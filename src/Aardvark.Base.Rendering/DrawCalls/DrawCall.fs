@@ -1,9 +1,7 @@
 ﻿namespace Aardvark.Base
 
-#nowarn "9"
-
-open System
 open System.Runtime.InteropServices
+open FSharp.Data.Adaptive
 
 [<StructLayout(LayoutKind.Sequential)>]
 type DrawCallInfo =
@@ -22,3 +20,6 @@ type DrawCallInfo =
         }
     end
 
+type DrawCalls =
+    | Direct of aval<list<DrawCallInfo>> // F# list seriously !?
+    | Indirect of aval<IndirectBuffer>

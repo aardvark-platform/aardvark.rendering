@@ -1,10 +1,5 @@
 ﻿namespace Aardvark.Base.Rendering
 
-
-open System
-open System.Collections.Generic
-open System.Threading
-open System.Runtime.InteropServices
 open Aardvark.Base
 open FSharp.Data.Adaptive
 
@@ -33,7 +28,7 @@ type DrawCallSet(collapseAdjacent : bool) =
         )
 
     member x.Add(r : Range1i) =
-        let result = 
+        let result =
             lock x (fun () ->
                 if all.Add r then
                     ranges <- RangeSet.insert r ranges
@@ -60,11 +55,11 @@ type DrawCallSet(collapseAdjacent : bool) =
         result
 
     override x.Compute(token) =
-        let drawRanges = 
+        let drawRanges =
             if collapseAdjacent then ranges :> seq<_>
             else all :> seq<_>
 
-        drawRanges 
+        drawRanges
             |> Seq.map (fun range ->
                 DrawCallInfo(
                     FirstIndex = range.Min,
@@ -73,9 +68,9 @@ type DrawCallSet(collapseAdjacent : bool) =
                     InstanceCount = 1,
                     BaseVertex = 0
                 )
-               ) 
+               )
             |> Seq.toArray
-            
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DrawCallSet =
     let inline create() = DrawCallSet(true)

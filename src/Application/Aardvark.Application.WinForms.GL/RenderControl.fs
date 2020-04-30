@@ -16,19 +16,19 @@ open Aardvark.Application
 type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
     inherit GLControl(
         Graphics.GraphicsMode(
-            OpenTK.Graphics.ColorFormat(Config.BitsPerPixel), 
-            Config.DepthBits, 
-            Config.StencilBits, 
-            samples, 
+            OpenTK.Graphics.ColorFormat(Config.BitsPerPixel),
+            Config.DepthBits,
+            Config.StencilBits,
+            samples,
             OpenTK.Graphics.ColorFormat.Empty,
-            Config.Buffers, 
+            Config.Buffers,
             false
-        ), 
-        Config.MajorVersion, 
-        Config.MinorVersion, 
-        Config.ContextFlags, 
+        ),
+        Config.MajorVersion,
+        Config.MinorVersion,
+        Config.ContextFlags,
         VSync = false
-    ) 
+    )
 //    static let messageLoop = MessageLoop()
 //    static do messageLoop.Start()
 
@@ -59,19 +59,19 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
             Set.empty
         )
 
-    let mutable contextHandle : ContextHandle = null 
-    let defaultFramebuffer = 
+    let mutable contextHandle : ContextHandle = null
+    let defaultFramebuffer =
         new Framebuffer(
-            ctx, fboSignature, 
-            (fun _ -> 0), 
-            ignore, 
+            ctx, fboSignature,
+            (fun _ -> 0),
+            ignore,
             [0, DefaultSemantic.Colors, Renderbuffer(ctx, 0, V2i.Zero, RenderbufferFormat.Rgba8, samples, 0L) :> IFramebufferOutput], None
         )
     let mutable defaultOutput = OutputDescription.ofFramebuffer defaultFramebuffer
 
     let sizes = AVal.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
 
-    let frameTime = RunningMean(10)
+    let frameTime = AverageWindow(10)
     let frameWatch = System.Diagnostics.Stopwatch()
 
     let timeWatch = System.Diagnostics.Stopwatch()
@@ -79,9 +79,9 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
     do timeWatch.Start()
 
     let now() = DateTime(timeWatch.Elapsed.Ticks + baseTime)
-    let nextFrameTime() = 
+    let nextFrameTime() =
         if frameTime.Count >= 10 then
-            now() + TimeSpan.FromSeconds frameTime.Average
+            now() + TimeSpan.FromSeconds frameTime.Value
         else
             now()
     let time = AVal.init (now())
@@ -89,10 +89,10 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
     let mutable needsRedraw = false
     let mutable first = true
-    
+
     let mutable renderContinuously = false
     let mutable autoInvalidate = true
-    let mutable threadStealing : StopStealing = 
+    let mutable threadStealing : StopStealing =
         { new StopStealing with member x.StopStealing () = { new IDisposable with member x.Dispose() = () } }
 
     let beforeRender = Event<unit>()
@@ -102,32 +102,32 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
     member val OnPaintRender = true with get, set
 
-    member x.DisableThreadStealing  
-        with get () = threadStealing 
+    member x.DisableThreadStealing
+        with get () = threadStealing
         and set v = threadStealing <- v
 
     // automatically invalidates after OnPaint if renderTask is out of date again
-    member x.AutoInvalidate 
+    member x.AutoInvalidate
         with get () = autoInvalidate
         and set v = autoInvalidate <- v
 
-    /// <summary> Returns true if the control has been fully initialized.</summary> 
-    member x.IsLoaded 
+    /// <summary> Returns true if the control has been fully initialized.</summary>
+    member x.IsLoaded
         with get () = loaded
 
     interface IInvalidateControl with
         member x.IsInvalid = needsRedraw
 
     member private x.ForceRedraw() =
-        if not renderContinuously then 
+        if not renderContinuously then
             MessageLoop.Invalidate x |> ignore
 
     member x.RenderContinuously
         with get() = renderContinuously
-        and set v = 
+        and set v =
             renderContinuously <- v
             // if continuous rendering is enabled make sure rendering is initiated
-            if v then 
+            if v then
                 x.Invalidate()
 
 
@@ -135,7 +135,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         with get() = task.Value
         and set t =
             match task with
-                | Some old -> 
+                | Some old ->
                     if taskSubscription <> null then taskSubscription.Dispose()
                     old.Dispose()
                 | None -> ()
@@ -153,7 +153,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         base.OnHandleCreated(e)
 
         let c = OpenTK.Graphics.GraphicsContext.CurrentContext
-        GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest) 
+        GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
         GL.Enable(EnableCap.TextureCubeMapSeamless)
         GL.Disable(EnableCap.PolygonSmooth)
 
@@ -162,7 +162,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
         //if ContextHandle.primaryContext <> null then
         //    ContextHandle.primaryContext.MakeCurrent()
-        
+
         x.KeyDown.Add(fun e ->
             if e.KeyCode = System.Windows.Forms.Keys.End && e.Control then
                 renderContinuously <- not renderContinuously
@@ -171,18 +171,18 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         )
 
         base.MakeCurrent()
-         
-    member x.Render() = 
+
+    member x.Render() =
         let mutable initial = false
         if loaded then
             if isNull contextHandle || contextHandle.Handle.IsDisposed then
-                contextHandle <- ContextHandle(base.Context, base.WindowInfo) 
+                contextHandle <- ContextHandle(base.Context, base.WindowInfo)
                 contextHandle.AttachDebugOutputIfNeeded(enableDebug)
                 initial <- true
 
             let size = V2i(base.ClientSize.Width, base.ClientSize.Height)
-          
-            
+
+
             beforeRender.Trigger()
 
             match task with
@@ -220,18 +220,18 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                         //EvaluationUtilities.evaluateTopLevel(fun () ->
                         t.Run(AdaptiveToken.Top, RenderToken.Empty, defaultOutput)
                         //)
-                        
+
 //                        let sw = System.Diagnostics.Stopwatch()
 //                        sw.Start()
 //                        while sw.Elapsed.TotalMilliseconds < 10.0 do 1;
 
 
-                        
+
                         x.SwapBuffers()
                         //System.Threading.Thread.Sleep(200)
                         frameWatch.Stop()
                         if not first then
-                            frameTime.Add frameWatch.Elapsed.TotalSeconds
+                            frameTime.Insert frameWatch.Elapsed.TotalSeconds |> ignore
 
                         transact (fun () -> time.MarkOutdated())
 
@@ -240,7 +240,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 //                            let sleepTime = max 0.0 (10.0 - sw.Elapsed.TotalMilliseconds)
 //                            let t = System.Threading.Tasks.Task.Delay (int sleepTime)
 //                            t.Wait()
-                            needsRedraw <- true                    
+                            needsRedraw <- true
                             if autoInvalidate then x.Invalidate()
                             ()
                         else
@@ -260,20 +260,20 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
             needsRedraw <- renderContinuously
             if renderContinuously then
                 x.Invalidate()
-        
+
     override x.OnPaint(e) =
         base.OnPaint(e)
         loaded <- true
         if x.OnPaintRender then
             x.Render()
-                    
+
 //    override x.OnResize(e) =
 //        base.OnResize(e)
 //        sizes.Emit <| V2i(base.ClientSize.Width, base.ClientSize.Height)
 
     member x.Time = time :> aval<_>
     member x.FramebufferSignature = fboSignature :> IFramebufferSignature
-    
+
     member x.BeforeRender = beforeRender.Publish
     member x.AfterRender = afterRender.Publish
 

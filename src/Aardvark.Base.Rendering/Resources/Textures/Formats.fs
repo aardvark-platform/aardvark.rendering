@@ -1,6 +1,5 @@
 ﻿namespace Aardvark.Base
 
-
 open System
 open FSharp.Data.Adaptive
 
@@ -257,7 +256,7 @@ type TextureParams =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module TextureParams =
-    
+
     let empty = { wantMipMaps = false; wantSrgb = false; wantCompressed = false}
     let compressed = { wantMipMaps = false; wantSrgb = false; wantCompressed = true }
     let mipmapped = { wantMipMaps = true; wantSrgb = false; wantCompressed = false }
@@ -282,7 +281,7 @@ module TextureFormat =
     let ofRenderbufferFormat (fmt : RenderbufferFormat) =
         convertEnum<_, TextureFormat> fmt
 
-    let private srgbFormats = 
+    let private srgbFormats =
         HashSet.ofList [
             TextureFormat.Srgb
             TextureFormat.SrgbAlpha
@@ -316,8 +315,8 @@ module TextureFormat =
     let hasDepth (fmt : TextureFormat) =
         depthFormats.Contains fmt
 
-    let ofPixFormat = 
-        
+    let ofPixFormat =
+
         let buildLookup = fun (norm, snorm) ->
             LookupTable.lookupTable [
                     TextureParams.empty, norm
@@ -329,7 +328,7 @@ module TextureFormat =
         let rgb8 = buildLookup(TextureFormat.Rgb8, TextureFormat.Srgb8)
         let rgba8 = buildLookup(TextureFormat.Rgba8, TextureFormat.Srgb8Alpha8)
         let r8 = buildLookup(TextureFormat.R8, TextureFormat.R8Snorm)
-        
+
         LookupTable.lookupTable [
             PixFormat.ByteBGR  , rgb8
             PixFormat.ByteBGRA , rgba8
@@ -348,23 +347,23 @@ module TextureFormat =
             PixFormat.UShortGray ,  (fun _ -> TextureFormat.R16)
 
             PixFormat(typeof<float32>, Col.Format.None), (fun _ -> TextureFormat.DepthComponent32)
-            
+
             PixFormat(typeof<float32>, Col.Format.Gray), (fun _ -> TextureFormat.R32f)
             PixFormat(typeof<float32>, Col.Format.NormalUV), (fun _ -> TextureFormat.Rg32f)
             PixFormat(typeof<float32>, Col.Format.RGB), (fun _ -> TextureFormat.Rgb32f)
-            PixFormat(typeof<float32>, Col.Format.RGBA), (fun _ -> TextureFormat.Rgba32f)   
+            PixFormat(typeof<float32>, Col.Format.RGBA), (fun _ -> TextureFormat.Rgba32f)
 
             PixFormat(typeof<int32>, Col.Format.Gray), (fun _ -> TextureFormat.R32i)
             PixFormat(typeof<int32>, Col.Format.NormalUV), (fun _ -> TextureFormat.Rg32i)
             PixFormat(typeof<int32>, Col.Format.RGB), (fun _ -> TextureFormat.Rgb32i)
             PixFormat(typeof<int32>, Col.Format.RGBA), (fun _ -> TextureFormat.Rgba32i)
-            
+
             PixFormat(typeof<uint32>, Col.Format.Gray), (fun _ -> TextureFormat.R32ui)
             PixFormat(typeof<uint32>, Col.Format.NormalUV), (fun _ -> TextureFormat.Rg32ui)
             PixFormat(typeof<uint32>, Col.Format.RGB), (fun _ -> TextureFormat.Rgb32ui)
             PixFormat(typeof<uint32>, Col.Format.RGBA), (fun _ -> TextureFormat.Rgba32ui)
         ]
-        
+
     let toDownloadFormat =
         LookupTable.lookupTable [
             TextureFormat.Rgba8, PixFormat.ByteRGBA
@@ -638,7 +637,7 @@ module PixFormat =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RenderbufferFormat =
-    
+
     let toColFormat =
         LookupTable.lookupTable [
             RenderbufferFormat.DepthComponent, Col.Format.Gray
@@ -713,10 +712,9 @@ module RenderbufferFormat =
             RenderbufferFormat.Rgb10A2ui, Col.Format.RGBA
 
         ]
-    
+
     let toTextureFormat (fmt : RenderbufferFormat) =
         convertEnum<_, TextureFormat> fmt
 
     let ofTextureFormat (fmt : TextureFormat) =
         convertEnum<_, RenderbufferFormat> fmt
-

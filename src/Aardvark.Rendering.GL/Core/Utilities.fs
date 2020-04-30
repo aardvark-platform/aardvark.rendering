@@ -5,7 +5,6 @@ open OpenTK.Graphics.OpenGL4
 open System.Text.RegularExpressions
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Rendering.GL
 
 [<AutoOpen>]
 module TypeSizeExtensions =
@@ -19,7 +18,7 @@ module TypeSizeExtensions =
             System.Runtime.InteropServices.Marshal.SizeOf(x)
 
 
-// profileMask: 
+// profileMask:
 // GL_CONTEXT_CORE_PROFILE_BIT          1
 // GL_CONTEXT_COMPATIBILITY_PROFILE_BIT 2
 // contextFlags:
@@ -53,8 +52,8 @@ module Driver =
 
 
     let readInfo() =
-        let vendor = GL.GetString(StringName.Vendor)  
-        let renderer = GL.GetString(StringName.Renderer)  
+        let vendor = GL.GetString(StringName.Vendor)
+        let renderer = GL.GetString(StringName.Renderer)
         let versionStr = GL.GetString(StringName.Version)
         let version = versionStr |> parseVersion
         let glslVersion = GL.GetString(StringName.ShadingLanguageVersion) |> parseVersion
@@ -69,7 +68,7 @@ module Driver =
 
 
         let pat = (vendor + "_" + renderer).ToLower()
-        let gpu = 
+        let gpu =
             if pat.Contains "nvidia" then Aardvark.Base.GPUVendor.nVidia
             elif pat.Contains "ati" || pat.Contains "amd" then Aardvark.Base.GPUVendor.AMD
             elif pat.Contains "intel" then Aardvark.Base.GPUVendor.Intel
@@ -77,7 +76,7 @@ module Driver =
 
 
 
-        { 
+        {
             device = gpu
             vendor = vendor
             renderer = renderer
@@ -86,11 +85,11 @@ module Driver =
             versionString = versionStr
             profileMask = profileMask
             contextFlags = contextFlags
-            extensions = extensions 
+            extensions = extensions
         }
 
 
-module MemoryManagementUtilities = 
+module MemoryManagementUtilities =
     open System.Collections.Generic
 
     type FreeList<'k, 'v when 'k : comparison>() =
@@ -100,14 +99,14 @@ module MemoryManagementUtilities =
 
         let tryGet (minimal : 'k) =
             let _, self, right = sortedSet.FindNeighbours((minimal, Unchecked.defaultof<_>))
-    
+
             let fitting =
                 if self.HasValue then Some self.Value
                 elif right.HasValue then Some right.Value
                 else None
-        
+
             match fitting with
-                | Some (k,container) -> 
+                | Some (k,container) ->
 
                     if container.Count <= 0 then
                         raise <| ArgumentException "invalid memory manager state"
@@ -136,7 +135,7 @@ module MemoryManagementUtilities =
 
         let remove (k : 'k) (v : 'v) =
             let _, self, _ = sortedSet.FindNeighbours((k, Unchecked.defaultof<_>))
-   
+
             if self.HasValue then
                 let (_,container) = self.Value
 
@@ -152,16 +151,16 @@ module MemoryManagementUtilities =
                     sets.Remove(k) |> ignore
 
                 res
-            else 
+            else
                 false
 
         let contains (k : 'k) (v : 'v) =
             let _, self, _ = sortedSet.FindNeighbours((k, Unchecked.defaultof<_>))
-   
+
             if self.HasValue then
                 let (_,container) = self.Value
                 container.Contains v
-            else 
+            else
                 false
 
 

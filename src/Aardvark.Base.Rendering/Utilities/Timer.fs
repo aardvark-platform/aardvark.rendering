@@ -7,12 +7,12 @@ open Aardvark.Base
 
 module MultimediaTimer =
 
-    module private Windows = 
+    module private Windows =
         type MultimediaTimerCallbackDel  = delegate of uint32 * uint32 * nativeint * uint32 * uint32 -> unit
 
         [<DllImport("winmm.dll", SetLastError = true); SuppressUnmanagedCodeSecurity>]
         extern uint32 timeSetEvent(uint32 msDelay, uint32 msResolution, nativeint callback, uint32& userCtx, uint32 eventType)
-            
+
         [<DllImport("winmm.dll", SetLastError = true); SuppressUnmanagedCodeSecurity>]
         extern void timeKillEvent(uint32 timer)
 
@@ -29,11 +29,11 @@ module MultimediaTimer =
                 { new IDisposable with
                     member x.Dispose() =
                         timeKillEvent(id)
-                        ptr.Dispose() 
+                        ptr.Dispose()
                 }
-            
+
     module private Linux =
-        
+
         [<DllImport("libc"); SuppressUnmanagedCodeSecurity>]
         extern void usleep(int usec)
 
@@ -50,29 +50,29 @@ module MultimediaTimer =
             }
 
     type Trigger(ms : int) =
-        let ticksPerMillisecond = int64 TimeSpan.TicksPerMillisecond 
+        let ticksPerMillisecond = int64 TimeSpan.TicksPerMillisecond
         let pulse = obj()
 
         let callback() =
             lock pulse (fun () ->
                 Monitor.PulseAll pulse
             )
-                
-        let timer = 
+
+        let timer =
             match Environment.OSVersion  with
                 | Windows -> Windows.start ms callback
                 | _ -> Linux.start ms callback
-        
+
         member x.Wait() =
             lock pulse (fun () ->
                 Monitor.Wait pulse |> ignore
-            )  
+            )
 
         member x.Signal() =
             lock pulse (fun () ->
                 Monitor.PulseAll pulse
-            )  
-            
+            )
+
         member x.Dispose() =
             timer.Dispose()
 

@@ -12,6 +12,7 @@ open FSharp.Data.Adaptive
 /// this means that an element is contained when it has been
 /// added at least once more than removed.
 /// </summary>
+// TODO: Remove once this is moved to Base
 type ReferenceCountingSet<'a>(initial : seq<'a>) =
     let mutable nullCount = 0
     let mutable version = 0
@@ -21,7 +22,7 @@ type ReferenceCountingSet<'a>(initial : seq<'a>) =
     static let rec checkDeltas (l : list<SetOperation<'a>>) =
         let set = System.Collections.Generic.HashSet<obj>()
         for d in l do
-            let value = 
+            let value =
                 match d with
                     | Add v -> v
                     | Rem v -> v
@@ -33,7 +34,7 @@ type ReferenceCountingSet<'a>(initial : seq<'a>) =
         Interlocked.Increment &version |> ignore
 
 
-    
+
 
     let toCollection (s : seq<'a>) =
         match s with
@@ -61,9 +62,9 @@ type ReferenceCountingSet<'a>(initial : seq<'a>) =
         if isNull (v :> obj) then
             nullCount <- nullCount + 1
             nullCount = 1
-        else 
+        else
             match store.TryGetValue v with
-                | (true, (_,r)) -> 
+                | (true, (_,r)) ->
                     r := !r + 1
                     false
                 | _ ->
@@ -76,7 +77,7 @@ type ReferenceCountingSet<'a>(initial : seq<'a>) =
         if isNull (v :> obj) then
             nullCount <- nullCount - 1
             nullCount = 0
-        else 
+        else
             match store.TryGetValue v with
                 | (true, (_,r)) ->
                     r := !r - 1
@@ -86,7 +87,7 @@ type ReferenceCountingSet<'a>(initial : seq<'a>) =
                     else
                         false
                 | _ ->
-                    false 
+                    false
 
     do for e in initial do
         add e |> ignore
@@ -107,16 +108,16 @@ type ReferenceCountingSet<'a>(initial : seq<'a>) =
     member internal x.Apply(deltas : list<SetOperation<'a>>) =
         match deltas with
             | [] -> []
-            | [v] -> 
+            | [v] ->
                 match v with
-                    | Add(_,v) -> 
+                    | Add(_,v) ->
                         if x.Add v then [Add v]
                         else []
                     | Rem(_,v) ->
                         if x.Remove v then [Rem v]
                         else []
 
-            | _ -> 
+            | _ ->
                 let mutable originalNullRefs = nullCount
                 let touched = Dictionary<obj, 'a * bool * ref<int>>()
                 for d in deltas do
@@ -127,7 +128,7 @@ type ReferenceCountingSet<'a>(initial : seq<'a>) =
                                 nullCount <- nullCount + 1
                             else
                                 match store.TryGetValue o with
-                                    | (true, (_,r)) -> 
+                                    | (true, (_,r)) ->
                                         r := !r + 1
                                     | _ ->
                                         let r = ref 1
@@ -140,17 +141,17 @@ type ReferenceCountingSet<'a>(initial : seq<'a>) =
                             else
                                 match store.TryGetValue o with
                                     | (true, (_,r)) ->
-                                        r := !r - 1 
-                                        if !r = 0 && not (touched.ContainsKey o) then 
+                                        r := !r - 1
+                                        if !r = 0 && not (touched.ContainsKey o) then
                                             touched.[o] <- (v, true, r)
-                                    | _ ->  
+                                    | _ ->
                                         let r = ref -1
                                         touched.[o] <- (v, false, r)
                                         store.[o] <- (v, r)
-                                
+
                             ()
 
-                let valueDeltas = 
+                let valueDeltas =
                     touched.Values
                         |> Seq.choose (fun (value, wasContained, refCount) ->
                             let r = !refCount
@@ -164,7 +165,7 @@ type ReferenceCountingSet<'a>(initial : seq<'a>) =
                            )
                         |> Seq.toList
 
-                let result = 
+                let result =
                     if nullCount = 0 && originalNullRefs > 0 then
                         (Rem Unchecked.defaultof<_>)::valueDeltas
                     elif nullCount > 0 && originalNullRefs = 0 then
@@ -215,7 +216,7 @@ type ReferenceCountingSet<'a>(initial : seq<'a>) =
     /// returns the number of (distinct) elements contained in
     /// the set.
     /// </summary>
-    member x.Count = 
+    member x.Count =
         (if nullCount > 0 then 1 else 0) + store.Count
 
     /// <summary>
@@ -230,7 +231,7 @@ type ReferenceCountingSet<'a>(initial : seq<'a>) =
 
     /// <summary>
     /// Remove items in other from this set. Modifies this set.
-    /// </summary>  
+    /// </summary>
     member x.ExceptWith (items : seq<'a>) =
         for o in items do
             x.Remove o |> ignore
@@ -314,7 +315,7 @@ type ReferenceCountingSet<'a>(initial : seq<'a>) =
         member x.Remove v = x.Remove v
         member x.Clear() = x.Clear()
         member x.Count = x.Count
-        member x.CopyTo(arr, index) = 
+        member x.CopyTo(arr, index) =
             let mutable i = index
 
             if nullCount > 0 then
@@ -364,21 +365,21 @@ and private ReferenceCountingSetEnumerator<'a>(containsNull : bool, store : Dict
             e.Current.Value |> fst
 
     interface IEnumerator with
-        member x.MoveNext() = 
+        member x.MoveNext() =
             if emitNull then
                 emitNull <- false
                 currentIsNull <- true
                 true
-            else 
+            else
                 currentIsNull <- false
                 e.MoveNext()
 
-        member x.Reset() = 
+        member x.Reset() =
             emitNull <- containsNull
             e.Reset()
 
         member x.Current = x.Current :> obj
 
     interface IEnumerator<'a> with
-        member x.Current = x.Current 
+        member x.Current = x.Current
         member x.Dispose() = e.Dispose()

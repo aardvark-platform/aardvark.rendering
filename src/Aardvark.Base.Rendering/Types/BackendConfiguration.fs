@@ -4,12 +4,12 @@ open System
 
 /// Execution engine performing the corresponding graphics API calls for the render commands
 type ExecutionEngine =
-    /// Wraps a debug layer around the native execution engine providing possibility 
+    /// Wraps a debug layer around the native execution engine providing possibility
     /// to step through using the debugger and trace state changes
     | Debug = 0
     /// Performs graphics API calls using an executable memory with lowest possible overhead
     | Native = 1
-   
+
 /// Resource sharing configuration
 [<Flags>]
 type ResourceSharing =
@@ -37,16 +37,16 @@ type BackendConfiguration = {
 module BackendConfiguration =
 
     /// Configuration using Native execution engine and Full resources sharing
-    let Native = 
-        { 
+    let Native =
+        {
             execution       = ExecutionEngine.Native
             sharing         = ResourceSharing.Textures &&& ResourceSharing.Buffers
             useDebugOutput  = false
         }
-    
-    /// Configuration with full debug functionality 
-    let Debug = 
-        { 
+
+    /// Configuration with full debug functionality
+    let Debug =
+        {
             execution       = ExecutionEngine.Debug
             sharing         = ResourceSharing.Textures  &&& ResourceSharing.Buffers
             useDebugOutput  = true

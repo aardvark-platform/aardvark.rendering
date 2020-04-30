@@ -27,7 +27,6 @@
   <ItemGroup>
     <None Include="Wrapper\gl.xml" />
     <None Include="Wrapper\Generator.fsx" />
-    <Compile Include="Core\Trie.fs" />
     <Compile Include="Core\Utilities.fs" />
     <Compile Include="Core\Config.fs" />
     <Compile Include="Core\GLVM.fs" />
