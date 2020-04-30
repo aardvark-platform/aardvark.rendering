@@ -469,6 +469,34 @@ type Application(runtime : IRuntime) =
     let visibleWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()
     do Application.IsMainThread_ <- true
 
+    let aardvarkIcon =
+        let sizes = Array.sortDescending [| 16; 24; 32; 48; 64; 128; 256 |]
+        let ass = typeof<Application>.Assembly
+        let name = ass.GetManifestResourceNames() |> Array.find (fun n -> n.EndsWith "aardvark.png")
+        let img = (ass.GetManifestResourceStream name |> PixImage.Create).ToPixImage<byte>(Col.Format.RGBA)
+
+        let levels =
+            let mutable last = img
+            sizes |> Array.map (fun s ->
+                if s = last.Size.X && s = last.Size.Y then
+                    last :> PixImage
+                else
+                    let dst = PixImage<byte>(Col.Format.RGBA, V2i(s,s))
+                    NativeVolume.using last.Volume (fun src ->
+                        NativeVolume.using dst.Volume (fun dst ->
+                            NativeVolume.blit src dst
+                        )
+                    )
+
+                    last <- dst
+                    dst :> PixImage
+            )
+
+        PixImageMipMap levels
+                
+
+
+
     let openglVersion = 
         let versions =
             [
@@ -658,7 +686,14 @@ type Application(runtime : IRuntime) =
             if old <> NativePtr.zero then
                 glfw.MakeContextCurrent old
 
-            new Window(x, win, cfg.title, cfg.vsync, unbox ctx, info, cfg.samples)
+            let w = new Window(x, win, cfg.title, cfg.vsync, unbox ctx, info, cfg.samples)
+
+
+
+
+            w.Icon <- Some aardvarkIcon
+
+            w
         )        
 
     member x.Run([<System.ParamArray>] ws : Window[]) =    
@@ -807,7 +842,7 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
             Map.ofList [0, (DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples })],
             Map.empty,
             Some { format = RenderbufferFormat.Depth24Stencil8; samples = samples },
-            Some { format = RenderbufferFormat.Depth24Stencil8; samples = samples },
+            None,
             1,
             Set.empty
         )

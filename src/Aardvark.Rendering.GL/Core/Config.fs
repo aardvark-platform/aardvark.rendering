@@ -39,6 +39,11 @@ module Config =
     /// rendering context instance.
     /// </summary>
     let mutable NumberOfResourceContexts = 1
+    
+    /// <summary>
+    /// Use the "new" RenderTask OpenGL RenderTask supporting RuntimeCommands (5.1.0)
+    /// </summary>
+    let mutable UseNewRenderTask = false
 
     /// <summary>
     /// The number of bits used for color values in default contexts
@@ -93,18 +98,18 @@ module Error =
          let message = Marshal.PtrToStringAnsi(message,length)
          match severity with
              | DebugSeverity.DebugSeverityNotification -> 
-                Report.Line(5, "[GL:{0}] {1}", userParam, message)
+                Report.Line(2, "[GL:{0}] {1}", userParam, message)
 
              | DebugSeverity.DebugSeverityMedium ->
                 match debugType with
-                    | DebugType.DebugTypePerformance -> Report.Line(4, "[GL:{0}] {1}", userParam, message)
+                    | DebugType.DebugTypePerformance -> Report.Line(1, "[GL:{0}] {1}", userParam, message)
                     | _ -> Report.Warn("[GL:{0}] {1}", userParam, message)
 
              | DebugSeverity.DebugSeverityHigh ->
                  Report.Error("[GL:{0}] {1}", userParam, message)
 
              | _ ->
-                Report.Line(4, "[GL:{0}] {1}", userParam, message)
+                Report.Line(2, "[GL:{0}] {1}", userParam, message)
 
     let private debugHandler = DebugProc debug
     let private debugGC = Marshal.PinDelegate debugHandler

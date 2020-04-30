@@ -857,7 +857,8 @@ DllExport(void) hglDrawArrays(RuntimeStats* stats, int* isActive, BeginMode* mod
 		}
 		else
 		{
-			glDrawArrays(m, info->FirstIndex, info->FaceVertexCount);
+			if (info->FirstInstance == 0) glDrawArrays(m, info->FirstIndex, info->FaceVertexCount);
+			else glDrawArraysInstancedBaseInstance(m, info->FirstIndex, info->FaceVertexCount, 1, info->FirstInstance);
 		}
 	}
 	endtrace("hglDrawArrays")
@@ -889,15 +890,21 @@ DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* m
 		{
 			auto offset = int64_t(info->FirstIndex * indexSize);
 
-			if (info->BaseVertex == 0)
-			{
-				//printf("glDrawElements(%d, %d, %d, %p)\n", m, info->FaceVertexCount, indexType, (GLvoid*)offset);
-				glDrawElements(m, info->FaceVertexCount, indexType, (GLvoid*)offset);
+			if (info->FirstInstance == 0) {
+
+				if (info->BaseVertex == 0)
+				{
+					//printf("glDrawElements(%d, %d, %d, %p)\n", m, info->FaceVertexCount, indexType, (GLvoid*)offset);
+					glDrawElements(m, info->FaceVertexCount, indexType, (GLvoid*)offset);
+				}
+				else
+				{
+					//printf("glDrawElementsBaseVertex(%d, %d, %d, %p, %d)\n", m, info->FaceVertexCount, indexType, (GLvoid*)offset, info->BaseVertex);
+					glDrawElementsBaseVertex(m, info->FaceVertexCount, indexType, (GLvoid*)offset, info->BaseVertex);
+				}
 			}
-			else
-			{
-				//printf("glDrawElementsBaseVertex(%d, %d, %d, %p, %d)\n", m, info->FaceVertexCount, indexType, (GLvoid*)offset, info->BaseVertex);
-				glDrawElementsBaseVertex(m, info->FaceVertexCount, indexType, (GLvoid*)offset, info->BaseVertex);
+			else {
+				glDrawElementsInstancedBaseVertexBaseInstance(m, info->FaceVertexCount, indexType, (const void*)(int64_t)(info->FirstIndex * indexSize), 1, info->BaseVertex, info->FirstInstance);
 			}
 		}
 	}

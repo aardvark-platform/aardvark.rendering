@@ -17,9 +17,9 @@
     <Copy Condition="'$(OS)' == 'Windows_NT'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.Vulkan\windows\AMD64\vkvm.dll" DestinationFolder="$(OutputPath)" ContinueOnError="true" />
     <Copy Condition="'$(OS)' == 'Windows_NT'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.Vulkan\windows\AMD64\vkvm.dll" DestinationFolder="$(OutputPath)..\netcoreapp3.1" ContinueOnError="true" />
     <Copy Condition="'$(OS)' == 'Windows_NT'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.Vulkan\windows\AMD64\vkvm.dll" DestinationFolder="$(OutputPath)..\net471" ContinueOnError="true" />
-    <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.Vulkan\linux\AMD64\vkvm.so" DestinationFolder="$(OutputPath)" ContinueOnError="true" />
-    <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.Vulkan\linux\AMD64\vkvm.so" DestinationFolder="$(OutputPath)..\netcoreapp3.1" ContinueOnError="true" />
-    <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.Vulkan\linux\AMD64\vkvm.so" DestinationFolder="$(OutputPath)..\net471" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.Vulkan\linux\AMD64\libvkvm.so" DestinationFolder="$(OutputPath)" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.Vulkan\linux\AMD64\libvkvm.so" DestinationFolder="$(OutputPath)..\netcoreapp3.1" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.Vulkan\linux\AMD64\libvkvm.so" DestinationFolder="$(OutputPath)..\net471" ContinueOnError="true" />
   </Target>
   <ItemGroup>
     <None Include="Wrapper\vk.xml" />

@@ -4,7 +4,7 @@ open Aardvark.Base.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Application.WPF
+open Aardvark.Application.WinForms
 
 // This example illustrates how to create a simple render window. 
 // In contrast to the rest of the examples (beginning from 01-Triangle), we use
@@ -16,7 +16,6 @@ open Aardvark.Application.WPF
 
 [<EntryPoint; STAThread>]
 let main argv = 
-    Config.useSharingControl <- true
     // first we need to initialize Aardvark's core components
     Aardvark.Init()
 
@@ -28,10 +27,28 @@ let main argv =
     // Note that there is also a WPF binding for OpenGL. For more complex GUIs however,
     // we recommend using aardvark-media anyways..
     let win = app.CreateSimpleRenderWindow(8)
-    //win.Title <- "Hello Aardvark"
 
+    // the following shows how `SubSampling` and `Samples` can be used to control render-quality.
+    // Since this is currently only available for OpenGL we need to unsafely get the "real" OpenGlRenderControl.
+    let ctrl = (unbox<Aardvark.Application.WinForms.OpenGlRenderControl> win.Control.Implementation)
     win.Keyboard.Down.Values.Add(fun k ->
-        Log.warn "%A" k
+        match k with
+        | Keys.Enter -> 
+            let n = ctrl.Samples * 2
+            ctrl.Samples <- 
+                if n > 8 then 1
+                else n
+            Log.warn "Samples: %A" ctrl.Samples
+        | Keys.OemPlus -> 
+            let n = ctrl.SubSampling * Constant.Sqrt2 |> clamp 0.015625 2.0
+            ctrl.SubSampling <- n
+            Log.warn "SubSampling: %A" ctrl.SubSampling
+        | Keys.OemMinus -> 
+            let n = ctrl.SubSampling / Constant.Sqrt2 |> clamp 0.015625 2.0
+            ctrl.SubSampling <- n
+            Log.warn "SubSampling: %A" ctrl.SubSampling
+        | _ ->
+            ()
     )
 
     // Given eye, target and sky vector we compute our initial camera pose

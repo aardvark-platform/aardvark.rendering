@@ -1111,7 +1111,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
 
     let usedMemory = ref 0L
     let totalMemory = ref 0L
-    let avgRenderTime = RunningMean(10)
+    let avgRenderTime = AverageWindow(10)
 
     let compile (indexType : Option<DrawElementsType>, mode : nativeptr<GLBeginMode>, a : VertexInputBindingHandle, ib : IndirectBuffer) (s : ICommandStream) : NativeStats =
         let stats = NativeStats(InstructionCount = 1)
@@ -1200,7 +1200,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     abstract member BeforeRender : ICommandStream -> unit
     default x.BeforeRender(_) = ()
 
-    member x.AverageRenderTime = MicroTime(int64 (1000000.0 * avgRenderTime.Average))
+    member x.AverageRenderTime = MicroTime(int64 (1000000.0 * avgRenderTime.Value))
 
     member x.Update() =
         puller.EvaluateAlways AdaptiveToken.Top (fun token ->   
@@ -1211,7 +1211,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                 
             let rawResult = NativePtr.read endTime - NativePtr.read startTime
             let ms = float rawResult / 1000000.0
-            avgRenderTime.Add ms
+            avgRenderTime.Insert ms |> ignore
 
 
 

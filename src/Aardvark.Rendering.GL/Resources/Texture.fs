@@ -1512,10 +1512,10 @@ module TextureUploadExtensions =
                 )
 
             let pbo = GL.GenBuffer()
+            GL.NamedBufferStorage(pbo, sizeInBytes, 0n, BufferStorageFlags.MapWriteBit)
+            GL.Check "could not allocate PBO"
             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
             GL.Check "could not bind PBO"
-            GL.BufferStorage(BufferTarget.PixelUnpackBuffer, sizeInBytes, 0n, BufferStorageFlags.MapWriteBit)
-            GL.Check "could not allocate PBO"
             let pDst = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, sizeInBytes, BufferAccessMask.MapWriteBit)
             GL.Check "could not map PBO"
             if pDst = 0n then failwith "[GL] could not map PBO"
@@ -1568,10 +1568,10 @@ module TextureUploadExtensions =
                 )
                 
             let pbo = GL.GenBuffer()
+            GL.NamedBufferStorage(pbo, sizeInBytes, 0n, BufferStorageFlags.MapReadBit)
+            GL.Check "could not allocate PBO"
             GL.BindBuffer(BufferTarget.CopyWriteBuffer, pbo)
             GL.Check "could not bind PBO"
-            GL.BufferStorage(BufferTarget.CopyWriteBuffer, sizeInBytes, 0n, BufferStorageFlags.MapReadBit)
-            GL.Check "could not allocate PBO"
             GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
 
             try 
@@ -1975,9 +1975,10 @@ module TextureExtensions =
                             Log.line "compression: %.2f%%" (100.0 * float size / float (w * h * channels)) 
 
                             let pbo = GL.GenBuffer()
-                            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
-                            GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint size, 0n, BufferStorageFlags.MapWriteBit)
+                            GL.NamedBufferStorage(pbo, nativeint size, 0n, BufferStorageFlags.MapWriteBit)
                             GL.Check "[uploadTexture2DLevelFile] BufferStorage"
+
+                            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
 
                             let ptr = GL.MapBuffer(BufferTarget.PixelUnpackBuffer, BufferAccess.WriteOnly)
                             GL.Check "[uploadTexture2DLevelFile] MapBuffer"
@@ -2026,9 +2027,9 @@ module TextureExtensions =
 
 
                                     let size = int64 (alignedLineSize * h)
-                                    GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
-                                    GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint size, 0n, BufferStorageFlags.MapWriteBit)
+                                    GL.NamedBufferStorage(pbo, nativeint size, 0n, BufferStorageFlags.MapWriteBit)
                                     GL.Check "[uploadTexture2DLevelFile] BufferStorage"
+                                    GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
                                     let dst = GL.MapBuffer(BufferTarget.PixelUnpackBuffer, BufferAccess.WriteOnly)
                                     GL.Check "[uploadTexture2DLevelFile] MapBuffer"
                                     let src = IL.GetData()
@@ -2427,10 +2428,12 @@ module TextureExtensions =
                 
             else
                 let b = GL.GenBuffer()
+                GL.NamedBufferStorage(b, nativeint targetSize, 0n, BufferStorageFlags.MapReadBit)
+                GL.Check "could not set buffer storage"
+
                 GL.BindBuffer(BufferTarget.PixelPackBuffer, b)
                 GL.Check "could not bind buffer"
-                GL.BufferStorage(BufferTarget.PixelPackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapReadBit)
-                GL.Check "could not set buffer storage"
+
                 //if t.IsArray then
                 //    GL.GetTextureSubImage(int bindTarget, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, 0, nativeint 0)
                 //else

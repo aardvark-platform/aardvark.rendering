@@ -1207,29 +1207,599 @@ module PreparedCommand =
         let rec ofRenderObject (owned : bool) (fboSignature : IFramebufferSignature) (x : ResourceManager) (o : IRenderObject) =
             let pass = o.RenderPass
             match o with
-                | :? RenderObject as o ->
-                    let state = PreparedPipelineState.ofRenderObject fboSignature x o
-                    let info = PreparedObjectInfo.ofRenderObject fboSignature x state.pProgramInterface state.pProgram o
-                    new PreparedObjectCommand(state, info, pass) :> PreparedCommand
+            | :? RenderObject as o ->
+                let state = PreparedPipelineState.ofRenderObject fboSignature x o
+                let info = PreparedObjectInfo.ofRenderObject fboSignature x state.pProgramInterface state.pProgram o
+                new PreparedObjectCommand(state, info, pass) :> PreparedCommand
 
-                | :? MultiRenderObject as o ->
-                    match o.Children with
-                        | [] -> 
-                            new NopCommand(x.Context, pass) :> PreparedCommand
-                        | [o] -> 
-                            ofRenderObject owned fboSignature x o
+            | :? MultiRenderObject as o ->
+                match o.Children with
+                    | [] -> 
+                        new NopCommand(x.Context, pass) :> PreparedCommand
+                    | [o] -> 
+                        ofRenderObject owned fboSignature x o
 
-                        | l -> 
-                            new MultiCommand(x.Context, l |> List.map (ofRenderObject owned fboSignature x), pass) :> PreparedCommand
+                    | l -> 
+                        new MultiCommand(x.Context, l |> List.map (ofRenderObject owned fboSignature x), pass) :> PreparedCommand
 
-                | :? PreparedCommand as cmd ->
-                    if not owned then cmd.AddReference()
-                    cmd
+            | :? PreparedCommand as cmd ->
+                if not owned then cmd.AddReference()
+                cmd
 
-                | :? ICustomRenderObject as o ->
-                    o.Create(fboSignature.Runtime, fboSignature) |> ofRenderObject true fboSignature x
+            | :? ICustomRenderObject as o ->
+                o.Create(fboSignature.Runtime, fboSignature) |> ofRenderObject true fboSignature x
 
-                | _ ->
-                    failwithf "bad object: %A" o
+            | _ ->
+                failwithf "bad object: %A" o
 
         ofRenderObject false fboSignature x o
+
+
+module rec Command =
+
+    [<AbstractClass>]
+    type Command() =
+        inherit AdaptiveObject()
+
+        let mutable next : option<Command> = None
+        let mutable prev : option<Command> = None
+
+        let mutable program : option<FragmentProgram> = None
+
+        abstract member Free : CompilerInfo -> unit
+        abstract member PerformUpdate : token : AdaptiveToken * program : FragmentProgram * info : CompilerInfo -> unit
+
+        abstract member PrevChanged : unit -> unit
+        default x.PrevChanged() = ()
+
+        member x.Update(token : AdaptiveToken, info : CompilerInfo) =
+            x.EvaluateIfNeeded token () (fun token ->
+                let p = 
+                    match program with
+                    | Some p -> p
+                    | None -> 
+                        let p = new FragmentProgram()
+                        program <- Some p
+                        p
+
+                p.Update(token)
+                x.PerformUpdate(token, p, info)
+            )
+
+        member x.Run() =
+            match program with
+            | Some p -> p.Run()
+            | None -> ()
+
+            match next with
+            | Some n -> n.Run()
+            | None -> ()
+
+        member x.Prev
+            with get() = prev
+            and set p = 
+                prev <- p
+                x.PrevChanged()
+
+        member x.Next
+            with get() = next
+            and set p = next <- p
+
+        member x.Program = program
+
+        interface ILinked<Command> with
+            member x.Prev
+                with get() = x.Prev
+                and set p = x.Prev <- p
+            
+            member x.Next
+                with get() = x.Next
+                and set p = x.Next <- p
+
+    type SingleObjectCommand (dirty : System.Collections.Generic.HashSet<SingleObjectCommand>, signature : IFramebufferSignature, manager : ResourceManager, o : IRenderObject) =
+        let mutable fragment : option<ProgramFragment> = None
+        let mutable o = o
+        let mutable prepared = None
+
+        let mutable prev : option<SingleObjectCommand> = None
+        let mutable next : option<SingleObjectCommand> = None
+
+        let compile (info : CompilerInfo) (s : IAssemblerStream) (p : IAdaptivePinning) =
+            let cmd = 
+                match prepared with
+                | None ->
+                    let cmd = PreparedCommand.ofRenderObject signature manager o
+                    for r in cmd.Resources do
+                        info.resources.Add r
+                    prepared <- Some cmd
+                    cmd
+                | Some cmd -> 
+                    cmd
+
+
+            let pp = prev |> Option.bind (fun p -> p.PreparedCommand)
+            cmd.Compile(info, AssemblerCommandStream(s), pp) |> ignore
+                
+
+        member private x.PreparedCommand = prepared
+        member internal x.Fragment = fragment
+
+        member x.Prev
+            with get() = prev
+            and set p =
+                prev <- p
+                dirty.Add x |> ignore
+
+        member x.Next
+            with get() = next
+            and set n =
+                next <- n
+                match n with
+                | Some n -> n.Prev <- Some x
+                | None -> ()
+
+                match fragment with
+                | Some f ->     
+                    match n with
+                    | Some n -> f.Next <- n.Fragment
+                    | None -> f.Next <- None
+                | None -> 
+                    ()
+
+
+        member x.Free(info : CompilerInfo) =
+            match prepared with
+            | Some prep ->
+                for r in prep.Resources do info.resources.Remove r
+                prep.Dispose()
+                prepared <- None
+            | None ->
+                ()
+
+            match fragment with
+            | Some f -> 
+                f.Dispose()
+                fragment <- None
+            | None -> ()
+
+
+            let n = next
+            let p = prev
+            match p with
+            | Some p -> p.Next <- n
+            | None -> ()
+
+            prev <- None
+            next <- None
+
+        member x.Compile(info : CompilerInfo, p : FragmentProgram) =
+            let fragment = 
+                match fragment with
+                    | Some f -> 
+                        f.Mutate (compile info)
+                        f
+                    | None ->
+                        let f = p.NewFragment (compile info)
+                        fragment <- Some f
+                        f
+            
+            match prev with
+            | Some p -> 
+                match p.Fragment with
+                | Some pf -> pf.Next <- Some fragment
+                | None -> ()
+            | None -> 
+                p.First <- Some fragment
+
+            match next with
+            | Some n -> fragment.Next <- n.Fragment
+            | None -> fragment.Next <- None
+
+        interface ILinked<SingleObjectCommand> with
+            member x.Next
+                with get() = x.Next
+                and set n = x.Next <- n
+            member x.Prev
+                with get() = x.Prev
+                and set p = x.Prev <- p
+
+    type ManyObjectsCommand(signature : IFramebufferSignature, manager : ResourceManager, o : aset<IRenderObject>) =
+        inherit Command()
+
+        let dirty = System.Collections.Generic.HashSet<SingleObjectCommand>()
+        let trie = 
+            Trie<SingleObjectCommand> [|
+                Some { new System.Collections.Generic.IComparer<obj> with member x.Compare(l, r) = compare (unbox<RenderPass> l) (unbox<RenderPass> r) }
+            |]
+        let mutable reader = o.GetReader()
+
+        let cache = Dict<list<obj>, SingleObjectCommand>()
+
+        let rec surface (o : IRenderObject) =
+            match o with
+            | :? RenderObject as o -> o.Surface :> obj
+            | :? MultiRenderObject as o -> 
+                match List.tryHead o.Children with
+                | Some o -> surface o
+                | None -> null
+            | :? IPreparedRenderObject as o ->
+                match o.Original with
+                | Some o -> surface o
+                | None -> null
+            | :? CommandRenderObject as o ->
+                null
+            | _ ->
+                null
+
+        let key (o : IRenderObject) =
+            [ 
+                o.RenderPass :> obj
+                surface o
+                o.Id :> obj 
+            ]
+
+        static let compileEpilog (program : FragmentProgram) (info : CompilerInfo) =
+            program.NewFragment (fun s p ->
+                let stream = AssemblerCommandStream s
+                stream.SetDepthMask(true)
+                stream.SetStencilMask(true)
+                stream.SetDrawBuffers(info.drawBufferCount, info.drawBuffers)
+                stream.UseProgram(0)
+                stream.BindBuffer(int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
+                for i in 0 .. 7 do
+                    stream.Disable(int OpenTK.Graphics.OpenGL4.EnableCap.ClipDistance0 + i)
+
+            )
+
+        let mutable epilog : option<ProgramFragment> = None
+
+        override x.PerformUpdate(token, program, info) =
+            let ops = reader.GetChanges token
+            let removes = System.Collections.Generic.List<IRenderObject>(ops.Count)
+            for o in ops do
+                match o with
+                | Rem _ ->
+                    // delay removes s.t. resources may survive reordering
+                    removes.Add o.Value
+
+                | Add(_, v) ->
+                    let key = key o.Value
+                    let cmd = new SingleObjectCommand(dirty, signature, manager, v)
+                    dirty.Add cmd |> ignore
+                    cache.[key] <- cmd
+                    trie.Add(key, cmd)
+
+            for v in removes do
+                let key = key v
+                match cache.TryRemove key with
+                | (true, cmd) ->
+                    trie.Remove key |> ignore
+                    cmd.Free(info)
+                | _ ->
+                    ()
+                
+            for d in dirty do
+                d.Compile(info, program)
+
+            dirty.Clear()
+
+            let epilog =
+                match epilog with
+                | Some e -> e
+                | None ->
+                    let e = compileEpilog program info
+                    epilog <- Some e
+                    e
+
+            program.First <- 
+                match trie.First with
+                | Some f -> f.Fragment
+                | None -> None
+
+            match trie.Last with
+            | Some l -> 
+                match l.Fragment with
+                | Some f -> f.Next <- Some epilog
+                | None -> ()
+            | None ->
+                ()
+
+
+        override x.Free(info : CompilerInfo) =
+            for cmd in cache.Values do
+                cmd.Free(info)
+
+            match epilog with
+            | Some e -> 
+                e.Dispose()
+                epilog <- None
+            | None ->
+                ()
+
+            cache.Clear()
+            trie.Clear()
+            dirty.Clear()
+            reader <- Unchecked.defaultof<_>
+
+    type OrderedCommand(o : alist<Command>) =
+        inherit Command()
+
+        let reader = o.GetReader()
+
+        let mutable state : IndexList<ProgramFragment * Command> = IndexList.empty
+        let mutable dirty = System.Collections.Generic.HashSet<Command>()
+
+        override x.InputChangedObject(t : obj, i : IAdaptiveObject) =
+            match i with
+            | :? Command as c -> lock dirty (fun () -> dirty.Add c |> ignore)
+            | _ -> ()
+
+        override x.PerformUpdate(token : AdaptiveToken, program : FragmentProgram, info : CompilerInfo) =
+            let ops = reader.GetChanges token
+
+            for i, op in IndexListDelta.toSeq ops do
+                let (l, s, r) = IndexList.neighbours i state
+                match op with
+                | Set cmd ->
+                    cmd.Update(token, info)
+
+                    let fragment = 
+                        match s with
+                        | Some (_, (fragment, old)) ->
+                            old.Free info
+                            lock dirty (fun () -> dirty.Remove old |> ignore)
+                            fragment.Mutate(fun s p ->
+                                s.Call(cmd.Program.Value, p)
+                            )
+                            fragment
+
+                        | None ->
+                            let fragment = 
+                                program.NewFragment (fun s p ->
+                                    s.Call(cmd.Program.Value, p)
+                                )
+                            match r with
+                            | Some (_, (r, _)) -> fragment.Next <- Some r
+                            | None -> fragment.Next <- None
+                            
+                            match l with
+                            | Some (_, (lf,_)) -> lf.Next <- Some fragment
+                            | None -> program.First <- Some fragment
+                            
+                            
+                            
+                            fragment
+
+                    state <- IndexList.set i (fragment, cmd) state
+                    
+                | Remove ->
+                    match s with
+                    | Some (_, (oldFragment, oldCmd)) ->
+                        oldCmd.Free info
+                        oldFragment.Dispose()
+                        lock dirty (fun () -> dirty.Remove oldCmd |> ignore)
+                    | None ->
+                        ()
+
+                    state <- IndexList.remove i state
+
+
+            let mine = 
+                lock dirty (fun () ->
+                    let d = Seq.toArray dirty
+                    dirty.Clear()
+                    d
+                )
+
+            for m in mine do 
+                m.Update(token, info)
+
+        override x.Free(info : CompilerInfo) =
+            for (f, cmd) in state do
+                cmd.Free info
+                f.Dispose()
+
+            state <- IndexList.empty
+            dirty.Clear()
+            ()
+
+    type ClearCommand(signature : IFramebufferSignature, colors : HashMap<Symbol, aval<C4f>>, depth : option<aval<float>>, stencil : option<aval<uint32>>) =
+        inherit Command()
+
+        let mutable fragment : option<ProgramFragment> = None
+
+        let colors =
+            signature.ColorAttachments |> HashMap.ofMap |> HashMap.choose (fun _ (sem, _) ->
+                match HashMap.tryFind sem colors with
+                | Some color -> Some color
+                | None -> None
+            )
+
+        let compile (info : CompilerInfo) (s : IAssemblerStream) (p : IAdaptivePinning) =
+
+            let mutable flags = ClearBufferMask.None
+
+
+            for (i, c) in colors do
+                s.BeginCall(1)
+                s.PushIntArg (info.drawBuffers + nativeint sizeof<int> * nativeint i)
+                s.Call(OpenGl.Pointers.DrawBuffer)
+                
+                let pColor = p.Pin c
+
+                flags <- flags ||| ClearBufferMask.ColorBufferBit
+                s.BeginCall(4)
+                s.PushFloatArg (NativePtr.toNativeInt pColor + nativeint sizeof<float32> * 3n)
+                s.PushFloatArg (NativePtr.toNativeInt pColor + nativeint sizeof<float32> * 2n)
+                s.PushFloatArg (NativePtr.toNativeInt pColor + nativeint sizeof<float32> * 1n)
+                s.PushFloatArg (NativePtr.toNativeInt pColor + nativeint sizeof<float32> * 0n)
+                s.Call(OpenGl.Pointers.ClearColor)
+
+
+            match depth with
+            | Some depth ->
+                let pDepth = p.Pin depth
+                flags <- flags ||| ClearBufferMask.DepthBufferBit
+                s.BeginCall(1)
+                s.PushDoubleArg (NativePtr.toNativeInt pDepth)
+                s.Call(OpenGl.Pointers.ClearDepth)
+            | None ->
+                ()
+
+            match stencil with
+            | Some stencil ->
+                let pStencil = p.Pin stencil
+                flags <- flags ||| ClearBufferMask.StencilBufferBit
+                s.BeginCall(1)
+                s.PushIntArg (NativePtr.toNativeInt pStencil)
+                s.Call(OpenGl.Pointers.ClearStencil)
+            | None ->
+                ()
+
+            s.BeginCall(1)
+            s.PushArg (int flags)
+            s.Call(OpenGl.Pointers.Clear)
+
+        override x.PerformUpdate(token : AdaptiveToken, program : FragmentProgram, info : CompilerInfo) =
+            match fragment with
+            | Some f ->
+                ()
+            | None ->
+                let f = program.NewFragment (compile info)
+                fragment <- Some f
+                program.First <- Some f
+
+            program.Update(token)
+
+        override x.Free(info : CompilerInfo) =
+            match fragment with
+            | Some f -> 
+                f.Dispose()
+                fragment <- None
+            | None ->
+                ()
+
+    type IfThenElseCommand(condition : aval<bool>, ifTrue : Command, ifFalse : Command) =
+        inherit Command()
+
+        let condition = AVal.map (function true -> 1 | false -> 0) condition
+        let mutable fragment : option<ProgramFragment> = None
+
+
+        override x.PerformUpdate(token : AdaptiveToken, program : FragmentProgram, info : CompilerInfo) =
+            ifTrue.Update(token, info)
+            ifFalse.Update(token, info)
+
+            match fragment with
+            | None ->
+                let f = 
+                    program.NewFragment(fun s p ->
+                        let f = s.NewLabel()
+                        let e = s.NewLabel()
+
+                        let pCond = p.Pin condition
+                        s.Cmp(NativePtr.toNativeInt pCond, 0)
+                        s.Jump(JumpCondition.Equal, f)
+                        s.Call(ifTrue.Program.Value, p)
+                        s.Jump(e)
+
+                        s.Mark(f)
+                        s.Call(ifFalse.Program.Value, p)
+
+                        s.Mark(e)
+                        
+                    )
+                program.First <- Some f
+                fragment <- Some f
+
+            | Some _ ->
+                ()
+
+            program.Update(token)
+
+        override x.Free(info : CompilerInfo) =
+            match fragment with
+            | Some f -> f.Dispose()
+            | None -> ()
+            ifTrue.Free info
+            ifFalse.Free info
+
+    type NopCommand private() =
+        inherit Command()
+
+        static let instance = NopCommand() :> Command
+
+        static member Instance = instance
+
+        override x.PerformUpdate(_,_,_) = 
+            ()
+
+        override x.Free(_) =
+            ()
+
+    let rec ofRuntimeCommand (fboSignature : IFramebufferSignature) (x : ResourceManager) (cmd : RuntimeCommand) =
+        match cmd with
+        | RuntimeCommand.EmptyCmd ->
+            NopCommand.Instance
+
+        | RuntimeCommand.RenderCmd objects ->
+            ManyObjectsCommand(fboSignature, x, objects) 
+            :> Command
+
+        | RuntimeCommand.OrderedCmd commands ->
+            commands 
+            |> AList.map (ofRuntimeCommand fboSignature x)
+            |> OrderedCommand
+            :> Command
+
+        | RuntimeCommand.ClearCmd(colors, depth, stencil) ->
+            ClearCommand(fboSignature, HashMap.ofMap colors, depth, stencil)
+            :> Command
+
+        | RuntimeCommand.IfThenElseCmd(cond, ifTrue, ifFalse) ->
+            let ifTrue = ofRuntimeCommand fboSignature x ifTrue
+            let ifFalse = ofRuntimeCommand fboSignature x ifFalse
+            IfThenElseCommand(cond, ifTrue, ifFalse)
+            :> Command
+
+        | RuntimeCommand.GeometriesCmd _
+        | RuntimeCommand.GeometriesSimpleCmd _
+        | RuntimeCommand.DispatchCmd _
+        | RuntimeCommand.LodTreeCmd _ ->
+            failwith "not implemented"
+
+    let ofRenderObjects (fboSignature : IFramebufferSignature) (x : ResourceManager) (objects : aset<IRenderObject>) =
+        let special = 
+            objects 
+            |> ASet.choose (function :? CommandRenderObject as o -> Some o.Command | _ -> None)
+            |> ASet.toAList
+
+        let simple =
+            objects 
+            |> ASet.choose (function :? CommandRenderObject -> None | o -> Some o)
+
+        let simpleCount =
+            if simple.IsConstant then ASet.force simple |> HashSet.count |> ValueSome
+            else ValueNone
+            
+        let specialCount =
+            if special.IsConstant then AList.force special |> IndexList.count |> ValueSome
+            else ValueNone
+
+        match struct (simpleCount, specialCount) with
+        | struct(ValueSome 0, ValueSome 0) ->
+            NopCommand.Instance
+
+        | struct(ValueSome 0, ValueSome 1) ->
+            special |> AList.force |> Seq.head |> ofRuntimeCommand fboSignature x
+
+        | struct(ValueSome 0, _) ->
+            RuntimeCommand.OrderedCmd special |> ofRuntimeCommand fboSignature x
+
+        | struct(_, ValueSome 0) ->
+            RuntimeCommand.RenderCmd simple |> ofRuntimeCommand fboSignature x
+
+        | _ ->
+            AList.append (AList.single (RuntimeCommand.RenderCmd simple)) special
+            |> RuntimeCommand.OrderedCmd
+            |> ofRuntimeCommand fboSignature x

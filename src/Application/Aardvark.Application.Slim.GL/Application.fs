@@ -36,6 +36,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
         let w = glfw.CreateWindow windowConfig
         let h = ContextHandle(w.Context, w.WindowInfo)
         if enableDebug then h.AttachDebugOutputIfNeeded()
+        let o = ContextHandle.Current
         h.MakeCurrent()
 
         OpenTK.Graphics.OpenGL4.GL.Hint(OpenTK.Graphics.OpenGL4.HintTarget.PointSmoothHint, OpenTK.Graphics.OpenGL4.HintMode.Fastest)
@@ -44,6 +45,9 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
         OpenTK.Graphics.OpenGL4.GL.Hint(OpenTK.Graphics.OpenGL4.HintTarget.FragmentShaderDerivativeHint, OpenTK.Graphics.OpenGL4.HintMode.Nicest)
 
         h.ReleaseCurrent()
+        match o with
+        | Some o -> o.MakeCurrent()
+        | None -> ()
         glfw.RemoveExistingWindow w
         h
 

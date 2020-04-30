@@ -589,7 +589,7 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
     let add x (call : DrawCallInfo) =
         locked x (fun () ->
             if indices.ContainsKey call then 
-                false
+                false // THIS SHOULD NEVER HAPPEN
             else
                 let index = calls.Count
                 indices.[call] <- calls.Count
@@ -617,7 +617,83 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
                         
                     true
                 | _ ->
-                    false
+                    false // THIS SHOULD NEVER HAPPEN
+        )
+
+    let emptySlots = IntSet()
+
+    let update x (removals : List<DrawCallInfo>) (additions : List<DrawCallInfo>) =
+        locked x (fun () -> 
+            let mutable changed = false
+            // collect new empty slots
+            for rem in removals do
+                match indices.TryRemove rem with
+                    | (true, index) ->
+                        emptySlots.Add(index) |> ignore 
+                        changed <- true
+                    | _ ->
+                        () // THIS SHOULD NEVER HAPPEN
+
+            // sort empty slots if we have less addition than removals
+            let emptySlotEnum = 
+                if emptySlots.Count > 0 && emptySlots.Count > additions.Count then
+                    let arr = emptySlots.ToArray()
+                    Array.sortInPlace arr
+                    (arr :> seq<int>).GetEnumerator()
+                else
+                    emptySlots.GetEnumerator()
+
+            // try filling empty slots with added draw calls
+            for call in additions do
+                if not (indices.ContainsKey call) then 
+                    let index = 
+                        // check if there are empty slots
+                        if emptySlotEnum.MoveNext() then 
+                            let index = emptySlotEnum.Current
+                            calls.[index] <- call
+                            index
+                        else // add at the end of the draw call buffer
+                            calls.Add call
+                            calls.Count - 1 
+
+                    indices.[call] <- index
+                    upload call index
+                    changed <- true
+                else
+                    () // THIS SHOULD NEVER HAPPEN
+
+            // fill remaining empty slots by compacting drawcall buffer
+            let newCallCount = indices.Count
+
+            if newCallCount = 0 then
+                calls.Clear()
+                store.Resize(0n)
+            else
+                while emptySlotEnum.MoveNext() do
+                    let index = emptySlotEnum.Current
+                    if index < newCallCount then // copy from the end
+                        // find last not empty index
+                        let mutable lastIndex = calls.Count - 1
+                        while emptySlots.Contains(lastIndex) do
+                            calls.RemoveAt lastIndex // calls.Count - 1
+                            lastIndex <- lastIndex - 1
+                        
+                        let lastCall = calls.[lastIndex]
+                        indices.[lastCall] <- index
+                        calls.[index] <- lastCall
+                        upload lastCall index
+
+                        calls.RemoveAt lastIndex // calls.Count - 1
+
+                    // there are no more calls to copy -> reduce calls.Count to indice.Count
+                    elif calls.Count > newCallCount then // as we already remove empty slots at the end while searching last not empty index only remove calls > newCallCount
+                        calls.RemoveAt (calls.Count - 1) // remove last (an empty slot)
+
+            //if calls.Count <> indices.Count then failwith "FAIL"
+
+            emptySlots.Clear()
+
+            true 
         )
 
     member x.Add (call : DrawCallInfo) =
@@ -629,6 +705,13 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
 
     member x.Remove(call : DrawCallInfo) =
         if remove x call then
+            transact (fun () -> x.MarkOutdated())
+            true
+        else
+            false
+
+    member x.Update(removals : List<DrawCallInfo>, additions : List<DrawCallInfo>) =
+        if update x removals additions then
             transact (fun () -> x.MarkOutdated())
             true
         else
@@ -682,17 +765,25 @@ module ``Pool Semantics`` =
             
             let pool = p.Pool
             
+            let additions = new List<DrawCallInfo>()
+            let removals = new List<DrawCallInfo>()
+
             let r = (p.Calls |> ASet.map (fun mdc -> mdc.Call)).GetReader()
             let calls =
                 let buffer = DrawCallBuffer(pool.Runtime, true) // who manages this? using finalizer for now
                 AVal.custom (fun self ->
                     let deltas = r.GetChanges self
-                    for d in deltas do
-                        match d with
-                            | Add(_,v) -> buffer.Add v |> ignore
-                            | Rem(_,v) -> buffer.Remove v |> ignore
+                    if deltas.Count > 0 then
+                        for d in deltas do
+                            match d with
+                                | Add(_,v) -> additions.Add v
+                                | Rem(_,v) -> removals.Add v
 
-                    buffer.GetValue()
+                        buffer.Update(removals, additions) |> ignore
+                        additions.Clear()
+                        removals.Clear()
+
+                    buffer.GetValue self
                 )
             
             let mutable ro = Unchecked.defaultof<RenderObject>
