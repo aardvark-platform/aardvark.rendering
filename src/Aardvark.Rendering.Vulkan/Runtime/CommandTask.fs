@@ -909,6 +909,11 @@ module private RuntimeCommands =
             | ValueSome v -> 
                 v.Value.Next <- Some cmd
                 cmd.Prev <- Some v.Value
+            match ref.Next with
+            | ValueNone -> ()
+            | ValueSome next -> 
+                next.Value.Prev <- Some cmd
+                cmd.Next <- Some next.Value
 
             match trie.Last with
             | ValueNone -> failwith "[Vulkan] empty CommandBucket"
@@ -923,15 +928,21 @@ module private RuntimeCommands =
             let res = trie.TryRemove(cmd.GroupKey)
             match res with
             | ValueNone -> false
-            | ValueSome l -> 
-                match trie.Last with
-                | ValueNone -> failwith "[Vulkan] empty CommandBucket"
-                | ValueSome l -> 
+            | ValueSome (prev,next) -> 
+                match prev,next with
+                | ValueSome prev, ValueSome next -> 
+                    prev.Value.Next <- Some next.Value
+                    next.Value.Prev <- Some prev.Value
+                | ValueSome last, ValueNone  -> 
                     let next = x.Next |> Option.map (fun n -> n.First)
-                    l.Value.Next <- next
+                    last.Value.Next <- next
                     match next with
                     | None -> ()
-                    | Some n -> n.Prev <- Some l.Value
+                    | Some n -> n.Prev <- Some last.Value
+                | ValueNone, ValueSome next ->
+                    firstCommand.Next <- Some next.Value
+                    next.Value.Prev <- Some firstCommand
+                | _ -> ()
                 true
 
 
