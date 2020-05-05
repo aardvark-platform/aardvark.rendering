@@ -207,7 +207,7 @@ module private BitonicKernels =
 
 
 
-type BitonicSorter<'a when 'a : unmanaged>(runtime : IRuntime, isGoodOrder : Expr<'a -> 'a -> bool>) =
+type BitonicSorter<'a when 'a : unmanaged>(runtime : IComputeRuntime, isGoodOrder : Expr<'a -> 'a -> bool>) =
 
     let initPerm    = runtime.CreateComputeShader BitonicKernels.initPermKernel
     let simple      = runtime.CreateComputeShader (BitonicKernels.bitonicKernel isGoodOrder)

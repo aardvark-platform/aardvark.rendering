@@ -547,10 +547,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     interface IRuntime with
 
-        member x.CreateLodRenderer(config : LodRendererConfig, data : aset<LodTreeInstance>) =
-            failf "not implemented"
-
-
         member x.DeviceCount = device.PhysicalDevices.Length
 
         member x.MaxLocalSize = device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize

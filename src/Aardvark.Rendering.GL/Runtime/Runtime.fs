@@ -63,7 +63,7 @@ type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * Attachm
         sprintf "{ ColorAttachments = %A; DepthAttachment = %A; StencilAttachment = %A }" colors depth stencil
 
     interface IFramebufferSignature with
-        member x.Runtime = runtime
+        member x.Runtime = runtime :> IFramebufferRuntime
         member x.ColorAttachments = colors
         member x.DepthAttachment = depth
         member x.StencilAttachment = stencil
@@ -116,12 +116,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             ctx <- null
 
     interface IDisposable with
-        member x.Dispose() = x.Dispose() 
+        member x.Dispose() = x.Dispose()
 
-    interface IRuntime with
-    
-        member x.DeviceCount = 1
-
+    interface ILodRuntime with
 
         member x.CreateLodRenderer(config : LodRendererConfig, data : aset<LodTreeInstance>) =
 
@@ -136,6 +133,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                             
             new LodRenderer(x.Context, x.ResourceManager, preparedState, config, data) :> IPreparedRenderObject
 
+    interface IRuntime with
+    
+        member x.DeviceCount = 1
 
         member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) : unit =
             use __ = ctx.ResourceLock

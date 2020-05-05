@@ -452,9 +452,7 @@ module FShadeInterop =
 
         member x.Effect = effect
 
-        interface IGeneratedSurface with
-            member x.Generate (r : IRuntime, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
-                r.AssembleEffect(effect, signature, topology) 
+        interface ISurface
 
     let toFShadeSurface (e : FShadeEffect) = FShadeSurface.Get e :> ISurface
 

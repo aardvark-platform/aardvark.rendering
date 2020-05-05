@@ -1173,7 +1173,7 @@ module Tools =
             handle.Free()
 
 
-type JpegCompressor(runtime : IRuntime) =
+type JpegCompressor(runtime : IComputeRuntime) =
     let dct         = runtime.CreateComputeShader JpegKernels.dct
     let codewords   = runtime.CreateComputeShader JpegKernels.codewordsKernelBallot
     let assemble    = runtime.CreateComputeShader JpegKernels.assembleKernel

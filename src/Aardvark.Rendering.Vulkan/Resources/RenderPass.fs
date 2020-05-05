@@ -30,7 +30,7 @@ type RenderPass =
                 | _ -> 0
 
         interface IFramebufferSignature with
-            member x.Runtime = x.Device.Runtime
+            member x.Runtime = x.Device.Runtime :> IFramebufferRuntime
             member x.ColorAttachments = x.ColorAttachments
             member x.DepthAttachment = x.DepthStencilAttachment |> Option.map snd
             member x.StencilAttachment = x.DepthStencilAttachment |> Option.map snd

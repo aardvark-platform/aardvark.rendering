@@ -1226,8 +1226,12 @@ module PreparedCommand =
                 if not owned then cmd.AddReference()
                 cmd
 
-            | :? ICustomRenderObject as o ->
-                o.Create(fboSignature.Runtime, fboSignature) |> ofRenderObject true fboSignature x
+            | :? ILodRenderObject as o ->
+                match fboSignature.Runtime with
+                | :? ILodRuntime as r ->
+                    o.Prepare(r, fboSignature) |> ofRenderObject true fboSignature x
+                | _ ->
+                    failwithf "expected ILodRuntime for object: %A" o
 
             | _ ->
                 failwithf "bad object: %A" o

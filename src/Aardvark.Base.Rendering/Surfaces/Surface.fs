@@ -12,6 +12,10 @@ type IDisposableSurface =
     inherit ISurface
     inherit IDisposable
 
+type IBackendSurface =
+    inherit ISurface
+    abstract member Handle : obj
+
 [<RequireQualifiedAccess>]
 type Surface =
     | FShadeSimple of Effect

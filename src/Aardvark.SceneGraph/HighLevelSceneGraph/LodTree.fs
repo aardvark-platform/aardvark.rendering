@@ -91,7 +91,7 @@ type LodNodeSem() =
 
         let id = newId()
         let obj =
-            { new ICustomRenderObject with
+            { new ILodRenderObject with
                 member x.Id = id
                 member x.AttributeScope = scope
                 member x.RenderPass = pass

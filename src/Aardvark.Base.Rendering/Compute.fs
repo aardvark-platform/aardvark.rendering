@@ -39,6 +39,8 @@ and IComputeRuntime =
     inherit IBufferRuntime
     inherit ITextureRuntime
 
+    abstract member ContextLock : IDisposable
+
     abstract member MaxLocalSize : V3i
     abstract member CreateComputeShader : FShade.ComputeShader -> IComputeShader
     abstract member DeleteComputeShader : IComputeShader -> unit

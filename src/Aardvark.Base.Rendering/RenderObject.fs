@@ -14,9 +14,14 @@ type IRenderObject =
     abstract member RenderPass : RenderPass
     abstract member AttributeScope : Ag.Scope
 
-[<CustomEquality>]
-[<CustomComparison>]
-type RenderObject =
+type IPreparedRenderObject =
+    inherit IRenderObject
+    inherit IDisposable
+
+    abstract member Update : AdaptiveToken * RenderToken -> unit
+    abstract member Original : Option<RenderObject>
+
+and [<CustomEquality; CustomComparison>] RenderObject =
     {
         Id : int
         mutable AttributeScope : Ag.Scope

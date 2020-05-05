@@ -41,7 +41,7 @@ type MultiRenderTask(runtime : MultiRuntime, signature : IFramebufferSignature, 
         member x.Run(t,rt,o) =
             x.EvaluateAlways t (fun t ->
                 let current = o.framebuffer.Signature.Runtime
-                let index = runtime.Runtimes.IndexOf current
+                let index = runtime.Runtimes.IndexOf (current :?> IRuntime)
                 tasks.[index].Run(t, rt, o)
             )
 
@@ -55,7 +55,7 @@ and MultiFramebufferSignature(runtime : IRuntime, signatures : IFramebufferSigna
         member x.Images = signatures.[0].Images
         member x.LayerCount = signatures.[0].LayerCount
         member x.PerLayerUniforms = signatures.[0].PerLayerUniforms
-        member x.Runtime = runtime
+        member x.Runtime = runtime :> IFramebufferRuntime
 
 //type MultiBlock<'a>(blocks : Management.Block<'a>[]) =
 //    inherit Management.Block<'a>(blocks.[0].Parent, blocks.[0].Offset, blocks.[0].Size, blocks.[1].IsFree, null, null)
@@ -277,10 +277,6 @@ and MultiRuntime(runtimes : IRuntime[]) =
 
     interface IRuntime with
         member x.DeviceCount = runtimes |> Seq.map (fun r -> r.DeviceCount) |> Seq.min
-
-        member x.CreateLodRenderer(config : LodRendererConfig, data : aset<LodTreeInstance>) =
-            failwithf "not implemented"
-
 
         member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) : unit =
             failwith "not implemented"

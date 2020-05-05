@@ -171,7 +171,7 @@ module private RefCountedResources =
                 | :? IOutputMod<'a> as x -> x.GetValue(c, t)
                 | _ -> x.GetValue(c)
 
-    type AdaptiveTexture(runtime : IRuntime, format : TextureFormat, samples : int, size : aval<V2i>) =
+    type AdaptiveTexture(runtime : ITextureRuntime, format : TextureFormat, samples : int, size : aval<V2i>) =
         inherit AbstractOutputMod<ITexture>()
 
         let mutable handle : Option<IBackendTexture> = None
@@ -205,7 +205,7 @@ module private RefCountedResources =
                     handle <- Some tex
                     tex :> ITexture
          
-    type AdaptiveCubeTexture(runtime : IRuntime, format : TextureFormat, samples : int, size : aval<int>) =
+    type AdaptiveCubeTexture(runtime : ITextureRuntime, format : TextureFormat, samples : int, size : aval<int>) =
         inherit AbstractOutputMod<ITexture>()
 
         let mutable handle : Option<IBackendTexture> = None
@@ -239,7 +239,7 @@ module private RefCountedResources =
                     handle <- Some tex
                     tex :> ITexture
 
-    type AdaptiveRenderbuffer(runtime : IRuntime, format : RenderbufferFormat, samples : int, size : aval<V2i>) =  
+    type AdaptiveRenderbuffer(runtime : ITextureRuntime, format : RenderbufferFormat, samples : int, size : aval<V2i>) =  
         inherit AbstractOutputMod<IRenderbuffer>()
 
         let mutable handle : Option<IRenderbuffer> = None
@@ -292,7 +292,7 @@ module private RefCountedResources =
             let rb = renderbuffer.GetValue(token, t)
             rb :> IFramebufferOutput
 
-    type IRuntime with
+    type ITextureRuntime with
         member x.CreateTexture(format : TextureFormat, samples : int, size : aval<V2i>) =
             AdaptiveTexture(x, format, samples, size) :> IOutputMod<ITexture>
 
@@ -310,7 +310,7 @@ module private RefCountedResources =
 
 
 
-    type AdaptiveFramebuffer(runtime : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<V2i>) =
+    type AdaptiveFramebuffer(runtime : IFramebufferRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<V2i>) =
         inherit AbstractOutputMod<IFramebuffer>()
 
         let createAttachment (sem : Symbol) (att : AttachmentSignature) =
@@ -363,7 +363,7 @@ module private RefCountedResources =
             handle <- Some fbo
             fbo
 
-    type AdaptiveFramebufferCube(runtime : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<int>) =
+    type AdaptiveFramebufferCube(runtime : IFramebufferRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<int>) =
         inherit AbstractOutputMod<IFramebuffer[]>()
 
         let store = SymDict.empty
@@ -483,15 +483,15 @@ module private RefCountedResources =
 type RuntimeFramebufferExtensions private() =
 
     [<Extension>]
-    static member CreateFramebuffer (this : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<V2i>) : IOutputMod<IFramebuffer> =
+    static member CreateFramebuffer (this : IFramebufferRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<V2i>) : IOutputMod<IFramebuffer> =
         AdaptiveFramebuffer(this, signature, textures, size) :> IOutputMod<IFramebuffer>
     
     [<Extension>]
-    static member CreateFramebufferCube (this : IRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<int>) : IOutputMod<IFramebuffer[]> =
+    static member CreateFramebufferCube (this : IFramebufferRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<int>) : IOutputMod<IFramebuffer[]> =
         AdaptiveFramebufferCube(this, signature, textures, size) :> IOutputMod<IFramebuffer[]>
 
     [<Extension>]
-    static member CreateFramebuffer (this : IRuntime, signature : IFramebufferSignature, size : aval<V2i>) : IOutputMod<IFramebuffer> =
+    static member CreateFramebuffer (this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<V2i>) : IOutputMod<IFramebuffer> =
         let sems =
             Set.ofList [
                 yield! signature.ColorAttachments |> Map.toSeq |> Seq.map snd |> Seq.map fst
