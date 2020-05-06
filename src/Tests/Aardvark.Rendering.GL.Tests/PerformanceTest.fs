@@ -190,7 +190,11 @@ module RenderTaskPerformance =
 
         let transparency = RenderPass.after "nam" RenderPassOrder.Arbitrary RenderPass.main
        
-        let s = app.Runtime.PrepareEffect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor (C4f(1.0,1.0,1.0,0.2)) |> toEffect ] :> ISurface
+        let s =
+            app.Runtime.PrepareEffect (win.FramebufferSignature, [
+                DefaultSurfaces.trafo |> toEffect
+                DefaultSurfaces.constantColor (C4f(1.0,1.0,1.0,0.2)) |> toEffect
+            ]) :> ISurface
 
         let renderObjects =
             objects

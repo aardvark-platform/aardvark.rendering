@@ -5,7 +5,7 @@ open FSharp.Data.Adaptive
 open System.Runtime.CompilerServices
 
 [<AbstractClass; Sealed; Extension>]
-type RenderRuntimeExtensions private() =
+type IRuntimeExtensions private() =
 
     [<Extension>]
     static member CompileClear(this : IRuntime, signature : IFramebufferSignature, colors : aval<seq<Symbol * C4f>>, depth : aval<float>) =

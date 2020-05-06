@@ -14,16 +14,14 @@
     <OutputPath>..\..\bin\Release</OutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="AverageWindow.fs" />
-    <Compile Include="DefaultSemantic.fs" />
-    <Compile Include="ReferenceCountingSet.fs" />
+    <Compile Include="Utilities\Obsolete\AverageWindow.fs" />
+    <Compile Include="Utilities\Obsolete\ReferenceCountingSet.fs" />
     <Compile Include="Utilities\TaskUtilities.fs" />
     <Compile Include="Utilities\ConstantVal.fs" />
     <Compile Include="Utilities\IdGenerator.fs" />
     <Compile Include="Utilities\PrimitiveValueConverter.fs" />
     <Compile Include="Utilities\GPUVendor.fs" />
     <Compile Include="Utilities\ArrayVisitor.fs" />
-    <Compile Include="Utilities\UniformWriters.fs" />
     <Compile Include="Utilities\Timer.fs" />
     <Compile Include="Locks\ColoredLock.fs" />
     <Compile Include="Locks\LockedResource.fs" />
@@ -40,13 +38,13 @@
     <Compile Include="Resources\Buffers\BufferView.fs" />
     <Compile Include="Resources\Textures\Formats.fs" />
     <Compile Include="Resources\Textures\Textures.fs" />
-    <Compile Include="Resources\Textures\TextureExtensions.fs" />
     <Compile Include="Resources\Textures\TextureSlicing.fs" />
     <Compile Include="Resources\Textures\FileTexture.fs" />
     <Compile Include="Resources\Textures\PixTexture2d.fs" />
     <Compile Include="Resources\Textures\PixTexture3d.fs" />
     <Compile Include="Resources\Textures\PixTextureCube.fs" />
     <Compile Include="Resources\Textures\BackendTextureOutputView.fs" />
+    <Compile Include="Resources\Textures\TextureExtensions.fs" />
     <Compile Include="Resources\Textures\DefaultTextures.fs" />
     <Compile Include="Resources\Framebuffer\Framebuffer.fs" />
     <Compile Include="Resources\Framebuffer\FramebufferExtensions.fs" />
@@ -57,9 +55,11 @@
     <Compile Include="Base\PixImageCube.fs" />
     <Compile Include="Geometry\IndexedGeometry.fs" />
     <Compile Include="Geometry\Geometry.fs" />
-    <Compile Include="Providers\UniformProvider.fs" />
-    <Compile Include="Providers\AttributeProvider.fs" />
-    <Compile Include="Providers\Uniforms.fs" />
+    <Compile Include="Uniforms\UniformWriters.fs" />
+    <Compile Include="Uniforms\UniformProvider.fs" />
+    <Compile Include="Uniforms\Uniforms.fs" />
+    <Compile Include="Attributes\DefaultSemantic.fs" />
+    <Compile Include="Attributes\AttributeProvider.fs" />
     <Compile Include="Camera.fs" />
     <Compile Include="DrawCalls.fs" />
     <Compile Include="Compute.fs" />
@@ -76,12 +76,10 @@
     <Compile Include="GeometryPacker.fs" />
     <Compile Include="Memory.fs" />
     <Compile Include="GeometryPool.fs" />
-    <Compile Include="ColorWriteMask.fs" />
     <Compile Include="Runtime\ResourceManager.fs" />
     <Compile Include="Runtime\Runtime.fs" />
     <Compile Include="Runtime\RuntimeExtensions.fs" />
     <Compile Include="RenderFragment.fs" />
-    <Compile Include="RuntimeExtensions.fs" />
     <Compile Include="ChangeableResources.fs" />
     <Compile Include="AdaptiveResources.fs" />
     <Compile Include="RenderTasks\AbstractRenderTask.fs" />

@@ -288,3 +288,30 @@ type ITextureRuntimeExtensions private() =
     [<Extension>]
     static member Upload(this : ITextureRuntime, texture : IBackendTexture, source : PixImage) =
         this.Upload(texture, 0, 0, source)
+
+
+[<AbstractClass; Sealed; Extension>]
+type IBackendTextureExtensions private() =
+
+    /// <summary>
+    /// Creates a FramebufferOutput of the texture with the given level and slice.
+    /// </summary>
+    [<Extension>]
+    static member GetOutputView(this : IBackendTexture, level : int, slice : int) =
+        { texture = this; level = level; slice = slice } :> IFramebufferOutput
+
+    /// <summary>
+    /// Creates a FramebufferOutput of the texture with the given level.
+    /// In case the texture is an array or a cube, all items or faces are selected as texture layers.
+    /// </summary>
+    [<Extension>]
+    static member GetOutputView(this : IBackendTexture, level : int) =
+        { texture = this; level = level; slice = -1 } :> IFramebufferOutput
+
+    /// <summary>
+    /// Creates a FramebufferOutput of the level of the texture.
+    /// In case the texture is an array or a cube, all items or faces are selected as texture layers.
+    /// </summary>
+    [<Extension>]
+    static member GetOutputView(this : IBackendTexture) =
+        { texture = this; level = 0; slice = -1 } :> IFramebufferOutput

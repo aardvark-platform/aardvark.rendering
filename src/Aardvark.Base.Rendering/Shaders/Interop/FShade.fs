@@ -483,19 +483,6 @@ type FShadeRuntimeExtensions private() =
         )
 
     [<Extension>]
-    static member PrepareEffect (this : IRuntime, l : list<FShadeEffect>) =
-        this.PrepareSurface(
-            toSurface l
-        )
-
-    [<Extension>]
-    static member PrepareEffect (this : IRuntime, [<ParamArray>] effects : array<FShadeEffect>) =
-        let l = List.ofArray(effects)
-        this.PrepareSurface(
-            toSurface l
-        )
-
-    [<Extension>]
     static member PrepareEffect (this : IRuntime, signature : IFramebufferSignature, l : aval<list<FShadeEffect>>) =
         let mutable current = None
         l |> AVal.map (fun l ->
