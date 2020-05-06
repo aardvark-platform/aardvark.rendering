@@ -95,7 +95,7 @@ type LodNodeSem() =
                 member x.Id = id
                 member x.AttributeScope = scope
                 member x.RenderPass = pass
-                member x.Create(r, fbo) = 
+                member x.Prepare(r, fbo) = 
                     let config =
                         {
                             fbo = fbo
