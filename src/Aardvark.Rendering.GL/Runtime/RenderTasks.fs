@@ -202,8 +202,6 @@ module RenderTasks =
         let sortWatch           = Stopwatch()
         //let runWatch            = OpenGlStopwatch()
 
-        let fragments = System.Collections.Generic.HashSet<RenderFragment>()
-
         member x.ProgramUpdate (t : RenderToken, f : unit -> 'a) =
             if RenderToken.isEmpty t then
                 f()
@@ -231,17 +229,7 @@ module RenderTasks =
         abstract member Add : PreparedCommand -> unit
         abstract member Remove : PreparedCommand -> unit
 
-        member x.Add(t : RenderFragment) = 
-            fragments.Add t |> ignore
-
-        member x.Remove(t : RenderFragment) = 
-            fragments.Remove t |> ignore
-
-
         member x.Run(token : AdaptiveToken, t : RenderToken, output : OutputDescription) =
-
-            for task in fragments do
-                task.Run(token, t, output)
 
             x.Perform(token, t)
             if RenderToken.isEmpty t then
