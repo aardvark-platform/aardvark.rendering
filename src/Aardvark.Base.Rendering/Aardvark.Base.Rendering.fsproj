@@ -82,7 +82,17 @@
     <Compile Include="Runtime\RuntimeExtensions.fs" />
     <Compile Include="RenderFragment.fs" />
     <Compile Include="RuntimeExtensions.fs" />
-    <Compile Include="RenderTask.fs" />
+    <Compile Include="ChangeableResources.fs" />
+    <Compile Include="AdaptiveResources.fs" />
+    <Compile Include="RenderTasks\AbstractRenderTask.fs" />
+    <Compile Include="RenderTasks\EmptyRenderTask.fs" />
+    <Compile Include="RenderTasks\SequentialRenderTask.fs" />
+    <Compile Include="RenderTasks\ModRenderTask.fs" />
+    <Compile Include="RenderTasks\AListRenderTask.fs" />
+    <Compile Include="RenderTasks\CustomRenderTask.fs" />
+    <Compile Include="RenderTasks\FinalizerRenderTask.fs" />
+    <Compile Include="RenderTasks\BeforeAfterRenderTask.fs" />
+    <Compile Include="RenderTasks\RenderTask.fs" />
     <Compile Include="Shaders\Interop\EffectDebugger.fs" />
     <Compile Include="Shaders\Interop\ShaderInterface.fs" />
     <Compile Include="Shaders\Interop\FShade.fs" />
@@ -109,6 +119,5 @@
     <Compile Include="Shaders\Effect.fs" />
     <Compile Include="Trie.fs" />
   </ItemGroup>
-  <ItemGroup />
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>
