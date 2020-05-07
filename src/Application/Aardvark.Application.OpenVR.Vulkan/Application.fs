@@ -377,7 +377,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
     member x.SubSampling
         with get() = 1.0
         and set (v : float) = 
-            let adjust (s : V2i) : V2i = max V2i.II (V2i (V2d s / v))
+            let adjust (s : V2i) : V2i = max V2i.II (V2i (V2d s * v))
             base.AdjustSize <- adjust
 
 
