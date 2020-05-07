@@ -1062,6 +1062,10 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
     member x.Time = time
     member x.Keyboard = keyboard :> Aardvark.Application.IKeyboard
     member x.Mouse = mouse :> Aardvark.Application.IMouse
+    
+    member x.SubSampling
+        with get() = 1.0
+        and set v = if v <> 1.0 then failwithf "[GLFW] SubSampling not implemented"
 
     interface Aardvark.Application.IRenderTarget with
         member x.AfterRender = x.AfterRender
@@ -1074,6 +1078,10 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
         member x.Samples = x.Samples
         member x.Sizes = x.Sizes
         member x.Time = x.Time
+
+        member x.SubSampling
+            with get() = x.SubSampling
+            and set v = x.SubSampling <- v
 
     interface Aardvark.Application.IRenderControl with
         member x.Keyboard = x.Keyboard

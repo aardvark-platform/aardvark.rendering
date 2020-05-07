@@ -693,6 +693,10 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
     
     member x.BeforeRender = beforeRender
     member x.AfterRender = afterRender
+    
+    member x.SubSampling
+        with get() = 1.0
+        and set v = if v <> 1.0 then failwith "[OpenGLSharing] SubSampling not implemented"
 
     interface IRenderTarget with
         member x.FramebufferSignature = x.FramebufferSignature
@@ -702,6 +706,9 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
         member x.RenderTask
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
+        member x.SubSampling
+            with get() = x.SubSampling
+            and set v = x.SubSampling <- v
         member x.Sizes = x.Sizes
         member x.BeforeRender = beforeRender.Publish
         member x.AfterRender = afterRender.Publish

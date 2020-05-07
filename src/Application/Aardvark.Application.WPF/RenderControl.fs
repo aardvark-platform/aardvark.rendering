@@ -14,6 +14,7 @@ type RenderControl() as self =
 
     let mutable runtime : IRuntime = Unchecked.defaultof<IRuntime>
     let mutable renderTask : Option<IRenderTask> = None
+    let mutable subsampling = 1.0
     let mutable impl : Option<IRenderTarget> = None
     let mutable ctrl : Option<FrameworkElement> = None
 
@@ -77,7 +78,7 @@ type RenderControl() as self =
         match renderTask with
             | Some task -> cr.RenderTask <- task
             | None -> ()
-
+        cr.SubSampling <- subsampling
             
         cr.BeforeRender.Add beforeRender.Trigger
         cr.AfterRender.Add afterRender.Trigger
@@ -123,6 +124,14 @@ type RenderControl() as self =
                 | Some i -> i.RenderTask <- t
                 | None -> ()
 
+    member x.SubSampling
+        with get() = subsampling
+        and set v =
+            subsampling <- v
+            match impl with
+            | Some i -> i.SubSampling <- v
+            | None -> ()
+
     member x.Time = time
 
 
@@ -143,3 +152,7 @@ type RenderControl() as self =
         member x.RenderTask 
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
+
+        member x.SubSampling
+            with get() = x.SubSampling
+            and set v = x.SubSampling <- v

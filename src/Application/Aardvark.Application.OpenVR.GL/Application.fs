@@ -162,6 +162,16 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
 
         info <- i
 
+        if loaded then
+            ctx.Delete (unbox<Framebuffer> fbo)
+            ctx.Delete fTex
+            ctx.Delete dTex
+            ctx.Delete cTex
+        else
+            compileHidden x.HiddenAreaMesh
+            compileClear()
+
+
         let nTex = ctx.CreateTexture2DArray(info.framebufferSize, 2, 1, TextureFormat.Rgba8, samples)
         let nDepth = ctx.CreateTexture2DArray(info.framebufferSize, 2, 1, TextureFormat.Depth24Stencil8, samples)
         let nfTex = ctx.CreateTexture2D(info.framebufferSize * V2i(2,1), 1, TextureFormat.Rgba8, 1)
@@ -176,6 +186,7 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
             )
             
 
+
         dTex <- nDepth
         cTex <- nTex
         fTex <- nfTex
@@ -186,8 +197,6 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
         let rTex = VrTexture.OpenGL(fTex.Handle, Box2d(V2d(0.5, 1.0), V2d(1.0, 0.0)))
         loaded <- true
         
-        compileHidden x.HiddenAreaMesh
-        compileClear()
 
         lTex,rTex
 
@@ -236,6 +245,12 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
     member x.BeforeRender = beforeRender
     member x.AfterRender = afterRender
 
+    member x.SubSampling
+        with get() = 1.0
+        and set (v : float) =
+            let adjust (s : V2i) : V2i = max V2i.II (V2i (V2d s * v))
+            base.AdjustSize <- adjust
+
     interface IRenderTarget with
         member x.Runtime = app.Runtime :> IRuntime
         member x.Sizes = AVal.constant x.DesiredSize
@@ -244,6 +259,9 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
         member x.RenderTask
             with get() = RenderTask.empty
             and set t = () //x.RenderTask <- t
+        member x.SubSampling
+            with get() = x.SubSampling
+            and set v = x.SubSampling <- v
         member x.Time = time
         member x.BeforeRender = beforeRender.Publish
         member x.AfterRender = afterRender.Publish
