@@ -30,23 +30,16 @@ let main argv =
 
     // the following shows how `SubSampling` and `Samples` can be used to control render-quality.
     // Since this is currently only available for OpenGL we need to unsafely get the "real" OpenGlRenderControl.
-    let ctrl = (unbox<Aardvark.Application.WinForms.OpenGlRenderControl> win.Control.Implementation)
     win.Keyboard.Down.Values.Add(fun k ->
         match k with
-        | Keys.Enter -> 
-            let n = ctrl.Samples * 2
-            ctrl.Samples <- 
-                if n > 8 then 1
-                else n
-            Log.warn "Samples: %A" ctrl.Samples
         | Keys.OemPlus -> 
-            let n = ctrl.SubSampling * Constant.Sqrt2 |> clamp 0.015625 2.0
-            ctrl.SubSampling <- n
-            Log.warn "SubSampling: %A" ctrl.SubSampling
+            let n = win.SubSampling * Constant.Sqrt2 |> clamp 0.015625 2.0
+            win.SubSampling <- n
+            Log.warn "SubSampling: %A" win.SubSampling
         | Keys.OemMinus -> 
-            let n = ctrl.SubSampling / Constant.Sqrt2 |> clamp 0.015625 2.0
-            ctrl.SubSampling <- n
-            Log.warn "SubSampling: %A" ctrl.SubSampling
+            let n = win.SubSampling / Constant.Sqrt2 |> clamp 0.015625 2.0
+            win.SubSampling <- n
+            Log.warn "SubSampling: %A" win.SubSampling
         | _ ->
             ()
     )

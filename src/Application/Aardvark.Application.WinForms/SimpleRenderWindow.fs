@@ -120,6 +120,10 @@ type SimpleRenderWindow() as this =
     member x.Time = ctrl.Time
     member x.Run() = Application.Run(x)
 
+    member x.SubSampling 
+        with get() = ctrl.SubSampling
+        and set v = ctrl.SubSampling <- v
+
     interface IRenderWindow with
         member x.FramebufferSignature = ctrl.FramebufferSignature
         member x.Runtime = ctrl.Runtime
@@ -128,6 +132,9 @@ type SimpleRenderWindow() as this =
             with get() = x.RenderTask
             and set (t : IRenderTask) = x.RenderTask <- t
             
+        member x.SubSampling 
+            with get() = x.SubSampling
+            and set v = x.SubSampling <- v
 
         member x.Sizes = ctrl.Sizes
         member x.Samples = ctrl.Samples
