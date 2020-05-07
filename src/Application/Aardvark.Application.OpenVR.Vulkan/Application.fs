@@ -172,6 +172,15 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
     override x.OnLoad(i : VrRenderInfo) : VrTexture * VrTexture =
         info <- i
 
+        if loaded then
+            device.Delete fbo
+            device.Delete cImg
+            device.Delete dImg
+            device.Delete fImg
+        else
+            compileHidden x.HiddenAreaMesh
+
+
         let nImg = 
             device.CreateImage(
                 V3i(info.framebufferSize, 1),
@@ -241,7 +250,6 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
         }
 
         
-        compileHidden x.HiddenAreaMesh
         
         let list = AList.ofList [ hiddenTask; userCmd ]
         task <- new Aardvark.Rendering.Vulkan.Temp.CommandTask(app.Device, renderPass, RuntimeCommand.Ordered list)
@@ -368,7 +376,9 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
 
     member x.SubSampling
         with get() = 1.0
-        and set v = if v <> 1.0 then failwith "[OpenVR] SubSampling not implemented (use adjustSize instead)"
+        and set (v : float) = 
+            let adjust (s : V2i) : V2i = max V2i.II (V2i (V2d s / v))
+            base.AdjustSize <- adjust
 
 
     interface IRenderTarget with
