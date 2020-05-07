@@ -35,10 +35,6 @@ module Render2TexturePrimiviteChangeableSize =
 
     let size = V2i(1024,768)
     let sizeM = AVal.init size
-    let color = 
-        ChangeableResources.createTexture runtime ~~1 sizeM ~~TextureFormat.Rgba8
-    let depth = 
-        ChangeableResources.createRenderbuffer runtime ~~1 sizeM ~~RenderbufferFormat.Depth24Stencil8
 
     // Signatures are required to compile render tasks. Signatures can be seen as the `type` of a framebuffer
     // It describes the instances which can be used to exectute the render task (in other words
@@ -51,8 +47,10 @@ module Render2TexturePrimiviteChangeableSize =
 
     // Create a framebuffer matching signature and capturing the render to texture targets
     let fbo = 
-        ChangeableResources.createFramebufferFromTexture runtime signature color depth None
+        runtime.CreateFramebuffer(signature, sizeM)
 
+    let color =
+        fbo |> RenderTask.getResult DefaultSemantic.Colors
   
     // Default scene graph setup with static camera
     let render2TextureSg =
@@ -76,7 +74,7 @@ module Render2TexturePrimiviteChangeableSize =
         open System.IO
 
         let pi = PixImage<byte>(Col.Format.BGRA, size) 
-        runtime.Download(color |> AVal.force, 0, 0, pi)
+        runtime.Download(color |> AVal.force :?> IBackendTexture, 0, 0, pi)
         let tempFileName = Path.ChangeExtension( Path.combine [__SOURCE_DIRECTORY__;  Path.GetTempFileName() ], ".bmp" )
         pi.SaveAsImage tempFileName
     

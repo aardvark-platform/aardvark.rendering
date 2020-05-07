@@ -14,6 +14,7 @@
     <OutputPath>..\..\bin\Release</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="DefaultSemantic.fs" />
     <Compile Include="Utilities\Obsolete\AverageWindow.fs" />
     <Compile Include="Utilities\Obsolete\ReferenceCountingSet.fs" />
     <Compile Include="Utilities\Locks\ColoredLock.fs" />
@@ -27,6 +28,7 @@
     <Compile Include="Utilities\ArrayVisitor.fs" />
     <Compile Include="Utilities\Timer.fs" />
     <Compile Include="Utilities\Memory.fs" />
+    <Compile Include="Resources\FrameStatistics.fs" />
     <Compile Include="Resources\Buffers\Buffers.fs" />
     <Compile Include="Resources\Buffers\ArrayBuffer.fs" />
     <Compile Include="Resources\Buffers\SingleValueBuffer.fs" />
@@ -47,8 +49,10 @@
     <Compile Include="Resources\Framebuffer\Framebuffer.fs" />
     <Compile Include="Resources\Framebuffer\FramebufferExtensions.fs" />
     <Compile Include="Resources\Framebuffer\OutputDescription.fs" />
+    <Compile Include="Resources\Adaptive\OutputMod.fs" />
+    <Compile Include="Resources\Adaptive\AdaptiveTextures.fs" />
+    <Compile Include="Resources\Adaptive\AdaptiveFramebuffers.fs" />
     <Compile Include="Resources\NullResources.fs" />
-    <Compile Include="Resources\FrameStatistics.fs" />
     <Compile Include="Resources\ResourceManagement.fs" />
     <Compile Include="Base\ImageTrafo.fs" />
     <Compile Include="Base\PixImageCube.fs" />
@@ -59,7 +63,6 @@
     <Compile Include="Uniforms\UniformWriters.fs" />
     <Compile Include="Uniforms\UniformProvider.fs" />
     <Compile Include="Uniforms\Uniforms.fs" />
-    <Compile Include="Attributes\DefaultSemantic.fs" />
     <Compile Include="Attributes\AttributeProvider.fs" />
     <Compile Include="Pipeline\Camera.fs" />
     <Compile Include="Pipeline\RenderPass.fs" />
@@ -75,12 +78,11 @@
     <Compile Include="Lod\Lod.fs" />
     <Compile Include="Lod\LodTree.fs" />
     <Compile Include="Lod\LodRuntime.fs" />
-    <Compile Include="RuntimeCommand.fs" />
     <Compile Include="Runtime\ResourceManager.fs" />
     <Compile Include="Runtime\Runtime.fs" />
     <Compile Include="Runtime\RuntimeExtensions.fs" />
-    <Compile Include="ChangeableResources.fs" />
-    <Compile Include="AdaptiveResources.fs" />
+    <Compile Include="Runtime\RuntimeCommand.fs" />
+    <Compile Include="RenderTasks\RenderToExtensions.fs" />
     <Compile Include="RenderTasks\AbstractRenderTask.fs" />
     <Compile Include="RenderTasks\EmptyRenderTask.fs" />
     <Compile Include="RenderTasks\SequentialRenderTask.fs" />

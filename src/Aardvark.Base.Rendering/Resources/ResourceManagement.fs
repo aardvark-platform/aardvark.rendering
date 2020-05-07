@@ -2,69 +2,12 @@
 
 open System
 open System.Threading
-open System.Collections.Generic
 open System.Collections.Concurrent
 open Aardvark.Base
 open FSharp.Data.Adaptive
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-
-type IOutputMod =
-    inherit IAdaptiveValue
-    abstract member Acquire : unit -> unit
-    abstract member Release : unit -> unit
-    abstract member GetValue : AdaptiveToken * RenderToken -> obj
-
-type IOutputMod<'a> =
-    inherit aval<'a>
-    inherit IOutputMod
-    abstract member GetValue : AdaptiveToken * RenderToken -> 'a
-
-[<AbstractClass>]
-type AbstractOutputMod<'a>() =
-    inherit AdaptiveObject()
-    let mutable cache = Unchecked.defaultof<'a>
-    let mutable refCount = 0
-
-    abstract member Create : unit -> unit
-    abstract member Destroy : unit -> unit
-    abstract member Compute : AdaptiveToken * RenderToken -> 'a
-
-
-    member x.Acquire() =
-        if Interlocked.Increment(&refCount) = 1 then
-            x.Create()
-
-    member x.Release() =
-        if Interlocked.Decrement(&refCount) = 0 then
-            x.Destroy()
-
-    member x.GetValue(token : AdaptiveToken, rt : RenderToken) =
-        x.EvaluateAlways token (fun token ->
-            if x.OutOfDate then
-                cache <- x.Compute (token, rt)
-            cache
-        )
-
-    member x.GetValue(token : AdaptiveToken) =
-        x.GetValue(token, RenderToken.Empty)
-
-    interface IAdaptiveValue with
-        member x.IsConstant = false
-        member x.ContentType = typeof<'a>
-        member x.GetValueUntyped(c) = x.GetValue(c) :> obj
-
-    interface aval<'a> with
-        member x.GetValue(c) = x.GetValue(c)
-
-    interface IOutputMod with
-        member x.Acquire() = x.Acquire()
-        member x.Release() = x.Release()
-        member x.GetValue(c,t) = x.GetValue(c,t) :> obj
-
-    interface IOutputMod<'a> with
-        member x.GetValue(c,t) = x.GetValue(c,t)
 
 type ResourceInfo =
     struct
