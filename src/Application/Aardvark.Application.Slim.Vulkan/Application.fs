@@ -223,6 +223,9 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
     
     member x.AverageFrameTime = totalTime / float frameCount
 
+    member x.SubSampling
+        with get() =  1.0
+        and set v = if v <> 1.0 then failwithf "[Vulkan] SubSampling not implemented"
 
     interface IRenderTarget with
         member this.AfterRender = this.AfterRender
@@ -231,6 +234,9 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
         member this.RenderTask
             with get () = this.RenderTask
             and set v = this.RenderTask <- v
+        member x.SubSampling
+            with get() = x.SubSampling
+            and set v = x.SubSampling <- v
         member this.Runtime = this.Runtime :> IRuntime
         member this.Samples = this.Samples
         member this.Sizes = this.Sizes

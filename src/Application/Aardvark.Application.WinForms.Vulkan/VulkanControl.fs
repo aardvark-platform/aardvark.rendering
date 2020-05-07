@@ -189,6 +189,10 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
             renderTask <- t
             taskSubscription <- t.AddMarkingCallback x.ForceRedraw
 
+    member x.SubSampling
+        with get() = 1.0
+        and set v = if v <> 1.0 then failwithf "[Vulkan] SubSampling not implemented"
+
     member x.BeforeRender = beforeRender.Publish
     member x.AfterRender = afterRender.Publish
     interface IRenderTarget with
@@ -197,7 +201,9 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
         member x.RenderTask
             with get() = x.RenderTask
             and set t = x.RenderTask <- unbox t
-
+        member x.SubSampling 
+            with get() = x.SubSampling
+            and set v = x.SubSampling <- v
         member x.Samples = 1
         member x.Sizes = sizes :> aval<_>
         member x.Time = time :> aval<_>

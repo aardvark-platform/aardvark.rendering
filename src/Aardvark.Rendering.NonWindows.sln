@@ -134,6 +134,8 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "28 - RenderToTextures", "Ex
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "09 - TextTrafoTest", "Scratch (netcore)\09 - TextTrafoTest\09 - TextTrafoTest.fsproj", "{A21CA003-4F6F-4701-9EB8-899B250FE7CC}"
 EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "12 - AddRemoveStress", "Scratch (netcore)\12 - AddRemoveStress\12 - AddRemoveStress.fsproj", "{39028E3D-EC53-4564-93F2-DB65606B0C40}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -356,6 +358,10 @@ Global
 		{A21CA003-4F6F-4701-9EB8-899B250FE7CC}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A21CA003-4F6F-4701-9EB8-899B250FE7CC}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A21CA003-4F6F-4701-9EB8-899B250FE7CC}.Release|Any CPU.Build.0 = Release|Any CPU
+		{39028E3D-EC53-4564-93F2-DB65606B0C40}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{39028E3D-EC53-4564-93F2-DB65606B0C40}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{39028E3D-EC53-4564-93F2-DB65606B0C40}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{39028E3D-EC53-4564-93F2-DB65606B0C40}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -406,6 +412,7 @@ Global
 		{9AEFCF2E-C8BC-42A7-A9AA-13CF6DEF8AA7} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{BF9A36CD-ADBA-4065-9A2E-5C88CD4D8437} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{A21CA003-4F6F-4701-9EB8-899B250FE7CC} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
+		{39028E3D-EC53-4564-93F2-DB65606B0C40} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}

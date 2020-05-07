@@ -1412,9 +1412,13 @@ module rec Command =
 
         let dirty = System.Collections.Generic.HashSet<SingleObjectCommand>()
         let trie = 
-            Trie<SingleObjectCommand> [|
-                Some { new System.Collections.Generic.IComparer<obj> with member x.Compare(l, r) = compare (unbox<RenderPass> l) (unbox<RenderPass> r) }
-            |]
+            OrderMaintenanceTrie<obj, SingleObjectCommand> (fun level ->
+                match level with
+                | 0 -> 
+                    Some { new System.Collections.Generic.IComparer<obj> with member x.Compare(l, r) = compare (unbox<RenderPass> l) (unbox<RenderPass> r) }
+                | _ ->
+                    None
+            )
         let mutable reader = o.GetReader()
 
         let cache = Dict<list<obj>, SingleObjectCommand>()
@@ -1460,6 +1464,17 @@ module rec Command =
         override x.PerformUpdate(token, program, info) =
             let ops = reader.GetChanges token
             let removes = System.Collections.Generic.List<IRenderObject>(ops.Count)
+
+            
+            let epilog =
+                match epilog with
+                | Some e -> e
+                | None ->
+                    let e = compileEpilog program info
+                    epilog <- Some e
+                    e
+
+
             for o in ops do
                 match o with
                 | Rem _ ->
@@ -1468,16 +1483,47 @@ module rec Command =
 
                 | Add(_, v) ->
                     let key = key o.Value
-                    let cmd = new SingleObjectCommand(dirty, signature, manager, v)
-                    dirty.Add cmd |> ignore
-                    cache.[key] <- cmd
-                    trie.Add(key, cmd)
+                    let ref = 
+                        trie.AddOrUpdate(key, fun o ->
+                            let cmd = new SingleObjectCommand(dirty, signature, manager, v)
+                            dirty.Add cmd |> ignore
+                            cache.[key] <- cmd
+                            cmd
+                        )
+
+                    match ref.Prev with
+                    | ValueSome p -> p.Value.Next <- Some ref.Value
+                    | ValueNone -> program.First <- ref.Value.Fragment
+
+                    match ref.Next with
+                    | ValueSome n -> ref.Value.Next <- Some n.Value
+                    | ValueNone -> 
+                        match ref.Value.Fragment with
+                        | Some f -> f.Next <- Some epilog  
+                        | None -> ()
+
 
             for v in removes do
                 let key = key v
                 match cache.TryRemove key with
                 | (true, cmd) ->
-                    trie.Remove key |> ignore
+                    match trie.TryRemove key with
+                    | ValueSome (l, r) ->
+                        match l with
+                        | ValueSome l ->    
+                            match r with
+                            | ValueSome r -> l.Value.Next <- Some r.Value
+                            | ValueNone -> 
+                                match l.Value.Fragment with
+                                | Some f -> f.Next <- Some epilog
+                                | None -> ()
+                        | ValueNone ->
+                            match r with
+                            | ValueSome r -> program.First <- r.Value.Fragment
+                            | ValueNone -> program.First <- None
+                    | ValueNone ->
+                        ()
+
                     cmd.Free(info)
                 | _ ->
                     ()
@@ -1487,25 +1533,17 @@ module rec Command =
 
             dirty.Clear()
 
-            let epilog =
-                match epilog with
-                | Some e -> e
-                | None ->
-                    let e = compileEpilog program info
-                    epilog <- Some e
-                    e
-
             program.First <- 
                 match trie.First with
-                | Some f -> f.Fragment
-                | None -> None
+                | ValueSome f -> f.Value.Fragment
+                | ValueNone -> None
 
             match trie.Last with
-            | Some l -> 
-                match l.Fragment with
+            | ValueSome l -> 
+                match l.Value.Fragment with
                 | Some f -> f.Next <- Some epilog
                 | None -> ()
-            | None ->
+            | ValueNone ->
                 ()
 
 

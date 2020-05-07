@@ -252,6 +252,9 @@ and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
             and set t =
                 Array.iter (fun (c : RenderControl) -> c.RenderTask <- t) controls
                 task <- t
+        member x.SubSampling
+            with get() = controls.[0].SubSampling 
+            and set t = Array.iter (fun (c : RenderControl) -> c.SubSampling <- t) controls
 
         member x.Samples = samples
         member x.Sizes = controls.[0].Sizes
