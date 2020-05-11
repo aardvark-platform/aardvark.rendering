@@ -452,6 +452,24 @@ type WindowConfig =
         samples : int
     }    
 
+module private FramebufferInfo =
+    open OpenTK.Graphics.OpenGL4
+
+    let print() =
+        let d = OpenTK.Graphics.OpenGL4.GL.GetFramebufferAttachmentParameter(FramebufferTarget.Framebuffer, FramebufferAttachment.Depth, FramebufferParameterName.FramebufferAttachmentDepthSize)
+        let s = OpenTK.Graphics.OpenGL4.GL.GetFramebufferAttachmentParameter(FramebufferTarget.Framebuffer, FramebufferAttachment.Depth, FramebufferParameterName.FramebufferAttachmentStencilSize)
+
+        let r = OpenTK.Graphics.OpenGL4.GL.GetFramebufferAttachmentParameter(FramebufferTarget.Framebuffer, FramebufferAttachment.BackLeft, FramebufferParameterName.FramebufferAttachmentRedSize)
+        let g = OpenTK.Graphics.OpenGL4.GL.GetFramebufferAttachmentParameter(FramebufferTarget.Framebuffer, FramebufferAttachment.BackLeft, FramebufferParameterName.FramebufferAttachmentGreenSize)
+        let b = OpenTK.Graphics.OpenGL4.GL.GetFramebufferAttachmentParameter(FramebufferTarget.Framebuffer, FramebufferAttachment.BackLeft, FramebufferParameterName.FramebufferAttachmentBlueSize)
+        let a = OpenTK.Graphics.OpenGL4.GL.GetFramebufferAttachmentParameter(FramebufferTarget.Framebuffer, FramebufferAttachment.BackLeft, FramebufferParameterName.FramebufferAttachmentAlphaSize)
+
+        Report.Begin(4, "backbuffer")
+        Report.Line(4, sprintf "color: R%dG%dB%dA%d" r g b a)
+        Report.Line(4, sprintf "depth: D%dS%d" d s)
+        Report.End(4) |> ignore
+
+
 [<Sealed>]
 type Application(runtime : IRuntime) =
     [<System.ThreadStatic; DefaultValue>]
@@ -650,6 +668,7 @@ type Application(runtime : IRuntime) =
 
                 glfw.WindowHint(unbox<WindowHintBool> 0x0002200C, true)
                 glfw.WindowHint(WindowHintInt.Samples, cfg.samples)
+
                 match lastWindow with
                 | Some l -> parent <- l
                 | None -> ()
@@ -681,6 +700,8 @@ type Application(runtime : IRuntime) =
                 glfw.MakeContextCurrent(win)
                 ctx.LoadAll()          
                 glfw.SwapInterval(if cfg.vsync then 1 else 0)
+
+                FramebufferInfo.print()
                 glfw.MakeContextCurrent(NativePtr.zero)
 
             if old <> NativePtr.zero then
