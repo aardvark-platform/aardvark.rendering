@@ -5,59 +5,45 @@ open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open System.Runtime.CompilerServices
 
-type private AdaptiveFramebuffer(runtime : IFramebufferRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<V2i>) =
+type private AdaptiveFramebuffer(runtime : IFramebufferRuntime, signature : IFramebufferSignature, attachments : Map<Symbol, aval<IFramebufferOutput>>) =
     inherit AbstractOutputMod<IFramebuffer>()
 
-    let createAttachment (sem : Symbol) (att : AttachmentSignature) =
-        let isTexture = Set.contains sem textures
-        if isTexture then
-            let tex = runtime.CreateTexture(unbox (int att.format), att.samples, size)
-            runtime.CreateTextureAttachment(tex, 0)
-        else
-            let rb = runtime.CreateRenderbuffer(att.format, att.samples, size)
-            runtime.CreateRenderbufferAttachment(rb)
+    let mutable handle = None
 
-    let attachments = SymDict.empty
-    let mutable handle : Option<IFramebuffer> = None
+    let compare x y =
+        let x = x |> Map.toList |> List.map snd
+        let y = y |> Map.toList |> List.map snd
+        List.forall2 (=) x y
 
-    do
-        match signature.DepthAttachment with
-        | Some d ->
-            attachments.[DefaultSemantic.Depth] <- createAttachment DefaultSemantic.Depth d
-        | None ->
-            ()
-
-        for (index, (sem, att)) in Map.toSeq signature.ColorAttachments do
-            let a = createAttachment sem att
-            attachments.[sem] <- a
+    let create signature att =
+        let fbo = runtime.CreateFramebuffer(signature, att)
+        handle <- Some (fbo, att)
+        fbo
 
     override x.Create() =
-        for att in attachments.Values do att.Acquire()
+        for (KeyValue (_, att)) in attachments do att.Acquire()
 
     override x.Destroy() =
-        for att in attachments.Values do att.Release()
-        match handle with
-        | Some h ->
-            runtime.DeleteFramebuffer(h)
-            handle <- None
-        | None -> ()
+        for (KeyValue (_, att)) in attachments do att.Release()
+        handle |> Option.iter (fun (fbo, _) -> runtime.DeleteFramebuffer fbo)
+        handle <- None
 
     override x.Compute(token : AdaptiveToken, t : RenderToken) =
         let att =
-            attachments
-                |> SymDict.toMap
-                |> Map.map (fun sem att -> att.GetValue(token, t))
+            attachments |> Map.map (fun _ att -> att.GetValue(token, t))
 
         match handle with
-        | Some h ->
-            runtime.DeleteFramebuffer(h)
-            t.ReplacedResource(ResourceKind.Framebuffer)
+        | Some (h, att') ->
+            if compare att att' then
+                h
+            else
+                t.ReplacedResource(ResourceKind.Framebuffer)
+                runtime.DeleteFramebuffer(h)
+                create signature att
+
         | None ->
             t.CreatedResource(ResourceKind.Framebuffer)
-
-        let fbo = runtime.CreateFramebuffer(signature, att)
-        handle <- Some fbo
-        fbo
+            create signature att
 
 type private AdaptiveFramebufferCube(runtime : IFramebufferRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<int>) =
     inherit AbstractOutputMod<IFramebuffer[]>()
@@ -70,7 +56,7 @@ type private AdaptiveFramebufferCube(runtime : IFramebufferRuntime, signature : 
 
             let tex =
                 store.GetOrCreate(sem, fun sem ->
-                    runtime.CreateTextureCube(unbox (int att.format), att.samples, size) :> IOutputMod
+                    runtime.CreateTextureCube(TextureFormat.ofRenderbufferFormat att.format, att.samples, size) :> IOutputMod
                 ) |> unbox<IOutputMod<ITexture>>
 
             runtime.CreateTextureAttachment(tex, int face)
@@ -138,12 +124,51 @@ type private AdaptiveFramebufferCube(runtime : IFramebufferRuntime, signature : 
 type IFramebufferRuntimeAdaptiveExtensions private() =
 
     [<Extension>]
-    static member CreateFramebuffer (this : IFramebufferRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<V2i>) : IOutputMod<IFramebuffer> =
-        AdaptiveFramebuffer(this, signature, textures, size) :> IOutputMod<IFramebuffer>
+    static member CreateFramebuffer(this : IFramebufferRuntime,
+                                    signature : IFramebufferSignature,
+                                    attachments : Map<Symbol, aval<IFramebufferOutput>>) =
+
+        AdaptiveFramebuffer(this, signature, attachments) :> IOutputMod<_>
 
     [<Extension>]
-    static member CreateFramebufferCube (this : IFramebufferRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<int>) : IOutputMod<IFramebuffer[]> =
-        AdaptiveFramebufferCube(this, signature, textures, size) :> IOutputMod<IFramebuffer[]>
+    static member CreateFramebuffer(this : IFramebufferRuntime,
+                                    signature : IFramebufferSignature,
+                                    color : Option<#aval<IFramebufferOutput>>,
+                                    depth : Option<#aval<IFramebufferOutput>>,
+                                    stencil : Option<#aval<IFramebufferOutput>>) =
+
+        let inline add sem opt dict =
+            opt |> Option.iter (fun x -> dict |> SymDict.add sem (x :> aval<_>))
+
+        let atts = SymDict.empty
+        atts |> add DefaultSemantic.Colors color
+        atts |> add DefaultSemantic.Depth depth
+        atts |> add DefaultSemantic.Stencil stencil
+
+        this.CreateFramebuffer(signature, SymDict.toMap atts)
+
+    [<Extension>]
+    static member CreateFramebuffer (this : IFramebufferRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<V2i>) =
+
+        let inline createAttachment (sem : Symbol) (att : AttachmentSignature) =
+            if textures |> Set.contains sem then
+                let tex = this.CreateTexture(TextureFormat.ofRenderbufferFormat att.format, att.samples, size)
+                this.CreateTextureAttachment(tex, 0) :> aval<_>
+            else
+                let rb = this.CreateRenderbuffer(att.format, att.samples, size)
+                this.CreateRenderbufferAttachment(rb) :> aval<_>
+
+        let atts = SymDict.empty
+
+        signature.DepthAttachment
+        |> Option.iter (fun d ->
+            atts.[DefaultSemantic.Depth] <- createAttachment DefaultSemantic.Depth d
+        )
+
+        for (_, (sem, att)) in Map.toSeq signature.ColorAttachments do
+            atts.[sem] <- createAttachment sem att
+
+        this.CreateFramebuffer(signature, SymDict.toMap atts)
 
     [<Extension>]
     static member CreateFramebuffer (this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<V2i>) : IOutputMod<IFramebuffer> =
@@ -154,4 +179,8 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
                 if Option.isSome signature.StencilAttachment then yield DefaultSemantic.Stencil
             ]
 
-        AdaptiveFramebuffer(this, signature, sems, size) :> IOutputMod<IFramebuffer>
+        this.CreateFramebuffer(signature, sems, size)
+
+    [<Extension>]
+    static member CreateFramebufferCube (this : IFramebufferRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<int>) =
+        AdaptiveFramebufferCube(this, signature, textures, size) :> IOutputMod<_>

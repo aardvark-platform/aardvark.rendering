@@ -130,18 +130,6 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
 [<AbstractClass; Sealed; Extension>]
 type ModResourceExtensionStuff() =
     [<Extension>]
-    static member inline Acquire(m : aval<'a>) =
-        match m with
-            | :? IOutputMod<'a> as o -> o.Acquire()
-            | _ -> ()
-
-    [<Extension>]
-    static member inline Release(m : aval<'a>) =
-        match m with
-            | :? IOutputMod<'a> as o -> o.Release()
-            | _ -> ()
-            
-    [<Extension>]
     static member inline GetLocked(a : 'a) =
         match a :> obj with
             | :? ILockedResource as l -> Some l

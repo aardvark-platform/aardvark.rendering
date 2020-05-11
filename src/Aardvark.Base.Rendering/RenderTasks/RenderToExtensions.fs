@@ -44,25 +44,6 @@ type private AdaptiveOutputTexture(semantic : Symbol, res : IOutputMod<IFramebuf
 type RenderToExtensions private() =
 
     [<Extension>]
-    static member CreateFramebuffer (this : IFramebufferRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<V2i>) : IOutputMod<IFramebuffer> =
-        AdaptiveFramebuffer(this, signature, textures, size) :> IOutputMod<IFramebuffer>
-
-    [<Extension>]
-    static member CreateFramebufferCube (this : IFramebufferRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<int>) : IOutputMod<IFramebuffer[]> =
-        AdaptiveFramebufferCube(this, signature, textures, size) :> IOutputMod<IFramebuffer[]>
-
-    [<Extension>]
-    static member CreateFramebuffer (this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<V2i>) : IOutputMod<IFramebuffer> =
-        let sems =
-            Set.ofList [
-                yield! signature.ColorAttachments |> Map.toSeq |> Seq.map snd |> Seq.map fst
-                if Option.isSome signature.DepthAttachment then yield DefaultSemantic.Depth
-                if Option.isSome signature.StencilAttachment then yield DefaultSemantic.Stencil
-            ]
-
-        AdaptiveFramebuffer(this, signature, sems, size) :> IOutputMod<IFramebuffer>
-
-    [<Extension>]
     static member RenderTo(this : IRenderTask, output : IOutputMod<IFramebuffer>) =
         AdaptiveRenderingResult(this, output) :> IOutputMod<_>
 

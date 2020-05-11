@@ -36,6 +36,14 @@ module Render2TexturePrimiviteChangeableSize =
     let size = V2i(1024,768)
     let sizeM = AVal.init size
 
+    let color =
+        let tex = runtime.CreateTexture(TextureFormat.Rgba8, 1, sizeM)
+        runtime.CreateTextureAttachment(tex, 0) :> aval<_>
+
+    let depth =
+        let rb = runtime.CreateRenderbuffer(RenderbufferFormat.Depth24Stencil8, 1, sizeM)
+        runtime.CreateRenderbufferAttachment(rb)
+
     // Signatures are required to compile render tasks. Signatures can be seen as the `type` of a framebuffer
     // It describes the instances which can be used to exectute the render task (in other words
     // the signature describes the formats and of all render targets which are subsequently used for rendering)
@@ -47,9 +55,9 @@ module Render2TexturePrimiviteChangeableSize =
 
     // Create a framebuffer matching signature and capturing the render to texture targets
     let fbo = 
-        runtime.CreateFramebuffer(signature, sizeM)
+        runtime.CreateFramebuffer(signature, Some color, Some depth, None)
 
-    let color =
+    let colorOutput =
         fbo |> RenderTask.getResult DefaultSemantic.Colors
   
     // Default scene graph setup with static camera
@@ -74,7 +82,7 @@ module Render2TexturePrimiviteChangeableSize =
         open System.IO
 
         let pi = PixImage<byte>(Col.Format.BGRA, size) 
-        runtime.Download(color |> AVal.force :?> IBackendTexture, 0, 0, pi)
+        runtime.Download(colorOutput |> AVal.force :?> IBackendTexture, 0, 0, pi)
         let tempFileName = Path.ChangeExtension( Path.combine [__SOURCE_DIRECTORY__;  Path.GetTempFileName() ], ".bmp" )
         pi.SaveAsImage tempFileName
     
@@ -91,7 +99,7 @@ module Render2TexturePrimiviteChangeableSize =
     // The render to texture texture can also be used in another render pass (here we again render to our main window)
     let sg = 
         Sg.fullScreenQuad 
-            |> Sg.texture DefaultSemantic.DiffuseColorTexture (color |> AVal.map (fun s -> s :> ITexture))
+            |> Sg.texture DefaultSemantic.DiffuseColorTexture colorOutput
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.diffuseTexture |> toEffect]
             |> Sg.viewTrafo Interactive.DefaultViewTrafo
             |> Sg.projTrafo Interactive.DefaultProjTrafo

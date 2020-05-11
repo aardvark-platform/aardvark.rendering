@@ -65,12 +65,25 @@ namespace Aardvark.Base
 
 open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
+open System.Runtime.CompilerServices
 
-[<AutoOpen>]
-module IAdaptiveValueOutputExtension =
+[<AbstractClass; Sealed; Extension>]
+type IAdaptiveValueOutputExtension() =
 
-    type IAdaptiveValue<'a> with
-        member x.GetValue(c : AdaptiveToken, t : RenderToken) =
-            match x with
-            | :? IOutputMod<'a> as x -> x.GetValue(c, t)
-            | _ -> x.GetValue(c)
+    [<Extension>]
+    static member inline GetValue(this : aval<'a>, c : AdaptiveToken, t : RenderToken) =
+        match this with
+        | :? IOutputMod<'a> as x -> x.GetValue(c, t)
+        | _ -> this.GetValue(c)
+
+    [<Extension>]
+    static member inline Acquire(this : aval<'a>) =
+        match this with
+        | :? IOutputMod<'a> as o -> o.Acquire()
+        | _ -> ()
+
+    [<Extension>]
+    static member inline Release(this : aval<'a>) =
+        match this with
+        | :? IOutputMod<'a> as o -> o.Release()
+        | _ -> ()
