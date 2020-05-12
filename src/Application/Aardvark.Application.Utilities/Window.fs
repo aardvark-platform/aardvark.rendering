@@ -76,66 +76,6 @@ module ``FShade Extensions`` =
 
 module Utilities =
 
-
-    [<AbstractClass>]
-    type OutputMod<'a, 'b>(inputs : list<IOutputMod>) =
-        inherit AbstractOutputMod<'b>()
-
-        let mutable handle : Option<'a> = None
-
-        abstract member View : 'a -> 'b
-        default x.View a = unbox a
-        
-        abstract member TryUpdate : AdaptiveToken * 'a -> bool
-        default x.TryUpdate(_,_) = false
-
-        abstract member Create : AdaptiveToken -> 'a
-        abstract member Destroy : 'a -> unit
-
-        override x.Create() =
-            for i in inputs do i.Acquire()
-
-        override x.Destroy() =
-            for i in inputs do i.Release()
-            match handle with
-                | Some h -> 
-                    x.Destroy h
-                    handle <- None
-                | _ ->
-                    ()
-
-        override x.Compute(t, rt) =
-            let handle = 
-                match handle with
-                    | Some h ->
-                        if not (x.TryUpdate(t, h)) then
-                            x.Destroy(h)
-                            let h = x.Create(t)
-                            handle <- Some h
-                            h
-                        else
-                            h
-                    | None ->
-                        let h = x.Create t
-                        handle <- Some h
-                        h
-            x.View handle
-                    
-    module OutputMod =
-        let custom (dependent : list<IOutputMod>) (create : AdaptiveToken -> 'a) (tryUpdate : AdaptiveToken -> 'a -> bool) (destroy : 'a -> unit) (view : 'a -> 'b) =
-            { new OutputMod<'a, 'b>(dependent) with
-                override x.Create t = create t
-                override x.TryUpdate(t,h) = tryUpdate t h
-                override x.Destroy h = destroy h
-                override x.View h = view h
-            } :> IOutputMod<_> 
-            
-        let simple (create : AdaptiveToken -> 'a) (destroy : 'a -> unit) =
-            { new OutputMod<'a, 'a>([]) with
-                override x.Create t = create t
-                override x.Destroy h = destroy h
-            } :> IOutputMod<_>
-
     module private Shader =
         open FShade
 
@@ -518,36 +458,19 @@ module Utilities =
         let s = win.Sizes |> AVal.map (fun s -> s / V2i(2,1))
 
         let colors =
-            OutputMod.custom 
-                []
-                (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Rgba8, 1, samples, 2))
-                (fun t h -> h.Size.XY = s.GetValue t)
-                (fun h -> runtime.DeleteTexture h)
-                id
-                
+            runtime.CreateTextureArray(TextureFormat.Rgba8, samples, s, ~~2)
+
         let depth =
-            OutputMod.custom 
-                []
-                (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Depth24Stencil8, 1, samples, 2))
-                (fun t h -> h.Size.XY = s.GetValue t)
-                (fun h -> runtime.DeleteTexture h)
-                id
+            runtime.CreateTextureArray(TextureFormat.Depth24Stencil8, samples, s, ~~2)
 
         let resolved =
-            OutputMod.custom 
-                []
-                (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Rgba8, 1, 1, 2))
-                (fun t h -> h.Size.XY = s.GetValue t)
-                (fun h -> runtime.DeleteTexture h)
-                id
-                
+            runtime.CreateTextureArray(TextureFormat.Rgba8, 1, s, ~~2)
+
         let framebuffer =
-            OutputMod.custom
-                [colors; depth]
-                (fun t -> runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, colors.GetValue(t).[TextureAspect.Color, 0] :> IFramebufferOutput; DefaultSemantic.Depth, depth.GetValue(t).[TextureAspect.Depth, 0] :> IFramebufferOutput]))
-                (fun t h -> false)
-                (fun h -> runtime.DeleteFramebuffer h)
-                id
+            runtime.CreateFramebuffer(signature, [
+                DefaultSemantic.Colors, runtime.CreateTextureAttachment(colors)
+                DefaultSemantic.Depth, runtime.CreateTextureAttachment(depth)
+            ])
 
         let initialView = 
             match cfg.initialCamera with
@@ -609,7 +532,7 @@ module Utilities =
             let task =
                 Sg.fullScreenQuad
                     |> Sg.uniform "Dependent" (AVal.constant 0.0)
-                    |> Sg.diffuseTexture (resolved |> AVal.map (fun a -> a :> ITexture))
+                    |> Sg.diffuseTexture resolved
                     |> Sg.shader {
                         do! Shader.renderStereo
                     }
@@ -625,11 +548,12 @@ module Utilities =
                         let fbo = framebuffer.GetValue t
                         let output = OutputDescription.ofFramebuffer fbo
 
-                        let r = resolved.GetValue(t)
+                        let c = colors.GetValue t |> unbox<IBackendTexture>
+                        let r = resolved.GetValue t |> unbox<IBackendTexture>
 
                         clearTask.Run(t, RenderToken.Empty, output)
                         stereoTask.Run(t, RenderToken.Empty, output)
-                        runtime.Copy(colors.GetValue(t), 0, 0, r, 0, 0, 2, 1)
+                        runtime.Copy(c, 0, 0, r, 0, 0, 2, 1)
 
                     member x.Release() =
                         stereoTask.Dispose()

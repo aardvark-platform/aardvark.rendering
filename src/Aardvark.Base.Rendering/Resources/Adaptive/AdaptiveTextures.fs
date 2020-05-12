@@ -6,181 +6,223 @@ open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 open System.Runtime.CompilerServices
 
-type private AdaptiveTexture(runtime : ITextureRuntime, format : aval<TextureFormat>, samples : aval<int>, size : aval<V2i>) =
-    inherit AbstractOutputMod<ITexture>()
+[<AutoOpen>]
+module private AdaptiveTextureTypes =
 
-    let mutable handle : Option<IBackendTexture> = None
+    type TextureParams2D = {
+            size : V2i
+            format : TextureFormat
+            levels : int
+            samples : int
+        }
 
-    override x.Create() = ()
-    override x.Destroy() =
-        match handle with
-        | Some h ->
-            runtime.DeleteTexture(h)
-            handle <- None
-        | None ->
-            ()
+    type TextureArrayParams2D = {
+            texture : TextureParams2D
+            count : int
+        }
 
-    override x.Compute(token : AdaptiveToken, t : RenderToken) =
-        let size = size.GetValue(token)
-        let format = format.GetValue(token)
-        let samples = samples.GetValue(token)
+    type TextureParamsCube = {
+            size : int
+            format : TextureFormat
+            levels : int
+            samples : int
+        }
 
-        match handle with
-        | Some h when h.Size.XY = size && h.Format = format && h.Samples = samples ->
-            h :> ITexture
+    type TextureArrayParamsCube = {
+            texture : TextureParamsCube
+            count : int
+        }
 
-        | Some h ->
-            t.ReplacedResource(ResourceKind.Texture)
-            runtime.DeleteTexture(h)
-            let tex = runtime.CreateTexture(size, format, 1, samples)
-            handle <- Some tex
+    [<AbstractClass>]
+    type AbstractAdaptiveTexture<'a when 'a : equality>(runtime : ITextureRuntime) =
+        inherit AbstractOutputMod<ITexture>()
+
+        let mutable handle : Option<IBackendTexture * 'a> = None
+
+        abstract member GetParams : AdaptiveToken -> 'a
+        abstract member CreateTexture : ITextureRuntime * 'a -> IBackendTexture
+
+        member private x.CreateHandle(runtime : ITextureRuntime, textureParams : 'a) =
+            let tex = x.CreateTexture(runtime, textureParams)
+            handle <- Some (tex, textureParams)
             tex :> ITexture
 
-        | None ->
-            t.CreatedResource(ResourceKind.Texture)
-            let tex = runtime.CreateTexture(size, format, 1, samples)
-            handle <- Some tex
-            tex :> ITexture
+        override x.Create() = ()
+        override x.Destroy() =
+            match handle with
+            | Some (h, _) ->
+                runtime.DeleteTexture h
+                handle <- None
+            | None ->
+                ()
 
-type private AdaptiveCubeTexture(runtime : ITextureRuntime, format : aval<TextureFormat>, samples : aval<int>, size : aval<int>) =
-    inherit AbstractOutputMod<ITexture>()
+        override x.Compute(token : AdaptiveToken, t : RenderToken) =
 
-    let mutable handle : Option<IBackendTexture> = None
+            let textureParams = x.GetParams token
 
-    override x.Create() = ()
-    override x.Destroy() =
-        match handle with
-        | Some h ->
-            runtime.DeleteTexture(h)
-            handle <- None
-        | None ->
-            ()
+            match handle with
+            | Some (h, p) when textureParams = p ->
+                h :> ITexture
 
-    override x.Compute(token : AdaptiveToken, t : RenderToken) =
-        let size = size.GetValue(token)
-        let format = format.GetValue(token)
-        let samples = samples.GetValue(token)
+            | Some (h, _) ->
+                t.ReplacedResource(ResourceKind.Texture)
+                runtime.DeleteTexture h
+                x.CreateHandle(runtime, textureParams)
 
-        match handle with
-        | Some h when h.Size.X = size && h.Format = format && h.Samples = samples ->
-            h :> ITexture
+            | None ->
+                t.CreatedResource(ResourceKind.Texture)
+                x.CreateHandle(runtime, textureParams)
 
-        | Some h ->
-            t.ReplacedResource(ResourceKind.Texture)
-            runtime.DeleteTexture(h)
-            let tex = runtime.CreateTextureCube(size, format, 1, samples)
-            handle <- Some tex
-            tex :> ITexture
 
-        | None ->
-            t.CreatedResource(ResourceKind.Texture)
-            let tex = runtime.CreateTextureCube(size, format, 1, samples)
-            handle <- Some tex
-            tex :> ITexture
+    type AdaptiveTexture(runtime : ITextureRuntime, size : aval<V2i>, format : aval<TextureFormat>, levels : aval<int>, samples : aval<int>) =
+        inherit AbstractAdaptiveTexture<TextureParams2D>(runtime)
 
-type private AdaptiveRenderbuffer(runtime : ITextureRuntime, format : aval<RenderbufferFormat>, samples : aval<int>, size : aval<V2i>) =
-    inherit AbstractOutputMod<IRenderbuffer>()
+        override x.GetParams(token : AdaptiveToken) =
+            {
+                size = size.GetValue token
+                format = format.GetValue token
+                levels = levels.GetValue token
+                samples = samples.GetValue token
+            }
 
-    let mutable handle : Option<IRenderbuffer> = None
+        override x.CreateTexture(runtime : ITextureRuntime, p : TextureParams2D) =
+            runtime.CreateTexture(p.size, p.format, p.levels, p.samples)
 
-    override x.Create() = ()
-    override x.Destroy() =
-        match handle with
-        | Some h ->
-            runtime.DeleteRenderbuffer(h)
-            handle <- None
-        | None ->
-            ()
 
-    override x.Compute(token : AdaptiveToken, t : RenderToken) =
-        let size = size.GetValue(token)
-        let format = format.GetValue(token)
-        let samples = samples.GetValue(token)
+    type AdaptiveTextureArray(runtime : ITextureRuntime, size : aval<V2i>, format : aval<TextureFormat>, levels : aval<int>, samples : aval<int>, count : aval<int>) =
+        inherit AbstractAdaptiveTexture<TextureArrayParams2D>(runtime)
 
-        match handle with
-        | Some h when h.Size = size && h.Format = format && h.Samples = samples ->
-            h
+        override x.GetParams(token : AdaptiveToken) =
+            let texture : TextureParams2D =
+                {
+                    size = size.GetValue token
+                    format = format.GetValue token
+                    levels = levels.GetValue token
+                    samples = samples.GetValue token
+                }
 
-        | Some h ->
-            t.ReplacedResource(ResourceKind.Renderbuffer)
-            runtime.DeleteRenderbuffer(h)
-            let tex = runtime.CreateRenderbuffer(size, format, samples)
-            handle <- Some tex
-            tex
+            { texture = texture; count = count.GetValue token }
 
-        | None ->
-            t.CreatedResource(ResourceKind.Renderbuffer)
-            let tex = runtime.CreateRenderbuffer(size, format, samples)
-            handle <- Some tex
-            tex
+        override x.CreateTexture(runtime : ITextureRuntime, p : TextureArrayParams2D) =
+            runtime.CreateTextureArray(p.texture.size, p.texture.format, p.texture.levels, p.texture.samples, p.count)
 
-[<AbstractClass>]
-type private AbstractAdaptiveFramebufferOutput(resource : IOutputMod) =
-    inherit AbstractOutputMod<IFramebufferOutput>()
 
-    override x.Create() = resource.Acquire()
-    override x.Destroy() = resource.Release()
+    type AdaptiveCubeTexture(runtime : ITextureRuntime, size : aval<int>, format : aval<TextureFormat>, levels : aval<int>, samples : aval<int>) =
+        inherit AbstractAdaptiveTexture<TextureParamsCube>(runtime)
 
-type private AdaptiveTextureAttachment(texture : IOutputMod<ITexture>, slice : int) =
-    inherit AbstractAdaptiveFramebufferOutput(texture)
-    override x.Compute(token : AdaptiveToken, t : RenderToken) =
-        let tex = texture.GetValue(token, t)
-        { texture = unbox tex; slice = slice; level = 0 } :> IFramebufferOutput
+        override x.GetParams(token : AdaptiveToken) =
+            {
+                size = size.GetValue token
+                format = format.GetValue token
+                levels = levels.GetValue token
+                samples = samples.GetValue token
+            }
 
-type private AdaptiveRenderbufferAttachment(renderbuffer : IOutputMod<IRenderbuffer>) =
-    inherit AbstractAdaptiveFramebufferOutput(renderbuffer)
-    override x.Compute(token : AdaptiveToken, t : RenderToken) =
-        let rb = renderbuffer.GetValue(token, t)
-        rb :> IFramebufferOutput
+        override x.CreateTexture(runtime : ITextureRuntime, p : TextureParamsCube) =
+            runtime.CreateTextureCube(p.size, p.format, p.levels, p.samples)
+
+
+    type AdaptiveCubeTextureArray(runtime : ITextureRuntime, size : aval<int>, format : aval<TextureFormat>, levels : aval<int>, samples : aval<int>, count : aval<int>) =
+        inherit AbstractAdaptiveTexture<TextureArrayParamsCube>(runtime)
+
+        override x.GetParams(token : AdaptiveToken) =
+            let texture : TextureParamsCube =
+                {
+                    size = size.GetValue token
+                    format = format.GetValue token
+                    levels = levels.GetValue token
+                    samples = samples.GetValue token
+                }
+
+            { texture = texture; count = count.GetValue token }
+
+        override x.CreateTexture(runtime : ITextureRuntime, p : TextureArrayParamsCube) =
+            runtime.CreateTextureCubeArray(p.texture.size, p.texture.format, p.texture.levels, p.texture.samples, p.count)
 
 
 [<AbstractClass; Sealed; Extension>]
-type ITextureRuntimeAdaptiveExtensions private() =
+type ITextureRuntimeAdaptiveTextureExtensions private() =
 
     // CreateTexture
     [<Extension>]
+    static member CreateTexture(this : ITextureRuntime, format : aval<TextureFormat>, levels : aval<int>, samples : aval<int>, size : aval<V2i>) =
+        AdaptiveTexture(this, size, format, levels, samples) :> IOutputMod<_>
+
+    [<Extension>]
+    static member CreateTexture(this : ITextureRuntime, format : TextureFormat, levels : int, samples : int, size : aval<V2i>) =
+        AdaptiveTexture(this, size, ~~format, ~~levels, ~~samples) :> IOutputMod<_>
+
+    [<Extension>]
     static member CreateTexture(this : ITextureRuntime, format : aval<TextureFormat>, samples : aval<int>, size : aval<V2i>) =
-        AdaptiveTexture(this, format, samples, size) :> IOutputMod<_>
+        AdaptiveTexture(this, size, format, ~~1, samples) :> IOutputMod<_>
 
     [<Extension>]
     static member CreateTexture(this : ITextureRuntime, format : TextureFormat, samples : aval<int>, size : aval<V2i>) =
-        AdaptiveTexture(this, ~~format, samples, size) :> IOutputMod<_>
+        AdaptiveTexture(this, size, ~~format, ~~1, samples) :> IOutputMod<_>
 
     [<Extension>]
     static member CreateTexture(this : ITextureRuntime, format : TextureFormat, samples : int, size : aval<V2i>) =
-        AdaptiveTexture(this, ~~format, ~~samples, size) :> IOutputMod<_>
+        AdaptiveTexture(this, size, ~~format, ~~1, ~~samples) :> IOutputMod<_>
+
+    // CreateTextureArray
+    [<Extension>]
+    static member CreateTextureArray(this : ITextureRuntime, format : aval<TextureFormat>, levels : aval<int>, samples : aval<int>, size : aval<V2i>, count : aval<int>) =
+        AdaptiveTextureArray(this, size, format, levels, samples, count) :> IOutputMod<_>
+
+    [<Extension>]
+    static member CreateTextureArray(this : ITextureRuntime, format : TextureFormat, levels : int, samples : int, size : aval<V2i>, count : aval<int>) =
+        AdaptiveTextureArray(this, size, ~~format, ~~levels, ~~samples, count) :> IOutputMod<_>
+
+    [<Extension>]
+    static member CreateTextureArray(this : ITextureRuntime, format : aval<TextureFormat>, samples : aval<int>, size : aval<V2i>, count : aval<int>) =
+        AdaptiveTextureArray(this, size, format, ~~1, samples, count) :> IOutputMod<_>
+
+    [<Extension>]
+    static member CreateTextureArray(this : ITextureRuntime, format : TextureFormat, samples : aval<int>, size : aval<V2i>, count : aval<int>) =
+        AdaptiveTextureArray(this, size, ~~format, ~~1, samples, count) :> IOutputMod<_>
+
+    [<Extension>]
+    static member CreateTextureArray(this : ITextureRuntime, format : TextureFormat, samples : int, size : aval<V2i>, count : aval<int>) =
+        AdaptiveTextureArray(this, size, ~~format, ~~1, ~~samples, count) :> IOutputMod<_>
 
     // CreateTextureCube
     [<Extension>]
+    static member CreateTextureCube(this : ITextureRuntime, format : aval<TextureFormat>, levels : aval<int>, samples : aval<int>, size : aval<int>) =
+        AdaptiveCubeTexture(this, size, format, levels, samples) :> IOutputMod<_>
+
+    [<Extension>]
+    static member CreateTextureCube(this : ITextureRuntime, format : TextureFormat, levels : int, samples : int, size : aval<int>) =
+        AdaptiveCubeTexture(this, size, ~~format, ~~levels, ~~samples) :> IOutputMod<_>
+
+    [<Extension>]
     static member CreateTextureCube(this : ITextureRuntime, format : aval<TextureFormat>, samples : aval<int>, size : aval<int>) =
-        AdaptiveCubeTexture(this, format, samples, size) :> IOutputMod<_>
+        AdaptiveCubeTexture(this, size, format, ~~1, samples) :> IOutputMod<_>
 
     [<Extension>]
     static member CreateTextureCube(this : ITextureRuntime, format : aval<TextureFormat>, samples : int, size : aval<int>) =
-        AdaptiveCubeTexture(this, format, ~~samples, size) :> IOutputMod<_>
+        AdaptiveCubeTexture(this, size, format, ~~1, ~~samples) :> IOutputMod<_>
 
     [<Extension>]
     static member CreateTextureCube(this : ITextureRuntime, format : TextureFormat, samples : int, size : aval<int>) =
-        AdaptiveCubeTexture(this, ~~format, ~~samples, size) :> IOutputMod<_>
+        AdaptiveCubeTexture(this, size, ~~format, ~~1, ~~samples) :> IOutputMod<_>
 
-    // CreateRenderbuffer
+    // CreateTextureCubeArray
     [<Extension>]
-    static member CreateRenderbuffer(this : ITextureRuntime, format : aval<RenderbufferFormat>, samples : aval<int>, size : aval<V2i>) =
-        AdaptiveRenderbuffer(this, format, samples, size) :> IOutputMod<_>
-
-    [<Extension>]
-    static member CreateRenderbuffer(this : ITextureRuntime, format : RenderbufferFormat, samples : aval<int>, size : aval<V2i>) =
-        AdaptiveRenderbuffer(this, ~~format, samples, size) :> IOutputMod<_>
+    static member CreateTextureCubeArray(this : ITextureRuntime, format : aval<TextureFormat>, levels : aval<int>, samples : aval<int>, size : aval<int>, count : aval<int>) =
+        AdaptiveCubeTextureArray(this, size, format, levels, samples, count) :> IOutputMod<_>
 
     [<Extension>]
-    static member CreateRenderbuffer(this : ITextureRuntime, format : RenderbufferFormat, samples : int, size : aval<V2i>) =
-        AdaptiveRenderbuffer(this, ~~format, ~~samples, size) :> IOutputMod<_>
-
-    // Attachments
-    [<Extension>]
-    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IOutputMod<ITexture>, slice : int) =
-        AdaptiveTextureAttachment(texture, slice) :> IOutputMod<_>
+    static member CreateTextureCubeArray(this : ITextureRuntime, format : TextureFormat, levels : int, samples : int, size : aval<int>, count : aval<int>) =
+        AdaptiveCubeTextureArray(this, size, ~~format, ~~levels, ~~samples, count) :> IOutputMod<_>
 
     [<Extension>]
-    static member CreateRenderbufferAttachment(_ : ITextureRuntime, renderbuffer : IOutputMod<IRenderbuffer>) =
-        AdaptiveRenderbufferAttachment(renderbuffer) :> IOutputMod<_>
+    static member CreateTextureCubeArray(this : ITextureRuntime, format : aval<TextureFormat>, samples : aval<int>, size : aval<int>, count : aval<int>) =
+        AdaptiveCubeTextureArray(this, size, format, ~~1, samples, count) :> IOutputMod<_>
+
+    [<Extension>]
+    static member CreateTextureCubeArray(this : ITextureRuntime, format : aval<TextureFormat>, samples : int, size : aval<int>, count : aval<int>) =
+        AdaptiveCubeTextureArray(this, size, format, ~~1, ~~samples, count) :> IOutputMod<_>
+
+    [<Extension>]
+    static member CreateTextureCubeArray(this : ITextureRuntime, format : TextureFormat, samples : int, size : aval<int>, count : aval<int>) =
+        AdaptiveCubeTextureArray(this, size, ~~format, ~~1, ~~samples, count) :> IOutputMod<_>
