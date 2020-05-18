@@ -23,14 +23,12 @@ type DrawCallInfo =
 /// native indirect buffers are supposed to have data layout as required by the graphics API, currently this is equal for OpenGL, Vulkan (and DX11)
 /// Indexed:     { uint count; uint primCount; uint firstIndex; uint baseVertex; uint baseInstance; }
 /// Non-indexed: { uint count; uint primCount; uint first; uint baseInstance; }
-/// NOTE:
-///  1. indexed or non-indexed only matters if directly an IBackendBuffer is used, ArrayBuffers will be uploaded according to if there are indirect present
-///   -> constructor intended to be used with IBackendBuffer, other should use IndirectBuffer module
-///  2. stride is actually hard-coded to 20 in glvm and vkvm
+/// NOTE: indexed or non-indexed only matters if directly an IBackendBuffer is used, ArrayBuffers will be uploaded according to if there are indices present
+///        -> constructor intended to be used with IBackendBuffer, other should use IndirectBuffer module
 type IndirectBuffer(b : IBuffer, count : int, stride : int, indexed : bool) =
     member x.Buffer = b
     member x.Count = count
-    member x.Stride = stride /// not supported, hardcoded to 20 in execution
+    member x.Stride = stride
     member x.Indexed = indexed
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
