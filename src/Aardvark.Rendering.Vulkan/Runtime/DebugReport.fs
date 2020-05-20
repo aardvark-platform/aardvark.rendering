@@ -10,6 +10,7 @@ open System.Threading
 open System.Collections.Concurrent
 open Aardvark.Base
 open Microsoft.FSharp.NativeInterop
+open EXTDebugReport
 open EXTDebugUtils
 
 type MessageSeverity =

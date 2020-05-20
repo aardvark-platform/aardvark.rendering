@@ -28,7 +28,6 @@ type VkShaderModuleCreateFlags = | MinValue = 0
 type VkMemoryMapFlags = | MinValue = 0
 type VkDisplaySurfaceCreateFlagsKHR = | MinValue = 0
 type VkSwapchainCreateFlagsKHR = | MinValue = 0
-type VkSwapchainCreateFlagBitsKHR = | MinValue = 0
 type VkPipelineLayoutCreateFlags = | MinValue = 0
 type VkBufferViewCreateFlags = | MinValue = 0
 type VkPipelineShaderStageCreateFlags = | MinValue = 0
@@ -53,7 +52,6 @@ type VkQueryPoolCreateFlags = | MinValue = 0
 type VkSubpassDescriptionFlags = | MinValue = 0
 type VkRenderPassCreateFlags = | MinValue = 0
 type VkSamplerCreateFlags = | MinValue = 0
-
 type VkAndroidSurfaceCreateFlagsKHR = | MinValue = 0
 type VkDisplayModeCreateFlagsKHR = | MinValue = 0
 type VkPipelineTessellationStateCreateFlags = | MinValue = 0
@@ -64,23 +62,13 @@ type VkWaylandSurfaceCreateFlagsKHR = | MinValue = 0
 type VkMirSurfaceCreateFlagsKHR = | MinValue = 0
 type PFN_vkDebugReportCallbackEXT = nativeint
 type PFN_vkDebugUtilsMessengerCallbackEXT = nativeint
-
 type VkExternalMemoryHandleTypeFlagsNV = | MinValue = 0
 type VkExternalMemoryFeatureFlagsNV = | MinValue = 0
 type VkIndirectCommandsLayoutUsageFlagsNVX = | MinValue = 0
 type VkObjectEntryUsageFlagsNVX = | MinValue = 0
-
 type VkDescriptorUpdateTemplateCreateFlags = | MinValue = 0
-type VkExternalFenceHandleTypeFlagsKHR = | MinValue = 0
-type VkExternalMemoryHandleTypeFlagsKHR = | MinValue = 0
-type VkExternalSemaphoreHandleTypeFlagsKHR = | MinValue = 0
-type VkExternalMemoryFeatureFlagsKHR = | MinValue = 0
-type VkExternalFenceFeatureFlagsKHR = | MinValue = 0
-type VkExternalSemaphoreFeatureFlagsKHR = | MinValue = 0
 type VkAcquireProfilingLockFlagsKHR = | MinValue = 0
 type VkIOSSurfaceCreateFlagsMVK = | MinValue = 0
-type VkFenceImportFlagsKHR = | MinValue = 0
-type VkSemaphoreImportFlagsKHR = | MinValue = 0
 type VkMacOSSurfaceCreateFlagsMVK = | MinValue = 0
 type VkMemoryAllocateFlagsKHX = | MinValue = 0
 type VkPipelineCoverageModulationStateCreateFlagsNV = | MinValue = 0
@@ -104,6 +92,8 @@ type VkPipelineRasterizationStateStreamCreateFlagsEXT = | MinValue = 0
 type VkImagePipeSurfaceCreateFlagsFUCHSIA = | MinValue = 0
 type VkStreamDescriptorSurfaceCreateFlagsGGP = | MinValue = 0
 type VkPipelineCoverageReductionStateCreateFlagsNV = | MinValue = 0
+type VkPrivateDataSlotCreateFlagsEXT = | MinValue = 0
+
 type VkInstance = nativeint
 type VkPhysicalDevice = nativeint
 type VkDevice = nativeint
@@ -310,21 +300,11 @@ type VkPipelineCache =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VkObjectTableNVX = 
+type VkIndirectCommandsLayoutNV = 
     struct
         val mutable public Handle : int64
         new(h) = { Handle = h }
-        static member Null = VkObjectTableNVX(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type VkIndirectCommandsLayoutNVX = 
-    struct
-        val mutable public Handle : int64
-        new(h) = { Handle = h }
-        static member Null = VkIndirectCommandsLayoutNVX(0L)
+        static member Null = VkIndirectCommandsLayoutNV(0L)
         member x.IsNull = x.Handle = 0L
         member x.IsValid = x.Handle <> 0L
     end
@@ -360,11 +340,11 @@ type VkValidationCacheEXT =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VkAccelerationStructureNV = 
+type VkAccelerationStructureKHR = 
     struct
         val mutable public Handle : int64
         new(h) = { Handle = h }
-        static member Null = VkAccelerationStructureNV(0L)
+        static member Null = VkAccelerationStructureKHR(0L)
         member x.IsNull = x.Handle = 0L
         member x.IsValid = x.Handle <> 0L
     end
@@ -375,6 +355,26 @@ type VkPerformanceConfigurationINTEL =
         val mutable public Handle : int64
         new(h) = { Handle = h }
         static member Null = VkPerformanceConfigurationINTEL(0L)
+        member x.IsNull = x.Handle = 0L
+        member x.IsValid = x.Handle <> 0L
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDeferredOperationKHR = 
+    struct
+        val mutable public Handle : int64
+        new(h) = { Handle = h }
+        static member Null = VkDeferredOperationKHR(0L)
+        member x.IsNull = x.Handle = 0L
+        member x.IsValid = x.Handle <> 0L
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPrivateDataSlotEXT = 
+    struct
+        val mutable public Handle : int64
+        new(h) = { Handle = h }
+        static member Null = VkPrivateDataSlotEXT(0L)
         member x.IsNull = x.Handle = 0L
         member x.IsValid = x.Handle <> 0L
     end
@@ -440,11 +440,13 @@ type VkDebugUtilsMessengerEXT =
     end
 
 
+// Typedefs
 type VkSampleMask = uint32
 type VkBool32 = uint32
 type VkFlags = uint32
 type VkDeviceSize = uint64
 type VkDeviceAddress = uint64
+
 type VkImageLayout = 
     | DepthAttachmentStencilReadOnlyOptimal = 1000117001
     | DepthReadOnlyStencilAttachmentOptimal = 1000117000
@@ -915,6 +917,7 @@ type VkResult =
     | VkErrorTooManyObjects = -10
     | VkErrorFormatNotSupported = -11
     | VkErrorFragmentedPool = -12
+    | VkErrorUnknown = -13
 
 type VkDynamicState = 
     | Viewport = 0
@@ -1246,62 +1249,14 @@ type VkDependencyFlags =
     | DeviceGroupBit = 0x00000004
     | ByRegionBit = 0x00000001
 
-type VkPresentModeKHR = 
-    | Immediate = 0
-    | Mailbox = 1
-    | Fifo = 2
-    | FifoRelaxed = 3
-
-type VkColorSpaceKHR = 
-    | SrgbNonlinear = 0
+type VkSemaphoreType = 
+    | Binary = 0
+    | Timeline = 1
 
 [<Flags>]
-type VkCompositeAlphaFlagsKHR = 
+type VkSemaphoreWaitFlags = 
     | None = 0
-    | OpaqueBit = 0x00000001
-    | PreMultipliedBit = 0x00000002
-    | PostMultipliedBit = 0x00000004
-    | InheritBit = 0x00000008
-
-[<Flags>]
-type VkSurfaceTransformFlagsKHR = 
-    | None = 0
-    | IdentityBit = 0x00000001
-    | Rotate90Bit = 0x00000002
-    | Rotate180Bit = 0x00000004
-    | Rotate270Bit = 0x00000008
-    | HorizontalMirrorBit = 0x00000010
-    | HorizontalMirrorRotate90Bit = 0x00000020
-    | HorizontalMirrorRotate180Bit = 0x00000040
-    | HorizontalMirrorRotate270Bit = 0x00000080
-    | InheritBit = 0x00000100
-
-[<Flags>]
-type VkDebugReportFlagsEXT = 
-    | None = 0
-    | InformationBit = 0x00000001
-    | WarningBit = 0x00000002
-    | PerformanceWarningBit = 0x00000004
-    | ErrorBit = 0x00000008
-    | DebugBit = 0x00000010
-
-type VkValidationCheckEXT = 
-    | All = 0
-    | Shaders = 1
-
-type VkValidationFeatureEnableEXT = 
-    | GpuAssisted = 0
-    | GpuAssistedReserveBindingSlot = 1
-    | BestPractices = 2
-
-type VkValidationFeatureDisableEXT = 
-    | All = 0
-    | Shaders = 1
-    | ThreadSafety = 2
-    | ApiParameters = 3
-    | ObjectLifetimes = 4
-    | CoreChecks = 5
-    | UniqueHandles = 6
+    | AnyBit = 0x00000001
 
 [<Flags>]
 type VkSubgroupFeatureFlags = 
@@ -1397,6 +1352,11 @@ type VkPointClippingBehavior =
     | AllClipPlanes = 0
     | UserClipPlanesOnly = 1
 
+type VkSamplerReductionMode = 
+    | WeightedAverage = 0
+    | Min = 1
+    | Max = 2
+
 type VkTessellationDomainOrigin = 
     | UpperLeft = 0
     | LowerLeft = 1
@@ -1432,7 +1392,7 @@ type VkDebugUtilsMessageTypeFlagsEXT =
     | PerformanceBit = 0x00000004
 
 [<Flags>]
-type VkDescriptorBindingFlagsEXT = 
+type VkDescriptorBindingFlags = 
     | None = 0
     | UpdateAfterBindBit = 0x00000001
     | UpdateUnusedWhilePendingBit = 0x00000002
@@ -1443,6 +1403,37 @@ type VkVendorId =
     | Viv = 65537
     | Vsi = 65538
     | Kazan = 65539
+    | Codeplay = 65540
+    | Mesa = 65541
+
+type VkDriverId = 
+    | AmdProprietary = 1
+    | AmdOpenSource = 2
+    | MesaRadv = 3
+    | NvidiaProprietary = 4
+    | IntelProprietaryWindows = 5
+    | IntelOpenSource = 6
+    | ImaginationProprietary = 7
+    | QualcommProprietary = 8
+    | ArmProprietary = 9
+    | GoogleSwiftshader = 10
+    | GgpProprietary = 11
+    | BroadcomProprietary = 12
+    | MesaLlvmpipe = 13
+
+[<Flags>]
+type VkResolveModeFlags = 
+    | None = 0
+    | SampleZeroBit = 0x00000001
+    | AverageBit = 0x00000002
+    | MinBit = 0x00000004
+    | MaxBit = 0x00000008
+
+type VkShaderFloatControlsIndependence = 
+    | D32BitOnly = 0
+    | All = 1
+    | None = 2
+
 
 [<StructLayout(LayoutKind.Explicit, Size = 128)>]
 type uint32_32 =
@@ -1658,7 +1649,7 @@ type VkAttachmentDescription =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VkAttachmentDescription2KHR = 
+type VkAttachmentDescription2 = 
     struct
         val mutable public sType : uint32
         val mutable public pNext : nativeint
@@ -1688,10 +1679,10 @@ type VkAttachmentDescription2KHR =
             }
 
         new(flags : VkAttachmentDescriptionFlags, format : VkFormat, samples : VkSampleCountFlags, loadOp : VkAttachmentLoadOp, storeOp : VkAttachmentStoreOp, stencilLoadOp : VkAttachmentLoadOp, stencilStoreOp : VkAttachmentStoreOp, initialLayout : VkImageLayout, finalLayout : VkImageLayout) =
-            VkAttachmentDescription2KHR(Unchecked.defaultof<nativeint>, flags, format, samples, loadOp, storeOp, stencilLoadOp, stencilStoreOp, initialLayout, finalLayout)
+            VkAttachmentDescription2(Unchecked.defaultof<nativeint>, flags, format, samples, loadOp, storeOp, stencilLoadOp, stencilStoreOp, initialLayout, finalLayout)
 
         static member Empty =
-            VkAttachmentDescription2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAttachmentDescriptionFlags>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkAttachmentLoadOp>, Unchecked.defaultof<VkAttachmentStoreOp>, Unchecked.defaultof<VkAttachmentLoadOp>, Unchecked.defaultof<VkAttachmentStoreOp>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImageLayout>)
+            VkAttachmentDescription2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAttachmentDescriptionFlags>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkAttachmentLoadOp>, Unchecked.defaultof<VkAttachmentStoreOp>, Unchecked.defaultof<VkAttachmentLoadOp>, Unchecked.defaultof<VkAttachmentStoreOp>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImageLayout>)
 
         override x.ToString() =
             String.concat "; " [
@@ -1706,7 +1697,38 @@ type VkAttachmentDescription2KHR =
                 sprintf "stencilStoreOp = %A" x.stencilStoreOp
                 sprintf "initialLayout = %A" x.initialLayout
                 sprintf "finalLayout = %A" x.finalLayout
-            ] |> sprintf "VkAttachmentDescription2KHR { %s }"
+            ] |> sprintf "VkAttachmentDescription2 { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkAttachmentDescriptionStencilLayout = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public stencilInitialLayout : VkImageLayout
+        val mutable public stencilFinalLayout : VkImageLayout
+
+        new(pNext : nativeint, stencilInitialLayout : VkImageLayout, stencilFinalLayout : VkImageLayout) =
+            {
+                sType = 1000241002u
+                pNext = pNext
+                stencilInitialLayout = stencilInitialLayout
+                stencilFinalLayout = stencilFinalLayout
+            }
+
+        new(stencilInitialLayout : VkImageLayout, stencilFinalLayout : VkImageLayout) =
+            VkAttachmentDescriptionStencilLayout(Unchecked.defaultof<nativeint>, stencilInitialLayout, stencilFinalLayout)
+
+        static member Empty =
+            VkAttachmentDescriptionStencilLayout(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImageLayout>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "stencilInitialLayout = %A" x.stencilInitialLayout
+                sprintf "stencilFinalLayout = %A" x.stencilFinalLayout
+            ] |> sprintf "VkAttachmentDescriptionStencilLayout { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -1732,7 +1754,7 @@ type VkAttachmentReference =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VkAttachmentReference2KHR = 
+type VkAttachmentReference2 = 
     struct
         val mutable public sType : uint32
         val mutable public pNext : nativeint
@@ -1750,10 +1772,10 @@ type VkAttachmentReference2KHR =
             }
 
         new(attachment : uint32, layout : VkImageLayout, aspectMask : VkImageAspectFlags) =
-            VkAttachmentReference2KHR(Unchecked.defaultof<nativeint>, attachment, layout, aspectMask)
+            VkAttachmentReference2(Unchecked.defaultof<nativeint>, attachment, layout, aspectMask)
 
         static member Empty =
-            VkAttachmentReference2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImageAspectFlags>)
+            VkAttachmentReference2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImageAspectFlags>)
 
         override x.ToString() =
             String.concat "; " [
@@ -1762,7 +1784,35 @@ type VkAttachmentReference2KHR =
                 sprintf "attachment = %A" x.attachment
                 sprintf "layout = %A" x.layout
                 sprintf "aspectMask = %A" x.aspectMask
-            ] |> sprintf "VkAttachmentReference2KHR { %s }"
+            ] |> sprintf "VkAttachmentReference2 { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkAttachmentReferenceStencilLayout = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public stencilLayout : VkImageLayout
+
+        new(pNext : nativeint, stencilLayout : VkImageLayout) =
+            {
+                sType = 1000241001u
+                pNext = pNext
+                stencilLayout = stencilLayout
+            }
+
+        new(stencilLayout : VkImageLayout) =
+            VkAttachmentReferenceStencilLayout(Unchecked.defaultof<nativeint>, stencilLayout)
+
+        static member Empty =
+            VkAttachmentReferenceStencilLayout(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageLayout>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "stencilLayout = %A" x.stencilLayout
+            ] |> sprintf "VkAttachmentReferenceStencilLayout { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2408,6 +2458,34 @@ type VkBufferCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkBufferDeviceAddressInfo = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public buffer : VkBuffer
+
+        new(pNext : nativeint, buffer : VkBuffer) =
+            {
+                sType = 1000244001u
+                pNext = pNext
+                buffer = buffer
+            }
+
+        new(buffer : VkBuffer) =
+            VkBufferDeviceAddressInfo(Unchecked.defaultof<nativeint>, buffer)
+
+        static member Empty =
+            VkBufferDeviceAddressInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBuffer>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "buffer = %A" x.buffer
+            ] |> sprintf "VkBufferDeviceAddressInfo { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkImageSubresourceLayers = 
     struct
         val mutable public aspectMask : VkImageAspectFlags
@@ -2541,6 +2619,34 @@ type VkBufferMemoryRequirementsInfo2 =
                 sprintf "pNext = %A" x.pNext
                 sprintf "buffer = %A" x.buffer
             ] |> sprintf "VkBufferMemoryRequirementsInfo2 { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkBufferOpaqueCaptureAddressCreateInfo = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public opaqueCaptureAddress : uint64
+
+        new(pNext : nativeint, opaqueCaptureAddress : uint64) =
+            {
+                sType = 1000257002u
+                pNext = pNext
+                opaqueCaptureAddress = opaqueCaptureAddress
+            }
+
+        new(opaqueCaptureAddress : uint64) =
+            VkBufferOpaqueCaptureAddressCreateInfo(Unchecked.defaultof<nativeint>, opaqueCaptureAddress)
+
+        static member Empty =
+            VkBufferOpaqueCaptureAddressCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint64>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "opaqueCaptureAddress = %A" x.opaqueCaptureAddress
+            ] |> sprintf "VkBufferOpaqueCaptureAddressCreateInfo { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -2989,6 +3095,34 @@ type VkComputePipelineCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkConformanceVersion = 
+    struct
+        val mutable public major : byte
+        val mutable public minor : byte
+        val mutable public subminor : byte
+        val mutable public patch : byte
+
+        new(major : byte, minor : byte, subminor : byte, patch : byte) =
+            {
+                major = major
+                minor = minor
+                subminor = subminor
+                patch = patch
+            }
+
+        static member Empty =
+            VkConformanceVersion(Unchecked.defaultof<byte>, Unchecked.defaultof<byte>, Unchecked.defaultof<byte>, Unchecked.defaultof<byte>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "major = %A" x.major
+                sprintf "minor = %A" x.minor
+                sprintf "subminor = %A" x.subminor
+                sprintf "patch = %A" x.patch
+            ] |> sprintf "VkConformanceVersion { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkCopyDescriptorSet = 
     struct
         val mutable public sType : uint32
@@ -3209,6 +3343,37 @@ type VkDescriptorSetLayoutBinding =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkDescriptorSetLayoutBindingFlagsCreateInfo = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public bindingCount : uint32
+        val mutable public pBindingFlags : nativeptr<VkDescriptorBindingFlags>
+
+        new(pNext : nativeint, bindingCount : uint32, pBindingFlags : nativeptr<VkDescriptorBindingFlags>) =
+            {
+                sType = 1000161000u
+                pNext = pNext
+                bindingCount = bindingCount
+                pBindingFlags = pBindingFlags
+            }
+
+        new(bindingCount : uint32, pBindingFlags : nativeptr<VkDescriptorBindingFlags>) =
+            VkDescriptorSetLayoutBindingFlagsCreateInfo(Unchecked.defaultof<nativeint>, bindingCount, pBindingFlags)
+
+        static member Empty =
+            VkDescriptorSetLayoutBindingFlagsCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDescriptorBindingFlags>>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "bindingCount = %A" x.bindingCount
+                sprintf "pBindingFlags = %A" x.pBindingFlags
+            ] |> sprintf "VkDescriptorSetLayoutBindingFlagsCreateInfo { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkDescriptorSetLayoutCreateInfo = 
     struct
         val mutable public sType : uint32
@@ -3268,6 +3433,65 @@ type VkDescriptorSetLayoutSupport =
                 sprintf "pNext = %A" x.pNext
                 sprintf "supported = %A" x.supported
             ] |> sprintf "VkDescriptorSetLayoutSupport { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDescriptorSetVariableDescriptorCountAllocateInfo = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public descriptorSetCount : uint32
+        val mutable public pDescriptorCounts : nativeptr<uint32>
+
+        new(pNext : nativeint, descriptorSetCount : uint32, pDescriptorCounts : nativeptr<uint32>) =
+            {
+                sType = 1000161003u
+                pNext = pNext
+                descriptorSetCount = descriptorSetCount
+                pDescriptorCounts = pDescriptorCounts
+            }
+
+        new(descriptorSetCount : uint32, pDescriptorCounts : nativeptr<uint32>) =
+            VkDescriptorSetVariableDescriptorCountAllocateInfo(Unchecked.defaultof<nativeint>, descriptorSetCount, pDescriptorCounts)
+
+        static member Empty =
+            VkDescriptorSetVariableDescriptorCountAllocateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "descriptorSetCount = %A" x.descriptorSetCount
+                sprintf "pDescriptorCounts = %A" x.pDescriptorCounts
+            ] |> sprintf "VkDescriptorSetVariableDescriptorCountAllocateInfo { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkDescriptorSetVariableDescriptorCountLayoutSupport = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public maxVariableDescriptorCount : uint32
+
+        new(pNext : nativeint, maxVariableDescriptorCount : uint32) =
+            {
+                sType = 1000161004u
+                pNext = pNext
+                maxVariableDescriptorCount = maxVariableDescriptorCount
+            }
+
+        new(maxVariableDescriptorCount : uint32) =
+            VkDescriptorSetVariableDescriptorCountLayoutSupport(Unchecked.defaultof<nativeint>, maxVariableDescriptorCount)
+
+        static member Empty =
+            VkDescriptorSetVariableDescriptorCountLayoutSupport(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "maxVariableDescriptorCount = %A" x.maxVariableDescriptorCount
+            ] |> sprintf "VkDescriptorSetVariableDescriptorCountLayoutSupport { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -3819,6 +4043,34 @@ type VkDeviceGroupSubmitInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkDeviceMemoryOpaqueCaptureAddressInfo = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public memory : VkDeviceMemory
+
+        new(pNext : nativeint, memory : VkDeviceMemory) =
+            {
+                sType = 1000257004u
+                pNext = pNext
+                memory = memory
+            }
+
+        new(memory : VkDeviceMemory) =
+            VkDeviceMemoryOpaqueCaptureAddressInfo(Unchecked.defaultof<nativeint>, memory)
+
+        static member Empty =
+            VkDeviceMemoryOpaqueCaptureAddressInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceMemory>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "memory = %A" x.memory
+            ] |> sprintf "VkDeviceMemoryOpaqueCaptureAddressInfo { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkDeviceQueueInfo2 = 
     struct
         val mutable public sType : uint32
@@ -4357,7 +4609,7 @@ type VkFormatProperties2 =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VkFramebufferAttachmentImageInfoKHR = 
+type VkFramebufferAttachmentImageInfo = 
     struct
         val mutable public sType : uint32
         val mutable public pNext : nativeint
@@ -4383,10 +4635,10 @@ type VkFramebufferAttachmentImageInfoKHR =
             }
 
         new(flags : VkImageCreateFlags, usage : VkImageUsageFlags, width : uint32, height : uint32, layerCount : uint32, viewFormatCount : uint32, pViewFormats : nativeptr<VkFormat>) =
-            VkFramebufferAttachmentImageInfoKHR(Unchecked.defaultof<nativeint>, flags, usage, width, height, layerCount, viewFormatCount, pViewFormats)
+            VkFramebufferAttachmentImageInfo(Unchecked.defaultof<nativeint>, flags, usage, width, height, layerCount, viewFormatCount, pViewFormats)
 
         static member Empty =
-            VkFramebufferAttachmentImageInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageCreateFlags>, Unchecked.defaultof<VkImageUsageFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkFormat>>)
+            VkFramebufferAttachmentImageInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageCreateFlags>, Unchecked.defaultof<VkImageUsageFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkFormat>>)
 
         override x.ToString() =
             String.concat "; " [
@@ -4399,7 +4651,38 @@ type VkFramebufferAttachmentImageInfoKHR =
                 sprintf "layerCount = %A" x.layerCount
                 sprintf "viewFormatCount = %A" x.viewFormatCount
                 sprintf "pViewFormats = %A" x.pViewFormats
-            ] |> sprintf "VkFramebufferAttachmentImageInfoKHR { %s }"
+            ] |> sprintf "VkFramebufferAttachmentImageInfo { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkFramebufferAttachmentsCreateInfo = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public attachmentImageInfoCount : uint32
+        val mutable public pAttachmentImageInfos : nativeptr<VkFramebufferAttachmentImageInfo>
+
+        new(pNext : nativeint, attachmentImageInfoCount : uint32, pAttachmentImageInfos : nativeptr<VkFramebufferAttachmentImageInfo>) =
+            {
+                sType = 1000108001u
+                pNext = pNext
+                attachmentImageInfoCount = attachmentImageInfoCount
+                pAttachmentImageInfos = pAttachmentImageInfos
+            }
+
+        new(attachmentImageInfoCount : uint32, pAttachmentImageInfos : nativeptr<VkFramebufferAttachmentImageInfo>) =
+            VkFramebufferAttachmentsCreateInfo(Unchecked.defaultof<nativeint>, attachmentImageInfoCount, pAttachmentImageInfos)
+
+        static member Empty =
+            VkFramebufferAttachmentsCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkFramebufferAttachmentImageInfo>>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "attachmentImageInfoCount = %A" x.attachmentImageInfoCount
+                sprintf "pAttachmentImageInfos = %A" x.pAttachmentImageInfos
+            ] |> sprintf "VkFramebufferAttachmentsCreateInfo { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -5193,6 +5476,37 @@ type VkImageCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkImageFormatListCreateInfo = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public viewFormatCount : uint32
+        val mutable public pViewFormats : nativeptr<VkFormat>
+
+        new(pNext : nativeint, viewFormatCount : uint32, pViewFormats : nativeptr<VkFormat>) =
+            {
+                sType = 1000147000u
+                pNext = pNext
+                viewFormatCount = viewFormatCount
+                pViewFormats = pViewFormats
+            }
+
+        new(viewFormatCount : uint32, pViewFormats : nativeptr<VkFormat>) =
+            VkImageFormatListCreateInfo(Unchecked.defaultof<nativeint>, viewFormatCount, pViewFormats)
+
+        static member Empty =
+            VkImageFormatListCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkFormat>>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "viewFormatCount = %A" x.viewFormatCount
+                sprintf "pViewFormats = %A" x.pViewFormats
+            ] |> sprintf "VkImageFormatListCreateInfo { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkImageFormatProperties = 
     struct
         val mutable public maxExtent : VkExtent3D
@@ -5444,6 +5758,34 @@ type VkImageSparseMemoryRequirementsInfo2 =
                 sprintf "pNext = %A" x.pNext
                 sprintf "image = %A" x.image
             ] |> sprintf "VkImageSparseMemoryRequirementsInfo2 { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkImageStencilUsageCreateInfo = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public stencilUsage : VkImageUsageFlags
+
+        new(pNext : nativeint, stencilUsage : VkImageUsageFlags) =
+            {
+                sType = 1000246000u
+                pNext = pNext
+                stencilUsage = stencilUsage
+            }
+
+        new(stencilUsage : VkImageUsageFlags) =
+            VkImageStencilUsageCreateInfo(Unchecked.defaultof<nativeint>, stencilUsage)
+
+        static member Empty =
+            VkImageStencilUsageCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageUsageFlags>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "stencilUsage = %A" x.stencilUsage
+            ] |> sprintf "VkImageStencilUsageCreateInfo { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -5849,6 +6191,34 @@ type VkMemoryHeap_16 =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkMemoryOpaqueCaptureAddressAllocateInfo = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public opaqueCaptureAddress : uint64
+
+        new(pNext : nativeint, opaqueCaptureAddress : uint64) =
+            {
+                sType = 1000257003u
+                pNext = pNext
+                opaqueCaptureAddress = opaqueCaptureAddress
+            }
+
+        new(opaqueCaptureAddress : uint64) =
+            VkMemoryOpaqueCaptureAddressAllocateInfo(Unchecked.defaultof<nativeint>, opaqueCaptureAddress)
+
+        static member Empty =
+            VkMemoryOpaqueCaptureAddressAllocateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint64>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "opaqueCaptureAddress = %A" x.opaqueCaptureAddress
+            ] |> sprintf "VkMemoryOpaqueCaptureAddressAllocateInfo { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkMemoryRequirements = 
     struct
         val mutable public size : VkDeviceSize
@@ -5982,6 +6352,327 @@ type VkPhysicalDevice16BitStorageFeatures =
                 sprintf "storagePushConstant16 = %A" x.storagePushConstant16
                 sprintf "storageInputOutput16 = %A" x.storageInputOutput16
             ] |> sprintf "VkPhysicalDevice16BitStorageFeatures { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDevice8BitStorageFeatures = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public storageBuffer8BitAccess : VkBool32
+        val mutable public uniformAndStorageBuffer8BitAccess : VkBool32
+        val mutable public storagePushConstant8 : VkBool32
+
+        new(pNext : nativeint, storageBuffer8BitAccess : VkBool32, uniformAndStorageBuffer8BitAccess : VkBool32, storagePushConstant8 : VkBool32) =
+            {
+                sType = 1000177000u
+                pNext = pNext
+                storageBuffer8BitAccess = storageBuffer8BitAccess
+                uniformAndStorageBuffer8BitAccess = uniformAndStorageBuffer8BitAccess
+                storagePushConstant8 = storagePushConstant8
+            }
+
+        new(storageBuffer8BitAccess : VkBool32, uniformAndStorageBuffer8BitAccess : VkBool32, storagePushConstant8 : VkBool32) =
+            VkPhysicalDevice8BitStorageFeatures(Unchecked.defaultof<nativeint>, storageBuffer8BitAccess, uniformAndStorageBuffer8BitAccess, storagePushConstant8)
+
+        static member Empty =
+            VkPhysicalDevice8BitStorageFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "storageBuffer8BitAccess = %A" x.storageBuffer8BitAccess
+                sprintf "uniformAndStorageBuffer8BitAccess = %A" x.uniformAndStorageBuffer8BitAccess
+                sprintf "storagePushConstant8 = %A" x.storagePushConstant8
+            ] |> sprintf "VkPhysicalDevice8BitStorageFeatures { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceBufferDeviceAddressFeatures = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public bufferDeviceAddress : VkBool32
+        val mutable public bufferDeviceAddressCaptureReplay : VkBool32
+        val mutable public bufferDeviceAddressMultiDevice : VkBool32
+
+        new(pNext : nativeint, bufferDeviceAddress : VkBool32, bufferDeviceAddressCaptureReplay : VkBool32, bufferDeviceAddressMultiDevice : VkBool32) =
+            {
+                sType = 1000257000u
+                pNext = pNext
+                bufferDeviceAddress = bufferDeviceAddress
+                bufferDeviceAddressCaptureReplay = bufferDeviceAddressCaptureReplay
+                bufferDeviceAddressMultiDevice = bufferDeviceAddressMultiDevice
+            }
+
+        new(bufferDeviceAddress : VkBool32, bufferDeviceAddressCaptureReplay : VkBool32, bufferDeviceAddressMultiDevice : VkBool32) =
+            VkPhysicalDeviceBufferDeviceAddressFeatures(Unchecked.defaultof<nativeint>, bufferDeviceAddress, bufferDeviceAddressCaptureReplay, bufferDeviceAddressMultiDevice)
+
+        static member Empty =
+            VkPhysicalDeviceBufferDeviceAddressFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "bufferDeviceAddress = %A" x.bufferDeviceAddress
+                sprintf "bufferDeviceAddressCaptureReplay = %A" x.bufferDeviceAddressCaptureReplay
+                sprintf "bufferDeviceAddressMultiDevice = %A" x.bufferDeviceAddressMultiDevice
+            ] |> sprintf "VkPhysicalDeviceBufferDeviceAddressFeatures { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceDepthStencilResolveProperties = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public supportedDepthResolveModes : VkResolveModeFlags
+        val mutable public supportedStencilResolveModes : VkResolveModeFlags
+        val mutable public independentResolveNone : VkBool32
+        val mutable public independentResolve : VkBool32
+
+        new(pNext : nativeint, supportedDepthResolveModes : VkResolveModeFlags, supportedStencilResolveModes : VkResolveModeFlags, independentResolveNone : VkBool32, independentResolve : VkBool32) =
+            {
+                sType = 1000199000u
+                pNext = pNext
+                supportedDepthResolveModes = supportedDepthResolveModes
+                supportedStencilResolveModes = supportedStencilResolveModes
+                independentResolveNone = independentResolveNone
+                independentResolve = independentResolve
+            }
+
+        new(supportedDepthResolveModes : VkResolveModeFlags, supportedStencilResolveModes : VkResolveModeFlags, independentResolveNone : VkBool32, independentResolve : VkBool32) =
+            VkPhysicalDeviceDepthStencilResolveProperties(Unchecked.defaultof<nativeint>, supportedDepthResolveModes, supportedStencilResolveModes, independentResolveNone, independentResolve)
+
+        static member Empty =
+            VkPhysicalDeviceDepthStencilResolveProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "supportedDepthResolveModes = %A" x.supportedDepthResolveModes
+                sprintf "supportedStencilResolveModes = %A" x.supportedStencilResolveModes
+                sprintf "independentResolveNone = %A" x.independentResolveNone
+                sprintf "independentResolve = %A" x.independentResolve
+            ] |> sprintf "VkPhysicalDeviceDepthStencilResolveProperties { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceDescriptorIndexingFeatures = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public shaderInputAttachmentArrayDynamicIndexing : VkBool32
+        val mutable public shaderUniformTexelBufferArrayDynamicIndexing : VkBool32
+        val mutable public shaderStorageTexelBufferArrayDynamicIndexing : VkBool32
+        val mutable public shaderUniformBufferArrayNonUniformIndexing : VkBool32
+        val mutable public shaderSampledImageArrayNonUniformIndexing : VkBool32
+        val mutable public shaderStorageBufferArrayNonUniformIndexing : VkBool32
+        val mutable public shaderStorageImageArrayNonUniformIndexing : VkBool32
+        val mutable public shaderInputAttachmentArrayNonUniformIndexing : VkBool32
+        val mutable public shaderUniformTexelBufferArrayNonUniformIndexing : VkBool32
+        val mutable public shaderStorageTexelBufferArrayNonUniformIndexing : VkBool32
+        val mutable public descriptorBindingUniformBufferUpdateAfterBind : VkBool32
+        val mutable public descriptorBindingSampledImageUpdateAfterBind : VkBool32
+        val mutable public descriptorBindingStorageImageUpdateAfterBind : VkBool32
+        val mutable public descriptorBindingStorageBufferUpdateAfterBind : VkBool32
+        val mutable public descriptorBindingUniformTexelBufferUpdateAfterBind : VkBool32
+        val mutable public descriptorBindingStorageTexelBufferUpdateAfterBind : VkBool32
+        val mutable public descriptorBindingUpdateUnusedWhilePending : VkBool32
+        val mutable public descriptorBindingPartiallyBound : VkBool32
+        val mutable public descriptorBindingVariableDescriptorCount : VkBool32
+        val mutable public runtimeDescriptorArray : VkBool32
+
+        new(pNext : nativeint, shaderInputAttachmentArrayDynamicIndexing : VkBool32, shaderUniformTexelBufferArrayDynamicIndexing : VkBool32, shaderStorageTexelBufferArrayDynamicIndexing : VkBool32, shaderUniformBufferArrayNonUniformIndexing : VkBool32, shaderSampledImageArrayNonUniformIndexing : VkBool32, shaderStorageBufferArrayNonUniformIndexing : VkBool32, shaderStorageImageArrayNonUniformIndexing : VkBool32, shaderInputAttachmentArrayNonUniformIndexing : VkBool32, shaderUniformTexelBufferArrayNonUniformIndexing : VkBool32, shaderStorageTexelBufferArrayNonUniformIndexing : VkBool32, descriptorBindingUniformBufferUpdateAfterBind : VkBool32, descriptorBindingSampledImageUpdateAfterBind : VkBool32, descriptorBindingStorageImageUpdateAfterBind : VkBool32, descriptorBindingStorageBufferUpdateAfterBind : VkBool32, descriptorBindingUniformTexelBufferUpdateAfterBind : VkBool32, descriptorBindingStorageTexelBufferUpdateAfterBind : VkBool32, descriptorBindingUpdateUnusedWhilePending : VkBool32, descriptorBindingPartiallyBound : VkBool32, descriptorBindingVariableDescriptorCount : VkBool32, runtimeDescriptorArray : VkBool32) =
+            {
+                sType = 1000161001u
+                pNext = pNext
+                shaderInputAttachmentArrayDynamicIndexing = shaderInputAttachmentArrayDynamicIndexing
+                shaderUniformTexelBufferArrayDynamicIndexing = shaderUniformTexelBufferArrayDynamicIndexing
+                shaderStorageTexelBufferArrayDynamicIndexing = shaderStorageTexelBufferArrayDynamicIndexing
+                shaderUniformBufferArrayNonUniformIndexing = shaderUniformBufferArrayNonUniformIndexing
+                shaderSampledImageArrayNonUniformIndexing = shaderSampledImageArrayNonUniformIndexing
+                shaderStorageBufferArrayNonUniformIndexing = shaderStorageBufferArrayNonUniformIndexing
+                shaderStorageImageArrayNonUniformIndexing = shaderStorageImageArrayNonUniformIndexing
+                shaderInputAttachmentArrayNonUniformIndexing = shaderInputAttachmentArrayNonUniformIndexing
+                shaderUniformTexelBufferArrayNonUniformIndexing = shaderUniformTexelBufferArrayNonUniformIndexing
+                shaderStorageTexelBufferArrayNonUniformIndexing = shaderStorageTexelBufferArrayNonUniformIndexing
+                descriptorBindingUniformBufferUpdateAfterBind = descriptorBindingUniformBufferUpdateAfterBind
+                descriptorBindingSampledImageUpdateAfterBind = descriptorBindingSampledImageUpdateAfterBind
+                descriptorBindingStorageImageUpdateAfterBind = descriptorBindingStorageImageUpdateAfterBind
+                descriptorBindingStorageBufferUpdateAfterBind = descriptorBindingStorageBufferUpdateAfterBind
+                descriptorBindingUniformTexelBufferUpdateAfterBind = descriptorBindingUniformTexelBufferUpdateAfterBind
+                descriptorBindingStorageTexelBufferUpdateAfterBind = descriptorBindingStorageTexelBufferUpdateAfterBind
+                descriptorBindingUpdateUnusedWhilePending = descriptorBindingUpdateUnusedWhilePending
+                descriptorBindingPartiallyBound = descriptorBindingPartiallyBound
+                descriptorBindingVariableDescriptorCount = descriptorBindingVariableDescriptorCount
+                runtimeDescriptorArray = runtimeDescriptorArray
+            }
+
+        new(shaderInputAttachmentArrayDynamicIndexing : VkBool32, shaderUniformTexelBufferArrayDynamicIndexing : VkBool32, shaderStorageTexelBufferArrayDynamicIndexing : VkBool32, shaderUniformBufferArrayNonUniformIndexing : VkBool32, shaderSampledImageArrayNonUniformIndexing : VkBool32, shaderStorageBufferArrayNonUniformIndexing : VkBool32, shaderStorageImageArrayNonUniformIndexing : VkBool32, shaderInputAttachmentArrayNonUniformIndexing : VkBool32, shaderUniformTexelBufferArrayNonUniformIndexing : VkBool32, shaderStorageTexelBufferArrayNonUniformIndexing : VkBool32, descriptorBindingUniformBufferUpdateAfterBind : VkBool32, descriptorBindingSampledImageUpdateAfterBind : VkBool32, descriptorBindingStorageImageUpdateAfterBind : VkBool32, descriptorBindingStorageBufferUpdateAfterBind : VkBool32, descriptorBindingUniformTexelBufferUpdateAfterBind : VkBool32, descriptorBindingStorageTexelBufferUpdateAfterBind : VkBool32, descriptorBindingUpdateUnusedWhilePending : VkBool32, descriptorBindingPartiallyBound : VkBool32, descriptorBindingVariableDescriptorCount : VkBool32, runtimeDescriptorArray : VkBool32) =
+            VkPhysicalDeviceDescriptorIndexingFeatures(Unchecked.defaultof<nativeint>, shaderInputAttachmentArrayDynamicIndexing, shaderUniformTexelBufferArrayDynamicIndexing, shaderStorageTexelBufferArrayDynamicIndexing, shaderUniformBufferArrayNonUniformIndexing, shaderSampledImageArrayNonUniformIndexing, shaderStorageBufferArrayNonUniformIndexing, shaderStorageImageArrayNonUniformIndexing, shaderInputAttachmentArrayNonUniformIndexing, shaderUniformTexelBufferArrayNonUniformIndexing, shaderStorageTexelBufferArrayNonUniformIndexing, descriptorBindingUniformBufferUpdateAfterBind, descriptorBindingSampledImageUpdateAfterBind, descriptorBindingStorageImageUpdateAfterBind, descriptorBindingStorageBufferUpdateAfterBind, descriptorBindingUniformTexelBufferUpdateAfterBind, descriptorBindingStorageTexelBufferUpdateAfterBind, descriptorBindingUpdateUnusedWhilePending, descriptorBindingPartiallyBound, descriptorBindingVariableDescriptorCount, runtimeDescriptorArray)
+
+        static member Empty =
+            VkPhysicalDeviceDescriptorIndexingFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "shaderInputAttachmentArrayDynamicIndexing = %A" x.shaderInputAttachmentArrayDynamicIndexing
+                sprintf "shaderUniformTexelBufferArrayDynamicIndexing = %A" x.shaderUniformTexelBufferArrayDynamicIndexing
+                sprintf "shaderStorageTexelBufferArrayDynamicIndexing = %A" x.shaderStorageTexelBufferArrayDynamicIndexing
+                sprintf "shaderUniformBufferArrayNonUniformIndexing = %A" x.shaderUniformBufferArrayNonUniformIndexing
+                sprintf "shaderSampledImageArrayNonUniformIndexing = %A" x.shaderSampledImageArrayNonUniformIndexing
+                sprintf "shaderStorageBufferArrayNonUniformIndexing = %A" x.shaderStorageBufferArrayNonUniformIndexing
+                sprintf "shaderStorageImageArrayNonUniformIndexing = %A" x.shaderStorageImageArrayNonUniformIndexing
+                sprintf "shaderInputAttachmentArrayNonUniformIndexing = %A" x.shaderInputAttachmentArrayNonUniformIndexing
+                sprintf "shaderUniformTexelBufferArrayNonUniformIndexing = %A" x.shaderUniformTexelBufferArrayNonUniformIndexing
+                sprintf "shaderStorageTexelBufferArrayNonUniformIndexing = %A" x.shaderStorageTexelBufferArrayNonUniformIndexing
+                sprintf "descriptorBindingUniformBufferUpdateAfterBind = %A" x.descriptorBindingUniformBufferUpdateAfterBind
+                sprintf "descriptorBindingSampledImageUpdateAfterBind = %A" x.descriptorBindingSampledImageUpdateAfterBind
+                sprintf "descriptorBindingStorageImageUpdateAfterBind = %A" x.descriptorBindingStorageImageUpdateAfterBind
+                sprintf "descriptorBindingStorageBufferUpdateAfterBind = %A" x.descriptorBindingStorageBufferUpdateAfterBind
+                sprintf "descriptorBindingUniformTexelBufferUpdateAfterBind = %A" x.descriptorBindingUniformTexelBufferUpdateAfterBind
+                sprintf "descriptorBindingStorageTexelBufferUpdateAfterBind = %A" x.descriptorBindingStorageTexelBufferUpdateAfterBind
+                sprintf "descriptorBindingUpdateUnusedWhilePending = %A" x.descriptorBindingUpdateUnusedWhilePending
+                sprintf "descriptorBindingPartiallyBound = %A" x.descriptorBindingPartiallyBound
+                sprintf "descriptorBindingVariableDescriptorCount = %A" x.descriptorBindingVariableDescriptorCount
+                sprintf "runtimeDescriptorArray = %A" x.runtimeDescriptorArray
+            ] |> sprintf "VkPhysicalDeviceDescriptorIndexingFeatures { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceDescriptorIndexingProperties = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public maxUpdateAfterBindDescriptorsInAllPools : uint32
+        val mutable public shaderUniformBufferArrayNonUniformIndexingNative : VkBool32
+        val mutable public shaderSampledImageArrayNonUniformIndexingNative : VkBool32
+        val mutable public shaderStorageBufferArrayNonUniformIndexingNative : VkBool32
+        val mutable public shaderStorageImageArrayNonUniformIndexingNative : VkBool32
+        val mutable public shaderInputAttachmentArrayNonUniformIndexingNative : VkBool32
+        val mutable public robustBufferAccessUpdateAfterBind : VkBool32
+        val mutable public quadDivergentImplicitLod : VkBool32
+        val mutable public maxPerStageDescriptorUpdateAfterBindSamplers : uint32
+        val mutable public maxPerStageDescriptorUpdateAfterBindUniformBuffers : uint32
+        val mutable public maxPerStageDescriptorUpdateAfterBindStorageBuffers : uint32
+        val mutable public maxPerStageDescriptorUpdateAfterBindSampledImages : uint32
+        val mutable public maxPerStageDescriptorUpdateAfterBindStorageImages : uint32
+        val mutable public maxPerStageDescriptorUpdateAfterBindInputAttachments : uint32
+        val mutable public maxPerStageUpdateAfterBindResources : uint32
+        val mutable public maxDescriptorSetUpdateAfterBindSamplers : uint32
+        val mutable public maxDescriptorSetUpdateAfterBindUniformBuffers : uint32
+        val mutable public maxDescriptorSetUpdateAfterBindUniformBuffersDynamic : uint32
+        val mutable public maxDescriptorSetUpdateAfterBindStorageBuffers : uint32
+        val mutable public maxDescriptorSetUpdateAfterBindStorageBuffersDynamic : uint32
+        val mutable public maxDescriptorSetUpdateAfterBindSampledImages : uint32
+        val mutable public maxDescriptorSetUpdateAfterBindStorageImages : uint32
+        val mutable public maxDescriptorSetUpdateAfterBindInputAttachments : uint32
+
+        new(pNext : nativeint, maxUpdateAfterBindDescriptorsInAllPools : uint32, shaderUniformBufferArrayNonUniformIndexingNative : VkBool32, shaderSampledImageArrayNonUniformIndexingNative : VkBool32, shaderStorageBufferArrayNonUniformIndexingNative : VkBool32, shaderStorageImageArrayNonUniformIndexingNative : VkBool32, shaderInputAttachmentArrayNonUniformIndexingNative : VkBool32, robustBufferAccessUpdateAfterBind : VkBool32, quadDivergentImplicitLod : VkBool32, maxPerStageDescriptorUpdateAfterBindSamplers : uint32, maxPerStageDescriptorUpdateAfterBindUniformBuffers : uint32, maxPerStageDescriptorUpdateAfterBindStorageBuffers : uint32, maxPerStageDescriptorUpdateAfterBindSampledImages : uint32, maxPerStageDescriptorUpdateAfterBindStorageImages : uint32, maxPerStageDescriptorUpdateAfterBindInputAttachments : uint32, maxPerStageUpdateAfterBindResources : uint32, maxDescriptorSetUpdateAfterBindSamplers : uint32, maxDescriptorSetUpdateAfterBindUniformBuffers : uint32, maxDescriptorSetUpdateAfterBindUniformBuffersDynamic : uint32, maxDescriptorSetUpdateAfterBindStorageBuffers : uint32, maxDescriptorSetUpdateAfterBindStorageBuffersDynamic : uint32, maxDescriptorSetUpdateAfterBindSampledImages : uint32, maxDescriptorSetUpdateAfterBindStorageImages : uint32, maxDescriptorSetUpdateAfterBindInputAttachments : uint32) =
+            {
+                sType = 1000161002u
+                pNext = pNext
+                maxUpdateAfterBindDescriptorsInAllPools = maxUpdateAfterBindDescriptorsInAllPools
+                shaderUniformBufferArrayNonUniformIndexingNative = shaderUniformBufferArrayNonUniformIndexingNative
+                shaderSampledImageArrayNonUniformIndexingNative = shaderSampledImageArrayNonUniformIndexingNative
+                shaderStorageBufferArrayNonUniformIndexingNative = shaderStorageBufferArrayNonUniformIndexingNative
+                shaderStorageImageArrayNonUniformIndexingNative = shaderStorageImageArrayNonUniformIndexingNative
+                shaderInputAttachmentArrayNonUniformIndexingNative = shaderInputAttachmentArrayNonUniformIndexingNative
+                robustBufferAccessUpdateAfterBind = robustBufferAccessUpdateAfterBind
+                quadDivergentImplicitLod = quadDivergentImplicitLod
+                maxPerStageDescriptorUpdateAfterBindSamplers = maxPerStageDescriptorUpdateAfterBindSamplers
+                maxPerStageDescriptorUpdateAfterBindUniformBuffers = maxPerStageDescriptorUpdateAfterBindUniformBuffers
+                maxPerStageDescriptorUpdateAfterBindStorageBuffers = maxPerStageDescriptorUpdateAfterBindStorageBuffers
+                maxPerStageDescriptorUpdateAfterBindSampledImages = maxPerStageDescriptorUpdateAfterBindSampledImages
+                maxPerStageDescriptorUpdateAfterBindStorageImages = maxPerStageDescriptorUpdateAfterBindStorageImages
+                maxPerStageDescriptorUpdateAfterBindInputAttachments = maxPerStageDescriptorUpdateAfterBindInputAttachments
+                maxPerStageUpdateAfterBindResources = maxPerStageUpdateAfterBindResources
+                maxDescriptorSetUpdateAfterBindSamplers = maxDescriptorSetUpdateAfterBindSamplers
+                maxDescriptorSetUpdateAfterBindUniformBuffers = maxDescriptorSetUpdateAfterBindUniformBuffers
+                maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = maxDescriptorSetUpdateAfterBindUniformBuffersDynamic
+                maxDescriptorSetUpdateAfterBindStorageBuffers = maxDescriptorSetUpdateAfterBindStorageBuffers
+                maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = maxDescriptorSetUpdateAfterBindStorageBuffersDynamic
+                maxDescriptorSetUpdateAfterBindSampledImages = maxDescriptorSetUpdateAfterBindSampledImages
+                maxDescriptorSetUpdateAfterBindStorageImages = maxDescriptorSetUpdateAfterBindStorageImages
+                maxDescriptorSetUpdateAfterBindInputAttachments = maxDescriptorSetUpdateAfterBindInputAttachments
+            }
+
+        new(maxUpdateAfterBindDescriptorsInAllPools : uint32, shaderUniformBufferArrayNonUniformIndexingNative : VkBool32, shaderSampledImageArrayNonUniformIndexingNative : VkBool32, shaderStorageBufferArrayNonUniformIndexingNative : VkBool32, shaderStorageImageArrayNonUniformIndexingNative : VkBool32, shaderInputAttachmentArrayNonUniformIndexingNative : VkBool32, robustBufferAccessUpdateAfterBind : VkBool32, quadDivergentImplicitLod : VkBool32, maxPerStageDescriptorUpdateAfterBindSamplers : uint32, maxPerStageDescriptorUpdateAfterBindUniformBuffers : uint32, maxPerStageDescriptorUpdateAfterBindStorageBuffers : uint32, maxPerStageDescriptorUpdateAfterBindSampledImages : uint32, maxPerStageDescriptorUpdateAfterBindStorageImages : uint32, maxPerStageDescriptorUpdateAfterBindInputAttachments : uint32, maxPerStageUpdateAfterBindResources : uint32, maxDescriptorSetUpdateAfterBindSamplers : uint32, maxDescriptorSetUpdateAfterBindUniformBuffers : uint32, maxDescriptorSetUpdateAfterBindUniformBuffersDynamic : uint32, maxDescriptorSetUpdateAfterBindStorageBuffers : uint32, maxDescriptorSetUpdateAfterBindStorageBuffersDynamic : uint32, maxDescriptorSetUpdateAfterBindSampledImages : uint32, maxDescriptorSetUpdateAfterBindStorageImages : uint32, maxDescriptorSetUpdateAfterBindInputAttachments : uint32) =
+            VkPhysicalDeviceDescriptorIndexingProperties(Unchecked.defaultof<nativeint>, maxUpdateAfterBindDescriptorsInAllPools, shaderUniformBufferArrayNonUniformIndexingNative, shaderSampledImageArrayNonUniformIndexingNative, shaderStorageBufferArrayNonUniformIndexingNative, shaderStorageImageArrayNonUniformIndexingNative, shaderInputAttachmentArrayNonUniformIndexingNative, robustBufferAccessUpdateAfterBind, quadDivergentImplicitLod, maxPerStageDescriptorUpdateAfterBindSamplers, maxPerStageDescriptorUpdateAfterBindUniformBuffers, maxPerStageDescriptorUpdateAfterBindStorageBuffers, maxPerStageDescriptorUpdateAfterBindSampledImages, maxPerStageDescriptorUpdateAfterBindStorageImages, maxPerStageDescriptorUpdateAfterBindInputAttachments, maxPerStageUpdateAfterBindResources, maxDescriptorSetUpdateAfterBindSamplers, maxDescriptorSetUpdateAfterBindUniformBuffers, maxDescriptorSetUpdateAfterBindUniformBuffersDynamic, maxDescriptorSetUpdateAfterBindStorageBuffers, maxDescriptorSetUpdateAfterBindStorageBuffersDynamic, maxDescriptorSetUpdateAfterBindSampledImages, maxDescriptorSetUpdateAfterBindStorageImages, maxDescriptorSetUpdateAfterBindInputAttachments)
+
+        static member Empty =
+            VkPhysicalDeviceDescriptorIndexingProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "maxUpdateAfterBindDescriptorsInAllPools = %A" x.maxUpdateAfterBindDescriptorsInAllPools
+                sprintf "shaderUniformBufferArrayNonUniformIndexingNative = %A" x.shaderUniformBufferArrayNonUniformIndexingNative
+                sprintf "shaderSampledImageArrayNonUniformIndexingNative = %A" x.shaderSampledImageArrayNonUniformIndexingNative
+                sprintf "shaderStorageBufferArrayNonUniformIndexingNative = %A" x.shaderStorageBufferArrayNonUniformIndexingNative
+                sprintf "shaderStorageImageArrayNonUniformIndexingNative = %A" x.shaderStorageImageArrayNonUniformIndexingNative
+                sprintf "shaderInputAttachmentArrayNonUniformIndexingNative = %A" x.shaderInputAttachmentArrayNonUniformIndexingNative
+                sprintf "robustBufferAccessUpdateAfterBind = %A" x.robustBufferAccessUpdateAfterBind
+                sprintf "quadDivergentImplicitLod = %A" x.quadDivergentImplicitLod
+                sprintf "maxPerStageDescriptorUpdateAfterBindSamplers = %A" x.maxPerStageDescriptorUpdateAfterBindSamplers
+                sprintf "maxPerStageDescriptorUpdateAfterBindUniformBuffers = %A" x.maxPerStageDescriptorUpdateAfterBindUniformBuffers
+                sprintf "maxPerStageDescriptorUpdateAfterBindStorageBuffers = %A" x.maxPerStageDescriptorUpdateAfterBindStorageBuffers
+                sprintf "maxPerStageDescriptorUpdateAfterBindSampledImages = %A" x.maxPerStageDescriptorUpdateAfterBindSampledImages
+                sprintf "maxPerStageDescriptorUpdateAfterBindStorageImages = %A" x.maxPerStageDescriptorUpdateAfterBindStorageImages
+                sprintf "maxPerStageDescriptorUpdateAfterBindInputAttachments = %A" x.maxPerStageDescriptorUpdateAfterBindInputAttachments
+                sprintf "maxPerStageUpdateAfterBindResources = %A" x.maxPerStageUpdateAfterBindResources
+                sprintf "maxDescriptorSetUpdateAfterBindSamplers = %A" x.maxDescriptorSetUpdateAfterBindSamplers
+                sprintf "maxDescriptorSetUpdateAfterBindUniformBuffers = %A" x.maxDescriptorSetUpdateAfterBindUniformBuffers
+                sprintf "maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = %A" x.maxDescriptorSetUpdateAfterBindUniformBuffersDynamic
+                sprintf "maxDescriptorSetUpdateAfterBindStorageBuffers = %A" x.maxDescriptorSetUpdateAfterBindStorageBuffers
+                sprintf "maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = %A" x.maxDescriptorSetUpdateAfterBindStorageBuffersDynamic
+                sprintf "maxDescriptorSetUpdateAfterBindSampledImages = %A" x.maxDescriptorSetUpdateAfterBindSampledImages
+                sprintf "maxDescriptorSetUpdateAfterBindStorageImages = %A" x.maxDescriptorSetUpdateAfterBindStorageImages
+                sprintf "maxDescriptorSetUpdateAfterBindInputAttachments = %A" x.maxDescriptorSetUpdateAfterBindInputAttachments
+            ] |> sprintf "VkPhysicalDeviceDescriptorIndexingProperties { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceDriverProperties = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public driverID : VkDriverId
+        val mutable public driverName : String256
+        val mutable public driverInfo : String256
+        val mutable public conformanceVersion : VkConformanceVersion
+
+        new(pNext : nativeint, driverID : VkDriverId, driverName : String256, driverInfo : String256, conformanceVersion : VkConformanceVersion) =
+            {
+                sType = 1000196000u
+                pNext = pNext
+                driverID = driverID
+                driverName = driverName
+                driverInfo = driverInfo
+                conformanceVersion = conformanceVersion
+            }
+
+        new(driverID : VkDriverId, driverName : String256, driverInfo : String256, conformanceVersion : VkConformanceVersion) =
+            VkPhysicalDeviceDriverProperties(Unchecked.defaultof<nativeint>, driverID, driverName, driverInfo, conformanceVersion)
+
+        static member Empty =
+            VkPhysicalDeviceDriverProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDriverId>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>, Unchecked.defaultof<VkConformanceVersion>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "driverID = %A" x.driverID
+                sprintf "driverName = %A" x.driverName
+                sprintf "driverInfo = %A" x.driverInfo
+                sprintf "conformanceVersion = %A" x.conformanceVersion
+            ] |> sprintf "VkPhysicalDeviceDriverProperties { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -6131,6 +6822,82 @@ type VkPhysicalDeviceFeatures2 =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceFloatControlsProperties = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public denormBehaviorIndependence : VkShaderFloatControlsIndependence
+        val mutable public roundingModeIndependence : VkShaderFloatControlsIndependence
+        val mutable public shaderSignedZeroInfNanPreserveFloat16 : VkBool32
+        val mutable public shaderSignedZeroInfNanPreserveFloat32 : VkBool32
+        val mutable public shaderSignedZeroInfNanPreserveFloat64 : VkBool32
+        val mutable public shaderDenormPreserveFloat16 : VkBool32
+        val mutable public shaderDenormPreserveFloat32 : VkBool32
+        val mutable public shaderDenormPreserveFloat64 : VkBool32
+        val mutable public shaderDenormFlushToZeroFloat16 : VkBool32
+        val mutable public shaderDenormFlushToZeroFloat32 : VkBool32
+        val mutable public shaderDenormFlushToZeroFloat64 : VkBool32
+        val mutable public shaderRoundingModeRTEFloat16 : VkBool32
+        val mutable public shaderRoundingModeRTEFloat32 : VkBool32
+        val mutable public shaderRoundingModeRTEFloat64 : VkBool32
+        val mutable public shaderRoundingModeRTZFloat16 : VkBool32
+        val mutable public shaderRoundingModeRTZFloat32 : VkBool32
+        val mutable public shaderRoundingModeRTZFloat64 : VkBool32
+
+        new(pNext : nativeint, denormBehaviorIndependence : VkShaderFloatControlsIndependence, roundingModeIndependence : VkShaderFloatControlsIndependence, shaderSignedZeroInfNanPreserveFloat16 : VkBool32, shaderSignedZeroInfNanPreserveFloat32 : VkBool32, shaderSignedZeroInfNanPreserveFloat64 : VkBool32, shaderDenormPreserveFloat16 : VkBool32, shaderDenormPreserveFloat32 : VkBool32, shaderDenormPreserveFloat64 : VkBool32, shaderDenormFlushToZeroFloat16 : VkBool32, shaderDenormFlushToZeroFloat32 : VkBool32, shaderDenormFlushToZeroFloat64 : VkBool32, shaderRoundingModeRTEFloat16 : VkBool32, shaderRoundingModeRTEFloat32 : VkBool32, shaderRoundingModeRTEFloat64 : VkBool32, shaderRoundingModeRTZFloat16 : VkBool32, shaderRoundingModeRTZFloat32 : VkBool32, shaderRoundingModeRTZFloat64 : VkBool32) =
+            {
+                sType = 1000197000u
+                pNext = pNext
+                denormBehaviorIndependence = denormBehaviorIndependence
+                roundingModeIndependence = roundingModeIndependence
+                shaderSignedZeroInfNanPreserveFloat16 = shaderSignedZeroInfNanPreserveFloat16
+                shaderSignedZeroInfNanPreserveFloat32 = shaderSignedZeroInfNanPreserveFloat32
+                shaderSignedZeroInfNanPreserveFloat64 = shaderSignedZeroInfNanPreserveFloat64
+                shaderDenormPreserveFloat16 = shaderDenormPreserveFloat16
+                shaderDenormPreserveFloat32 = shaderDenormPreserveFloat32
+                shaderDenormPreserveFloat64 = shaderDenormPreserveFloat64
+                shaderDenormFlushToZeroFloat16 = shaderDenormFlushToZeroFloat16
+                shaderDenormFlushToZeroFloat32 = shaderDenormFlushToZeroFloat32
+                shaderDenormFlushToZeroFloat64 = shaderDenormFlushToZeroFloat64
+                shaderRoundingModeRTEFloat16 = shaderRoundingModeRTEFloat16
+                shaderRoundingModeRTEFloat32 = shaderRoundingModeRTEFloat32
+                shaderRoundingModeRTEFloat64 = shaderRoundingModeRTEFloat64
+                shaderRoundingModeRTZFloat16 = shaderRoundingModeRTZFloat16
+                shaderRoundingModeRTZFloat32 = shaderRoundingModeRTZFloat32
+                shaderRoundingModeRTZFloat64 = shaderRoundingModeRTZFloat64
+            }
+
+        new(denormBehaviorIndependence : VkShaderFloatControlsIndependence, roundingModeIndependence : VkShaderFloatControlsIndependence, shaderSignedZeroInfNanPreserveFloat16 : VkBool32, shaderSignedZeroInfNanPreserveFloat32 : VkBool32, shaderSignedZeroInfNanPreserveFloat64 : VkBool32, shaderDenormPreserveFloat16 : VkBool32, shaderDenormPreserveFloat32 : VkBool32, shaderDenormPreserveFloat64 : VkBool32, shaderDenormFlushToZeroFloat16 : VkBool32, shaderDenormFlushToZeroFloat32 : VkBool32, shaderDenormFlushToZeroFloat64 : VkBool32, shaderRoundingModeRTEFloat16 : VkBool32, shaderRoundingModeRTEFloat32 : VkBool32, shaderRoundingModeRTEFloat64 : VkBool32, shaderRoundingModeRTZFloat16 : VkBool32, shaderRoundingModeRTZFloat32 : VkBool32, shaderRoundingModeRTZFloat64 : VkBool32) =
+            VkPhysicalDeviceFloatControlsProperties(Unchecked.defaultof<nativeint>, denormBehaviorIndependence, roundingModeIndependence, shaderSignedZeroInfNanPreserveFloat16, shaderSignedZeroInfNanPreserveFloat32, shaderSignedZeroInfNanPreserveFloat64, shaderDenormPreserveFloat16, shaderDenormPreserveFloat32, shaderDenormPreserveFloat64, shaderDenormFlushToZeroFloat16, shaderDenormFlushToZeroFloat32, shaderDenormFlushToZeroFloat64, shaderRoundingModeRTEFloat16, shaderRoundingModeRTEFloat32, shaderRoundingModeRTEFloat64, shaderRoundingModeRTZFloat16, shaderRoundingModeRTZFloat32, shaderRoundingModeRTZFloat64)
+
+        static member Empty =
+            VkPhysicalDeviceFloatControlsProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkShaderFloatControlsIndependence>, Unchecked.defaultof<VkShaderFloatControlsIndependence>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "denormBehaviorIndependence = %A" x.denormBehaviorIndependence
+                sprintf "roundingModeIndependence = %A" x.roundingModeIndependence
+                sprintf "shaderSignedZeroInfNanPreserveFloat16 = %A" x.shaderSignedZeroInfNanPreserveFloat16
+                sprintf "shaderSignedZeroInfNanPreserveFloat32 = %A" x.shaderSignedZeroInfNanPreserveFloat32
+                sprintf "shaderSignedZeroInfNanPreserveFloat64 = %A" x.shaderSignedZeroInfNanPreserveFloat64
+                sprintf "shaderDenormPreserveFloat16 = %A" x.shaderDenormPreserveFloat16
+                sprintf "shaderDenormPreserveFloat32 = %A" x.shaderDenormPreserveFloat32
+                sprintf "shaderDenormPreserveFloat64 = %A" x.shaderDenormPreserveFloat64
+                sprintf "shaderDenormFlushToZeroFloat16 = %A" x.shaderDenormFlushToZeroFloat16
+                sprintf "shaderDenormFlushToZeroFloat32 = %A" x.shaderDenormFlushToZeroFloat32
+                sprintf "shaderDenormFlushToZeroFloat64 = %A" x.shaderDenormFlushToZeroFloat64
+                sprintf "shaderRoundingModeRTEFloat16 = %A" x.shaderRoundingModeRTEFloat16
+                sprintf "shaderRoundingModeRTEFloat32 = %A" x.shaderRoundingModeRTEFloat32
+                sprintf "shaderRoundingModeRTEFloat64 = %A" x.shaderRoundingModeRTEFloat64
+                sprintf "shaderRoundingModeRTZFloat16 = %A" x.shaderRoundingModeRTZFloat16
+                sprintf "shaderRoundingModeRTZFloat32 = %A" x.shaderRoundingModeRTZFloat32
+                sprintf "shaderRoundingModeRTZFloat64 = %A" x.shaderRoundingModeRTZFloat64
+            ] |> sprintf "VkPhysicalDeviceFloatControlsProperties { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkPhysicalDeviceGroupProperties = 
     struct
         val mutable public sType : uint32
@@ -6162,6 +6929,34 @@ type VkPhysicalDeviceGroupProperties =
                 sprintf "physicalDevices = %A" x.physicalDevices
                 sprintf "subsetAllocation = %A" x.subsetAllocation
             ] |> sprintf "VkPhysicalDeviceGroupProperties { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceHostQueryResetFeatures = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public hostQueryReset : VkBool32
+
+        new(pNext : nativeint, hostQueryReset : VkBool32) =
+            {
+                sType = 1000261000u
+                pNext = pNext
+                hostQueryReset = hostQueryReset
+            }
+
+        new(hostQueryReset : VkBool32) =
+            VkPhysicalDeviceHostQueryResetFeatures(Unchecked.defaultof<nativeint>, hostQueryReset)
+
+        static member Empty =
+            VkPhysicalDeviceHostQueryResetFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "hostQueryReset = %A" x.hostQueryReset
+            ] |> sprintf "VkPhysicalDeviceHostQueryResetFeatures { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -6242,6 +7037,34 @@ type VkPhysicalDeviceImageFormatInfo2 =
                 sprintf "usage = %A" x.usage
                 sprintf "flags = %A" x.flags
             ] |> sprintf "VkPhysicalDeviceImageFormatInfo2 { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceImagelessFramebufferFeatures = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public imagelessFramebuffer : VkBool32
+
+        new(pNext : nativeint, imagelessFramebuffer : VkBool32) =
+            {
+                sType = 1000108000u
+                pNext = pNext
+                imagelessFramebuffer = imagelessFramebuffer
+            }
+
+        new(imagelessFramebuffer : VkBool32) =
+            VkPhysicalDeviceImagelessFramebufferFeatures(Unchecked.defaultof<nativeint>, imagelessFramebuffer)
+
+        static member Empty =
+            VkPhysicalDeviceImagelessFramebufferFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "imagelessFramebuffer = %A" x.imagelessFramebuffer
+            ] |> sprintf "VkPhysicalDeviceImagelessFramebufferFeatures { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -6917,6 +7740,37 @@ type VkPhysicalDeviceProtectedMemoryProperties =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceSamplerFilterMinmaxProperties = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public filterMinmaxSingleComponentFormats : VkBool32
+        val mutable public filterMinmaxImageComponentMapping : VkBool32
+
+        new(pNext : nativeint, filterMinmaxSingleComponentFormats : VkBool32, filterMinmaxImageComponentMapping : VkBool32) =
+            {
+                sType = 1000130000u
+                pNext = pNext
+                filterMinmaxSingleComponentFormats = filterMinmaxSingleComponentFormats
+                filterMinmaxImageComponentMapping = filterMinmaxImageComponentMapping
+            }
+
+        new(filterMinmaxSingleComponentFormats : VkBool32, filterMinmaxImageComponentMapping : VkBool32) =
+            VkPhysicalDeviceSamplerFilterMinmaxProperties(Unchecked.defaultof<nativeint>, filterMinmaxSingleComponentFormats, filterMinmaxImageComponentMapping)
+
+        static member Empty =
+            VkPhysicalDeviceSamplerFilterMinmaxProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "filterMinmaxSingleComponentFormats = %A" x.filterMinmaxSingleComponentFormats
+                sprintf "filterMinmaxImageComponentMapping = %A" x.filterMinmaxImageComponentMapping
+            ] |> sprintf "VkPhysicalDeviceSamplerFilterMinmaxProperties { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkPhysicalDeviceSamplerYcbcrConversionFeatures = 
     struct
         val mutable public sType : uint32
@@ -6942,6 +7796,93 @@ type VkPhysicalDeviceSamplerYcbcrConversionFeatures =
                 sprintf "pNext = %A" x.pNext
                 sprintf "samplerYcbcrConversion = %A" x.samplerYcbcrConversion
             ] |> sprintf "VkPhysicalDeviceSamplerYcbcrConversionFeatures { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceScalarBlockLayoutFeatures = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public scalarBlockLayout : VkBool32
+
+        new(pNext : nativeint, scalarBlockLayout : VkBool32) =
+            {
+                sType = 1000221000u
+                pNext = pNext
+                scalarBlockLayout = scalarBlockLayout
+            }
+
+        new(scalarBlockLayout : VkBool32) =
+            VkPhysicalDeviceScalarBlockLayoutFeatures(Unchecked.defaultof<nativeint>, scalarBlockLayout)
+
+        static member Empty =
+            VkPhysicalDeviceScalarBlockLayoutFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "scalarBlockLayout = %A" x.scalarBlockLayout
+            ] |> sprintf "VkPhysicalDeviceScalarBlockLayoutFeatures { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public separateDepthStencilLayouts : VkBool32
+
+        new(pNext : nativeint, separateDepthStencilLayouts : VkBool32) =
+            {
+                sType = 1000241000u
+                pNext = pNext
+                separateDepthStencilLayouts = separateDepthStencilLayouts
+            }
+
+        new(separateDepthStencilLayouts : VkBool32) =
+            VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures(Unchecked.defaultof<nativeint>, separateDepthStencilLayouts)
+
+        static member Empty =
+            VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "separateDepthStencilLayouts = %A" x.separateDepthStencilLayouts
+            ] |> sprintf "VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceShaderAtomicInt64Features = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public shaderBufferInt64Atomics : VkBool32
+        val mutable public shaderSharedInt64Atomics : VkBool32
+
+        new(pNext : nativeint, shaderBufferInt64Atomics : VkBool32, shaderSharedInt64Atomics : VkBool32) =
+            {
+                sType = 1000180000u
+                pNext = pNext
+                shaderBufferInt64Atomics = shaderBufferInt64Atomics
+                shaderSharedInt64Atomics = shaderSharedInt64Atomics
+            }
+
+        new(shaderBufferInt64Atomics : VkBool32, shaderSharedInt64Atomics : VkBool32) =
+            VkPhysicalDeviceShaderAtomicInt64Features(Unchecked.defaultof<nativeint>, shaderBufferInt64Atomics, shaderSharedInt64Atomics)
+
+        static member Empty =
+            VkPhysicalDeviceShaderAtomicInt64Features(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "shaderBufferInt64Atomics = %A" x.shaderBufferInt64Atomics
+                sprintf "shaderSharedInt64Atomics = %A" x.shaderSharedInt64Atomics
+            ] |> sprintf "VkPhysicalDeviceShaderAtomicInt64Features { %s }"
     end
 
 type VkPhysicalDeviceShaderDrawParameterFeatures = VkPhysicalDeviceShaderDrawParametersFeatures
@@ -6971,6 +7912,65 @@ type VkPhysicalDeviceShaderDrawParametersFeatures =
                 sprintf "pNext = %A" x.pNext
                 sprintf "shaderDrawParameters = %A" x.shaderDrawParameters
             ] |> sprintf "VkPhysicalDeviceShaderDrawParametersFeatures { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceShaderFloat16Int8Features = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public shaderFloat16 : VkBool32
+        val mutable public shaderInt8 : VkBool32
+
+        new(pNext : nativeint, shaderFloat16 : VkBool32, shaderInt8 : VkBool32) =
+            {
+                sType = 1000082000u
+                pNext = pNext
+                shaderFloat16 = shaderFloat16
+                shaderInt8 = shaderInt8
+            }
+
+        new(shaderFloat16 : VkBool32, shaderInt8 : VkBool32) =
+            VkPhysicalDeviceShaderFloat16Int8Features(Unchecked.defaultof<nativeint>, shaderFloat16, shaderInt8)
+
+        static member Empty =
+            VkPhysicalDeviceShaderFloat16Int8Features(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "shaderFloat16 = %A" x.shaderFloat16
+                sprintf "shaderInt8 = %A" x.shaderInt8
+            ] |> sprintf "VkPhysicalDeviceShaderFloat16Int8Features { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public shaderSubgroupExtendedTypes : VkBool32
+
+        new(pNext : nativeint, shaderSubgroupExtendedTypes : VkBool32) =
+            {
+                sType = 1000175000u
+                pNext = pNext
+                shaderSubgroupExtendedTypes = shaderSubgroupExtendedTypes
+            }
+
+        new(shaderSubgroupExtendedTypes : VkBool32) =
+            VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures(Unchecked.defaultof<nativeint>, shaderSubgroupExtendedTypes)
+
+        static member Empty =
+            VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "shaderSubgroupExtendedTypes = %A" x.shaderSubgroupExtendedTypes
+            ] |> sprintf "VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -7050,6 +8050,90 @@ type VkPhysicalDeviceSubgroupProperties =
             ] |> sprintf "VkPhysicalDeviceSubgroupProperties { %s }"
     end
 
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceTimelineSemaphoreFeatures = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public timelineSemaphore : VkBool32
+
+        new(pNext : nativeint, timelineSemaphore : VkBool32) =
+            {
+                sType = 1000207000u
+                pNext = pNext
+                timelineSemaphore = timelineSemaphore
+            }
+
+        new(timelineSemaphore : VkBool32) =
+            VkPhysicalDeviceTimelineSemaphoreFeatures(Unchecked.defaultof<nativeint>, timelineSemaphore)
+
+        static member Empty =
+            VkPhysicalDeviceTimelineSemaphoreFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "timelineSemaphore = %A" x.timelineSemaphore
+            ] |> sprintf "VkPhysicalDeviceTimelineSemaphoreFeatures { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceTimelineSemaphoreProperties = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public maxTimelineSemaphoreValueDifference : uint64
+
+        new(pNext : nativeint, maxTimelineSemaphoreValueDifference : uint64) =
+            {
+                sType = 1000207001u
+                pNext = pNext
+                maxTimelineSemaphoreValueDifference = maxTimelineSemaphoreValueDifference
+            }
+
+        new(maxTimelineSemaphoreValueDifference : uint64) =
+            VkPhysicalDeviceTimelineSemaphoreProperties(Unchecked.defaultof<nativeint>, maxTimelineSemaphoreValueDifference)
+
+        static member Empty =
+            VkPhysicalDeviceTimelineSemaphoreProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint64>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "maxTimelineSemaphoreValueDifference = %A" x.maxTimelineSemaphoreValueDifference
+            ] |> sprintf "VkPhysicalDeviceTimelineSemaphoreProperties { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceUniformBufferStandardLayoutFeatures = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public uniformBufferStandardLayout : VkBool32
+
+        new(pNext : nativeint, uniformBufferStandardLayout : VkBool32) =
+            {
+                sType = 1000253000u
+                pNext = pNext
+                uniformBufferStandardLayout = uniformBufferStandardLayout
+            }
+
+        new(uniformBufferStandardLayout : VkBool32) =
+            VkPhysicalDeviceUniformBufferStandardLayoutFeatures(Unchecked.defaultof<nativeint>, uniformBufferStandardLayout)
+
+        static member Empty =
+            VkPhysicalDeviceUniformBufferStandardLayoutFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "uniformBufferStandardLayout = %A" x.uniformBufferStandardLayout
+            ] |> sprintf "VkPhysicalDeviceUniformBufferStandardLayoutFeatures { %s }"
+    end
+
 type VkPhysicalDeviceVariablePointerFeatures = VkPhysicalDeviceVariablePointersFeatures
 [<StructLayout(LayoutKind.Sequential)>]
 type VkPhysicalDeviceVariablePointersFeatures = 
@@ -7080,6 +8164,518 @@ type VkPhysicalDeviceVariablePointersFeatures =
                 sprintf "variablePointersStorageBuffer = %A" x.variablePointersStorageBuffer
                 sprintf "variablePointers = %A" x.variablePointers
             ] |> sprintf "VkPhysicalDeviceVariablePointersFeatures { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceVulkan11Features = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public storageBuffer16BitAccess : VkBool32
+        val mutable public uniformAndStorageBuffer16BitAccess : VkBool32
+        val mutable public storagePushConstant16 : VkBool32
+        val mutable public storageInputOutput16 : VkBool32
+        val mutable public multiview : VkBool32
+        val mutable public multiviewGeometryShader : VkBool32
+        val mutable public multiviewTessellationShader : VkBool32
+        val mutable public variablePointersStorageBuffer : VkBool32
+        val mutable public variablePointers : VkBool32
+        val mutable public protectedMemory : VkBool32
+        val mutable public samplerYcbcrConversion : VkBool32
+        val mutable public shaderDrawParameters : VkBool32
+
+        new(pNext : nativeint, storageBuffer16BitAccess : VkBool32, uniformAndStorageBuffer16BitAccess : VkBool32, storagePushConstant16 : VkBool32, storageInputOutput16 : VkBool32, multiview : VkBool32, multiviewGeometryShader : VkBool32, multiviewTessellationShader : VkBool32, variablePointersStorageBuffer : VkBool32, variablePointers : VkBool32, protectedMemory : VkBool32, samplerYcbcrConversion : VkBool32, shaderDrawParameters : VkBool32) =
+            {
+                sType = 49u
+                pNext = pNext
+                storageBuffer16BitAccess = storageBuffer16BitAccess
+                uniformAndStorageBuffer16BitAccess = uniformAndStorageBuffer16BitAccess
+                storagePushConstant16 = storagePushConstant16
+                storageInputOutput16 = storageInputOutput16
+                multiview = multiview
+                multiviewGeometryShader = multiviewGeometryShader
+                multiviewTessellationShader = multiviewTessellationShader
+                variablePointersStorageBuffer = variablePointersStorageBuffer
+                variablePointers = variablePointers
+                protectedMemory = protectedMemory
+                samplerYcbcrConversion = samplerYcbcrConversion
+                shaderDrawParameters = shaderDrawParameters
+            }
+
+        new(storageBuffer16BitAccess : VkBool32, uniformAndStorageBuffer16BitAccess : VkBool32, storagePushConstant16 : VkBool32, storageInputOutput16 : VkBool32, multiview : VkBool32, multiviewGeometryShader : VkBool32, multiviewTessellationShader : VkBool32, variablePointersStorageBuffer : VkBool32, variablePointers : VkBool32, protectedMemory : VkBool32, samplerYcbcrConversion : VkBool32, shaderDrawParameters : VkBool32) =
+            VkPhysicalDeviceVulkan11Features(Unchecked.defaultof<nativeint>, storageBuffer16BitAccess, uniformAndStorageBuffer16BitAccess, storagePushConstant16, storageInputOutput16, multiview, multiviewGeometryShader, multiviewTessellationShader, variablePointersStorageBuffer, variablePointers, protectedMemory, samplerYcbcrConversion, shaderDrawParameters)
+
+        static member Empty =
+            VkPhysicalDeviceVulkan11Features(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "storageBuffer16BitAccess = %A" x.storageBuffer16BitAccess
+                sprintf "uniformAndStorageBuffer16BitAccess = %A" x.uniformAndStorageBuffer16BitAccess
+                sprintf "storagePushConstant16 = %A" x.storagePushConstant16
+                sprintf "storageInputOutput16 = %A" x.storageInputOutput16
+                sprintf "multiview = %A" x.multiview
+                sprintf "multiviewGeometryShader = %A" x.multiviewGeometryShader
+                sprintf "multiviewTessellationShader = %A" x.multiviewTessellationShader
+                sprintf "variablePointersStorageBuffer = %A" x.variablePointersStorageBuffer
+                sprintf "variablePointers = %A" x.variablePointers
+                sprintf "protectedMemory = %A" x.protectedMemory
+                sprintf "samplerYcbcrConversion = %A" x.samplerYcbcrConversion
+                sprintf "shaderDrawParameters = %A" x.shaderDrawParameters
+            ] |> sprintf "VkPhysicalDeviceVulkan11Features { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceVulkan11Properties = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public deviceUUID : Guid
+        val mutable public driverUUID : Guid
+        val mutable public deviceLUID : byte_8
+        val mutable public deviceNodeMask : uint32
+        val mutable public deviceLUIDValid : VkBool32
+        val mutable public subgroupSize : uint32
+        val mutable public subgroupSupportedStages : VkShaderStageFlags
+        val mutable public subgroupSupportedOperations : VkSubgroupFeatureFlags
+        val mutable public subgroupQuadOperationsInAllStages : VkBool32
+        val mutable public pointClippingBehavior : VkPointClippingBehavior
+        val mutable public maxMultiviewViewCount : uint32
+        val mutable public maxMultiviewInstanceIndex : uint32
+        val mutable public protectedNoFault : VkBool32
+        val mutable public maxPerSetDescriptors : uint32
+        val mutable public maxMemoryAllocationSize : VkDeviceSize
+
+        new(pNext : nativeint, deviceUUID : Guid, driverUUID : Guid, deviceLUID : byte_8, deviceNodeMask : uint32, deviceLUIDValid : VkBool32, subgroupSize : uint32, subgroupSupportedStages : VkShaderStageFlags, subgroupSupportedOperations : VkSubgroupFeatureFlags, subgroupQuadOperationsInAllStages : VkBool32, pointClippingBehavior : VkPointClippingBehavior, maxMultiviewViewCount : uint32, maxMultiviewInstanceIndex : uint32, protectedNoFault : VkBool32, maxPerSetDescriptors : uint32, maxMemoryAllocationSize : VkDeviceSize) =
+            {
+                sType = 50u
+                pNext = pNext
+                deviceUUID = deviceUUID
+                driverUUID = driverUUID
+                deviceLUID = deviceLUID
+                deviceNodeMask = deviceNodeMask
+                deviceLUIDValid = deviceLUIDValid
+                subgroupSize = subgroupSize
+                subgroupSupportedStages = subgroupSupportedStages
+                subgroupSupportedOperations = subgroupSupportedOperations
+                subgroupQuadOperationsInAllStages = subgroupQuadOperationsInAllStages
+                pointClippingBehavior = pointClippingBehavior
+                maxMultiviewViewCount = maxMultiviewViewCount
+                maxMultiviewInstanceIndex = maxMultiviewInstanceIndex
+                protectedNoFault = protectedNoFault
+                maxPerSetDescriptors = maxPerSetDescriptors
+                maxMemoryAllocationSize = maxMemoryAllocationSize
+            }
+
+        new(deviceUUID : Guid, driverUUID : Guid, deviceLUID : byte_8, deviceNodeMask : uint32, deviceLUIDValid : VkBool32, subgroupSize : uint32, subgroupSupportedStages : VkShaderStageFlags, subgroupSupportedOperations : VkSubgroupFeatureFlags, subgroupQuadOperationsInAllStages : VkBool32, pointClippingBehavior : VkPointClippingBehavior, maxMultiviewViewCount : uint32, maxMultiviewInstanceIndex : uint32, protectedNoFault : VkBool32, maxPerSetDescriptors : uint32, maxMemoryAllocationSize : VkDeviceSize) =
+            VkPhysicalDeviceVulkan11Properties(Unchecked.defaultof<nativeint>, deviceUUID, driverUUID, deviceLUID, deviceNodeMask, deviceLUIDValid, subgroupSize, subgroupSupportedStages, subgroupSupportedOperations, subgroupQuadOperationsInAllStages, pointClippingBehavior, maxMultiviewViewCount, maxMultiviewInstanceIndex, protectedNoFault, maxPerSetDescriptors, maxMemoryAllocationSize)
+
+        static member Empty =
+            VkPhysicalDeviceVulkan11Properties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<Guid>, Unchecked.defaultof<Guid>, Unchecked.defaultof<byte_8>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkShaderStageFlags>, Unchecked.defaultof<VkSubgroupFeatureFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkPointClippingBehavior>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDeviceSize>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "deviceUUID = %A" x.deviceUUID
+                sprintf "driverUUID = %A" x.driverUUID
+                sprintf "deviceLUID = %A" x.deviceLUID
+                sprintf "deviceNodeMask = %A" x.deviceNodeMask
+                sprintf "deviceLUIDValid = %A" x.deviceLUIDValid
+                sprintf "subgroupSize = %A" x.subgroupSize
+                sprintf "subgroupSupportedStages = %A" x.subgroupSupportedStages
+                sprintf "subgroupSupportedOperations = %A" x.subgroupSupportedOperations
+                sprintf "subgroupQuadOperationsInAllStages = %A" x.subgroupQuadOperationsInAllStages
+                sprintf "pointClippingBehavior = %A" x.pointClippingBehavior
+                sprintf "maxMultiviewViewCount = %A" x.maxMultiviewViewCount
+                sprintf "maxMultiviewInstanceIndex = %A" x.maxMultiviewInstanceIndex
+                sprintf "protectedNoFault = %A" x.protectedNoFault
+                sprintf "maxPerSetDescriptors = %A" x.maxPerSetDescriptors
+                sprintf "maxMemoryAllocationSize = %A" x.maxMemoryAllocationSize
+            ] |> sprintf "VkPhysicalDeviceVulkan11Properties { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceVulkan12Features = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public samplerMirrorClampToEdge : VkBool32
+        val mutable public drawIndirectCount : VkBool32
+        val mutable public storageBuffer8BitAccess : VkBool32
+        val mutable public uniformAndStorageBuffer8BitAccess : VkBool32
+        val mutable public storagePushConstant8 : VkBool32
+        val mutable public shaderBufferInt64Atomics : VkBool32
+        val mutable public shaderSharedInt64Atomics : VkBool32
+        val mutable public shaderFloat16 : VkBool32
+        val mutable public shaderInt8 : VkBool32
+        val mutable public descriptorIndexing : VkBool32
+        val mutable public shaderInputAttachmentArrayDynamicIndexing : VkBool32
+        val mutable public shaderUniformTexelBufferArrayDynamicIndexing : VkBool32
+        val mutable public shaderStorageTexelBufferArrayDynamicIndexing : VkBool32
+        val mutable public shaderUniformBufferArrayNonUniformIndexing : VkBool32
+        val mutable public shaderSampledImageArrayNonUniformIndexing : VkBool32
+        val mutable public shaderStorageBufferArrayNonUniformIndexing : VkBool32
+        val mutable public shaderStorageImageArrayNonUniformIndexing : VkBool32
+        val mutable public shaderInputAttachmentArrayNonUniformIndexing : VkBool32
+        val mutable public shaderUniformTexelBufferArrayNonUniformIndexing : VkBool32
+        val mutable public shaderStorageTexelBufferArrayNonUniformIndexing : VkBool32
+        val mutable public descriptorBindingUniformBufferUpdateAfterBind : VkBool32
+        val mutable public descriptorBindingSampledImageUpdateAfterBind : VkBool32
+        val mutable public descriptorBindingStorageImageUpdateAfterBind : VkBool32
+        val mutable public descriptorBindingStorageBufferUpdateAfterBind : VkBool32
+        val mutable public descriptorBindingUniformTexelBufferUpdateAfterBind : VkBool32
+        val mutable public descriptorBindingStorageTexelBufferUpdateAfterBind : VkBool32
+        val mutable public descriptorBindingUpdateUnusedWhilePending : VkBool32
+        val mutable public descriptorBindingPartiallyBound : VkBool32
+        val mutable public descriptorBindingVariableDescriptorCount : VkBool32
+        val mutable public runtimeDescriptorArray : VkBool32
+        val mutable public samplerFilterMinmax : VkBool32
+        val mutable public scalarBlockLayout : VkBool32
+        val mutable public imagelessFramebuffer : VkBool32
+        val mutable public uniformBufferStandardLayout : VkBool32
+        val mutable public shaderSubgroupExtendedTypes : VkBool32
+        val mutable public separateDepthStencilLayouts : VkBool32
+        val mutable public hostQueryReset : VkBool32
+        val mutable public timelineSemaphore : VkBool32
+        val mutable public bufferDeviceAddress : VkBool32
+        val mutable public bufferDeviceAddressCaptureReplay : VkBool32
+        val mutable public bufferDeviceAddressMultiDevice : VkBool32
+        val mutable public vulkanMemoryModel : VkBool32
+        val mutable public vulkanMemoryModelDeviceScope : VkBool32
+        val mutable public vulkanMemoryModelAvailabilityVisibilityChains : VkBool32
+        val mutable public shaderOutputViewportIndex : VkBool32
+        val mutable public shaderOutputLayer : VkBool32
+        val mutable public subgroupBroadcastDynamicId : VkBool32
+
+        new(pNext : nativeint, samplerMirrorClampToEdge : VkBool32, drawIndirectCount : VkBool32, storageBuffer8BitAccess : VkBool32, uniformAndStorageBuffer8BitAccess : VkBool32, storagePushConstant8 : VkBool32, shaderBufferInt64Atomics : VkBool32, shaderSharedInt64Atomics : VkBool32, shaderFloat16 : VkBool32, shaderInt8 : VkBool32, descriptorIndexing : VkBool32, shaderInputAttachmentArrayDynamicIndexing : VkBool32, shaderUniformTexelBufferArrayDynamicIndexing : VkBool32, shaderStorageTexelBufferArrayDynamicIndexing : VkBool32, shaderUniformBufferArrayNonUniformIndexing : VkBool32, shaderSampledImageArrayNonUniformIndexing : VkBool32, shaderStorageBufferArrayNonUniformIndexing : VkBool32, shaderStorageImageArrayNonUniformIndexing : VkBool32, shaderInputAttachmentArrayNonUniformIndexing : VkBool32, shaderUniformTexelBufferArrayNonUniformIndexing : VkBool32, shaderStorageTexelBufferArrayNonUniformIndexing : VkBool32, descriptorBindingUniformBufferUpdateAfterBind : VkBool32, descriptorBindingSampledImageUpdateAfterBind : VkBool32, descriptorBindingStorageImageUpdateAfterBind : VkBool32, descriptorBindingStorageBufferUpdateAfterBind : VkBool32, descriptorBindingUniformTexelBufferUpdateAfterBind : VkBool32, descriptorBindingStorageTexelBufferUpdateAfterBind : VkBool32, descriptorBindingUpdateUnusedWhilePending : VkBool32, descriptorBindingPartiallyBound : VkBool32, descriptorBindingVariableDescriptorCount : VkBool32, runtimeDescriptorArray : VkBool32, samplerFilterMinmax : VkBool32, scalarBlockLayout : VkBool32, imagelessFramebuffer : VkBool32, uniformBufferStandardLayout : VkBool32, shaderSubgroupExtendedTypes : VkBool32, separateDepthStencilLayouts : VkBool32, hostQueryReset : VkBool32, timelineSemaphore : VkBool32, bufferDeviceAddress : VkBool32, bufferDeviceAddressCaptureReplay : VkBool32, bufferDeviceAddressMultiDevice : VkBool32, vulkanMemoryModel : VkBool32, vulkanMemoryModelDeviceScope : VkBool32, vulkanMemoryModelAvailabilityVisibilityChains : VkBool32, shaderOutputViewportIndex : VkBool32, shaderOutputLayer : VkBool32, subgroupBroadcastDynamicId : VkBool32) =
+            {
+                sType = 51u
+                pNext = pNext
+                samplerMirrorClampToEdge = samplerMirrorClampToEdge
+                drawIndirectCount = drawIndirectCount
+                storageBuffer8BitAccess = storageBuffer8BitAccess
+                uniformAndStorageBuffer8BitAccess = uniformAndStorageBuffer8BitAccess
+                storagePushConstant8 = storagePushConstant8
+                shaderBufferInt64Atomics = shaderBufferInt64Atomics
+                shaderSharedInt64Atomics = shaderSharedInt64Atomics
+                shaderFloat16 = shaderFloat16
+                shaderInt8 = shaderInt8
+                descriptorIndexing = descriptorIndexing
+                shaderInputAttachmentArrayDynamicIndexing = shaderInputAttachmentArrayDynamicIndexing
+                shaderUniformTexelBufferArrayDynamicIndexing = shaderUniformTexelBufferArrayDynamicIndexing
+                shaderStorageTexelBufferArrayDynamicIndexing = shaderStorageTexelBufferArrayDynamicIndexing
+                shaderUniformBufferArrayNonUniformIndexing = shaderUniformBufferArrayNonUniformIndexing
+                shaderSampledImageArrayNonUniformIndexing = shaderSampledImageArrayNonUniformIndexing
+                shaderStorageBufferArrayNonUniformIndexing = shaderStorageBufferArrayNonUniformIndexing
+                shaderStorageImageArrayNonUniformIndexing = shaderStorageImageArrayNonUniformIndexing
+                shaderInputAttachmentArrayNonUniformIndexing = shaderInputAttachmentArrayNonUniformIndexing
+                shaderUniformTexelBufferArrayNonUniformIndexing = shaderUniformTexelBufferArrayNonUniformIndexing
+                shaderStorageTexelBufferArrayNonUniformIndexing = shaderStorageTexelBufferArrayNonUniformIndexing
+                descriptorBindingUniformBufferUpdateAfterBind = descriptorBindingUniformBufferUpdateAfterBind
+                descriptorBindingSampledImageUpdateAfterBind = descriptorBindingSampledImageUpdateAfterBind
+                descriptorBindingStorageImageUpdateAfterBind = descriptorBindingStorageImageUpdateAfterBind
+                descriptorBindingStorageBufferUpdateAfterBind = descriptorBindingStorageBufferUpdateAfterBind
+                descriptorBindingUniformTexelBufferUpdateAfterBind = descriptorBindingUniformTexelBufferUpdateAfterBind
+                descriptorBindingStorageTexelBufferUpdateAfterBind = descriptorBindingStorageTexelBufferUpdateAfterBind
+                descriptorBindingUpdateUnusedWhilePending = descriptorBindingUpdateUnusedWhilePending
+                descriptorBindingPartiallyBound = descriptorBindingPartiallyBound
+                descriptorBindingVariableDescriptorCount = descriptorBindingVariableDescriptorCount
+                runtimeDescriptorArray = runtimeDescriptorArray
+                samplerFilterMinmax = samplerFilterMinmax
+                scalarBlockLayout = scalarBlockLayout
+                imagelessFramebuffer = imagelessFramebuffer
+                uniformBufferStandardLayout = uniformBufferStandardLayout
+                shaderSubgroupExtendedTypes = shaderSubgroupExtendedTypes
+                separateDepthStencilLayouts = separateDepthStencilLayouts
+                hostQueryReset = hostQueryReset
+                timelineSemaphore = timelineSemaphore
+                bufferDeviceAddress = bufferDeviceAddress
+                bufferDeviceAddressCaptureReplay = bufferDeviceAddressCaptureReplay
+                bufferDeviceAddressMultiDevice = bufferDeviceAddressMultiDevice
+                vulkanMemoryModel = vulkanMemoryModel
+                vulkanMemoryModelDeviceScope = vulkanMemoryModelDeviceScope
+                vulkanMemoryModelAvailabilityVisibilityChains = vulkanMemoryModelAvailabilityVisibilityChains
+                shaderOutputViewportIndex = shaderOutputViewportIndex
+                shaderOutputLayer = shaderOutputLayer
+                subgroupBroadcastDynamicId = subgroupBroadcastDynamicId
+            }
+
+        new(samplerMirrorClampToEdge : VkBool32, drawIndirectCount : VkBool32, storageBuffer8BitAccess : VkBool32, uniformAndStorageBuffer8BitAccess : VkBool32, storagePushConstant8 : VkBool32, shaderBufferInt64Atomics : VkBool32, shaderSharedInt64Atomics : VkBool32, shaderFloat16 : VkBool32, shaderInt8 : VkBool32, descriptorIndexing : VkBool32, shaderInputAttachmentArrayDynamicIndexing : VkBool32, shaderUniformTexelBufferArrayDynamicIndexing : VkBool32, shaderStorageTexelBufferArrayDynamicIndexing : VkBool32, shaderUniformBufferArrayNonUniformIndexing : VkBool32, shaderSampledImageArrayNonUniformIndexing : VkBool32, shaderStorageBufferArrayNonUniformIndexing : VkBool32, shaderStorageImageArrayNonUniformIndexing : VkBool32, shaderInputAttachmentArrayNonUniformIndexing : VkBool32, shaderUniformTexelBufferArrayNonUniformIndexing : VkBool32, shaderStorageTexelBufferArrayNonUniformIndexing : VkBool32, descriptorBindingUniformBufferUpdateAfterBind : VkBool32, descriptorBindingSampledImageUpdateAfterBind : VkBool32, descriptorBindingStorageImageUpdateAfterBind : VkBool32, descriptorBindingStorageBufferUpdateAfterBind : VkBool32, descriptorBindingUniformTexelBufferUpdateAfterBind : VkBool32, descriptorBindingStorageTexelBufferUpdateAfterBind : VkBool32, descriptorBindingUpdateUnusedWhilePending : VkBool32, descriptorBindingPartiallyBound : VkBool32, descriptorBindingVariableDescriptorCount : VkBool32, runtimeDescriptorArray : VkBool32, samplerFilterMinmax : VkBool32, scalarBlockLayout : VkBool32, imagelessFramebuffer : VkBool32, uniformBufferStandardLayout : VkBool32, shaderSubgroupExtendedTypes : VkBool32, separateDepthStencilLayouts : VkBool32, hostQueryReset : VkBool32, timelineSemaphore : VkBool32, bufferDeviceAddress : VkBool32, bufferDeviceAddressCaptureReplay : VkBool32, bufferDeviceAddressMultiDevice : VkBool32, vulkanMemoryModel : VkBool32, vulkanMemoryModelDeviceScope : VkBool32, vulkanMemoryModelAvailabilityVisibilityChains : VkBool32, shaderOutputViewportIndex : VkBool32, shaderOutputLayer : VkBool32, subgroupBroadcastDynamicId : VkBool32) =
+            VkPhysicalDeviceVulkan12Features(Unchecked.defaultof<nativeint>, samplerMirrorClampToEdge, drawIndirectCount, storageBuffer8BitAccess, uniformAndStorageBuffer8BitAccess, storagePushConstant8, shaderBufferInt64Atomics, shaderSharedInt64Atomics, shaderFloat16, shaderInt8, descriptorIndexing, shaderInputAttachmentArrayDynamicIndexing, shaderUniformTexelBufferArrayDynamicIndexing, shaderStorageTexelBufferArrayDynamicIndexing, shaderUniformBufferArrayNonUniformIndexing, shaderSampledImageArrayNonUniformIndexing, shaderStorageBufferArrayNonUniformIndexing, shaderStorageImageArrayNonUniformIndexing, shaderInputAttachmentArrayNonUniformIndexing, shaderUniformTexelBufferArrayNonUniformIndexing, shaderStorageTexelBufferArrayNonUniformIndexing, descriptorBindingUniformBufferUpdateAfterBind, descriptorBindingSampledImageUpdateAfterBind, descriptorBindingStorageImageUpdateAfterBind, descriptorBindingStorageBufferUpdateAfterBind, descriptorBindingUniformTexelBufferUpdateAfterBind, descriptorBindingStorageTexelBufferUpdateAfterBind, descriptorBindingUpdateUnusedWhilePending, descriptorBindingPartiallyBound, descriptorBindingVariableDescriptorCount, runtimeDescriptorArray, samplerFilterMinmax, scalarBlockLayout, imagelessFramebuffer, uniformBufferStandardLayout, shaderSubgroupExtendedTypes, separateDepthStencilLayouts, hostQueryReset, timelineSemaphore, bufferDeviceAddress, bufferDeviceAddressCaptureReplay, bufferDeviceAddressMultiDevice, vulkanMemoryModel, vulkanMemoryModelDeviceScope, vulkanMemoryModelAvailabilityVisibilityChains, shaderOutputViewportIndex, shaderOutputLayer, subgroupBroadcastDynamicId)
+
+        static member Empty =
+            VkPhysicalDeviceVulkan12Features(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "samplerMirrorClampToEdge = %A" x.samplerMirrorClampToEdge
+                sprintf "drawIndirectCount = %A" x.drawIndirectCount
+                sprintf "storageBuffer8BitAccess = %A" x.storageBuffer8BitAccess
+                sprintf "uniformAndStorageBuffer8BitAccess = %A" x.uniformAndStorageBuffer8BitAccess
+                sprintf "storagePushConstant8 = %A" x.storagePushConstant8
+                sprintf "shaderBufferInt64Atomics = %A" x.shaderBufferInt64Atomics
+                sprintf "shaderSharedInt64Atomics = %A" x.shaderSharedInt64Atomics
+                sprintf "shaderFloat16 = %A" x.shaderFloat16
+                sprintf "shaderInt8 = %A" x.shaderInt8
+                sprintf "descriptorIndexing = %A" x.descriptorIndexing
+                sprintf "shaderInputAttachmentArrayDynamicIndexing = %A" x.shaderInputAttachmentArrayDynamicIndexing
+                sprintf "shaderUniformTexelBufferArrayDynamicIndexing = %A" x.shaderUniformTexelBufferArrayDynamicIndexing
+                sprintf "shaderStorageTexelBufferArrayDynamicIndexing = %A" x.shaderStorageTexelBufferArrayDynamicIndexing
+                sprintf "shaderUniformBufferArrayNonUniformIndexing = %A" x.shaderUniformBufferArrayNonUniformIndexing
+                sprintf "shaderSampledImageArrayNonUniformIndexing = %A" x.shaderSampledImageArrayNonUniformIndexing
+                sprintf "shaderStorageBufferArrayNonUniformIndexing = %A" x.shaderStorageBufferArrayNonUniformIndexing
+                sprintf "shaderStorageImageArrayNonUniformIndexing = %A" x.shaderStorageImageArrayNonUniformIndexing
+                sprintf "shaderInputAttachmentArrayNonUniformIndexing = %A" x.shaderInputAttachmentArrayNonUniformIndexing
+                sprintf "shaderUniformTexelBufferArrayNonUniformIndexing = %A" x.shaderUniformTexelBufferArrayNonUniformIndexing
+                sprintf "shaderStorageTexelBufferArrayNonUniformIndexing = %A" x.shaderStorageTexelBufferArrayNonUniformIndexing
+                sprintf "descriptorBindingUniformBufferUpdateAfterBind = %A" x.descriptorBindingUniformBufferUpdateAfterBind
+                sprintf "descriptorBindingSampledImageUpdateAfterBind = %A" x.descriptorBindingSampledImageUpdateAfterBind
+                sprintf "descriptorBindingStorageImageUpdateAfterBind = %A" x.descriptorBindingStorageImageUpdateAfterBind
+                sprintf "descriptorBindingStorageBufferUpdateAfterBind = %A" x.descriptorBindingStorageBufferUpdateAfterBind
+                sprintf "descriptorBindingUniformTexelBufferUpdateAfterBind = %A" x.descriptorBindingUniformTexelBufferUpdateAfterBind
+                sprintf "descriptorBindingStorageTexelBufferUpdateAfterBind = %A" x.descriptorBindingStorageTexelBufferUpdateAfterBind
+                sprintf "descriptorBindingUpdateUnusedWhilePending = %A" x.descriptorBindingUpdateUnusedWhilePending
+                sprintf "descriptorBindingPartiallyBound = %A" x.descriptorBindingPartiallyBound
+                sprintf "descriptorBindingVariableDescriptorCount = %A" x.descriptorBindingVariableDescriptorCount
+                sprintf "runtimeDescriptorArray = %A" x.runtimeDescriptorArray
+                sprintf "samplerFilterMinmax = %A" x.samplerFilterMinmax
+                sprintf "scalarBlockLayout = %A" x.scalarBlockLayout
+                sprintf "imagelessFramebuffer = %A" x.imagelessFramebuffer
+                sprintf "uniformBufferStandardLayout = %A" x.uniformBufferStandardLayout
+                sprintf "shaderSubgroupExtendedTypes = %A" x.shaderSubgroupExtendedTypes
+                sprintf "separateDepthStencilLayouts = %A" x.separateDepthStencilLayouts
+                sprintf "hostQueryReset = %A" x.hostQueryReset
+                sprintf "timelineSemaphore = %A" x.timelineSemaphore
+                sprintf "bufferDeviceAddress = %A" x.bufferDeviceAddress
+                sprintf "bufferDeviceAddressCaptureReplay = %A" x.bufferDeviceAddressCaptureReplay
+                sprintf "bufferDeviceAddressMultiDevice = %A" x.bufferDeviceAddressMultiDevice
+                sprintf "vulkanMemoryModel = %A" x.vulkanMemoryModel
+                sprintf "vulkanMemoryModelDeviceScope = %A" x.vulkanMemoryModelDeviceScope
+                sprintf "vulkanMemoryModelAvailabilityVisibilityChains = %A" x.vulkanMemoryModelAvailabilityVisibilityChains
+                sprintf "shaderOutputViewportIndex = %A" x.shaderOutputViewportIndex
+                sprintf "shaderOutputLayer = %A" x.shaderOutputLayer
+                sprintf "subgroupBroadcastDynamicId = %A" x.subgroupBroadcastDynamicId
+            ] |> sprintf "VkPhysicalDeviceVulkan12Features { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceVulkan12Properties = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public driverID : VkDriverId
+        val mutable public driverName : String256
+        val mutable public driverInfo : String256
+        val mutable public conformanceVersion : VkConformanceVersion
+        val mutable public denormBehaviorIndependence : VkShaderFloatControlsIndependence
+        val mutable public roundingModeIndependence : VkShaderFloatControlsIndependence
+        val mutable public shaderSignedZeroInfNanPreserveFloat16 : VkBool32
+        val mutable public shaderSignedZeroInfNanPreserveFloat32 : VkBool32
+        val mutable public shaderSignedZeroInfNanPreserveFloat64 : VkBool32
+        val mutable public shaderDenormPreserveFloat16 : VkBool32
+        val mutable public shaderDenormPreserveFloat32 : VkBool32
+        val mutable public shaderDenormPreserveFloat64 : VkBool32
+        val mutable public shaderDenormFlushToZeroFloat16 : VkBool32
+        val mutable public shaderDenormFlushToZeroFloat32 : VkBool32
+        val mutable public shaderDenormFlushToZeroFloat64 : VkBool32
+        val mutable public shaderRoundingModeRTEFloat16 : VkBool32
+        val mutable public shaderRoundingModeRTEFloat32 : VkBool32
+        val mutable public shaderRoundingModeRTEFloat64 : VkBool32
+        val mutable public shaderRoundingModeRTZFloat16 : VkBool32
+        val mutable public shaderRoundingModeRTZFloat32 : VkBool32
+        val mutable public shaderRoundingModeRTZFloat64 : VkBool32
+        val mutable public maxUpdateAfterBindDescriptorsInAllPools : uint32
+        val mutable public shaderUniformBufferArrayNonUniformIndexingNative : VkBool32
+        val mutable public shaderSampledImageArrayNonUniformIndexingNative : VkBool32
+        val mutable public shaderStorageBufferArrayNonUniformIndexingNative : VkBool32
+        val mutable public shaderStorageImageArrayNonUniformIndexingNative : VkBool32
+        val mutable public shaderInputAttachmentArrayNonUniformIndexingNative : VkBool32
+        val mutable public robustBufferAccessUpdateAfterBind : VkBool32
+        val mutable public quadDivergentImplicitLod : VkBool32
+        val mutable public maxPerStageDescriptorUpdateAfterBindSamplers : uint32
+        val mutable public maxPerStageDescriptorUpdateAfterBindUniformBuffers : uint32
+        val mutable public maxPerStageDescriptorUpdateAfterBindStorageBuffers : uint32
+        val mutable public maxPerStageDescriptorUpdateAfterBindSampledImages : uint32
+        val mutable public maxPerStageDescriptorUpdateAfterBindStorageImages : uint32
+        val mutable public maxPerStageDescriptorUpdateAfterBindInputAttachments : uint32
+        val mutable public maxPerStageUpdateAfterBindResources : uint32
+        val mutable public maxDescriptorSetUpdateAfterBindSamplers : uint32
+        val mutable public maxDescriptorSetUpdateAfterBindUniformBuffers : uint32
+        val mutable public maxDescriptorSetUpdateAfterBindUniformBuffersDynamic : uint32
+        val mutable public maxDescriptorSetUpdateAfterBindStorageBuffers : uint32
+        val mutable public maxDescriptorSetUpdateAfterBindStorageBuffersDynamic : uint32
+        val mutable public maxDescriptorSetUpdateAfterBindSampledImages : uint32
+        val mutable public maxDescriptorSetUpdateAfterBindStorageImages : uint32
+        val mutable public maxDescriptorSetUpdateAfterBindInputAttachments : uint32
+        val mutable public supportedDepthResolveModes : VkResolveModeFlags
+        val mutable public supportedStencilResolveModes : VkResolveModeFlags
+        val mutable public independentResolveNone : VkBool32
+        val mutable public independentResolve : VkBool32
+        val mutable public filterMinmaxSingleComponentFormats : VkBool32
+        val mutable public filterMinmaxImageComponentMapping : VkBool32
+        val mutable public maxTimelineSemaphoreValueDifference : uint64
+        val mutable public framebufferIntegerColorSampleCounts : VkSampleCountFlags
+
+        new(pNext : nativeint, driverID : VkDriverId, driverName : String256, driverInfo : String256, conformanceVersion : VkConformanceVersion, denormBehaviorIndependence : VkShaderFloatControlsIndependence, roundingModeIndependence : VkShaderFloatControlsIndependence, shaderSignedZeroInfNanPreserveFloat16 : VkBool32, shaderSignedZeroInfNanPreserveFloat32 : VkBool32, shaderSignedZeroInfNanPreserveFloat64 : VkBool32, shaderDenormPreserveFloat16 : VkBool32, shaderDenormPreserveFloat32 : VkBool32, shaderDenormPreserveFloat64 : VkBool32, shaderDenormFlushToZeroFloat16 : VkBool32, shaderDenormFlushToZeroFloat32 : VkBool32, shaderDenormFlushToZeroFloat64 : VkBool32, shaderRoundingModeRTEFloat16 : VkBool32, shaderRoundingModeRTEFloat32 : VkBool32, shaderRoundingModeRTEFloat64 : VkBool32, shaderRoundingModeRTZFloat16 : VkBool32, shaderRoundingModeRTZFloat32 : VkBool32, shaderRoundingModeRTZFloat64 : VkBool32, maxUpdateAfterBindDescriptorsInAllPools : uint32, shaderUniformBufferArrayNonUniformIndexingNative : VkBool32, shaderSampledImageArrayNonUniformIndexingNative : VkBool32, shaderStorageBufferArrayNonUniformIndexingNative : VkBool32, shaderStorageImageArrayNonUniformIndexingNative : VkBool32, shaderInputAttachmentArrayNonUniformIndexingNative : VkBool32, robustBufferAccessUpdateAfterBind : VkBool32, quadDivergentImplicitLod : VkBool32, maxPerStageDescriptorUpdateAfterBindSamplers : uint32, maxPerStageDescriptorUpdateAfterBindUniformBuffers : uint32, maxPerStageDescriptorUpdateAfterBindStorageBuffers : uint32, maxPerStageDescriptorUpdateAfterBindSampledImages : uint32, maxPerStageDescriptorUpdateAfterBindStorageImages : uint32, maxPerStageDescriptorUpdateAfterBindInputAttachments : uint32, maxPerStageUpdateAfterBindResources : uint32, maxDescriptorSetUpdateAfterBindSamplers : uint32, maxDescriptorSetUpdateAfterBindUniformBuffers : uint32, maxDescriptorSetUpdateAfterBindUniformBuffersDynamic : uint32, maxDescriptorSetUpdateAfterBindStorageBuffers : uint32, maxDescriptorSetUpdateAfterBindStorageBuffersDynamic : uint32, maxDescriptorSetUpdateAfterBindSampledImages : uint32, maxDescriptorSetUpdateAfterBindStorageImages : uint32, maxDescriptorSetUpdateAfterBindInputAttachments : uint32, supportedDepthResolveModes : VkResolveModeFlags, supportedStencilResolveModes : VkResolveModeFlags, independentResolveNone : VkBool32, independentResolve : VkBool32, filterMinmaxSingleComponentFormats : VkBool32, filterMinmaxImageComponentMapping : VkBool32, maxTimelineSemaphoreValueDifference : uint64, framebufferIntegerColorSampleCounts : VkSampleCountFlags) =
+            {
+                sType = 52u
+                pNext = pNext
+                driverID = driverID
+                driverName = driverName
+                driverInfo = driverInfo
+                conformanceVersion = conformanceVersion
+                denormBehaviorIndependence = denormBehaviorIndependence
+                roundingModeIndependence = roundingModeIndependence
+                shaderSignedZeroInfNanPreserveFloat16 = shaderSignedZeroInfNanPreserveFloat16
+                shaderSignedZeroInfNanPreserveFloat32 = shaderSignedZeroInfNanPreserveFloat32
+                shaderSignedZeroInfNanPreserveFloat64 = shaderSignedZeroInfNanPreserveFloat64
+                shaderDenormPreserveFloat16 = shaderDenormPreserveFloat16
+                shaderDenormPreserveFloat32 = shaderDenormPreserveFloat32
+                shaderDenormPreserveFloat64 = shaderDenormPreserveFloat64
+                shaderDenormFlushToZeroFloat16 = shaderDenormFlushToZeroFloat16
+                shaderDenormFlushToZeroFloat32 = shaderDenormFlushToZeroFloat32
+                shaderDenormFlushToZeroFloat64 = shaderDenormFlushToZeroFloat64
+                shaderRoundingModeRTEFloat16 = shaderRoundingModeRTEFloat16
+                shaderRoundingModeRTEFloat32 = shaderRoundingModeRTEFloat32
+                shaderRoundingModeRTEFloat64 = shaderRoundingModeRTEFloat64
+                shaderRoundingModeRTZFloat16 = shaderRoundingModeRTZFloat16
+                shaderRoundingModeRTZFloat32 = shaderRoundingModeRTZFloat32
+                shaderRoundingModeRTZFloat64 = shaderRoundingModeRTZFloat64
+                maxUpdateAfterBindDescriptorsInAllPools = maxUpdateAfterBindDescriptorsInAllPools
+                shaderUniformBufferArrayNonUniformIndexingNative = shaderUniformBufferArrayNonUniformIndexingNative
+                shaderSampledImageArrayNonUniformIndexingNative = shaderSampledImageArrayNonUniformIndexingNative
+                shaderStorageBufferArrayNonUniformIndexingNative = shaderStorageBufferArrayNonUniformIndexingNative
+                shaderStorageImageArrayNonUniformIndexingNative = shaderStorageImageArrayNonUniformIndexingNative
+                shaderInputAttachmentArrayNonUniformIndexingNative = shaderInputAttachmentArrayNonUniformIndexingNative
+                robustBufferAccessUpdateAfterBind = robustBufferAccessUpdateAfterBind
+                quadDivergentImplicitLod = quadDivergentImplicitLod
+                maxPerStageDescriptorUpdateAfterBindSamplers = maxPerStageDescriptorUpdateAfterBindSamplers
+                maxPerStageDescriptorUpdateAfterBindUniformBuffers = maxPerStageDescriptorUpdateAfterBindUniformBuffers
+                maxPerStageDescriptorUpdateAfterBindStorageBuffers = maxPerStageDescriptorUpdateAfterBindStorageBuffers
+                maxPerStageDescriptorUpdateAfterBindSampledImages = maxPerStageDescriptorUpdateAfterBindSampledImages
+                maxPerStageDescriptorUpdateAfterBindStorageImages = maxPerStageDescriptorUpdateAfterBindStorageImages
+                maxPerStageDescriptorUpdateAfterBindInputAttachments = maxPerStageDescriptorUpdateAfterBindInputAttachments
+                maxPerStageUpdateAfterBindResources = maxPerStageUpdateAfterBindResources
+                maxDescriptorSetUpdateAfterBindSamplers = maxDescriptorSetUpdateAfterBindSamplers
+                maxDescriptorSetUpdateAfterBindUniformBuffers = maxDescriptorSetUpdateAfterBindUniformBuffers
+                maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = maxDescriptorSetUpdateAfterBindUniformBuffersDynamic
+                maxDescriptorSetUpdateAfterBindStorageBuffers = maxDescriptorSetUpdateAfterBindStorageBuffers
+                maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = maxDescriptorSetUpdateAfterBindStorageBuffersDynamic
+                maxDescriptorSetUpdateAfterBindSampledImages = maxDescriptorSetUpdateAfterBindSampledImages
+                maxDescriptorSetUpdateAfterBindStorageImages = maxDescriptorSetUpdateAfterBindStorageImages
+                maxDescriptorSetUpdateAfterBindInputAttachments = maxDescriptorSetUpdateAfterBindInputAttachments
+                supportedDepthResolveModes = supportedDepthResolveModes
+                supportedStencilResolveModes = supportedStencilResolveModes
+                independentResolveNone = independentResolveNone
+                independentResolve = independentResolve
+                filterMinmaxSingleComponentFormats = filterMinmaxSingleComponentFormats
+                filterMinmaxImageComponentMapping = filterMinmaxImageComponentMapping
+                maxTimelineSemaphoreValueDifference = maxTimelineSemaphoreValueDifference
+                framebufferIntegerColorSampleCounts = framebufferIntegerColorSampleCounts
+            }
+
+        new(driverID : VkDriverId, driverName : String256, driverInfo : String256, conformanceVersion : VkConformanceVersion, denormBehaviorIndependence : VkShaderFloatControlsIndependence, roundingModeIndependence : VkShaderFloatControlsIndependence, shaderSignedZeroInfNanPreserveFloat16 : VkBool32, shaderSignedZeroInfNanPreserveFloat32 : VkBool32, shaderSignedZeroInfNanPreserveFloat64 : VkBool32, shaderDenormPreserveFloat16 : VkBool32, shaderDenormPreserveFloat32 : VkBool32, shaderDenormPreserveFloat64 : VkBool32, shaderDenormFlushToZeroFloat16 : VkBool32, shaderDenormFlushToZeroFloat32 : VkBool32, shaderDenormFlushToZeroFloat64 : VkBool32, shaderRoundingModeRTEFloat16 : VkBool32, shaderRoundingModeRTEFloat32 : VkBool32, shaderRoundingModeRTEFloat64 : VkBool32, shaderRoundingModeRTZFloat16 : VkBool32, shaderRoundingModeRTZFloat32 : VkBool32, shaderRoundingModeRTZFloat64 : VkBool32, maxUpdateAfterBindDescriptorsInAllPools : uint32, shaderUniformBufferArrayNonUniformIndexingNative : VkBool32, shaderSampledImageArrayNonUniformIndexingNative : VkBool32, shaderStorageBufferArrayNonUniformIndexingNative : VkBool32, shaderStorageImageArrayNonUniformIndexingNative : VkBool32, shaderInputAttachmentArrayNonUniformIndexingNative : VkBool32, robustBufferAccessUpdateAfterBind : VkBool32, quadDivergentImplicitLod : VkBool32, maxPerStageDescriptorUpdateAfterBindSamplers : uint32, maxPerStageDescriptorUpdateAfterBindUniformBuffers : uint32, maxPerStageDescriptorUpdateAfterBindStorageBuffers : uint32, maxPerStageDescriptorUpdateAfterBindSampledImages : uint32, maxPerStageDescriptorUpdateAfterBindStorageImages : uint32, maxPerStageDescriptorUpdateAfterBindInputAttachments : uint32, maxPerStageUpdateAfterBindResources : uint32, maxDescriptorSetUpdateAfterBindSamplers : uint32, maxDescriptorSetUpdateAfterBindUniformBuffers : uint32, maxDescriptorSetUpdateAfterBindUniformBuffersDynamic : uint32, maxDescriptorSetUpdateAfterBindStorageBuffers : uint32, maxDescriptorSetUpdateAfterBindStorageBuffersDynamic : uint32, maxDescriptorSetUpdateAfterBindSampledImages : uint32, maxDescriptorSetUpdateAfterBindStorageImages : uint32, maxDescriptorSetUpdateAfterBindInputAttachments : uint32, supportedDepthResolveModes : VkResolveModeFlags, supportedStencilResolveModes : VkResolveModeFlags, independentResolveNone : VkBool32, independentResolve : VkBool32, filterMinmaxSingleComponentFormats : VkBool32, filterMinmaxImageComponentMapping : VkBool32, maxTimelineSemaphoreValueDifference : uint64, framebufferIntegerColorSampleCounts : VkSampleCountFlags) =
+            VkPhysicalDeviceVulkan12Properties(Unchecked.defaultof<nativeint>, driverID, driverName, driverInfo, conformanceVersion, denormBehaviorIndependence, roundingModeIndependence, shaderSignedZeroInfNanPreserveFloat16, shaderSignedZeroInfNanPreserveFloat32, shaderSignedZeroInfNanPreserveFloat64, shaderDenormPreserveFloat16, shaderDenormPreserveFloat32, shaderDenormPreserveFloat64, shaderDenormFlushToZeroFloat16, shaderDenormFlushToZeroFloat32, shaderDenormFlushToZeroFloat64, shaderRoundingModeRTEFloat16, shaderRoundingModeRTEFloat32, shaderRoundingModeRTEFloat64, shaderRoundingModeRTZFloat16, shaderRoundingModeRTZFloat32, shaderRoundingModeRTZFloat64, maxUpdateAfterBindDescriptorsInAllPools, shaderUniformBufferArrayNonUniformIndexingNative, shaderSampledImageArrayNonUniformIndexingNative, shaderStorageBufferArrayNonUniformIndexingNative, shaderStorageImageArrayNonUniformIndexingNative, shaderInputAttachmentArrayNonUniformIndexingNative, robustBufferAccessUpdateAfterBind, quadDivergentImplicitLod, maxPerStageDescriptorUpdateAfterBindSamplers, maxPerStageDescriptorUpdateAfterBindUniformBuffers, maxPerStageDescriptorUpdateAfterBindStorageBuffers, maxPerStageDescriptorUpdateAfterBindSampledImages, maxPerStageDescriptorUpdateAfterBindStorageImages, maxPerStageDescriptorUpdateAfterBindInputAttachments, maxPerStageUpdateAfterBindResources, maxDescriptorSetUpdateAfterBindSamplers, maxDescriptorSetUpdateAfterBindUniformBuffers, maxDescriptorSetUpdateAfterBindUniformBuffersDynamic, maxDescriptorSetUpdateAfterBindStorageBuffers, maxDescriptorSetUpdateAfterBindStorageBuffersDynamic, maxDescriptorSetUpdateAfterBindSampledImages, maxDescriptorSetUpdateAfterBindStorageImages, maxDescriptorSetUpdateAfterBindInputAttachments, supportedDepthResolveModes, supportedStencilResolveModes, independentResolveNone, independentResolve, filterMinmaxSingleComponentFormats, filterMinmaxImageComponentMapping, maxTimelineSemaphoreValueDifference, framebufferIntegerColorSampleCounts)
+
+        static member Empty =
+            VkPhysicalDeviceVulkan12Properties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDriverId>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>, Unchecked.defaultof<VkConformanceVersion>, Unchecked.defaultof<VkShaderFloatControlsIndependence>, Unchecked.defaultof<VkShaderFloatControlsIndependence>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint64>, Unchecked.defaultof<VkSampleCountFlags>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "driverID = %A" x.driverID
+                sprintf "driverName = %A" x.driverName
+                sprintf "driverInfo = %A" x.driverInfo
+                sprintf "conformanceVersion = %A" x.conformanceVersion
+                sprintf "denormBehaviorIndependence = %A" x.denormBehaviorIndependence
+                sprintf "roundingModeIndependence = %A" x.roundingModeIndependence
+                sprintf "shaderSignedZeroInfNanPreserveFloat16 = %A" x.shaderSignedZeroInfNanPreserveFloat16
+                sprintf "shaderSignedZeroInfNanPreserveFloat32 = %A" x.shaderSignedZeroInfNanPreserveFloat32
+                sprintf "shaderSignedZeroInfNanPreserveFloat64 = %A" x.shaderSignedZeroInfNanPreserveFloat64
+                sprintf "shaderDenormPreserveFloat16 = %A" x.shaderDenormPreserveFloat16
+                sprintf "shaderDenormPreserveFloat32 = %A" x.shaderDenormPreserveFloat32
+                sprintf "shaderDenormPreserveFloat64 = %A" x.shaderDenormPreserveFloat64
+                sprintf "shaderDenormFlushToZeroFloat16 = %A" x.shaderDenormFlushToZeroFloat16
+                sprintf "shaderDenormFlushToZeroFloat32 = %A" x.shaderDenormFlushToZeroFloat32
+                sprintf "shaderDenormFlushToZeroFloat64 = %A" x.shaderDenormFlushToZeroFloat64
+                sprintf "shaderRoundingModeRTEFloat16 = %A" x.shaderRoundingModeRTEFloat16
+                sprintf "shaderRoundingModeRTEFloat32 = %A" x.shaderRoundingModeRTEFloat32
+                sprintf "shaderRoundingModeRTEFloat64 = %A" x.shaderRoundingModeRTEFloat64
+                sprintf "shaderRoundingModeRTZFloat16 = %A" x.shaderRoundingModeRTZFloat16
+                sprintf "shaderRoundingModeRTZFloat32 = %A" x.shaderRoundingModeRTZFloat32
+                sprintf "shaderRoundingModeRTZFloat64 = %A" x.shaderRoundingModeRTZFloat64
+                sprintf "maxUpdateAfterBindDescriptorsInAllPools = %A" x.maxUpdateAfterBindDescriptorsInAllPools
+                sprintf "shaderUniformBufferArrayNonUniformIndexingNative = %A" x.shaderUniformBufferArrayNonUniformIndexingNative
+                sprintf "shaderSampledImageArrayNonUniformIndexingNative = %A" x.shaderSampledImageArrayNonUniformIndexingNative
+                sprintf "shaderStorageBufferArrayNonUniformIndexingNative = %A" x.shaderStorageBufferArrayNonUniformIndexingNative
+                sprintf "shaderStorageImageArrayNonUniformIndexingNative = %A" x.shaderStorageImageArrayNonUniformIndexingNative
+                sprintf "shaderInputAttachmentArrayNonUniformIndexingNative = %A" x.shaderInputAttachmentArrayNonUniformIndexingNative
+                sprintf "robustBufferAccessUpdateAfterBind = %A" x.robustBufferAccessUpdateAfterBind
+                sprintf "quadDivergentImplicitLod = %A" x.quadDivergentImplicitLod
+                sprintf "maxPerStageDescriptorUpdateAfterBindSamplers = %A" x.maxPerStageDescriptorUpdateAfterBindSamplers
+                sprintf "maxPerStageDescriptorUpdateAfterBindUniformBuffers = %A" x.maxPerStageDescriptorUpdateAfterBindUniformBuffers
+                sprintf "maxPerStageDescriptorUpdateAfterBindStorageBuffers = %A" x.maxPerStageDescriptorUpdateAfterBindStorageBuffers
+                sprintf "maxPerStageDescriptorUpdateAfterBindSampledImages = %A" x.maxPerStageDescriptorUpdateAfterBindSampledImages
+                sprintf "maxPerStageDescriptorUpdateAfterBindStorageImages = %A" x.maxPerStageDescriptorUpdateAfterBindStorageImages
+                sprintf "maxPerStageDescriptorUpdateAfterBindInputAttachments = %A" x.maxPerStageDescriptorUpdateAfterBindInputAttachments
+                sprintf "maxPerStageUpdateAfterBindResources = %A" x.maxPerStageUpdateAfterBindResources
+                sprintf "maxDescriptorSetUpdateAfterBindSamplers = %A" x.maxDescriptorSetUpdateAfterBindSamplers
+                sprintf "maxDescriptorSetUpdateAfterBindUniformBuffers = %A" x.maxDescriptorSetUpdateAfterBindUniformBuffers
+                sprintf "maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = %A" x.maxDescriptorSetUpdateAfterBindUniformBuffersDynamic
+                sprintf "maxDescriptorSetUpdateAfterBindStorageBuffers = %A" x.maxDescriptorSetUpdateAfterBindStorageBuffers
+                sprintf "maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = %A" x.maxDescriptorSetUpdateAfterBindStorageBuffersDynamic
+                sprintf "maxDescriptorSetUpdateAfterBindSampledImages = %A" x.maxDescriptorSetUpdateAfterBindSampledImages
+                sprintf "maxDescriptorSetUpdateAfterBindStorageImages = %A" x.maxDescriptorSetUpdateAfterBindStorageImages
+                sprintf "maxDescriptorSetUpdateAfterBindInputAttachments = %A" x.maxDescriptorSetUpdateAfterBindInputAttachments
+                sprintf "supportedDepthResolveModes = %A" x.supportedDepthResolveModes
+                sprintf "supportedStencilResolveModes = %A" x.supportedStencilResolveModes
+                sprintf "independentResolveNone = %A" x.independentResolveNone
+                sprintf "independentResolve = %A" x.independentResolve
+                sprintf "filterMinmaxSingleComponentFormats = %A" x.filterMinmaxSingleComponentFormats
+                sprintf "filterMinmaxImageComponentMapping = %A" x.filterMinmaxImageComponentMapping
+                sprintf "maxTimelineSemaphoreValueDifference = %A" x.maxTimelineSemaphoreValueDifference
+                sprintf "framebufferIntegerColorSampleCounts = %A" x.framebufferIntegerColorSampleCounts
+            ] |> sprintf "VkPhysicalDeviceVulkan12Properties { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkPhysicalDeviceVulkanMemoryModelFeatures = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public vulkanMemoryModel : VkBool32
+        val mutable public vulkanMemoryModelDeviceScope : VkBool32
+        val mutable public vulkanMemoryModelAvailabilityVisibilityChains : VkBool32
+
+        new(pNext : nativeint, vulkanMemoryModel : VkBool32, vulkanMemoryModelDeviceScope : VkBool32, vulkanMemoryModelAvailabilityVisibilityChains : VkBool32) =
+            {
+                sType = 1000211000u
+                pNext = pNext
+                vulkanMemoryModel = vulkanMemoryModel
+                vulkanMemoryModelDeviceScope = vulkanMemoryModelDeviceScope
+                vulkanMemoryModelAvailabilityVisibilityChains = vulkanMemoryModelAvailabilityVisibilityChains
+            }
+
+        new(vulkanMemoryModel : VkBool32, vulkanMemoryModelDeviceScope : VkBool32, vulkanMemoryModelAvailabilityVisibilityChains : VkBool32) =
+            VkPhysicalDeviceVulkanMemoryModelFeatures(Unchecked.defaultof<nativeint>, vulkanMemoryModel, vulkanMemoryModelDeviceScope, vulkanMemoryModelAvailabilityVisibilityChains)
+
+        static member Empty =
+            VkPhysicalDeviceVulkanMemoryModelFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "vulkanMemoryModel = %A" x.vulkanMemoryModel
+                sprintf "vulkanMemoryModelDeviceScope = %A" x.vulkanMemoryModelDeviceScope
+                sprintf "vulkanMemoryModelAvailabilityVisibilityChains = %A" x.vulkanMemoryModelAvailabilityVisibilityChains
+            ] |> sprintf "VkPhysicalDeviceVulkanMemoryModelFeatures { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -7210,49 +8806,6 @@ type VkPipelineTessellationDomainOriginStateCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VkPresentInfoKHR = 
-    struct
-        val mutable public sType : uint32
-        val mutable public pNext : nativeint
-        val mutable public waitSemaphoreCount : uint32
-        val mutable public pWaitSemaphores : nativeptr<VkSemaphore>
-        val mutable public swapchainCount : uint32
-        val mutable public pSwapchains : nativeptr<VkSwapchainKHR>
-        val mutable public pImageIndices : nativeptr<uint32>
-        val mutable public pResults : nativeptr<VkResult>
-
-        new(pNext : nativeint, waitSemaphoreCount : uint32, pWaitSemaphores : nativeptr<VkSemaphore>, swapchainCount : uint32, pSwapchains : nativeptr<VkSwapchainKHR>, pImageIndices : nativeptr<uint32>, pResults : nativeptr<VkResult>) =
-            {
-                sType = 1000001001u
-                pNext = pNext
-                waitSemaphoreCount = waitSemaphoreCount
-                pWaitSemaphores = pWaitSemaphores
-                swapchainCount = swapchainCount
-                pSwapchains = pSwapchains
-                pImageIndices = pImageIndices
-                pResults = pResults
-            }
-
-        new(waitSemaphoreCount : uint32, pWaitSemaphores : nativeptr<VkSemaphore>, swapchainCount : uint32, pSwapchains : nativeptr<VkSwapchainKHR>, pImageIndices : nativeptr<uint32>, pResults : nativeptr<VkResult>) =
-            VkPresentInfoKHR(Unchecked.defaultof<nativeint>, waitSemaphoreCount, pWaitSemaphores, swapchainCount, pSwapchains, pImageIndices, pResults)
-
-        static member Empty =
-            VkPresentInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSemaphore>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSwapchainKHR>>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<nativeptr<VkResult>>)
-
-        override x.ToString() =
-            String.concat "; " [
-                sprintf "sType = %A" x.sType
-                sprintf "pNext = %A" x.pNext
-                sprintf "waitSemaphoreCount = %A" x.waitSemaphoreCount
-                sprintf "pWaitSemaphores = %A" x.pWaitSemaphores
-                sprintf "swapchainCount = %A" x.swapchainCount
-                sprintf "pSwapchains = %A" x.pSwapchains
-                sprintf "pImageIndices = %A" x.pImageIndices
-                sprintf "pResults = %A" x.pResults
-            ] |> sprintf "VkPresentInfoKHR { %s }"
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
 type VkProtectedSubmitInfo = 
     struct
         val mutable public sType : uint32
@@ -7371,6 +8924,37 @@ type VkQueueFamilyProperties2 =
                 sprintf "pNext = %A" x.pNext
                 sprintf "queueFamilyProperties = %A" x.queueFamilyProperties
             ] |> sprintf "VkQueueFamilyProperties2 { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkRenderPassAttachmentBeginInfo = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public attachmentCount : uint32
+        val mutable public pAttachments : nativeptr<VkImageView>
+
+        new(pNext : nativeint, attachmentCount : uint32, pAttachments : nativeptr<VkImageView>) =
+            {
+                sType = 1000108003u
+                pNext = pNext
+                attachmentCount = attachmentCount
+                pAttachments = pAttachments
+            }
+
+        new(attachmentCount : uint32, pAttachments : nativeptr<VkImageView>) =
+            VkRenderPassAttachmentBeginInfo(Unchecked.defaultof<nativeint>, attachmentCount, pAttachments)
+
+        static member Empty =
+            VkRenderPassAttachmentBeginInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkImageView>>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "attachmentCount = %A" x.attachmentCount
+                sprintf "pAttachments = %A" x.pAttachments
+            ] |> sprintf "VkRenderPassAttachmentBeginInfo { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -7543,7 +9127,7 @@ type VkRenderPassCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VkSubpassDescription2KHR = 
+type VkSubpassDescription2 = 
     struct
         val mutable public sType : uint32
         val mutable public pNext : nativeint
@@ -7551,15 +9135,15 @@ type VkSubpassDescription2KHR =
         val mutable public pipelineBindPoint : VkPipelineBindPoint
         val mutable public viewMask : uint32
         val mutable public inputAttachmentCount : uint32
-        val mutable public pInputAttachments : nativeptr<VkAttachmentReference2KHR>
+        val mutable public pInputAttachments : nativeptr<VkAttachmentReference2>
         val mutable public colorAttachmentCount : uint32
-        val mutable public pColorAttachments : nativeptr<VkAttachmentReference2KHR>
-        val mutable public pResolveAttachments : nativeptr<VkAttachmentReference2KHR>
-        val mutable public pDepthStencilAttachment : nativeptr<VkAttachmentReference2KHR>
+        val mutable public pColorAttachments : nativeptr<VkAttachmentReference2>
+        val mutable public pResolveAttachments : nativeptr<VkAttachmentReference2>
+        val mutable public pDepthStencilAttachment : nativeptr<VkAttachmentReference2>
         val mutable public preserveAttachmentCount : uint32
         val mutable public pPreserveAttachments : nativeptr<uint32>
 
-        new(pNext : nativeint, flags : VkSubpassDescriptionFlags, pipelineBindPoint : VkPipelineBindPoint, viewMask : uint32, inputAttachmentCount : uint32, pInputAttachments : nativeptr<VkAttachmentReference2KHR>, colorAttachmentCount : uint32, pColorAttachments : nativeptr<VkAttachmentReference2KHR>, pResolveAttachments : nativeptr<VkAttachmentReference2KHR>, pDepthStencilAttachment : nativeptr<VkAttachmentReference2KHR>, preserveAttachmentCount : uint32, pPreserveAttachments : nativeptr<uint32>) =
+        new(pNext : nativeint, flags : VkSubpassDescriptionFlags, pipelineBindPoint : VkPipelineBindPoint, viewMask : uint32, inputAttachmentCount : uint32, pInputAttachments : nativeptr<VkAttachmentReference2>, colorAttachmentCount : uint32, pColorAttachments : nativeptr<VkAttachmentReference2>, pResolveAttachments : nativeptr<VkAttachmentReference2>, pDepthStencilAttachment : nativeptr<VkAttachmentReference2>, preserveAttachmentCount : uint32, pPreserveAttachments : nativeptr<uint32>) =
             {
                 sType = 1000109002u
                 pNext = pNext
@@ -7576,11 +9160,11 @@ type VkSubpassDescription2KHR =
                 pPreserveAttachments = pPreserveAttachments
             }
 
-        new(flags : VkSubpassDescriptionFlags, pipelineBindPoint : VkPipelineBindPoint, viewMask : uint32, inputAttachmentCount : uint32, pInputAttachments : nativeptr<VkAttachmentReference2KHR>, colorAttachmentCount : uint32, pColorAttachments : nativeptr<VkAttachmentReference2KHR>, pResolveAttachments : nativeptr<VkAttachmentReference2KHR>, pDepthStencilAttachment : nativeptr<VkAttachmentReference2KHR>, preserveAttachmentCount : uint32, pPreserveAttachments : nativeptr<uint32>) =
-            VkSubpassDescription2KHR(Unchecked.defaultof<nativeint>, flags, pipelineBindPoint, viewMask, inputAttachmentCount, pInputAttachments, colorAttachmentCount, pColorAttachments, pResolveAttachments, pDepthStencilAttachment, preserveAttachmentCount, pPreserveAttachments)
+        new(flags : VkSubpassDescriptionFlags, pipelineBindPoint : VkPipelineBindPoint, viewMask : uint32, inputAttachmentCount : uint32, pInputAttachments : nativeptr<VkAttachmentReference2>, colorAttachmentCount : uint32, pColorAttachments : nativeptr<VkAttachmentReference2>, pResolveAttachments : nativeptr<VkAttachmentReference2>, pDepthStencilAttachment : nativeptr<VkAttachmentReference2>, preserveAttachmentCount : uint32, pPreserveAttachments : nativeptr<uint32>) =
+            VkSubpassDescription2(Unchecked.defaultof<nativeint>, flags, pipelineBindPoint, viewMask, inputAttachmentCount, pInputAttachments, colorAttachmentCount, pColorAttachments, pResolveAttachments, pDepthStencilAttachment, preserveAttachmentCount, pPreserveAttachments)
 
         static member Empty =
-            VkSubpassDescription2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSubpassDescriptionFlags>, Unchecked.defaultof<VkPipelineBindPoint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentReference2KHR>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentReference2KHR>>, Unchecked.defaultof<nativeptr<VkAttachmentReference2KHR>>, Unchecked.defaultof<nativeptr<VkAttachmentReference2KHR>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
+            VkSubpassDescription2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSubpassDescriptionFlags>, Unchecked.defaultof<VkPipelineBindPoint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentReference2>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentReference2>>, Unchecked.defaultof<nativeptr<VkAttachmentReference2>>, Unchecked.defaultof<nativeptr<VkAttachmentReference2>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
 
         override x.ToString() =
             String.concat "; " [
@@ -7597,11 +9181,11 @@ type VkSubpassDescription2KHR =
                 sprintf "pDepthStencilAttachment = %A" x.pDepthStencilAttachment
                 sprintf "preserveAttachmentCount = %A" x.preserveAttachmentCount
                 sprintf "pPreserveAttachments = %A" x.pPreserveAttachments
-            ] |> sprintf "VkSubpassDescription2KHR { %s }"
+            ] |> sprintf "VkSubpassDescription2 { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VkSubpassDependency2KHR = 
+type VkSubpassDependency2 = 
     struct
         val mutable public sType : uint32
         val mutable public pNext : nativeint
@@ -7629,10 +9213,10 @@ type VkSubpassDependency2KHR =
             }
 
         new(srcSubpass : uint32, dstSubpass : uint32, srcStageMask : VkPipelineStageFlags, dstStageMask : VkPipelineStageFlags, srcAccessMask : VkAccessFlags, dstAccessMask : VkAccessFlags, dependencyFlags : VkDependencyFlags, viewOffset : int) =
-            VkSubpassDependency2KHR(Unchecked.defaultof<nativeint>, srcSubpass, dstSubpass, srcStageMask, dstStageMask, srcAccessMask, dstAccessMask, dependencyFlags, viewOffset)
+            VkSubpassDependency2(Unchecked.defaultof<nativeint>, srcSubpass, dstSubpass, srcStageMask, dstStageMask, srcAccessMask, dstAccessMask, dependencyFlags, viewOffset)
 
         static member Empty =
-            VkSubpassDependency2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkPipelineStageFlags>, Unchecked.defaultof<VkPipelineStageFlags>, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkDependencyFlags>, Unchecked.defaultof<int>)
+            VkSubpassDependency2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkPipelineStageFlags>, Unchecked.defaultof<VkPipelineStageFlags>, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkDependencyFlags>, Unchecked.defaultof<int>)
 
         override x.ToString() =
             String.concat "; " [
@@ -7646,25 +9230,25 @@ type VkSubpassDependency2KHR =
                 sprintf "dstAccessMask = %A" x.dstAccessMask
                 sprintf "dependencyFlags = %A" x.dependencyFlags
                 sprintf "viewOffset = %A" x.viewOffset
-            ] |> sprintf "VkSubpassDependency2KHR { %s }"
+            ] |> sprintf "VkSubpassDependency2 { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VkRenderPassCreateInfo2KHR = 
+type VkRenderPassCreateInfo2 = 
     struct
         val mutable public sType : uint32
         val mutable public pNext : nativeint
         val mutable public flags : VkRenderPassCreateFlags
         val mutable public attachmentCount : uint32
-        val mutable public pAttachments : nativeptr<VkAttachmentDescription2KHR>
+        val mutable public pAttachments : nativeptr<VkAttachmentDescription2>
         val mutable public subpassCount : uint32
-        val mutable public pSubpasses : nativeptr<VkSubpassDescription2KHR>
+        val mutable public pSubpasses : nativeptr<VkSubpassDescription2>
         val mutable public dependencyCount : uint32
-        val mutable public pDependencies : nativeptr<VkSubpassDependency2KHR>
+        val mutable public pDependencies : nativeptr<VkSubpassDependency2>
         val mutable public correlatedViewMaskCount : uint32
         val mutable public pCorrelatedViewMasks : nativeptr<uint32>
 
-        new(pNext : nativeint, flags : VkRenderPassCreateFlags, attachmentCount : uint32, pAttachments : nativeptr<VkAttachmentDescription2KHR>, subpassCount : uint32, pSubpasses : nativeptr<VkSubpassDescription2KHR>, dependencyCount : uint32, pDependencies : nativeptr<VkSubpassDependency2KHR>, correlatedViewMaskCount : uint32, pCorrelatedViewMasks : nativeptr<uint32>) =
+        new(pNext : nativeint, flags : VkRenderPassCreateFlags, attachmentCount : uint32, pAttachments : nativeptr<VkAttachmentDescription2>, subpassCount : uint32, pSubpasses : nativeptr<VkSubpassDescription2>, dependencyCount : uint32, pDependencies : nativeptr<VkSubpassDependency2>, correlatedViewMaskCount : uint32, pCorrelatedViewMasks : nativeptr<uint32>) =
             {
                 sType = 1000109004u
                 pNext = pNext
@@ -7679,11 +9263,11 @@ type VkRenderPassCreateInfo2KHR =
                 pCorrelatedViewMasks = pCorrelatedViewMasks
             }
 
-        new(flags : VkRenderPassCreateFlags, attachmentCount : uint32, pAttachments : nativeptr<VkAttachmentDescription2KHR>, subpassCount : uint32, pSubpasses : nativeptr<VkSubpassDescription2KHR>, dependencyCount : uint32, pDependencies : nativeptr<VkSubpassDependency2KHR>, correlatedViewMaskCount : uint32, pCorrelatedViewMasks : nativeptr<uint32>) =
-            VkRenderPassCreateInfo2KHR(Unchecked.defaultof<nativeint>, flags, attachmentCount, pAttachments, subpassCount, pSubpasses, dependencyCount, pDependencies, correlatedViewMaskCount, pCorrelatedViewMasks)
+        new(flags : VkRenderPassCreateFlags, attachmentCount : uint32, pAttachments : nativeptr<VkAttachmentDescription2>, subpassCount : uint32, pSubpasses : nativeptr<VkSubpassDescription2>, dependencyCount : uint32, pDependencies : nativeptr<VkSubpassDependency2>, correlatedViewMaskCount : uint32, pCorrelatedViewMasks : nativeptr<uint32>) =
+            VkRenderPassCreateInfo2(Unchecked.defaultof<nativeint>, flags, attachmentCount, pAttachments, subpassCount, pSubpasses, dependencyCount, pDependencies, correlatedViewMaskCount, pCorrelatedViewMasks)
 
         static member Empty =
-            VkRenderPassCreateInfo2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkRenderPassCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentDescription2KHR>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSubpassDescription2KHR>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSubpassDependency2KHR>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
+            VkRenderPassCreateInfo2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkRenderPassCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentDescription2>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSubpassDescription2>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSubpassDependency2>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
 
         override x.ToString() =
             String.concat "; " [
@@ -7698,7 +9282,7 @@ type VkRenderPassCreateInfo2KHR =
                 sprintf "pDependencies = %A" x.pDependencies
                 sprintf "correlatedViewMaskCount = %A" x.correlatedViewMaskCount
                 sprintf "pCorrelatedViewMasks = %A" x.pCorrelatedViewMasks
-            ] |> sprintf "VkRenderPassCreateInfo2KHR { %s }"
+            ] |> sprintf "VkRenderPassCreateInfo2 { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -7849,6 +9433,34 @@ type VkSamplerCreateInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type VkSamplerReductionModeCreateInfo = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public reductionMode : VkSamplerReductionMode
+
+        new(pNext : nativeint, reductionMode : VkSamplerReductionMode) =
+            {
+                sType = 1000130001u
+                pNext = pNext
+                reductionMode = reductionMode
+            }
+
+        new(reductionMode : VkSamplerReductionMode) =
+            VkSamplerReductionModeCreateInfo(Unchecked.defaultof<nativeint>, reductionMode)
+
+        static member Empty =
+            VkSamplerReductionModeCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSamplerReductionMode>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "reductionMode = %A" x.reductionMode
+            ] |> sprintf "VkSamplerReductionModeCreateInfo { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type VkSamplerYcbcrConversionCreateInfo = 
     struct
         val mutable public sType : uint32
@@ -7979,6 +9591,105 @@ type VkSemaphoreCreateInfo =
                 sprintf "pNext = %A" x.pNext
                 sprintf "flags = %A" x.flags
             ] |> sprintf "VkSemaphoreCreateInfo { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSemaphoreSignalInfo = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public semaphore : VkSemaphore
+        val mutable public value : uint64
+
+        new(pNext : nativeint, semaphore : VkSemaphore, value : uint64) =
+            {
+                sType = 1000207005u
+                pNext = pNext
+                semaphore = semaphore
+                value = value
+            }
+
+        new(semaphore : VkSemaphore, value : uint64) =
+            VkSemaphoreSignalInfo(Unchecked.defaultof<nativeint>, semaphore, value)
+
+        static member Empty =
+            VkSemaphoreSignalInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSemaphore>, Unchecked.defaultof<uint64>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "semaphore = %A" x.semaphore
+                sprintf "value = %A" x.value
+            ] |> sprintf "VkSemaphoreSignalInfo { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSemaphoreTypeCreateInfo = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public semaphoreType : VkSemaphoreType
+        val mutable public initialValue : uint64
+
+        new(pNext : nativeint, semaphoreType : VkSemaphoreType, initialValue : uint64) =
+            {
+                sType = 1000207002u
+                pNext = pNext
+                semaphoreType = semaphoreType
+                initialValue = initialValue
+            }
+
+        new(semaphoreType : VkSemaphoreType, initialValue : uint64) =
+            VkSemaphoreTypeCreateInfo(Unchecked.defaultof<nativeint>, semaphoreType, initialValue)
+
+        static member Empty =
+            VkSemaphoreTypeCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSemaphoreType>, Unchecked.defaultof<uint64>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "semaphoreType = %A" x.semaphoreType
+                sprintf "initialValue = %A" x.initialValue
+            ] |> sprintf "VkSemaphoreTypeCreateInfo { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSemaphoreWaitInfo = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public flags : VkSemaphoreWaitFlags
+        val mutable public semaphoreCount : uint32
+        val mutable public pSemaphores : nativeptr<VkSemaphore>
+        val mutable public pValues : nativeptr<uint64>
+
+        new(pNext : nativeint, flags : VkSemaphoreWaitFlags, semaphoreCount : uint32, pSemaphores : nativeptr<VkSemaphore>, pValues : nativeptr<uint64>) =
+            {
+                sType = 1000207004u
+                pNext = pNext
+                flags = flags
+                semaphoreCount = semaphoreCount
+                pSemaphores = pSemaphores
+                pValues = pValues
+            }
+
+        new(flags : VkSemaphoreWaitFlags, semaphoreCount : uint32, pSemaphores : nativeptr<VkSemaphore>, pValues : nativeptr<uint64>) =
+            VkSemaphoreWaitInfo(Unchecked.defaultof<nativeint>, flags, semaphoreCount, pSemaphores, pValues)
+
+        static member Empty =
+            VkSemaphoreWaitInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSemaphoreWaitFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSemaphore>>, Unchecked.defaultof<nativeptr<uint64>>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "flags = %A" x.flags
+                sprintf "semaphoreCount = %A" x.semaphoreCount
+                sprintf "pSemaphores = %A" x.pSemaphores
+                sprintf "pValues = %A" x.pValues
+            ] |> sprintf "VkSemaphoreWaitInfo { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -8174,7 +9885,7 @@ type VkSubmitInfo =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VkSubpassBeginInfoKHR = 
+type VkSubpassBeginInfo = 
     struct
         val mutable public sType : uint32
         val mutable public pNext : nativeint
@@ -8188,21 +9899,55 @@ type VkSubpassBeginInfoKHR =
             }
 
         new(contents : VkSubpassContents) =
-            VkSubpassBeginInfoKHR(Unchecked.defaultof<nativeint>, contents)
+            VkSubpassBeginInfo(Unchecked.defaultof<nativeint>, contents)
 
         static member Empty =
-            VkSubpassBeginInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSubpassContents>)
+            VkSubpassBeginInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSubpassContents>)
 
         override x.ToString() =
             String.concat "; " [
                 sprintf "sType = %A" x.sType
                 sprintf "pNext = %A" x.pNext
                 sprintf "contents = %A" x.contents
-            ] |> sprintf "VkSubpassBeginInfoKHR { %s }"
+            ] |> sprintf "VkSubpassBeginInfo { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VkSubpassEndInfoKHR = 
+type VkSubpassDescriptionDepthStencilResolve = 
+    struct
+        val mutable public sType : uint32
+        val mutable public pNext : nativeint
+        val mutable public depthResolveMode : VkResolveModeFlags
+        val mutable public stencilResolveMode : VkResolveModeFlags
+        val mutable public pDepthStencilResolveAttachment : nativeptr<VkAttachmentReference2>
+
+        new(pNext : nativeint, depthResolveMode : VkResolveModeFlags, stencilResolveMode : VkResolveModeFlags, pDepthStencilResolveAttachment : nativeptr<VkAttachmentReference2>) =
+            {
+                sType = 1000199001u
+                pNext = pNext
+                depthResolveMode = depthResolveMode
+                stencilResolveMode = stencilResolveMode
+                pDepthStencilResolveAttachment = pDepthStencilResolveAttachment
+            }
+
+        new(depthResolveMode : VkResolveModeFlags, stencilResolveMode : VkResolveModeFlags, pDepthStencilResolveAttachment : nativeptr<VkAttachmentReference2>) =
+            VkSubpassDescriptionDepthStencilResolve(Unchecked.defaultof<nativeint>, depthResolveMode, stencilResolveMode, pDepthStencilResolveAttachment)
+
+        static member Empty =
+            VkSubpassDescriptionDepthStencilResolve(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<nativeptr<VkAttachmentReference2>>)
+
+        override x.ToString() =
+            String.concat "; " [
+                sprintf "sType = %A" x.sType
+                sprintf "pNext = %A" x.pNext
+                sprintf "depthResolveMode = %A" x.depthResolveMode
+                sprintf "stencilResolveMode = %A" x.stencilResolveMode
+                sprintf "pDepthStencilResolveAttachment = %A" x.pDepthStencilResolveAttachment
+            ] |> sprintf "VkSubpassDescriptionDepthStencilResolve { %s }"
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
+type VkSubpassEndInfo = 
     struct
         val mutable public sType : uint32
         val mutable public pNext : nativeint
@@ -8214,13 +9959,13 @@ type VkSubpassEndInfoKHR =
             }
 
         static member Empty =
-            VkSubpassEndInfoKHR(Unchecked.defaultof<nativeint>)
+            VkSubpassEndInfo(Unchecked.defaultof<nativeint>)
 
         override x.ToString() =
             String.concat "; " [
                 sprintf "sType = %A" x.sType
                 sprintf "pNext = %A" x.pNext
-            ] |> sprintf "VkSubpassEndInfoKHR { %s }"
+            ] |> sprintf "VkSubpassEndInfo { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -8255,74 +10000,6 @@ type VkSubresourceLayout =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VkSurfaceCapabilitiesKHR = 
-    struct
-        val mutable public minImageCount : uint32
-        val mutable public maxImageCount : uint32
-        val mutable public currentExtent : VkExtent2D
-        val mutable public minImageExtent : VkExtent2D
-        val mutable public maxImageExtent : VkExtent2D
-        val mutable public maxImageArrayLayers : uint32
-        val mutable public supportedTransforms : VkSurfaceTransformFlagsKHR
-        val mutable public currentTransform : VkSurfaceTransformFlagsKHR
-        val mutable public supportedCompositeAlpha : VkCompositeAlphaFlagsKHR
-        val mutable public supportedUsageFlags : VkImageUsageFlags
-
-        new(minImageCount : uint32, maxImageCount : uint32, currentExtent : VkExtent2D, minImageExtent : VkExtent2D, maxImageExtent : VkExtent2D, maxImageArrayLayers : uint32, supportedTransforms : VkSurfaceTransformFlagsKHR, currentTransform : VkSurfaceTransformFlagsKHR, supportedCompositeAlpha : VkCompositeAlphaFlagsKHR, supportedUsageFlags : VkImageUsageFlags) =
-            {
-                minImageCount = minImageCount
-                maxImageCount = maxImageCount
-                currentExtent = currentExtent
-                minImageExtent = minImageExtent
-                maxImageExtent = maxImageExtent
-                maxImageArrayLayers = maxImageArrayLayers
-                supportedTransforms = supportedTransforms
-                currentTransform = currentTransform
-                supportedCompositeAlpha = supportedCompositeAlpha
-                supportedUsageFlags = supportedUsageFlags
-            }
-
-        static member Empty =
-            VkSurfaceCapabilitiesKHR(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkCompositeAlphaFlagsKHR>, Unchecked.defaultof<VkImageUsageFlags>)
-
-        override x.ToString() =
-            String.concat "; " [
-                sprintf "minImageCount = %A" x.minImageCount
-                sprintf "maxImageCount = %A" x.maxImageCount
-                sprintf "currentExtent = %A" x.currentExtent
-                sprintf "minImageExtent = %A" x.minImageExtent
-                sprintf "maxImageExtent = %A" x.maxImageExtent
-                sprintf "maxImageArrayLayers = %A" x.maxImageArrayLayers
-                sprintf "supportedTransforms = %A" x.supportedTransforms
-                sprintf "currentTransform = %A" x.currentTransform
-                sprintf "supportedCompositeAlpha = %A" x.supportedCompositeAlpha
-                sprintf "supportedUsageFlags = %A" x.supportedUsageFlags
-            ] |> sprintf "VkSurfaceCapabilitiesKHR { %s }"
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type VkSurfaceFormatKHR = 
-    struct
-        val mutable public format : VkFormat
-        val mutable public colorSpace : VkColorSpaceKHR
-
-        new(format : VkFormat, colorSpace : VkColorSpaceKHR) =
-            {
-                format = format
-                colorSpace = colorSpace
-            }
-
-        static member Empty =
-            VkSurfaceFormatKHR(Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkColorSpaceKHR>)
-
-        override x.ToString() =
-            String.concat "; " [
-                sprintf "format = %A" x.format
-                sprintf "colorSpace = %A" x.colorSpace
-            ] |> sprintf "VkSurfaceFormatKHR { %s }"
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
 type VkSurfaceFullScreenExclusiveWin32InfoEXT = 
     struct
         val mutable public sType : uint32
@@ -8351,76 +10028,40 @@ type VkSurfaceFullScreenExclusiveWin32InfoEXT =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
-type VkSwapchainCreateInfoKHR = 
+type VkTimelineSemaphoreSubmitInfo = 
     struct
         val mutable public sType : uint32
         val mutable public pNext : nativeint
-        val mutable public flags : VkSwapchainCreateFlagsKHR
-        val mutable public surface : VkSurfaceKHR
-        val mutable public minImageCount : uint32
-        val mutable public imageFormat : VkFormat
-        val mutable public imageColorSpace : VkColorSpaceKHR
-        val mutable public imageExtent : VkExtent2D
-        val mutable public imageArrayLayers : uint32
-        val mutable public imageUsage : VkImageUsageFlags
-        val mutable public imageSharingMode : VkSharingMode
-        val mutable public queueFamilyIndexCount : uint32
-        val mutable public pQueueFamilyIndices : nativeptr<uint32>
-        val mutable public preTransform : VkSurfaceTransformFlagsKHR
-        val mutable public compositeAlpha : VkCompositeAlphaFlagsKHR
-        val mutable public presentMode : VkPresentModeKHR
-        val mutable public clipped : VkBool32
-        val mutable public oldSwapchain : VkSwapchainKHR
+        val mutable public waitSemaphoreValueCount : uint32
+        val mutable public pWaitSemaphoreValues : nativeptr<uint64>
+        val mutable public signalSemaphoreValueCount : uint32
+        val mutable public pSignalSemaphoreValues : nativeptr<uint64>
 
-        new(pNext : nativeint, flags : VkSwapchainCreateFlagsKHR, surface : VkSurfaceKHR, minImageCount : uint32, imageFormat : VkFormat, imageColorSpace : VkColorSpaceKHR, imageExtent : VkExtent2D, imageArrayLayers : uint32, imageUsage : VkImageUsageFlags, imageSharingMode : VkSharingMode, queueFamilyIndexCount : uint32, pQueueFamilyIndices : nativeptr<uint32>, preTransform : VkSurfaceTransformFlagsKHR, compositeAlpha : VkCompositeAlphaFlagsKHR, presentMode : VkPresentModeKHR, clipped : VkBool32, oldSwapchain : VkSwapchainKHR) =
+        new(pNext : nativeint, waitSemaphoreValueCount : uint32, pWaitSemaphoreValues : nativeptr<uint64>, signalSemaphoreValueCount : uint32, pSignalSemaphoreValues : nativeptr<uint64>) =
             {
-                sType = 1000001000u
+                sType = 1000207003u
                 pNext = pNext
-                flags = flags
-                surface = surface
-                minImageCount = minImageCount
-                imageFormat = imageFormat
-                imageColorSpace = imageColorSpace
-                imageExtent = imageExtent
-                imageArrayLayers = imageArrayLayers
-                imageUsage = imageUsage
-                imageSharingMode = imageSharingMode
-                queueFamilyIndexCount = queueFamilyIndexCount
-                pQueueFamilyIndices = pQueueFamilyIndices
-                preTransform = preTransform
-                compositeAlpha = compositeAlpha
-                presentMode = presentMode
-                clipped = clipped
-                oldSwapchain = oldSwapchain
+                waitSemaphoreValueCount = waitSemaphoreValueCount
+                pWaitSemaphoreValues = pWaitSemaphoreValues
+                signalSemaphoreValueCount = signalSemaphoreValueCount
+                pSignalSemaphoreValues = pSignalSemaphoreValues
             }
 
-        new(flags : VkSwapchainCreateFlagsKHR, surface : VkSurfaceKHR, minImageCount : uint32, imageFormat : VkFormat, imageColorSpace : VkColorSpaceKHR, imageExtent : VkExtent2D, imageArrayLayers : uint32, imageUsage : VkImageUsageFlags, imageSharingMode : VkSharingMode, queueFamilyIndexCount : uint32, pQueueFamilyIndices : nativeptr<uint32>, preTransform : VkSurfaceTransformFlagsKHR, compositeAlpha : VkCompositeAlphaFlagsKHR, presentMode : VkPresentModeKHR, clipped : VkBool32, oldSwapchain : VkSwapchainKHR) =
-            VkSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, flags, surface, minImageCount, imageFormat, imageColorSpace, imageExtent, imageArrayLayers, imageUsage, imageSharingMode, queueFamilyIndexCount, pQueueFamilyIndices, preTransform, compositeAlpha, presentMode, clipped, oldSwapchain)
+        new(waitSemaphoreValueCount : uint32, pWaitSemaphoreValues : nativeptr<uint64>, signalSemaphoreValueCount : uint32, pSignalSemaphoreValues : nativeptr<uint64>) =
+            VkTimelineSemaphoreSubmitInfo(Unchecked.defaultof<nativeint>, waitSemaphoreValueCount, pWaitSemaphoreValues, signalSemaphoreValueCount, pSignalSemaphoreValues)
 
         static member Empty =
-            VkSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSwapchainCreateFlagsKHR>, Unchecked.defaultof<VkSurfaceKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkColorSpaceKHR>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkImageUsageFlags>, Unchecked.defaultof<VkSharingMode>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkCompositeAlphaFlagsKHR>, Unchecked.defaultof<VkPresentModeKHR>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkSwapchainKHR>)
+            VkTimelineSemaphoreSubmitInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint64>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint64>>)
 
         override x.ToString() =
             String.concat "; " [
                 sprintf "sType = %A" x.sType
                 sprintf "pNext = %A" x.pNext
-                sprintf "flags = %A" x.flags
-                sprintf "surface = %A" x.surface
-                sprintf "minImageCount = %A" x.minImageCount
-                sprintf "imageFormat = %A" x.imageFormat
-                sprintf "imageColorSpace = %A" x.imageColorSpace
-                sprintf "imageExtent = %A" x.imageExtent
-                sprintf "imageArrayLayers = %A" x.imageArrayLayers
-                sprintf "imageUsage = %A" x.imageUsage
-                sprintf "imageSharingMode = %A" x.imageSharingMode
-                sprintf "queueFamilyIndexCount = %A" x.queueFamilyIndexCount
-                sprintf "pQueueFamilyIndices = %A" x.pQueueFamilyIndices
-                sprintf "preTransform = %A" x.preTransform
-                sprintf "compositeAlpha = %A" x.compositeAlpha
-                sprintf "presentMode = %A" x.presentMode
-                sprintf "clipped = %A" x.clipped
-                sprintf "oldSwapchain = %A" x.oldSwapchain
-            ] |> sprintf "VkSwapchainCreateInfoKHR { %s }"
+                sprintf "waitSemaphoreValueCount = %A" x.waitSemaphoreValueCount
+                sprintf "pWaitSemaphoreValues = %A" x.pWaitSemaphoreValues
+                sprintf "signalSemaphoreValueCount = %A" x.signalSemaphoreValueCount
+                sprintf "pSignalSemaphoreValues = %A" x.pSignalSemaphoreValues
+            ] |> sprintf "VkTimelineSemaphoreSubmitInfo { %s }"
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
@@ -8472,6 +10113,7 @@ type VkWriteDescriptorSet =
             ] |> sprintf "VkWriteDescriptorSet { %s }"
     end
 
+
 module VkRaw = 
     [<CompilerMessage("activeInstance is for internal use only", 1337, IsError=false, IsHidden=true)>]
     let mutable internal activeInstance : VkInstance = 0n
@@ -8485,7 +10127,7 @@ module VkRaw =
         if res = VkResult.VkSuccess then
             activeInstance <- NativePtr.read pInstance
         res
-    
+
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkDestroyInstance(VkInstance instance, VkAllocationCallbacks* pAllocator)
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
@@ -8586,6 +10228,8 @@ module VkRaw =
     extern void vkDestroyQueryPool(VkDevice device, VkQueryPool queryPool, VkAllocationCallbacks* pAllocator)
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkGetQueryPoolResults(VkDevice device, VkQueryPool queryPool, uint32 firstQuery, uint32 queryCount, uint64 dataSize, nativeint pData, VkDeviceSize stride, VkQueryResultFlags flags)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkResetQueryPool(VkDevice device, VkQueryPool queryPool, uint32 firstQuery, uint32 queryCount)
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern VkResult vkCreateBuffer(VkDevice device, VkBufferCreateInfo* pCreateInfo, VkAllocationCallbacks* pAllocator, VkBuffer* pBuffer)
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
@@ -8807,8 +10451,6 @@ module VkRaw =
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkUpdateDescriptorSetWithTemplate(VkDevice device, VkDescriptorSet descriptorSet, VkDescriptorUpdateTemplate descriptorUpdateTemplate, nativeint pData)
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
-    extern void vkCmdPushDescriptorSetWithTemplateKHR(VkCommandBuffer commandBuffer, VkDescriptorUpdateTemplate descriptorUpdateTemplate, VkPipelineLayout layout, uint32 set, nativeint pData)
-    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkGetBufferMemoryRequirements2(VkDevice device, VkBufferMemoryRequirementsInfo2* pInfo, VkMemoryRequirements2* pMemoryRequirements)
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkGetImageMemoryRequirements2(VkDevice device, VkImageMemoryRequirementsInfo2* pInfo, VkMemoryRequirements2* pMemoryRequirements)
@@ -8822,7 +10464,31 @@ module VkRaw =
     extern void vkGetDeviceQueue2(VkDevice device, VkDeviceQueueInfo2* pQueueInfo, VkQueue* pQueue)
     [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
     extern void vkGetDescriptorSetLayoutSupport(VkDevice device, VkDescriptorSetLayoutCreateInfo* pCreateInfo, VkDescriptorSetLayoutSupport* pSupport)
-    
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkCreateRenderPass2(VkDevice device, VkRenderPassCreateInfo2* pCreateInfo, VkAllocationCallbacks* pAllocator, VkRenderPass* pRenderPass)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkCmdBeginRenderPass2(VkCommandBuffer commandBuffer, VkRenderPassBeginInfo* pRenderPassBegin, VkSubpassBeginInfo* pSubpassBeginInfo)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkCmdNextSubpass2(VkCommandBuffer commandBuffer, VkSubpassBeginInfo* pSubpassBeginInfo, VkSubpassEndInfo* pSubpassEndInfo)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkCmdEndRenderPass2(VkCommandBuffer commandBuffer, VkSubpassEndInfo* pSubpassEndInfo)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkGetSemaphoreCounterValue(VkDevice device, VkSemaphore semaphore, uint64* pValue)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkWaitSemaphores(VkDevice device, VkSemaphoreWaitInfo* pWaitInfo, uint64 timeout)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkResult vkSignalSemaphore(VkDevice device, VkSemaphoreSignalInfo* pSignalInfo)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkCmdDrawIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32 maxDrawCount, uint32 stride)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern void vkCmdDrawIndexedIndirectCount(VkCommandBuffer commandBuffer, VkBuffer buffer, VkDeviceSize offset, VkBuffer countBuffer, VkDeviceSize countBufferOffset, uint32 maxDrawCount, uint32 stride)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern uint64 vkGetBufferOpaqueCaptureAddress(VkDevice device, VkBufferDeviceAddressInfo* pInfo)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern VkDeviceAddress vkGetBufferDeviceAddress(VkDevice device, VkBufferDeviceAddressInfo* pInfo)
+    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]
+    extern uint64 vkGetDeviceMemoryOpaqueCaptureAddress(VkDevice device, VkDeviceMemoryOpaqueCaptureAddressInfo* pInfo)
+
     [<CompilerMessage("vkImportInstanceDelegate is for internal use only", 1337, IsError=false, IsHidden=true)>]
     let vkImportInstanceDelegate<'a>(name : string) = 
         let ptr = vkGetInstanceProcAddr(activeInstance, name)
@@ -8833,119 +10499,11 @@ module VkRaw =
             Report.Line(3, sprintf "loaded function %s (0x%08X)" name ptr)
             Marshal.GetDelegateForFunctionPointer(ptr, typeof<'a>) |> unbox<'a>
 
-module EXTDebugReport =
-    let Name = "VK_EXT_debug_report"
-    let Number = 12
-    
-    type VkDebugReportObjectTypeEXT = 
-        | Unknown = 0
-        | Instance = 1
-        | PhysicalDevice = 2
-        | Device = 3
-        | Queue = 4
-        | Semaphore = 5
-        | CommandBuffer = 6
-        | Fence = 7
-        | DeviceMemory = 8
-        | Buffer = 9
-        | Image = 10
-        | Event = 11
-        | QueryPool = 12
-        | BufferView = 13
-        | ImageView = 14
-        | ShaderModule = 15
-        | PipelineCache = 16
-        | PipelineLayout = 17
-        | RenderPass = 18
-        | Pipeline = 19
-        | DescriptorSetLayout = 20
-        | Sampler = 21
-        | DescriptorPool = 22
-        | DescriptorSet = 23
-        | Framebuffer = 24
-        | CommandPool = 25
-        | SurfaceKhr = 26
-        | SwapchainKhr = 27
-        | DebugReportCallbackExt = 28
-        | DisplayKhr = 29
-        | DisplayModeKhr = 30
-        | ObjectTableNvx = 31
-        | IndirectCommandsLayoutNvx = 32
-        | ValidationCacheExt = 33
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkDebugReportCallbackCreateInfoEXT = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public flags : VkDebugReportFlagsEXT
-            val mutable public pfnCallback : PFN_vkDebugReportCallbackEXT
-            val mutable public pUserData : nativeint
-    
-            new(pNext : nativeint, flags : VkDebugReportFlagsEXT, pfnCallback : PFN_vkDebugReportCallbackEXT, pUserData : nativeint) =
-                {
-                    sType = 1000011000u
-                    pNext = pNext
-                    flags = flags
-                    pfnCallback = pfnCallback
-                    pUserData = pUserData
-                }
-    
-            new(flags : VkDebugReportFlagsEXT, pfnCallback : PFN_vkDebugReportCallbackEXT, pUserData : nativeint) =
-                VkDebugReportCallbackCreateInfoEXT(Unchecked.defaultof<nativeint>, flags, pfnCallback, pUserData)
-    
-            static member Empty =
-                VkDebugReportCallbackCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDebugReportFlagsEXT>, Unchecked.defaultof<PFN_vkDebugReportCallbackEXT>, Unchecked.defaultof<nativeint>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "flags = %A" x.flags
-                    sprintf "pfnCallback = %A" x.pfnCallback
-                    sprintf "pUserData = %A" x.pUserData
-                ] |> sprintf "VkDebugReportCallbackCreateInfoEXT { %s }"
-        end
-    
-    
-    type VkObjectType with
-         static member inline DebugReportCallbackExt = unbox<VkObjectType> 1000011000
-    type VkResult with
-         static member inline VkErrorValidationFailedExt = unbox<VkResult> -1000011001
-    
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module VkRaw =
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkCreateDebugReportCallbackEXTDel = delegate of VkInstance * nativeptr<VkDebugReportCallbackCreateInfoEXT> * nativeptr<VkAllocationCallbacks> * nativeptr<VkDebugReportCallbackEXT> -> VkResult
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkDestroyDebugReportCallbackEXTDel = delegate of VkInstance * VkDebugReportCallbackEXT * nativeptr<VkAllocationCallbacks> -> unit
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkDebugReportMessageEXTDel = delegate of VkInstance * VkDebugReportFlagsEXT * VkDebugReportObjectTypeEXT * uint64 * uint64 * int * cstr * cstr -> unit
-        
-        [<AbstractClass; Sealed>]
-        type private Loader<'d> private() =
-            static do Report.Begin(3, "[Vulkan] loading VK_EXT_debug_report")
-            static let s_vkCreateDebugReportCallbackEXTDel = VkRaw.vkImportInstanceDelegate<VkCreateDebugReportCallbackEXTDel> "vkCreateDebugReportCallbackEXT"
-            static let s_vkDestroyDebugReportCallbackEXTDel = VkRaw.vkImportInstanceDelegate<VkDestroyDebugReportCallbackEXTDel> "vkDestroyDebugReportCallbackEXT"
-            static let s_vkDebugReportMessageEXTDel = VkRaw.vkImportInstanceDelegate<VkDebugReportMessageEXTDel> "vkDebugReportMessageEXT"
-            static do Report.End(3) |> ignore
-            static member vkCreateDebugReportCallbackEXT = s_vkCreateDebugReportCallbackEXTDel
-            static member vkDestroyDebugReportCallbackEXT = s_vkDestroyDebugReportCallbackEXTDel
-            static member vkDebugReportMessageEXT = s_vkDebugReportMessageEXTDel
-        let vkCreateDebugReportCallbackEXT(instance : VkInstance, pCreateInfo : nativeptr<VkDebugReportCallbackCreateInfoEXT>, pAllocator : nativeptr<VkAllocationCallbacks>, pCallback : nativeptr<VkDebugReportCallbackEXT>) = Loader<unit>.vkCreateDebugReportCallbackEXT.Invoke(instance, pCreateInfo, pAllocator, pCallback)
-        let vkDestroyDebugReportCallbackEXT(instance : VkInstance, callback : VkDebugReportCallbackEXT, pAllocator : nativeptr<VkAllocationCallbacks>) = Loader<unit>.vkDestroyDebugReportCallbackEXT.Invoke(instance, callback, pAllocator)
-        let vkDebugReportMessageEXT(instance : VkInstance, flags : VkDebugReportFlagsEXT, objectType : VkDebugReportObjectTypeEXT, _object : uint64, location : uint64, messageCode : int, pLayerPrefix : cstr, pMessage : cstr) = Loader<unit>.vkDebugReportMessageEXT.Invoke(instance, flags, objectType, _object, location, messageCode, pLayerPrefix, pMessage)
-
 module AMDBufferMarker =
     let Name = "VK_AMD_buffer_marker"
     let Number = 180
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -8962,10 +10520,8 @@ module AMDBufferMarker =
 module AMDDeviceCoherentMemory =
     let Name = "VK_AMD_device_coherent_memory"
     let Number = 230
-    
-    open EXTDebugReport
-    
-    
+
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceCoherentMemoryFeaturesAMD = 
         struct
@@ -8995,18 +10551,18 @@ module AMDDeviceCoherentMemory =
         end
     
     
-    type VkMemoryPropertyFlags with
-         static member inline DeviceCoherentBitAmd = unbox<VkMemoryPropertyFlags> 64
-         static member inline DeviceUncachedBitAmd = unbox<VkMemoryPropertyFlags> 128
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkMemoryPropertyFlags with
+              static member inline DeviceCoherentBitAmd = unbox<VkMemoryPropertyFlags> 64
+              static member inline DeviceUncachedBitAmd = unbox<VkMemoryPropertyFlags> 128
     
 
 module KHRGetPhysicalDeviceProperties2 =
     let Name = "VK_KHR_get_physical_device_properties2"
     let Number = 60
-    
-    open EXTDebugReport
-    
-    
+
+
     type VkFormatProperties2KHR = VkFormatProperties2
     type VkImageFormatProperties2KHR = VkImageFormatProperties2
     type VkPhysicalDeviceFeatures2KHR = VkPhysicalDeviceFeatures2
@@ -9017,21 +10573,119 @@ module KHRGetPhysicalDeviceProperties2 =
     type VkQueueFamilyProperties2KHR = VkQueueFamilyProperties2
     type VkSparseImageFormatProperties2KHR = VkSparseImageFormatProperties2
     
-    
 
 module KHRSurface =
     let Name = "VK_KHR_surface"
     let Number = 1
+
+
+    [<Flags>]
+    type VkSurfaceTransformFlagsKHR = 
+        | None = 0
+        | IdentityBit = 0x00000001
+        | Rotate90Bit = 0x00000002
+        | Rotate180Bit = 0x00000004
+        | Rotate270Bit = 0x00000008
+        | HorizontalMirrorBit = 0x00000010
+        | HorizontalMirrorRotate90Bit = 0x00000020
+        | HorizontalMirrorRotate180Bit = 0x00000040
+        | HorizontalMirrorRotate270Bit = 0x00000080
+        | InheritBit = 0x00000100
     
-    open EXTDebugReport
+    type VkPresentModeKHR = 
+        | Immediate = 0
+        | Mailbox = 1
+        | Fifo = 2
+        | FifoRelaxed = 3
+    
+    type VkColorSpaceKHR = 
+        | SrgbNonlinear = 0
+    
+    [<Flags>]
+    type VkCompositeAlphaFlagsKHR = 
+        | None = 0
+        | OpaqueBit = 0x00000001
+        | PreMultipliedBit = 0x00000002
+        | PostMultipliedBit = 0x00000004
+        | InheritBit = 0x00000008
+    
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkSurfaceCapabilitiesKHR = 
+        struct
+            val mutable public minImageCount : uint32
+            val mutable public maxImageCount : uint32
+            val mutable public currentExtent : VkExtent2D
+            val mutable public minImageExtent : VkExtent2D
+            val mutable public maxImageExtent : VkExtent2D
+            val mutable public maxImageArrayLayers : uint32
+            val mutable public supportedTransforms : VkSurfaceTransformFlagsKHR
+            val mutable public currentTransform : VkSurfaceTransformFlagsKHR
+            val mutable public supportedCompositeAlpha : VkCompositeAlphaFlagsKHR
+            val mutable public supportedUsageFlags : VkImageUsageFlags
+    
+            new(minImageCount : uint32, maxImageCount : uint32, currentExtent : VkExtent2D, minImageExtent : VkExtent2D, maxImageExtent : VkExtent2D, maxImageArrayLayers : uint32, supportedTransforms : VkSurfaceTransformFlagsKHR, currentTransform : VkSurfaceTransformFlagsKHR, supportedCompositeAlpha : VkCompositeAlphaFlagsKHR, supportedUsageFlags : VkImageUsageFlags) =
+                {
+                    minImageCount = minImageCount
+                    maxImageCount = maxImageCount
+                    currentExtent = currentExtent
+                    minImageExtent = minImageExtent
+                    maxImageExtent = maxImageExtent
+                    maxImageArrayLayers = maxImageArrayLayers
+                    supportedTransforms = supportedTransforms
+                    currentTransform = currentTransform
+                    supportedCompositeAlpha = supportedCompositeAlpha
+                    supportedUsageFlags = supportedUsageFlags
+                }
+    
+            static member Empty =
+                VkSurfaceCapabilitiesKHR(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkCompositeAlphaFlagsKHR>, Unchecked.defaultof<VkImageUsageFlags>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "minImageCount = %A" x.minImageCount
+                    sprintf "maxImageCount = %A" x.maxImageCount
+                    sprintf "currentExtent = %A" x.currentExtent
+                    sprintf "minImageExtent = %A" x.minImageExtent
+                    sprintf "maxImageExtent = %A" x.maxImageExtent
+                    sprintf "maxImageArrayLayers = %A" x.maxImageArrayLayers
+                    sprintf "supportedTransforms = %A" x.supportedTransforms
+                    sprintf "currentTransform = %A" x.currentTransform
+                    sprintf "supportedCompositeAlpha = %A" x.supportedCompositeAlpha
+                    sprintf "supportedUsageFlags = %A" x.supportedUsageFlags
+                ] |> sprintf "VkSurfaceCapabilitiesKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkSurfaceFormatKHR = 
+        struct
+            val mutable public format : VkFormat
+            val mutable public colorSpace : VkColorSpaceKHR
+    
+            new(format : VkFormat, colorSpace : VkColorSpaceKHR) =
+                {
+                    format = format
+                    colorSpace = colorSpace
+                }
+    
+            static member Empty =
+                VkSurfaceFormatKHR(Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkColorSpaceKHR>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "format = %A" x.format
+                    sprintf "colorSpace = %A" x.colorSpace
+                ] |> sprintf "VkSurfaceFormatKHR { %s }"
+        end
     
     
-    
-    type VkObjectType with
-         static member inline SurfaceKhr = unbox<VkObjectType> 1000000000
-    type VkResult with
-         static member inline VkErrorSurfaceLostKhr = unbox<VkResult> -1000000000
-         static member inline VkErrorNativeWindowInUseKhr = unbox<VkResult> -1000000001
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkObjectType with
+              static member inline SurfaceKhr = unbox<VkObjectType> 1000000000
+         type VkResult with
+              static member inline VkErrorSurfaceLostKhr = unbox<VkResult> -1000000000
+              static member inline VkErrorNativeWindowInUseKhr = unbox<VkResult> -1000000001
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -9069,12 +10723,10 @@ module KHRSurface =
 module KHRGetSurfaceCapabilities2 =
     let Name = "VK_KHR_get_surface_capabilities2"
     let Number = 120
-    
+
     let Required = [ KHRSurface.Name ]
     open KHRSurface
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceSurfaceInfo2KHR = 
         struct
@@ -9160,7 +10812,6 @@ module KHRGetSurfaceCapabilities2 =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -9182,20 +10833,136 @@ module KHRGetSurfaceCapabilities2 =
 module KHRSwapchain =
     let Name = "VK_KHR_swapchain"
     let Number = 2
-    
+
     let Required = [ KHRSurface.Name ]
     open KHRSurface
-    open EXTDebugReport
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPresentInfoKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public waitSemaphoreCount : uint32
+            val mutable public pWaitSemaphores : nativeptr<VkSemaphore>
+            val mutable public swapchainCount : uint32
+            val mutable public pSwapchains : nativeptr<VkSwapchainKHR>
+            val mutable public pImageIndices : nativeptr<uint32>
+            val mutable public pResults : nativeptr<VkResult>
+    
+            new(pNext : nativeint, waitSemaphoreCount : uint32, pWaitSemaphores : nativeptr<VkSemaphore>, swapchainCount : uint32, pSwapchains : nativeptr<VkSwapchainKHR>, pImageIndices : nativeptr<uint32>, pResults : nativeptr<VkResult>) =
+                {
+                    sType = 1000001001u
+                    pNext = pNext
+                    waitSemaphoreCount = waitSemaphoreCount
+                    pWaitSemaphores = pWaitSemaphores
+                    swapchainCount = swapchainCount
+                    pSwapchains = pSwapchains
+                    pImageIndices = pImageIndices
+                    pResults = pResults
+                }
+    
+            new(waitSemaphoreCount : uint32, pWaitSemaphores : nativeptr<VkSemaphore>, swapchainCount : uint32, pSwapchains : nativeptr<VkSwapchainKHR>, pImageIndices : nativeptr<uint32>, pResults : nativeptr<VkResult>) =
+                VkPresentInfoKHR(Unchecked.defaultof<nativeint>, waitSemaphoreCount, pWaitSemaphores, swapchainCount, pSwapchains, pImageIndices, pResults)
+    
+            static member Empty =
+                VkPresentInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSemaphore>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSwapchainKHR>>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<nativeptr<VkResult>>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "waitSemaphoreCount = %A" x.waitSemaphoreCount
+                    sprintf "pWaitSemaphores = %A" x.pWaitSemaphores
+                    sprintf "swapchainCount = %A" x.swapchainCount
+                    sprintf "pSwapchains = %A" x.pSwapchains
+                    sprintf "pImageIndices = %A" x.pImageIndices
+                    sprintf "pResults = %A" x.pResults
+                ] |> sprintf "VkPresentInfoKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkSwapchainCreateInfoKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public flags : VkSwapchainCreateFlagsKHR
+            val mutable public surface : VkSurfaceKHR
+            val mutable public minImageCount : uint32
+            val mutable public imageFormat : VkFormat
+            val mutable public imageColorSpace : VkColorSpaceKHR
+            val mutable public imageExtent : VkExtent2D
+            val mutable public imageArrayLayers : uint32
+            val mutable public imageUsage : VkImageUsageFlags
+            val mutable public imageSharingMode : VkSharingMode
+            val mutable public queueFamilyIndexCount : uint32
+            val mutable public pQueueFamilyIndices : nativeptr<uint32>
+            val mutable public preTransform : VkSurfaceTransformFlagsKHR
+            val mutable public compositeAlpha : VkCompositeAlphaFlagsKHR
+            val mutable public presentMode : VkPresentModeKHR
+            val mutable public clipped : VkBool32
+            val mutable public oldSwapchain : VkSwapchainKHR
+    
+            new(pNext : nativeint, flags : VkSwapchainCreateFlagsKHR, surface : VkSurfaceKHR, minImageCount : uint32, imageFormat : VkFormat, imageColorSpace : VkColorSpaceKHR, imageExtent : VkExtent2D, imageArrayLayers : uint32, imageUsage : VkImageUsageFlags, imageSharingMode : VkSharingMode, queueFamilyIndexCount : uint32, pQueueFamilyIndices : nativeptr<uint32>, preTransform : VkSurfaceTransformFlagsKHR, compositeAlpha : VkCompositeAlphaFlagsKHR, presentMode : VkPresentModeKHR, clipped : VkBool32, oldSwapchain : VkSwapchainKHR) =
+                {
+                    sType = 1000001000u
+                    pNext = pNext
+                    flags = flags
+                    surface = surface
+                    minImageCount = minImageCount
+                    imageFormat = imageFormat
+                    imageColorSpace = imageColorSpace
+                    imageExtent = imageExtent
+                    imageArrayLayers = imageArrayLayers
+                    imageUsage = imageUsage
+                    imageSharingMode = imageSharingMode
+                    queueFamilyIndexCount = queueFamilyIndexCount
+                    pQueueFamilyIndices = pQueueFamilyIndices
+                    preTransform = preTransform
+                    compositeAlpha = compositeAlpha
+                    presentMode = presentMode
+                    clipped = clipped
+                    oldSwapchain = oldSwapchain
+                }
+    
+            new(flags : VkSwapchainCreateFlagsKHR, surface : VkSurfaceKHR, minImageCount : uint32, imageFormat : VkFormat, imageColorSpace : VkColorSpaceKHR, imageExtent : VkExtent2D, imageArrayLayers : uint32, imageUsage : VkImageUsageFlags, imageSharingMode : VkSharingMode, queueFamilyIndexCount : uint32, pQueueFamilyIndices : nativeptr<uint32>, preTransform : VkSurfaceTransformFlagsKHR, compositeAlpha : VkCompositeAlphaFlagsKHR, presentMode : VkPresentModeKHR, clipped : VkBool32, oldSwapchain : VkSwapchainKHR) =
+                VkSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, flags, surface, minImageCount, imageFormat, imageColorSpace, imageExtent, imageArrayLayers, imageUsage, imageSharingMode, queueFamilyIndexCount, pQueueFamilyIndices, preTransform, compositeAlpha, presentMode, clipped, oldSwapchain)
+    
+            static member Empty =
+                VkSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSwapchainCreateFlagsKHR>, Unchecked.defaultof<VkSurfaceKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkColorSpaceKHR>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkImageUsageFlags>, Unchecked.defaultof<VkSharingMode>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkCompositeAlphaFlagsKHR>, Unchecked.defaultof<VkPresentModeKHR>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkSwapchainKHR>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "flags = %A" x.flags
+                    sprintf "surface = %A" x.surface
+                    sprintf "minImageCount = %A" x.minImageCount
+                    sprintf "imageFormat = %A" x.imageFormat
+                    sprintf "imageColorSpace = %A" x.imageColorSpace
+                    sprintf "imageExtent = %A" x.imageExtent
+                    sprintf "imageArrayLayers = %A" x.imageArrayLayers
+                    sprintf "imageUsage = %A" x.imageUsage
+                    sprintf "imageSharingMode = %A" x.imageSharingMode
+                    sprintf "queueFamilyIndexCount = %A" x.queueFamilyIndexCount
+                    sprintf "pQueueFamilyIndices = %A" x.pQueueFamilyIndices
+                    sprintf "preTransform = %A" x.preTransform
+                    sprintf "compositeAlpha = %A" x.compositeAlpha
+                    sprintf "presentMode = %A" x.presentMode
+                    sprintf "clipped = %A" x.clipped
+                    sprintf "oldSwapchain = %A" x.oldSwapchain
+                ] |> sprintf "VkSwapchainCreateInfoKHR { %s }"
+        end
     
     
-    
-    type VkImageLayout with
-         static member inline PresentSrcKhr = unbox<VkImageLayout> 1000001002
-    type VkObjectType with
-         static member inline SwapchainKhr = unbox<VkObjectType> 1000001000
-    type VkResult with
-         static member inline VkSuboptimalKhr = unbox<VkResult> 1000001003
-         static member inline VkErrorOutOfDateKhr = unbox<VkResult> -1000001004
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkImageLayout with
+              static member inline PresentSrcKhr = unbox<VkImageLayout> 1000001002
+         type VkObjectType with
+              static member inline SwapchainKhr = unbox<VkObjectType> 1000001000
+         type VkResult with
+              static member inline VkSuboptimalKhr = unbox<VkResult> 1000001003
+              static member inline VkErrorOutOfDateKhr = unbox<VkResult> -1000001004
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -9233,14 +11000,13 @@ module KHRSwapchain =
 module AMDDisplayNativeHdr =
     let Name = "VK_AMD_display_native_hdr"
     let Number = 214
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRGetSurfaceCapabilities2.Name; KHRSwapchain.Name ]
     open KHRGetPhysicalDeviceProperties2
     open KHRGetSurfaceCapabilities2
+    open KHRSurface
     open KHRSwapchain
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDisplayNativeHdrSurfaceCapabilitiesAMD = 
         struct
@@ -9298,8 +11064,10 @@ module AMDDisplayNativeHdr =
         end
     
     
-    type VkColorSpaceKHR with
-         static member inline VkColorSpaceDisplayNativeAmd = unbox<VkColorSpaceKHR> 1000213000
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkColorSpaceKHR with
+              static member inline DisplayNativeAmd = unbox<VkColorSpaceKHR> 1000213000
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -9317,113 +11085,104 @@ module AMDDisplayNativeHdr =
 module AMDDrawIndirectCount =
     let Name = "VK_AMD_draw_indirect_count"
     let Number = 34
-    
-    open EXTDebugReport
-    
-    
-    
+
+
+
+module AMDExtension227 =
+    let Name = "VK_AMD_extension_227"
+    let Number = 227
+
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkFormatFeatureFlags with
+              static member inline AmdReserved30Bit = unbox<VkFormatFeatureFlags> 1073741824
     
 
 module AMDExtension24 =
     let Name = "VK_AMD_extension_24"
     let Number = 24
-    
-    open EXTDebugReport
-    
-    
-    
-    type VkAccessFlags with
-         static member inline Reserved30BitKhr = unbox<VkAccessFlags> 1073741824
-         static member inline Reserved31BitKhr = unbox<VkAccessFlags> -2147483648
-    type VkBufferUsageFlags with
-         static member inline Reserved15BitKhr = unbox<VkBufferUsageFlags> 32768
-         static member inline Reserved16BitKhr = unbox<VkBufferUsageFlags> 65536
-    type VkFormatFeatureFlags with
-         static member inline Reserved27BitKhr = unbox<VkFormatFeatureFlags> 134217728
-         static member inline Reserved28BitKhr = unbox<VkFormatFeatureFlags> 268435456
-    type VkImageUsageFlags with
-         static member inline Reserved13BitKhr = unbox<VkImageUsageFlags> 8192
-         static member inline Reserved14BitKhr = unbox<VkImageUsageFlags> 16384
-         static member inline Reserved15BitKhr = unbox<VkImageUsageFlags> 32768
-    type VkPipelineStageFlags with
-         static member inline Reserved27BitKhr = unbox<VkPipelineStageFlags> 134217728
-    type VkQueryType with
-         static member inline Reserved8 = unbox<VkQueryType> 1000023008
-    type VkQueueFlags with
-         static member inline Reserved6BitKhr = unbox<VkQueueFlags> 64
+
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkAccessFlags with
+              static member inline Reserved30BitKhr = unbox<VkAccessFlags> 1073741824
+         type VkBufferUsageFlags with
+              static member inline Reserved15BitKhr = unbox<VkBufferUsageFlags> 32768
+              static member inline Reserved16BitKhr = unbox<VkBufferUsageFlags> 65536
+         type VkFormatFeatureFlags with
+              static member inline Reserved27BitKhr = unbox<VkFormatFeatureFlags> 134217728
+              static member inline Reserved28BitKhr = unbox<VkFormatFeatureFlags> 268435456
+         type VkImageUsageFlags with
+              static member inline Reserved13BitKhr = unbox<VkImageUsageFlags> 8192
+              static member inline Reserved14BitKhr = unbox<VkImageUsageFlags> 16384
+              static member inline Reserved15BitKhr = unbox<VkImageUsageFlags> 32768
+         type VkPipelineStageFlags with
+              static member inline Reserved27BitKhr = unbox<VkPipelineStageFlags> 134217728
+         type VkQueryType with
+              static member inline Reserved8 = unbox<VkQueryType> 1000023008
+         type VkQueueFlags with
+              static member inline Reserved6BitKhr = unbox<VkQueueFlags> 64
     
 
 module AMDExtension25 =
     let Name = "VK_AMD_extension_25"
     let Number = 25
-    
-    open EXTDebugReport
-    
-    
-    
-    type VkAccessFlags with
-         static member inline Reserved28BitKhr = unbox<VkAccessFlags> 268435456
-         static member inline Reserved29BitKhr = unbox<VkAccessFlags> 536870912
-    type VkBufferUsageFlags with
-         static member inline Reserved13BitKhr = unbox<VkBufferUsageFlags> 8192
-         static member inline Reserved14BitKhr = unbox<VkBufferUsageFlags> 16384
-    type VkFormatFeatureFlags with
-         static member inline Reserved25BitKhr = unbox<VkFormatFeatureFlags> 33554432
-         static member inline Reserved26BitKhr = unbox<VkFormatFeatureFlags> 67108864
-    type VkImageUsageFlags with
-         static member inline Reserved10BitKhr = unbox<VkImageUsageFlags> 1024
-         static member inline Reserved11BitKhr = unbox<VkImageUsageFlags> 2048
-         static member inline Reserved12BitKhr = unbox<VkImageUsageFlags> 4096
-    type VkPipelineStageFlags with
-         static member inline Reserved26BitKhr = unbox<VkPipelineStageFlags> 67108864
-    type VkQueryType with
-         static member inline Reserved4 = unbox<VkQueryType> 1000024004
-    type VkQueueFlags with
-         static member inline Reserved5BitKhr = unbox<VkQueueFlags> 32
+
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkAccessFlags with
+              static member inline Reserved28BitKhr = unbox<VkAccessFlags> 268435456
+              static member inline Reserved29BitKhr = unbox<VkAccessFlags> 536870912
+         type VkBufferUsageFlags with
+              static member inline Reserved13BitKhr = unbox<VkBufferUsageFlags> 8192
+              static member inline Reserved14BitKhr = unbox<VkBufferUsageFlags> 16384
+         type VkFormatFeatureFlags with
+              static member inline Reserved25BitKhr = unbox<VkFormatFeatureFlags> 33554432
+              static member inline Reserved26BitKhr = unbox<VkFormatFeatureFlags> 67108864
+         type VkImageUsageFlags with
+              static member inline Reserved10BitKhr = unbox<VkImageUsageFlags> 1024
+              static member inline Reserved11BitKhr = unbox<VkImageUsageFlags> 2048
+              static member inline Reserved12BitKhr = unbox<VkImageUsageFlags> 4096
+         type VkPipelineStageFlags with
+              static member inline Reserved26BitKhr = unbox<VkPipelineStageFlags> 67108864
+         type VkQueryType with
+              static member inline Reserved4 = unbox<VkQueryType> 1000024004
+         type VkQueueFlags with
+              static member inline Reserved5BitKhr = unbox<VkQueueFlags> 32
     
 
 module AMDGcnShader =
     let Name = "VK_AMD_gcn_shader"
     let Number = 26
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module AMDGpuShaderHalfFloat =
     let Name = "VK_AMD_gpu_shader_half_float"
     let Number = 37
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module AMDGpuShaderInt16 =
     let Name = "VK_AMD_gpu_shader_int16"
     let Number = 133
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module AMDMemoryOverallocationBehavior =
     let Name = "VK_AMD_memory_overallocation_behavior"
     let Number = 190
-    
-    open EXTDebugReport
-    
+
+
     type VkMemoryOverallocationBehaviorAMD = 
         | Default = 0
         | Allowed = 1
         | Disallowed = 2
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDeviceMemoryOverallocationCreateInfoAMD = 
         struct
@@ -9453,35 +11212,24 @@ module AMDMemoryOverallocationBehavior =
         end
     
     
-    
 
 module AMDMixedAttachmentSamples =
     let Name = "VK_AMD_mixed_attachment_samples"
     let Number = 137
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module AMDNegativeViewportHeight =
     let Name = "VK_AMD_negative_viewport_height"
     let Number = 36
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module AMDPipelineCompilerControl =
     let Name = "VK_AMD_pipeline_compiler_control"
     let Number = 184
-    
-    open EXTDebugReport
-    
-    
+
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPipelineCompilerControlCreateInfoAMD = 
         struct
@@ -9511,19 +11259,17 @@ module AMDPipelineCompilerControl =
         end
     
     
-    
 
 module AMDRasterizationOrder =
     let Name = "VK_AMD_rasterization_order"
     let Number = 19
-    
-    open EXTDebugReport
-    
+
+
     type VkRasterizationOrderAMD = 
         | Strict = 0
         | Relaxed = 1
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPipelineRasterizationStateRasterizationOrderAMD = 
         struct
@@ -9553,27 +11299,20 @@ module AMDRasterizationOrder =
         end
     
     
-    
 
 module AMDShaderBallot =
     let Name = "VK_AMD_shader_ballot"
     let Number = 38
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module AMDShaderCoreProperties =
     let Name = "VK_AMD_shader_core_properties"
     let Number = 186
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceShaderCorePropertiesAMD = 
         struct
@@ -9642,17 +11381,15 @@ module AMDShaderCoreProperties =
         end
     
     
-    
 
 module AMDShaderCoreProperties2 =
     let Name = "VK_AMD_shader_core_properties2"
     let Number = 228
-    
+
     let Required = [ AMDShaderCoreProperties.Name ]
     open AMDShaderCoreProperties
-    open EXTDebugReport
-    
-    
+    open KHRGetPhysicalDeviceProperties2
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceShaderCoreProperties2AMD = 
         struct
@@ -9685,50 +11422,36 @@ module AMDShaderCoreProperties2 =
         end
     
     
-    
 
 module AMDShaderExplicitVertexParameter =
     let Name = "VK_AMD_shader_explicit_vertex_parameter"
     let Number = 22
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module AMDShaderFragmentMask =
     let Name = "VK_AMD_shader_fragment_mask"
     let Number = 138
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module AMDShaderImageLoadStoreLod =
     let Name = "VK_AMD_shader_image_load_store_lod"
     let Number = 47
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module AMDShaderInfo =
     let Name = "VK_AMD_shader_info"
     let Number = 43
-    
-    open EXTDebugReport
-    
+
+
     type VkShaderInfoTypeAMD = 
         | Statistics = 0
         | Binary = 1
         | Disassembly = 2
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkShaderResourceUsageAMD = 
         struct
@@ -9798,7 +11521,6 @@ module AMDShaderInfo =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -9815,22 +11537,16 @@ module AMDShaderInfo =
 module AMDShaderTrinaryMinmax =
     let Name = "VK_AMD_shader_trinary_minmax"
     let Number = 21
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module AMDTextureGatherBiasLod =
     let Name = "VK_AMD_texture_gather_bias_lod"
     let Number = 42
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkTextureLODGatherFormatPropertiesAMD = 
         struct
@@ -9860,57 +11576,218 @@ module AMDTextureGatherBiasLod =
         end
     
     
+
+module KHRExternalMemoryCapabilities =
+    let Name = "VK_KHR_external_memory_capabilities"
+    let Number = 72
+
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
+
+    type VkExternalMemoryFeatureFlagsKHR = VkExternalMemoryFeatureFlags
+    type VkExternalMemoryHandleTypeFlagsKHR = VkExternalMemoryHandleTypeFlags
+
+    type VkExternalBufferPropertiesKHR = VkExternalBufferProperties
+    type VkExternalImageFormatPropertiesKHR = VkExternalImageFormatProperties
+    type VkExternalMemoryPropertiesKHR = VkExternalMemoryProperties
+    type VkPhysicalDeviceExternalBufferInfoKHR = VkPhysicalDeviceExternalBufferInfo
+    type VkPhysicalDeviceExternalImageFormatInfoKHR = VkPhysicalDeviceExternalImageFormatInfo
+    type VkPhysicalDeviceIDPropertiesKHR = VkPhysicalDeviceIDProperties
     
 
-module KHRMaintenance1 =
-    let Name = "VK_KHR_maintenance1"
-    let Number = 70
-    
-    open EXTDebugReport
-    
-    
-    
+module KHRExternalMemory =
+    let Name = "VK_KHR_external_memory"
+    let Number = 73
+
+    let Required = [ KHRExternalMemoryCapabilities.Name ]
+    open KHRExternalMemoryCapabilities
+    open KHRGetPhysicalDeviceProperties2
+
+    type VkExportMemoryAllocateInfoKHR = VkExportMemoryAllocateInfo
+    type VkExternalMemoryBufferCreateInfoKHR = VkExternalMemoryBufferCreateInfo
+    type VkExternalMemoryImageCreateInfoKHR = VkExternalMemoryImageCreateInfo
     
 
-module KHRBindMemory2 =
-    let Name = "VK_KHR_bind_memory2"
-    let Number = 158
-    
-    open EXTDebugReport
-    
-    
-    type VkBindBufferMemoryInfoKHR = VkBindBufferMemoryInfo
-    type VkBindImageMemoryInfoKHR = VkBindImageMemoryInfo
-    
-    
+module EXTQueueFamilyForeign =
+    let Name = "VK_EXT_queue_family_foreign"
+    let Number = 127
+
+    let Required = [ KHRExternalMemory.Name ]
+    open KHRExternalMemory
+    open KHRExternalMemoryCapabilities
+    open KHRGetPhysicalDeviceProperties2
+
 
 module KHRGetMemoryRequirements2 =
     let Name = "VK_KHR_get_memory_requirements2"
     let Number = 147
-    
-    open EXTDebugReport
-    
-    
+
+
     type VkBufferMemoryRequirementsInfo2KHR = VkBufferMemoryRequirementsInfo2
     type VkImageMemoryRequirementsInfo2KHR = VkImageMemoryRequirementsInfo2
     type VkImageSparseMemoryRequirementsInfo2KHR = VkImageSparseMemoryRequirementsInfo2
     type VkMemoryRequirements2KHR = VkMemoryRequirements2
     type VkSparseImageMemoryRequirements2KHR = VkSparseImageMemoryRequirements2
     
+
+module KHRDedicatedAllocation =
+    let Name = "VK_KHR_dedicated_allocation"
+    let Number = 128
+
+    let Required = [ KHRGetMemoryRequirements2.Name ]
+    open KHRGetMemoryRequirements2
+
+    type VkMemoryDedicatedAllocateInfoKHR = VkMemoryDedicatedAllocateInfo
+    type VkMemoryDedicatedRequirementsKHR = VkMemoryDedicatedRequirements
     
+
+module KHRBindMemory2 =
+    let Name = "VK_KHR_bind_memory2"
+    let Number = 158
+
+
+    type VkBindBufferMemoryInfoKHR = VkBindBufferMemoryInfo
+    type VkBindImageMemoryInfoKHR = VkBindImageMemoryInfo
+    
+
+module KHRMaintenance1 =
+    let Name = "VK_KHR_maintenance1"
+    let Number = 70
+
+
+    type VkCommandPoolTrimFlagsKHR = VkCommandPoolTrimFlags
+
+
+module EXTDebugReport =
+    let Name = "VK_EXT_debug_report"
+    let Number = 12
+
+
+    [<Flags>]
+    type VkDebugReportFlagsEXT = 
+        | None = 0
+        | InformationBit = 0x00000001
+        | WarningBit = 0x00000002
+        | PerformanceWarningBit = 0x00000004
+        | ErrorBit = 0x00000008
+        | DebugBit = 0x00000010
+    
+    type VkDebugReportObjectTypeEXT = 
+        | Unknown = 0
+        | Instance = 1
+        | PhysicalDevice = 2
+        | Device = 3
+        | Queue = 4
+        | Semaphore = 5
+        | CommandBuffer = 6
+        | Fence = 7
+        | DeviceMemory = 8
+        | Buffer = 9
+        | Image = 10
+        | Event = 11
+        | QueryPool = 12
+        | BufferView = 13
+        | ImageView = 14
+        | ShaderModule = 15
+        | PipelineCache = 16
+        | PipelineLayout = 17
+        | RenderPass = 18
+        | Pipeline = 19
+        | DescriptorSetLayout = 20
+        | Sampler = 21
+        | DescriptorPool = 22
+        | DescriptorSet = 23
+        | Framebuffer = 24
+        | CommandPool = 25
+        | Surface = 26
+        | Swapchain = 27
+        | DebugReportCallback = 28
+        | Display = 29
+        | DisplayMode = 30
+        | ValidationCache = 33
+    
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkDebugReportCallbackCreateInfoEXT = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public flags : VkDebugReportFlagsEXT
+            val mutable public pfnCallback : PFN_vkDebugReportCallbackEXT
+            val mutable public pUserData : nativeint
+    
+            new(pNext : nativeint, flags : VkDebugReportFlagsEXT, pfnCallback : PFN_vkDebugReportCallbackEXT, pUserData : nativeint) =
+                {
+                    sType = 1000011000u
+                    pNext = pNext
+                    flags = flags
+                    pfnCallback = pfnCallback
+                    pUserData = pUserData
+                }
+    
+            new(flags : VkDebugReportFlagsEXT, pfnCallback : PFN_vkDebugReportCallbackEXT, pUserData : nativeint) =
+                VkDebugReportCallbackCreateInfoEXT(Unchecked.defaultof<nativeint>, flags, pfnCallback, pUserData)
+    
+            static member Empty =
+                VkDebugReportCallbackCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDebugReportFlagsEXT>, Unchecked.defaultof<PFN_vkDebugReportCallbackEXT>, Unchecked.defaultof<nativeint>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "flags = %A" x.flags
+                    sprintf "pfnCallback = %A" x.pfnCallback
+                    sprintf "pUserData = %A" x.pUserData
+                ] |> sprintf "VkDebugReportCallbackCreateInfoEXT { %s }"
+        end
+    
+    
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkObjectType with
+              static member inline DebugReportCallbackExt = unbox<VkObjectType> 1000011000
+         type VkResult with
+              static member inline VkErrorValidationFailedExt = unbox<VkResult> -1000011001
+    
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module VkRaw =
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCreateDebugReportCallbackEXTDel = delegate of VkInstance * nativeptr<VkDebugReportCallbackCreateInfoEXT> * nativeptr<VkAllocationCallbacks> * nativeptr<VkDebugReportCallbackEXT> -> VkResult
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkDestroyDebugReportCallbackEXTDel = delegate of VkInstance * VkDebugReportCallbackEXT * nativeptr<VkAllocationCallbacks> -> unit
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkDebugReportMessageEXTDel = delegate of VkInstance * VkDebugReportFlagsEXT * VkDebugReportObjectTypeEXT * uint64 * uint64 * int * cstr * cstr -> unit
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Report.Begin(3, "[Vulkan] loading VK_EXT_debug_report")
+            static let s_vkCreateDebugReportCallbackEXTDel = VkRaw.vkImportInstanceDelegate<VkCreateDebugReportCallbackEXTDel> "vkCreateDebugReportCallbackEXT"
+            static let s_vkDestroyDebugReportCallbackEXTDel = VkRaw.vkImportInstanceDelegate<VkDestroyDebugReportCallbackEXTDel> "vkDestroyDebugReportCallbackEXT"
+            static let s_vkDebugReportMessageEXTDel = VkRaw.vkImportInstanceDelegate<VkDebugReportMessageEXTDel> "vkDebugReportMessageEXT"
+            static do Report.End(3) |> ignore
+            static member vkCreateDebugReportCallbackEXT = s_vkCreateDebugReportCallbackEXTDel
+            static member vkDestroyDebugReportCallbackEXT = s_vkDestroyDebugReportCallbackEXTDel
+            static member vkDebugReportMessageEXT = s_vkDebugReportMessageEXTDel
+        let vkCreateDebugReportCallbackEXT(instance : VkInstance, pCreateInfo : nativeptr<VkDebugReportCallbackCreateInfoEXT>, pAllocator : nativeptr<VkAllocationCallbacks>, pCallback : nativeptr<VkDebugReportCallbackEXT>) = Loader<unit>.vkCreateDebugReportCallbackEXT.Invoke(instance, pCreateInfo, pAllocator, pCallback)
+        let vkDestroyDebugReportCallbackEXT(instance : VkInstance, callback : VkDebugReportCallbackEXT, pAllocator : nativeptr<VkAllocationCallbacks>) = Loader<unit>.vkDestroyDebugReportCallbackEXT.Invoke(instance, callback, pAllocator)
+        let vkDebugReportMessageEXT(instance : VkInstance, flags : VkDebugReportFlagsEXT, objectType : VkDebugReportObjectTypeEXT, _object : uint64, location : uint64, messageCode : int, pLayerPrefix : cstr, pMessage : cstr) = Loader<unit>.vkDebugReportMessageEXT.Invoke(instance, flags, objectType, _object, location, messageCode, pLayerPrefix, pMessage)
 
 module KHRSamplerYcbcrConversion =
     let Name = "VK_KHR_sampler_ycbcr_conversion"
     let Number = 157
-    
+
     let Required = [ KHRBindMemory2.Name; KHRGetMemoryRequirements2.Name; KHRGetPhysicalDeviceProperties2.Name; KHRMaintenance1.Name ]
+    open EXTDebugReport
     open KHRBindMemory2
     open KHRGetMemoryRequirements2
     open KHRGetPhysicalDeviceProperties2
     open KHRMaintenance1
-    open EXTDebugReport
-    
-    
+
+    type VkChromaLocationKHR = VkChromaLocation
+    type VkSamplerYcbcrConversionKHR = VkSamplerYcbcrConversion
+    type VkSamplerYcbcrModelConversionKHR = VkSamplerYcbcrModelConversion
+    type VkSamplerYcbcrRangeKHR = VkSamplerYcbcrRange
+
     type VkBindImagePlaneMemoryInfoKHR = VkBindImagePlaneMemoryInfo
     type VkImagePlaneMemoryRequirementsInfoKHR = VkImagePlaneMemoryRequirementsInfo
     type VkPhysicalDeviceSamplerYcbcrConversionFeaturesKHR = VkPhysicalDeviceSamplerYcbcrConversionFeatures
@@ -9919,70 +11796,29 @@ module KHRSamplerYcbcrConversion =
     type VkSamplerYcbcrConversionInfoKHR = VkSamplerYcbcrConversionInfo
     
     
-    
     module EXTDebugReport =
-        
-        
-        type VkDebugReportObjectTypeEXT with
-             static member inline VkDebugReportObjectTypeSamplerYcbcrConversionExt = unbox<VkDebugReportObjectTypeEXT> 999998000
-        
 
-module KHRExternalMemoryCapabilities =
-    let Name = "VK_KHR_external_memory_capabilities"
-    let Number = 72
-    
-    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
-    open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
-    type VkExternalBufferPropertiesKHR = VkExternalBufferProperties
-    type VkExternalImageFormatPropertiesKHR = VkExternalImageFormatProperties
-    type VkExternalMemoryPropertiesKHR = VkExternalMemoryProperties
-    type VkPhysicalDeviceExternalBufferInfoKHR = VkPhysicalDeviceExternalBufferInfo
-    type VkPhysicalDeviceExternalImageFormatInfoKHR = VkPhysicalDeviceExternalImageFormatInfo
-    type VkPhysicalDeviceIDPropertiesKHR = VkPhysicalDeviceIDProperties
-    
-    
-
-module KHRExternalMemory =
-    let Name = "VK_KHR_external_memory"
-    let Number = 73
-    
-    let Required = [ KHRExternalMemoryCapabilities.Name ]
-    open KHRExternalMemoryCapabilities
-    open EXTDebugReport
-    
-    
-    type VkExportMemoryAllocateInfoKHR = VkExportMemoryAllocateInfo
-    type VkExternalMemoryBufferCreateInfoKHR = VkExternalMemoryBufferCreateInfo
-    type VkExternalMemoryImageCreateInfoKHR = VkExternalMemoryImageCreateInfo
-    
-    
-
-module EXTQueueFamilyForeign =
-    let Name = "VK_EXT_queue_family_foreign"
-    let Number = 127
-    
-    let Required = [ KHRExternalMemory.Name ]
-    open KHRExternalMemory
-    open EXTDebugReport
-    
-    
-    
-    
+        [<AutoOpen>]
+        module EnumExtensions =
+             type VkDebugReportObjectTypeEXT with
+                  static member inline SamplerYcbcrConversion = unbox<VkDebugReportObjectTypeEXT> 999998000
+        
 
 module ANDROIDExternalMemoryAndroidHardwareBuffer =
     let Name = "VK_ANDROID_external_memory_android_hardware_buffer"
     let Number = 130
-    
-    let Required = [ EXTQueueFamilyForeign.Name; KHRExternalMemory.Name; KHRSamplerYcbcrConversion.Name ]
+
+    let Required = [ EXTQueueFamilyForeign.Name; KHRDedicatedAllocation.Name; KHRExternalMemory.Name; KHRSamplerYcbcrConversion.Name ]
     open EXTQueueFamilyForeign
+    open KHRBindMemory2
+    open KHRDedicatedAllocation
     open KHRExternalMemory
+    open KHRExternalMemoryCapabilities
+    open KHRGetMemoryRequirements2
+    open KHRGetPhysicalDeviceProperties2
+    open KHRMaintenance1
     open KHRSamplerYcbcrConversion
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkAndroidHardwareBufferFormatPropertiesANDROID = 
         struct
@@ -10176,8 +12012,10 @@ module ANDROIDExternalMemoryAndroidHardwareBuffer =
         end
     
     
-    type VkExternalMemoryHandleTypeFlags with
-         static member inline AndroidHardwareBufferBitAndroid = unbox<VkExternalMemoryHandleTypeFlags> 1024
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkExternalMemoryHandleTypeFlags with
+              static member inline AndroidHardwareBufferBitAndroid = unbox<VkExternalMemoryHandleTypeFlags> 1024
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -10200,15 +12038,14 @@ module ANDROIDExternalMemoryAndroidHardwareBuffer =
 module ANDROIDNativeBuffer =
     let Name = "VK_ANDROID_native_buffer"
     let Number = 11
-    
-    open EXTDebugReport
-    
+
+
     [<Flags>]
     type VkSwapchainImageUsageFlagsANDROID = 
         | None = 0
         | SharedBit = 0x00000001
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkNativeBufferUsage2ANDROID = 
         struct
@@ -10328,7 +12165,6 @@ module ANDROIDNativeBuffer =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -10360,11 +12196,10 @@ module ANDROIDNativeBuffer =
 module KHRDisplay =
     let Name = "VK_KHR_display"
     let Number = 3
-    
+
     let Required = [ KHRSurface.Name ]
     open KHRSurface
-    open EXTDebugReport
-    
+
     [<Flags>]
     type VkDisplayPlaneAlphaFlagsKHR = 
         | None = 0
@@ -10373,7 +12208,7 @@ module KHRDisplay =
         | PerPixelBit = 0x00000004
         | PerPixelPremultipliedBit = 0x00000008
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDisplayModeParametersKHR = 
         struct
@@ -10601,9 +12436,11 @@ module KHRDisplay =
         end
     
     
-    type VkObjectType with
-         static member inline DisplayKhr = unbox<VkObjectType> 1000002000
-         static member inline DisplayModeKhr = unbox<VkObjectType> 1000002001
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkObjectType with
+              static member inline DisplayKhr = unbox<VkObjectType> 1000002000
+              static member inline DisplayModeKhr = unbox<VkObjectType> 1000002001
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -10651,14 +12488,11 @@ module KHRDisplay =
 module EXTDirectModeDisplay =
     let Name = "VK_EXT_direct_mode_display"
     let Number = 89
-    
+
     let Required = [ KHRDisplay.Name ]
     open KHRDisplay
-    open EXTDebugReport
-    
-    
-    
-    
+    open KHRSurface
+
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -10675,14 +12509,12 @@ module EXTDirectModeDisplay =
 module EXTAcquireXlibDisplay =
     let Name = "VK_EXT_acquire_xlib_display"
     let Number = 90
-    
+
     let Required = [ EXTDirectModeDisplay.Name ]
     open EXTDirectModeDisplay
-    open EXTDebugReport
-    
-    
-    
-    
+    open KHRDisplay
+    open KHRSurface
+
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -10704,12 +12536,10 @@ module EXTAcquireXlibDisplay =
 module EXTAstcDecodeMode =
     let Name = "VK_EXT_astc_decode_mode"
     let Number = 68
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkImageViewASTCDecodeModeEXT = 
         struct
@@ -10767,20 +12597,18 @@ module EXTAstcDecodeMode =
         end
     
     
-    
 
 module EXTBlendOperationAdvanced =
     let Name = "VK_EXT_blend_operation_advanced"
     let Number = 149
-    
-    open EXTDebugReport
-    
+
+
     type VkBlendOverlapEXT = 
         | Uncorrelated = 0
         | Disjoint = 1
         | Conjoint = 2
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT = 
         struct
@@ -10887,66 +12715,66 @@ module EXTBlendOperationAdvanced =
         end
     
     
-    type VkAccessFlags with
-         static member inline ColorAttachmentReadNoncoherentBitExt = unbox<VkAccessFlags> 524288
-    type VkBlendOp with
-         static member inline ZeroExt = unbox<VkBlendOp> 1000148000
-         static member inline SrcExt = unbox<VkBlendOp> 1000148001
-         static member inline DstExt = unbox<VkBlendOp> 1000148002
-         static member inline SrcOverExt = unbox<VkBlendOp> 1000148003
-         static member inline DstOverExt = unbox<VkBlendOp> 1000148004
-         static member inline SrcInExt = unbox<VkBlendOp> 1000148005
-         static member inline DstInExt = unbox<VkBlendOp> 1000148006
-         static member inline SrcOutExt = unbox<VkBlendOp> 1000148007
-         static member inline DstOutExt = unbox<VkBlendOp> 1000148008
-         static member inline SrcAtopExt = unbox<VkBlendOp> 1000148009
-         static member inline DstAtopExt = unbox<VkBlendOp> 1000148010
-         static member inline XorExt = unbox<VkBlendOp> 1000148011
-         static member inline MultiplyExt = unbox<VkBlendOp> 1000148012
-         static member inline ScreenExt = unbox<VkBlendOp> 1000148013
-         static member inline OverlayExt = unbox<VkBlendOp> 1000148014
-         static member inline DarkenExt = unbox<VkBlendOp> 1000148015
-         static member inline LightenExt = unbox<VkBlendOp> 1000148016
-         static member inline ColordodgeExt = unbox<VkBlendOp> 1000148017
-         static member inline ColorburnExt = unbox<VkBlendOp> 1000148018
-         static member inline HardlightExt = unbox<VkBlendOp> 1000148019
-         static member inline SoftlightExt = unbox<VkBlendOp> 1000148020
-         static member inline DifferenceExt = unbox<VkBlendOp> 1000148021
-         static member inline ExclusionExt = unbox<VkBlendOp> 1000148022
-         static member inline InvertExt = unbox<VkBlendOp> 1000148023
-         static member inline InvertRgbExt = unbox<VkBlendOp> 1000148024
-         static member inline LineardodgeExt = unbox<VkBlendOp> 1000148025
-         static member inline LinearburnExt = unbox<VkBlendOp> 1000148026
-         static member inline VividlightExt = unbox<VkBlendOp> 1000148027
-         static member inline LinearlightExt = unbox<VkBlendOp> 1000148028
-         static member inline PinlightExt = unbox<VkBlendOp> 1000148029
-         static member inline HardmixExt = unbox<VkBlendOp> 1000148030
-         static member inline HslHueExt = unbox<VkBlendOp> 1000148031
-         static member inline HslSaturationExt = unbox<VkBlendOp> 1000148032
-         static member inline HslColorExt = unbox<VkBlendOp> 1000148033
-         static member inline HslLuminosityExt = unbox<VkBlendOp> 1000148034
-         static member inline PlusExt = unbox<VkBlendOp> 1000148035
-         static member inline PlusClampedExt = unbox<VkBlendOp> 1000148036
-         static member inline PlusClampedAlphaExt = unbox<VkBlendOp> 1000148037
-         static member inline PlusDarkerExt = unbox<VkBlendOp> 1000148038
-         static member inline MinusExt = unbox<VkBlendOp> 1000148039
-         static member inline MinusClampedExt = unbox<VkBlendOp> 1000148040
-         static member inline ContrastExt = unbox<VkBlendOp> 1000148041
-         static member inline InvertOvgExt = unbox<VkBlendOp> 1000148042
-         static member inline RedExt = unbox<VkBlendOp> 1000148043
-         static member inline GreenExt = unbox<VkBlendOp> 1000148044
-         static member inline BlueExt = unbox<VkBlendOp> 1000148045
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkAccessFlags with
+              static member inline ColorAttachmentReadNoncoherentBitExt = unbox<VkAccessFlags> 524288
+         type VkBlendOp with
+              static member inline ZeroExt = unbox<VkBlendOp> 1000148000
+              static member inline SrcExt = unbox<VkBlendOp> 1000148001
+              static member inline DstExt = unbox<VkBlendOp> 1000148002
+              static member inline SrcOverExt = unbox<VkBlendOp> 1000148003
+              static member inline DstOverExt = unbox<VkBlendOp> 1000148004
+              static member inline SrcInExt = unbox<VkBlendOp> 1000148005
+              static member inline DstInExt = unbox<VkBlendOp> 1000148006
+              static member inline SrcOutExt = unbox<VkBlendOp> 1000148007
+              static member inline DstOutExt = unbox<VkBlendOp> 1000148008
+              static member inline SrcAtopExt = unbox<VkBlendOp> 1000148009
+              static member inline DstAtopExt = unbox<VkBlendOp> 1000148010
+              static member inline XorExt = unbox<VkBlendOp> 1000148011
+              static member inline MultiplyExt = unbox<VkBlendOp> 1000148012
+              static member inline ScreenExt = unbox<VkBlendOp> 1000148013
+              static member inline OverlayExt = unbox<VkBlendOp> 1000148014
+              static member inline DarkenExt = unbox<VkBlendOp> 1000148015
+              static member inline LightenExt = unbox<VkBlendOp> 1000148016
+              static member inline ColordodgeExt = unbox<VkBlendOp> 1000148017
+              static member inline ColorburnExt = unbox<VkBlendOp> 1000148018
+              static member inline HardlightExt = unbox<VkBlendOp> 1000148019
+              static member inline SoftlightExt = unbox<VkBlendOp> 1000148020
+              static member inline DifferenceExt = unbox<VkBlendOp> 1000148021
+              static member inline ExclusionExt = unbox<VkBlendOp> 1000148022
+              static member inline InvertExt = unbox<VkBlendOp> 1000148023
+              static member inline InvertRgbExt = unbox<VkBlendOp> 1000148024
+              static member inline LineardodgeExt = unbox<VkBlendOp> 1000148025
+              static member inline LinearburnExt = unbox<VkBlendOp> 1000148026
+              static member inline VividlightExt = unbox<VkBlendOp> 1000148027
+              static member inline LinearlightExt = unbox<VkBlendOp> 1000148028
+              static member inline PinlightExt = unbox<VkBlendOp> 1000148029
+              static member inline HardmixExt = unbox<VkBlendOp> 1000148030
+              static member inline HslHueExt = unbox<VkBlendOp> 1000148031
+              static member inline HslSaturationExt = unbox<VkBlendOp> 1000148032
+              static member inline HslColorExt = unbox<VkBlendOp> 1000148033
+              static member inline HslLuminosityExt = unbox<VkBlendOp> 1000148034
+              static member inline PlusExt = unbox<VkBlendOp> 1000148035
+              static member inline PlusClampedExt = unbox<VkBlendOp> 1000148036
+              static member inline PlusClampedAlphaExt = unbox<VkBlendOp> 1000148037
+              static member inline PlusDarkerExt = unbox<VkBlendOp> 1000148038
+              static member inline MinusExt = unbox<VkBlendOp> 1000148039
+              static member inline MinusClampedExt = unbox<VkBlendOp> 1000148040
+              static member inline ContrastExt = unbox<VkBlendOp> 1000148041
+              static member inline InvertOvgExt = unbox<VkBlendOp> 1000148042
+              static member inline RedExt = unbox<VkBlendOp> 1000148043
+              static member inline GreenExt = unbox<VkBlendOp> 1000148044
+              static member inline BlueExt = unbox<VkBlendOp> 1000148045
     
 
 module EXTBufferDeviceAddress =
     let Name = "VK_EXT_buffer_device_address"
     let Number = 245
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkBufferDeviceAddressCreateInfoEXT = 
         struct
@@ -10975,7 +12803,7 @@ module EXTBufferDeviceAddress =
                 ] |> sprintf "VkBufferDeviceAddressCreateInfoEXT { %s }"
         end
     
-    type VkBufferDeviceAddressInfoEXT = VkBufferDeviceAddressInfoKHR
+    type VkBufferDeviceAddressInfoEXT = VkBufferDeviceAddressInfo
     type VkPhysicalDeviceBufferAddressFeaturesEXT = VkPhysicalDeviceBufferDeviceAddressFeaturesEXT
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceBufferDeviceAddressFeaturesEXT = 
@@ -11012,21 +12840,19 @@ module EXTBufferDeviceAddress =
         end
     
     
-    
 
 module EXTCalibratedTimestamps =
     let Name = "VK_EXT_calibrated_timestamps"
     let Number = 185
-    
-    open EXTDebugReport
-    
+
+
     type VkTimeDomainEXT = 
         | Device = 0
         | ClockMonotonic = 1
         | ClockMonotonicRaw = 2
         | QueryPerformanceCounter = 3
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkCalibratedTimestampInfoEXT = 
         struct
@@ -11056,7 +12882,6 @@ module EXTCalibratedTimestamps =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -11078,15 +12903,14 @@ module EXTCalibratedTimestamps =
 module EXTConditionalRendering =
     let Name = "VK_EXT_conditional_rendering"
     let Number = 82
-    
-    open EXTDebugReport
-    
+
+
     [<Flags>]
     type VkConditionalRenderingFlagsEXT = 
         | None = 0
         | InvertedBit = 0x00000001
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkCommandBufferInheritanceConditionalRenderingInfoEXT = 
         struct
@@ -11181,12 +13005,14 @@ module EXTConditionalRendering =
         end
     
     
-    type VkAccessFlags with
-         static member inline ConditionalRenderingReadBitExt = unbox<VkAccessFlags> 1048576
-    type VkBufferUsageFlags with
-         static member inline ConditionalRenderingBitExt = unbox<VkBufferUsageFlags> 512
-    type VkPipelineStageFlags with
-         static member inline ConditionalRenderingBitExt = unbox<VkPipelineStageFlags> 262144
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkAccessFlags with
+              static member inline ConditionalRenderingReadBitExt = unbox<VkAccessFlags> 1048576
+         type VkBufferUsageFlags with
+              static member inline ConditionalRenderingBitExt = unbox<VkBufferUsageFlags> 512
+         type VkPipelineStageFlags with
+              static member inline ConditionalRenderingBitExt = unbox<VkPipelineStageFlags> 262144
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -11209,17 +13035,16 @@ module EXTConditionalRendering =
 module EXTConservativeRasterization =
     let Name = "VK_EXT_conservative_rasterization"
     let Number = 102
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
+
     type VkConservativeRasterizationModeEXT = 
         | Disabled = 0
         | Overestimate = 1
         | Underestimate = 2
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceConservativeRasterizationPropertiesEXT = 
         struct
@@ -11307,17 +13132,117 @@ module EXTConservativeRasterization =
         end
     
     
+
+module EXTCustomBorderColor =
+    let Name = "VK_EXT_custom_border_color"
+    let Number = 288
+
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPhysicalDeviceCustomBorderColorFeaturesEXT = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public customBorderColors : VkBool32
+            val mutable public customBorderColorWithoutFormat : VkBool32
+    
+            new(pNext : nativeint, customBorderColors : VkBool32, customBorderColorWithoutFormat : VkBool32) =
+                {
+                    sType = 1000287002u
+                    pNext = pNext
+                    customBorderColors = customBorderColors
+                    customBorderColorWithoutFormat = customBorderColorWithoutFormat
+                }
+    
+            new(customBorderColors : VkBool32, customBorderColorWithoutFormat : VkBool32) =
+                VkPhysicalDeviceCustomBorderColorFeaturesEXT(Unchecked.defaultof<nativeint>, customBorderColors, customBorderColorWithoutFormat)
+    
+            static member Empty =
+                VkPhysicalDeviceCustomBorderColorFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "customBorderColors = %A" x.customBorderColors
+                    sprintf "customBorderColorWithoutFormat = %A" x.customBorderColorWithoutFormat
+                ] |> sprintf "VkPhysicalDeviceCustomBorderColorFeaturesEXT { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPhysicalDeviceCustomBorderColorPropertiesEXT = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public maxCustomBorderColorSamplers : uint32
+    
+            new(pNext : nativeint, maxCustomBorderColorSamplers : uint32) =
+                {
+                    sType = 1000287001u
+                    pNext = pNext
+                    maxCustomBorderColorSamplers = maxCustomBorderColorSamplers
+                }
+    
+            new(maxCustomBorderColorSamplers : uint32) =
+                VkPhysicalDeviceCustomBorderColorPropertiesEXT(Unchecked.defaultof<nativeint>, maxCustomBorderColorSamplers)
+    
+            static member Empty =
+                VkPhysicalDeviceCustomBorderColorPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "maxCustomBorderColorSamplers = %A" x.maxCustomBorderColorSamplers
+                ] |> sprintf "VkPhysicalDeviceCustomBorderColorPropertiesEXT { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkSamplerCustomBorderColorCreateInfoEXT = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public customBorderColor : VkClearColorValue
+            val mutable public format : VkFormat
+    
+            new(pNext : nativeint, customBorderColor : VkClearColorValue, format : VkFormat) =
+                {
+                    sType = 1000287000u
+                    pNext = pNext
+                    customBorderColor = customBorderColor
+                    format = format
+                }
+    
+            new(customBorderColor : VkClearColorValue, format : VkFormat) =
+                VkSamplerCustomBorderColorCreateInfoEXT(Unchecked.defaultof<nativeint>, customBorderColor, format)
+    
+            static member Empty =
+                VkSamplerCustomBorderColorCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkClearColorValue>, Unchecked.defaultof<VkFormat>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "customBorderColor = %A" x.customBorderColor
+                    sprintf "format = %A" x.format
+                ] |> sprintf "VkSamplerCustomBorderColorCreateInfoEXT { %s }"
+        end
+    
+    
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkBorderColor with
+              static member inline FloatCustomExt = unbox<VkBorderColor> 1000287003
+              static member inline IntCustomExt = unbox<VkBorderColor> 1000287004
     
 
 module EXTDebugMarker =
     let Name = "VK_EXT_debug_marker"
     let Number = 23
-    
+
     let Required = [ EXTDebugReport.Name ]
     open EXTDebugReport
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDebugMarkerMarkerInfoEXT = 
         struct
@@ -11424,7 +13349,6 @@ module EXTDebugMarker =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -11461,10 +13385,8 @@ module EXTDebugMarker =
 module EXTDebugUtils =
     let Name = "VK_EXT_debug_utils"
     let Number = 129
-    
-    open EXTDebugReport
-    
-    
+
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDebugUtilsLabelEXT = 
         struct
@@ -11666,8 +13588,10 @@ module EXTDebugUtils =
         end
     
     
-    type VkObjectType with
-         static member inline DebugUtilsMessengerExt = unbox<VkObjectType> 1000128000
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkObjectType with
+              static member inline DebugUtilsMessengerExt = unbox<VkObjectType> 1000128000
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -11735,10 +13659,8 @@ module EXTDebugUtils =
 module EXTDepthClipEnable =
     let Name = "VK_EXT_depth_clip_enable"
     let Number = 103
-    
-    open EXTDebugReport
-    
-    
+
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceDepthClipEnableFeaturesEXT = 
         struct
@@ -11799,333 +13721,53 @@ module EXTDepthClipEnable =
         end
     
     
-    
 
 module EXTDepthRangeUnrestricted =
     let Name = "VK_EXT_depth_range_unrestricted"
     let Number = 14
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module KHRMaintenance3 =
     let Name = "VK_KHR_maintenance3"
     let Number = 169
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     type VkDescriptorSetLayoutSupportKHR = VkDescriptorSetLayoutSupport
     type VkPhysicalDeviceMaintenance3PropertiesKHR = VkPhysicalDeviceMaintenance3Properties
-    
     
 
 module EXTDescriptorIndexing =
     let Name = "VK_EXT_descriptor_indexing"
     let Number = 162
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRMaintenance3.Name ]
     open KHRGetPhysicalDeviceProperties2
     open KHRMaintenance3
-    open EXTDebugReport
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkDescriptorSetLayoutBindingFlagsCreateInfoEXT = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public bindingCount : uint32
-            val mutable public pBindingFlags : nativeptr<VkDescriptorBindingFlagsEXT>
-    
-            new(pNext : nativeint, bindingCount : uint32, pBindingFlags : nativeptr<VkDescriptorBindingFlagsEXT>) =
-                {
-                    sType = 1000161000u
-                    pNext = pNext
-                    bindingCount = bindingCount
-                    pBindingFlags = pBindingFlags
-                }
-    
-            new(bindingCount : uint32, pBindingFlags : nativeptr<VkDescriptorBindingFlagsEXT>) =
-                VkDescriptorSetLayoutBindingFlagsCreateInfoEXT(Unchecked.defaultof<nativeint>, bindingCount, pBindingFlags)
-    
-            static member Empty =
-                VkDescriptorSetLayoutBindingFlagsCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDescriptorBindingFlagsEXT>>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "bindingCount = %A" x.bindingCount
-                    sprintf "pBindingFlags = %A" x.pBindingFlags
-                ] |> sprintf "VkDescriptorSetLayoutBindingFlagsCreateInfoEXT { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkDescriptorSetVariableDescriptorCountAllocateInfoEXT = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public descriptorSetCount : uint32
-            val mutable public pDescriptorCounts : nativeptr<uint32>
-    
-            new(pNext : nativeint, descriptorSetCount : uint32, pDescriptorCounts : nativeptr<uint32>) =
-                {
-                    sType = 1000161003u
-                    pNext = pNext
-                    descriptorSetCount = descriptorSetCount
-                    pDescriptorCounts = pDescriptorCounts
-                }
-    
-            new(descriptorSetCount : uint32, pDescriptorCounts : nativeptr<uint32>) =
-                VkDescriptorSetVariableDescriptorCountAllocateInfoEXT(Unchecked.defaultof<nativeint>, descriptorSetCount, pDescriptorCounts)
-    
-            static member Empty =
-                VkDescriptorSetVariableDescriptorCountAllocateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "descriptorSetCount = %A" x.descriptorSetCount
-                    sprintf "pDescriptorCounts = %A" x.pDescriptorCounts
-                ] |> sprintf "VkDescriptorSetVariableDescriptorCountAllocateInfoEXT { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkDescriptorSetVariableDescriptorCountLayoutSupportEXT = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public maxVariableDescriptorCount : uint32
-    
-            new(pNext : nativeint, maxVariableDescriptorCount : uint32) =
-                {
-                    sType = 1000161004u
-                    pNext = pNext
-                    maxVariableDescriptorCount = maxVariableDescriptorCount
-                }
-    
-            new(maxVariableDescriptorCount : uint32) =
-                VkDescriptorSetVariableDescriptorCountLayoutSupportEXT(Unchecked.defaultof<nativeint>, maxVariableDescriptorCount)
-    
-            static member Empty =
-                VkDescriptorSetVariableDescriptorCountLayoutSupportEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "maxVariableDescriptorCount = %A" x.maxVariableDescriptorCount
-                ] |> sprintf "VkDescriptorSetVariableDescriptorCountLayoutSupportEXT { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceDescriptorIndexingFeaturesEXT = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public shaderInputAttachmentArrayDynamicIndexing : VkBool32
-            val mutable public shaderUniformTexelBufferArrayDynamicIndexing : VkBool32
-            val mutable public shaderStorageTexelBufferArrayDynamicIndexing : VkBool32
-            val mutable public shaderUniformBufferArrayNonUniformIndexing : VkBool32
-            val mutable public shaderSampledImageArrayNonUniformIndexing : VkBool32
-            val mutable public shaderStorageBufferArrayNonUniformIndexing : VkBool32
-            val mutable public shaderStorageImageArrayNonUniformIndexing : VkBool32
-            val mutable public shaderInputAttachmentArrayNonUniformIndexing : VkBool32
-            val mutable public shaderUniformTexelBufferArrayNonUniformIndexing : VkBool32
-            val mutable public shaderStorageTexelBufferArrayNonUniformIndexing : VkBool32
-            val mutable public descriptorBindingUniformBufferUpdateAfterBind : VkBool32
-            val mutable public descriptorBindingSampledImageUpdateAfterBind : VkBool32
-            val mutable public descriptorBindingStorageImageUpdateAfterBind : VkBool32
-            val mutable public descriptorBindingStorageBufferUpdateAfterBind : VkBool32
-            val mutable public descriptorBindingUniformTexelBufferUpdateAfterBind : VkBool32
-            val mutable public descriptorBindingStorageTexelBufferUpdateAfterBind : VkBool32
-            val mutable public descriptorBindingUpdateUnusedWhilePending : VkBool32
-            val mutable public descriptorBindingPartiallyBound : VkBool32
-            val mutable public descriptorBindingVariableDescriptorCount : VkBool32
-            val mutable public runtimeDescriptorArray : VkBool32
-    
-            new(pNext : nativeint, shaderInputAttachmentArrayDynamicIndexing : VkBool32, shaderUniformTexelBufferArrayDynamicIndexing : VkBool32, shaderStorageTexelBufferArrayDynamicIndexing : VkBool32, shaderUniformBufferArrayNonUniformIndexing : VkBool32, shaderSampledImageArrayNonUniformIndexing : VkBool32, shaderStorageBufferArrayNonUniformIndexing : VkBool32, shaderStorageImageArrayNonUniformIndexing : VkBool32, shaderInputAttachmentArrayNonUniformIndexing : VkBool32, shaderUniformTexelBufferArrayNonUniformIndexing : VkBool32, shaderStorageTexelBufferArrayNonUniformIndexing : VkBool32, descriptorBindingUniformBufferUpdateAfterBind : VkBool32, descriptorBindingSampledImageUpdateAfterBind : VkBool32, descriptorBindingStorageImageUpdateAfterBind : VkBool32, descriptorBindingStorageBufferUpdateAfterBind : VkBool32, descriptorBindingUniformTexelBufferUpdateAfterBind : VkBool32, descriptorBindingStorageTexelBufferUpdateAfterBind : VkBool32, descriptorBindingUpdateUnusedWhilePending : VkBool32, descriptorBindingPartiallyBound : VkBool32, descriptorBindingVariableDescriptorCount : VkBool32, runtimeDescriptorArray : VkBool32) =
-                {
-                    sType = 1000161001u
-                    pNext = pNext
-                    shaderInputAttachmentArrayDynamicIndexing = shaderInputAttachmentArrayDynamicIndexing
-                    shaderUniformTexelBufferArrayDynamicIndexing = shaderUniformTexelBufferArrayDynamicIndexing
-                    shaderStorageTexelBufferArrayDynamicIndexing = shaderStorageTexelBufferArrayDynamicIndexing
-                    shaderUniformBufferArrayNonUniformIndexing = shaderUniformBufferArrayNonUniformIndexing
-                    shaderSampledImageArrayNonUniformIndexing = shaderSampledImageArrayNonUniformIndexing
-                    shaderStorageBufferArrayNonUniformIndexing = shaderStorageBufferArrayNonUniformIndexing
-                    shaderStorageImageArrayNonUniformIndexing = shaderStorageImageArrayNonUniformIndexing
-                    shaderInputAttachmentArrayNonUniformIndexing = shaderInputAttachmentArrayNonUniformIndexing
-                    shaderUniformTexelBufferArrayNonUniformIndexing = shaderUniformTexelBufferArrayNonUniformIndexing
-                    shaderStorageTexelBufferArrayNonUniformIndexing = shaderStorageTexelBufferArrayNonUniformIndexing
-                    descriptorBindingUniformBufferUpdateAfterBind = descriptorBindingUniformBufferUpdateAfterBind
-                    descriptorBindingSampledImageUpdateAfterBind = descriptorBindingSampledImageUpdateAfterBind
-                    descriptorBindingStorageImageUpdateAfterBind = descriptorBindingStorageImageUpdateAfterBind
-                    descriptorBindingStorageBufferUpdateAfterBind = descriptorBindingStorageBufferUpdateAfterBind
-                    descriptorBindingUniformTexelBufferUpdateAfterBind = descriptorBindingUniformTexelBufferUpdateAfterBind
-                    descriptorBindingStorageTexelBufferUpdateAfterBind = descriptorBindingStorageTexelBufferUpdateAfterBind
-                    descriptorBindingUpdateUnusedWhilePending = descriptorBindingUpdateUnusedWhilePending
-                    descriptorBindingPartiallyBound = descriptorBindingPartiallyBound
-                    descriptorBindingVariableDescriptorCount = descriptorBindingVariableDescriptorCount
-                    runtimeDescriptorArray = runtimeDescriptorArray
-                }
-    
-            new(shaderInputAttachmentArrayDynamicIndexing : VkBool32, shaderUniformTexelBufferArrayDynamicIndexing : VkBool32, shaderStorageTexelBufferArrayDynamicIndexing : VkBool32, shaderUniformBufferArrayNonUniformIndexing : VkBool32, shaderSampledImageArrayNonUniformIndexing : VkBool32, shaderStorageBufferArrayNonUniformIndexing : VkBool32, shaderStorageImageArrayNonUniformIndexing : VkBool32, shaderInputAttachmentArrayNonUniformIndexing : VkBool32, shaderUniformTexelBufferArrayNonUniformIndexing : VkBool32, shaderStorageTexelBufferArrayNonUniformIndexing : VkBool32, descriptorBindingUniformBufferUpdateAfterBind : VkBool32, descriptorBindingSampledImageUpdateAfterBind : VkBool32, descriptorBindingStorageImageUpdateAfterBind : VkBool32, descriptorBindingStorageBufferUpdateAfterBind : VkBool32, descriptorBindingUniformTexelBufferUpdateAfterBind : VkBool32, descriptorBindingStorageTexelBufferUpdateAfterBind : VkBool32, descriptorBindingUpdateUnusedWhilePending : VkBool32, descriptorBindingPartiallyBound : VkBool32, descriptorBindingVariableDescriptorCount : VkBool32, runtimeDescriptorArray : VkBool32) =
-                VkPhysicalDeviceDescriptorIndexingFeaturesEXT(Unchecked.defaultof<nativeint>, shaderInputAttachmentArrayDynamicIndexing, shaderUniformTexelBufferArrayDynamicIndexing, shaderStorageTexelBufferArrayDynamicIndexing, shaderUniformBufferArrayNonUniformIndexing, shaderSampledImageArrayNonUniformIndexing, shaderStorageBufferArrayNonUniformIndexing, shaderStorageImageArrayNonUniformIndexing, shaderInputAttachmentArrayNonUniformIndexing, shaderUniformTexelBufferArrayNonUniformIndexing, shaderStorageTexelBufferArrayNonUniformIndexing, descriptorBindingUniformBufferUpdateAfterBind, descriptorBindingSampledImageUpdateAfterBind, descriptorBindingStorageImageUpdateAfterBind, descriptorBindingStorageBufferUpdateAfterBind, descriptorBindingUniformTexelBufferUpdateAfterBind, descriptorBindingStorageTexelBufferUpdateAfterBind, descriptorBindingUpdateUnusedWhilePending, descriptorBindingPartiallyBound, descriptorBindingVariableDescriptorCount, runtimeDescriptorArray)
-    
-            static member Empty =
-                VkPhysicalDeviceDescriptorIndexingFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "shaderInputAttachmentArrayDynamicIndexing = %A" x.shaderInputAttachmentArrayDynamicIndexing
-                    sprintf "shaderUniformTexelBufferArrayDynamicIndexing = %A" x.shaderUniformTexelBufferArrayDynamicIndexing
-                    sprintf "shaderStorageTexelBufferArrayDynamicIndexing = %A" x.shaderStorageTexelBufferArrayDynamicIndexing
-                    sprintf "shaderUniformBufferArrayNonUniformIndexing = %A" x.shaderUniformBufferArrayNonUniformIndexing
-                    sprintf "shaderSampledImageArrayNonUniformIndexing = %A" x.shaderSampledImageArrayNonUniformIndexing
-                    sprintf "shaderStorageBufferArrayNonUniformIndexing = %A" x.shaderStorageBufferArrayNonUniformIndexing
-                    sprintf "shaderStorageImageArrayNonUniformIndexing = %A" x.shaderStorageImageArrayNonUniformIndexing
-                    sprintf "shaderInputAttachmentArrayNonUniformIndexing = %A" x.shaderInputAttachmentArrayNonUniformIndexing
-                    sprintf "shaderUniformTexelBufferArrayNonUniformIndexing = %A" x.shaderUniformTexelBufferArrayNonUniformIndexing
-                    sprintf "shaderStorageTexelBufferArrayNonUniformIndexing = %A" x.shaderStorageTexelBufferArrayNonUniformIndexing
-                    sprintf "descriptorBindingUniformBufferUpdateAfterBind = %A" x.descriptorBindingUniformBufferUpdateAfterBind
-                    sprintf "descriptorBindingSampledImageUpdateAfterBind = %A" x.descriptorBindingSampledImageUpdateAfterBind
-                    sprintf "descriptorBindingStorageImageUpdateAfterBind = %A" x.descriptorBindingStorageImageUpdateAfterBind
-                    sprintf "descriptorBindingStorageBufferUpdateAfterBind = %A" x.descriptorBindingStorageBufferUpdateAfterBind
-                    sprintf "descriptorBindingUniformTexelBufferUpdateAfterBind = %A" x.descriptorBindingUniformTexelBufferUpdateAfterBind
-                    sprintf "descriptorBindingStorageTexelBufferUpdateAfterBind = %A" x.descriptorBindingStorageTexelBufferUpdateAfterBind
-                    sprintf "descriptorBindingUpdateUnusedWhilePending = %A" x.descriptorBindingUpdateUnusedWhilePending
-                    sprintf "descriptorBindingPartiallyBound = %A" x.descriptorBindingPartiallyBound
-                    sprintf "descriptorBindingVariableDescriptorCount = %A" x.descriptorBindingVariableDescriptorCount
-                    sprintf "runtimeDescriptorArray = %A" x.runtimeDescriptorArray
-                ] |> sprintf "VkPhysicalDeviceDescriptorIndexingFeaturesEXT { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceDescriptorIndexingPropertiesEXT = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public maxUpdateAfterBindDescriptorsInAllPools : uint32
-            val mutable public shaderUniformBufferArrayNonUniformIndexingNative : VkBool32
-            val mutable public shaderSampledImageArrayNonUniformIndexingNative : VkBool32
-            val mutable public shaderStorageBufferArrayNonUniformIndexingNative : VkBool32
-            val mutable public shaderStorageImageArrayNonUniformIndexingNative : VkBool32
-            val mutable public shaderInputAttachmentArrayNonUniformIndexingNative : VkBool32
-            val mutable public robustBufferAccessUpdateAfterBind : VkBool32
-            val mutable public quadDivergentImplicitLod : VkBool32
-            val mutable public maxPerStageDescriptorUpdateAfterBindSamplers : uint32
-            val mutable public maxPerStageDescriptorUpdateAfterBindUniformBuffers : uint32
-            val mutable public maxPerStageDescriptorUpdateAfterBindStorageBuffers : uint32
-            val mutable public maxPerStageDescriptorUpdateAfterBindSampledImages : uint32
-            val mutable public maxPerStageDescriptorUpdateAfterBindStorageImages : uint32
-            val mutable public maxPerStageDescriptorUpdateAfterBindInputAttachments : uint32
-            val mutable public maxPerStageUpdateAfterBindResources : uint32
-            val mutable public maxDescriptorSetUpdateAfterBindSamplers : uint32
-            val mutable public maxDescriptorSetUpdateAfterBindUniformBuffers : uint32
-            val mutable public maxDescriptorSetUpdateAfterBindUniformBuffersDynamic : uint32
-            val mutable public maxDescriptorSetUpdateAfterBindStorageBuffers : uint32
-            val mutable public maxDescriptorSetUpdateAfterBindStorageBuffersDynamic : uint32
-            val mutable public maxDescriptorSetUpdateAfterBindSampledImages : uint32
-            val mutable public maxDescriptorSetUpdateAfterBindStorageImages : uint32
-            val mutable public maxDescriptorSetUpdateAfterBindInputAttachments : uint32
-    
-            new(pNext : nativeint, maxUpdateAfterBindDescriptorsInAllPools : uint32, shaderUniformBufferArrayNonUniformIndexingNative : VkBool32, shaderSampledImageArrayNonUniformIndexingNative : VkBool32, shaderStorageBufferArrayNonUniformIndexingNative : VkBool32, shaderStorageImageArrayNonUniformIndexingNative : VkBool32, shaderInputAttachmentArrayNonUniformIndexingNative : VkBool32, robustBufferAccessUpdateAfterBind : VkBool32, quadDivergentImplicitLod : VkBool32, maxPerStageDescriptorUpdateAfterBindSamplers : uint32, maxPerStageDescriptorUpdateAfterBindUniformBuffers : uint32, maxPerStageDescriptorUpdateAfterBindStorageBuffers : uint32, maxPerStageDescriptorUpdateAfterBindSampledImages : uint32, maxPerStageDescriptorUpdateAfterBindStorageImages : uint32, maxPerStageDescriptorUpdateAfterBindInputAttachments : uint32, maxPerStageUpdateAfterBindResources : uint32, maxDescriptorSetUpdateAfterBindSamplers : uint32, maxDescriptorSetUpdateAfterBindUniformBuffers : uint32, maxDescriptorSetUpdateAfterBindUniformBuffersDynamic : uint32, maxDescriptorSetUpdateAfterBindStorageBuffers : uint32, maxDescriptorSetUpdateAfterBindStorageBuffersDynamic : uint32, maxDescriptorSetUpdateAfterBindSampledImages : uint32, maxDescriptorSetUpdateAfterBindStorageImages : uint32, maxDescriptorSetUpdateAfterBindInputAttachments : uint32) =
-                {
-                    sType = 1000161002u
-                    pNext = pNext
-                    maxUpdateAfterBindDescriptorsInAllPools = maxUpdateAfterBindDescriptorsInAllPools
-                    shaderUniformBufferArrayNonUniformIndexingNative = shaderUniformBufferArrayNonUniformIndexingNative
-                    shaderSampledImageArrayNonUniformIndexingNative = shaderSampledImageArrayNonUniformIndexingNative
-                    shaderStorageBufferArrayNonUniformIndexingNative = shaderStorageBufferArrayNonUniformIndexingNative
-                    shaderStorageImageArrayNonUniformIndexingNative = shaderStorageImageArrayNonUniformIndexingNative
-                    shaderInputAttachmentArrayNonUniformIndexingNative = shaderInputAttachmentArrayNonUniformIndexingNative
-                    robustBufferAccessUpdateAfterBind = robustBufferAccessUpdateAfterBind
-                    quadDivergentImplicitLod = quadDivergentImplicitLod
-                    maxPerStageDescriptorUpdateAfterBindSamplers = maxPerStageDescriptorUpdateAfterBindSamplers
-                    maxPerStageDescriptorUpdateAfterBindUniformBuffers = maxPerStageDescriptorUpdateAfterBindUniformBuffers
-                    maxPerStageDescriptorUpdateAfterBindStorageBuffers = maxPerStageDescriptorUpdateAfterBindStorageBuffers
-                    maxPerStageDescriptorUpdateAfterBindSampledImages = maxPerStageDescriptorUpdateAfterBindSampledImages
-                    maxPerStageDescriptorUpdateAfterBindStorageImages = maxPerStageDescriptorUpdateAfterBindStorageImages
-                    maxPerStageDescriptorUpdateAfterBindInputAttachments = maxPerStageDescriptorUpdateAfterBindInputAttachments
-                    maxPerStageUpdateAfterBindResources = maxPerStageUpdateAfterBindResources
-                    maxDescriptorSetUpdateAfterBindSamplers = maxDescriptorSetUpdateAfterBindSamplers
-                    maxDescriptorSetUpdateAfterBindUniformBuffers = maxDescriptorSetUpdateAfterBindUniformBuffers
-                    maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = maxDescriptorSetUpdateAfterBindUniformBuffersDynamic
-                    maxDescriptorSetUpdateAfterBindStorageBuffers = maxDescriptorSetUpdateAfterBindStorageBuffers
-                    maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = maxDescriptorSetUpdateAfterBindStorageBuffersDynamic
-                    maxDescriptorSetUpdateAfterBindSampledImages = maxDescriptorSetUpdateAfterBindSampledImages
-                    maxDescriptorSetUpdateAfterBindStorageImages = maxDescriptorSetUpdateAfterBindStorageImages
-                    maxDescriptorSetUpdateAfterBindInputAttachments = maxDescriptorSetUpdateAfterBindInputAttachments
-                }
-    
-            new(maxUpdateAfterBindDescriptorsInAllPools : uint32, shaderUniformBufferArrayNonUniformIndexingNative : VkBool32, shaderSampledImageArrayNonUniformIndexingNative : VkBool32, shaderStorageBufferArrayNonUniformIndexingNative : VkBool32, shaderStorageImageArrayNonUniformIndexingNative : VkBool32, shaderInputAttachmentArrayNonUniformIndexingNative : VkBool32, robustBufferAccessUpdateAfterBind : VkBool32, quadDivergentImplicitLod : VkBool32, maxPerStageDescriptorUpdateAfterBindSamplers : uint32, maxPerStageDescriptorUpdateAfterBindUniformBuffers : uint32, maxPerStageDescriptorUpdateAfterBindStorageBuffers : uint32, maxPerStageDescriptorUpdateAfterBindSampledImages : uint32, maxPerStageDescriptorUpdateAfterBindStorageImages : uint32, maxPerStageDescriptorUpdateAfterBindInputAttachments : uint32, maxPerStageUpdateAfterBindResources : uint32, maxDescriptorSetUpdateAfterBindSamplers : uint32, maxDescriptorSetUpdateAfterBindUniformBuffers : uint32, maxDescriptorSetUpdateAfterBindUniformBuffersDynamic : uint32, maxDescriptorSetUpdateAfterBindStorageBuffers : uint32, maxDescriptorSetUpdateAfterBindStorageBuffersDynamic : uint32, maxDescriptorSetUpdateAfterBindSampledImages : uint32, maxDescriptorSetUpdateAfterBindStorageImages : uint32, maxDescriptorSetUpdateAfterBindInputAttachments : uint32) =
-                VkPhysicalDeviceDescriptorIndexingPropertiesEXT(Unchecked.defaultof<nativeint>, maxUpdateAfterBindDescriptorsInAllPools, shaderUniformBufferArrayNonUniformIndexingNative, shaderSampledImageArrayNonUniformIndexingNative, shaderStorageBufferArrayNonUniformIndexingNative, shaderStorageImageArrayNonUniformIndexingNative, shaderInputAttachmentArrayNonUniformIndexingNative, robustBufferAccessUpdateAfterBind, quadDivergentImplicitLod, maxPerStageDescriptorUpdateAfterBindSamplers, maxPerStageDescriptorUpdateAfterBindUniformBuffers, maxPerStageDescriptorUpdateAfterBindStorageBuffers, maxPerStageDescriptorUpdateAfterBindSampledImages, maxPerStageDescriptorUpdateAfterBindStorageImages, maxPerStageDescriptorUpdateAfterBindInputAttachments, maxPerStageUpdateAfterBindResources, maxDescriptorSetUpdateAfterBindSamplers, maxDescriptorSetUpdateAfterBindUniformBuffers, maxDescriptorSetUpdateAfterBindUniformBuffersDynamic, maxDescriptorSetUpdateAfterBindStorageBuffers, maxDescriptorSetUpdateAfterBindStorageBuffersDynamic, maxDescriptorSetUpdateAfterBindSampledImages, maxDescriptorSetUpdateAfterBindStorageImages, maxDescriptorSetUpdateAfterBindInputAttachments)
-    
-            static member Empty =
-                VkPhysicalDeviceDescriptorIndexingPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "maxUpdateAfterBindDescriptorsInAllPools = %A" x.maxUpdateAfterBindDescriptorsInAllPools
-                    sprintf "shaderUniformBufferArrayNonUniformIndexingNative = %A" x.shaderUniformBufferArrayNonUniformIndexingNative
-                    sprintf "shaderSampledImageArrayNonUniformIndexingNative = %A" x.shaderSampledImageArrayNonUniformIndexingNative
-                    sprintf "shaderStorageBufferArrayNonUniformIndexingNative = %A" x.shaderStorageBufferArrayNonUniformIndexingNative
-                    sprintf "shaderStorageImageArrayNonUniformIndexingNative = %A" x.shaderStorageImageArrayNonUniformIndexingNative
-                    sprintf "shaderInputAttachmentArrayNonUniformIndexingNative = %A" x.shaderInputAttachmentArrayNonUniformIndexingNative
-                    sprintf "robustBufferAccessUpdateAfterBind = %A" x.robustBufferAccessUpdateAfterBind
-                    sprintf "quadDivergentImplicitLod = %A" x.quadDivergentImplicitLod
-                    sprintf "maxPerStageDescriptorUpdateAfterBindSamplers = %A" x.maxPerStageDescriptorUpdateAfterBindSamplers
-                    sprintf "maxPerStageDescriptorUpdateAfterBindUniformBuffers = %A" x.maxPerStageDescriptorUpdateAfterBindUniformBuffers
-                    sprintf "maxPerStageDescriptorUpdateAfterBindStorageBuffers = %A" x.maxPerStageDescriptorUpdateAfterBindStorageBuffers
-                    sprintf "maxPerStageDescriptorUpdateAfterBindSampledImages = %A" x.maxPerStageDescriptorUpdateAfterBindSampledImages
-                    sprintf "maxPerStageDescriptorUpdateAfterBindStorageImages = %A" x.maxPerStageDescriptorUpdateAfterBindStorageImages
-                    sprintf "maxPerStageDescriptorUpdateAfterBindInputAttachments = %A" x.maxPerStageDescriptorUpdateAfterBindInputAttachments
-                    sprintf "maxPerStageUpdateAfterBindResources = %A" x.maxPerStageUpdateAfterBindResources
-                    sprintf "maxDescriptorSetUpdateAfterBindSamplers = %A" x.maxDescriptorSetUpdateAfterBindSamplers
-                    sprintf "maxDescriptorSetUpdateAfterBindUniformBuffers = %A" x.maxDescriptorSetUpdateAfterBindUniformBuffers
-                    sprintf "maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = %A" x.maxDescriptorSetUpdateAfterBindUniformBuffersDynamic
-                    sprintf "maxDescriptorSetUpdateAfterBindStorageBuffers = %A" x.maxDescriptorSetUpdateAfterBindStorageBuffers
-                    sprintf "maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = %A" x.maxDescriptorSetUpdateAfterBindStorageBuffersDynamic
-                    sprintf "maxDescriptorSetUpdateAfterBindSampledImages = %A" x.maxDescriptorSetUpdateAfterBindSampledImages
-                    sprintf "maxDescriptorSetUpdateAfterBindStorageImages = %A" x.maxDescriptorSetUpdateAfterBindStorageImages
-                    sprintf "maxDescriptorSetUpdateAfterBindInputAttachments = %A" x.maxDescriptorSetUpdateAfterBindInputAttachments
-                ] |> sprintf "VkPhysicalDeviceDescriptorIndexingPropertiesEXT { %s }"
-        end
-    
-    
-    type VkDescriptorPoolCreateFlags with
-         static member inline UpdateAfterBindBitExt = unbox<VkDescriptorPoolCreateFlags> 2
-    type VkDescriptorSetLayoutCreateFlags with
-         static member inline UpdateAfterBindPoolBitExt = unbox<VkDescriptorSetLayoutCreateFlags> 2
-    type VkResult with
-         static member inline VkErrorFragmentationExt = unbox<VkResult> -1000161000
+
+    type VkDescriptorBindingFlagsEXT = VkDescriptorBindingFlags
+
+    type VkDescriptorSetLayoutBindingFlagsCreateInfoEXT = VkDescriptorSetLayoutBindingFlagsCreateInfo
+    type VkDescriptorSetVariableDescriptorCountAllocateInfoEXT = VkDescriptorSetVariableDescriptorCountAllocateInfo
+    type VkDescriptorSetVariableDescriptorCountLayoutSupportEXT = VkDescriptorSetVariableDescriptorCountLayoutSupport
+    type VkPhysicalDeviceDescriptorIndexingFeaturesEXT = VkPhysicalDeviceDescriptorIndexingFeatures
+    type VkPhysicalDeviceDescriptorIndexingPropertiesEXT = VkPhysicalDeviceDescriptorIndexingProperties
     
 
 module EXTDiscardRectangles =
     let Name = "VK_EXT_discard_rectangles"
     let Number = 100
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
+
     type VkDiscardRectangleModeEXT = 
         | Inclusive = 0
         | Exclusive = 1
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceDiscardRectanglePropertiesEXT = 
         struct
@@ -12192,8 +13834,10 @@ module EXTDiscardRectangles =
         end
     
     
-    type VkDynamicState with
-         static member inline DiscardRectangleExt = unbox<VkDynamicState> 1000099000
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkDynamicState with
+              static member inline DiscardRectangleExt = unbox<VkDynamicState> 1000099000
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -12211,17 +13855,17 @@ module EXTDiscardRectangles =
 module EXTDisplaySurfaceCounter =
     let Name = "VK_EXT_display_surface_counter"
     let Number = 91
-    
+
     let Required = [ KHRDisplay.Name ]
     open KHRDisplay
-    open EXTDebugReport
-    
+    open KHRSurface
+
     [<Flags>]
     type VkSurfaceCounterFlagsEXT = 
         | None = 0
         | Vblank = 0x00000001
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkSurfaceCapabilities2EXT = 
         struct
@@ -12281,7 +13925,6 @@ module EXTDisplaySurfaceCounter =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -12298,12 +13941,13 @@ module EXTDisplaySurfaceCounter =
 module EXTDisplayControl =
     let Name = "VK_EXT_display_control"
     let Number = 92
-    
+
     let Required = [ EXTDisplaySurfaceCounter.Name; KHRSwapchain.Name ]
     open EXTDisplaySurfaceCounter
+    open KHRDisplay
+    open KHRSurface
     open KHRSwapchain
-    open EXTDebugReport
-    
+
     type VkDisplayPowerStateEXT = 
         | Off = 0
         | Suspend = 1
@@ -12315,7 +13959,7 @@ module EXTDisplayControl =
     type VkDisplayEventTypeEXT = 
         | FirstPixelOut = 0
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDeviceEventInfoEXT = 
         struct
@@ -12429,7 +14073,6 @@ module EXTDisplayControl =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -12458,31 +14101,26 @@ module EXTDisplayControl =
         let vkRegisterDisplayEventEXT(device : VkDevice, display : VkDisplayKHR, pDisplayEventInfo : nativeptr<VkDisplayEventInfoEXT>, pAllocator : nativeptr<VkAllocationCallbacks>, pFence : nativeptr<VkFence>) = Loader<unit>.vkRegisterDisplayEventEXT.Invoke(device, display, pDisplayEventInfo, pAllocator, pFence)
         let vkGetSwapchainCounterEXT(device : VkDevice, swapchain : VkSwapchainKHR, counter : VkSurfaceCounterFlagsEXT, pCounterValue : nativeptr<uint64>) = Loader<unit>.vkGetSwapchainCounterEXT.Invoke(device, swapchain, counter, pCounterValue)
 
-module EXTExtension298 =
-    let Name = "VK_EXT_extension_298"
-    let Number = 298
-    
-    open EXTDebugReport
-    
-    
-    
-    type VkPipelineCreateFlags with
-         static member inline Reserved8BitExt = unbox<VkPipelineCreateFlags> 256
-         static member inline Reserved9BitExt = unbox<VkPipelineCreateFlags> 512
-         static member inline Reserved10BitExt = unbox<VkPipelineCreateFlags> 1024
-    type VkResult with
-         static member inline Ext298ReservedValue0Ext = unbox<VkResult> 1000297000
+module EXTExtension333 =
+    let Name = "VK_EXT_extension_333"
+    let Number = 333
+
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkImageViewCreateFlags with
+              static member inline Reserved1BitExt = unbox<VkImageViewCreateFlags> 2
     
 
 module KHRExternalMemoryFd =
     let Name = "VK_KHR_external_memory_fd"
     let Number = 75
-    
+
     let Required = [ KHRExternalMemory.Name ]
     open KHRExternalMemory
-    open EXTDebugReport
-    
-    
+    open KHRExternalMemoryCapabilities
+    open KHRGetPhysicalDeviceProperties2
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkImportMemoryFdInfoKHR = 
         struct
@@ -12574,7 +14212,6 @@ module KHRExternalMemoryFd =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -12596,26 +14233,28 @@ module KHRExternalMemoryFd =
 module EXTExternalMemoryDmaBuf =
     let Name = "VK_EXT_external_memory_dma_buf"
     let Number = 126
-    
+
     let Required = [ KHRExternalMemoryFd.Name ]
+    open KHRExternalMemory
+    open KHRExternalMemoryCapabilities
     open KHRExternalMemoryFd
-    open EXTDebugReport
-    
-    
-    
-    type VkExternalMemoryHandleTypeFlags with
-         static member inline DmaBufBitExt = unbox<VkExternalMemoryHandleTypeFlags> 512
+    open KHRGetPhysicalDeviceProperties2
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkExternalMemoryHandleTypeFlags with
+              static member inline DmaBufBitExt = unbox<VkExternalMemoryHandleTypeFlags> 512
     
 
 module EXTExternalMemoryHost =
     let Name = "VK_EXT_external_memory_host"
     let Number = 179
-    
+
     let Required = [ KHRExternalMemory.Name ]
     open KHRExternalMemory
-    open EXTDebugReport
-    
-    
+    open KHRExternalMemoryCapabilities
+    open KHRGetPhysicalDeviceProperties2
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkImportMemoryHostPointerInfoEXT = 
         struct
@@ -12704,9 +14343,11 @@ module EXTExternalMemoryHost =
         end
     
     
-    type VkExternalMemoryHandleTypeFlags with
-         static member inline HostAllocationBitExt = unbox<VkExternalMemoryHandleTypeFlags> 128
-         static member inline HostMappedForeignMemoryBitExt = unbox<VkExternalMemoryHandleTypeFlags> 256
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkExternalMemoryHandleTypeFlags with
+              static member inline HostAllocationBitExt = unbox<VkExternalMemoryHandleTypeFlags> 128
+              static member inline HostMappedForeignMemoryBitExt = unbox<VkExternalMemoryHandleTypeFlags> 256
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -12724,26 +14365,23 @@ module EXTExternalMemoryHost =
 module IMGFilterCubic =
     let Name = "VK_IMG_filter_cubic"
     let Number = 16
-    
-    open EXTDebugReport
-    
-    
-    
-    type VkFilter with
-         static member inline CubicImg = unbox<VkFilter> 1000015000
-    type VkFormatFeatureFlags with
-         static member inline SampledImageFilterCubicBitImg = unbox<VkFormatFeatureFlags> 8192
+
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkFilter with
+              static member inline CubicImg = unbox<VkFilter> 1000015000
+         type VkFormatFeatureFlags with
+              static member inline SampledImageFilterCubicBitImg = unbox<VkFormatFeatureFlags> 8192
     
 
 module EXTFilterCubic =
     let Name = "VK_EXT_filter_cubic"
     let Number = 171
-    
+
     let Required = [ IMGFilterCubic.Name ]
     open IMGFilterCubic
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkFilterCubicImageViewImageFormatPropertiesEXT = 
         struct
@@ -12804,17 +14442,14 @@ module EXTFilterCubic =
         end
     
     
-    
 
 module EXTFragmentDensityMap =
     let Name = "VK_EXT_fragment_density_map"
     let Number = 219
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceFragmentDensityMapFeaturesEXT = 
         struct
@@ -12912,34 +14547,34 @@ module EXTFragmentDensityMap =
         end
     
     
-    type VkAccessFlags with
-         static member inline FragmentDensityMapReadBitExt = unbox<VkAccessFlags> 16777216
-    type VkFormatFeatureFlags with
-         static member inline FragmentDensityMapBitExt = unbox<VkFormatFeatureFlags> 16777216
-    type VkImageCreateFlags with
-         static member inline SubsampledBitExt = unbox<VkImageCreateFlags> 16384
-    type VkImageLayout with
-         static member inline FragmentDensityMapOptimalExt = unbox<VkImageLayout> 1000218000
-    type VkImageUsageFlags with
-         static member inline FragmentDensityMapBitExt = unbox<VkImageUsageFlags> 512
-    type VkImageViewCreateFlags with
-         static member inline FragmentDensityMapDynamicBitExt = unbox<VkImageViewCreateFlags> 1
-    type VkPipelineStageFlags with
-         static member inline FragmentDensityProcessBitExt = unbox<VkPipelineStageFlags> 8388608
-    type VkSamplerCreateFlags with
-         static member inline SubsampledBitExt = unbox<VkSamplerCreateFlags> 1
-         static member inline SubsampledCoarseReconstructionBitExt = unbox<VkSamplerCreateFlags> 2
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkAccessFlags with
+              static member inline FragmentDensityMapReadBitExt = unbox<VkAccessFlags> 16777216
+         type VkFormatFeatureFlags with
+              static member inline FragmentDensityMapBitExt = unbox<VkFormatFeatureFlags> 16777216
+         type VkImageCreateFlags with
+              static member inline SubsampledBitExt = unbox<VkImageCreateFlags> 16384
+         type VkImageLayout with
+              static member inline FragmentDensityMapOptimalExt = unbox<VkImageLayout> 1000218000
+         type VkImageUsageFlags with
+              static member inline FragmentDensityMapBitExt = unbox<VkImageUsageFlags> 512
+         type VkImageViewCreateFlags with
+              static member inline FragmentDensityMapDynamicBitExt = unbox<VkImageViewCreateFlags> 1
+         type VkPipelineStageFlags with
+              static member inline FragmentDensityProcessBitExt = unbox<VkPipelineStageFlags> 8388608
+         type VkSamplerCreateFlags with
+              static member inline SubsampledBitExt = unbox<VkSamplerCreateFlags> 1
+              static member inline SubsampledCoarseReconstructionBitExt = unbox<VkSamplerCreateFlags> 2
     
 
 module EXTFragmentShaderInterlock =
     let Name = "VK_EXT_fragment_shader_interlock"
     let Number = 252
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT = 
         struct
@@ -12975,26 +14610,365 @@ module EXTFragmentShaderInterlock =
         end
     
     
+
+module KHRWin32Surface =
+    let Name = "VK_KHR_win32_surface"
+    let Number = 10
+
+    let Required = [ KHRSurface.Name ]
+    open KHRSurface
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkWin32SurfaceCreateInfoKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public flags : VkWin32SurfaceCreateFlagsKHR
+            val mutable public hinstance : nativeint
+            val mutable public hwnd : nativeint
     
+            new(pNext : nativeint, flags : VkWin32SurfaceCreateFlagsKHR, hinstance : nativeint, hwnd : nativeint) =
+                {
+                    sType = 1000009000u
+                    pNext = pNext
+                    flags = flags
+                    hinstance = hinstance
+                    hwnd = hwnd
+                }
+    
+            new(flags : VkWin32SurfaceCreateFlagsKHR, hinstance : nativeint, hwnd : nativeint) =
+                VkWin32SurfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, flags, hinstance, hwnd)
+    
+            static member Empty =
+                VkWin32SurfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkWin32SurfaceCreateFlagsKHR>, Unchecked.defaultof<nativeint>, Unchecked.defaultof<nativeint>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "flags = %A" x.flags
+                    sprintf "hinstance = %A" x.hinstance
+                    sprintf "hwnd = %A" x.hwnd
+                ] |> sprintf "VkWin32SurfaceCreateInfoKHR { %s }"
+        end
+    
+    
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module VkRaw =
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCreateWin32SurfaceKHRDel = delegate of VkInstance * nativeptr<VkWin32SurfaceCreateInfoKHR> * nativeptr<VkAllocationCallbacks> * nativeptr<VkSurfaceKHR> -> VkResult
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkGetPhysicalDeviceWin32PresentationSupportKHRDel = delegate of VkPhysicalDevice * uint32 -> VkBool32
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_win32_surface")
+            static let s_vkCreateWin32SurfaceKHRDel = VkRaw.vkImportInstanceDelegate<VkCreateWin32SurfaceKHRDel> "vkCreateWin32SurfaceKHR"
+            static let s_vkGetPhysicalDeviceWin32PresentationSupportKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceWin32PresentationSupportKHRDel> "vkGetPhysicalDeviceWin32PresentationSupportKHR"
+            static do Report.End(3) |> ignore
+            static member vkCreateWin32SurfaceKHR = s_vkCreateWin32SurfaceKHRDel
+            static member vkGetPhysicalDeviceWin32PresentationSupportKHR = s_vkGetPhysicalDeviceWin32PresentationSupportKHRDel
+        let vkCreateWin32SurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkWin32SurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateWin32SurfaceKHR.Invoke(instance, pCreateInfo, pAllocator, pSurface)
+        let vkGetPhysicalDeviceWin32PresentationSupportKHR(physicalDevice : VkPhysicalDevice, queueFamilyIndex : uint32) = Loader<unit>.vkGetPhysicalDeviceWin32PresentationSupportKHR.Invoke(physicalDevice, queueFamilyIndex)
+
+module KHRDeviceGroupCreation =
+    let Name = "VK_KHR_device_group_creation"
+    let Number = 71
+
+
+    type VkDeviceGroupDeviceCreateInfoKHR = VkDeviceGroupDeviceCreateInfo
+    type VkPhysicalDeviceGroupPropertiesKHR = VkPhysicalDeviceGroupProperties
+    
+
+module KHRDeviceGroup =
+    let Name = "VK_KHR_device_group"
+    let Number = 61
+
+    let Required = [ KHRDeviceGroupCreation.Name ]
+    open KHRDeviceGroupCreation
+
+    type VkMemoryAllocateFlagsKHR = VkMemoryAllocateFlags
+    type VkPeerMemoryFeatureFlagsKHR = VkPeerMemoryFeatureFlags
+
+    type VkDeviceGroupBindSparseInfoKHR = VkDeviceGroupBindSparseInfo
+    type VkDeviceGroupCommandBufferBeginInfoKHR = VkDeviceGroupCommandBufferBeginInfo
+    type VkDeviceGroupRenderPassBeginInfoKHR = VkDeviceGroupRenderPassBeginInfo
+    type VkDeviceGroupSubmitInfoKHR = VkDeviceGroupSubmitInfo
+    type VkMemoryAllocateFlagsInfoKHR = VkMemoryAllocateFlagsInfo
+    
+    
+    module KHRBindMemory2 =
+
+        type VkBindBufferMemoryDeviceGroupInfoKHR = VkBindBufferMemoryDeviceGroupInfo
+        type VkBindImageMemoryDeviceGroupInfoKHR = VkBindImageMemoryDeviceGroupInfo
+        
+    
+    module KHRSurface =
+
+        [<Flags>]
+        type VkDeviceGroupPresentModeFlagsKHR = 
+            | None = 0
+            | LocalBit = 0x00000001
+            | RemoteBit = 0x00000002
+            | SumBit = 0x00000004
+            | LocalMultiDeviceBit = 0x00000008
+        
+
+        [<StructLayout(LayoutKind.Sequential)>]
+        type VkDeviceGroupPresentCapabilitiesKHR = 
+            struct
+                val mutable public sType : uint32
+                val mutable public pNext : nativeint
+                val mutable public presentMask : uint32_32
+                val mutable public modes : VkDeviceGroupPresentModeFlagsKHR
+        
+                new(pNext : nativeint, presentMask : uint32_32, modes : VkDeviceGroupPresentModeFlagsKHR) =
+                    {
+                        sType = 1000060007u
+                        pNext = pNext
+                        presentMask = presentMask
+                        modes = modes
+                    }
+        
+                new(presentMask : uint32_32, modes : VkDeviceGroupPresentModeFlagsKHR) =
+                    VkDeviceGroupPresentCapabilitiesKHR(Unchecked.defaultof<nativeint>, presentMask, modes)
+        
+                static member Empty =
+                    VkDeviceGroupPresentCapabilitiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32_32>, Unchecked.defaultof<VkDeviceGroupPresentModeFlagsKHR>)
+        
+                override x.ToString() =
+                    String.concat "; " [
+                        sprintf "sType = %A" x.sType
+                        sprintf "pNext = %A" x.pNext
+                        sprintf "presentMask = %A" x.presentMask
+                        sprintf "modes = %A" x.modes
+                    ] |> sprintf "VkDeviceGroupPresentCapabilitiesKHR { %s }"
+            end
+        
+        
+        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+        module VkRaw =
+            [<SuppressUnmanagedCodeSecurity>]
+            type VkGetDeviceGroupPresentCapabilitiesKHRDel = delegate of VkDevice * nativeptr<VkDeviceGroupPresentCapabilitiesKHR> -> VkResult
+            [<SuppressUnmanagedCodeSecurity>]
+            type VkGetDeviceGroupSurfacePresentModesKHRDel = delegate of VkDevice * VkSurfaceKHR * nativeptr<VkDeviceGroupPresentModeFlagsKHR> -> VkResult
+            [<SuppressUnmanagedCodeSecurity>]
+            type VkGetPhysicalDevicePresentRectanglesKHRDel = delegate of VkPhysicalDevice * VkSurfaceKHR * nativeptr<uint32> * nativeptr<VkRect2D> -> VkResult
+            
+            [<AbstractClass; Sealed>]
+            type private Loader<'d> private() =
+                static do Report.Begin(3, "[Vulkan] loading VK_KHR_surface")
+                static let s_vkGetDeviceGroupPresentCapabilitiesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetDeviceGroupPresentCapabilitiesKHRDel> "vkGetDeviceGroupPresentCapabilitiesKHR"
+                static let s_vkGetDeviceGroupSurfacePresentModesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetDeviceGroupSurfacePresentModesKHRDel> "vkGetDeviceGroupSurfacePresentModesKHR"
+                static let s_vkGetPhysicalDevicePresentRectanglesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDevicePresentRectanglesKHRDel> "vkGetPhysicalDevicePresentRectanglesKHR"
+                static do Report.End(3) |> ignore
+                static member vkGetDeviceGroupPresentCapabilitiesKHR = s_vkGetDeviceGroupPresentCapabilitiesKHRDel
+                static member vkGetDeviceGroupSurfacePresentModesKHR = s_vkGetDeviceGroupSurfacePresentModesKHRDel
+                static member vkGetPhysicalDevicePresentRectanglesKHR = s_vkGetPhysicalDevicePresentRectanglesKHRDel
+            let vkGetDeviceGroupPresentCapabilitiesKHR(device : VkDevice, pDeviceGroupPresentCapabilities : nativeptr<VkDeviceGroupPresentCapabilitiesKHR>) = Loader<unit>.vkGetDeviceGroupPresentCapabilitiesKHR.Invoke(device, pDeviceGroupPresentCapabilities)
+            let vkGetDeviceGroupSurfacePresentModesKHR(device : VkDevice, surface : VkSurfaceKHR, pModes : nativeptr<VkDeviceGroupPresentModeFlagsKHR>) = Loader<unit>.vkGetDeviceGroupSurfacePresentModesKHR.Invoke(device, surface, pModes)
+            let vkGetPhysicalDevicePresentRectanglesKHR(physicalDevice : VkPhysicalDevice, surface : VkSurfaceKHR, pRectCount : nativeptr<uint32>, pRects : nativeptr<VkRect2D>) = Loader<unit>.vkGetPhysicalDevicePresentRectanglesKHR.Invoke(physicalDevice, surface, pRectCount, pRects)
+    
+    module KHRSwapchain =
+        open KHRSurface
+
+        [<StructLayout(LayoutKind.Sequential)>]
+        type VkAcquireNextImageInfoKHR = 
+            struct
+                val mutable public sType : uint32
+                val mutable public pNext : nativeint
+                val mutable public swapchain : VkSwapchainKHR
+                val mutable public timeout : uint64
+                val mutable public semaphore : VkSemaphore
+                val mutable public fence : VkFence
+                val mutable public deviceMask : uint32
+        
+                new(pNext : nativeint, swapchain : VkSwapchainKHR, timeout : uint64, semaphore : VkSemaphore, fence : VkFence, deviceMask : uint32) =
+                    {
+                        sType = 1000060010u
+                        pNext = pNext
+                        swapchain = swapchain
+                        timeout = timeout
+                        semaphore = semaphore
+                        fence = fence
+                        deviceMask = deviceMask
+                    }
+        
+                new(swapchain : VkSwapchainKHR, timeout : uint64, semaphore : VkSemaphore, fence : VkFence, deviceMask : uint32) =
+                    VkAcquireNextImageInfoKHR(Unchecked.defaultof<nativeint>, swapchain, timeout, semaphore, fence, deviceMask)
+        
+                static member Empty =
+                    VkAcquireNextImageInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSwapchainKHR>, Unchecked.defaultof<uint64>, Unchecked.defaultof<VkSemaphore>, Unchecked.defaultof<VkFence>, Unchecked.defaultof<uint32>)
+        
+                override x.ToString() =
+                    String.concat "; " [
+                        sprintf "sType = %A" x.sType
+                        sprintf "pNext = %A" x.pNext
+                        sprintf "swapchain = %A" x.swapchain
+                        sprintf "timeout = %A" x.timeout
+                        sprintf "semaphore = %A" x.semaphore
+                        sprintf "fence = %A" x.fence
+                        sprintf "deviceMask = %A" x.deviceMask
+                    ] |> sprintf "VkAcquireNextImageInfoKHR { %s }"
+            end
+        
+        [<StructLayout(LayoutKind.Sequential)>]
+        type VkBindImageMemorySwapchainInfoKHR = 
+            struct
+                val mutable public sType : uint32
+                val mutable public pNext : nativeint
+                val mutable public swapchain : VkSwapchainKHR
+                val mutable public imageIndex : uint32
+        
+                new(pNext : nativeint, swapchain : VkSwapchainKHR, imageIndex : uint32) =
+                    {
+                        sType = 1000060009u
+                        pNext = pNext
+                        swapchain = swapchain
+                        imageIndex = imageIndex
+                    }
+        
+                new(swapchain : VkSwapchainKHR, imageIndex : uint32) =
+                    VkBindImageMemorySwapchainInfoKHR(Unchecked.defaultof<nativeint>, swapchain, imageIndex)
+        
+                static member Empty =
+                    VkBindImageMemorySwapchainInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSwapchainKHR>, Unchecked.defaultof<uint32>)
+        
+                override x.ToString() =
+                    String.concat "; " [
+                        sprintf "sType = %A" x.sType
+                        sprintf "pNext = %A" x.pNext
+                        sprintf "swapchain = %A" x.swapchain
+                        sprintf "imageIndex = %A" x.imageIndex
+                    ] |> sprintf "VkBindImageMemorySwapchainInfoKHR { %s }"
+            end
+        
+        [<StructLayout(LayoutKind.Sequential)>]
+        type VkDeviceGroupPresentInfoKHR = 
+            struct
+                val mutable public sType : uint32
+                val mutable public pNext : nativeint
+                val mutable public swapchainCount : uint32
+                val mutable public pDeviceMasks : nativeptr<uint32>
+                val mutable public mode : VkDeviceGroupPresentModeFlagsKHR
+        
+                new(pNext : nativeint, swapchainCount : uint32, pDeviceMasks : nativeptr<uint32>, mode : VkDeviceGroupPresentModeFlagsKHR) =
+                    {
+                        sType = 1000060011u
+                        pNext = pNext
+                        swapchainCount = swapchainCount
+                        pDeviceMasks = pDeviceMasks
+                        mode = mode
+                    }
+        
+                new(swapchainCount : uint32, pDeviceMasks : nativeptr<uint32>, mode : VkDeviceGroupPresentModeFlagsKHR) =
+                    VkDeviceGroupPresentInfoKHR(Unchecked.defaultof<nativeint>, swapchainCount, pDeviceMasks, mode)
+        
+                static member Empty =
+                    VkDeviceGroupPresentInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<VkDeviceGroupPresentModeFlagsKHR>)
+        
+                override x.ToString() =
+                    String.concat "; " [
+                        sprintf "sType = %A" x.sType
+                        sprintf "pNext = %A" x.pNext
+                        sprintf "swapchainCount = %A" x.swapchainCount
+                        sprintf "pDeviceMasks = %A" x.pDeviceMasks
+                        sprintf "mode = %A" x.mode
+                    ] |> sprintf "VkDeviceGroupPresentInfoKHR { %s }"
+            end
+        
+        [<StructLayout(LayoutKind.Sequential)>]
+        type VkDeviceGroupSwapchainCreateInfoKHR = 
+            struct
+                val mutable public sType : uint32
+                val mutable public pNext : nativeint
+                val mutable public modes : VkDeviceGroupPresentModeFlagsKHR
+        
+                new(pNext : nativeint, modes : VkDeviceGroupPresentModeFlagsKHR) =
+                    {
+                        sType = 1000060012u
+                        pNext = pNext
+                        modes = modes
+                    }
+        
+                new(modes : VkDeviceGroupPresentModeFlagsKHR) =
+                    VkDeviceGroupSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, modes)
+        
+                static member Empty =
+                    VkDeviceGroupSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceGroupPresentModeFlagsKHR>)
+        
+                override x.ToString() =
+                    String.concat "; " [
+                        sprintf "sType = %A" x.sType
+                        sprintf "pNext = %A" x.pNext
+                        sprintf "modes = %A" x.modes
+                    ] |> sprintf "VkDeviceGroupSwapchainCreateInfoKHR { %s }"
+            end
+        
+        [<StructLayout(LayoutKind.Sequential)>]
+        type VkImageSwapchainCreateInfoKHR = 
+            struct
+                val mutable public sType : uint32
+                val mutable public pNext : nativeint
+                val mutable public swapchain : VkSwapchainKHR
+        
+                new(pNext : nativeint, swapchain : VkSwapchainKHR) =
+                    {
+                        sType = 1000060008u
+                        pNext = pNext
+                        swapchain = swapchain
+                    }
+        
+                new(swapchain : VkSwapchainKHR) =
+                    VkImageSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, swapchain)
+        
+                static member Empty =
+                    VkImageSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSwapchainKHR>)
+        
+                override x.ToString() =
+                    String.concat "; " [
+                        sprintf "sType = %A" x.sType
+                        sprintf "pNext = %A" x.pNext
+                        sprintf "swapchain = %A" x.swapchain
+                    ] |> sprintf "VkImageSwapchainCreateInfoKHR { %s }"
+            end
+        
+        
+        [<AutoOpen>]
+        module EnumExtensions =
+             type VkSwapchainCreateFlagsKHR with
+                  static member inline SplitInstanceBindRegionsBit = unbox<VkSwapchainCreateFlagsKHR> 1
+        
+        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+        module VkRaw =
+            [<SuppressUnmanagedCodeSecurity>]
+            type VkAcquireNextImage2KHRDel = delegate of VkDevice * nativeptr<VkAcquireNextImageInfoKHR> * nativeptr<uint32> -> VkResult
+            
+            [<AbstractClass; Sealed>]
+            type private Loader<'d> private() =
+                static do Report.Begin(3, "[Vulkan] loading VK_KHR_swapchain")
+                static let s_vkAcquireNextImage2KHRDel = VkRaw.vkImportInstanceDelegate<VkAcquireNextImage2KHRDel> "vkAcquireNextImage2KHR"
+                static do Report.End(3) |> ignore
+                static member vkAcquireNextImage2KHR = s_vkAcquireNextImage2KHRDel
+            let vkAcquireNextImage2KHR(device : VkDevice, pAcquireInfo : nativeptr<VkAcquireNextImageInfoKHR>, pImageIndex : nativeptr<uint32>) = Loader<unit>.vkAcquireNextImage2KHR.Invoke(device, pAcquireInfo, pImageIndex)
 
 module EXTFullScreenExclusive =
     let Name = "VK_EXT_full_screen_exclusive"
     let Number = 256
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRGetSurfaceCapabilities2.Name; KHRSurface.Name; KHRSwapchain.Name ]
     open KHRGetPhysicalDeviceProperties2
     open KHRGetSurfaceCapabilities2
     open KHRSurface
     open KHRSwapchain
-    open EXTDebugReport
-    
+
     type VkFullScreenExclusiveEXT = 
         | Default = 0
         | Allowed = 1
         | Disallowed = 2
         | ApplicationControlled = 3
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkSurfaceCapabilitiesFullScreenExclusiveEXT = 
         struct
@@ -13052,8 +15026,10 @@ module EXTFullScreenExclusive =
         end
     
     
-    type VkResult with
-         static member inline VkErrorFullScreenExclusiveModeLostExt = unbox<VkResult> -1000255000
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkResult with
+              static member inline VkErrorFullScreenExclusiveModeLostExt = unbox<VkResult> -1000255000
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -13079,9 +15055,8 @@ module EXTFullScreenExclusive =
         let vkReleaseFullScreenExclusiveModeEXT(device : VkDevice, swapchain : VkSwapchainKHR) = Loader<unit>.vkReleaseFullScreenExclusiveModeEXT.Invoke(device, swapchain)
     
     module KHRWin32Surface =
-        open EXTDebugReport
-        
-        
+        open KHRSurface
+
         [<StructLayout(LayoutKind.Sequential)>]
         type VkSurfaceFullScreenExclusiveWin32InfoEXT = 
             struct
@@ -13111,14 +15086,10 @@ module EXTFullScreenExclusive =
             end
         
         
-        
     
     module KHRDeviceGroup =
-        open EXTDebugReport
-        
-        
-        
-        
+        open KHRDeviceGroupCreation
+
         [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
         module VkRaw =
             [<SuppressUnmanagedCodeSecurity>]
@@ -13135,16 +15106,15 @@ module EXTFullScreenExclusive =
 module EXTGlobalPriority =
     let Name = "VK_EXT_global_priority"
     let Number = 175
-    
-    open EXTDebugReport
-    
+
+
     type VkQueueGlobalPriorityEXT = 
         | Low = 128
         | Medium = 256
         | High = 512
         | Realtime = 1024
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDeviceQueueGlobalPriorityCreateInfoEXT = 
         struct
@@ -13174,19 +15144,20 @@ module EXTGlobalPriority =
         end
     
     
-    type VkResult with
-         static member inline VkErrorNotPermittedExt = unbox<VkResult> -1000174001
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkResult with
+              static member inline VkErrorNotPermittedExt = unbox<VkResult> -1000174001
     
 
 module EXTHdrMetadata =
     let Name = "VK_EXT_hdr_metadata"
     let Number = 106
-    
+
     let Required = [ KHRSwapchain.Name ]
+    open KHRSurface
     open KHRSwapchain
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkXYColorEXT = 
         struct
@@ -13259,7 +15230,6 @@ module EXTHdrMetadata =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -13276,12 +15246,10 @@ module EXTHdrMetadata =
 module EXTHeadlessSurface =
     let Name = "VK_EXT_headless_surface"
     let Number = 257
-    
+
     let Required = [ KHRSurface.Name ]
     open KHRSurface
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkHeadlessSurfaceCreateInfoEXT = 
         struct
@@ -13311,7 +15279,6 @@ module EXTHeadlessSurface =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -13328,108 +15295,33 @@ module EXTHeadlessSurface =
 module EXTHostQueryReset =
     let Name = "VK_EXT_host_query_reset"
     let Number = 262
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
+
+    type VkPhysicalDeviceHostQueryResetFeaturesEXT = VkPhysicalDeviceHostQueryResetFeatures
     
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceHostQueryResetFeaturesEXT = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public hostQueryReset : VkBool32
-    
-            new(pNext : nativeint, hostQueryReset : VkBool32) =
-                {
-                    sType = 1000261000u
-                    pNext = pNext
-                    hostQueryReset = hostQueryReset
-                }
-    
-            new(hostQueryReset : VkBool32) =
-                VkPhysicalDeviceHostQueryResetFeaturesEXT(Unchecked.defaultof<nativeint>, hostQueryReset)
-    
-            static member Empty =
-                VkPhysicalDeviceHostQueryResetFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "hostQueryReset = %A" x.hostQueryReset
-                ] |> sprintf "VkPhysicalDeviceHostQueryResetFeaturesEXT { %s }"
-        end
-    
-    
-    
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module VkRaw =
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkResetQueryPoolEXTDel = delegate of VkDevice * VkQueryPool * uint32 * uint32 -> unit
-        
-        [<AbstractClass; Sealed>]
-        type private Loader<'d> private() =
-            static do Report.Begin(3, "[Vulkan] loading VK_EXT_host_query_reset")
-            static let s_vkResetQueryPoolEXTDel = VkRaw.vkImportInstanceDelegate<VkResetQueryPoolEXTDel> "vkResetQueryPoolEXT"
-            static do Report.End(3) |> ignore
-            static member vkResetQueryPoolEXT = s_vkResetQueryPoolEXTDel
-        let vkResetQueryPoolEXT(device : VkDevice, queryPool : VkQueryPool, firstQuery : uint32, queryCount : uint32) = Loader<unit>.vkResetQueryPoolEXT.Invoke(device, queryPool, firstQuery, queryCount)
 
 module KHRImageFormatList =
     let Name = "VK_KHR_image_format_list"
     let Number = 148
-    
-    open EXTDebugReport
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkImageFormatListCreateInfoKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public viewFormatCount : uint32
-            val mutable public pViewFormats : nativeptr<VkFormat>
-    
-            new(pNext : nativeint, viewFormatCount : uint32, pViewFormats : nativeptr<VkFormat>) =
-                {
-                    sType = 1000147000u
-                    pNext = pNext
-                    viewFormatCount = viewFormatCount
-                    pViewFormats = pViewFormats
-                }
-    
-            new(viewFormatCount : uint32, pViewFormats : nativeptr<VkFormat>) =
-                VkImageFormatListCreateInfoKHR(Unchecked.defaultof<nativeint>, viewFormatCount, pViewFormats)
-    
-            static member Empty =
-                VkImageFormatListCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkFormat>>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "viewFormatCount = %A" x.viewFormatCount
-                    sprintf "pViewFormats = %A" x.pViewFormats
-                ] |> sprintf "VkImageFormatListCreateInfoKHR { %s }"
-        end
-    
-    
+
+
+    type VkImageFormatListCreateInfoKHR = VkImageFormatListCreateInfo
     
 
 module EXTImageDrmFormatModifier =
     let Name = "VK_EXT_image_drm_format_modifier"
     let Number = 159
-    
+
     let Required = [ KHRBindMemory2.Name; KHRGetPhysicalDeviceProperties2.Name; KHRImageFormatList.Name; KHRSamplerYcbcrConversion.Name ]
     open KHRBindMemory2
+    open KHRGetMemoryRequirements2
     open KHRGetPhysicalDeviceProperties2
     open KHRImageFormatList
+    open KHRMaintenance1
     open KHRSamplerYcbcrConversion
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDrmFormatModifierPropertiesEXT = 
         struct
@@ -13617,15 +15509,17 @@ module EXTImageDrmFormatModifier =
         end
     
     
-    type VkImageAspectFlags with
-         static member inline MemoryPlane0BitExt = unbox<VkImageAspectFlags> 128
-         static member inline MemoryPlane1BitExt = unbox<VkImageAspectFlags> 256
-         static member inline MemoryPlane2BitExt = unbox<VkImageAspectFlags> 512
-         static member inline MemoryPlane3BitExt = unbox<VkImageAspectFlags> 1024
-    type VkImageTiling with
-         static member inline DrmFormatModifierExt = unbox<VkImageTiling> 1000158000
-    type VkResult with
-         static member inline VkErrorInvalidDrmFormatModifierPlaneLayoutExt = unbox<VkResult> -1000158000
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkImageAspectFlags with
+              static member inline MemoryPlane0BitExt = unbox<VkImageAspectFlags> 128
+              static member inline MemoryPlane1BitExt = unbox<VkImageAspectFlags> 256
+              static member inline MemoryPlane2BitExt = unbox<VkImageAspectFlags> 512
+              static member inline MemoryPlane3BitExt = unbox<VkImageAspectFlags> 1024
+         type VkImageTiling with
+              static member inline DrmFormatModifierExt = unbox<VkImageTiling> 1000158000
+         type VkResult with
+              static member inline VkErrorInvalidDrmFormatModifierPlaneLayoutExt = unbox<VkResult> -1000158000
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -13643,10 +15537,8 @@ module EXTImageDrmFormatModifier =
 module EXTIndexTypeUint8 =
     let Name = "VK_EXT_index_type_uint8"
     let Number = 266
-    
-    open EXTDebugReport
-    
-    
+
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceIndexTypeUint8FeaturesEXT = 
         struct
@@ -13676,20 +15568,20 @@ module EXTIndexTypeUint8 =
         end
     
     
-    type VkIndexType with
-         static member inline Uint8Ext = unbox<VkIndexType> 1000265000
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkIndexType with
+              static member inline Uint8Ext = unbox<VkIndexType> 1000265000
     
 
 module EXTInlineUniformBlock =
     let Name = "VK_EXT_inline_uniform_block"
     let Number = 139
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRMaintenance1.Name ]
     open KHRGetPhysicalDeviceProperties2
     open KHRMaintenance1
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDescriptorPoolInlineUniformBlockCreateInfoEXT = 
         struct
@@ -13821,25 +15713,26 @@ module EXTInlineUniformBlock =
         end
     
     
-    type VkDescriptorType with
-         static member inline InlineUniformBlockExt = unbox<VkDescriptorType> 1000138000
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkDescriptorType with
+              static member inline InlineUniformBlockExt = unbox<VkDescriptorType> 1000138000
     
 
 module EXTLineRasterization =
     let Name = "VK_EXT_line_rasterization"
     let Number = 260
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
+
     type VkLineRasterizationModeEXT = 
         | Default = 0
         | Rectangular = 1
         | Bresenham = 2
         | RectangularSmooth = 3
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceLineRasterizationFeaturesEXT = 
         struct
@@ -13949,8 +15842,10 @@ module EXTLineRasterization =
         end
     
     
-    type VkDynamicState with
-         static member inline LineStippleExt = unbox<VkDynamicState> 1000259000
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkDynamicState with
+              static member inline LineStippleExt = unbox<VkDynamicState> 1000259000
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -13968,12 +15863,10 @@ module EXTLineRasterization =
 module EXTMemoryBudget =
     let Name = "VK_EXT_memory_budget"
     let Number = 238
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceMemoryBudgetPropertiesEXT = 
         struct
@@ -14006,17 +15899,14 @@ module EXTMemoryBudget =
         end
     
     
-    
 
 module EXTMemoryPriority =
     let Name = "VK_EXT_memory_priority"
     let Number = 239
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkMemoryPriorityAllocateInfoEXT = 
         struct
@@ -14074,17 +15964,14 @@ module EXTMemoryPriority =
         end
     
     
-    
 
 module EXTMetalSurface =
     let Name = "VK_EXT_metal_surface"
     let Number = 218
-    
+
     let Required = [ KHRSurface.Name ]
     open KHRSurface
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkMetalSurfaceCreateInfoEXT = 
         struct
@@ -14117,7 +16004,6 @@ module EXTMetalSurface =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -14134,12 +16020,10 @@ module EXTMetalSurface =
 module EXTPciBusInfo =
     let Name = "VK_EXT_pci_bus_info"
     let Number = 213
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDevicePCIBusInfoPropertiesEXT = 
         struct
@@ -14178,14 +16062,57 @@ module EXTPciBusInfo =
         end
     
     
+
+module EXTPipelineCreationCacheControl =
+    let Name = "VK_EXT_pipeline_creation_cache_control"
+    let Number = 298
+
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public pipelineCreationCacheControl : VkBool32
+    
+            new(pNext : nativeint, pipelineCreationCacheControl : VkBool32) =
+                {
+                    sType = 1000297000u
+                    pNext = pNext
+                    pipelineCreationCacheControl = pipelineCreationCacheControl
+                }
+    
+            new(pipelineCreationCacheControl : VkBool32) =
+                VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT(Unchecked.defaultof<nativeint>, pipelineCreationCacheControl)
+    
+            static member Empty =
+                VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "pipelineCreationCacheControl = %A" x.pipelineCreationCacheControl
+                ] |> sprintf "VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT { %s }"
+        end
+    
+    
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkPipelineCacheCreateFlags with
+              static member inline ExternallySynchronizedBitExt = unbox<VkPipelineCacheCreateFlags> 1
+         type VkPipelineCreateFlags with
+              static member inline FailOnPipelineCompileRequiredBitExt = unbox<VkPipelineCreateFlags> 256
+              static member inline EarlyReturnOnFailureBitExt = unbox<VkPipelineCreateFlags> 512
+         type VkResult with
+              static member inline VkPipelineCompileRequiredExt = unbox<VkResult> 1000297000
     
 
 module EXTPipelineCreationFeedback =
     let Name = "VK_EXT_pipeline_creation_feedback"
     let Number = 193
-    
-    open EXTDebugReport
-    
+
+
     [<Flags>]
     type VkPipelineCreationFeedbackFlagsEXT = 
         | None = 0
@@ -14193,7 +16120,7 @@ module EXTPipelineCreationFeedback =
         | ApplicationPipelineCacheHitBit = 0x00000002
         | BasePipelineAccelerationBit = 0x00000004
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPipelineCreationFeedbackEXT = 
         struct
@@ -14251,27 +16178,215 @@ module EXTPipelineCreationFeedback =
         end
     
     
-    
 
 module EXTPostDepthCoverage =
     let Name = "VK_EXT_post_depth_coverage"
     let Number = 156
+
+
+
+module EXTPrivateData =
+    let Name = "VK_EXT_private_data"
+    let Number = 296
+
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkDevicePrivateDataCreateInfoEXT = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public privateDataSlotRequestCount : uint32
     
-    open EXTDebugReport
+            new(pNext : nativeint, privateDataSlotRequestCount : uint32) =
+                {
+                    sType = 1000295001u
+                    pNext = pNext
+                    privateDataSlotRequestCount = privateDataSlotRequestCount
+                }
+    
+            new(privateDataSlotRequestCount : uint32) =
+                VkDevicePrivateDataCreateInfoEXT(Unchecked.defaultof<nativeint>, privateDataSlotRequestCount)
+    
+            static member Empty =
+                VkDevicePrivateDataCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "privateDataSlotRequestCount = %A" x.privateDataSlotRequestCount
+                ] |> sprintf "VkDevicePrivateDataCreateInfoEXT { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPhysicalDevicePrivateDataFeaturesEXT = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public privateData : VkBool32
+    
+            new(pNext : nativeint, privateData : VkBool32) =
+                {
+                    sType = 1000295000u
+                    pNext = pNext
+                    privateData = privateData
+                }
+    
+            new(privateData : VkBool32) =
+                VkPhysicalDevicePrivateDataFeaturesEXT(Unchecked.defaultof<nativeint>, privateData)
+    
+            static member Empty =
+                VkPhysicalDevicePrivateDataFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "privateData = %A" x.privateData
+                ] |> sprintf "VkPhysicalDevicePrivateDataFeaturesEXT { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPrivateDataSlotCreateInfoEXT = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public flags : VkPrivateDataSlotCreateFlagsEXT
+    
+            new(pNext : nativeint, flags : VkPrivateDataSlotCreateFlagsEXT) =
+                {
+                    sType = 1000295002u
+                    pNext = pNext
+                    flags = flags
+                }
+    
+            new(flags : VkPrivateDataSlotCreateFlagsEXT) =
+                VkPrivateDataSlotCreateInfoEXT(Unchecked.defaultof<nativeint>, flags)
+    
+            static member Empty =
+                VkPrivateDataSlotCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPrivateDataSlotCreateFlagsEXT>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "flags = %A" x.flags
+                ] |> sprintf "VkPrivateDataSlotCreateInfoEXT { %s }"
+        end
     
     
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkObjectType with
+              static member inline PrivateDataSlotExt = unbox<VkObjectType> 1000295000
+    
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module VkRaw =
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCreatePrivateDataSlotEXTDel = delegate of VkDevice * nativeptr<VkPrivateDataSlotCreateInfoEXT> * nativeptr<VkAllocationCallbacks> * nativeptr<VkPrivateDataSlotEXT> -> VkResult
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkDestroyPrivateDataSlotEXTDel = delegate of VkDevice * VkPrivateDataSlotEXT * nativeptr<VkAllocationCallbacks> -> unit
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkSetPrivateDataEXTDel = delegate of VkDevice * VkObjectType * uint64 * VkPrivateDataSlotEXT * uint64 -> VkResult
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkGetPrivateDataEXTDel = delegate of VkDevice * VkObjectType * uint64 * VkPrivateDataSlotEXT * nativeptr<uint64> -> unit
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Report.Begin(3, "[Vulkan] loading VK_EXT_private_data")
+            static let s_vkCreatePrivateDataSlotEXTDel = VkRaw.vkImportInstanceDelegate<VkCreatePrivateDataSlotEXTDel> "vkCreatePrivateDataSlotEXT"
+            static let s_vkDestroyPrivateDataSlotEXTDel = VkRaw.vkImportInstanceDelegate<VkDestroyPrivateDataSlotEXTDel> "vkDestroyPrivateDataSlotEXT"
+            static let s_vkSetPrivateDataEXTDel = VkRaw.vkImportInstanceDelegate<VkSetPrivateDataEXTDel> "vkSetPrivateDataEXT"
+            static let s_vkGetPrivateDataEXTDel = VkRaw.vkImportInstanceDelegate<VkGetPrivateDataEXTDel> "vkGetPrivateDataEXT"
+            static do Report.End(3) |> ignore
+            static member vkCreatePrivateDataSlotEXT = s_vkCreatePrivateDataSlotEXTDel
+            static member vkDestroyPrivateDataSlotEXT = s_vkDestroyPrivateDataSlotEXTDel
+            static member vkSetPrivateDataEXT = s_vkSetPrivateDataEXTDel
+            static member vkGetPrivateDataEXT = s_vkGetPrivateDataEXTDel
+        let vkCreatePrivateDataSlotEXT(device : VkDevice, pCreateInfo : nativeptr<VkPrivateDataSlotCreateInfoEXT>, pAllocator : nativeptr<VkAllocationCallbacks>, pPrivateDataSlot : nativeptr<VkPrivateDataSlotEXT>) = Loader<unit>.vkCreatePrivateDataSlotEXT.Invoke(device, pCreateInfo, pAllocator, pPrivateDataSlot)
+        let vkDestroyPrivateDataSlotEXT(device : VkDevice, privateDataSlot : VkPrivateDataSlotEXT, pAllocator : nativeptr<VkAllocationCallbacks>) = Loader<unit>.vkDestroyPrivateDataSlotEXT.Invoke(device, privateDataSlot, pAllocator)
+        let vkSetPrivateDataEXT(device : VkDevice, objectType : VkObjectType, objectHandle : uint64, privateDataSlot : VkPrivateDataSlotEXT, data : uint64) = Loader<unit>.vkSetPrivateDataEXT.Invoke(device, objectType, objectHandle, privateDataSlot, data)
+        let vkGetPrivateDataEXT(device : VkDevice, objectType : VkObjectType, objectHandle : uint64, privateDataSlot : VkPrivateDataSlotEXT, pData : nativeptr<uint64>) = Loader<unit>.vkGetPrivateDataEXT.Invoke(device, objectType, objectHandle, privateDataSlot, pData)
+
+module EXTRobustness2 =
+    let Name = "VK_EXT_robustness2"
+    let Number = 287
+
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPhysicalDeviceRobustness2FeaturesEXT = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public robustBufferAccess2 : VkBool32
+            val mutable public robustImageAccess2 : VkBool32
+            val mutable public nullDescriptor : VkBool32
+    
+            new(pNext : nativeint, robustBufferAccess2 : VkBool32, robustImageAccess2 : VkBool32, nullDescriptor : VkBool32) =
+                {
+                    sType = 1000286000u
+                    pNext = pNext
+                    robustBufferAccess2 = robustBufferAccess2
+                    robustImageAccess2 = robustImageAccess2
+                    nullDescriptor = nullDescriptor
+                }
+    
+            new(robustBufferAccess2 : VkBool32, robustImageAccess2 : VkBool32, nullDescriptor : VkBool32) =
+                VkPhysicalDeviceRobustness2FeaturesEXT(Unchecked.defaultof<nativeint>, robustBufferAccess2, robustImageAccess2, nullDescriptor)
+    
+            static member Empty =
+                VkPhysicalDeviceRobustness2FeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "robustBufferAccess2 = %A" x.robustBufferAccess2
+                    sprintf "robustImageAccess2 = %A" x.robustImageAccess2
+                    sprintf "nullDescriptor = %A" x.nullDescriptor
+                ] |> sprintf "VkPhysicalDeviceRobustness2FeaturesEXT { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPhysicalDeviceRobustness2PropertiesEXT = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public robustStorageBufferAccessSizeAlignment : VkDeviceSize
+            val mutable public robustUniformBufferAccessSizeAlignment : VkDeviceSize
+    
+            new(pNext : nativeint, robustStorageBufferAccessSizeAlignment : VkDeviceSize, robustUniformBufferAccessSizeAlignment : VkDeviceSize) =
+                {
+                    sType = 1000286001u
+                    pNext = pNext
+                    robustStorageBufferAccessSizeAlignment = robustStorageBufferAccessSizeAlignment
+                    robustUniformBufferAccessSizeAlignment = robustUniformBufferAccessSizeAlignment
+                }
+    
+            new(robustStorageBufferAccessSizeAlignment : VkDeviceSize, robustUniformBufferAccessSizeAlignment : VkDeviceSize) =
+                VkPhysicalDeviceRobustness2PropertiesEXT(Unchecked.defaultof<nativeint>, robustStorageBufferAccessSizeAlignment, robustUniformBufferAccessSizeAlignment)
+    
+            static member Empty =
+                VkPhysicalDeviceRobustness2PropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "robustStorageBufferAccessSizeAlignment = %A" x.robustStorageBufferAccessSizeAlignment
+                    sprintf "robustUniformBufferAccessSizeAlignment = %A" x.robustUniformBufferAccessSizeAlignment
+                ] |> sprintf "VkPhysicalDeviceRobustness2PropertiesEXT { %s }"
+        end
     
     
 
 module EXTSampleLocations =
     let Name = "VK_EXT_sample_locations"
     let Number = 144
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkSampleLocationEXT = 
         struct
@@ -14512,10 +16627,12 @@ module EXTSampleLocations =
         end
     
     
-    type VkDynamicState with
-         static member inline SampleLocationsExt = unbox<VkDynamicState> 1000143000
-    type VkImageCreateFlags with
-         static member inline SampleLocationsCompatibleDepthBitExt = unbox<VkImageCreateFlags> 4096
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkDynamicState with
+              static member inline SampleLocationsExt = unbox<VkDynamicState> 1000143000
+         type VkImageCreateFlags with
+              static member inline SampleLocationsCompatibleDepthBitExt = unbox<VkImageCreateFlags> 4096
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -14538,168 +16655,41 @@ module EXTSampleLocations =
 module EXTSamplerFilterMinmax =
     let Name = "VK_EXT_sampler_filter_minmax"
     let Number = 131
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    type VkSamplerReductionModeEXT = 
-        | WeightedAverage = 0
-        | Min = 1
-        | Max = 2
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public filterMinmaxSingleComponentFormats : VkBool32
-            val mutable public filterMinmaxImageComponentMapping : VkBool32
-    
-            new(pNext : nativeint, filterMinmaxSingleComponentFormats : VkBool32, filterMinmaxImageComponentMapping : VkBool32) =
-                {
-                    sType = 1000130000u
-                    pNext = pNext
-                    filterMinmaxSingleComponentFormats = filterMinmaxSingleComponentFormats
-                    filterMinmaxImageComponentMapping = filterMinmaxImageComponentMapping
-                }
-    
-            new(filterMinmaxSingleComponentFormats : VkBool32, filterMinmaxImageComponentMapping : VkBool32) =
-                VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT(Unchecked.defaultof<nativeint>, filterMinmaxSingleComponentFormats, filterMinmaxImageComponentMapping)
-    
-            static member Empty =
-                VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "filterMinmaxSingleComponentFormats = %A" x.filterMinmaxSingleComponentFormats
-                    sprintf "filterMinmaxImageComponentMapping = %A" x.filterMinmaxImageComponentMapping
-                ] |> sprintf "VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkSamplerReductionModeCreateInfoEXT = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public reductionMode : VkSamplerReductionModeEXT
-    
-            new(pNext : nativeint, reductionMode : VkSamplerReductionModeEXT) =
-                {
-                    sType = 1000130001u
-                    pNext = pNext
-                    reductionMode = reductionMode
-                }
-    
-            new(reductionMode : VkSamplerReductionModeEXT) =
-                VkSamplerReductionModeCreateInfoEXT(Unchecked.defaultof<nativeint>, reductionMode)
-    
-            static member Empty =
-                VkSamplerReductionModeCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSamplerReductionModeEXT>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "reductionMode = %A" x.reductionMode
-                ] |> sprintf "VkSamplerReductionModeCreateInfoEXT { %s }"
-        end
-    
-    
-    type VkFormatFeatureFlags with
-         static member inline SampledImageFilterMinmaxBitExt = unbox<VkFormatFeatureFlags> 65536
+
+    type VkSamplerReductionModeEXT = VkSamplerReductionMode
+
+    type VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT = VkPhysicalDeviceSamplerFilterMinmaxProperties
+    type VkSamplerReductionModeCreateInfoEXT = VkSamplerReductionModeCreateInfo
     
 
 module EXTScalarBlockLayout =
     let Name = "VK_EXT_scalar_block_layout"
     let Number = 222
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceScalarBlockLayoutFeaturesEXT = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public scalarBlockLayout : VkBool32
-    
-            new(pNext : nativeint, scalarBlockLayout : VkBool32) =
-                {
-                    sType = 1000221000u
-                    pNext = pNext
-                    scalarBlockLayout = scalarBlockLayout
-                }
-    
-            new(scalarBlockLayout : VkBool32) =
-                VkPhysicalDeviceScalarBlockLayoutFeaturesEXT(Unchecked.defaultof<nativeint>, scalarBlockLayout)
-    
-            static member Empty =
-                VkPhysicalDeviceScalarBlockLayoutFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "scalarBlockLayout = %A" x.scalarBlockLayout
-                ] |> sprintf "VkPhysicalDeviceScalarBlockLayoutFeaturesEXT { %s }"
-        end
-    
-    
+
+    type VkPhysicalDeviceScalarBlockLayoutFeaturesEXT = VkPhysicalDeviceScalarBlockLayoutFeatures
     
 
 module EXTSeparateStencilUsage =
     let Name = "VK_EXT_separate_stencil_usage"
     let Number = 247
-    
-    open EXTDebugReport
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkImageStencilUsageCreateInfoEXT = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public stencilUsage : VkImageUsageFlags
-    
-            new(pNext : nativeint, stencilUsage : VkImageUsageFlags) =
-                {
-                    sType = 1000246000u
-                    pNext = pNext
-                    stencilUsage = stencilUsage
-                }
-    
-            new(stencilUsage : VkImageUsageFlags) =
-                VkImageStencilUsageCreateInfoEXT(Unchecked.defaultof<nativeint>, stencilUsage)
-    
-            static member Empty =
-                VkImageStencilUsageCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageUsageFlags>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "stencilUsage = %A" x.stencilUsage
-                ] |> sprintf "VkImageStencilUsageCreateInfoEXT { %s }"
-        end
-    
-    
+
+
+    type VkImageStencilUsageCreateInfoEXT = VkImageStencilUsageCreateInfo
     
 
 module EXTShaderDemoteToHelperInvocation =
     let Name = "VK_EXT_shader_demote_to_helper_invocation"
     let Number = 277
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT = 
         struct
@@ -14729,55 +16719,36 @@ module EXTShaderDemoteToHelperInvocation =
         end
     
     
-    
 
 module EXTShaderStencilExport =
     let Name = "VK_EXT_shader_stencil_export"
     let Number = 141
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module EXTShaderSubgroupBallot =
     let Name = "VK_EXT_shader_subgroup_ballot"
     let Number = 65
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module EXTShaderSubgroupVote =
     let Name = "VK_EXT_shader_subgroup_vote"
     let Number = 66
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module EXTShaderViewportIndexLayer =
     let Name = "VK_EXT_shader_viewport_index_layer"
     let Number = 163
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module EXTSubgroupSizeControl =
     let Name = "VK_EXT_subgroup_size_control"
     let Number = 226
-    
-    open EXTDebugReport
-    
-    
+
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceSubgroupSizeControlFeaturesEXT = 
         struct
@@ -14875,47 +16846,46 @@ module EXTSubgroupSizeControl =
         end
     
     
-    type VkPipelineShaderStageCreateFlags with
-         static member inline AllowVaryingSubgroupSizeBitExt = unbox<VkPipelineShaderStageCreateFlags> 1
-         static member inline RequireFullSubgroupsBitExt = unbox<VkPipelineShaderStageCreateFlags> 2
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkPipelineShaderStageCreateFlags with
+              static member inline AllowVaryingSubgroupSizeBitExt = unbox<VkPipelineShaderStageCreateFlags> 1
+              static member inline RequireFullSubgroupsBitExt = unbox<VkPipelineShaderStageCreateFlags> 2
     
 
 module EXTSwapchainColorspace =
     let Name = "VK_EXT_swapchain_colorspace"
     let Number = 105
-    
+
     let Required = [ KHRSurface.Name ]
     open KHRSurface
-    open EXTDebugReport
-    
-    
-    
-    type VkColorSpaceKHR with
-         static member inline VkColorSpaceDisplayP3NonlinearExt = unbox<VkColorSpaceKHR> 1000104001
-         static member inline VkColorSpaceExtendedSrgbLinearExt = unbox<VkColorSpaceKHR> 1000104002
-         static member inline VkColorSpaceDisplayP3LinearExt = unbox<VkColorSpaceKHR> 1000104003
-         static member inline VkColorSpaceDciP3NonlinearExt = unbox<VkColorSpaceKHR> 1000104004
-         static member inline VkColorSpaceBt709LinearExt = unbox<VkColorSpaceKHR> 1000104005
-         static member inline VkColorSpaceBt709NonlinearExt = unbox<VkColorSpaceKHR> 1000104006
-         static member inline VkColorSpaceBt2020LinearExt = unbox<VkColorSpaceKHR> 1000104007
-         static member inline VkColorSpaceHdr10St2084Ext = unbox<VkColorSpaceKHR> 1000104008
-         static member inline VkColorSpaceDolbyvisionExt = unbox<VkColorSpaceKHR> 1000104009
-         static member inline VkColorSpaceHdr10HlgExt = unbox<VkColorSpaceKHR> 1000104010
-         static member inline VkColorSpaceAdobergbLinearExt = unbox<VkColorSpaceKHR> 1000104011
-         static member inline VkColorSpaceAdobergbNonlinearExt = unbox<VkColorSpaceKHR> 1000104012
-         static member inline VkColorSpacePassThroughExt = unbox<VkColorSpaceKHR> 1000104013
-         static member inline VkColorSpaceExtendedSrgbNonlinearExt = unbox<VkColorSpaceKHR> 1000104014
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkColorSpaceKHR with
+              static member inline DisplayP3NonlinearExt = unbox<VkColorSpaceKHR> 1000104001
+              static member inline ExtendedSrgbLinearExt = unbox<VkColorSpaceKHR> 1000104002
+              static member inline DisplayP3LinearExt = unbox<VkColorSpaceKHR> 1000104003
+              static member inline DciP3NonlinearExt = unbox<VkColorSpaceKHR> 1000104004
+              static member inline Bt709LinearExt = unbox<VkColorSpaceKHR> 1000104005
+              static member inline Bt709NonlinearExt = unbox<VkColorSpaceKHR> 1000104006
+              static member inline Bt2020LinearExt = unbox<VkColorSpaceKHR> 1000104007
+              static member inline Hdr10St2084Ext = unbox<VkColorSpaceKHR> 1000104008
+              static member inline DolbyvisionExt = unbox<VkColorSpaceKHR> 1000104009
+              static member inline Hdr10HlgExt = unbox<VkColorSpaceKHR> 1000104010
+              static member inline AdobergbLinearExt = unbox<VkColorSpaceKHR> 1000104011
+              static member inline AdobergbNonlinearExt = unbox<VkColorSpaceKHR> 1000104012
+              static member inline PassThroughExt = unbox<VkColorSpaceKHR> 1000104013
+              static member inline ExtendedSrgbNonlinearExt = unbox<VkColorSpaceKHR> 1000104014
     
 
 module EXTTexelBufferAlignment =
     let Name = "VK_EXT_texel_buffer_alignment"
     let Number = 282
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT = 
         struct
@@ -14982,17 +16952,14 @@ module EXTTexelBufferAlignment =
         end
     
     
-    
 
 module EXTTextureCompressionAstcHdr =
     let Name = "VK_EXT_texture_compression_astc_hdr"
     let Number = 67
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceTextureCompressionASTCHDRFeaturesEXT = 
         struct
@@ -15022,29 +16989,30 @@ module EXTTextureCompressionAstcHdr =
         end
     
     
-    type VkFormat with
-         static member inline Astc44SfloatBlockExt = unbox<VkFormat> 1000066000
-         static member inline Astc54SfloatBlockExt = unbox<VkFormat> 1000066001
-         static member inline Astc55SfloatBlockExt = unbox<VkFormat> 1000066002
-         static member inline Astc65SfloatBlockExt = unbox<VkFormat> 1000066003
-         static member inline Astc66SfloatBlockExt = unbox<VkFormat> 1000066004
-         static member inline Astc85SfloatBlockExt = unbox<VkFormat> 1000066005
-         static member inline Astc86SfloatBlockExt = unbox<VkFormat> 1000066006
-         static member inline Astc88SfloatBlockExt = unbox<VkFormat> 1000066007
-         static member inline Astc105SfloatBlockExt = unbox<VkFormat> 1000066008
-         static member inline Astc106SfloatBlockExt = unbox<VkFormat> 1000066009
-         static member inline Astc108SfloatBlockExt = unbox<VkFormat> 1000066010
-         static member inline Astc1010SfloatBlockExt = unbox<VkFormat> 1000066011
-         static member inline Astc1210SfloatBlockExt = unbox<VkFormat> 1000066012
-         static member inline Astc1212SfloatBlockExt = unbox<VkFormat> 1000066013
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkFormat with
+              static member inline Astc44SfloatBlockExt = unbox<VkFormat> 1000066000
+              static member inline Astc54SfloatBlockExt = unbox<VkFormat> 1000066001
+              static member inline Astc55SfloatBlockExt = unbox<VkFormat> 1000066002
+              static member inline Astc65SfloatBlockExt = unbox<VkFormat> 1000066003
+              static member inline Astc66SfloatBlockExt = unbox<VkFormat> 1000066004
+              static member inline Astc85SfloatBlockExt = unbox<VkFormat> 1000066005
+              static member inline Astc86SfloatBlockExt = unbox<VkFormat> 1000066006
+              static member inline Astc88SfloatBlockExt = unbox<VkFormat> 1000066007
+              static member inline Astc105SfloatBlockExt = unbox<VkFormat> 1000066008
+              static member inline Astc106SfloatBlockExt = unbox<VkFormat> 1000066009
+              static member inline Astc108SfloatBlockExt = unbox<VkFormat> 1000066010
+              static member inline Astc1010SfloatBlockExt = unbox<VkFormat> 1000066011
+              static member inline Astc1210SfloatBlockExt = unbox<VkFormat> 1000066012
+              static member inline Astc1212SfloatBlockExt = unbox<VkFormat> 1000066013
     
 
 module EXTToolingInfo =
     let Name = "VK_EXT_tooling_info"
     let Number = 246
-    
-    open EXTDebugReport
-    
+
+
     [<Flags>]
     type VkToolPurposeFlagsEXT = 
         | None = 0
@@ -15054,7 +17022,7 @@ module EXTToolingInfo =
         | AdditionalFeaturesBit = 0x00000008
         | ModifyingFeaturesBit = 0x00000010
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceToolPropertiesEXT = 
         struct
@@ -15096,7 +17064,6 @@ module EXTToolingInfo =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -15111,40 +17078,38 @@ module EXTToolingInfo =
         let vkGetPhysicalDeviceToolPropertiesEXT(physicalDevice : VkPhysicalDevice, pToolCount : nativeptr<uint32>, pToolProperties : nativeptr<VkPhysicalDeviceToolPropertiesEXT>) = Loader<unit>.vkGetPhysicalDeviceToolPropertiesEXT.Invoke(physicalDevice, pToolCount, pToolProperties)
     
     module EXTDebugReport =
-        
-        
-        type VkToolPurposeFlagsEXT with
-             static member inline VkToolPurposeDebugReportingBitExt = unbox<VkToolPurposeFlagsEXT> 32
+
+        [<AutoOpen>]
+        module EnumExtensions =
+             type VkToolPurposeFlagsEXT with
+                  static member inline DebugReportingBit = unbox<VkToolPurposeFlagsEXT> 32
         
     
     module EXTDebugMarker =
         open EXTDebugReport
-        
-        
-        
-        type VkToolPurposeFlagsEXT with
-             static member inline VkToolPurposeDebugMarkersBitExt = unbox<VkToolPurposeFlagsEXT> 64
+
+        [<AutoOpen>]
+        module EnumExtensions =
+             type VkToolPurposeFlagsEXT with
+                  static member inline DebugMarkersBit = unbox<VkToolPurposeFlagsEXT> 64
         
     
     module EXTDebugUtils =
-        open EXTDebugReport
-        
-        
-        
-        type VkToolPurposeFlagsEXT with
-             static member inline VkToolPurposeDebugReportingBitExt = unbox<VkToolPurposeFlagsEXT> 32
-             static member inline VkToolPurposeDebugMarkersBitExt = unbox<VkToolPurposeFlagsEXT> 64
+
+        [<AutoOpen>]
+        module EnumExtensions =
+             type VkToolPurposeFlagsEXT with
+                  static member inline DebugReportingBit = unbox<VkToolPurposeFlagsEXT> 32
+                  static member inline DebugMarkersBit = unbox<VkToolPurposeFlagsEXT> 64
         
 
 module EXTTransformFeedback =
     let Name = "VK_EXT_transform_feedback"
     let Number = 29
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceTransformFeedbackFeaturesEXT = 
         struct
@@ -15263,17 +17228,19 @@ module EXTTransformFeedback =
         end
     
     
-    type VkAccessFlags with
-         static member inline TransformFeedbackWriteBitExt = unbox<VkAccessFlags> 33554432
-         static member inline TransformFeedbackCounterReadBitExt = unbox<VkAccessFlags> 67108864
-         static member inline TransformFeedbackCounterWriteBitExt = unbox<VkAccessFlags> 134217728
-    type VkBufferUsageFlags with
-         static member inline TransformFeedbackBufferBitExt = unbox<VkBufferUsageFlags> 2048
-         static member inline TransformFeedbackCounterBufferBitExt = unbox<VkBufferUsageFlags> 4096
-    type VkPipelineStageFlags with
-         static member inline TransformFeedbackBitExt = unbox<VkPipelineStageFlags> 16777216
-    type VkQueryType with
-         static member inline TransformFeedbackStreamExt = unbox<VkQueryType> 1000028004
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkAccessFlags with
+              static member inline TransformFeedbackWriteBitExt = unbox<VkAccessFlags> 33554432
+              static member inline TransformFeedbackCounterReadBitExt = unbox<VkAccessFlags> 67108864
+              static member inline TransformFeedbackCounterWriteBitExt = unbox<VkAccessFlags> 134217728
+         type VkBufferUsageFlags with
+              static member inline TransformFeedbackBufferBitExt = unbox<VkBufferUsageFlags> 2048
+              static member inline TransformFeedbackCounterBufferBitExt = unbox<VkBufferUsageFlags> 4096
+         type VkPipelineStageFlags with
+              static member inline TransformFeedbackBitExt = unbox<VkPipelineStageFlags> 16777216
+         type VkQueryType with
+              static member inline TransformFeedbackStreamExt = unbox<VkQueryType> 1000028004
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -15316,13 +17283,12 @@ module EXTTransformFeedback =
 module EXTValidationCache =
     let Name = "VK_EXT_validation_cache"
     let Number = 161
-    
-    open EXTDebugReport
-    
+
+
     type VkValidationCacheHeaderVersionEXT = 
         | One = 1
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkShaderModuleValidationCacheCreateInfoEXT = 
         struct
@@ -15386,8 +17352,10 @@ module EXTValidationCache =
         end
     
     
-    type VkObjectType with
-         static member inline ValidationCacheExt = unbox<VkObjectType> 1000160000
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkObjectType with
+              static member inline ValidationCacheExt = unbox<VkObjectType> 1000160000
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -15420,10 +17388,24 @@ module EXTValidationCache =
 module EXTValidationFeatures =
     let Name = "VK_EXT_validation_features"
     let Number = 248
+
+
+    type VkValidationFeatureEnableEXT = 
+        | GpuAssisted = 0
+        | GpuAssistedReserveBindingSlot = 1
+        | BestPractices = 2
+        | DebugPrintf = 3
     
-    open EXTDebugReport
+    type VkValidationFeatureDisableEXT = 
+        | All = 0
+        | Shaders = 1
+        | ThreadSafety = 2
+        | ApiParameters = 3
+        | ObjectLifetimes = 4
+        | CoreChecks = 5
+        | UniqueHandles = 6
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkValidationFeaturesEXT = 
         struct
@@ -15462,15 +17444,17 @@ module EXTValidationFeatures =
         end
     
     
-    
 
 module EXTValidationFlags =
     let Name = "VK_EXT_validation_flags"
     let Number = 62
+
+
+    type VkValidationCheckEXT = 
+        | All = 0
+        | Shaders = 1
     
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkValidationFlagsEXT = 
         struct
@@ -15503,17 +17487,14 @@ module EXTValidationFlags =
         end
     
     
-    
 
 module EXTVertexAttributeDivisor =
     let Name = "VK_EXT_vertex_attribute_divisor"
     let Number = 191
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT = 
         struct
@@ -15627,17 +17608,18 @@ module EXTVertexAttributeDivisor =
         end
     
     
-    
 
 module EXTYcbcrImageArrays =
     let Name = "VK_EXT_ycbcr_image_arrays"
     let Number = 253
-    
+
     let Required = [ KHRSamplerYcbcrConversion.Name ]
+    open KHRBindMemory2
+    open KHRGetMemoryRequirements2
+    open KHRGetPhysicalDeviceProperties2
+    open KHRMaintenance1
     open KHRSamplerYcbcrConversion
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceYcbcrImageArraysFeaturesEXT = 
         struct
@@ -15667,17 +17649,14 @@ module EXTYcbcrImageArrays =
         end
     
     
-    
 
 module FUCHSIAImagepipeSurface =
     let Name = "VK_FUCHSIA_imagepipe_surface"
     let Number = 215
-    
+
     let Required = [ KHRSurface.Name ]
     open KHRSurface
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkImagePipeSurfaceCreateInfoFUCHSIA = 
         struct
@@ -15710,7 +17689,6 @@ module FUCHSIAImagepipeSurface =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -15727,12 +17705,10 @@ module FUCHSIAImagepipeSurface =
 module GGPStreamDescriptorSurface =
     let Name = "VK_GGP_stream_descriptor_surface"
     let Number = 50
-    
+
     let Required = [ KHRSurface.Name ]
     open KHRSurface
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkStreamDescriptorSurfaceCreateInfoGGP = 
         struct
@@ -15765,7 +17741,6 @@ module GGPStreamDescriptorSurface =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -15782,13 +17757,12 @@ module GGPStreamDescriptorSurface =
 module GGPFrameToken =
     let Name = "VK_GGP_frame_token"
     let Number = 192
-    
+
     let Required = [ GGPStreamDescriptorSurface.Name; KHRSwapchain.Name ]
     open GGPStreamDescriptorSurface
+    open KHRSurface
     open KHRSwapchain
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPresentFrameTokenGGP = 
         struct
@@ -15818,27 +17792,21 @@ module GGPFrameToken =
         end
     
     
-    
 
 module GOOGLEDecorateString =
     let Name = "VK_GOOGLE_decorate_string"
     let Number = 225
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module GOOGLEDisplayTiming =
     let Name = "VK_GOOGLE_display_timing"
     let Number = 93
-    
+
     let Required = [ KHRSwapchain.Name ]
+    open KHRSurface
     open KHRSwapchain
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPastPresentationTimingGOOGLE = 
         struct
@@ -15943,7 +17911,6 @@ module GOOGLEDisplayTiming =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -15965,48 +17932,38 @@ module GOOGLEDisplayTiming =
 module GOOGLEHlslFunctionality1 =
     let Name = "VK_GOOGLE_hlsl_functionality1"
     let Number = 224
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module GOOGLEUserType =
     let Name = "VK_GOOGLE_user_type"
     let Number = 290
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module IMGFormatPvrtc =
     let Name = "VK_IMG_format_pvrtc"
     let Number = 55
-    
-    open EXTDebugReport
-    
-    
-    
-    type VkFormat with
-         static member inline Pvrtc12bppUnormBlockImg = unbox<VkFormat> 1000054000
-         static member inline Pvrtc14bppUnormBlockImg = unbox<VkFormat> 1000054001
-         static member inline Pvrtc22bppUnormBlockImg = unbox<VkFormat> 1000054002
-         static member inline Pvrtc24bppUnormBlockImg = unbox<VkFormat> 1000054003
-         static member inline Pvrtc12bppSrgbBlockImg = unbox<VkFormat> 1000054004
-         static member inline Pvrtc14bppSrgbBlockImg = unbox<VkFormat> 1000054005
-         static member inline Pvrtc22bppSrgbBlockImg = unbox<VkFormat> 1000054006
-         static member inline Pvrtc24bppSrgbBlockImg = unbox<VkFormat> 1000054007
+
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkFormat with
+              static member inline Pvrtc12bppUnormBlockImg = unbox<VkFormat> 1000054000
+              static member inline Pvrtc14bppUnormBlockImg = unbox<VkFormat> 1000054001
+              static member inline Pvrtc22bppUnormBlockImg = unbox<VkFormat> 1000054002
+              static member inline Pvrtc24bppUnormBlockImg = unbox<VkFormat> 1000054003
+              static member inline Pvrtc12bppSrgbBlockImg = unbox<VkFormat> 1000054004
+              static member inline Pvrtc14bppSrgbBlockImg = unbox<VkFormat> 1000054005
+              static member inline Pvrtc22bppSrgbBlockImg = unbox<VkFormat> 1000054006
+              static member inline Pvrtc24bppSrgbBlockImg = unbox<VkFormat> 1000054007
     
 
 module INTELPerformanceQuery =
     let Name = "VK_INTEL_performance_query"
     let Number = 211
-    
-    open EXTDebugReport
-    
+
+
     type VkPerformanceConfigurationTypeINTEL = 
         | CommandQueueMetricsDiscoveryActivated = 0
     
@@ -16028,7 +17985,7 @@ module INTELPerformanceQuery =
         | Bool = 3
         | String = 4
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkInitializePerformanceApiInfoINTEL = 
         struct
@@ -16221,8 +18178,9 @@ module INTELPerformanceQuery =
                 ] |> sprintf "VkPerformanceValueINTEL { %s }"
         end
     
+    type VkQueryPoolCreateInfoINTEL = VkQueryPoolPerformanceQueryCreateInfoINTEL
     [<StructLayout(LayoutKind.Sequential)>]
-    type VkQueryPoolCreateInfoINTEL = 
+    type VkQueryPoolPerformanceQueryCreateInfoINTEL = 
         struct
             val mutable public sType : uint32
             val mutable public pNext : nativeint
@@ -16236,24 +18194,26 @@ module INTELPerformanceQuery =
                 }
     
             new(performanceCountersSampling : VkQueryPoolSamplingModeINTEL) =
-                VkQueryPoolCreateInfoINTEL(Unchecked.defaultof<nativeint>, performanceCountersSampling)
+                VkQueryPoolPerformanceQueryCreateInfoINTEL(Unchecked.defaultof<nativeint>, performanceCountersSampling)
     
             static member Empty =
-                VkQueryPoolCreateInfoINTEL(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkQueryPoolSamplingModeINTEL>)
+                VkQueryPoolPerformanceQueryCreateInfoINTEL(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkQueryPoolSamplingModeINTEL>)
     
             override x.ToString() =
                 String.concat "; " [
                     sprintf "sType = %A" x.sType
                     sprintf "pNext = %A" x.pNext
                     sprintf "performanceCountersSampling = %A" x.performanceCountersSampling
-                ] |> sprintf "VkQueryPoolCreateInfoINTEL { %s }"
+                ] |> sprintf "VkQueryPoolPerformanceQueryCreateInfoINTEL { %s }"
         end
     
     
-    type VkObjectType with
-         static member inline PerformanceConfigurationIntel = unbox<VkObjectType> 1000210000
-    type VkQueryType with
-         static member inline PerformanceQueryIntel = unbox<VkQueryType> 1000210000
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkObjectType with
+              static member inline PerformanceConfigurationIntel = unbox<VkObjectType> 1000210000
+         type VkQueryType with
+              static member inline PerformanceQueryIntel = unbox<VkQueryType> 1000210000
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -16311,12 +18271,10 @@ module INTELPerformanceQuery =
 module INTELShaderIntegerFunctions2 =
     let Name = "VK_INTEL_shader_integer_functions2"
     let Number = 210
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL = 
         struct
@@ -16346,88 +18304,42 @@ module INTELShaderIntegerFunctions2 =
         end
     
     
-    
 
 module KHRStorageBufferStorageClass =
     let Name = "VK_KHR_storage_buffer_storage_class"
     let Number = 132
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module KHR16bitStorage =
     let Name = "VK_KHR_16bit_storage"
     let Number = 84
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRStorageBufferStorageClass.Name ]
     open KHRGetPhysicalDeviceProperties2
     open KHRStorageBufferStorageClass
-    open EXTDebugReport
-    
-    
+
     type VkPhysicalDevice16BitStorageFeaturesKHR = VkPhysicalDevice16BitStorageFeatures
-    
     
 
 module KHR8bitStorage =
     let Name = "VK_KHR_8bit_storage"
     let Number = 178
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRStorageBufferStorageClass.Name ]
     open KHRGetPhysicalDeviceProperties2
     open KHRStorageBufferStorageClass
-    open EXTDebugReport
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDevice8BitStorageFeaturesKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public storageBuffer8BitAccess : VkBool32
-            val mutable public uniformAndStorageBuffer8BitAccess : VkBool32
-            val mutable public storagePushConstant8 : VkBool32
-    
-            new(pNext : nativeint, storageBuffer8BitAccess : VkBool32, uniformAndStorageBuffer8BitAccess : VkBool32, storagePushConstant8 : VkBool32) =
-                {
-                    sType = 1000177000u
-                    pNext = pNext
-                    storageBuffer8BitAccess = storageBuffer8BitAccess
-                    uniformAndStorageBuffer8BitAccess = uniformAndStorageBuffer8BitAccess
-                    storagePushConstant8 = storagePushConstant8
-                }
-    
-            new(storageBuffer8BitAccess : VkBool32, uniformAndStorageBuffer8BitAccess : VkBool32, storagePushConstant8 : VkBool32) =
-                VkPhysicalDevice8BitStorageFeaturesKHR(Unchecked.defaultof<nativeint>, storageBuffer8BitAccess, uniformAndStorageBuffer8BitAccess, storagePushConstant8)
-    
-            static member Empty =
-                VkPhysicalDevice8BitStorageFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "storageBuffer8BitAccess = %A" x.storageBuffer8BitAccess
-                    sprintf "uniformAndStorageBuffer8BitAccess = %A" x.uniformAndStorageBuffer8BitAccess
-                    sprintf "storagePushConstant8 = %A" x.storagePushConstant8
-                ] |> sprintf "VkPhysicalDevice8BitStorageFeaturesKHR { %s }"
-        end
-    
-    
+
+    type VkPhysicalDevice8BitStorageFeaturesKHR = VkPhysicalDevice8BitStorageFeatures
     
 
 module KHRAndroidSurface =
     let Name = "VK_KHR_android_surface"
     let Number = 9
-    
+
     let Required = [ KHRSurface.Name ]
     open KHRSurface
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkAndroidSurfaceCreateInfoKHR = 
         struct
@@ -16460,7 +18372,6 @@ module KHRAndroidSurface =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -16477,385 +18388,211 @@ module KHRAndroidSurface =
 module KHRBufferDeviceAddress =
     let Name = "VK_KHR_buffer_device_address"
     let Number = 258
-    
-    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
-    open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkBufferDeviceAddressInfoKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public buffer : VkBuffer
-    
-            new(pNext : nativeint, buffer : VkBuffer) =
-                {
-                    sType = 1000244001u
-                    pNext = pNext
-                    buffer = buffer
-                }
-    
-            new(buffer : VkBuffer) =
-                VkBufferDeviceAddressInfoKHR(Unchecked.defaultof<nativeint>, buffer)
-    
-            static member Empty =
-                VkBufferDeviceAddressInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBuffer>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "buffer = %A" x.buffer
-                ] |> sprintf "VkBufferDeviceAddressInfoKHR { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkBufferOpaqueCaptureAddressCreateInfoKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public opaqueCaptureAddress : uint64
-    
-            new(pNext : nativeint, opaqueCaptureAddress : uint64) =
-                {
-                    sType = 1000257002u
-                    pNext = pNext
-                    opaqueCaptureAddress = opaqueCaptureAddress
-                }
-    
-            new(opaqueCaptureAddress : uint64) =
-                VkBufferOpaqueCaptureAddressCreateInfoKHR(Unchecked.defaultof<nativeint>, opaqueCaptureAddress)
-    
-            static member Empty =
-                VkBufferOpaqueCaptureAddressCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint64>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "opaqueCaptureAddress = %A" x.opaqueCaptureAddress
-                ] |> sprintf "VkBufferOpaqueCaptureAddressCreateInfoKHR { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkDeviceMemoryOpaqueCaptureAddressInfoKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public memory : VkDeviceMemory
-    
-            new(pNext : nativeint, memory : VkDeviceMemory) =
-                {
-                    sType = 1000257004u
-                    pNext = pNext
-                    memory = memory
-                }
-    
-            new(memory : VkDeviceMemory) =
-                VkDeviceMemoryOpaqueCaptureAddressInfoKHR(Unchecked.defaultof<nativeint>, memory)
-    
-            static member Empty =
-                VkDeviceMemoryOpaqueCaptureAddressInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceMemory>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "memory = %A" x.memory
-                ] |> sprintf "VkDeviceMemoryOpaqueCaptureAddressInfoKHR { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkMemoryOpaqueCaptureAddressAllocateInfoKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public opaqueCaptureAddress : uint64
-    
-            new(pNext : nativeint, opaqueCaptureAddress : uint64) =
-                {
-                    sType = 1000257003u
-                    pNext = pNext
-                    opaqueCaptureAddress = opaqueCaptureAddress
-                }
-    
-            new(opaqueCaptureAddress : uint64) =
-                VkMemoryOpaqueCaptureAddressAllocateInfoKHR(Unchecked.defaultof<nativeint>, opaqueCaptureAddress)
-    
-            static member Empty =
-                VkMemoryOpaqueCaptureAddressAllocateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint64>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "opaqueCaptureAddress = %A" x.opaqueCaptureAddress
-                ] |> sprintf "VkMemoryOpaqueCaptureAddressAllocateInfoKHR { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceBufferDeviceAddressFeaturesKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public bufferDeviceAddress : VkBool32
-            val mutable public bufferDeviceAddressCaptureReplay : VkBool32
-            val mutable public bufferDeviceAddressMultiDevice : VkBool32
-    
-            new(pNext : nativeint, bufferDeviceAddress : VkBool32, bufferDeviceAddressCaptureReplay : VkBool32, bufferDeviceAddressMultiDevice : VkBool32) =
-                {
-                    sType = 1000257000u
-                    pNext = pNext
-                    bufferDeviceAddress = bufferDeviceAddress
-                    bufferDeviceAddressCaptureReplay = bufferDeviceAddressCaptureReplay
-                    bufferDeviceAddressMultiDevice = bufferDeviceAddressMultiDevice
-                }
-    
-            new(bufferDeviceAddress : VkBool32, bufferDeviceAddressCaptureReplay : VkBool32, bufferDeviceAddressMultiDevice : VkBool32) =
-                VkPhysicalDeviceBufferDeviceAddressFeaturesKHR(Unchecked.defaultof<nativeint>, bufferDeviceAddress, bufferDeviceAddressCaptureReplay, bufferDeviceAddressMultiDevice)
-    
-            static member Empty =
-                VkPhysicalDeviceBufferDeviceAddressFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "bufferDeviceAddress = %A" x.bufferDeviceAddress
-                    sprintf "bufferDeviceAddressCaptureReplay = %A" x.bufferDeviceAddressCaptureReplay
-                    sprintf "bufferDeviceAddressMultiDevice = %A" x.bufferDeviceAddressMultiDevice
-                ] |> sprintf "VkPhysicalDeviceBufferDeviceAddressFeaturesKHR { %s }"
-        end
-    
-    
-    type VkBufferCreateFlags with
-         static member inline DeviceAddressCaptureReplayBitKhr = unbox<VkBufferCreateFlags> 16
-    type VkBufferUsageFlags with
-         static member inline ShaderDeviceAddressBitKhr = unbox<VkBufferUsageFlags> 131072
-    type VkMemoryAllocateFlags with
-         static member inline DeviceAddressBitKhr = unbox<VkMemoryAllocateFlags> 2
-         static member inline DeviceAddressCaptureReplayBitKhr = unbox<VkMemoryAllocateFlags> 4
-    type VkResult with
-         static member inline VkErrorInvalidOpaqueCaptureAddressKhr = unbox<VkResult> -1000257000
-    
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module VkRaw =
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkGetBufferDeviceAddressKHRDel = delegate of VkDevice * nativeptr<VkBufferDeviceAddressInfoKHR> -> VkDeviceAddress
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkGetBufferOpaqueCaptureAddressKHRDel = delegate of VkDevice * nativeptr<VkBufferDeviceAddressInfoKHR> -> uint64
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkGetDeviceMemoryOpaqueCaptureAddressKHRDel = delegate of VkDevice * nativeptr<VkDeviceMemoryOpaqueCaptureAddressInfoKHR> -> uint64
-        
-        [<AbstractClass; Sealed>]
-        type private Loader<'d> private() =
-            static do Report.Begin(3, "[Vulkan] loading VK_KHR_buffer_device_address")
-            static let s_vkGetBufferDeviceAddressKHRDel = VkRaw.vkImportInstanceDelegate<VkGetBufferDeviceAddressKHRDel> "vkGetBufferDeviceAddressKHR"
-            static let s_vkGetBufferOpaqueCaptureAddressKHRDel = VkRaw.vkImportInstanceDelegate<VkGetBufferOpaqueCaptureAddressKHRDel> "vkGetBufferOpaqueCaptureAddressKHR"
-            static let s_vkGetDeviceMemoryOpaqueCaptureAddressKHRDel = VkRaw.vkImportInstanceDelegate<VkGetDeviceMemoryOpaqueCaptureAddressKHRDel> "vkGetDeviceMemoryOpaqueCaptureAddressKHR"
-            static do Report.End(3) |> ignore
-            static member vkGetBufferDeviceAddressKHR = s_vkGetBufferDeviceAddressKHRDel
-            static member vkGetBufferOpaqueCaptureAddressKHR = s_vkGetBufferOpaqueCaptureAddressKHRDel
-            static member vkGetDeviceMemoryOpaqueCaptureAddressKHR = s_vkGetDeviceMemoryOpaqueCaptureAddressKHRDel
-        let vkGetBufferDeviceAddressKHR(device : VkDevice, pInfo : nativeptr<VkBufferDeviceAddressInfoKHR>) = Loader<unit>.vkGetBufferDeviceAddressKHR.Invoke(device, pInfo)
-        let vkGetBufferOpaqueCaptureAddressKHR(device : VkDevice, pInfo : nativeptr<VkBufferDeviceAddressInfoKHR>) = Loader<unit>.vkGetBufferOpaqueCaptureAddressKHR.Invoke(device, pInfo)
-        let vkGetDeviceMemoryOpaqueCaptureAddressKHR(device : VkDevice, pInfo : nativeptr<VkDeviceMemoryOpaqueCaptureAddressInfoKHR>) = Loader<unit>.vkGetDeviceMemoryOpaqueCaptureAddressKHR.Invoke(device, pInfo)
 
-module KHRMultiview =
-    let Name = "VK_KHR_multiview"
-    let Number = 54
-    
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
-    type VkPhysicalDeviceMultiviewFeaturesKHR = VkPhysicalDeviceMultiviewFeatures
-    type VkPhysicalDeviceMultiviewPropertiesKHR = VkPhysicalDeviceMultiviewProperties
-    type VkRenderPassMultiviewCreateInfoKHR = VkRenderPassMultiviewCreateInfo
-    
+
+    type VkBufferDeviceAddressInfoKHR = VkBufferDeviceAddressInfo
+    type VkBufferOpaqueCaptureAddressCreateInfoKHR = VkBufferOpaqueCaptureAddressCreateInfo
+    type VkDeviceMemoryOpaqueCaptureAddressInfoKHR = VkDeviceMemoryOpaqueCaptureAddressInfo
+    type VkMemoryOpaqueCaptureAddressAllocateInfoKHR = VkMemoryOpaqueCaptureAddressAllocateInfo
+    type VkPhysicalDeviceBufferDeviceAddressFeaturesKHR = VkPhysicalDeviceBufferDeviceAddressFeatures
     
 
 module KHRMaintenance2 =
     let Name = "VK_KHR_maintenance2"
     let Number = 118
-    
-    open EXTDebugReport
-    
-    
+
+
+    type VkPointClippingBehaviorKHR = VkPointClippingBehavior
+    type VkTessellationDomainOriginKHR = VkTessellationDomainOrigin
+
     type VkImageViewUsageCreateInfoKHR = VkImageViewUsageCreateInfo
     type VkInputAttachmentAspectReferenceKHR = VkInputAttachmentAspectReference
     type VkPhysicalDevicePointClippingPropertiesKHR = VkPhysicalDevicePointClippingProperties
     type VkPipelineTessellationDomainOriginStateCreateInfoKHR = VkPipelineTessellationDomainOriginStateCreateInfo
     type VkRenderPassInputAttachmentAspectCreateInfoKHR = VkRenderPassInputAttachmentAspectCreateInfo
     
+
+module KHRMultiview =
+    let Name = "VK_KHR_multiview"
+    let Number = 54
+
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
+
+    type VkPhysicalDeviceMultiviewFeaturesKHR = VkPhysicalDeviceMultiviewFeatures
+    type VkPhysicalDeviceMultiviewPropertiesKHR = VkPhysicalDeviceMultiviewProperties
+    type VkRenderPassMultiviewCreateInfoKHR = VkRenderPassMultiviewCreateInfo
     
 
 module KHRCreateRenderpass2 =
     let Name = "VK_KHR_create_renderpass2"
     let Number = 110
-    
+
     let Required = [ KHRMaintenance2.Name; KHRMultiview.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open KHRMaintenance2
     open KHRMultiview
-    open EXTDebugReport
+
+    type VkAttachmentDescription2KHR = VkAttachmentDescription2
+    type VkAttachmentReference2KHR = VkAttachmentReference2
+    type VkRenderPassCreateInfo2KHR = VkRenderPassCreateInfo2
+    type VkSubpassBeginInfoKHR = VkSubpassBeginInfo
+    type VkSubpassDependency2KHR = VkSubpassDependency2
+    type VkSubpassDescription2KHR = VkSubpassDescription2
+    type VkSubpassEndInfoKHR = VkSubpassEndInfo
+    
+
+module KHRDeferredHostOperations =
+    let Name = "VK_KHR_deferred_host_operations"
+    let Number = 269
+
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkDeferredOperationInfoKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public operationHandle : VkDeferredOperationKHR
+    
+            new(pNext : nativeint, operationHandle : VkDeferredOperationKHR) =
+                {
+                    sType = 1000268000u
+                    pNext = pNext
+                    operationHandle = operationHandle
+                }
+    
+            new(operationHandle : VkDeferredOperationKHR) =
+                VkDeferredOperationInfoKHR(Unchecked.defaultof<nativeint>, operationHandle)
+    
+            static member Empty =
+                VkDeferredOperationInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeferredOperationKHR>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "operationHandle = %A" x.operationHandle
+                ] |> sprintf "VkDeferredOperationInfoKHR { %s }"
+        end
     
     
-    
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkObjectType with
+              static member inline DeferredOperationKhr = unbox<VkObjectType> 1000268000
+         type VkResult with
+              static member inline VkThreadIdleKhr = unbox<VkResult> 1000268000
+              static member inline VkThreadDoneKhr = unbox<VkResult> 1000268001
+              static member inline VkOperationDeferredKhr = unbox<VkResult> 1000268002
+              static member inline VkOperationNotDeferredKhr = unbox<VkResult> 1000268003
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
-        type VkCreateRenderPass2KHRDel = delegate of VkDevice * nativeptr<VkRenderPassCreateInfo2KHR> * nativeptr<VkAllocationCallbacks> * nativeptr<VkRenderPass> -> VkResult
+        type VkCreateDeferredOperationKHRDel = delegate of VkDevice * nativeptr<VkAllocationCallbacks> * nativeptr<VkDeferredOperationKHR> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
-        type VkCmdBeginRenderPass2KHRDel = delegate of VkCommandBuffer * nativeptr<VkRenderPassBeginInfo> * nativeptr<VkSubpassBeginInfoKHR> -> unit
+        type VkDestroyDeferredOperationKHRDel = delegate of VkDevice * VkDeferredOperationKHR * nativeptr<VkAllocationCallbacks> -> unit
         [<SuppressUnmanagedCodeSecurity>]
-        type VkCmdNextSubpass2KHRDel = delegate of VkCommandBuffer * nativeptr<VkSubpassBeginInfoKHR> * nativeptr<VkSubpassEndInfoKHR> -> unit
+        type VkGetDeferredOperationMaxConcurrencyKHRDel = delegate of VkDevice * VkDeferredOperationKHR -> uint32
         [<SuppressUnmanagedCodeSecurity>]
-        type VkCmdEndRenderPass2KHRDel = delegate of VkCommandBuffer * nativeptr<VkSubpassEndInfoKHR> -> unit
+        type VkGetDeferredOperationResultKHRDel = delegate of VkDevice * VkDeferredOperationKHR -> VkResult
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkDeferredOperationJoinKHRDel = delegate of VkDevice * VkDeferredOperationKHR -> VkResult
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Report.Begin(3, "[Vulkan] loading VK_KHR_create_renderpass2")
-            static let s_vkCreateRenderPass2KHRDel = VkRaw.vkImportInstanceDelegate<VkCreateRenderPass2KHRDel> "vkCreateRenderPass2KHR"
-            static let s_vkCmdBeginRenderPass2KHRDel = VkRaw.vkImportInstanceDelegate<VkCmdBeginRenderPass2KHRDel> "vkCmdBeginRenderPass2KHR"
-            static let s_vkCmdNextSubpass2KHRDel = VkRaw.vkImportInstanceDelegate<VkCmdNextSubpass2KHRDel> "vkCmdNextSubpass2KHR"
-            static let s_vkCmdEndRenderPass2KHRDel = VkRaw.vkImportInstanceDelegate<VkCmdEndRenderPass2KHRDel> "vkCmdEndRenderPass2KHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_deferred_host_operations")
+            static let s_vkCreateDeferredOperationKHRDel = VkRaw.vkImportInstanceDelegate<VkCreateDeferredOperationKHRDel> "vkCreateDeferredOperationKHR"
+            static let s_vkDestroyDeferredOperationKHRDel = VkRaw.vkImportInstanceDelegate<VkDestroyDeferredOperationKHRDel> "vkDestroyDeferredOperationKHR"
+            static let s_vkGetDeferredOperationMaxConcurrencyKHRDel = VkRaw.vkImportInstanceDelegate<VkGetDeferredOperationMaxConcurrencyKHRDel> "vkGetDeferredOperationMaxConcurrencyKHR"
+            static let s_vkGetDeferredOperationResultKHRDel = VkRaw.vkImportInstanceDelegate<VkGetDeferredOperationResultKHRDel> "vkGetDeferredOperationResultKHR"
+            static let s_vkDeferredOperationJoinKHRDel = VkRaw.vkImportInstanceDelegate<VkDeferredOperationJoinKHRDel> "vkDeferredOperationJoinKHR"
             static do Report.End(3) |> ignore
-            static member vkCreateRenderPass2KHR = s_vkCreateRenderPass2KHRDel
-            static member vkCmdBeginRenderPass2KHR = s_vkCmdBeginRenderPass2KHRDel
-            static member vkCmdNextSubpass2KHR = s_vkCmdNextSubpass2KHRDel
-            static member vkCmdEndRenderPass2KHR = s_vkCmdEndRenderPass2KHRDel
-        let vkCreateRenderPass2KHR(device : VkDevice, pCreateInfo : nativeptr<VkRenderPassCreateInfo2KHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pRenderPass : nativeptr<VkRenderPass>) = Loader<unit>.vkCreateRenderPass2KHR.Invoke(device, pCreateInfo, pAllocator, pRenderPass)
-        let vkCmdBeginRenderPass2KHR(commandBuffer : VkCommandBuffer, pRenderPassBegin : nativeptr<VkRenderPassBeginInfo>, pSubpassBeginInfo : nativeptr<VkSubpassBeginInfoKHR>) = Loader<unit>.vkCmdBeginRenderPass2KHR.Invoke(commandBuffer, pRenderPassBegin, pSubpassBeginInfo)
-        let vkCmdNextSubpass2KHR(commandBuffer : VkCommandBuffer, pSubpassBeginInfo : nativeptr<VkSubpassBeginInfoKHR>, pSubpassEndInfo : nativeptr<VkSubpassEndInfoKHR>) = Loader<unit>.vkCmdNextSubpass2KHR.Invoke(commandBuffer, pSubpassBeginInfo, pSubpassEndInfo)
-        let vkCmdEndRenderPass2KHR(commandBuffer : VkCommandBuffer, pSubpassEndInfo : nativeptr<VkSubpassEndInfoKHR>) = Loader<unit>.vkCmdEndRenderPass2KHR.Invoke(commandBuffer, pSubpassEndInfo)
-
-module KHRDedicatedAllocation =
-    let Name = "VK_KHR_dedicated_allocation"
-    let Number = 128
-    
-    let Required = [ KHRGetMemoryRequirements2.Name ]
-    open KHRGetMemoryRequirements2
-    open EXTDebugReport
-    
-    
-    type VkMemoryDedicatedAllocateInfoKHR = VkMemoryDedicatedAllocateInfo
-    type VkMemoryDedicatedRequirementsKHR = VkMemoryDedicatedRequirements
-    
-    
+            static member vkCreateDeferredOperationKHR = s_vkCreateDeferredOperationKHRDel
+            static member vkDestroyDeferredOperationKHR = s_vkDestroyDeferredOperationKHRDel
+            static member vkGetDeferredOperationMaxConcurrencyKHR = s_vkGetDeferredOperationMaxConcurrencyKHRDel
+            static member vkGetDeferredOperationResultKHR = s_vkGetDeferredOperationResultKHRDel
+            static member vkDeferredOperationJoinKHR = s_vkDeferredOperationJoinKHRDel
+        let vkCreateDeferredOperationKHR(device : VkDevice, pAllocator : nativeptr<VkAllocationCallbacks>, pDeferredOperation : nativeptr<VkDeferredOperationKHR>) = Loader<unit>.vkCreateDeferredOperationKHR.Invoke(device, pAllocator, pDeferredOperation)
+        let vkDestroyDeferredOperationKHR(device : VkDevice, operation : VkDeferredOperationKHR, pAllocator : nativeptr<VkAllocationCallbacks>) = Loader<unit>.vkDestroyDeferredOperationKHR.Invoke(device, operation, pAllocator)
+        let vkGetDeferredOperationMaxConcurrencyKHR(device : VkDevice, operation : VkDeferredOperationKHR) = Loader<unit>.vkGetDeferredOperationMaxConcurrencyKHR.Invoke(device, operation)
+        let vkGetDeferredOperationResultKHR(device : VkDevice, operation : VkDeferredOperationKHR) = Loader<unit>.vkGetDeferredOperationResultKHR.Invoke(device, operation)
+        let vkDeferredOperationJoinKHR(device : VkDevice, operation : VkDeferredOperationKHR) = Loader<unit>.vkDeferredOperationJoinKHR.Invoke(device, operation)
 
 module KHRDepthStencilResolve =
     let Name = "VK_KHR_depth_stencil_resolve"
     let Number = 200
-    
+
     let Required = [ KHRCreateRenderpass2.Name ]
     open KHRCreateRenderpass2
-    open EXTDebugReport
-    
-    [<Flags>]
-    type VkResolveModeFlagsKHR = 
-        | None = 0
-        | SampleZeroBit = 0x00000001
-        | AverageBit = 0x00000002
-        | MinBit = 0x00000004
-        | MaxBit = 0x00000008
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceDepthStencilResolvePropertiesKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public supportedDepthResolveModes : VkResolveModeFlagsKHR
-            val mutable public supportedStencilResolveModes : VkResolveModeFlagsKHR
-            val mutable public independentResolveNone : VkBool32
-            val mutable public independentResolve : VkBool32
-    
-            new(pNext : nativeint, supportedDepthResolveModes : VkResolveModeFlagsKHR, supportedStencilResolveModes : VkResolveModeFlagsKHR, independentResolveNone : VkBool32, independentResolve : VkBool32) =
-                {
-                    sType = 1000199000u
-                    pNext = pNext
-                    supportedDepthResolveModes = supportedDepthResolveModes
-                    supportedStencilResolveModes = supportedStencilResolveModes
-                    independentResolveNone = independentResolveNone
-                    independentResolve = independentResolve
-                }
-    
-            new(supportedDepthResolveModes : VkResolveModeFlagsKHR, supportedStencilResolveModes : VkResolveModeFlagsKHR, independentResolveNone : VkBool32, independentResolve : VkBool32) =
-                VkPhysicalDeviceDepthStencilResolvePropertiesKHR(Unchecked.defaultof<nativeint>, supportedDepthResolveModes, supportedStencilResolveModes, independentResolveNone, independentResolve)
-    
-            static member Empty =
-                VkPhysicalDeviceDepthStencilResolvePropertiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkResolveModeFlagsKHR>, Unchecked.defaultof<VkResolveModeFlagsKHR>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "supportedDepthResolveModes = %A" x.supportedDepthResolveModes
-                    sprintf "supportedStencilResolveModes = %A" x.supportedStencilResolveModes
-                    sprintf "independentResolveNone = %A" x.independentResolveNone
-                    sprintf "independentResolve = %A" x.independentResolve
-                ] |> sprintf "VkPhysicalDeviceDepthStencilResolvePropertiesKHR { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkSubpassDescriptionDepthStencilResolveKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public depthResolveMode : VkResolveModeFlagsKHR
-            val mutable public stencilResolveMode : VkResolveModeFlagsKHR
-            val mutable public pDepthStencilResolveAttachment : nativeptr<VkAttachmentReference2KHR>
-    
-            new(pNext : nativeint, depthResolveMode : VkResolveModeFlagsKHR, stencilResolveMode : VkResolveModeFlagsKHR, pDepthStencilResolveAttachment : nativeptr<VkAttachmentReference2KHR>) =
-                {
-                    sType = 1000199001u
-                    pNext = pNext
-                    depthResolveMode = depthResolveMode
-                    stencilResolveMode = stencilResolveMode
-                    pDepthStencilResolveAttachment = pDepthStencilResolveAttachment
-                }
-    
-            new(depthResolveMode : VkResolveModeFlagsKHR, stencilResolveMode : VkResolveModeFlagsKHR, pDepthStencilResolveAttachment : nativeptr<VkAttachmentReference2KHR>) =
-                VkSubpassDescriptionDepthStencilResolveKHR(Unchecked.defaultof<nativeint>, depthResolveMode, stencilResolveMode, pDepthStencilResolveAttachment)
-    
-            static member Empty =
-                VkSubpassDescriptionDepthStencilResolveKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkResolveModeFlagsKHR>, Unchecked.defaultof<VkResolveModeFlagsKHR>, Unchecked.defaultof<nativeptr<VkAttachmentReference2KHR>>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "depthResolveMode = %A" x.depthResolveMode
-                    sprintf "stencilResolveMode = %A" x.stencilResolveMode
-                    sprintf "pDepthStencilResolveAttachment = %A" x.pDepthStencilResolveAttachment
-                ] |> sprintf "VkSubpassDescriptionDepthStencilResolveKHR { %s }"
-        end
-    
-    
+    open KHRGetPhysicalDeviceProperties2
+    open KHRMaintenance2
+    open KHRMultiview
+
+    type VkResolveModeFlagsKHR = VkResolveModeFlags
+
+    type VkPhysicalDeviceDepthStencilResolvePropertiesKHR = VkPhysicalDeviceDepthStencilResolveProperties
+    type VkSubpassDescriptionDepthStencilResolveKHR = VkSubpassDescriptionDepthStencilResolve
     
 
-module KHRDescriptorUpdateTemplate =
-    let Name = "VK_KHR_descriptor_update_template"
-    let Number = 86
+module KHRPushDescriptor =
+    let Name = "VK_KHR_push_descriptor"
+    let Number = 81
+
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPhysicalDevicePushDescriptorPropertiesKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public maxPushDescriptors : uint32
     
-    open EXTDebugReport
+            new(pNext : nativeint, maxPushDescriptors : uint32) =
+                {
+                    sType = 1000080000u
+                    pNext = pNext
+                    maxPushDescriptors = maxPushDescriptors
+                }
+    
+            new(maxPushDescriptors : uint32) =
+                VkPhysicalDevicePushDescriptorPropertiesKHR(Unchecked.defaultof<nativeint>, maxPushDescriptors)
+    
+            static member Empty =
+                VkPhysicalDevicePushDescriptorPropertiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "maxPushDescriptors = %A" x.maxPushDescriptors
+                ] |> sprintf "VkPhysicalDevicePushDescriptorPropertiesKHR { %s }"
+        end
     
     
-    type VkDescriptorUpdateTemplateCreateInfoKHR = VkDescriptorUpdateTemplateCreateInfo
-    type VkDescriptorUpdateTemplateEntryKHR = VkDescriptorUpdateTemplateEntry
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkDescriptorSetLayoutCreateFlags with
+              static member inline PushDescriptorBitKhr = unbox<VkDescriptorSetLayoutCreateFlags> 1
     
-    
-    
-    module KHRPushDescriptor =
-        open EXTDebugReport
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module VkRaw =
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCmdPushDescriptorSetKHRDel = delegate of VkCommandBuffer * VkPipelineBindPoint * VkPipelineLayout * uint32 * uint32 * nativeptr<VkWriteDescriptorSet> -> unit
         
-        
-        
-        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_push_descriptor")
+            static let s_vkCmdPushDescriptorSetKHRDel = VkRaw.vkImportInstanceDelegate<VkCmdPushDescriptorSetKHRDel> "vkCmdPushDescriptorSetKHR"
+            static do Report.End(3) |> ignore
+            static member vkCmdPushDescriptorSetKHR = s_vkCmdPushDescriptorSetKHRDel
+        let vkCmdPushDescriptorSetKHR(commandBuffer : VkCommandBuffer, pipelineBindPoint : VkPipelineBindPoint, layout : VkPipelineLayout, set : uint32, descriptorWriteCount : uint32, pDescriptorWrites : nativeptr<VkWriteDescriptorSet>) = Loader<unit>.vkCmdPushDescriptorSetKHR.Invoke(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites)
+    
+    module KHRDescriptorUpdateTemplate =
+
         [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
         module VkRaw =
             [<SuppressUnmanagedCodeSecurity>]
@@ -16863,310 +18600,34 @@ module KHRDescriptorUpdateTemplate =
             
             [<AbstractClass; Sealed>]
             type private Loader<'d> private() =
-                static do Report.Begin(3, "[Vulkan] loading VK_KHR_push_descriptor")
+                static do Report.Begin(3, "[Vulkan] loading VK_KHR_descriptor_update_template")
                 static let s_vkCmdPushDescriptorSetWithTemplateKHRDel = VkRaw.vkImportInstanceDelegate<VkCmdPushDescriptorSetWithTemplateKHRDel> "vkCmdPushDescriptorSetWithTemplateKHR"
                 static do Report.End(3) |> ignore
                 static member vkCmdPushDescriptorSetWithTemplateKHR = s_vkCmdPushDescriptorSetWithTemplateKHRDel
             let vkCmdPushDescriptorSetWithTemplateKHR(commandBuffer : VkCommandBuffer, descriptorUpdateTemplate : VkDescriptorUpdateTemplate, layout : VkPipelineLayout, set : uint32, pData : nativeint) = Loader<unit>.vkCmdPushDescriptorSetWithTemplateKHR.Invoke(commandBuffer, descriptorUpdateTemplate, layout, set, pData)
 
-module KHRDeviceGroupCreation =
-    let Name = "VK_KHR_device_group_creation"
-    let Number = 71
-    
-    open EXTDebugReport
-    
-    
-    type VkDeviceGroupDeviceCreateInfoKHR = VkDeviceGroupDeviceCreateInfo
-    type VkPhysicalDeviceGroupPropertiesKHR = VkPhysicalDeviceGroupProperties
-    
-    
+module KHRDescriptorUpdateTemplate =
+    let Name = "VK_KHR_descriptor_update_template"
+    let Number = 86
 
-module KHRDeviceGroup =
-    let Name = "VK_KHR_device_group"
-    let Number = 61
+
+    type VkDescriptorUpdateTemplateCreateFlagsKHR = VkDescriptorUpdateTemplateCreateFlags
+    type VkDescriptorUpdateTemplateKHR = VkDescriptorUpdateTemplate
+    type VkDescriptorUpdateTemplateTypeKHR = VkDescriptorUpdateTemplateType
+
+    type VkDescriptorUpdateTemplateCreateInfoKHR = VkDescriptorUpdateTemplateCreateInfo
+    type VkDescriptorUpdateTemplateEntryKHR = VkDescriptorUpdateTemplateEntry
     
-    let Required = [ KHRDeviceGroupCreation.Name ]
-    open KHRDeviceGroupCreation
-    open EXTDebugReport
-    
-    
-    type VkDeviceGroupBindSparseInfoKHR = VkDeviceGroupBindSparseInfo
-    type VkDeviceGroupCommandBufferBeginInfoKHR = VkDeviceGroupCommandBufferBeginInfo
-    type VkDeviceGroupRenderPassBeginInfoKHR = VkDeviceGroupRenderPassBeginInfo
-    type VkDeviceGroupSubmitInfoKHR = VkDeviceGroupSubmitInfo
-    type VkMemoryAllocateFlagsInfoKHR = VkMemoryAllocateFlagsInfo
-    
-    
-    
-    module KHRBindMemory2 =
-        open EXTDebugReport
-        
-        
-        type VkBindBufferMemoryDeviceGroupInfoKHR = VkBindBufferMemoryDeviceGroupInfo
-        type VkBindImageMemoryDeviceGroupInfoKHR = VkBindImageMemoryDeviceGroupInfo
-        
-        
-    
-    module KHRSurface =
-        open EXTDebugReport
-        
-        [<Flags>]
-        type VkDeviceGroupPresentModeFlagsKHR = 
-            | None = 0
-            | LocalBit = 0x00000001
-            | RemoteBit = 0x00000002
-            | SumBit = 0x00000004
-            | LocalMultiDeviceBit = 0x00000008
-        
-        
-        [<StructLayout(LayoutKind.Sequential)>]
-        type VkDeviceGroupPresentCapabilitiesKHR = 
-            struct
-                val mutable public sType : uint32
-                val mutable public pNext : nativeint
-                val mutable public presentMask : uint32_32
-                val mutable public modes : VkDeviceGroupPresentModeFlagsKHR
-        
-                new(pNext : nativeint, presentMask : uint32_32, modes : VkDeviceGroupPresentModeFlagsKHR) =
-                    {
-                        sType = 1000060007u
-                        pNext = pNext
-                        presentMask = presentMask
-                        modes = modes
-                    }
-        
-                new(presentMask : uint32_32, modes : VkDeviceGroupPresentModeFlagsKHR) =
-                    VkDeviceGroupPresentCapabilitiesKHR(Unchecked.defaultof<nativeint>, presentMask, modes)
-        
-                static member Empty =
-                    VkDeviceGroupPresentCapabilitiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32_32>, Unchecked.defaultof<VkDeviceGroupPresentModeFlagsKHR>)
-        
-                override x.ToString() =
-                    String.concat "; " [
-                        sprintf "sType = %A" x.sType
-                        sprintf "pNext = %A" x.pNext
-                        sprintf "presentMask = %A" x.presentMask
-                        sprintf "modes = %A" x.modes
-                    ] |> sprintf "VkDeviceGroupPresentCapabilitiesKHR { %s }"
-            end
-        
-        
-        
-        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-        module VkRaw =
-            [<SuppressUnmanagedCodeSecurity>]
-            type VkGetDeviceGroupPresentCapabilitiesKHRDel = delegate of VkDevice * nativeptr<VkDeviceGroupPresentCapabilitiesKHR> -> VkResult
-            [<SuppressUnmanagedCodeSecurity>]
-            type VkGetDeviceGroupSurfacePresentModesKHRDel = delegate of VkDevice * VkSurfaceKHR * nativeptr<VkDeviceGroupPresentModeFlagsKHR> -> VkResult
-            [<SuppressUnmanagedCodeSecurity>]
-            type VkGetPhysicalDevicePresentRectanglesKHRDel = delegate of VkPhysicalDevice * VkSurfaceKHR * nativeptr<uint32> * nativeptr<VkRect2D> -> VkResult
-            
-            [<AbstractClass; Sealed>]
-            type private Loader<'d> private() =
-                static do Report.Begin(3, "[Vulkan] loading VK_KHR_surface")
-                static let s_vkGetDeviceGroupPresentCapabilitiesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetDeviceGroupPresentCapabilitiesKHRDel> "vkGetDeviceGroupPresentCapabilitiesKHR"
-                static let s_vkGetDeviceGroupSurfacePresentModesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetDeviceGroupSurfacePresentModesKHRDel> "vkGetDeviceGroupSurfacePresentModesKHR"
-                static let s_vkGetPhysicalDevicePresentRectanglesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDevicePresentRectanglesKHRDel> "vkGetPhysicalDevicePresentRectanglesKHR"
-                static do Report.End(3) |> ignore
-                static member vkGetDeviceGroupPresentCapabilitiesKHR = s_vkGetDeviceGroupPresentCapabilitiesKHRDel
-                static member vkGetDeviceGroupSurfacePresentModesKHR = s_vkGetDeviceGroupSurfacePresentModesKHRDel
-                static member vkGetPhysicalDevicePresentRectanglesKHR = s_vkGetPhysicalDevicePresentRectanglesKHRDel
-            let vkGetDeviceGroupPresentCapabilitiesKHR(device : VkDevice, pDeviceGroupPresentCapabilities : nativeptr<VkDeviceGroupPresentCapabilitiesKHR>) = Loader<unit>.vkGetDeviceGroupPresentCapabilitiesKHR.Invoke(device, pDeviceGroupPresentCapabilities)
-            let vkGetDeviceGroupSurfacePresentModesKHR(device : VkDevice, surface : VkSurfaceKHR, pModes : nativeptr<VkDeviceGroupPresentModeFlagsKHR>) = Loader<unit>.vkGetDeviceGroupSurfacePresentModesKHR.Invoke(device, surface, pModes)
-            let vkGetPhysicalDevicePresentRectanglesKHR(physicalDevice : VkPhysicalDevice, surface : VkSurfaceKHR, pRectCount : nativeptr<uint32>, pRects : nativeptr<VkRect2D>) = Loader<unit>.vkGetPhysicalDevicePresentRectanglesKHR.Invoke(physicalDevice, surface, pRectCount, pRects)
-    
-    module KHRSwapchain =
-        open EXTDebugReport
-        
-        
-        [<StructLayout(LayoutKind.Sequential)>]
-        type VkAcquireNextImageInfoKHR = 
-            struct
-                val mutable public sType : uint32
-                val mutable public pNext : nativeint
-                val mutable public swapchain : VkSwapchainKHR
-                val mutable public timeout : uint64
-                val mutable public semaphore : VkSemaphore
-                val mutable public fence : VkFence
-                val mutable public deviceMask : uint32
-        
-                new(pNext : nativeint, swapchain : VkSwapchainKHR, timeout : uint64, semaphore : VkSemaphore, fence : VkFence, deviceMask : uint32) =
-                    {
-                        sType = 1000060010u
-                        pNext = pNext
-                        swapchain = swapchain
-                        timeout = timeout
-                        semaphore = semaphore
-                        fence = fence
-                        deviceMask = deviceMask
-                    }
-        
-                new(swapchain : VkSwapchainKHR, timeout : uint64, semaphore : VkSemaphore, fence : VkFence, deviceMask : uint32) =
-                    VkAcquireNextImageInfoKHR(Unchecked.defaultof<nativeint>, swapchain, timeout, semaphore, fence, deviceMask)
-        
-                static member Empty =
-                    VkAcquireNextImageInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSwapchainKHR>, Unchecked.defaultof<uint64>, Unchecked.defaultof<VkSemaphore>, Unchecked.defaultof<VkFence>, Unchecked.defaultof<uint32>)
-        
-                override x.ToString() =
-                    String.concat "; " [
-                        sprintf "sType = %A" x.sType
-                        sprintf "pNext = %A" x.pNext
-                        sprintf "swapchain = %A" x.swapchain
-                        sprintf "timeout = %A" x.timeout
-                        sprintf "semaphore = %A" x.semaphore
-                        sprintf "fence = %A" x.fence
-                        sprintf "deviceMask = %A" x.deviceMask
-                    ] |> sprintf "VkAcquireNextImageInfoKHR { %s }"
-            end
-        
-        [<StructLayout(LayoutKind.Sequential)>]
-        type VkBindImageMemorySwapchainInfoKHR = 
-            struct
-                val mutable public sType : uint32
-                val mutable public pNext : nativeint
-                val mutable public swapchain : VkSwapchainKHR
-                val mutable public imageIndex : uint32
-        
-                new(pNext : nativeint, swapchain : VkSwapchainKHR, imageIndex : uint32) =
-                    {
-                        sType = 1000060009u
-                        pNext = pNext
-                        swapchain = swapchain
-                        imageIndex = imageIndex
-                    }
-        
-                new(swapchain : VkSwapchainKHR, imageIndex : uint32) =
-                    VkBindImageMemorySwapchainInfoKHR(Unchecked.defaultof<nativeint>, swapchain, imageIndex)
-        
-                static member Empty =
-                    VkBindImageMemorySwapchainInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSwapchainKHR>, Unchecked.defaultof<uint32>)
-        
-                override x.ToString() =
-                    String.concat "; " [
-                        sprintf "sType = %A" x.sType
-                        sprintf "pNext = %A" x.pNext
-                        sprintf "swapchain = %A" x.swapchain
-                        sprintf "imageIndex = %A" x.imageIndex
-                    ] |> sprintf "VkBindImageMemorySwapchainInfoKHR { %s }"
-            end
-        
-        [<StructLayout(LayoutKind.Sequential)>]
-        type VkDeviceGroupPresentInfoKHR = 
-            struct
-                val mutable public sType : uint32
-                val mutable public pNext : nativeint
-                val mutable public swapchainCount : uint32
-                val mutable public pDeviceMasks : nativeptr<uint32>
-                val mutable public mode : VkDeviceGroupPresentModeFlagsKHR
-        
-                new(pNext : nativeint, swapchainCount : uint32, pDeviceMasks : nativeptr<uint32>, mode : VkDeviceGroupPresentModeFlagsKHR) =
-                    {
-                        sType = 1000060011u
-                        pNext = pNext
-                        swapchainCount = swapchainCount
-                        pDeviceMasks = pDeviceMasks
-                        mode = mode
-                    }
-        
-                new(swapchainCount : uint32, pDeviceMasks : nativeptr<uint32>, mode : VkDeviceGroupPresentModeFlagsKHR) =
-                    VkDeviceGroupPresentInfoKHR(Unchecked.defaultof<nativeint>, swapchainCount, pDeviceMasks, mode)
-        
-                static member Empty =
-                    VkDeviceGroupPresentInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<VkDeviceGroupPresentModeFlagsKHR>)
-        
-                override x.ToString() =
-                    String.concat "; " [
-                        sprintf "sType = %A" x.sType
-                        sprintf "pNext = %A" x.pNext
-                        sprintf "swapchainCount = %A" x.swapchainCount
-                        sprintf "pDeviceMasks = %A" x.pDeviceMasks
-                        sprintf "mode = %A" x.mode
-                    ] |> sprintf "VkDeviceGroupPresentInfoKHR { %s }"
-            end
-        
-        [<StructLayout(LayoutKind.Sequential)>]
-        type VkDeviceGroupSwapchainCreateInfoKHR = 
-            struct
-                val mutable public sType : uint32
-                val mutable public pNext : nativeint
-                val mutable public modes : VkDeviceGroupPresentModeFlagsKHR
-        
-                new(pNext : nativeint, modes : VkDeviceGroupPresentModeFlagsKHR) =
-                    {
-                        sType = 1000060012u
-                        pNext = pNext
-                        modes = modes
-                    }
-        
-                new(modes : VkDeviceGroupPresentModeFlagsKHR) =
-                    VkDeviceGroupSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, modes)
-        
-                static member Empty =
-                    VkDeviceGroupSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceGroupPresentModeFlagsKHR>)
-        
-                override x.ToString() =
-                    String.concat "; " [
-                        sprintf "sType = %A" x.sType
-                        sprintf "pNext = %A" x.pNext
-                        sprintf "modes = %A" x.modes
-                    ] |> sprintf "VkDeviceGroupSwapchainCreateInfoKHR { %s }"
-            end
-        
-        [<StructLayout(LayoutKind.Sequential)>]
-        type VkImageSwapchainCreateInfoKHR = 
-            struct
-                val mutable public sType : uint32
-                val mutable public pNext : nativeint
-                val mutable public swapchain : VkSwapchainKHR
-        
-                new(pNext : nativeint, swapchain : VkSwapchainKHR) =
-                    {
-                        sType = 1000060008u
-                        pNext = pNext
-                        swapchain = swapchain
-                    }
-        
-                new(swapchain : VkSwapchainKHR) =
-                    VkImageSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, swapchain)
-        
-                static member Empty =
-                    VkImageSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSwapchainKHR>)
-        
-                override x.ToString() =
-                    String.concat "; " [
-                        sprintf "sType = %A" x.sType
-                        sprintf "pNext = %A" x.pNext
-                        sprintf "swapchain = %A" x.swapchain
-                    ] |> sprintf "VkImageSwapchainCreateInfoKHR { %s }"
-            end
-        
-        
-        type VkSwapchainCreateFlagsKHR with
-             static member inline VkSwapchainCreateSplitInstanceBindRegionsBitKhr = unbox<VkSwapchainCreateFlagsKHR> 1
-        
-        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-        module VkRaw =
-            [<SuppressUnmanagedCodeSecurity>]
-            type VkAcquireNextImage2KHRDel = delegate of VkDevice * nativeptr<VkAcquireNextImageInfoKHR> * nativeptr<uint32> -> VkResult
-            
-            [<AbstractClass; Sealed>]
-            type private Loader<'d> private() =
-                static do Report.Begin(3, "[Vulkan] loading VK_KHR_swapchain")
-                static let s_vkAcquireNextImage2KHRDel = VkRaw.vkImportInstanceDelegate<VkAcquireNextImage2KHRDel> "vkAcquireNextImage2KHR"
-                static do Report.End(3) |> ignore
-                static member vkAcquireNextImage2KHR = s_vkAcquireNextImage2KHRDel
-            let vkAcquireNextImage2KHR(device : VkDevice, pAcquireInfo : nativeptr<VkAcquireNextImageInfoKHR>, pImageIndex : nativeptr<uint32>) = Loader<unit>.vkAcquireNextImage2KHR.Invoke(device, pAcquireInfo, pImageIndex)
 
 module KHRDisplaySwapchain =
     let Name = "VK_KHR_display_swapchain"
     let Number = 4
-    
+
     let Required = [ KHRDisplay.Name; KHRSwapchain.Name ]
     open KHRDisplay
+    open KHRSurface
     open KHRSwapchain
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDisplayPresentInfoKHR = 
         struct
@@ -17202,8 +18663,10 @@ module KHRDisplaySwapchain =
         end
     
     
-    type VkResult with
-         static member inline VkErrorIncompatibleDisplayKhr = unbox<VkResult> -1000003001
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkResult with
+              static member inline VkErrorIncompatibleDisplayKhr = unbox<VkResult> -1000003001
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -17221,181 +18684,92 @@ module KHRDisplaySwapchain =
 module KHRDrawIndirectCount =
     let Name = "VK_KHR_draw_indirect_count"
     let Number = 170
-    
-    open EXTDebugReport
-    
-    
-    
-    
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module VkRaw =
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkCmdDrawIndirectCountKHRDel = delegate of VkCommandBuffer * VkBuffer * VkDeviceSize * VkBuffer * VkDeviceSize * uint32 * uint32 -> unit
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkCmdDrawIndexedIndirectCountKHRDel = delegate of VkCommandBuffer * VkBuffer * VkDeviceSize * VkBuffer * VkDeviceSize * uint32 * uint32 -> unit
-        
-        [<AbstractClass; Sealed>]
-        type private Loader<'d> private() =
-            static do Report.Begin(3, "[Vulkan] loading VK_KHR_draw_indirect_count")
-            static let s_vkCmdDrawIndirectCountKHRDel = VkRaw.vkImportInstanceDelegate<VkCmdDrawIndirectCountKHRDel> "vkCmdDrawIndirectCountKHR"
-            static let s_vkCmdDrawIndexedIndirectCountKHRDel = VkRaw.vkImportInstanceDelegate<VkCmdDrawIndexedIndirectCountKHRDel> "vkCmdDrawIndexedIndirectCountKHR"
-            static do Report.End(3) |> ignore
-            static member vkCmdDrawIndirectCountKHR = s_vkCmdDrawIndirectCountKHRDel
-            static member vkCmdDrawIndexedIndirectCountKHR = s_vkCmdDrawIndexedIndirectCountKHRDel
-        let vkCmdDrawIndirectCountKHR(commandBuffer : VkCommandBuffer, buffer : VkBuffer, offset : VkDeviceSize, countBuffer : VkBuffer, countBufferOffset : VkDeviceSize, maxDrawCount : uint32, stride : uint32) = Loader<unit>.vkCmdDrawIndirectCountKHR.Invoke(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride)
-        let vkCmdDrawIndexedIndirectCountKHR(commandBuffer : VkCommandBuffer, buffer : VkBuffer, offset : VkDeviceSize, countBuffer : VkBuffer, countBufferOffset : VkDeviceSize, maxDrawCount : uint32, stride : uint32) = Loader<unit>.vkCmdDrawIndexedIndirectCountKHR.Invoke(commandBuffer, buffer, offset, countBuffer, countBufferOffset, maxDrawCount, stride)
+
+
 
 module KHRDriverProperties =
     let Name = "VK_KHR_driver_properties"
     let Number = 197
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    type VkDriverIdKHR = 
-        | AmdProprietary = 1
-        | AmdOpenSource = 2
-        | MesaRadv = 3
-        | NvidiaProprietary = 4
-        | IntelProprietaryWindows = 5
-        | IntelOpenSourceMesa = 6
-        | ImaginationProprietary = 7
-        | QualcommProprietary = 8
-        | ArmProprietary = 9
-        | GoogleSwiftshader = 10
-        | GgpProprietary = 11
-        | BroadcomProprietary = 12
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkConformanceVersionKHR = 
-        struct
-            val mutable public major : byte
-            val mutable public minor : byte
-            val mutable public subminor : byte
-            val mutable public patch : byte
-    
-            new(major : byte, minor : byte, subminor : byte, patch : byte) =
-                {
-                    major = major
-                    minor = minor
-                    subminor = subminor
-                    patch = patch
-                }
-    
-            static member Empty =
-                VkConformanceVersionKHR(Unchecked.defaultof<byte>, Unchecked.defaultof<byte>, Unchecked.defaultof<byte>, Unchecked.defaultof<byte>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "major = %A" x.major
-                    sprintf "minor = %A" x.minor
-                    sprintf "subminor = %A" x.subminor
-                    sprintf "patch = %A" x.patch
-                ] |> sprintf "VkConformanceVersionKHR { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceDriverPropertiesKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public driverID : VkDriverIdKHR
-            val mutable public driverName : String256
-            val mutable public driverInfo : String256
-            val mutable public conformanceVersion : VkConformanceVersionKHR
-    
-            new(pNext : nativeint, driverID : VkDriverIdKHR, driverName : String256, driverInfo : String256, conformanceVersion : VkConformanceVersionKHR) =
-                {
-                    sType = 1000196000u
-                    pNext = pNext
-                    driverID = driverID
-                    driverName = driverName
-                    driverInfo = driverInfo
-                    conformanceVersion = conformanceVersion
-                }
-    
-            new(driverID : VkDriverIdKHR, driverName : String256, driverInfo : String256, conformanceVersion : VkConformanceVersionKHR) =
-                VkPhysicalDeviceDriverPropertiesKHR(Unchecked.defaultof<nativeint>, driverID, driverName, driverInfo, conformanceVersion)
-    
-            static member Empty =
-                VkPhysicalDeviceDriverPropertiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDriverIdKHR>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>, Unchecked.defaultof<VkConformanceVersionKHR>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "driverID = %A" x.driverID
-                    sprintf "driverName = %A" x.driverName
-                    sprintf "driverInfo = %A" x.driverInfo
-                    sprintf "conformanceVersion = %A" x.conformanceVersion
-                ] |> sprintf "VkPhysicalDeviceDriverPropertiesKHR { %s }"
-        end
-    
-    
+
+    type VkDriverIdKHR = VkDriverId
+
+    type VkConformanceVersionKHR = VkConformanceVersion
+    type VkPhysicalDeviceDriverPropertiesKHR = VkPhysicalDeviceDriverProperties
     
 
 module KHRExtension221 =
     let Name = "VK_KHR_extension_221"
     let Number = 221
-    
-    open EXTDebugReport
-    
-    
-    
-    type VkRenderPassCreateFlags with
-         static member inline Reserved0BitKhr = unbox<VkRenderPassCreateFlags> 1
+
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkRenderPassCreateFlags with
+              static member inline Reserved0BitKhr = unbox<VkRenderPassCreateFlags> 1
     
 
 module KHRExtension297 =
     let Name = "VK_KHR_extension_297"
     let Number = 297
+
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkPipelineShaderStageCreateFlags with
+              static member inline Reserved3BitKhr = unbox<VkPipelineShaderStageCreateFlags> 8
     
-    open EXTDebugReport
-    
-    
-    
-    type VkPipelineShaderStageCreateFlags with
-         static member inline Reserved3BitKhr = unbox<VkPipelineShaderStageCreateFlags> 8
+
+module KHRExtension309 =
+    let Name = "VK_KHR_extension_309"
+    let Number = 309
+
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkMemoryHeapFlags with
+              static member inline Reserved2BitKhr = unbox<VkMemoryHeapFlags> 4
     
 
 module KHRExternalFenceCapabilities =
     let Name = "VK_KHR_external_fence_capabilities"
     let Number = 113
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
+    type VkExternalFenceFeatureFlagsKHR = VkExternalFenceFeatureFlags
+    type VkExternalFenceHandleTypeFlagsKHR = VkExternalFenceHandleTypeFlags
+    type VkPhysicalDeviceIDPropertiesKHR = VkPhysicalDeviceIDProperties
+
     type VkExternalFencePropertiesKHR = VkExternalFenceProperties
     type VkPhysicalDeviceExternalFenceInfoKHR = VkPhysicalDeviceExternalFenceInfo
-    
     
 
 module KHRExternalFence =
     let Name = "VK_KHR_external_fence"
     let Number = 114
-    
+
     let Required = [ KHRExternalFenceCapabilities.Name ]
     open KHRExternalFenceCapabilities
-    open EXTDebugReport
-    
-    
+    open KHRGetPhysicalDeviceProperties2
+
+    type VkFenceImportFlagsKHR = VkFenceImportFlags
+
     type VkExportFenceCreateInfoKHR = VkExportFenceCreateInfo
-    
     
 
 module KHRExternalFenceFd =
     let Name = "VK_KHR_external_fence_fd"
     let Number = 116
-    
+
     let Required = [ KHRExternalFence.Name ]
     open KHRExternalFence
-    open EXTDebugReport
-    
-    
+    open KHRExternalFenceCapabilities
+    open KHRGetPhysicalDeviceProperties2
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkFenceGetFdInfoKHR = 
         struct
@@ -17465,7 +18839,6 @@ module KHRExternalFenceFd =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -17487,12 +18860,12 @@ module KHRExternalFenceFd =
 module KHRExternalFenceWin32 =
     let Name = "VK_KHR_external_fence_win32"
     let Number = 115
-    
+
     let Required = [ KHRExternalFence.Name ]
     open KHRExternalFence
-    open EXTDebugReport
-    
-    
+    open KHRExternalFenceCapabilities
+    open KHRGetPhysicalDeviceProperties2
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkExportFenceWin32HandleInfoKHR = 
         struct
@@ -17599,7 +18972,6 @@ module KHRExternalFenceWin32 =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -17621,12 +18993,12 @@ module KHRExternalFenceWin32 =
 module KHRExternalMemoryWin32 =
     let Name = "VK_KHR_external_memory_win32"
     let Number = 74
-    
+
     let Required = [ KHRExternalMemory.Name ]
     open KHRExternalMemory
-    open EXTDebugReport
-    
-    
+    open KHRExternalMemoryCapabilities
+    open KHRGetPhysicalDeviceProperties2
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkExportMemoryWin32HandleInfoKHR = 
         struct
@@ -17755,7 +19127,6 @@ module KHRExternalMemoryWin32 =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -17777,39 +19148,40 @@ module KHRExternalMemoryWin32 =
 module KHRExternalSemaphoreCapabilities =
     let Name = "VK_KHR_external_semaphore_capabilities"
     let Number = 77
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
+    type VkExternalSemaphoreFeatureFlagsKHR = VkExternalSemaphoreFeatureFlags
+    type VkExternalSemaphoreHandleTypeFlagsKHR = VkExternalSemaphoreHandleTypeFlags
+    type VkPhysicalDeviceIDPropertiesKHR = VkPhysicalDeviceIDProperties
+
     type VkExternalSemaphorePropertiesKHR = VkExternalSemaphoreProperties
     type VkPhysicalDeviceExternalSemaphoreInfoKHR = VkPhysicalDeviceExternalSemaphoreInfo
-    
     
 
 module KHRExternalSemaphore =
     let Name = "VK_KHR_external_semaphore"
     let Number = 78
-    
+
     let Required = [ KHRExternalSemaphoreCapabilities.Name ]
     open KHRExternalSemaphoreCapabilities
-    open EXTDebugReport
-    
-    
+    open KHRGetPhysicalDeviceProperties2
+
+    type VkSemaphoreImportFlagsKHR = VkSemaphoreImportFlags
+
     type VkExportSemaphoreCreateInfoKHR = VkExportSemaphoreCreateInfo
-    
     
 
 module KHRExternalSemaphoreFd =
     let Name = "VK_KHR_external_semaphore_fd"
     let Number = 80
-    
+
     let Required = [ KHRExternalSemaphore.Name ]
     open KHRExternalSemaphore
-    open EXTDebugReport
-    
-    
+    open KHRExternalSemaphoreCapabilities
+    open KHRGetPhysicalDeviceProperties2
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkImportSemaphoreFdInfoKHR = 
         struct
@@ -17879,7 +19251,6 @@ module KHRExternalSemaphoreFd =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -17901,12 +19272,12 @@ module KHRExternalSemaphoreFd =
 module KHRExternalSemaphoreWin32 =
     let Name = "VK_KHR_external_semaphore_win32"
     let Number = 79
-    
+
     let Required = [ KHRExternalSemaphore.Name ]
     open KHRExternalSemaphore
-    open EXTDebugReport
-    
-    
+    open KHRExternalSemaphoreCapabilities
+    open KHRGetPhysicalDeviceProperties2
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkD3D12FenceSubmitInfoKHR = 
         struct
@@ -18050,7 +19421,6 @@ module KHRExternalSemaphoreWin32 =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -18072,12 +19442,11 @@ module KHRExternalSemaphoreWin32 =
 module KHRGetDisplayProperties2 =
     let Name = "VK_KHR_get_display_properties2"
     let Number = 122
-    
+
     let Required = [ KHRDisplay.Name ]
     open KHRDisplay
-    open EXTDebugReport
-    
-    
+    open KHRSurface
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDisplayModeProperties2KHR = 
         struct
@@ -18222,7 +19591,6 @@ module KHRGetDisplayProperties2 =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -18254,117 +19622,25 @@ module KHRGetDisplayProperties2 =
 module KHRImagelessFramebuffer =
     let Name = "VK_KHR_imageless_framebuffer"
     let Number = 109
-    
+
     let Required = [ KHRImageFormatList.Name; KHRMaintenance2.Name ]
     open KHRImageFormatList
     open KHRMaintenance2
-    open EXTDebugReport
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkFramebufferAttachmentsCreateInfoKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public attachmentImageInfoCount : uint32
-            val mutable public pAttachmentImageInfos : nativeptr<VkFramebufferAttachmentImageInfoKHR>
-    
-            new(pNext : nativeint, attachmentImageInfoCount : uint32, pAttachmentImageInfos : nativeptr<VkFramebufferAttachmentImageInfoKHR>) =
-                {
-                    sType = 1000108001u
-                    pNext = pNext
-                    attachmentImageInfoCount = attachmentImageInfoCount
-                    pAttachmentImageInfos = pAttachmentImageInfos
-                }
-    
-            new(attachmentImageInfoCount : uint32, pAttachmentImageInfos : nativeptr<VkFramebufferAttachmentImageInfoKHR>) =
-                VkFramebufferAttachmentsCreateInfoKHR(Unchecked.defaultof<nativeint>, attachmentImageInfoCount, pAttachmentImageInfos)
-    
-            static member Empty =
-                VkFramebufferAttachmentsCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkFramebufferAttachmentImageInfoKHR>>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "attachmentImageInfoCount = %A" x.attachmentImageInfoCount
-                    sprintf "pAttachmentImageInfos = %A" x.pAttachmentImageInfos
-                ] |> sprintf "VkFramebufferAttachmentsCreateInfoKHR { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceImagelessFramebufferFeaturesKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public imagelessFramebuffer : VkBool32
-    
-            new(pNext : nativeint, imagelessFramebuffer : VkBool32) =
-                {
-                    sType = 1000108000u
-                    pNext = pNext
-                    imagelessFramebuffer = imagelessFramebuffer
-                }
-    
-            new(imagelessFramebuffer : VkBool32) =
-                VkPhysicalDeviceImagelessFramebufferFeaturesKHR(Unchecked.defaultof<nativeint>, imagelessFramebuffer)
-    
-            static member Empty =
-                VkPhysicalDeviceImagelessFramebufferFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "imagelessFramebuffer = %A" x.imagelessFramebuffer
-                ] |> sprintf "VkPhysicalDeviceImagelessFramebufferFeaturesKHR { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkRenderPassAttachmentBeginInfoKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public attachmentCount : uint32
-            val mutable public pAttachments : nativeptr<VkImageView>
-    
-            new(pNext : nativeint, attachmentCount : uint32, pAttachments : nativeptr<VkImageView>) =
-                {
-                    sType = 1000108003u
-                    pNext = pNext
-                    attachmentCount = attachmentCount
-                    pAttachments = pAttachments
-                }
-    
-            new(attachmentCount : uint32, pAttachments : nativeptr<VkImageView>) =
-                VkRenderPassAttachmentBeginInfoKHR(Unchecked.defaultof<nativeint>, attachmentCount, pAttachments)
-    
-            static member Empty =
-                VkRenderPassAttachmentBeginInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkImageView>>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "attachmentCount = %A" x.attachmentCount
-                    sprintf "pAttachments = %A" x.pAttachments
-                ] |> sprintf "VkRenderPassAttachmentBeginInfoKHR { %s }"
-        end
-    
-    
-    type VkFramebufferCreateFlags with
-         static member inline ImagelessBitKhr = unbox<VkFramebufferCreateFlags> 1
+
+    type VkFramebufferAttachmentImageInfoKHR = VkFramebufferAttachmentImageInfo
+    type VkFramebufferAttachmentsCreateInfoKHR = VkFramebufferAttachmentsCreateInfo
+    type VkPhysicalDeviceImagelessFramebufferFeaturesKHR = VkPhysicalDeviceImagelessFramebufferFeatures
+    type VkRenderPassAttachmentBeginInfoKHR = VkRenderPassAttachmentBeginInfo
     
 
 module KHRIncrementalPresent =
     let Name = "VK_KHR_incremental_present"
     let Number = 85
-    
+
     let Required = [ KHRSwapchain.Name ]
+    open KHRSurface
     open KHRSwapchain
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkRectLayerKHR = 
         struct
@@ -18444,28 +19720,22 @@ module KHRIncrementalPresent =
         end
     
     
-    
 
 module KHRMirSurface =
     let Name = "VK_KHR_mir_surface"
     let Number = 8
-    
+
     let Required = [ KHRSurface.Name ]
     open KHRSurface
-    open EXTDebugReport
-    
-    
-    
-    
+
 
 module KHRPerformanceQuery =
     let Name = "VK_KHR_performance_query"
     let Number = 117
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
+
     [<Flags>]
     type VkPerformanceCounterDescriptionFlagsKHR = 
         | None = 0
@@ -18473,9 +19743,9 @@ module KHRPerformanceQuery =
         | ConcurrentlyImpacted = 0x00000002
     
     type VkPerformanceCounterScopeKHR = 
-        | VkQueryScopeCommandBuffer = 0
-        | VkQueryScopeRenderPass = 1
-        | VkQueryScopeCommand = 2
+        | CommandBuffer = 0
+        | RenderPass = 1
+        | Command = 2
     
     type VkPerformanceCounterStorageKHR = 
         | Int32 = 0
@@ -18498,7 +19768,7 @@ module KHRPerformanceQuery =
         | Hertz = 9
         | Cycles = 10
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkAcquireProfilingLockInfoKHR = 
         struct
@@ -18753,8 +20023,10 @@ module KHRPerformanceQuery =
         end
     
     
-    type VkQueryType with
-         static member inline PerformanceQueryKhr = unbox<VkQueryType> 1000116000
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkQueryType with
+              static member inline PerformanceQueryKhr = unbox<VkQueryType> 1000116000
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -18787,16 +20059,15 @@ module KHRPerformanceQuery =
 module KHRPipelineExecutableProperties =
     let Name = "VK_KHR_pipeline_executable_properties"
     let Number = 270
-    
-    open EXTDebugReport
-    
+
+
     type VkPipelineExecutableStatisticFormatKHR = 
         | Bool32 = 0
         | Int64 = 1
         | Uint64 = 2
         | Float64 = 3
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR = 
         struct
@@ -19020,9 +20291,11 @@ module KHRPipelineExecutableProperties =
         end
     
     
-    type VkPipelineCreateFlags with
-         static member inline CaptureStatisticsBitKhr = unbox<VkPipelineCreateFlags> 64
-         static member inline CaptureInternalRepresentationsBitKhr = unbox<VkPipelineCreateFlags> 128
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkPipelineCreateFlags with
+              static member inline CaptureStatisticsBitKhr = unbox<VkPipelineCreateFlags> 64
+              static member inline CaptureInternalRepresentationsBitKhr = unbox<VkPipelineCreateFlags> 128
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -19047,237 +20320,1318 @@ module KHRPipelineExecutableProperties =
         let vkGetPipelineExecutableStatisticsKHR(device : VkDevice, pExecutableInfo : nativeptr<VkPipelineExecutableInfoKHR>, pStatisticCount : nativeptr<uint32>, pStatistics : nativeptr<VkPipelineExecutableStatisticKHR>) = Loader<unit>.vkGetPipelineExecutableStatisticsKHR.Invoke(device, pExecutableInfo, pStatisticCount, pStatistics)
         let vkGetPipelineExecutableInternalRepresentationsKHR(device : VkDevice, pExecutableInfo : nativeptr<VkPipelineExecutableInfoKHR>, pInternalRepresentationCount : nativeptr<uint32>, pInternalRepresentations : nativeptr<VkPipelineExecutableInternalRepresentationKHR>) = Loader<unit>.vkGetPipelineExecutableInternalRepresentationsKHR.Invoke(device, pExecutableInfo, pInternalRepresentationCount, pInternalRepresentations)
 
-module KHRPushDescriptor =
-    let Name = "VK_KHR_push_descriptor"
-    let Number = 81
-    
-    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
-    open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+module KHRPipelineLibrary =
+    let Name = "VK_KHR_pipeline_library"
+    let Number = 291
+
+
     [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDevicePushDescriptorPropertiesKHR = 
+    type VkPipelineLibraryCreateInfoKHR = 
         struct
             val mutable public sType : uint32
             val mutable public pNext : nativeint
-            val mutable public maxPushDescriptors : uint32
+            val mutable public libraryCount : uint32
+            val mutable public pLibraries : nativeptr<VkPipeline>
     
-            new(pNext : nativeint, maxPushDescriptors : uint32) =
+            new(pNext : nativeint, libraryCount : uint32, pLibraries : nativeptr<VkPipeline>) =
                 {
-                    sType = 1000080000u
+                    sType = 1000290000u
                     pNext = pNext
-                    maxPushDescriptors = maxPushDescriptors
+                    libraryCount = libraryCount
+                    pLibraries = pLibraries
                 }
     
-            new(maxPushDescriptors : uint32) =
-                VkPhysicalDevicePushDescriptorPropertiesKHR(Unchecked.defaultof<nativeint>, maxPushDescriptors)
+            new(libraryCount : uint32, pLibraries : nativeptr<VkPipeline>) =
+                VkPipelineLibraryCreateInfoKHR(Unchecked.defaultof<nativeint>, libraryCount, pLibraries)
     
             static member Empty =
-                VkPhysicalDevicePushDescriptorPropertiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
+                VkPipelineLibraryCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipeline>>)
     
             override x.ToString() =
                 String.concat "; " [
                     sprintf "sType = %A" x.sType
                     sprintf "pNext = %A" x.pNext
-                    sprintf "maxPushDescriptors = %A" x.maxPushDescriptors
-                ] |> sprintf "VkPhysicalDevicePushDescriptorPropertiesKHR { %s }"
+                    sprintf "libraryCount = %A" x.libraryCount
+                    sprintf "pLibraries = %A" x.pLibraries
+                ] |> sprintf "VkPipelineLibraryCreateInfoKHR { %s }"
         end
     
     
-    type VkDescriptorSetLayoutCreateFlags with
-         static member inline PushDescriptorBitKhr = unbox<VkDescriptorSetLayoutCreateFlags> 1
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkPipelineCreateFlags with
+              static member inline LibraryBitKhr = unbox<VkPipelineCreateFlags> 2048
+    
+
+module KHRRayTracing =
+    let Name = "VK_KHR_ray_tracing"
+    let Number = 151
+
+    let Required = [ EXTDescriptorIndexing.Name; KHRBufferDeviceAddress.Name; KHRDeferredHostOperations.Name; KHRGetMemoryRequirements2.Name; KHRGetPhysicalDeviceProperties2.Name; KHRPipelineLibrary.Name ]
+    open EXTDebugReport
+    open EXTDescriptorIndexing
+    open KHRBufferDeviceAddress
+    open KHRDeferredHostOperations
+    open KHRGetMemoryRequirements2
+    open KHRGetPhysicalDeviceProperties2
+    open KHRMaintenance3
+    open KHRPipelineLibrary
+
+    type VkAccelerationStructureTypeKHR = 
+        | TopLevel = 0
+        | BottomLevel = 1
+    
+    type VkRayTracingShaderGroupTypeKHR = 
+        | General = 0
+        | TrianglesHitGroup = 1
+        | ProceduralHitGroup = 2
+    
+    type VkAccelerationStructureBuildTypeKHR = 
+        | Host = 0
+        | Device = 1
+        | HostOrDevice = 2
+    
+    [<Flags>]
+    type VkGeometryFlagsKHR = 
+        | None = 0
+        | OpaqueBit = 0x00000001
+        | NoDuplicateAnyHitInvocationBit = 0x00000002
+    
+    [<Flags>]
+    type VkGeometryInstanceFlagsKHR = 
+        | None = 0
+        | TriangleFacingCullDisableBit = 0x00000001
+        | TriangleFrontCounterclockwiseBit = 0x00000002
+        | ForceOpaqueBit = 0x00000004
+        | ForceNoOpaqueBit = 0x00000008
+    
+    [<Flags>]
+    type VkBuildAccelerationStructureFlagsKHR = 
+        | None = 0
+        | AllowUpdateBit = 0x00000001
+        | AllowCompactionBit = 0x00000002
+        | PreferFastTraceBit = 0x00000004
+        | PreferFastBuildBit = 0x00000008
+        | LowMemoryBit = 0x00000010
+    
+    type VkCopyAccelerationStructureModeKHR = 
+        | Clone = 0
+        | Compact = 1
+        | Serialize = 2
+        | Deserialize = 3
+    
+    type VkGeometryTypeKHR = 
+        | Triangles = 0
+        | Aabbs = 1
+    
+    type VkAccelerationStructureMemoryRequirementsTypeKHR = 
+        | Object = 0
+        | BuildScratch = 1
+        | UpdateScratch = 2
+    
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkAabbPositionsKHR = 
+        struct
+            val mutable public minX : float32
+            val mutable public minY : float32
+            val mutable public minZ : float32
+            val mutable public maxX : float32
+            val mutable public maxY : float32
+            val mutable public maxZ : float32
+    
+            new(minX : float32, minY : float32, minZ : float32, maxX : float32, maxY : float32, maxZ : float32) =
+                {
+                    minX = minX
+                    minY = minY
+                    minZ = minZ
+                    maxX = maxX
+                    maxY = maxY
+                    maxZ = maxZ
+                }
+    
+            static member Empty =
+                VkAabbPositionsKHR(Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "minX = %A" x.minX
+                    sprintf "minY = %A" x.minY
+                    sprintf "minZ = %A" x.minZ
+                    sprintf "maxX = %A" x.maxX
+                    sprintf "maxY = %A" x.maxY
+                    sprintf "maxZ = %A" x.maxZ
+                ] |> sprintf "VkAabbPositionsKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Explicit)>]
+    type VkDeviceOrHostAddressConstKHR = 
+        struct
+            [<FieldOffset(0)>]
+            val mutable public deviceAddress : VkDeviceAddress
+            [<FieldOffset(0)>]
+            val mutable public hostAddress : nativeint
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "deviceAddress = %A" x.deviceAddress
+                    sprintf "hostAddress = %A" x.hostAddress
+                ] |> sprintf "VkDeviceOrHostAddressConstKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkAccelerationStructureGeometryTrianglesDataKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public vertexFormat : VkFormat
+            val mutable public vertexData : VkDeviceOrHostAddressConstKHR
+            val mutable public vertexStride : VkDeviceSize
+            val mutable public indexType : VkIndexType
+            val mutable public indexData : VkDeviceOrHostAddressConstKHR
+            val mutable public transformData : VkDeviceOrHostAddressConstKHR
+    
+            new(pNext : nativeint, vertexFormat : VkFormat, vertexData : VkDeviceOrHostAddressConstKHR, vertexStride : VkDeviceSize, indexType : VkIndexType, indexData : VkDeviceOrHostAddressConstKHR, transformData : VkDeviceOrHostAddressConstKHR) =
+                {
+                    sType = 1000150005u
+                    pNext = pNext
+                    vertexFormat = vertexFormat
+                    vertexData = vertexData
+                    vertexStride = vertexStride
+                    indexType = indexType
+                    indexData = indexData
+                    transformData = transformData
+                }
+    
+            new(vertexFormat : VkFormat, vertexData : VkDeviceOrHostAddressConstKHR, vertexStride : VkDeviceSize, indexType : VkIndexType, indexData : VkDeviceOrHostAddressConstKHR, transformData : VkDeviceOrHostAddressConstKHR) =
+                VkAccelerationStructureGeometryTrianglesDataKHR(Unchecked.defaultof<nativeint>, vertexFormat, vertexData, vertexStride, indexType, indexData, transformData)
+    
+            static member Empty =
+                VkAccelerationStructureGeometryTrianglesDataKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkIndexType>, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "vertexFormat = %A" x.vertexFormat
+                    sprintf "vertexData = %A" x.vertexData
+                    sprintf "vertexStride = %A" x.vertexStride
+                    sprintf "indexType = %A" x.indexType
+                    sprintf "indexData = %A" x.indexData
+                    sprintf "transformData = %A" x.transformData
+                ] |> sprintf "VkAccelerationStructureGeometryTrianglesDataKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkAccelerationStructureGeometryAabbsDataKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public data : VkDeviceOrHostAddressConstKHR
+            val mutable public stride : VkDeviceSize
+    
+            new(pNext : nativeint, data : VkDeviceOrHostAddressConstKHR, stride : VkDeviceSize) =
+                {
+                    sType = 1000150003u
+                    pNext = pNext
+                    data = data
+                    stride = stride
+                }
+    
+            new(data : VkDeviceOrHostAddressConstKHR, stride : VkDeviceSize) =
+                VkAccelerationStructureGeometryAabbsDataKHR(Unchecked.defaultof<nativeint>, data, stride)
+    
+            static member Empty =
+                VkAccelerationStructureGeometryAabbsDataKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>, Unchecked.defaultof<VkDeviceSize>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "data = %A" x.data
+                    sprintf "stride = %A" x.stride
+                ] |> sprintf "VkAccelerationStructureGeometryAabbsDataKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkAccelerationStructureGeometryInstancesDataKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public arrayOfPointers : VkBool32
+            val mutable public data : VkDeviceOrHostAddressConstKHR
+    
+            new(pNext : nativeint, arrayOfPointers : VkBool32, data : VkDeviceOrHostAddressConstKHR) =
+                {
+                    sType = 1000150004u
+                    pNext = pNext
+                    arrayOfPointers = arrayOfPointers
+                    data = data
+                }
+    
+            new(arrayOfPointers : VkBool32, data : VkDeviceOrHostAddressConstKHR) =
+                VkAccelerationStructureGeometryInstancesDataKHR(Unchecked.defaultof<nativeint>, arrayOfPointers, data)
+    
+            static member Empty =
+                VkAccelerationStructureGeometryInstancesDataKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "arrayOfPointers = %A" x.arrayOfPointers
+                    sprintf "data = %A" x.data
+                ] |> sprintf "VkAccelerationStructureGeometryInstancesDataKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Explicit)>]
+    type VkAccelerationStructureGeometryDataKHR = 
+        struct
+            [<FieldOffset(0)>]
+            val mutable public triangles : VkAccelerationStructureGeometryTrianglesDataKHR
+            [<FieldOffset(0)>]
+            val mutable public aabbs : VkAccelerationStructureGeometryAabbsDataKHR
+            [<FieldOffset(0)>]
+            val mutable public instances : VkAccelerationStructureGeometryInstancesDataKHR
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "triangles = %A" x.triangles
+                    sprintf "aabbs = %A" x.aabbs
+                    sprintf "instances = %A" x.instances
+                ] |> sprintf "VkAccelerationStructureGeometryDataKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkAccelerationStructureGeometryKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public geometryType : VkGeometryTypeKHR
+            val mutable public geometry : VkAccelerationStructureGeometryDataKHR
+            val mutable public flags : VkGeometryFlagsKHR
+    
+            new(pNext : nativeint, geometryType : VkGeometryTypeKHR, geometry : VkAccelerationStructureGeometryDataKHR, flags : VkGeometryFlagsKHR) =
+                {
+                    sType = 1000150006u
+                    pNext = pNext
+                    geometryType = geometryType
+                    geometry = geometry
+                    flags = flags
+                }
+    
+            new(geometryType : VkGeometryTypeKHR, geometry : VkAccelerationStructureGeometryDataKHR, flags : VkGeometryFlagsKHR) =
+                VkAccelerationStructureGeometryKHR(Unchecked.defaultof<nativeint>, geometryType, geometry, flags)
+    
+            static member Empty =
+                VkAccelerationStructureGeometryKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkGeometryTypeKHR>, Unchecked.defaultof<VkAccelerationStructureGeometryDataKHR>, Unchecked.defaultof<VkGeometryFlagsKHR>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "geometryType = %A" x.geometryType
+                    sprintf "geometry = %A" x.geometry
+                    sprintf "flags = %A" x.flags
+                ] |> sprintf "VkAccelerationStructureGeometryKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Explicit)>]
+    type VkDeviceOrHostAddressKHR = 
+        struct
+            [<FieldOffset(0)>]
+            val mutable public deviceAddress : VkDeviceAddress
+            [<FieldOffset(0)>]
+            val mutable public hostAddress : nativeint
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "deviceAddress = %A" x.deviceAddress
+                    sprintf "hostAddress = %A" x.hostAddress
+                ] |> sprintf "VkDeviceOrHostAddressKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkAccelerationStructureBuildGeometryInfoKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public _type : VkAccelerationStructureTypeKHR
+            val mutable public flags : VkBuildAccelerationStructureFlagsKHR
+            val mutable public update : VkBool32
+            val mutable public srcAccelerationStructure : VkAccelerationStructureKHR
+            val mutable public dstAccelerationStructure : VkAccelerationStructureKHR
+            val mutable public geometryArrayOfPointers : VkBool32
+            val mutable public geometryCount : uint32
+            val mutable public ppGeometries : nativeptr<nativeptr<VkAccelerationStructureGeometryKHR>>
+            val mutable public scratchData : VkDeviceOrHostAddressKHR
+    
+            new(pNext : nativeint, _type : VkAccelerationStructureTypeKHR, flags : VkBuildAccelerationStructureFlagsKHR, update : VkBool32, srcAccelerationStructure : VkAccelerationStructureKHR, dstAccelerationStructure : VkAccelerationStructureKHR, geometryArrayOfPointers : VkBool32, geometryCount : uint32, ppGeometries : nativeptr<nativeptr<VkAccelerationStructureGeometryKHR>>, scratchData : VkDeviceOrHostAddressKHR) =
+                {
+                    sType = 1000150000u
+                    pNext = pNext
+                    _type = _type
+                    flags = flags
+                    update = update
+                    srcAccelerationStructure = srcAccelerationStructure
+                    dstAccelerationStructure = dstAccelerationStructure
+                    geometryArrayOfPointers = geometryArrayOfPointers
+                    geometryCount = geometryCount
+                    ppGeometries = ppGeometries
+                    scratchData = scratchData
+                }
+    
+            new(_type : VkAccelerationStructureTypeKHR, flags : VkBuildAccelerationStructureFlagsKHR, update : VkBool32, srcAccelerationStructure : VkAccelerationStructureKHR, dstAccelerationStructure : VkAccelerationStructureKHR, geometryArrayOfPointers : VkBool32, geometryCount : uint32, ppGeometries : nativeptr<nativeptr<VkAccelerationStructureGeometryKHR>>, scratchData : VkDeviceOrHostAddressKHR) =
+                VkAccelerationStructureBuildGeometryInfoKHR(Unchecked.defaultof<nativeint>, _type, flags, update, srcAccelerationStructure, dstAccelerationStructure, geometryArrayOfPointers, geometryCount, ppGeometries, scratchData)
+    
+            static member Empty =
+                VkAccelerationStructureBuildGeometryInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccelerationStructureTypeKHR>, Unchecked.defaultof<VkBuildAccelerationStructureFlagsKHR>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<nativeptr<VkAccelerationStructureGeometryKHR>>>, Unchecked.defaultof<VkDeviceOrHostAddressKHR>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "_type = %A" x._type
+                    sprintf "flags = %A" x.flags
+                    sprintf "update = %A" x.update
+                    sprintf "srcAccelerationStructure = %A" x.srcAccelerationStructure
+                    sprintf "dstAccelerationStructure = %A" x.dstAccelerationStructure
+                    sprintf "geometryArrayOfPointers = %A" x.geometryArrayOfPointers
+                    sprintf "geometryCount = %A" x.geometryCount
+                    sprintf "ppGeometries = %A" x.ppGeometries
+                    sprintf "scratchData = %A" x.scratchData
+                ] |> sprintf "VkAccelerationStructureBuildGeometryInfoKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkAccelerationStructureBuildOffsetInfoKHR = 
+        struct
+            val mutable public primitiveCount : uint32
+            val mutable public primitiveOffset : uint32
+            val mutable public firstVertex : uint32
+            val mutable public transformOffset : uint32
+    
+            new(primitiveCount : uint32, primitiveOffset : uint32, firstVertex : uint32, transformOffset : uint32) =
+                {
+                    primitiveCount = primitiveCount
+                    primitiveOffset = primitiveOffset
+                    firstVertex = firstVertex
+                    transformOffset = transformOffset
+                }
+    
+            static member Empty =
+                VkAccelerationStructureBuildOffsetInfoKHR(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "primitiveCount = %A" x.primitiveCount
+                    sprintf "primitiveOffset = %A" x.primitiveOffset
+                    sprintf "firstVertex = %A" x.firstVertex
+                    sprintf "transformOffset = %A" x.transformOffset
+                ] |> sprintf "VkAccelerationStructureBuildOffsetInfoKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkAccelerationStructureCreateGeometryTypeInfoKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public geometryType : VkGeometryTypeKHR
+            val mutable public maxPrimitiveCount : uint32
+            val mutable public indexType : VkIndexType
+            val mutable public maxVertexCount : uint32
+            val mutable public vertexFormat : VkFormat
+            val mutable public allowsTransforms : VkBool32
+    
+            new(pNext : nativeint, geometryType : VkGeometryTypeKHR, maxPrimitiveCount : uint32, indexType : VkIndexType, maxVertexCount : uint32, vertexFormat : VkFormat, allowsTransforms : VkBool32) =
+                {
+                    sType = 1000150001u
+                    pNext = pNext
+                    geometryType = geometryType
+                    maxPrimitiveCount = maxPrimitiveCount
+                    indexType = indexType
+                    maxVertexCount = maxVertexCount
+                    vertexFormat = vertexFormat
+                    allowsTransforms = allowsTransforms
+                }
+    
+            new(geometryType : VkGeometryTypeKHR, maxPrimitiveCount : uint32, indexType : VkIndexType, maxVertexCount : uint32, vertexFormat : VkFormat, allowsTransforms : VkBool32) =
+                VkAccelerationStructureCreateGeometryTypeInfoKHR(Unchecked.defaultof<nativeint>, geometryType, maxPrimitiveCount, indexType, maxVertexCount, vertexFormat, allowsTransforms)
+    
+            static member Empty =
+                VkAccelerationStructureCreateGeometryTypeInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkGeometryTypeKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkIndexType>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkBool32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "geometryType = %A" x.geometryType
+                    sprintf "maxPrimitiveCount = %A" x.maxPrimitiveCount
+                    sprintf "indexType = %A" x.indexType
+                    sprintf "maxVertexCount = %A" x.maxVertexCount
+                    sprintf "vertexFormat = %A" x.vertexFormat
+                    sprintf "allowsTransforms = %A" x.allowsTransforms
+                ] |> sprintf "VkAccelerationStructureCreateGeometryTypeInfoKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkAccelerationStructureCreateInfoKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public compactedSize : VkDeviceSize
+            val mutable public _type : VkAccelerationStructureTypeKHR
+            val mutable public flags : VkBuildAccelerationStructureFlagsKHR
+            val mutable public maxGeometryCount : uint32
+            val mutable public pGeometryInfos : nativeptr<VkAccelerationStructureCreateGeometryTypeInfoKHR>
+            val mutable public deviceAddress : VkDeviceAddress
+    
+            new(pNext : nativeint, compactedSize : VkDeviceSize, _type : VkAccelerationStructureTypeKHR, flags : VkBuildAccelerationStructureFlagsKHR, maxGeometryCount : uint32, pGeometryInfos : nativeptr<VkAccelerationStructureCreateGeometryTypeInfoKHR>, deviceAddress : VkDeviceAddress) =
+                {
+                    sType = 1000150017u
+                    pNext = pNext
+                    compactedSize = compactedSize
+                    _type = _type
+                    flags = flags
+                    maxGeometryCount = maxGeometryCount
+                    pGeometryInfos = pGeometryInfos
+                    deviceAddress = deviceAddress
+                }
+    
+            new(compactedSize : VkDeviceSize, _type : VkAccelerationStructureTypeKHR, flags : VkBuildAccelerationStructureFlagsKHR, maxGeometryCount : uint32, pGeometryInfos : nativeptr<VkAccelerationStructureCreateGeometryTypeInfoKHR>, deviceAddress : VkDeviceAddress) =
+                VkAccelerationStructureCreateInfoKHR(Unchecked.defaultof<nativeint>, compactedSize, _type, flags, maxGeometryCount, pGeometryInfos, deviceAddress)
+    
+            static member Empty =
+                VkAccelerationStructureCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkAccelerationStructureTypeKHR>, Unchecked.defaultof<VkBuildAccelerationStructureFlagsKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAccelerationStructureCreateGeometryTypeInfoKHR>>, Unchecked.defaultof<VkDeviceAddress>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "compactedSize = %A" x.compactedSize
+                    sprintf "_type = %A" x._type
+                    sprintf "flags = %A" x.flags
+                    sprintf "maxGeometryCount = %A" x.maxGeometryCount
+                    sprintf "pGeometryInfos = %A" x.pGeometryInfos
+                    sprintf "deviceAddress = %A" x.deviceAddress
+                ] |> sprintf "VkAccelerationStructureCreateInfoKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkAccelerationStructureDeviceAddressInfoKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public accelerationStructure : VkAccelerationStructureKHR
+    
+            new(pNext : nativeint, accelerationStructure : VkAccelerationStructureKHR) =
+                {
+                    sType = 1000150002u
+                    pNext = pNext
+                    accelerationStructure = accelerationStructure
+                }
+    
+            new(accelerationStructure : VkAccelerationStructureKHR) =
+                VkAccelerationStructureDeviceAddressInfoKHR(Unchecked.defaultof<nativeint>, accelerationStructure)
+    
+            static member Empty =
+                VkAccelerationStructureDeviceAddressInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccelerationStructureKHR>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "accelerationStructure = %A" x.accelerationStructure
+                ] |> sprintf "VkAccelerationStructureDeviceAddressInfoKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkTransformMatrixKHR = 
+        struct
+            val mutable public matrix : M34f
+    
+            new(matrix : M34f) =
+                {
+                    matrix = matrix
+                }
+    
+            static member Empty =
+                VkTransformMatrixKHR(Unchecked.defaultof<M34f>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "matrix = %A" x.matrix
+                ] |> sprintf "VkTransformMatrixKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkAccelerationStructureInstanceKHR = 
+        struct
+            val mutable public transform : VkTransformMatrixKHR
+            val mutable public instanceCustomIndex : uint32
+            val mutable public mask : uint32
+            val mutable public instanceShaderBindingTableRecordOffset : uint32
+            val mutable public flags : VkGeometryInstanceFlagsKHR
+            val mutable public accelerationStructureReference : uint64
+    
+            new(transform : VkTransformMatrixKHR, instanceCustomIndex : uint32, mask : uint32, instanceShaderBindingTableRecordOffset : uint32, flags : VkGeometryInstanceFlagsKHR, accelerationStructureReference : uint64) =
+                {
+                    transform = transform
+                    instanceCustomIndex = instanceCustomIndex
+                    mask = mask
+                    instanceShaderBindingTableRecordOffset = instanceShaderBindingTableRecordOffset
+                    flags = flags
+                    accelerationStructureReference = accelerationStructureReference
+                }
+    
+            static member Empty =
+                VkAccelerationStructureInstanceKHR(Unchecked.defaultof<VkTransformMatrixKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkGeometryInstanceFlagsKHR>, Unchecked.defaultof<uint64>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "transform = %A" x.transform
+                    sprintf "instanceCustomIndex = %A" x.instanceCustomIndex
+                    sprintf "mask = %A" x.mask
+                    sprintf "instanceShaderBindingTableRecordOffset = %A" x.instanceShaderBindingTableRecordOffset
+                    sprintf "flags = %A" x.flags
+                    sprintf "accelerationStructureReference = %A" x.accelerationStructureReference
+                ] |> sprintf "VkAccelerationStructureInstanceKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkAccelerationStructureMemoryRequirementsInfoKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public _type : VkAccelerationStructureMemoryRequirementsTypeKHR
+            val mutable public buildType : VkAccelerationStructureBuildTypeKHR
+            val mutable public accelerationStructure : VkAccelerationStructureKHR
+    
+            new(pNext : nativeint, _type : VkAccelerationStructureMemoryRequirementsTypeKHR, buildType : VkAccelerationStructureBuildTypeKHR, accelerationStructure : VkAccelerationStructureKHR) =
+                {
+                    sType = 1000150008u
+                    pNext = pNext
+                    _type = _type
+                    buildType = buildType
+                    accelerationStructure = accelerationStructure
+                }
+    
+            new(_type : VkAccelerationStructureMemoryRequirementsTypeKHR, buildType : VkAccelerationStructureBuildTypeKHR, accelerationStructure : VkAccelerationStructureKHR) =
+                VkAccelerationStructureMemoryRequirementsInfoKHR(Unchecked.defaultof<nativeint>, _type, buildType, accelerationStructure)
+    
+            static member Empty =
+                VkAccelerationStructureMemoryRequirementsInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccelerationStructureMemoryRequirementsTypeKHR>, Unchecked.defaultof<VkAccelerationStructureBuildTypeKHR>, Unchecked.defaultof<VkAccelerationStructureKHR>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "_type = %A" x._type
+                    sprintf "buildType = %A" x.buildType
+                    sprintf "accelerationStructure = %A" x.accelerationStructure
+                ] |> sprintf "VkAccelerationStructureMemoryRequirementsInfoKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkAccelerationStructureVersionKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public versionData : nativeptr<byte>
+    
+            new(pNext : nativeint, versionData : nativeptr<byte>) =
+                {
+                    sType = 1000150009u
+                    pNext = pNext
+                    versionData = versionData
+                }
+    
+            new(versionData : nativeptr<byte>) =
+                VkAccelerationStructureVersionKHR(Unchecked.defaultof<nativeint>, versionData)
+    
+            static member Empty =
+                VkAccelerationStructureVersionKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<nativeptr<byte>>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "versionData = %A" x.versionData
+                ] |> sprintf "VkAccelerationStructureVersionKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkBindAccelerationStructureMemoryInfoKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public accelerationStructure : VkAccelerationStructureKHR
+            val mutable public memory : VkDeviceMemory
+            val mutable public memoryOffset : VkDeviceSize
+            val mutable public deviceIndexCount : uint32
+            val mutable public pDeviceIndices : nativeptr<uint32>
+    
+            new(pNext : nativeint, accelerationStructure : VkAccelerationStructureKHR, memory : VkDeviceMemory, memoryOffset : VkDeviceSize, deviceIndexCount : uint32, pDeviceIndices : nativeptr<uint32>) =
+                {
+                    sType = 1000165006u
+                    pNext = pNext
+                    accelerationStructure = accelerationStructure
+                    memory = memory
+                    memoryOffset = memoryOffset
+                    deviceIndexCount = deviceIndexCount
+                    pDeviceIndices = pDeviceIndices
+                }
+    
+            new(accelerationStructure : VkAccelerationStructureKHR, memory : VkDeviceMemory, memoryOffset : VkDeviceSize, deviceIndexCount : uint32, pDeviceIndices : nativeptr<uint32>) =
+                VkBindAccelerationStructureMemoryInfoKHR(Unchecked.defaultof<nativeint>, accelerationStructure, memory, memoryOffset, deviceIndexCount, pDeviceIndices)
+    
+            static member Empty =
+                VkBindAccelerationStructureMemoryInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<VkDeviceMemory>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "accelerationStructure = %A" x.accelerationStructure
+                    sprintf "memory = %A" x.memory
+                    sprintf "memoryOffset = %A" x.memoryOffset
+                    sprintf "deviceIndexCount = %A" x.deviceIndexCount
+                    sprintf "pDeviceIndices = %A" x.pDeviceIndices
+                ] |> sprintf "VkBindAccelerationStructureMemoryInfoKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkCopyAccelerationStructureInfoKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public src : VkAccelerationStructureKHR
+            val mutable public dst : VkAccelerationStructureKHR
+            val mutable public mode : VkCopyAccelerationStructureModeKHR
+    
+            new(pNext : nativeint, src : VkAccelerationStructureKHR, dst : VkAccelerationStructureKHR, mode : VkCopyAccelerationStructureModeKHR) =
+                {
+                    sType = 1000150010u
+                    pNext = pNext
+                    src = src
+                    dst = dst
+                    mode = mode
+                }
+    
+            new(src : VkAccelerationStructureKHR, dst : VkAccelerationStructureKHR, mode : VkCopyAccelerationStructureModeKHR) =
+                VkCopyAccelerationStructureInfoKHR(Unchecked.defaultof<nativeint>, src, dst, mode)
+    
+            static member Empty =
+                VkCopyAccelerationStructureInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<VkCopyAccelerationStructureModeKHR>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "src = %A" x.src
+                    sprintf "dst = %A" x.dst
+                    sprintf "mode = %A" x.mode
+                ] |> sprintf "VkCopyAccelerationStructureInfoKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkCopyAccelerationStructureToMemoryInfoKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public src : VkAccelerationStructureKHR
+            val mutable public dst : VkDeviceOrHostAddressKHR
+            val mutable public mode : VkCopyAccelerationStructureModeKHR
+    
+            new(pNext : nativeint, src : VkAccelerationStructureKHR, dst : VkDeviceOrHostAddressKHR, mode : VkCopyAccelerationStructureModeKHR) =
+                {
+                    sType = 1000150011u
+                    pNext = pNext
+                    src = src
+                    dst = dst
+                    mode = mode
+                }
+    
+            new(src : VkAccelerationStructureKHR, dst : VkDeviceOrHostAddressKHR, mode : VkCopyAccelerationStructureModeKHR) =
+                VkCopyAccelerationStructureToMemoryInfoKHR(Unchecked.defaultof<nativeint>, src, dst, mode)
+    
+            static member Empty =
+                VkCopyAccelerationStructureToMemoryInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<VkDeviceOrHostAddressKHR>, Unchecked.defaultof<VkCopyAccelerationStructureModeKHR>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "src = %A" x.src
+                    sprintf "dst = %A" x.dst
+                    sprintf "mode = %A" x.mode
+                ] |> sprintf "VkCopyAccelerationStructureToMemoryInfoKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkCopyMemoryToAccelerationStructureInfoKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public src : VkDeviceOrHostAddressConstKHR
+            val mutable public dst : VkAccelerationStructureKHR
+            val mutable public mode : VkCopyAccelerationStructureModeKHR
+    
+            new(pNext : nativeint, src : VkDeviceOrHostAddressConstKHR, dst : VkAccelerationStructureKHR, mode : VkCopyAccelerationStructureModeKHR) =
+                {
+                    sType = 1000150012u
+                    pNext = pNext
+                    src = src
+                    dst = dst
+                    mode = mode
+                }
+    
+            new(src : VkDeviceOrHostAddressConstKHR, dst : VkAccelerationStructureKHR, mode : VkCopyAccelerationStructureModeKHR) =
+                VkCopyMemoryToAccelerationStructureInfoKHR(Unchecked.defaultof<nativeint>, src, dst, mode)
+    
+            static member Empty =
+                VkCopyMemoryToAccelerationStructureInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<VkCopyAccelerationStructureModeKHR>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "src = %A" x.src
+                    sprintf "dst = %A" x.dst
+                    sprintf "mode = %A" x.mode
+                ] |> sprintf "VkCopyMemoryToAccelerationStructureInfoKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPhysicalDeviceRayTracingFeaturesKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public rayTracing : VkBool32
+            val mutable public rayTracingShaderGroupHandleCaptureReplay : VkBool32
+            val mutable public rayTracingShaderGroupHandleCaptureReplayMixed : VkBool32
+            val mutable public rayTracingAccelerationStructureCaptureReplay : VkBool32
+            val mutable public rayTracingIndirectTraceRays : VkBool32
+            val mutable public rayTracingIndirectAccelerationStructureBuild : VkBool32
+            val mutable public rayTracingHostAccelerationStructureCommands : VkBool32
+            val mutable public rayQuery : VkBool32
+            val mutable public rayTracingPrimitiveCulling : VkBool32
+    
+            new(pNext : nativeint, rayTracing : VkBool32, rayTracingShaderGroupHandleCaptureReplay : VkBool32, rayTracingShaderGroupHandleCaptureReplayMixed : VkBool32, rayTracingAccelerationStructureCaptureReplay : VkBool32, rayTracingIndirectTraceRays : VkBool32, rayTracingIndirectAccelerationStructureBuild : VkBool32, rayTracingHostAccelerationStructureCommands : VkBool32, rayQuery : VkBool32, rayTracingPrimitiveCulling : VkBool32) =
+                {
+                    sType = 1000150013u
+                    pNext = pNext
+                    rayTracing = rayTracing
+                    rayTracingShaderGroupHandleCaptureReplay = rayTracingShaderGroupHandleCaptureReplay
+                    rayTracingShaderGroupHandleCaptureReplayMixed = rayTracingShaderGroupHandleCaptureReplayMixed
+                    rayTracingAccelerationStructureCaptureReplay = rayTracingAccelerationStructureCaptureReplay
+                    rayTracingIndirectTraceRays = rayTracingIndirectTraceRays
+                    rayTracingIndirectAccelerationStructureBuild = rayTracingIndirectAccelerationStructureBuild
+                    rayTracingHostAccelerationStructureCommands = rayTracingHostAccelerationStructureCommands
+                    rayQuery = rayQuery
+                    rayTracingPrimitiveCulling = rayTracingPrimitiveCulling
+                }
+    
+            new(rayTracing : VkBool32, rayTracingShaderGroupHandleCaptureReplay : VkBool32, rayTracingShaderGroupHandleCaptureReplayMixed : VkBool32, rayTracingAccelerationStructureCaptureReplay : VkBool32, rayTracingIndirectTraceRays : VkBool32, rayTracingIndirectAccelerationStructureBuild : VkBool32, rayTracingHostAccelerationStructureCommands : VkBool32, rayQuery : VkBool32, rayTracingPrimitiveCulling : VkBool32) =
+                VkPhysicalDeviceRayTracingFeaturesKHR(Unchecked.defaultof<nativeint>, rayTracing, rayTracingShaderGroupHandleCaptureReplay, rayTracingShaderGroupHandleCaptureReplayMixed, rayTracingAccelerationStructureCaptureReplay, rayTracingIndirectTraceRays, rayTracingIndirectAccelerationStructureBuild, rayTracingHostAccelerationStructureCommands, rayQuery, rayTracingPrimitiveCulling)
+    
+            static member Empty =
+                VkPhysicalDeviceRayTracingFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "rayTracing = %A" x.rayTracing
+                    sprintf "rayTracingShaderGroupHandleCaptureReplay = %A" x.rayTracingShaderGroupHandleCaptureReplay
+                    sprintf "rayTracingShaderGroupHandleCaptureReplayMixed = %A" x.rayTracingShaderGroupHandleCaptureReplayMixed
+                    sprintf "rayTracingAccelerationStructureCaptureReplay = %A" x.rayTracingAccelerationStructureCaptureReplay
+                    sprintf "rayTracingIndirectTraceRays = %A" x.rayTracingIndirectTraceRays
+                    sprintf "rayTracingIndirectAccelerationStructureBuild = %A" x.rayTracingIndirectAccelerationStructureBuild
+                    sprintf "rayTracingHostAccelerationStructureCommands = %A" x.rayTracingHostAccelerationStructureCommands
+                    sprintf "rayQuery = %A" x.rayQuery
+                    sprintf "rayTracingPrimitiveCulling = %A" x.rayTracingPrimitiveCulling
+                ] |> sprintf "VkPhysicalDeviceRayTracingFeaturesKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPhysicalDeviceRayTracingPropertiesKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public shaderGroupHandleSize : uint32
+            val mutable public maxRecursionDepth : uint32
+            val mutable public maxShaderGroupStride : uint32
+            val mutable public shaderGroupBaseAlignment : uint32
+            val mutable public maxGeometryCount : uint64
+            val mutable public maxInstanceCount : uint64
+            val mutable public maxPrimitiveCount : uint64
+            val mutable public maxDescriptorSetAccelerationStructures : uint32
+            val mutable public shaderGroupHandleCaptureReplaySize : uint32
+    
+            new(pNext : nativeint, shaderGroupHandleSize : uint32, maxRecursionDepth : uint32, maxShaderGroupStride : uint32, shaderGroupBaseAlignment : uint32, maxGeometryCount : uint64, maxInstanceCount : uint64, maxPrimitiveCount : uint64, maxDescriptorSetAccelerationStructures : uint32, shaderGroupHandleCaptureReplaySize : uint32) =
+                {
+                    sType = 1000150014u
+                    pNext = pNext
+                    shaderGroupHandleSize = shaderGroupHandleSize
+                    maxRecursionDepth = maxRecursionDepth
+                    maxShaderGroupStride = maxShaderGroupStride
+                    shaderGroupBaseAlignment = shaderGroupBaseAlignment
+                    maxGeometryCount = maxGeometryCount
+                    maxInstanceCount = maxInstanceCount
+                    maxPrimitiveCount = maxPrimitiveCount
+                    maxDescriptorSetAccelerationStructures = maxDescriptorSetAccelerationStructures
+                    shaderGroupHandleCaptureReplaySize = shaderGroupHandleCaptureReplaySize
+                }
+    
+            new(shaderGroupHandleSize : uint32, maxRecursionDepth : uint32, maxShaderGroupStride : uint32, shaderGroupBaseAlignment : uint32, maxGeometryCount : uint64, maxInstanceCount : uint64, maxPrimitiveCount : uint64, maxDescriptorSetAccelerationStructures : uint32, shaderGroupHandleCaptureReplaySize : uint32) =
+                VkPhysicalDeviceRayTracingPropertiesKHR(Unchecked.defaultof<nativeint>, shaderGroupHandleSize, maxRecursionDepth, maxShaderGroupStride, shaderGroupBaseAlignment, maxGeometryCount, maxInstanceCount, maxPrimitiveCount, maxDescriptorSetAccelerationStructures, shaderGroupHandleCaptureReplaySize)
+    
+            static member Empty =
+                VkPhysicalDeviceRayTracingPropertiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "shaderGroupHandleSize = %A" x.shaderGroupHandleSize
+                    sprintf "maxRecursionDepth = %A" x.maxRecursionDepth
+                    sprintf "maxShaderGroupStride = %A" x.maxShaderGroupStride
+                    sprintf "shaderGroupBaseAlignment = %A" x.shaderGroupBaseAlignment
+                    sprintf "maxGeometryCount = %A" x.maxGeometryCount
+                    sprintf "maxInstanceCount = %A" x.maxInstanceCount
+                    sprintf "maxPrimitiveCount = %A" x.maxPrimitiveCount
+                    sprintf "maxDescriptorSetAccelerationStructures = %A" x.maxDescriptorSetAccelerationStructures
+                    sprintf "shaderGroupHandleCaptureReplaySize = %A" x.shaderGroupHandleCaptureReplaySize
+                ] |> sprintf "VkPhysicalDeviceRayTracingPropertiesKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkRayTracingShaderGroupCreateInfoKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public _type : VkRayTracingShaderGroupTypeKHR
+            val mutable public generalShader : uint32
+            val mutable public closestHitShader : uint32
+            val mutable public anyHitShader : uint32
+            val mutable public intersectionShader : uint32
+            val mutable public pShaderGroupCaptureReplayHandle : nativeint
+    
+            new(pNext : nativeint, _type : VkRayTracingShaderGroupTypeKHR, generalShader : uint32, closestHitShader : uint32, anyHitShader : uint32, intersectionShader : uint32, pShaderGroupCaptureReplayHandle : nativeint) =
+                {
+                    sType = 1000150016u
+                    pNext = pNext
+                    _type = _type
+                    generalShader = generalShader
+                    closestHitShader = closestHitShader
+                    anyHitShader = anyHitShader
+                    intersectionShader = intersectionShader
+                    pShaderGroupCaptureReplayHandle = pShaderGroupCaptureReplayHandle
+                }
+    
+            new(_type : VkRayTracingShaderGroupTypeKHR, generalShader : uint32, closestHitShader : uint32, anyHitShader : uint32, intersectionShader : uint32, pShaderGroupCaptureReplayHandle : nativeint) =
+                VkRayTracingShaderGroupCreateInfoKHR(Unchecked.defaultof<nativeint>, _type, generalShader, closestHitShader, anyHitShader, intersectionShader, pShaderGroupCaptureReplayHandle)
+    
+            static member Empty =
+                VkRayTracingShaderGroupCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkRayTracingShaderGroupTypeKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeint>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "_type = %A" x._type
+                    sprintf "generalShader = %A" x.generalShader
+                    sprintf "closestHitShader = %A" x.closestHitShader
+                    sprintf "anyHitShader = %A" x.anyHitShader
+                    sprintf "intersectionShader = %A" x.intersectionShader
+                    sprintf "pShaderGroupCaptureReplayHandle = %A" x.pShaderGroupCaptureReplayHandle
+                ] |> sprintf "VkRayTracingShaderGroupCreateInfoKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkRayTracingPipelineInterfaceCreateInfoKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public maxPayloadSize : uint32
+            val mutable public maxAttributeSize : uint32
+            val mutable public maxCallableSize : uint32
+    
+            new(pNext : nativeint, maxPayloadSize : uint32, maxAttributeSize : uint32, maxCallableSize : uint32) =
+                {
+                    sType = 1000150018u
+                    pNext = pNext
+                    maxPayloadSize = maxPayloadSize
+                    maxAttributeSize = maxAttributeSize
+                    maxCallableSize = maxCallableSize
+                }
+    
+            new(maxPayloadSize : uint32, maxAttributeSize : uint32, maxCallableSize : uint32) =
+                VkRayTracingPipelineInterfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, maxPayloadSize, maxAttributeSize, maxCallableSize)
+    
+            static member Empty =
+                VkRayTracingPipelineInterfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "maxPayloadSize = %A" x.maxPayloadSize
+                    sprintf "maxAttributeSize = %A" x.maxAttributeSize
+                    sprintf "maxCallableSize = %A" x.maxCallableSize
+                ] |> sprintf "VkRayTracingPipelineInterfaceCreateInfoKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkRayTracingPipelineCreateInfoKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public flags : VkPipelineCreateFlags
+            val mutable public stageCount : uint32
+            val mutable public pStages : nativeptr<VkPipelineShaderStageCreateInfo>
+            val mutable public groupCount : uint32
+            val mutable public pGroups : nativeptr<VkRayTracingShaderGroupCreateInfoKHR>
+            val mutable public maxRecursionDepth : uint32
+            val mutable public libraries : VkPipelineLibraryCreateInfoKHR
+            val mutable public pLibraryInterface : nativeptr<VkRayTracingPipelineInterfaceCreateInfoKHR>
+            val mutable public layout : VkPipelineLayout
+            val mutable public basePipelineHandle : VkPipeline
+            val mutable public basePipelineIndex : int
+    
+            new(pNext : nativeint, flags : VkPipelineCreateFlags, stageCount : uint32, pStages : nativeptr<VkPipelineShaderStageCreateInfo>, groupCount : uint32, pGroups : nativeptr<VkRayTracingShaderGroupCreateInfoKHR>, maxRecursionDepth : uint32, libraries : VkPipelineLibraryCreateInfoKHR, pLibraryInterface : nativeptr<VkRayTracingPipelineInterfaceCreateInfoKHR>, layout : VkPipelineLayout, basePipelineHandle : VkPipeline, basePipelineIndex : int) =
+                {
+                    sType = 1000150015u
+                    pNext = pNext
+                    flags = flags
+                    stageCount = stageCount
+                    pStages = pStages
+                    groupCount = groupCount
+                    pGroups = pGroups
+                    maxRecursionDepth = maxRecursionDepth
+                    libraries = libraries
+                    pLibraryInterface = pLibraryInterface
+                    layout = layout
+                    basePipelineHandle = basePipelineHandle
+                    basePipelineIndex = basePipelineIndex
+                }
+    
+            new(flags : VkPipelineCreateFlags, stageCount : uint32, pStages : nativeptr<VkPipelineShaderStageCreateInfo>, groupCount : uint32, pGroups : nativeptr<VkRayTracingShaderGroupCreateInfoKHR>, maxRecursionDepth : uint32, libraries : VkPipelineLibraryCreateInfoKHR, pLibraryInterface : nativeptr<VkRayTracingPipelineInterfaceCreateInfoKHR>, layout : VkPipelineLayout, basePipelineHandle : VkPipeline, basePipelineIndex : int) =
+                VkRayTracingPipelineCreateInfoKHR(Unchecked.defaultof<nativeint>, flags, stageCount, pStages, groupCount, pGroups, maxRecursionDepth, libraries, pLibraryInterface, layout, basePipelineHandle, basePipelineIndex)
+    
+            static member Empty =
+                VkRayTracingPipelineCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipelineShaderStageCreateInfo>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkRayTracingShaderGroupCreateInfoKHR>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkPipelineLibraryCreateInfoKHR>, Unchecked.defaultof<nativeptr<VkRayTracingPipelineInterfaceCreateInfoKHR>>, Unchecked.defaultof<VkPipelineLayout>, Unchecked.defaultof<VkPipeline>, Unchecked.defaultof<int>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "flags = %A" x.flags
+                    sprintf "stageCount = %A" x.stageCount
+                    sprintf "pStages = %A" x.pStages
+                    sprintf "groupCount = %A" x.groupCount
+                    sprintf "pGroups = %A" x.pGroups
+                    sprintf "maxRecursionDepth = %A" x.maxRecursionDepth
+                    sprintf "libraries = %A" x.libraries
+                    sprintf "pLibraryInterface = %A" x.pLibraryInterface
+                    sprintf "layout = %A" x.layout
+                    sprintf "basePipelineHandle = %A" x.basePipelineHandle
+                    sprintf "basePipelineIndex = %A" x.basePipelineIndex
+                ] |> sprintf "VkRayTracingPipelineCreateInfoKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkStridedBufferRegionKHR = 
+        struct
+            val mutable public buffer : VkBuffer
+            val mutable public offset : VkDeviceSize
+            val mutable public stride : VkDeviceSize
+            val mutable public size : VkDeviceSize
+    
+            new(buffer : VkBuffer, offset : VkDeviceSize, stride : VkDeviceSize, size : VkDeviceSize) =
+                {
+                    buffer = buffer
+                    offset = offset
+                    stride = stride
+                    size = size
+                }
+    
+            static member Empty =
+                VkStridedBufferRegionKHR(Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "buffer = %A" x.buffer
+                    sprintf "offset = %A" x.offset
+                    sprintf "stride = %A" x.stride
+                    sprintf "size = %A" x.size
+                ] |> sprintf "VkStridedBufferRegionKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkTraceRaysIndirectCommandKHR = 
+        struct
+            val mutable public width : uint32
+            val mutable public height : uint32
+            val mutable public depth : uint32
+    
+            new(width : uint32, height : uint32, depth : uint32) =
+                {
+                    width = width
+                    height = height
+                    depth = depth
+                }
+    
+            static member Empty =
+                VkTraceRaysIndirectCommandKHR(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "width = %A" x.width
+                    sprintf "height = %A" x.height
+                    sprintf "depth = %A" x.depth
+                ] |> sprintf "VkTraceRaysIndirectCommandKHR { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkWriteDescriptorSetAccelerationStructureKHR = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public accelerationStructureCount : uint32
+            val mutable public pAccelerationStructures : nativeptr<VkAccelerationStructureKHR>
+    
+            new(pNext : nativeint, accelerationStructureCount : uint32, pAccelerationStructures : nativeptr<VkAccelerationStructureKHR>) =
+                {
+                    sType = 1000165007u
+                    pNext = pNext
+                    accelerationStructureCount = accelerationStructureCount
+                    pAccelerationStructures = pAccelerationStructures
+                }
+    
+            new(accelerationStructureCount : uint32, pAccelerationStructures : nativeptr<VkAccelerationStructureKHR>) =
+                VkWriteDescriptorSetAccelerationStructureKHR(Unchecked.defaultof<nativeint>, accelerationStructureCount, pAccelerationStructures)
+    
+            static member Empty =
+                VkWriteDescriptorSetAccelerationStructureKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAccelerationStructureKHR>>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "accelerationStructureCount = %A" x.accelerationStructureCount
+                    sprintf "pAccelerationStructures = %A" x.pAccelerationStructures
+                ] |> sprintf "VkWriteDescriptorSetAccelerationStructureKHR { %s }"
+        end
+    
+    
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkAccessFlags with
+              static member inline AccelerationStructureReadBitKhr = unbox<VkAccessFlags> 2097152
+              static member inline AccelerationStructureWriteBitKhr = unbox<VkAccessFlags> 4194304
+         type VkBufferUsageFlags with
+              static member inline RayTracingBitKhr = unbox<VkBufferUsageFlags> 1024
+         type VkDebugReportObjectTypeEXT with
+              static member inline AccelerationStructureKhr = unbox<VkDebugReportObjectTypeEXT> 1000150000
+         type VkDescriptorType with
+              static member inline AccelerationStructureKhr = unbox<VkDescriptorType> 1000150000
+         type VkFormatFeatureFlags with
+              static member inline AccelerationStructureVertexBufferBitKhr = unbox<VkFormatFeatureFlags> 536870912
+         type VkGeometryTypeKHR with
+              static member inline Instances = unbox<VkGeometryTypeKHR> 1000150000
+         type VkIndexType with
+              static member inline NoneKhr = unbox<VkIndexType> 1000150000
+         type VkObjectType with
+              static member inline AccelerationStructureKhr = unbox<VkObjectType> 1000150000
+         type VkPipelineBindPoint with
+              static member inline RayTracingKhr = unbox<VkPipelineBindPoint> 1000150000
+         type VkPipelineCreateFlags with
+              static member inline RayTracingNoNullAnyHitShadersBitKhr = unbox<VkPipelineCreateFlags> 16384
+              static member inline RayTracingNoNullClosestHitShadersBitKhr = unbox<VkPipelineCreateFlags> 32768
+              static member inline RayTracingNoNullMissShadersBitKhr = unbox<VkPipelineCreateFlags> 65536
+              static member inline RayTracingNoNullIntersectionShadersBitKhr = unbox<VkPipelineCreateFlags> 131072
+              static member inline RayTracingSkipTrianglesBitKhr = unbox<VkPipelineCreateFlags> 4096
+              static member inline RayTracingSkipAabbsBitKhr = unbox<VkPipelineCreateFlags> 8192
+         type VkPipelineStageFlags with
+              static member inline RayTracingShaderBitKhr = unbox<VkPipelineStageFlags> 2097152
+              static member inline AccelerationStructureBuildBitKhr = unbox<VkPipelineStageFlags> 33554432
+         type VkQueryType with
+              static member inline AccelerationStructureCompactedSizeKhr = unbox<VkQueryType> 1000150000
+              static member inline AccelerationStructureSerializationSizeKhr = unbox<VkQueryType> 1000150000
+         type VkResult with
+              static member inline VkErrorIncompatibleVersionKhr = unbox<VkResult> -1000150000
+         type VkShaderStageFlags with
+              static member inline RaygenBitKhr = unbox<VkShaderStageFlags> 256
+              static member inline AnyHitBitKhr = unbox<VkShaderStageFlags> 512
+              static member inline ClosestHitBitKhr = unbox<VkShaderStageFlags> 1024
+              static member inline MissBitKhr = unbox<VkShaderStageFlags> 2048
+              static member inline IntersectionBitKhr = unbox<VkShaderStageFlags> 4096
+              static member inline CallableBitKhr = unbox<VkShaderStageFlags> 8192
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
-        type VkCmdPushDescriptorSetKHRDel = delegate of VkCommandBuffer * VkPipelineBindPoint * VkPipelineLayout * uint32 * uint32 * nativeptr<VkWriteDescriptorSet> -> unit
+        type VkCreateAccelerationStructureKHRDel = delegate of VkDevice * nativeptr<VkAccelerationStructureCreateInfoKHR> * nativeptr<VkAllocationCallbacks> * nativeptr<VkAccelerationStructureKHR> -> VkResult
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkDestroyAccelerationStructureKHRDel = delegate of VkDevice * VkAccelerationStructureKHR * nativeptr<VkAllocationCallbacks> -> unit
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkGetAccelerationStructureMemoryRequirementsKHRDel = delegate of VkDevice * nativeptr<VkAccelerationStructureMemoryRequirementsInfoKHR> * nativeptr<VkMemoryRequirements2> -> unit
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkBindAccelerationStructureMemoryKHRDel = delegate of VkDevice * uint32 * nativeptr<VkBindAccelerationStructureMemoryInfoKHR> -> VkResult
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCmdBuildAccelerationStructureKHRDel = delegate of VkCommandBuffer * uint32 * nativeptr<VkAccelerationStructureBuildGeometryInfoKHR> * nativeptr<nativeptr<VkAccelerationStructureBuildOffsetInfoKHR>> -> unit
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCmdBuildAccelerationStructureIndirectKHRDel = delegate of VkCommandBuffer * nativeptr<VkAccelerationStructureBuildGeometryInfoKHR> * VkBuffer * VkDeviceSize * uint32 -> unit
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkBuildAccelerationStructureKHRDel = delegate of VkDevice * uint32 * nativeptr<VkAccelerationStructureBuildGeometryInfoKHR> * nativeptr<nativeptr<VkAccelerationStructureBuildOffsetInfoKHR>> -> VkResult
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCopyAccelerationStructureKHRDel = delegate of VkDevice * nativeptr<VkCopyAccelerationStructureInfoKHR> -> VkResult
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCopyAccelerationStructureToMemoryKHRDel = delegate of VkDevice * nativeptr<VkCopyAccelerationStructureToMemoryInfoKHR> -> VkResult
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCopyMemoryToAccelerationStructureKHRDel = delegate of VkDevice * nativeptr<VkCopyMemoryToAccelerationStructureInfoKHR> -> VkResult
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkWriteAccelerationStructuresPropertiesKHRDel = delegate of VkDevice * uint32 * nativeptr<VkAccelerationStructureKHR> * VkQueryType * uint64 * nativeint * uint64 -> VkResult
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCmdCopyAccelerationStructureKHRDel = delegate of VkCommandBuffer * nativeptr<VkCopyAccelerationStructureInfoKHR> -> unit
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCmdCopyAccelerationStructureToMemoryKHRDel = delegate of VkCommandBuffer * nativeptr<VkCopyAccelerationStructureToMemoryInfoKHR> -> unit
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCmdCopyMemoryToAccelerationStructureKHRDel = delegate of VkCommandBuffer * nativeptr<VkCopyMemoryToAccelerationStructureInfoKHR> -> unit
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCmdTraceRaysKHRDel = delegate of VkCommandBuffer * nativeptr<VkStridedBufferRegionKHR> * nativeptr<VkStridedBufferRegionKHR> * nativeptr<VkStridedBufferRegionKHR> * nativeptr<VkStridedBufferRegionKHR> * uint32 * uint32 * uint32 -> unit
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCreateRayTracingPipelinesKHRDel = delegate of VkDevice * VkPipelineCache * uint32 * nativeptr<VkRayTracingPipelineCreateInfoKHR> * nativeptr<VkAllocationCallbacks> * nativeptr<VkPipeline> -> VkResult
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkGetRayTracingShaderGroupHandlesKHRDel = delegate of VkDevice * VkPipeline * uint32 * uint32 * uint64 * nativeint -> VkResult
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkGetAccelerationStructureDeviceAddressKHRDel = delegate of VkDevice * nativeptr<VkAccelerationStructureDeviceAddressInfoKHR> -> VkDeviceAddress
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkGetRayTracingCaptureReplayShaderGroupHandlesKHRDel = delegate of VkDevice * VkPipeline * uint32 * uint32 * uint64 * nativeint -> VkResult
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCmdWriteAccelerationStructuresPropertiesKHRDel = delegate of VkCommandBuffer * uint32 * nativeptr<VkAccelerationStructureKHR> * VkQueryType * VkQueryPool * uint32 -> unit
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCmdTraceRaysIndirectKHRDel = delegate of VkCommandBuffer * nativeptr<VkStridedBufferRegionKHR> * nativeptr<VkStridedBufferRegionKHR> * nativeptr<VkStridedBufferRegionKHR> * nativeptr<VkStridedBufferRegionKHR> * VkBuffer * VkDeviceSize -> unit
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkGetDeviceAccelerationStructureCompatibilityKHRDel = delegate of VkDevice * nativeptr<VkAccelerationStructureVersionKHR> -> VkResult
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
-            static do Report.Begin(3, "[Vulkan] loading VK_KHR_push_descriptor")
-            static let s_vkCmdPushDescriptorSetKHRDel = VkRaw.vkImportInstanceDelegate<VkCmdPushDescriptorSetKHRDel> "vkCmdPushDescriptorSetKHR"
+            static do Report.Begin(3, "[Vulkan] loading VK_KHR_ray_tracing")
+            static let s_vkCreateAccelerationStructureKHRDel = VkRaw.vkImportInstanceDelegate<VkCreateAccelerationStructureKHRDel> "vkCreateAccelerationStructureKHR"
+            static let s_vkDestroyAccelerationStructureKHRDel = VkRaw.vkImportInstanceDelegate<VkDestroyAccelerationStructureKHRDel> "vkDestroyAccelerationStructureKHR"
+            static let s_vkGetAccelerationStructureMemoryRequirementsKHRDel = VkRaw.vkImportInstanceDelegate<VkGetAccelerationStructureMemoryRequirementsKHRDel> "vkGetAccelerationStructureMemoryRequirementsKHR"
+            static let s_vkBindAccelerationStructureMemoryKHRDel = VkRaw.vkImportInstanceDelegate<VkBindAccelerationStructureMemoryKHRDel> "vkBindAccelerationStructureMemoryKHR"
+            static let s_vkCmdBuildAccelerationStructureKHRDel = VkRaw.vkImportInstanceDelegate<VkCmdBuildAccelerationStructureKHRDel> "vkCmdBuildAccelerationStructureKHR"
+            static let s_vkCmdBuildAccelerationStructureIndirectKHRDel = VkRaw.vkImportInstanceDelegate<VkCmdBuildAccelerationStructureIndirectKHRDel> "vkCmdBuildAccelerationStructureIndirectKHR"
+            static let s_vkBuildAccelerationStructureKHRDel = VkRaw.vkImportInstanceDelegate<VkBuildAccelerationStructureKHRDel> "vkBuildAccelerationStructureKHR"
+            static let s_vkCopyAccelerationStructureKHRDel = VkRaw.vkImportInstanceDelegate<VkCopyAccelerationStructureKHRDel> "vkCopyAccelerationStructureKHR"
+            static let s_vkCopyAccelerationStructureToMemoryKHRDel = VkRaw.vkImportInstanceDelegate<VkCopyAccelerationStructureToMemoryKHRDel> "vkCopyAccelerationStructureToMemoryKHR"
+            static let s_vkCopyMemoryToAccelerationStructureKHRDel = VkRaw.vkImportInstanceDelegate<VkCopyMemoryToAccelerationStructureKHRDel> "vkCopyMemoryToAccelerationStructureKHR"
+            static let s_vkWriteAccelerationStructuresPropertiesKHRDel = VkRaw.vkImportInstanceDelegate<VkWriteAccelerationStructuresPropertiesKHRDel> "vkWriteAccelerationStructuresPropertiesKHR"
+            static let s_vkCmdCopyAccelerationStructureKHRDel = VkRaw.vkImportInstanceDelegate<VkCmdCopyAccelerationStructureKHRDel> "vkCmdCopyAccelerationStructureKHR"
+            static let s_vkCmdCopyAccelerationStructureToMemoryKHRDel = VkRaw.vkImportInstanceDelegate<VkCmdCopyAccelerationStructureToMemoryKHRDel> "vkCmdCopyAccelerationStructureToMemoryKHR"
+            static let s_vkCmdCopyMemoryToAccelerationStructureKHRDel = VkRaw.vkImportInstanceDelegate<VkCmdCopyMemoryToAccelerationStructureKHRDel> "vkCmdCopyMemoryToAccelerationStructureKHR"
+            static let s_vkCmdTraceRaysKHRDel = VkRaw.vkImportInstanceDelegate<VkCmdTraceRaysKHRDel> "vkCmdTraceRaysKHR"
+            static let s_vkCreateRayTracingPipelinesKHRDel = VkRaw.vkImportInstanceDelegate<VkCreateRayTracingPipelinesKHRDel> "vkCreateRayTracingPipelinesKHR"
+            static let s_vkGetRayTracingShaderGroupHandlesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetRayTracingShaderGroupHandlesKHRDel> "vkGetRayTracingShaderGroupHandlesKHR"
+            static let s_vkGetAccelerationStructureDeviceAddressKHRDel = VkRaw.vkImportInstanceDelegate<VkGetAccelerationStructureDeviceAddressKHRDel> "vkGetAccelerationStructureDeviceAddressKHR"
+            static let s_vkGetRayTracingCaptureReplayShaderGroupHandlesKHRDel = VkRaw.vkImportInstanceDelegate<VkGetRayTracingCaptureReplayShaderGroupHandlesKHRDel> "vkGetRayTracingCaptureReplayShaderGroupHandlesKHR"
+            static let s_vkCmdWriteAccelerationStructuresPropertiesKHRDel = VkRaw.vkImportInstanceDelegate<VkCmdWriteAccelerationStructuresPropertiesKHRDel> "vkCmdWriteAccelerationStructuresPropertiesKHR"
+            static let s_vkCmdTraceRaysIndirectKHRDel = VkRaw.vkImportInstanceDelegate<VkCmdTraceRaysIndirectKHRDel> "vkCmdTraceRaysIndirectKHR"
+            static let s_vkGetDeviceAccelerationStructureCompatibilityKHRDel = VkRaw.vkImportInstanceDelegate<VkGetDeviceAccelerationStructureCompatibilityKHRDel> "vkGetDeviceAccelerationStructureCompatibilityKHR"
             static do Report.End(3) |> ignore
-            static member vkCmdPushDescriptorSetKHR = s_vkCmdPushDescriptorSetKHRDel
-        let vkCmdPushDescriptorSetKHR(commandBuffer : VkCommandBuffer, pipelineBindPoint : VkPipelineBindPoint, layout : VkPipelineLayout, set : uint32, descriptorWriteCount : uint32, pDescriptorWrites : nativeptr<VkWriteDescriptorSet>) = Loader<unit>.vkCmdPushDescriptorSetKHR.Invoke(commandBuffer, pipelineBindPoint, layout, set, descriptorWriteCount, pDescriptorWrites)
+            static member vkCreateAccelerationStructureKHR = s_vkCreateAccelerationStructureKHRDel
+            static member vkDestroyAccelerationStructureKHR = s_vkDestroyAccelerationStructureKHRDel
+            static member vkGetAccelerationStructureMemoryRequirementsKHR = s_vkGetAccelerationStructureMemoryRequirementsKHRDel
+            static member vkBindAccelerationStructureMemoryKHR = s_vkBindAccelerationStructureMemoryKHRDel
+            static member vkCmdBuildAccelerationStructureKHR = s_vkCmdBuildAccelerationStructureKHRDel
+            static member vkCmdBuildAccelerationStructureIndirectKHR = s_vkCmdBuildAccelerationStructureIndirectKHRDel
+            static member vkBuildAccelerationStructureKHR = s_vkBuildAccelerationStructureKHRDel
+            static member vkCopyAccelerationStructureKHR = s_vkCopyAccelerationStructureKHRDel
+            static member vkCopyAccelerationStructureToMemoryKHR = s_vkCopyAccelerationStructureToMemoryKHRDel
+            static member vkCopyMemoryToAccelerationStructureKHR = s_vkCopyMemoryToAccelerationStructureKHRDel
+            static member vkWriteAccelerationStructuresPropertiesKHR = s_vkWriteAccelerationStructuresPropertiesKHRDel
+            static member vkCmdCopyAccelerationStructureKHR = s_vkCmdCopyAccelerationStructureKHRDel
+            static member vkCmdCopyAccelerationStructureToMemoryKHR = s_vkCmdCopyAccelerationStructureToMemoryKHRDel
+            static member vkCmdCopyMemoryToAccelerationStructureKHR = s_vkCmdCopyMemoryToAccelerationStructureKHRDel
+            static member vkCmdTraceRaysKHR = s_vkCmdTraceRaysKHRDel
+            static member vkCreateRayTracingPipelinesKHR = s_vkCreateRayTracingPipelinesKHRDel
+            static member vkGetRayTracingShaderGroupHandlesKHR = s_vkGetRayTracingShaderGroupHandlesKHRDel
+            static member vkGetAccelerationStructureDeviceAddressKHR = s_vkGetAccelerationStructureDeviceAddressKHRDel
+            static member vkGetRayTracingCaptureReplayShaderGroupHandlesKHR = s_vkGetRayTracingCaptureReplayShaderGroupHandlesKHRDel
+            static member vkCmdWriteAccelerationStructuresPropertiesKHR = s_vkCmdWriteAccelerationStructuresPropertiesKHRDel
+            static member vkCmdTraceRaysIndirectKHR = s_vkCmdTraceRaysIndirectKHRDel
+            static member vkGetDeviceAccelerationStructureCompatibilityKHR = s_vkGetDeviceAccelerationStructureCompatibilityKHRDel
+        let vkCreateAccelerationStructureKHR(device : VkDevice, pCreateInfo : nativeptr<VkAccelerationStructureCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pAccelerationStructure : nativeptr<VkAccelerationStructureKHR>) = Loader<unit>.vkCreateAccelerationStructureKHR.Invoke(device, pCreateInfo, pAllocator, pAccelerationStructure)
+        let vkDestroyAccelerationStructureKHR(device : VkDevice, accelerationStructure : VkAccelerationStructureKHR, pAllocator : nativeptr<VkAllocationCallbacks>) = Loader<unit>.vkDestroyAccelerationStructureKHR.Invoke(device, accelerationStructure, pAllocator)
+        let vkGetAccelerationStructureMemoryRequirementsKHR(device : VkDevice, pInfo : nativeptr<VkAccelerationStructureMemoryRequirementsInfoKHR>, pMemoryRequirements : nativeptr<VkMemoryRequirements2>) = Loader<unit>.vkGetAccelerationStructureMemoryRequirementsKHR.Invoke(device, pInfo, pMemoryRequirements)
+        let vkBindAccelerationStructureMemoryKHR(device : VkDevice, bindInfoCount : uint32, pBindInfos : nativeptr<VkBindAccelerationStructureMemoryInfoKHR>) = Loader<unit>.vkBindAccelerationStructureMemoryKHR.Invoke(device, bindInfoCount, pBindInfos)
+        let vkCmdBuildAccelerationStructureKHR(commandBuffer : VkCommandBuffer, infoCount : uint32, pInfos : nativeptr<VkAccelerationStructureBuildGeometryInfoKHR>, ppOffsetInfos : nativeptr<nativeptr<VkAccelerationStructureBuildOffsetInfoKHR>>) = Loader<unit>.vkCmdBuildAccelerationStructureKHR.Invoke(commandBuffer, infoCount, pInfos, ppOffsetInfos)
+        let vkCmdBuildAccelerationStructureIndirectKHR(commandBuffer : VkCommandBuffer, pInfo : nativeptr<VkAccelerationStructureBuildGeometryInfoKHR>, indirectBuffer : VkBuffer, indirectOffset : VkDeviceSize, indirectStride : uint32) = Loader<unit>.vkCmdBuildAccelerationStructureIndirectKHR.Invoke(commandBuffer, pInfo, indirectBuffer, indirectOffset, indirectStride)
+        let vkBuildAccelerationStructureKHR(device : VkDevice, infoCount : uint32, pInfos : nativeptr<VkAccelerationStructureBuildGeometryInfoKHR>, ppOffsetInfos : nativeptr<nativeptr<VkAccelerationStructureBuildOffsetInfoKHR>>) = Loader<unit>.vkBuildAccelerationStructureKHR.Invoke(device, infoCount, pInfos, ppOffsetInfos)
+        let vkCopyAccelerationStructureKHR(device : VkDevice, pInfo : nativeptr<VkCopyAccelerationStructureInfoKHR>) = Loader<unit>.vkCopyAccelerationStructureKHR.Invoke(device, pInfo)
+        let vkCopyAccelerationStructureToMemoryKHR(device : VkDevice, pInfo : nativeptr<VkCopyAccelerationStructureToMemoryInfoKHR>) = Loader<unit>.vkCopyAccelerationStructureToMemoryKHR.Invoke(device, pInfo)
+        let vkCopyMemoryToAccelerationStructureKHR(device : VkDevice, pInfo : nativeptr<VkCopyMemoryToAccelerationStructureInfoKHR>) = Loader<unit>.vkCopyMemoryToAccelerationStructureKHR.Invoke(device, pInfo)
+        let vkWriteAccelerationStructuresPropertiesKHR(device : VkDevice, accelerationStructureCount : uint32, pAccelerationStructures : nativeptr<VkAccelerationStructureKHR>, queryType : VkQueryType, dataSize : uint64, pData : nativeint, stride : uint64) = Loader<unit>.vkWriteAccelerationStructuresPropertiesKHR.Invoke(device, accelerationStructureCount, pAccelerationStructures, queryType, dataSize, pData, stride)
+        let vkCmdCopyAccelerationStructureKHR(commandBuffer : VkCommandBuffer, pInfo : nativeptr<VkCopyAccelerationStructureInfoKHR>) = Loader<unit>.vkCmdCopyAccelerationStructureKHR.Invoke(commandBuffer, pInfo)
+        let vkCmdCopyAccelerationStructureToMemoryKHR(commandBuffer : VkCommandBuffer, pInfo : nativeptr<VkCopyAccelerationStructureToMemoryInfoKHR>) = Loader<unit>.vkCmdCopyAccelerationStructureToMemoryKHR.Invoke(commandBuffer, pInfo)
+        let vkCmdCopyMemoryToAccelerationStructureKHR(commandBuffer : VkCommandBuffer, pInfo : nativeptr<VkCopyMemoryToAccelerationStructureInfoKHR>) = Loader<unit>.vkCmdCopyMemoryToAccelerationStructureKHR.Invoke(commandBuffer, pInfo)
+        let vkCmdTraceRaysKHR(commandBuffer : VkCommandBuffer, pRaygenShaderBindingTable : nativeptr<VkStridedBufferRegionKHR>, pMissShaderBindingTable : nativeptr<VkStridedBufferRegionKHR>, pHitShaderBindingTable : nativeptr<VkStridedBufferRegionKHR>, pCallableShaderBindingTable : nativeptr<VkStridedBufferRegionKHR>, width : uint32, height : uint32, depth : uint32) = Loader<unit>.vkCmdTraceRaysKHR.Invoke(commandBuffer, pRaygenShaderBindingTable, pMissShaderBindingTable, pHitShaderBindingTable, pCallableShaderBindingTable, width, height, depth)
+        let vkCreateRayTracingPipelinesKHR(device : VkDevice, pipelineCache : VkPipelineCache, createInfoCount : uint32, pCreateInfos : nativeptr<VkRayTracingPipelineCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pPipelines : nativeptr<VkPipeline>) = Loader<unit>.vkCreateRayTracingPipelinesKHR.Invoke(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines)
+        let vkGetRayTracingShaderGroupHandlesKHR(device : VkDevice, pipeline : VkPipeline, firstGroup : uint32, groupCount : uint32, dataSize : uint64, pData : nativeint) = Loader<unit>.vkGetRayTracingShaderGroupHandlesKHR.Invoke(device, pipeline, firstGroup, groupCount, dataSize, pData)
+        let vkGetAccelerationStructureDeviceAddressKHR(device : VkDevice, pInfo : nativeptr<VkAccelerationStructureDeviceAddressInfoKHR>) = Loader<unit>.vkGetAccelerationStructureDeviceAddressKHR.Invoke(device, pInfo)
+        let vkGetRayTracingCaptureReplayShaderGroupHandlesKHR(device : VkDevice, pipeline : VkPipeline, firstGroup : uint32, groupCount : uint32, dataSize : uint64, pData : nativeint) = Loader<unit>.vkGetRayTracingCaptureReplayShaderGroupHandlesKHR.Invoke(device, pipeline, firstGroup, groupCount, dataSize, pData)
+        let vkCmdWriteAccelerationStructuresPropertiesKHR(commandBuffer : VkCommandBuffer, accelerationStructureCount : uint32, pAccelerationStructures : nativeptr<VkAccelerationStructureKHR>, queryType : VkQueryType, queryPool : VkQueryPool, firstQuery : uint32) = Loader<unit>.vkCmdWriteAccelerationStructuresPropertiesKHR.Invoke(commandBuffer, accelerationStructureCount, pAccelerationStructures, queryType, queryPool, firstQuery)
+        let vkCmdTraceRaysIndirectKHR(commandBuffer : VkCommandBuffer, pRaygenShaderBindingTable : nativeptr<VkStridedBufferRegionKHR>, pMissShaderBindingTable : nativeptr<VkStridedBufferRegionKHR>, pHitShaderBindingTable : nativeptr<VkStridedBufferRegionKHR>, pCallableShaderBindingTable : nativeptr<VkStridedBufferRegionKHR>, buffer : VkBuffer, offset : VkDeviceSize) = Loader<unit>.vkCmdTraceRaysIndirectKHR.Invoke(commandBuffer, pRaygenShaderBindingTable, pMissShaderBindingTable, pHitShaderBindingTable, pCallableShaderBindingTable, buffer, offset)
+        let vkGetDeviceAccelerationStructureCompatibilityKHR(device : VkDevice, version : nativeptr<VkAccelerationStructureVersionKHR>) = Loader<unit>.vkGetDeviceAccelerationStructureCompatibilityKHR.Invoke(device, version)
 
 module KHRRelaxedBlockLayout =
     let Name = "VK_KHR_relaxed_block_layout"
     let Number = 145
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module KHRSamplerMirrorClampToEdge =
     let Name = "VK_KHR_sampler_mirror_clamp_to_edge"
     let Number = 15
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module KHRSeparateDepthStencilLayouts =
     let Name = "VK_KHR_separate_depth_stencil_layouts"
     let Number = 242
-    
+
     let Required = [ KHRCreateRenderpass2.Name; KHRGetPhysicalDeviceProperties2.Name ]
     open KHRCreateRenderpass2
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkAttachmentDescriptionStencilLayoutKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public stencilInitialLayout : VkImageLayout
-            val mutable public stencilFinalLayout : VkImageLayout
-    
-            new(pNext : nativeint, stencilInitialLayout : VkImageLayout, stencilFinalLayout : VkImageLayout) =
-                {
-                    sType = 1000241002u
-                    pNext = pNext
-                    stencilInitialLayout = stencilInitialLayout
-                    stencilFinalLayout = stencilFinalLayout
-                }
-    
-            new(stencilInitialLayout : VkImageLayout, stencilFinalLayout : VkImageLayout) =
-                VkAttachmentDescriptionStencilLayoutKHR(Unchecked.defaultof<nativeint>, stencilInitialLayout, stencilFinalLayout)
-    
-            static member Empty =
-                VkAttachmentDescriptionStencilLayoutKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImageLayout>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "stencilInitialLayout = %A" x.stencilInitialLayout
-                    sprintf "stencilFinalLayout = %A" x.stencilFinalLayout
-                ] |> sprintf "VkAttachmentDescriptionStencilLayoutKHR { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkAttachmentReferenceStencilLayoutKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public stencilLayout : VkImageLayout
-    
-            new(pNext : nativeint, stencilLayout : VkImageLayout) =
-                {
-                    sType = 1000241001u
-                    pNext = pNext
-                    stencilLayout = stencilLayout
-                }
-    
-            new(stencilLayout : VkImageLayout) =
-                VkAttachmentReferenceStencilLayoutKHR(Unchecked.defaultof<nativeint>, stencilLayout)
-    
-            static member Empty =
-                VkAttachmentReferenceStencilLayoutKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageLayout>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "stencilLayout = %A" x.stencilLayout
-                ] |> sprintf "VkAttachmentReferenceStencilLayoutKHR { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public separateDepthStencilLayouts : VkBool32
-    
-            new(pNext : nativeint, separateDepthStencilLayouts : VkBool32) =
-                {
-                    sType = 1000241000u
-                    pNext = pNext
-                    separateDepthStencilLayouts = separateDepthStencilLayouts
-                }
-    
-            new(separateDepthStencilLayouts : VkBool32) =
-                VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR(Unchecked.defaultof<nativeint>, separateDepthStencilLayouts)
-    
-            static member Empty =
-                VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "separateDepthStencilLayouts = %A" x.separateDepthStencilLayouts
-                ] |> sprintf "VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR { %s }"
-        end
-    
-    
-    type VkImageLayout with
-         static member inline DepthAttachmentOptimalKhr = unbox<VkImageLayout> 1000241000
-         static member inline DepthReadOnlyOptimalKhr = unbox<VkImageLayout> 1000241001
-         static member inline StencilAttachmentOptimalKhr = unbox<VkImageLayout> 1000241002
-         static member inline StencilReadOnlyOptimalKhr = unbox<VkImageLayout> 1000241003
+    open KHRMaintenance2
+    open KHRMultiview
+
+    type VkAttachmentDescriptionStencilLayoutKHR = VkAttachmentDescriptionStencilLayout
+    type VkAttachmentReferenceStencilLayoutKHR = VkAttachmentReferenceStencilLayout
+    type VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR = VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures
     
 
 module KHRShaderAtomicInt64 =
     let Name = "VK_KHR_shader_atomic_int64"
     let Number = 181
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceShaderAtomicInt64FeaturesKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public shaderBufferInt64Atomics : VkBool32
-            val mutable public shaderSharedInt64Atomics : VkBool32
-    
-            new(pNext : nativeint, shaderBufferInt64Atomics : VkBool32, shaderSharedInt64Atomics : VkBool32) =
-                {
-                    sType = 1000180000u
-                    pNext = pNext
-                    shaderBufferInt64Atomics = shaderBufferInt64Atomics
-                    shaderSharedInt64Atomics = shaderSharedInt64Atomics
-                }
-    
-            new(shaderBufferInt64Atomics : VkBool32, shaderSharedInt64Atomics : VkBool32) =
-                VkPhysicalDeviceShaderAtomicInt64FeaturesKHR(Unchecked.defaultof<nativeint>, shaderBufferInt64Atomics, shaderSharedInt64Atomics)
-    
-            static member Empty =
-                VkPhysicalDeviceShaderAtomicInt64FeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "shaderBufferInt64Atomics = %A" x.shaderBufferInt64Atomics
-                    sprintf "shaderSharedInt64Atomics = %A" x.shaderSharedInt64Atomics
-                ] |> sprintf "VkPhysicalDeviceShaderAtomicInt64FeaturesKHR { %s }"
-        end
-    
-    
+
+    type VkPhysicalDeviceShaderAtomicInt64FeaturesKHR = VkPhysicalDeviceShaderAtomicInt64Features
     
 
 module KHRShaderClock =
     let Name = "VK_KHR_shader_clock"
     let Number = 182
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceShaderClockFeaturesKHR = 
         struct
@@ -19310,204 +21664,60 @@ module KHRShaderClock =
         end
     
     
-    
 
 module KHRShaderDrawParameters =
     let Name = "VK_KHR_shader_draw_parameters"
     let Number = 64
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module KHRShaderFloat16Int8 =
     let Name = "VK_KHR_shader_float16_int8"
     let Number = 83
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
-    type VkPhysicalDeviceFloat16Int8FeaturesKHR = VkPhysicalDeviceShaderFloat16Int8FeaturesKHR
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceShaderFloat16Int8FeaturesKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public shaderFloat16 : VkBool32
-            val mutable public shaderInt8 : VkBool32
-    
-            new(pNext : nativeint, shaderFloat16 : VkBool32, shaderInt8 : VkBool32) =
-                {
-                    sType = 1000082000u
-                    pNext = pNext
-                    shaderFloat16 = shaderFloat16
-                    shaderInt8 = shaderInt8
-                }
-    
-            new(shaderFloat16 : VkBool32, shaderInt8 : VkBool32) =
-                VkPhysicalDeviceShaderFloat16Int8FeaturesKHR(Unchecked.defaultof<nativeint>, shaderFloat16, shaderInt8)
-    
-            static member Empty =
-                VkPhysicalDeviceShaderFloat16Int8FeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "shaderFloat16 = %A" x.shaderFloat16
-                    sprintf "shaderInt8 = %A" x.shaderInt8
-                ] |> sprintf "VkPhysicalDeviceShaderFloat16Int8FeaturesKHR { %s }"
-        end
-    
-    
+
+    type VkPhysicalDeviceFloat16Int8FeaturesKHR = VkPhysicalDeviceShaderFloat16Int8Features
+    type VkPhysicalDeviceShaderFloat16Int8FeaturesKHR = VkPhysicalDeviceShaderFloat16Int8Features
     
 
 module KHRShaderFloatControls =
     let Name = "VK_KHR_shader_float_controls"
     let Number = 198
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
+
+    type VkShaderFloatControlsIndependenceKHR = VkShaderFloatControlsIndependence
+
+    type VkPhysicalDeviceFloatControlsPropertiesKHR = VkPhysicalDeviceFloatControlsProperties
     
-    type VkShaderFloatControlsIndependenceKHR = 
-        | D32BitOnly = 0
-        | All = 1
-        | None = 2
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceFloatControlsPropertiesKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public denormBehaviorIndependence : VkShaderFloatControlsIndependenceKHR
-            val mutable public roundingModeIndependence : VkShaderFloatControlsIndependenceKHR
-            val mutable public shaderSignedZeroInfNanPreserveFloat16 : VkBool32
-            val mutable public shaderSignedZeroInfNanPreserveFloat32 : VkBool32
-            val mutable public shaderSignedZeroInfNanPreserveFloat64 : VkBool32
-            val mutable public shaderDenormPreserveFloat16 : VkBool32
-            val mutable public shaderDenormPreserveFloat32 : VkBool32
-            val mutable public shaderDenormPreserveFloat64 : VkBool32
-            val mutable public shaderDenormFlushToZeroFloat16 : VkBool32
-            val mutable public shaderDenormFlushToZeroFloat32 : VkBool32
-            val mutable public shaderDenormFlushToZeroFloat64 : VkBool32
-            val mutable public shaderRoundingModeRTEFloat16 : VkBool32
-            val mutable public shaderRoundingModeRTEFloat32 : VkBool32
-            val mutable public shaderRoundingModeRTEFloat64 : VkBool32
-            val mutable public shaderRoundingModeRTZFloat16 : VkBool32
-            val mutable public shaderRoundingModeRTZFloat32 : VkBool32
-            val mutable public shaderRoundingModeRTZFloat64 : VkBool32
-    
-            new(pNext : nativeint, denormBehaviorIndependence : VkShaderFloatControlsIndependenceKHR, roundingModeIndependence : VkShaderFloatControlsIndependenceKHR, shaderSignedZeroInfNanPreserveFloat16 : VkBool32, shaderSignedZeroInfNanPreserveFloat32 : VkBool32, shaderSignedZeroInfNanPreserveFloat64 : VkBool32, shaderDenormPreserveFloat16 : VkBool32, shaderDenormPreserveFloat32 : VkBool32, shaderDenormPreserveFloat64 : VkBool32, shaderDenormFlushToZeroFloat16 : VkBool32, shaderDenormFlushToZeroFloat32 : VkBool32, shaderDenormFlushToZeroFloat64 : VkBool32, shaderRoundingModeRTEFloat16 : VkBool32, shaderRoundingModeRTEFloat32 : VkBool32, shaderRoundingModeRTEFloat64 : VkBool32, shaderRoundingModeRTZFloat16 : VkBool32, shaderRoundingModeRTZFloat32 : VkBool32, shaderRoundingModeRTZFloat64 : VkBool32) =
-                {
-                    sType = 1000197000u
-                    pNext = pNext
-                    denormBehaviorIndependence = denormBehaviorIndependence
-                    roundingModeIndependence = roundingModeIndependence
-                    shaderSignedZeroInfNanPreserveFloat16 = shaderSignedZeroInfNanPreserveFloat16
-                    shaderSignedZeroInfNanPreserveFloat32 = shaderSignedZeroInfNanPreserveFloat32
-                    shaderSignedZeroInfNanPreserveFloat64 = shaderSignedZeroInfNanPreserveFloat64
-                    shaderDenormPreserveFloat16 = shaderDenormPreserveFloat16
-                    shaderDenormPreserveFloat32 = shaderDenormPreserveFloat32
-                    shaderDenormPreserveFloat64 = shaderDenormPreserveFloat64
-                    shaderDenormFlushToZeroFloat16 = shaderDenormFlushToZeroFloat16
-                    shaderDenormFlushToZeroFloat32 = shaderDenormFlushToZeroFloat32
-                    shaderDenormFlushToZeroFloat64 = shaderDenormFlushToZeroFloat64
-                    shaderRoundingModeRTEFloat16 = shaderRoundingModeRTEFloat16
-                    shaderRoundingModeRTEFloat32 = shaderRoundingModeRTEFloat32
-                    shaderRoundingModeRTEFloat64 = shaderRoundingModeRTEFloat64
-                    shaderRoundingModeRTZFloat16 = shaderRoundingModeRTZFloat16
-                    shaderRoundingModeRTZFloat32 = shaderRoundingModeRTZFloat32
-                    shaderRoundingModeRTZFloat64 = shaderRoundingModeRTZFloat64
-                }
-    
-            new(denormBehaviorIndependence : VkShaderFloatControlsIndependenceKHR, roundingModeIndependence : VkShaderFloatControlsIndependenceKHR, shaderSignedZeroInfNanPreserveFloat16 : VkBool32, shaderSignedZeroInfNanPreserveFloat32 : VkBool32, shaderSignedZeroInfNanPreserveFloat64 : VkBool32, shaderDenormPreserveFloat16 : VkBool32, shaderDenormPreserveFloat32 : VkBool32, shaderDenormPreserveFloat64 : VkBool32, shaderDenormFlushToZeroFloat16 : VkBool32, shaderDenormFlushToZeroFloat32 : VkBool32, shaderDenormFlushToZeroFloat64 : VkBool32, shaderRoundingModeRTEFloat16 : VkBool32, shaderRoundingModeRTEFloat32 : VkBool32, shaderRoundingModeRTEFloat64 : VkBool32, shaderRoundingModeRTZFloat16 : VkBool32, shaderRoundingModeRTZFloat32 : VkBool32, shaderRoundingModeRTZFloat64 : VkBool32) =
-                VkPhysicalDeviceFloatControlsPropertiesKHR(Unchecked.defaultof<nativeint>, denormBehaviorIndependence, roundingModeIndependence, shaderSignedZeroInfNanPreserveFloat16, shaderSignedZeroInfNanPreserveFloat32, shaderSignedZeroInfNanPreserveFloat64, shaderDenormPreserveFloat16, shaderDenormPreserveFloat32, shaderDenormPreserveFloat64, shaderDenormFlushToZeroFloat16, shaderDenormFlushToZeroFloat32, shaderDenormFlushToZeroFloat64, shaderRoundingModeRTEFloat16, shaderRoundingModeRTEFloat32, shaderRoundingModeRTEFloat64, shaderRoundingModeRTZFloat16, shaderRoundingModeRTZFloat32, shaderRoundingModeRTZFloat64)
-    
-            static member Empty =
-                VkPhysicalDeviceFloatControlsPropertiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkShaderFloatControlsIndependenceKHR>, Unchecked.defaultof<VkShaderFloatControlsIndependenceKHR>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "denormBehaviorIndependence = %A" x.denormBehaviorIndependence
-                    sprintf "roundingModeIndependence = %A" x.roundingModeIndependence
-                    sprintf "shaderSignedZeroInfNanPreserveFloat16 = %A" x.shaderSignedZeroInfNanPreserveFloat16
-                    sprintf "shaderSignedZeroInfNanPreserveFloat32 = %A" x.shaderSignedZeroInfNanPreserveFloat32
-                    sprintf "shaderSignedZeroInfNanPreserveFloat64 = %A" x.shaderSignedZeroInfNanPreserveFloat64
-                    sprintf "shaderDenormPreserveFloat16 = %A" x.shaderDenormPreserveFloat16
-                    sprintf "shaderDenormPreserveFloat32 = %A" x.shaderDenormPreserveFloat32
-                    sprintf "shaderDenormPreserveFloat64 = %A" x.shaderDenormPreserveFloat64
-                    sprintf "shaderDenormFlushToZeroFloat16 = %A" x.shaderDenormFlushToZeroFloat16
-                    sprintf "shaderDenormFlushToZeroFloat32 = %A" x.shaderDenormFlushToZeroFloat32
-                    sprintf "shaderDenormFlushToZeroFloat64 = %A" x.shaderDenormFlushToZeroFloat64
-                    sprintf "shaderRoundingModeRTEFloat16 = %A" x.shaderRoundingModeRTEFloat16
-                    sprintf "shaderRoundingModeRTEFloat32 = %A" x.shaderRoundingModeRTEFloat32
-                    sprintf "shaderRoundingModeRTEFloat64 = %A" x.shaderRoundingModeRTEFloat64
-                    sprintf "shaderRoundingModeRTZFloat16 = %A" x.shaderRoundingModeRTZFloat16
-                    sprintf "shaderRoundingModeRTZFloat32 = %A" x.shaderRoundingModeRTZFloat32
-                    sprintf "shaderRoundingModeRTZFloat64 = %A" x.shaderRoundingModeRTZFloat64
-                ] |> sprintf "VkPhysicalDeviceFloatControlsPropertiesKHR { %s }"
-        end
-    
-    
-    
+
+module KHRShaderNonSemanticInfo =
+    let Name = "VK_KHR_shader_non_semantic_info"
+    let Number = 294
+
+
 
 module KHRShaderSubgroupExtendedTypes =
     let Name = "VK_KHR_shader_subgroup_extended_types"
     let Number = 176
-    
-    open EXTDebugReport
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceShaderSubgroupExtendedTypesFeaturesKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public shaderSubgroupExtendedTypes : VkBool32
-    
-            new(pNext : nativeint, shaderSubgroupExtendedTypes : VkBool32) =
-                {
-                    sType = 1000175000u
-                    pNext = pNext
-                    shaderSubgroupExtendedTypes = shaderSubgroupExtendedTypes
-                }
-    
-            new(shaderSubgroupExtendedTypes : VkBool32) =
-                VkPhysicalDeviceShaderSubgroupExtendedTypesFeaturesKHR(Unchecked.defaultof<nativeint>, shaderSubgroupExtendedTypes)
-    
-            static member Empty =
-                VkPhysicalDeviceShaderSubgroupExtendedTypesFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "shaderSubgroupExtendedTypes = %A" x.shaderSubgroupExtendedTypes
-                ] |> sprintf "VkPhysicalDeviceShaderSubgroupExtendedTypesFeaturesKHR { %s }"
-        end
-    
-    
+
+
+    type VkPhysicalDeviceShaderSubgroupExtendedTypesFeaturesKHR = VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures
     
 
 module KHRSharedPresentableImage =
     let Name = "VK_KHR_shared_presentable_image"
     let Number = 112
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRGetSurfaceCapabilities2.Name; KHRSwapchain.Name ]
     open KHRGetPhysicalDeviceProperties2
     open KHRGetSurfaceCapabilities2
+    open KHRSurface
     open KHRSwapchain
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkSharedPresentSurfaceCapabilitiesKHR = 
         struct
@@ -19537,11 +21747,13 @@ module KHRSharedPresentableImage =
         end
     
     
-    type VkImageLayout with
-         static member inline SharedPresentKhr = unbox<VkImageLayout> 1000111000
-    type VkPresentModeKHR with
-         static member inline VkPresentModeSharedDemandRefreshKhr = unbox<VkPresentModeKHR> 1000111000
-         static member inline VkPresentModeSharedContinuousRefreshKhr = unbox<VkPresentModeKHR> 1000111001
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkImageLayout with
+              static member inline SharedPresentKhr = unbox<VkImageLayout> 1000111000
+         type VkPresentModeKHR with
+              static member inline SharedDemandRefresh = unbox<VkPresentModeKHR> 1000111000
+              static member inline SharedContinuousRefresh = unbox<VkPresentModeKHR> 1000111001
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -19559,24 +21771,20 @@ module KHRSharedPresentableImage =
 module KHRSpirv14 =
     let Name = "VK_KHR_spirv_1_4"
     let Number = 237
-    
+
     let Required = [ KHRShaderFloatControls.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open KHRShaderFloatControls
-    open EXTDebugReport
-    
-    
-    
-    
+
 
 module KHRSurfaceProtectedCapabilities =
     let Name = "VK_KHR_surface_protected_capabilities"
     let Number = 240
-    
+
     let Required = [ KHRGetSurfaceCapabilities2.Name ]
     open KHRGetSurfaceCapabilities2
-    open EXTDebugReport
-    
-    
+    open KHRSurface
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkSurfaceProtectedCapabilitiesKHR = 
         struct
@@ -19606,367 +21814,78 @@ module KHRSurfaceProtectedCapabilities =
         end
     
     
-    
 
 module KHRSwapchainMutableFormat =
     let Name = "VK_KHR_swapchain_mutable_format"
     let Number = 201
-    
+
     let Required = [ KHRImageFormatList.Name; KHRMaintenance2.Name; KHRSwapchain.Name ]
     open KHRImageFormatList
     open KHRMaintenance2
+    open KHRSurface
     open KHRSwapchain
-    open EXTDebugReport
-    
-    
-    
-    type VkSwapchainCreateFlagsKHR with
-         static member inline VkSwapchainCreateMutableFormatBitKhr = unbox<VkSwapchainCreateFlagsKHR> 4
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkSwapchainCreateFlagsKHR with
+              static member inline MutableFormatBit = unbox<VkSwapchainCreateFlagsKHR> 4
     
 
 module KHRTimelineSemaphore =
     let Name = "VK_KHR_timeline_semaphore"
     let Number = 208
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
+
+    type VkSemaphoreTypeKHR = VkSemaphoreType
+    type VkSemaphoreWaitFlagsKHR = VkSemaphoreWaitFlags
+
+    type VkPhysicalDeviceTimelineSemaphoreFeaturesKHR = VkPhysicalDeviceTimelineSemaphoreFeatures
+    type VkPhysicalDeviceTimelineSemaphorePropertiesKHR = VkPhysicalDeviceTimelineSemaphoreProperties
+    type VkSemaphoreSignalInfoKHR = VkSemaphoreSignalInfo
+    type VkSemaphoreTypeCreateInfoKHR = VkSemaphoreTypeCreateInfo
+    type VkSemaphoreWaitInfoKHR = VkSemaphoreWaitInfo
+    type VkTimelineSemaphoreSubmitInfoKHR = VkTimelineSemaphoreSubmitInfo
     
-    type VkSemaphoreTypeKHR = 
-        | Binary = 0
-        | Timeline = 1
-    
-    [<Flags>]
-    type VkSemaphoreWaitFlagsKHR = 
-        | None = 0
-        | AnyBit = 0x00000001
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceTimelineSemaphoreFeaturesKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public timelineSemaphore : VkBool32
-    
-            new(pNext : nativeint, timelineSemaphore : VkBool32) =
-                {
-                    sType = 1000207000u
-                    pNext = pNext
-                    timelineSemaphore = timelineSemaphore
-                }
-    
-            new(timelineSemaphore : VkBool32) =
-                VkPhysicalDeviceTimelineSemaphoreFeaturesKHR(Unchecked.defaultof<nativeint>, timelineSemaphore)
-    
-            static member Empty =
-                VkPhysicalDeviceTimelineSemaphoreFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "timelineSemaphore = %A" x.timelineSemaphore
-                ] |> sprintf "VkPhysicalDeviceTimelineSemaphoreFeaturesKHR { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceTimelineSemaphorePropertiesKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public maxTimelineSemaphoreValueDifference : uint64
-    
-            new(pNext : nativeint, maxTimelineSemaphoreValueDifference : uint64) =
-                {
-                    sType = 1000207001u
-                    pNext = pNext
-                    maxTimelineSemaphoreValueDifference = maxTimelineSemaphoreValueDifference
-                }
-    
-            new(maxTimelineSemaphoreValueDifference : uint64) =
-                VkPhysicalDeviceTimelineSemaphorePropertiesKHR(Unchecked.defaultof<nativeint>, maxTimelineSemaphoreValueDifference)
-    
-            static member Empty =
-                VkPhysicalDeviceTimelineSemaphorePropertiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint64>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "maxTimelineSemaphoreValueDifference = %A" x.maxTimelineSemaphoreValueDifference
-                ] |> sprintf "VkPhysicalDeviceTimelineSemaphorePropertiesKHR { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkSemaphoreSignalInfoKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public semaphore : VkSemaphore
-            val mutable public value : uint64
-    
-            new(pNext : nativeint, semaphore : VkSemaphore, value : uint64) =
-                {
-                    sType = 1000207005u
-                    pNext = pNext
-                    semaphore = semaphore
-                    value = value
-                }
-    
-            new(semaphore : VkSemaphore, value : uint64) =
-                VkSemaphoreSignalInfoKHR(Unchecked.defaultof<nativeint>, semaphore, value)
-    
-            static member Empty =
-                VkSemaphoreSignalInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSemaphore>, Unchecked.defaultof<uint64>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "semaphore = %A" x.semaphore
-                    sprintf "value = %A" x.value
-                ] |> sprintf "VkSemaphoreSignalInfoKHR { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkSemaphoreTypeCreateInfoKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public semaphoreType : VkSemaphoreTypeKHR
-            val mutable public initialValue : uint64
-    
-            new(pNext : nativeint, semaphoreType : VkSemaphoreTypeKHR, initialValue : uint64) =
-                {
-                    sType = 1000207002u
-                    pNext = pNext
-                    semaphoreType = semaphoreType
-                    initialValue = initialValue
-                }
-    
-            new(semaphoreType : VkSemaphoreTypeKHR, initialValue : uint64) =
-                VkSemaphoreTypeCreateInfoKHR(Unchecked.defaultof<nativeint>, semaphoreType, initialValue)
-    
-            static member Empty =
-                VkSemaphoreTypeCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSemaphoreTypeKHR>, Unchecked.defaultof<uint64>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "semaphoreType = %A" x.semaphoreType
-                    sprintf "initialValue = %A" x.initialValue
-                ] |> sprintf "VkSemaphoreTypeCreateInfoKHR { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkSemaphoreWaitInfoKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public flags : VkSemaphoreWaitFlagsKHR
-            val mutable public semaphoreCount : uint32
-            val mutable public pSemaphores : nativeptr<VkSemaphore>
-            val mutable public pValues : nativeptr<uint64>
-    
-            new(pNext : nativeint, flags : VkSemaphoreWaitFlagsKHR, semaphoreCount : uint32, pSemaphores : nativeptr<VkSemaphore>, pValues : nativeptr<uint64>) =
-                {
-                    sType = 1000207004u
-                    pNext = pNext
-                    flags = flags
-                    semaphoreCount = semaphoreCount
-                    pSemaphores = pSemaphores
-                    pValues = pValues
-                }
-    
-            new(flags : VkSemaphoreWaitFlagsKHR, semaphoreCount : uint32, pSemaphores : nativeptr<VkSemaphore>, pValues : nativeptr<uint64>) =
-                VkSemaphoreWaitInfoKHR(Unchecked.defaultof<nativeint>, flags, semaphoreCount, pSemaphores, pValues)
-    
-            static member Empty =
-                VkSemaphoreWaitInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSemaphoreWaitFlagsKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSemaphore>>, Unchecked.defaultof<nativeptr<uint64>>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "flags = %A" x.flags
-                    sprintf "semaphoreCount = %A" x.semaphoreCount
-                    sprintf "pSemaphores = %A" x.pSemaphores
-                    sprintf "pValues = %A" x.pValues
-                ] |> sprintf "VkSemaphoreWaitInfoKHR { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkTimelineSemaphoreSubmitInfoKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public waitSemaphoreValueCount : uint32
-            val mutable public pWaitSemaphoreValues : nativeptr<uint64>
-            val mutable public signalSemaphoreValueCount : uint32
-            val mutable public pSignalSemaphoreValues : nativeptr<uint64>
-    
-            new(pNext : nativeint, waitSemaphoreValueCount : uint32, pWaitSemaphoreValues : nativeptr<uint64>, signalSemaphoreValueCount : uint32, pSignalSemaphoreValues : nativeptr<uint64>) =
-                {
-                    sType = 1000207003u
-                    pNext = pNext
-                    waitSemaphoreValueCount = waitSemaphoreValueCount
-                    pWaitSemaphoreValues = pWaitSemaphoreValues
-                    signalSemaphoreValueCount = signalSemaphoreValueCount
-                    pSignalSemaphoreValues = pSignalSemaphoreValues
-                }
-    
-            new(waitSemaphoreValueCount : uint32, pWaitSemaphoreValues : nativeptr<uint64>, signalSemaphoreValueCount : uint32, pSignalSemaphoreValues : nativeptr<uint64>) =
-                VkTimelineSemaphoreSubmitInfoKHR(Unchecked.defaultof<nativeint>, waitSemaphoreValueCount, pWaitSemaphoreValues, signalSemaphoreValueCount, pSignalSemaphoreValues)
-    
-            static member Empty =
-                VkTimelineSemaphoreSubmitInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint64>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint64>>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "waitSemaphoreValueCount = %A" x.waitSemaphoreValueCount
-                    sprintf "pWaitSemaphoreValues = %A" x.pWaitSemaphoreValues
-                    sprintf "signalSemaphoreValueCount = %A" x.signalSemaphoreValueCount
-                    sprintf "pSignalSemaphoreValues = %A" x.pSignalSemaphoreValues
-                ] |> sprintf "VkTimelineSemaphoreSubmitInfoKHR { %s }"
-        end
-    
-    
-    
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module VkRaw =
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkGetSemaphoreCounterValueKHRDel = delegate of VkDevice * VkSemaphore * nativeptr<uint64> -> VkResult
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkWaitSemaphoresKHRDel = delegate of VkDevice * nativeptr<VkSemaphoreWaitInfoKHR> * uint64 -> VkResult
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkSignalSemaphoreKHRDel = delegate of VkDevice * nativeptr<VkSemaphoreSignalInfoKHR> -> VkResult
-        
-        [<AbstractClass; Sealed>]
-        type private Loader<'d> private() =
-            static do Report.Begin(3, "[Vulkan] loading VK_KHR_timeline_semaphore")
-            static let s_vkGetSemaphoreCounterValueKHRDel = VkRaw.vkImportInstanceDelegate<VkGetSemaphoreCounterValueKHRDel> "vkGetSemaphoreCounterValueKHR"
-            static let s_vkWaitSemaphoresKHRDel = VkRaw.vkImportInstanceDelegate<VkWaitSemaphoresKHRDel> "vkWaitSemaphoresKHR"
-            static let s_vkSignalSemaphoreKHRDel = VkRaw.vkImportInstanceDelegate<VkSignalSemaphoreKHRDel> "vkSignalSemaphoreKHR"
-            static do Report.End(3) |> ignore
-            static member vkGetSemaphoreCounterValueKHR = s_vkGetSemaphoreCounterValueKHRDel
-            static member vkWaitSemaphoresKHR = s_vkWaitSemaphoresKHRDel
-            static member vkSignalSemaphoreKHR = s_vkSignalSemaphoreKHRDel
-        let vkGetSemaphoreCounterValueKHR(device : VkDevice, semaphore : VkSemaphore, pValue : nativeptr<uint64>) = Loader<unit>.vkGetSemaphoreCounterValueKHR.Invoke(device, semaphore, pValue)
-        let vkWaitSemaphoresKHR(device : VkDevice, pWaitInfo : nativeptr<VkSemaphoreWaitInfoKHR>, timeout : uint64) = Loader<unit>.vkWaitSemaphoresKHR.Invoke(device, pWaitInfo, timeout)
-        let vkSignalSemaphoreKHR(device : VkDevice, pSignalInfo : nativeptr<VkSemaphoreSignalInfoKHR>) = Loader<unit>.vkSignalSemaphoreKHR.Invoke(device, pSignalInfo)
 
 module KHRUniformBufferStandardLayout =
     let Name = "VK_KHR_uniform_buffer_standard_layout"
     let Number = 254
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public uniformBufferStandardLayout : VkBool32
-    
-            new(pNext : nativeint, uniformBufferStandardLayout : VkBool32) =
-                {
-                    sType = 1000253000u
-                    pNext = pNext
-                    uniformBufferStandardLayout = uniformBufferStandardLayout
-                }
-    
-            new(uniformBufferStandardLayout : VkBool32) =
-                VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR(Unchecked.defaultof<nativeint>, uniformBufferStandardLayout)
-    
-            static member Empty =
-                VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "uniformBufferStandardLayout = %A" x.uniformBufferStandardLayout
-                ] |> sprintf "VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR { %s }"
-        end
-    
-    
+
+    type VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR = VkPhysicalDeviceUniformBufferStandardLayoutFeatures
     
 
 module KHRVariablePointers =
     let Name = "VK_KHR_variable_pointers"
     let Number = 121
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name; KHRStorageBufferStorageClass.Name ]
     open KHRGetPhysicalDeviceProperties2
     open KHRStorageBufferStorageClass
-    open EXTDebugReport
-    
-    
+
     type VkPhysicalDeviceVariablePointerFeaturesKHR = VkPhysicalDeviceVariablePointersFeatures
     type VkPhysicalDeviceVariablePointersFeaturesKHR = VkPhysicalDeviceVariablePointersFeatures
-    
     
 
 module KHRVulkanMemoryModel =
     let Name = "VK_KHR_vulkan_memory_model"
     let Number = 212
-    
-    open EXTDebugReport
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkPhysicalDeviceVulkanMemoryModelFeaturesKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public vulkanMemoryModel : VkBool32
-            val mutable public vulkanMemoryModelDeviceScope : VkBool32
-            val mutable public vulkanMemoryModelAvailabilityVisibilityChains : VkBool32
-    
-            new(pNext : nativeint, vulkanMemoryModel : VkBool32, vulkanMemoryModelDeviceScope : VkBool32, vulkanMemoryModelAvailabilityVisibilityChains : VkBool32) =
-                {
-                    sType = 1000211000u
-                    pNext = pNext
-                    vulkanMemoryModel = vulkanMemoryModel
-                    vulkanMemoryModelDeviceScope = vulkanMemoryModelDeviceScope
-                    vulkanMemoryModelAvailabilityVisibilityChains = vulkanMemoryModelAvailabilityVisibilityChains
-                }
-    
-            new(vulkanMemoryModel : VkBool32, vulkanMemoryModelDeviceScope : VkBool32, vulkanMemoryModelAvailabilityVisibilityChains : VkBool32) =
-                VkPhysicalDeviceVulkanMemoryModelFeaturesKHR(Unchecked.defaultof<nativeint>, vulkanMemoryModel, vulkanMemoryModelDeviceScope, vulkanMemoryModelAvailabilityVisibilityChains)
-    
-            static member Empty =
-                VkPhysicalDeviceVulkanMemoryModelFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "vulkanMemoryModel = %A" x.vulkanMemoryModel
-                    sprintf "vulkanMemoryModelDeviceScope = %A" x.vulkanMemoryModelDeviceScope
-                    sprintf "vulkanMemoryModelAvailabilityVisibilityChains = %A" x.vulkanMemoryModelAvailabilityVisibilityChains
-                ] |> sprintf "VkPhysicalDeviceVulkanMemoryModelFeaturesKHR { %s }"
-        end
-    
-    
+
+
+    type VkPhysicalDeviceVulkanMemoryModelFeaturesKHR = VkPhysicalDeviceVulkanMemoryModelFeatures
     
 
 module KHRWaylandSurface =
     let Name = "VK_KHR_wayland_surface"
     let Number = 7
-    
+
     let Required = [ KHRSurface.Name ]
     open KHRSurface
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkWaylandSurfaceCreateInfoKHR = 
         struct
@@ -20002,7 +21921,6 @@ module KHRWaylandSurface =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -20024,12 +21942,13 @@ module KHRWaylandSurface =
 module KHRWin32KeyedMutex =
     let Name = "VK_KHR_win32_keyed_mutex"
     let Number = 76
-    
+
     let Required = [ KHRExternalMemoryWin32.Name ]
+    open KHRExternalMemory
+    open KHRExternalMemoryCapabilities
     open KHRExternalMemoryWin32
-    open EXTDebugReport
-    
-    
+    open KHRGetPhysicalDeviceProperties2
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkWin32KeyedMutexAcquireReleaseInfoKHR = 
         struct
@@ -20077,80 +21996,14 @@ module KHRWin32KeyedMutex =
         end
     
     
-    
-
-module KHRWin32Surface =
-    let Name = "VK_KHR_win32_surface"
-    let Number = 10
-    
-    let Required = [ KHRSurface.Name ]
-    open KHRSurface
-    open EXTDebugReport
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkWin32SurfaceCreateInfoKHR = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public flags : VkWin32SurfaceCreateFlagsKHR
-            val mutable public hinstance : nativeint
-            val mutable public hwnd : nativeint
-    
-            new(pNext : nativeint, flags : VkWin32SurfaceCreateFlagsKHR, hinstance : nativeint, hwnd : nativeint) =
-                {
-                    sType = 1000009000u
-                    pNext = pNext
-                    flags = flags
-                    hinstance = hinstance
-                    hwnd = hwnd
-                }
-    
-            new(flags : VkWin32SurfaceCreateFlagsKHR, hinstance : nativeint, hwnd : nativeint) =
-                VkWin32SurfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, flags, hinstance, hwnd)
-    
-            static member Empty =
-                VkWin32SurfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkWin32SurfaceCreateFlagsKHR>, Unchecked.defaultof<nativeint>, Unchecked.defaultof<nativeint>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "flags = %A" x.flags
-                    sprintf "hinstance = %A" x.hinstance
-                    sprintf "hwnd = %A" x.hwnd
-                ] |> sprintf "VkWin32SurfaceCreateInfoKHR { %s }"
-        end
-    
-    
-    
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module VkRaw =
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkCreateWin32SurfaceKHRDel = delegate of VkInstance * nativeptr<VkWin32SurfaceCreateInfoKHR> * nativeptr<VkAllocationCallbacks> * nativeptr<VkSurfaceKHR> -> VkResult
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkGetPhysicalDeviceWin32PresentationSupportKHRDel = delegate of VkPhysicalDevice * uint32 -> VkBool32
-        
-        [<AbstractClass; Sealed>]
-        type private Loader<'d> private() =
-            static do Report.Begin(3, "[Vulkan] loading VK_KHR_win32_surface")
-            static let s_vkCreateWin32SurfaceKHRDel = VkRaw.vkImportInstanceDelegate<VkCreateWin32SurfaceKHRDel> "vkCreateWin32SurfaceKHR"
-            static let s_vkGetPhysicalDeviceWin32PresentationSupportKHRDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceWin32PresentationSupportKHRDel> "vkGetPhysicalDeviceWin32PresentationSupportKHR"
-            static do Report.End(3) |> ignore
-            static member vkCreateWin32SurfaceKHR = s_vkCreateWin32SurfaceKHRDel
-            static member vkGetPhysicalDeviceWin32PresentationSupportKHR = s_vkGetPhysicalDeviceWin32PresentationSupportKHRDel
-        let vkCreateWin32SurfaceKHR(instance : VkInstance, pCreateInfo : nativeptr<VkWin32SurfaceCreateInfoKHR>, pAllocator : nativeptr<VkAllocationCallbacks>, pSurface : nativeptr<VkSurfaceKHR>) = Loader<unit>.vkCreateWin32SurfaceKHR.Invoke(instance, pCreateInfo, pAllocator, pSurface)
-        let vkGetPhysicalDeviceWin32PresentationSupportKHR(physicalDevice : VkPhysicalDevice, queueFamilyIndex : uint32) = Loader<unit>.vkGetPhysicalDeviceWin32PresentationSupportKHR.Invoke(physicalDevice, queueFamilyIndex)
 
 module KHRXcbSurface =
     let Name = "VK_KHR_xcb_surface"
     let Number = 6
-    
+
     let Required = [ KHRSurface.Name ]
     open KHRSurface
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkXcbSurfaceCreateInfoKHR = 
         struct
@@ -20186,7 +22039,6 @@ module KHRXcbSurface =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -20208,12 +22060,10 @@ module KHRXcbSurface =
 module KHRXlibSurface =
     let Name = "VK_KHR_xlib_surface"
     let Number = 5
-    
+
     let Required = [ KHRSurface.Name ]
     open KHRSurface
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkXlibSurfaceCreateInfoKHR = 
         struct
@@ -20249,7 +22099,6 @@ module KHRXlibSurface =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -20271,12 +22120,10 @@ module KHRXlibSurface =
 module MVKIosSurface =
     let Name = "VK_MVK_ios_surface"
     let Number = 123
-    
+
     let Required = [ KHRSurface.Name ]
     open KHRSurface
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkIOSSurfaceCreateInfoMVK = 
         struct
@@ -20309,7 +22156,6 @@ module MVKIosSurface =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -20326,12 +22172,10 @@ module MVKIosSurface =
 module MVKMacosSurface =
     let Name = "VK_MVK_macos_surface"
     let Number = 124
-    
+
     let Required = [ KHRSurface.Name ]
     open KHRSurface
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkMacOSSurfaceCreateInfoMVK = 
         struct
@@ -20364,7 +22208,6 @@ module MVKMacosSurface =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -20381,22 +22224,16 @@ module MVKMacosSurface =
 module MVKMoltenvk =
     let Name = "VK_MVK_moltenvk"
     let Number = 125
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module NNViSurface =
     let Name = "VK_NN_vi_surface"
     let Number = 63
-    
+
     let Required = [ KHRSurface.Name ]
     open KHRSurface
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkViSurfaceCreateInfoNN = 
         struct
@@ -20429,7 +22266,6 @@ module NNViSurface =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -20446,10 +22282,8 @@ module NNViSurface =
 module NVClipSpaceWScaling =
     let Name = "VK_NV_clip_space_w_scaling"
     let Number = 88
-    
-    open EXTDebugReport
-    
-    
+
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkViewportWScalingNV = 
         struct
@@ -20507,8 +22341,10 @@ module NVClipSpaceWScaling =
         end
     
     
-    type VkDynamicState with
-         static member inline ViewportWScalingNv = unbox<VkDynamicState> 1000087000
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkDynamicState with
+              static member inline ViewportWScalingNv = unbox<VkDynamicState> 1000087000
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -20526,12 +22362,10 @@ module NVClipSpaceWScaling =
 module NVComputeShaderDerivatives =
     let Name = "VK_NV_compute_shader_derivatives"
     let Number = 202
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceComputeShaderDerivativesFeaturesNV = 
         struct
@@ -20564,16 +22398,14 @@ module NVComputeShaderDerivatives =
         end
     
     
-    
 
 module NVCooperativeMatrix =
     let Name = "VK_NV_cooperative_matrix"
     let Number = 250
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
+
     type VkScopeNV = 
         | Device = 1
         | Workgroup = 2
@@ -20593,7 +22425,7 @@ module NVCooperativeMatrix =
         | Uint32 = 9
         | Uint64 = 10
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkCooperativeMatrixPropertiesNV = 
         struct
@@ -20703,7 +22535,6 @@ module NVCooperativeMatrix =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -20720,12 +22551,10 @@ module NVCooperativeMatrix =
 module NVCornerSampledImage =
     let Name = "VK_NV_corner_sampled_image"
     let Number = 51
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceCornerSampledImageFeaturesNV = 
         struct
@@ -20755,23 +22584,24 @@ module NVCornerSampledImage =
         end
     
     
-    type VkImageCreateFlags with
-         static member inline CornerSampledBitNv = unbox<VkImageCreateFlags> 8192
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkImageCreateFlags with
+              static member inline CornerSampledBitNv = unbox<VkImageCreateFlags> 8192
     
 
 module NVFramebufferMixedSamples =
     let Name = "VK_NV_framebuffer_mixed_samples"
     let Number = 153
-    
-    open EXTDebugReport
-    
+
+
     type VkCoverageModulationModeNV = 
         | None = 0
         | Rgb = 1
         | Alpha = 2
         | Rgba = 3
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPipelineCoverageModulationStateCreateInfoNV = 
         struct
@@ -20813,21 +22643,19 @@ module NVFramebufferMixedSamples =
         end
     
     
-    
 
 module NVCoverageReductionMode =
     let Name = "VK_NV_coverage_reduction_mode"
     let Number = 251
-    
+
     let Required = [ NVFramebufferMixedSamples.Name ]
     open NVFramebufferMixedSamples
-    open EXTDebugReport
-    
+
     type VkCoverageReductionModeNV = 
         | Merge = 0
         | Truncate = 1
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkFramebufferMixedSamplesCombinationNV = 
         struct
@@ -20925,7 +22753,6 @@ module NVCoverageReductionMode =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -20942,10 +22769,8 @@ module NVCoverageReductionMode =
 module NVDedicatedAllocation =
     let Name = "VK_NV_dedicated_allocation"
     let Number = 27
-    
-    open EXTDebugReport
-    
-    
+
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDedicatedAllocationBufferCreateInfoNV = 
         struct
@@ -21034,17 +22859,15 @@ module NVDedicatedAllocation =
         end
     
     
-    
 
 module NVDedicatedAllocationImageAliasing =
     let Name = "VK_NV_dedicated_allocation_image_aliasing"
     let Number = 241
-    
+
     let Required = [ KHRDedicatedAllocation.Name ]
     open KHRDedicatedAllocation
-    open EXTDebugReport
-    
-    
+    open KHRGetMemoryRequirements2
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceDedicatedAllocationImageAliasingFeaturesNV = 
         struct
@@ -21074,17 +22897,14 @@ module NVDedicatedAllocationImageAliasing =
         end
     
     
-    
 
 module NVDeviceDiagnosticCheckpoints =
     let Name = "VK_NV_device_diagnostic_checkpoints"
     let Number = 207
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkCheckpointDataNV = 
         struct
@@ -21145,7 +22965,6 @@ module NVDeviceDiagnosticCheckpoints =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -21164,57 +22983,659 @@ module NVDeviceDiagnosticCheckpoints =
         let vkCmdSetCheckpointNV(commandBuffer : VkCommandBuffer, pCheckpointMarker : nativeint) = Loader<unit>.vkCmdSetCheckpointNV.Invoke(commandBuffer, pCheckpointMarker)
         let vkGetQueueCheckpointDataNV(queue : VkQueue, pCheckpointDataCount : nativeptr<uint32>, pCheckpointData : nativeptr<VkCheckpointDataNV>) = Loader<unit>.vkGetQueueCheckpointDataNV.Invoke(queue, pCheckpointDataCount, pCheckpointData)
 
-module NVExtension151 =
-    let Name = "VK_NV_extension_151"
-    let Number = 151
-    
-    open EXTDebugReport
-    
-    
-    
-    type VkFormatFeatureFlags with
-         static member inline Reserved29BitNv = unbox<VkFormatFeatureFlags> 536870912
-    type VkPipelineCreateFlags with
-         static member inline Extension151Bit0Nv = unbox<VkPipelineCreateFlags> 2048
-         static member inline Extension151Bit1Nv = unbox<VkPipelineCreateFlags> 16384
-         static member inline Extension151Bit2Nv = unbox<VkPipelineCreateFlags> 32768
-         static member inline Extension151Bit3Nv = unbox<VkPipelineCreateFlags> 65536
-         static member inline Extension151Bit4Nv = unbox<VkPipelineCreateFlags> 131072
+module NVDeviceDiagnosticsConfig =
+    let Name = "VK_NV_device_diagnostics_config"
+    let Number = 301
+
+    let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
+    open KHRGetPhysicalDeviceProperties2
+
+    [<Flags>]
+    type VkDeviceDiagnosticsConfigFlagsNV = 
+        | None = 0
+        | EnableShaderDebugInfoBit = 0x00000001
+        | EnableResourceTrackingBit = 0x00000002
+        | EnableAutomaticCheckpointsBit = 0x00000004
     
 
-module NVExtension291 =
-    let Name = "VK_NV_extension_291"
-    let Number = 291
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkDeviceDiagnosticsConfigCreateInfoNV = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public flags : VkDeviceDiagnosticsConfigFlagsNV
     
-    open EXTDebugReport
+            new(pNext : nativeint, flags : VkDeviceDiagnosticsConfigFlagsNV) =
+                {
+                    sType = 1000300001u
+                    pNext = pNext
+                    flags = flags
+                }
+    
+            new(flags : VkDeviceDiagnosticsConfigFlagsNV) =
+                VkDeviceDiagnosticsConfigCreateInfoNV(Unchecked.defaultof<nativeint>, flags)
+    
+            static member Empty =
+                VkDeviceDiagnosticsConfigCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceDiagnosticsConfigFlagsNV>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "flags = %A" x.flags
+                ] |> sprintf "VkDeviceDiagnosticsConfigCreateInfoNV { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPhysicalDeviceDiagnosticsConfigFeaturesNV = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public diagnosticsConfig : VkBool32
+    
+            new(pNext : nativeint, diagnosticsConfig : VkBool32) =
+                {
+                    sType = 1000300000u
+                    pNext = pNext
+                    diagnosticsConfig = diagnosticsConfig
+                }
+    
+            new(diagnosticsConfig : VkBool32) =
+                VkPhysicalDeviceDiagnosticsConfigFeaturesNV(Unchecked.defaultof<nativeint>, diagnosticsConfig)
+    
+            static member Empty =
+                VkPhysicalDeviceDiagnosticsConfigFeaturesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "diagnosticsConfig = %A" x.diagnosticsConfig
+                ] |> sprintf "VkPhysicalDeviceDiagnosticsConfigFeaturesNV { %s }"
+        end
     
     
+
+module NVDeviceGeneratedCommands =
+    let Name = "VK_NV_device_generated_commands"
+    let Number = 278
+
+
+    [<Flags>]
+    type VkIndirectStateFlagsNV = 
+        | None = 0
+        | FlagFrontfaceBit = 0x00000001
     
-    type VkPipelineCreateFlags with
-         static member inline Extension291Bit0Nv = unbox<VkPipelineCreateFlags> 4096
-         static member inline Extension291Bit1Nv = unbox<VkPipelineCreateFlags> 8192
+    type VkIndirectCommandsTokenTypeNV = 
+        | ShaderGroup = 0
+        | State = 1
+        | IndexBuffer = 2
+        | VertexBuffer = 3
+        | PushConstant = 4
+        | DrawIndexed = 5
+        | Draw = 6
+        | DrawTasks = 7
+    
+    [<Flags>]
+    type VkIndirectCommandsLayoutUsageFlagsNV = 
+        | None = 0
+        | ExplicitPreprocessBit = 0x00000001
+        | IndexedSequencesBit = 0x00000002
+        | UnorderedSequencesBit = 0x00000004
+    
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkBindIndexBufferIndirectCommandNV = 
+        struct
+            val mutable public bufferAddress : VkDeviceAddress
+            val mutable public size : uint32
+            val mutable public indexType : VkIndexType
+    
+            new(bufferAddress : VkDeviceAddress, size : uint32, indexType : VkIndexType) =
+                {
+                    bufferAddress = bufferAddress
+                    size = size
+                    indexType = indexType
+                }
+    
+            static member Empty =
+                VkBindIndexBufferIndirectCommandNV(Unchecked.defaultof<VkDeviceAddress>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkIndexType>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "bufferAddress = %A" x.bufferAddress
+                    sprintf "size = %A" x.size
+                    sprintf "indexType = %A" x.indexType
+                ] |> sprintf "VkBindIndexBufferIndirectCommandNV { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkBindShaderGroupIndirectCommandNV = 
+        struct
+            val mutable public groupIndex : uint32
+    
+            new(groupIndex : uint32) =
+                {
+                    groupIndex = groupIndex
+                }
+    
+            static member Empty =
+                VkBindShaderGroupIndirectCommandNV(Unchecked.defaultof<uint32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "groupIndex = %A" x.groupIndex
+                ] |> sprintf "VkBindShaderGroupIndirectCommandNV { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkBindVertexBufferIndirectCommandNV = 
+        struct
+            val mutable public bufferAddress : VkDeviceAddress
+            val mutable public size : uint32
+            val mutable public stride : uint32
+    
+            new(bufferAddress : VkDeviceAddress, size : uint32, stride : uint32) =
+                {
+                    bufferAddress = bufferAddress
+                    size = size
+                    stride = stride
+                }
+    
+            static member Empty =
+                VkBindVertexBufferIndirectCommandNV(Unchecked.defaultof<VkDeviceAddress>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "bufferAddress = %A" x.bufferAddress
+                    sprintf "size = %A" x.size
+                    sprintf "stride = %A" x.stride
+                ] |> sprintf "VkBindVertexBufferIndirectCommandNV { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkIndirectCommandsStreamNV = 
+        struct
+            val mutable public buffer : VkBuffer
+            val mutable public offset : VkDeviceSize
+    
+            new(buffer : VkBuffer, offset : VkDeviceSize) =
+                {
+                    buffer = buffer
+                    offset = offset
+                }
+    
+            static member Empty =
+                VkIndirectCommandsStreamNV(Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "buffer = %A" x.buffer
+                    sprintf "offset = %A" x.offset
+                ] |> sprintf "VkIndirectCommandsStreamNV { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkGeneratedCommandsInfoNV = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public pipelineBindPoint : VkPipelineBindPoint
+            val mutable public pipeline : VkPipeline
+            val mutable public indirectCommandsLayout : VkIndirectCommandsLayoutNV
+            val mutable public streamCount : uint32
+            val mutable public pStreams : nativeptr<VkIndirectCommandsStreamNV>
+            val mutable public sequencesCount : uint32
+            val mutable public preprocessBuffer : VkBuffer
+            val mutable public preprocessOffset : VkDeviceSize
+            val mutable public preprocessSize : VkDeviceSize
+            val mutable public sequencesCountBuffer : VkBuffer
+            val mutable public sequencesCountOffset : VkDeviceSize
+            val mutable public sequencesIndexBuffer : VkBuffer
+            val mutable public sequencesIndexOffset : VkDeviceSize
+    
+            new(pNext : nativeint, pipelineBindPoint : VkPipelineBindPoint, pipeline : VkPipeline, indirectCommandsLayout : VkIndirectCommandsLayoutNV, streamCount : uint32, pStreams : nativeptr<VkIndirectCommandsStreamNV>, sequencesCount : uint32, preprocessBuffer : VkBuffer, preprocessOffset : VkDeviceSize, preprocessSize : VkDeviceSize, sequencesCountBuffer : VkBuffer, sequencesCountOffset : VkDeviceSize, sequencesIndexBuffer : VkBuffer, sequencesIndexOffset : VkDeviceSize) =
+                {
+                    sType = 1000277005u
+                    pNext = pNext
+                    pipelineBindPoint = pipelineBindPoint
+                    pipeline = pipeline
+                    indirectCommandsLayout = indirectCommandsLayout
+                    streamCount = streamCount
+                    pStreams = pStreams
+                    sequencesCount = sequencesCount
+                    preprocessBuffer = preprocessBuffer
+                    preprocessOffset = preprocessOffset
+                    preprocessSize = preprocessSize
+                    sequencesCountBuffer = sequencesCountBuffer
+                    sequencesCountOffset = sequencesCountOffset
+                    sequencesIndexBuffer = sequencesIndexBuffer
+                    sequencesIndexOffset = sequencesIndexOffset
+                }
+    
+            new(pipelineBindPoint : VkPipelineBindPoint, pipeline : VkPipeline, indirectCommandsLayout : VkIndirectCommandsLayoutNV, streamCount : uint32, pStreams : nativeptr<VkIndirectCommandsStreamNV>, sequencesCount : uint32, preprocessBuffer : VkBuffer, preprocessOffset : VkDeviceSize, preprocessSize : VkDeviceSize, sequencesCountBuffer : VkBuffer, sequencesCountOffset : VkDeviceSize, sequencesIndexBuffer : VkBuffer, sequencesIndexOffset : VkDeviceSize) =
+                VkGeneratedCommandsInfoNV(Unchecked.defaultof<nativeint>, pipelineBindPoint, pipeline, indirectCommandsLayout, streamCount, pStreams, sequencesCount, preprocessBuffer, preprocessOffset, preprocessSize, sequencesCountBuffer, sequencesCountOffset, sequencesIndexBuffer, sequencesIndexOffset)
+    
+            static member Empty =
+                VkGeneratedCommandsInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineBindPoint>, Unchecked.defaultof<VkPipeline>, Unchecked.defaultof<VkIndirectCommandsLayoutNV>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkIndirectCommandsStreamNV>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "pipelineBindPoint = %A" x.pipelineBindPoint
+                    sprintf "pipeline = %A" x.pipeline
+                    sprintf "indirectCommandsLayout = %A" x.indirectCommandsLayout
+                    sprintf "streamCount = %A" x.streamCount
+                    sprintf "pStreams = %A" x.pStreams
+                    sprintf "sequencesCount = %A" x.sequencesCount
+                    sprintf "preprocessBuffer = %A" x.preprocessBuffer
+                    sprintf "preprocessOffset = %A" x.preprocessOffset
+                    sprintf "preprocessSize = %A" x.preprocessSize
+                    sprintf "sequencesCountBuffer = %A" x.sequencesCountBuffer
+                    sprintf "sequencesCountOffset = %A" x.sequencesCountOffset
+                    sprintf "sequencesIndexBuffer = %A" x.sequencesIndexBuffer
+                    sprintf "sequencesIndexOffset = %A" x.sequencesIndexOffset
+                ] |> sprintf "VkGeneratedCommandsInfoNV { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkGeneratedCommandsMemoryRequirementsInfoNV = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public pipelineBindPoint : VkPipelineBindPoint
+            val mutable public pipeline : VkPipeline
+            val mutable public indirectCommandsLayout : VkIndirectCommandsLayoutNV
+            val mutable public maxSequencesCount : uint32
+    
+            new(pNext : nativeint, pipelineBindPoint : VkPipelineBindPoint, pipeline : VkPipeline, indirectCommandsLayout : VkIndirectCommandsLayoutNV, maxSequencesCount : uint32) =
+                {
+                    sType = 1000277006u
+                    pNext = pNext
+                    pipelineBindPoint = pipelineBindPoint
+                    pipeline = pipeline
+                    indirectCommandsLayout = indirectCommandsLayout
+                    maxSequencesCount = maxSequencesCount
+                }
+    
+            new(pipelineBindPoint : VkPipelineBindPoint, pipeline : VkPipeline, indirectCommandsLayout : VkIndirectCommandsLayoutNV, maxSequencesCount : uint32) =
+                VkGeneratedCommandsMemoryRequirementsInfoNV(Unchecked.defaultof<nativeint>, pipelineBindPoint, pipeline, indirectCommandsLayout, maxSequencesCount)
+    
+            static member Empty =
+                VkGeneratedCommandsMemoryRequirementsInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineBindPoint>, Unchecked.defaultof<VkPipeline>, Unchecked.defaultof<VkIndirectCommandsLayoutNV>, Unchecked.defaultof<uint32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "pipelineBindPoint = %A" x.pipelineBindPoint
+                    sprintf "pipeline = %A" x.pipeline
+                    sprintf "indirectCommandsLayout = %A" x.indirectCommandsLayout
+                    sprintf "maxSequencesCount = %A" x.maxSequencesCount
+                ] |> sprintf "VkGeneratedCommandsMemoryRequirementsInfoNV { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkGraphicsShaderGroupCreateInfoNV = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public stageCount : uint32
+            val mutable public pStages : nativeptr<VkPipelineShaderStageCreateInfo>
+            val mutable public pVertexInputState : nativeptr<VkPipelineVertexInputStateCreateInfo>
+            val mutable public pTessellationState : nativeptr<VkPipelineTessellationStateCreateInfo>
+    
+            new(pNext : nativeint, stageCount : uint32, pStages : nativeptr<VkPipelineShaderStageCreateInfo>, pVertexInputState : nativeptr<VkPipelineVertexInputStateCreateInfo>, pTessellationState : nativeptr<VkPipelineTessellationStateCreateInfo>) =
+                {
+                    sType = 1000277001u
+                    pNext = pNext
+                    stageCount = stageCount
+                    pStages = pStages
+                    pVertexInputState = pVertexInputState
+                    pTessellationState = pTessellationState
+                }
+    
+            new(stageCount : uint32, pStages : nativeptr<VkPipelineShaderStageCreateInfo>, pVertexInputState : nativeptr<VkPipelineVertexInputStateCreateInfo>, pTessellationState : nativeptr<VkPipelineTessellationStateCreateInfo>) =
+                VkGraphicsShaderGroupCreateInfoNV(Unchecked.defaultof<nativeint>, stageCount, pStages, pVertexInputState, pTessellationState)
+    
+            static member Empty =
+                VkGraphicsShaderGroupCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipelineShaderStageCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineVertexInputStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineTessellationStateCreateInfo>>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "stageCount = %A" x.stageCount
+                    sprintf "pStages = %A" x.pStages
+                    sprintf "pVertexInputState = %A" x.pVertexInputState
+                    sprintf "pTessellationState = %A" x.pTessellationState
+                ] |> sprintf "VkGraphicsShaderGroupCreateInfoNV { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkGraphicsPipelineShaderGroupsCreateInfoNV = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public groupCount : uint32
+            val mutable public pGroups : nativeptr<VkGraphicsShaderGroupCreateInfoNV>
+            val mutable public pipelineCount : uint32
+            val mutable public pPipelines : nativeptr<VkPipeline>
+    
+            new(pNext : nativeint, groupCount : uint32, pGroups : nativeptr<VkGraphicsShaderGroupCreateInfoNV>, pipelineCount : uint32, pPipelines : nativeptr<VkPipeline>) =
+                {
+                    sType = 1000277002u
+                    pNext = pNext
+                    groupCount = groupCount
+                    pGroups = pGroups
+                    pipelineCount = pipelineCount
+                    pPipelines = pPipelines
+                }
+    
+            new(groupCount : uint32, pGroups : nativeptr<VkGraphicsShaderGroupCreateInfoNV>, pipelineCount : uint32, pPipelines : nativeptr<VkPipeline>) =
+                VkGraphicsPipelineShaderGroupsCreateInfoNV(Unchecked.defaultof<nativeint>, groupCount, pGroups, pipelineCount, pPipelines)
+    
+            static member Empty =
+                VkGraphicsPipelineShaderGroupsCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkGraphicsShaderGroupCreateInfoNV>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipeline>>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "groupCount = %A" x.groupCount
+                    sprintf "pGroups = %A" x.pGroups
+                    sprintf "pipelineCount = %A" x.pipelineCount
+                    sprintf "pPipelines = %A" x.pPipelines
+                ] |> sprintf "VkGraphicsPipelineShaderGroupsCreateInfoNV { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkIndirectCommandsLayoutTokenNV = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public tokenType : VkIndirectCommandsTokenTypeNV
+            val mutable public stream : uint32
+            val mutable public offset : uint32
+            val mutable public vertexBindingUnit : uint32
+            val mutable public vertexDynamicStride : VkBool32
+            val mutable public pushconstantPipelineLayout : VkPipelineLayout
+            val mutable public pushconstantShaderStageFlags : VkShaderStageFlags
+            val mutable public pushconstantOffset : uint32
+            val mutable public pushconstantSize : uint32
+            val mutable public indirectStateFlags : VkIndirectStateFlagsNV
+            val mutable public indexTypeCount : uint32
+            val mutable public pIndexTypes : nativeptr<VkIndexType>
+            val mutable public pIndexTypeValues : nativeptr<uint32>
+    
+            new(pNext : nativeint, tokenType : VkIndirectCommandsTokenTypeNV, stream : uint32, offset : uint32, vertexBindingUnit : uint32, vertexDynamicStride : VkBool32, pushconstantPipelineLayout : VkPipelineLayout, pushconstantShaderStageFlags : VkShaderStageFlags, pushconstantOffset : uint32, pushconstantSize : uint32, indirectStateFlags : VkIndirectStateFlagsNV, indexTypeCount : uint32, pIndexTypes : nativeptr<VkIndexType>, pIndexTypeValues : nativeptr<uint32>) =
+                {
+                    sType = 1000277003u
+                    pNext = pNext
+                    tokenType = tokenType
+                    stream = stream
+                    offset = offset
+                    vertexBindingUnit = vertexBindingUnit
+                    vertexDynamicStride = vertexDynamicStride
+                    pushconstantPipelineLayout = pushconstantPipelineLayout
+                    pushconstantShaderStageFlags = pushconstantShaderStageFlags
+                    pushconstantOffset = pushconstantOffset
+                    pushconstantSize = pushconstantSize
+                    indirectStateFlags = indirectStateFlags
+                    indexTypeCount = indexTypeCount
+                    pIndexTypes = pIndexTypes
+                    pIndexTypeValues = pIndexTypeValues
+                }
+    
+            new(tokenType : VkIndirectCommandsTokenTypeNV, stream : uint32, offset : uint32, vertexBindingUnit : uint32, vertexDynamicStride : VkBool32, pushconstantPipelineLayout : VkPipelineLayout, pushconstantShaderStageFlags : VkShaderStageFlags, pushconstantOffset : uint32, pushconstantSize : uint32, indirectStateFlags : VkIndirectStateFlagsNV, indexTypeCount : uint32, pIndexTypes : nativeptr<VkIndexType>, pIndexTypeValues : nativeptr<uint32>) =
+                VkIndirectCommandsLayoutTokenNV(Unchecked.defaultof<nativeint>, tokenType, stream, offset, vertexBindingUnit, vertexDynamicStride, pushconstantPipelineLayout, pushconstantShaderStageFlags, pushconstantOffset, pushconstantSize, indirectStateFlags, indexTypeCount, pIndexTypes, pIndexTypeValues)
+    
+            static member Empty =
+                VkIndirectCommandsLayoutTokenNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkIndirectCommandsTokenTypeNV>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkPipelineLayout>, Unchecked.defaultof<VkShaderStageFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkIndirectStateFlagsNV>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkIndexType>>, Unchecked.defaultof<nativeptr<uint32>>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "tokenType = %A" x.tokenType
+                    sprintf "stream = %A" x.stream
+                    sprintf "offset = %A" x.offset
+                    sprintf "vertexBindingUnit = %A" x.vertexBindingUnit
+                    sprintf "vertexDynamicStride = %A" x.vertexDynamicStride
+                    sprintf "pushconstantPipelineLayout = %A" x.pushconstantPipelineLayout
+                    sprintf "pushconstantShaderStageFlags = %A" x.pushconstantShaderStageFlags
+                    sprintf "pushconstantOffset = %A" x.pushconstantOffset
+                    sprintf "pushconstantSize = %A" x.pushconstantSize
+                    sprintf "indirectStateFlags = %A" x.indirectStateFlags
+                    sprintf "indexTypeCount = %A" x.indexTypeCount
+                    sprintf "pIndexTypes = %A" x.pIndexTypes
+                    sprintf "pIndexTypeValues = %A" x.pIndexTypeValues
+                ] |> sprintf "VkIndirectCommandsLayoutTokenNV { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkIndirectCommandsLayoutCreateInfoNV = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public flags : VkIndirectCommandsLayoutUsageFlagsNV
+            val mutable public pipelineBindPoint : VkPipelineBindPoint
+            val mutable public tokenCount : uint32
+            val mutable public pTokens : nativeptr<VkIndirectCommandsLayoutTokenNV>
+            val mutable public streamCount : uint32
+            val mutable public pStreamStrides : nativeptr<uint32>
+    
+            new(pNext : nativeint, flags : VkIndirectCommandsLayoutUsageFlagsNV, pipelineBindPoint : VkPipelineBindPoint, tokenCount : uint32, pTokens : nativeptr<VkIndirectCommandsLayoutTokenNV>, streamCount : uint32, pStreamStrides : nativeptr<uint32>) =
+                {
+                    sType = 1000277004u
+                    pNext = pNext
+                    flags = flags
+                    pipelineBindPoint = pipelineBindPoint
+                    tokenCount = tokenCount
+                    pTokens = pTokens
+                    streamCount = streamCount
+                    pStreamStrides = pStreamStrides
+                }
+    
+            new(flags : VkIndirectCommandsLayoutUsageFlagsNV, pipelineBindPoint : VkPipelineBindPoint, tokenCount : uint32, pTokens : nativeptr<VkIndirectCommandsLayoutTokenNV>, streamCount : uint32, pStreamStrides : nativeptr<uint32>) =
+                VkIndirectCommandsLayoutCreateInfoNV(Unchecked.defaultof<nativeint>, flags, pipelineBindPoint, tokenCount, pTokens, streamCount, pStreamStrides)
+    
+            static member Empty =
+                VkIndirectCommandsLayoutCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkIndirectCommandsLayoutUsageFlagsNV>, Unchecked.defaultof<VkPipelineBindPoint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkIndirectCommandsLayoutTokenNV>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "flags = %A" x.flags
+                    sprintf "pipelineBindPoint = %A" x.pipelineBindPoint
+                    sprintf "tokenCount = %A" x.tokenCount
+                    sprintf "pTokens = %A" x.pTokens
+                    sprintf "streamCount = %A" x.streamCount
+                    sprintf "pStreamStrides = %A" x.pStreamStrides
+                ] |> sprintf "VkIndirectCommandsLayoutCreateInfoNV { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public deviceGeneratedCommands : VkBool32
+    
+            new(pNext : nativeint, deviceGeneratedCommands : VkBool32) =
+                {
+                    sType = 1000277007u
+                    pNext = pNext
+                    deviceGeneratedCommands = deviceGeneratedCommands
+                }
+    
+            new(deviceGeneratedCommands : VkBool32) =
+                VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV(Unchecked.defaultof<nativeint>, deviceGeneratedCommands)
+    
+            static member Empty =
+                VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "deviceGeneratedCommands = %A" x.deviceGeneratedCommands
+                ] |> sprintf "VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public maxGraphicsShaderGroupCount : uint32
+            val mutable public maxIndirectSequenceCount : uint32
+            val mutable public maxIndirectCommandsTokenCount : uint32
+            val mutable public maxIndirectCommandsStreamCount : uint32
+            val mutable public maxIndirectCommandsTokenOffset : uint32
+            val mutable public maxIndirectCommandsStreamStride : uint32
+            val mutable public minSequencesCountBufferOffsetAlignment : uint32
+            val mutable public minSequencesIndexBufferOffsetAlignment : uint32
+            val mutable public minIndirectCommandsBufferOffsetAlignment : uint32
+    
+            new(pNext : nativeint, maxGraphicsShaderGroupCount : uint32, maxIndirectSequenceCount : uint32, maxIndirectCommandsTokenCount : uint32, maxIndirectCommandsStreamCount : uint32, maxIndirectCommandsTokenOffset : uint32, maxIndirectCommandsStreamStride : uint32, minSequencesCountBufferOffsetAlignment : uint32, minSequencesIndexBufferOffsetAlignment : uint32, minIndirectCommandsBufferOffsetAlignment : uint32) =
+                {
+                    sType = 1000277000u
+                    pNext = pNext
+                    maxGraphicsShaderGroupCount = maxGraphicsShaderGroupCount
+                    maxIndirectSequenceCount = maxIndirectSequenceCount
+                    maxIndirectCommandsTokenCount = maxIndirectCommandsTokenCount
+                    maxIndirectCommandsStreamCount = maxIndirectCommandsStreamCount
+                    maxIndirectCommandsTokenOffset = maxIndirectCommandsTokenOffset
+                    maxIndirectCommandsStreamStride = maxIndirectCommandsStreamStride
+                    minSequencesCountBufferOffsetAlignment = minSequencesCountBufferOffsetAlignment
+                    minSequencesIndexBufferOffsetAlignment = minSequencesIndexBufferOffsetAlignment
+                    minIndirectCommandsBufferOffsetAlignment = minIndirectCommandsBufferOffsetAlignment
+                }
+    
+            new(maxGraphicsShaderGroupCount : uint32, maxIndirectSequenceCount : uint32, maxIndirectCommandsTokenCount : uint32, maxIndirectCommandsStreamCount : uint32, maxIndirectCommandsTokenOffset : uint32, maxIndirectCommandsStreamStride : uint32, minSequencesCountBufferOffsetAlignment : uint32, minSequencesIndexBufferOffsetAlignment : uint32, minIndirectCommandsBufferOffsetAlignment : uint32) =
+                VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV(Unchecked.defaultof<nativeint>, maxGraphicsShaderGroupCount, maxIndirectSequenceCount, maxIndirectCommandsTokenCount, maxIndirectCommandsStreamCount, maxIndirectCommandsTokenOffset, maxIndirectCommandsStreamStride, minSequencesCountBufferOffsetAlignment, minSequencesIndexBufferOffsetAlignment, minIndirectCommandsBufferOffsetAlignment)
+    
+            static member Empty =
+                VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "maxGraphicsShaderGroupCount = %A" x.maxGraphicsShaderGroupCount
+                    sprintf "maxIndirectSequenceCount = %A" x.maxIndirectSequenceCount
+                    sprintf "maxIndirectCommandsTokenCount = %A" x.maxIndirectCommandsTokenCount
+                    sprintf "maxIndirectCommandsStreamCount = %A" x.maxIndirectCommandsStreamCount
+                    sprintf "maxIndirectCommandsTokenOffset = %A" x.maxIndirectCommandsTokenOffset
+                    sprintf "maxIndirectCommandsStreamStride = %A" x.maxIndirectCommandsStreamStride
+                    sprintf "minSequencesCountBufferOffsetAlignment = %A" x.minSequencesCountBufferOffsetAlignment
+                    sprintf "minSequencesIndexBufferOffsetAlignment = %A" x.minSequencesIndexBufferOffsetAlignment
+                    sprintf "minIndirectCommandsBufferOffsetAlignment = %A" x.minIndirectCommandsBufferOffsetAlignment
+                ] |> sprintf "VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkSetStateFlagsIndirectCommandNV = 
+        struct
+            val mutable public data : uint32
+    
+            new(data : uint32) =
+                {
+                    data = data
+                }
+    
+            static member Empty =
+                VkSetStateFlagsIndirectCommandNV(Unchecked.defaultof<uint32>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "data = %A" x.data
+                ] |> sprintf "VkSetStateFlagsIndirectCommandNV { %s }"
+        end
+    
+    
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkAccessFlags with
+              static member inline CommandPreprocessReadBitNv = unbox<VkAccessFlags> 131072
+              static member inline CommandPreprocessWriteBitNv = unbox<VkAccessFlags> 262144
+         type VkObjectType with
+              static member inline IndirectCommandsLayoutNv = unbox<VkObjectType> 1000277000
+         type VkPipelineCreateFlags with
+              static member inline IndirectBindableBitNv = unbox<VkPipelineCreateFlags> 262144
+         type VkPipelineStageFlags with
+              static member inline CommandPreprocessBitNv = unbox<VkPipelineStageFlags> 131072
+    
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module VkRaw =
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkGetGeneratedCommandsMemoryRequirementsNVDel = delegate of VkDevice * nativeptr<VkGeneratedCommandsMemoryRequirementsInfoNV> * nativeptr<VkMemoryRequirements2> -> unit
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCmdPreprocessGeneratedCommandsNVDel = delegate of VkCommandBuffer * nativeptr<VkGeneratedCommandsInfoNV> -> unit
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCmdExecuteGeneratedCommandsNVDel = delegate of VkCommandBuffer * VkBool32 * nativeptr<VkGeneratedCommandsInfoNV> -> unit
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCmdBindPipelineShaderGroupNVDel = delegate of VkCommandBuffer * VkPipelineBindPoint * VkPipeline * uint32 -> unit
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkCreateIndirectCommandsLayoutNVDel = delegate of VkDevice * nativeptr<VkIndirectCommandsLayoutCreateInfoNV> * nativeptr<VkAllocationCallbacks> * nativeptr<VkIndirectCommandsLayoutNV> -> VkResult
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkDestroyIndirectCommandsLayoutNVDel = delegate of VkDevice * VkIndirectCommandsLayoutNV * nativeptr<VkAllocationCallbacks> -> unit
+        
+        [<AbstractClass; Sealed>]
+        type private Loader<'d> private() =
+            static do Report.Begin(3, "[Vulkan] loading VK_NV_device_generated_commands")
+            static let s_vkGetGeneratedCommandsMemoryRequirementsNVDel = VkRaw.vkImportInstanceDelegate<VkGetGeneratedCommandsMemoryRequirementsNVDel> "vkGetGeneratedCommandsMemoryRequirementsNV"
+            static let s_vkCmdPreprocessGeneratedCommandsNVDel = VkRaw.vkImportInstanceDelegate<VkCmdPreprocessGeneratedCommandsNVDel> "vkCmdPreprocessGeneratedCommandsNV"
+            static let s_vkCmdExecuteGeneratedCommandsNVDel = VkRaw.vkImportInstanceDelegate<VkCmdExecuteGeneratedCommandsNVDel> "vkCmdExecuteGeneratedCommandsNV"
+            static let s_vkCmdBindPipelineShaderGroupNVDel = VkRaw.vkImportInstanceDelegate<VkCmdBindPipelineShaderGroupNVDel> "vkCmdBindPipelineShaderGroupNV"
+            static let s_vkCreateIndirectCommandsLayoutNVDel = VkRaw.vkImportInstanceDelegate<VkCreateIndirectCommandsLayoutNVDel> "vkCreateIndirectCommandsLayoutNV"
+            static let s_vkDestroyIndirectCommandsLayoutNVDel = VkRaw.vkImportInstanceDelegate<VkDestroyIndirectCommandsLayoutNVDel> "vkDestroyIndirectCommandsLayoutNV"
+            static do Report.End(3) |> ignore
+            static member vkGetGeneratedCommandsMemoryRequirementsNV = s_vkGetGeneratedCommandsMemoryRequirementsNVDel
+            static member vkCmdPreprocessGeneratedCommandsNV = s_vkCmdPreprocessGeneratedCommandsNVDel
+            static member vkCmdExecuteGeneratedCommandsNV = s_vkCmdExecuteGeneratedCommandsNVDel
+            static member vkCmdBindPipelineShaderGroupNV = s_vkCmdBindPipelineShaderGroupNVDel
+            static member vkCreateIndirectCommandsLayoutNV = s_vkCreateIndirectCommandsLayoutNVDel
+            static member vkDestroyIndirectCommandsLayoutNV = s_vkDestroyIndirectCommandsLayoutNVDel
+        let vkGetGeneratedCommandsMemoryRequirementsNV(device : VkDevice, pInfo : nativeptr<VkGeneratedCommandsMemoryRequirementsInfoNV>, pMemoryRequirements : nativeptr<VkMemoryRequirements2>) = Loader<unit>.vkGetGeneratedCommandsMemoryRequirementsNV.Invoke(device, pInfo, pMemoryRequirements)
+        let vkCmdPreprocessGeneratedCommandsNV(commandBuffer : VkCommandBuffer, pGeneratedCommandsInfo : nativeptr<VkGeneratedCommandsInfoNV>) = Loader<unit>.vkCmdPreprocessGeneratedCommandsNV.Invoke(commandBuffer, pGeneratedCommandsInfo)
+        let vkCmdExecuteGeneratedCommandsNV(commandBuffer : VkCommandBuffer, isPreprocessed : VkBool32, pGeneratedCommandsInfo : nativeptr<VkGeneratedCommandsInfoNV>) = Loader<unit>.vkCmdExecuteGeneratedCommandsNV.Invoke(commandBuffer, isPreprocessed, pGeneratedCommandsInfo)
+        let vkCmdBindPipelineShaderGroupNV(commandBuffer : VkCommandBuffer, pipelineBindPoint : VkPipelineBindPoint, pipeline : VkPipeline, groupIndex : uint32) = Loader<unit>.vkCmdBindPipelineShaderGroupNV.Invoke(commandBuffer, pipelineBindPoint, pipeline, groupIndex)
+        let vkCreateIndirectCommandsLayoutNV(device : VkDevice, pCreateInfo : nativeptr<VkIndirectCommandsLayoutCreateInfoNV>, pAllocator : nativeptr<VkAllocationCallbacks>, pIndirectCommandsLayout : nativeptr<VkIndirectCommandsLayoutNV>) = Loader<unit>.vkCreateIndirectCommandsLayoutNV.Invoke(device, pCreateInfo, pAllocator, pIndirectCommandsLayout)
+        let vkDestroyIndirectCommandsLayoutNV(device : VkDevice, indirectCommandsLayout : VkIndirectCommandsLayoutNV, pAllocator : nativeptr<VkAllocationCallbacks>) = Loader<unit>.vkDestroyIndirectCommandsLayoutNV.Invoke(device, indirectCommandsLayout, pAllocator)
+
+module NVExtension168 =
+    let Name = "VK_NV_extension_168"
+    let Number = 168
+
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkPipelineCreateFlags with
+              static member inline Reserved19BitKhr = unbox<VkPipelineCreateFlags> 524288
     
 
 module NVExtension52 =
     let Name = "VK_NV_extension_52"
     let Number = 52
-    
-    open EXTDebugReport
-    
-    
-    
-    type VkPipelineShaderStageCreateFlags with
-         static member inline Reserved2BitNv = unbox<VkPipelineShaderStageCreateFlags> 4
-    type VkShaderModuleCreateFlags with
-         static member inline Reserved0BitNv = unbox<VkShaderModuleCreateFlags> 1
+
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkPipelineShaderStageCreateFlags with
+              static member inline Reserved2BitNv = unbox<VkPipelineShaderStageCreateFlags> 4
+         type VkShaderModuleCreateFlags with
+              static member inline Reserved0BitNv = unbox<VkShaderModuleCreateFlags> 1
     
 
 module NVExternalMemoryCapabilities =
     let Name = "VK_NV_external_memory_capabilities"
     let Number = 56
-    
-    open EXTDebugReport
-    
+
+
     [<Flags>]
     type VkExternalMemoryHandleTypeFlagsNV = 
         | None = 0
@@ -21230,7 +23651,7 @@ module NVExternalMemoryCapabilities =
         | ExportableBit = 0x00000002
         | ImportableBit = 0x00000004
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkExternalImageFormatPropertiesNV = 
         struct
@@ -21260,7 +23681,6 @@ module NVExternalMemoryCapabilities =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -21277,12 +23697,10 @@ module NVExternalMemoryCapabilities =
 module NVExternalMemory =
     let Name = "VK_NV_external_memory"
     let Number = 57
-    
+
     let Required = [ NVExternalMemoryCapabilities.Name ]
     open NVExternalMemoryCapabilities
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkExportMemoryAllocateInfoNV = 
         struct
@@ -21340,17 +23758,15 @@ module NVExternalMemory =
         end
     
     
-    
 
 module NVExternalMemoryWin32 =
     let Name = "VK_NV_external_memory_win32"
     let Number = 58
-    
+
     let Required = [ NVExternalMemory.Name ]
     open NVExternalMemory
-    open EXTDebugReport
-    
-    
+    open NVExternalMemoryCapabilities
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkExportMemoryWin32HandleInfoNV = 
         struct
@@ -21414,7 +23830,6 @@ module NVExternalMemoryWin32 =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -21431,22 +23846,19 @@ module NVExternalMemoryWin32 =
 module NVFillRectangle =
     let Name = "VK_NV_fill_rectangle"
     let Number = 154
-    
-    open EXTDebugReport
-    
-    
-    
-    type VkPolygonMode with
-         static member inline FillRectangleNv = unbox<VkPolygonMode> 1000153000
+
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkPolygonMode with
+              static member inline FillRectangleNv = unbox<VkPolygonMode> 1000153000
     
 
 module NVFragmentCoverageToColor =
     let Name = "VK_NV_fragment_coverage_to_color"
     let Number = 150
-    
-    open EXTDebugReport
-    
-    
+
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPipelineCoverageToColorStateCreateInfoNV = 
         struct
@@ -21482,17 +23894,14 @@ module NVFragmentCoverageToColor =
         end
     
     
-    
 
 module NVFragmentShaderBarycentric =
     let Name = "VK_NV_fragment_shader_barycentric"
     let Number = 204
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceFragmentShaderBarycentricFeaturesNV = 
         struct
@@ -21522,39 +23931,31 @@ module NVFragmentShaderBarycentric =
         end
     
     
-    
 
 module NVGeometryShaderPassthrough =
     let Name = "VK_NV_geometry_shader_passthrough"
     let Number = 96
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module NVGlslShader =
     let Name = "VK_NV_glsl_shader"
     let Number = 13
-    
-    open EXTDebugReport
-    
-    
-    
-    type VkResult with
-         static member inline VkErrorInvalidShaderNv = unbox<VkResult> -1000012000
+
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkResult with
+              static member inline VkErrorInvalidShaderNv = unbox<VkResult> -1000012000
     
 
 module NVMeshShader =
     let Name = "VK_NV_mesh_shader"
     let Number = 203
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDrawMeshTasksIndirectCommandNV = 
         struct
@@ -21673,12 +24074,14 @@ module NVMeshShader =
         end
     
     
-    type VkPipelineStageFlags with
-         static member inline TaskShaderBitNv = unbox<VkPipelineStageFlags> 524288
-         static member inline MeshShaderBitNv = unbox<VkPipelineStageFlags> 1048576
-    type VkShaderStageFlags with
-         static member inline TaskBitNv = unbox<VkShaderStageFlags> 64
-         static member inline MeshBitNv = unbox<VkShaderStageFlags> 128
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkPipelineStageFlags with
+              static member inline TaskShaderBitNv = unbox<VkPipelineStageFlags> 524288
+              static member inline MeshShaderBitNv = unbox<VkPipelineStageFlags> 1048576
+         type VkShaderStageFlags with
+              static member inline TaskBitNv = unbox<VkShaderStageFlags> 64
+              static member inline MeshBitNv = unbox<VkShaderStageFlags> 128
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -21706,58 +24109,24 @@ module NVMeshShader =
 module NVRayTracing =
     let Name = "VK_NV_ray_tracing"
     let Number = 166
-    
+
     let Required = [ KHRGetMemoryRequirements2.Name; KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetMemoryRequirements2
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    type VkAccelerationStructureTypeNV = 
-        | TopLevel = 0
-        | BottomLevel = 1
-    
-    type VkRayTracingShaderGroupTypeNV = 
-        | General = 0
-        | TrianglesHitGroup = 1
-        | ProceduralHitGroup = 2
-    
-    [<Flags>]
-    type VkGeometryFlagsNV = 
-        | None = 0
-        | OpaqueBit = 0x00000001
-        | NoDuplicateAnyHitInvocationBit = 0x00000002
-    
-    [<Flags>]
-    type VkGeometryInstanceFlagsNV = 
-        | None = 0
-        | TriangleCullDisableBit = 0x00000001
-        | TriangleFrontCounterclockwiseBit = 0x00000002
-        | ForceOpaqueBit = 0x00000004
-        | ForceNoOpaqueBit = 0x00000008
-    
-    [<Flags>]
-    type VkBuildAccelerationStructureFlagsNV = 
-        | None = 0
-        | AllowUpdateBit = 0x00000001
-        | AllowCompactionBit = 0x00000002
-        | PreferFastTraceBit = 0x00000004
-        | PreferFastBuildBit = 0x00000008
-        | LowMemoryBit = 0x00000010
-    
-    type VkCopyAccelerationStructureModeNV = 
-        | Clone = 0
-        | Compact = 1
-    
-    type VkGeometryTypeNV = 
-        | Triangles = 0
-        | Aabbs = 1
-    
-    type VkAccelerationStructureMemoryRequirementsTypeNV = 
-        | Object = 0
-        | BuildScratch = 1
-        | UpdateScratch = 2
-    
-    
+    open KHRRayTracing
+
+    type VkAccelerationStructureMemoryRequirementsTypeNV = VkAccelerationStructureMemoryRequirementsTypeKHR
+    type VkAccelerationStructureNV = VkAccelerationStructureKHR
+    type VkAccelerationStructureTypeNV = VkAccelerationStructureTypeKHR
+    type VkBuildAccelerationStructureFlagsNV = VkBuildAccelerationStructureFlagsKHR
+    type VkCopyAccelerationStructureModeNV = VkCopyAccelerationStructureModeKHR
+    type VkGeometryFlagsNV = VkGeometryFlagsKHR
+    type VkGeometryInstanceFlagsNV = VkGeometryInstanceFlagsKHR
+    type VkGeometryTypeNV = VkGeometryTypeKHR
+    type VkMemoryRequirements2KHR = VkMemoryRequirements2
+    type VkRayTracingShaderGroupTypeNV = VkRayTracingShaderGroupTypeKHR
+
+    type VkAabbPositionsNV = VkAabbPositionsKHR
     [<StructLayout(LayoutKind.Sequential)>]
     type VkGeometryTrianglesNV = 
         struct
@@ -21880,11 +24249,11 @@ module NVRayTracing =
         struct
             val mutable public sType : uint32
             val mutable public pNext : nativeint
-            val mutable public geometryType : VkGeometryTypeNV
+            val mutable public geometryType : VkGeometryTypeKHR
             val mutable public geometry : VkGeometryDataNV
-            val mutable public flags : VkGeometryFlagsNV
+            val mutable public flags : VkGeometryFlagsKHR
     
-            new(pNext : nativeint, geometryType : VkGeometryTypeNV, geometry : VkGeometryDataNV, flags : VkGeometryFlagsNV) =
+            new(pNext : nativeint, geometryType : VkGeometryTypeKHR, geometry : VkGeometryDataNV, flags : VkGeometryFlagsKHR) =
                 {
                     sType = 1000165003u
                     pNext = pNext
@@ -21893,11 +24262,11 @@ module NVRayTracing =
                     flags = flags
                 }
     
-            new(geometryType : VkGeometryTypeNV, geometry : VkGeometryDataNV, flags : VkGeometryFlagsNV) =
+            new(geometryType : VkGeometryTypeKHR, geometry : VkGeometryDataNV, flags : VkGeometryFlagsKHR) =
                 VkGeometryNV(Unchecked.defaultof<nativeint>, geometryType, geometry, flags)
     
             static member Empty =
-                VkGeometryNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkGeometryTypeNV>, Unchecked.defaultof<VkGeometryDataNV>, Unchecked.defaultof<VkGeometryFlagsNV>)
+                VkGeometryNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkGeometryTypeKHR>, Unchecked.defaultof<VkGeometryDataNV>, Unchecked.defaultof<VkGeometryFlagsKHR>)
     
             override x.ToString() =
                 String.concat "; " [
@@ -21980,6 +24349,7 @@ module NVRayTracing =
                 ] |> sprintf "VkAccelerationStructureCreateInfoNV { %s }"
         end
     
+    type VkAccelerationStructureInstanceNV = VkAccelerationStructureInstanceKHR
     [<StructLayout(LayoutKind.Sequential)>]
     type VkAccelerationStructureMemoryRequirementsInfoNV = 
         struct
@@ -22011,46 +24381,7 @@ module NVRayTracing =
                 ] |> sprintf "VkAccelerationStructureMemoryRequirementsInfoNV { %s }"
         end
     
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkBindAccelerationStructureMemoryInfoNV = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public accelerationStructure : VkAccelerationStructureNV
-            val mutable public memory : VkDeviceMemory
-            val mutable public memoryOffset : VkDeviceSize
-            val mutable public deviceIndexCount : uint32
-            val mutable public pDeviceIndices : nativeptr<uint32>
-    
-            new(pNext : nativeint, accelerationStructure : VkAccelerationStructureNV, memory : VkDeviceMemory, memoryOffset : VkDeviceSize, deviceIndexCount : uint32, pDeviceIndices : nativeptr<uint32>) =
-                {
-                    sType = 1000165006u
-                    pNext = pNext
-                    accelerationStructure = accelerationStructure
-                    memory = memory
-                    memoryOffset = memoryOffset
-                    deviceIndexCount = deviceIndexCount
-                    pDeviceIndices = pDeviceIndices
-                }
-    
-            new(accelerationStructure : VkAccelerationStructureNV, memory : VkDeviceMemory, memoryOffset : VkDeviceSize, deviceIndexCount : uint32, pDeviceIndices : nativeptr<uint32>) =
-                VkBindAccelerationStructureMemoryInfoNV(Unchecked.defaultof<nativeint>, accelerationStructure, memory, memoryOffset, deviceIndexCount, pDeviceIndices)
-    
-            static member Empty =
-                VkBindAccelerationStructureMemoryInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccelerationStructureNV>, Unchecked.defaultof<VkDeviceMemory>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "accelerationStructure = %A" x.accelerationStructure
-                    sprintf "memory = %A" x.memory
-                    sprintf "memoryOffset = %A" x.memoryOffset
-                    sprintf "deviceIndexCount = %A" x.deviceIndexCount
-                    sprintf "pDeviceIndices = %A" x.pDeviceIndices
-                ] |> sprintf "VkBindAccelerationStructureMemoryInfoNV { %s }"
-        end
-    
+    type VkBindAccelerationStructureMemoryInfoNV = VkBindAccelerationStructureMemoryInfoKHR
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceRayTracingPropertiesNV = 
         struct
@@ -22105,13 +24436,13 @@ module NVRayTracing =
         struct
             val mutable public sType : uint32
             val mutable public pNext : nativeint
-            val mutable public _type : VkRayTracingShaderGroupTypeNV
+            val mutable public _type : VkRayTracingShaderGroupTypeKHR
             val mutable public generalShader : uint32
             val mutable public closestHitShader : uint32
             val mutable public anyHitShader : uint32
             val mutable public intersectionShader : uint32
     
-            new(pNext : nativeint, _type : VkRayTracingShaderGroupTypeNV, generalShader : uint32, closestHitShader : uint32, anyHitShader : uint32, intersectionShader : uint32) =
+            new(pNext : nativeint, _type : VkRayTracingShaderGroupTypeKHR, generalShader : uint32, closestHitShader : uint32, anyHitShader : uint32, intersectionShader : uint32) =
                 {
                     sType = 1000165011u
                     pNext = pNext
@@ -22122,11 +24453,11 @@ module NVRayTracing =
                     intersectionShader = intersectionShader
                 }
     
-            new(_type : VkRayTracingShaderGroupTypeNV, generalShader : uint32, closestHitShader : uint32, anyHitShader : uint32, intersectionShader : uint32) =
+            new(_type : VkRayTracingShaderGroupTypeKHR, generalShader : uint32, closestHitShader : uint32, anyHitShader : uint32, intersectionShader : uint32) =
                 VkRayTracingShaderGroupCreateInfoNV(Unchecked.defaultof<nativeint>, _type, generalShader, closestHitShader, anyHitShader, intersectionShader)
     
             static member Empty =
-                VkRayTracingShaderGroupCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkRayTracingShaderGroupTypeNV>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
+                VkRayTracingShaderGroupCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkRayTracingShaderGroupTypeKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
     
             override x.ToString() =
                 String.concat "; " [
@@ -22192,92 +24523,30 @@ module NVRayTracing =
                 ] |> sprintf "VkRayTracingPipelineCreateInfoNV { %s }"
         end
     
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkWriteDescriptorSetAccelerationStructureNV = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public accelerationStructureCount : uint32
-            val mutable public pAccelerationStructures : nativeptr<VkAccelerationStructureNV>
+    type VkTransformMatrixNV = VkTransformMatrixKHR
+    type VkWriteDescriptorSetAccelerationStructureNV = VkWriteDescriptorSetAccelerationStructureKHR
     
-            new(pNext : nativeint, accelerationStructureCount : uint32, pAccelerationStructures : nativeptr<VkAccelerationStructureNV>) =
-                {
-                    sType = 1000165007u
-                    pNext = pNext
-                    accelerationStructureCount = accelerationStructureCount
-                    pAccelerationStructures = pAccelerationStructures
-                }
-    
-            new(accelerationStructureCount : uint32, pAccelerationStructures : nativeptr<VkAccelerationStructureNV>) =
-                VkWriteDescriptorSetAccelerationStructureNV(Unchecked.defaultof<nativeint>, accelerationStructureCount, pAccelerationStructures)
-    
-            static member Empty =
-                VkWriteDescriptorSetAccelerationStructureNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAccelerationStructureNV>>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "accelerationStructureCount = %A" x.accelerationStructureCount
-                    sprintf "pAccelerationStructures = %A" x.pAccelerationStructures
-                ] |> sprintf "VkWriteDescriptorSetAccelerationStructureNV { %s }"
-        end
-    
-    
-    type VkAccessFlags with
-         static member inline AccelerationStructureReadBitNv = unbox<VkAccessFlags> 2097152
-         static member inline AccelerationStructureWriteBitNv = unbox<VkAccessFlags> 4194304
-    type VkBufferUsageFlags with
-         static member inline RayTracingBitNv = unbox<VkBufferUsageFlags> 1024
-    type VkDebugReportObjectTypeEXT with
-         static member inline VkDebugReportObjectTypeAccelerationStructureNvExt = unbox<VkDebugReportObjectTypeEXT> 1000165000
-    type VkDescriptorType with
-         static member inline AccelerationStructureNv = unbox<VkDescriptorType> 1000165000
-    type VkIndexType with
-         static member inline NoneNv = unbox<VkIndexType> 1000165000
-    type VkObjectType with
-         static member inline AccelerationStructureNv = unbox<VkObjectType> 1000165000
-    type VkPipelineBindPoint with
-         static member inline RayTracingNv = unbox<VkPipelineBindPoint> 1000165000
-    type VkPipelineCreateFlags with
-         static member inline DeferCompileBitNv = unbox<VkPipelineCreateFlags> 32
-    type VkPipelineStageFlags with
-         static member inline RayTracingShaderBitNv = unbox<VkPipelineStageFlags> 2097152
-         static member inline AccelerationStructureBuildBitNv = unbox<VkPipelineStageFlags> 33554432
-    type VkQueryType with
-         static member inline AccelerationStructureCompactedSizeNv = unbox<VkQueryType> 1000165000
-    type VkShaderStageFlags with
-         static member inline RaygenBitNv = unbox<VkShaderStageFlags> 256
-         static member inline AnyHitBitNv = unbox<VkShaderStageFlags> 512
-         static member inline ClosestHitBitNv = unbox<VkShaderStageFlags> 1024
-         static member inline MissBitNv = unbox<VkShaderStageFlags> 2048
-         static member inline IntersectionBitNv = unbox<VkShaderStageFlags> 4096
-         static member inline CallableBitNv = unbox<VkShaderStageFlags> 8192
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkPipelineCreateFlags with
+              static member inline DeferCompileBitNv = unbox<VkPipelineCreateFlags> 32
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateAccelerationStructureNVDel = delegate of VkDevice * nativeptr<VkAccelerationStructureCreateInfoNV> * nativeptr<VkAllocationCallbacks> * nativeptr<VkAccelerationStructureNV> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
-        type VkDestroyAccelerationStructureNVDel = delegate of VkDevice * VkAccelerationStructureNV * nativeptr<VkAllocationCallbacks> -> unit
-        [<SuppressUnmanagedCodeSecurity>]
         type VkGetAccelerationStructureMemoryRequirementsNVDel = delegate of VkDevice * nativeptr<VkAccelerationStructureMemoryRequirementsInfoNV> * nativeptr<VkMemoryRequirements2KHR> -> unit
         [<SuppressUnmanagedCodeSecurity>]
-        type VkBindAccelerationStructureMemoryNVDel = delegate of VkDevice * uint32 * nativeptr<VkBindAccelerationStructureMemoryInfoNV> -> VkResult
+        type VkCmdBuildAccelerationStructureNVDel = delegate of VkCommandBuffer * nativeptr<VkAccelerationStructureInfoNV> * VkBuffer * VkDeviceSize * VkBool32 * VkAccelerationStructureKHR * VkAccelerationStructureKHR * VkBuffer * VkDeviceSize -> unit
         [<SuppressUnmanagedCodeSecurity>]
-        type VkCmdBuildAccelerationStructureNVDel = delegate of VkCommandBuffer * nativeptr<VkAccelerationStructureInfoNV> * VkBuffer * VkDeviceSize * VkBool32 * VkAccelerationStructureNV * VkAccelerationStructureNV * VkBuffer * VkDeviceSize -> unit
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkCmdCopyAccelerationStructureNVDel = delegate of VkCommandBuffer * VkAccelerationStructureNV * VkAccelerationStructureNV * VkCopyAccelerationStructureModeNV -> unit
+        type VkCmdCopyAccelerationStructureNVDel = delegate of VkCommandBuffer * VkAccelerationStructureKHR * VkAccelerationStructureKHR * VkCopyAccelerationStructureModeKHR -> unit
         [<SuppressUnmanagedCodeSecurity>]
         type VkCmdTraceRaysNVDel = delegate of VkCommandBuffer * VkBuffer * VkDeviceSize * VkBuffer * VkDeviceSize * VkDeviceSize * VkBuffer * VkDeviceSize * VkDeviceSize * VkBuffer * VkDeviceSize * VkDeviceSize * uint32 * uint32 * uint32 -> unit
         [<SuppressUnmanagedCodeSecurity>]
         type VkCreateRayTracingPipelinesNVDel = delegate of VkDevice * VkPipelineCache * uint32 * nativeptr<VkRayTracingPipelineCreateInfoNV> * nativeptr<VkAllocationCallbacks> * nativeptr<VkPipeline> -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
-        type VkGetRayTracingShaderGroupHandlesNVDel = delegate of VkDevice * VkPipeline * uint32 * uint32 * uint64 * nativeint -> VkResult
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkGetAccelerationStructureHandleNVDel = delegate of VkDevice * VkAccelerationStructureNV * uint64 * nativeint -> VkResult
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkCmdWriteAccelerationStructuresPropertiesNVDel = delegate of VkCommandBuffer * uint32 * nativeptr<VkAccelerationStructureNV> * VkQueryType * VkQueryPool * uint32 -> unit
+        type VkGetAccelerationStructureHandleNVDel = delegate of VkDevice * VkAccelerationStructureKHR * uint64 * nativeint -> VkResult
         [<SuppressUnmanagedCodeSecurity>]
         type VkCompileDeferredNVDel = delegate of VkDevice * VkPipeline * uint32 -> VkResult
         
@@ -22285,50 +24554,36 @@ module NVRayTracing =
         type private Loader<'d> private() =
             static do Report.Begin(3, "[Vulkan] loading VK_NV_ray_tracing")
             static let s_vkCreateAccelerationStructureNVDel = VkRaw.vkImportInstanceDelegate<VkCreateAccelerationStructureNVDel> "vkCreateAccelerationStructureNV"
-            static let s_vkDestroyAccelerationStructureNVDel = VkRaw.vkImportInstanceDelegate<VkDestroyAccelerationStructureNVDel> "vkDestroyAccelerationStructureNV"
             static let s_vkGetAccelerationStructureMemoryRequirementsNVDel = VkRaw.vkImportInstanceDelegate<VkGetAccelerationStructureMemoryRequirementsNVDel> "vkGetAccelerationStructureMemoryRequirementsNV"
-            static let s_vkBindAccelerationStructureMemoryNVDel = VkRaw.vkImportInstanceDelegate<VkBindAccelerationStructureMemoryNVDel> "vkBindAccelerationStructureMemoryNV"
             static let s_vkCmdBuildAccelerationStructureNVDel = VkRaw.vkImportInstanceDelegate<VkCmdBuildAccelerationStructureNVDel> "vkCmdBuildAccelerationStructureNV"
             static let s_vkCmdCopyAccelerationStructureNVDel = VkRaw.vkImportInstanceDelegate<VkCmdCopyAccelerationStructureNVDel> "vkCmdCopyAccelerationStructureNV"
             static let s_vkCmdTraceRaysNVDel = VkRaw.vkImportInstanceDelegate<VkCmdTraceRaysNVDel> "vkCmdTraceRaysNV"
             static let s_vkCreateRayTracingPipelinesNVDel = VkRaw.vkImportInstanceDelegate<VkCreateRayTracingPipelinesNVDel> "vkCreateRayTracingPipelinesNV"
-            static let s_vkGetRayTracingShaderGroupHandlesNVDel = VkRaw.vkImportInstanceDelegate<VkGetRayTracingShaderGroupHandlesNVDel> "vkGetRayTracingShaderGroupHandlesNV"
             static let s_vkGetAccelerationStructureHandleNVDel = VkRaw.vkImportInstanceDelegate<VkGetAccelerationStructureHandleNVDel> "vkGetAccelerationStructureHandleNV"
-            static let s_vkCmdWriteAccelerationStructuresPropertiesNVDel = VkRaw.vkImportInstanceDelegate<VkCmdWriteAccelerationStructuresPropertiesNVDel> "vkCmdWriteAccelerationStructuresPropertiesNV"
             static let s_vkCompileDeferredNVDel = VkRaw.vkImportInstanceDelegate<VkCompileDeferredNVDel> "vkCompileDeferredNV"
             static do Report.End(3) |> ignore
             static member vkCreateAccelerationStructureNV = s_vkCreateAccelerationStructureNVDel
-            static member vkDestroyAccelerationStructureNV = s_vkDestroyAccelerationStructureNVDel
             static member vkGetAccelerationStructureMemoryRequirementsNV = s_vkGetAccelerationStructureMemoryRequirementsNVDel
-            static member vkBindAccelerationStructureMemoryNV = s_vkBindAccelerationStructureMemoryNVDel
             static member vkCmdBuildAccelerationStructureNV = s_vkCmdBuildAccelerationStructureNVDel
             static member vkCmdCopyAccelerationStructureNV = s_vkCmdCopyAccelerationStructureNVDel
             static member vkCmdTraceRaysNV = s_vkCmdTraceRaysNVDel
             static member vkCreateRayTracingPipelinesNV = s_vkCreateRayTracingPipelinesNVDel
-            static member vkGetRayTracingShaderGroupHandlesNV = s_vkGetRayTracingShaderGroupHandlesNVDel
             static member vkGetAccelerationStructureHandleNV = s_vkGetAccelerationStructureHandleNVDel
-            static member vkCmdWriteAccelerationStructuresPropertiesNV = s_vkCmdWriteAccelerationStructuresPropertiesNVDel
             static member vkCompileDeferredNV = s_vkCompileDeferredNVDel
         let vkCreateAccelerationStructureNV(device : VkDevice, pCreateInfo : nativeptr<VkAccelerationStructureCreateInfoNV>, pAllocator : nativeptr<VkAllocationCallbacks>, pAccelerationStructure : nativeptr<VkAccelerationStructureNV>) = Loader<unit>.vkCreateAccelerationStructureNV.Invoke(device, pCreateInfo, pAllocator, pAccelerationStructure)
-        let vkDestroyAccelerationStructureNV(device : VkDevice, accelerationStructure : VkAccelerationStructureNV, pAllocator : nativeptr<VkAllocationCallbacks>) = Loader<unit>.vkDestroyAccelerationStructureNV.Invoke(device, accelerationStructure, pAllocator)
         let vkGetAccelerationStructureMemoryRequirementsNV(device : VkDevice, pInfo : nativeptr<VkAccelerationStructureMemoryRequirementsInfoNV>, pMemoryRequirements : nativeptr<VkMemoryRequirements2KHR>) = Loader<unit>.vkGetAccelerationStructureMemoryRequirementsNV.Invoke(device, pInfo, pMemoryRequirements)
-        let vkBindAccelerationStructureMemoryNV(device : VkDevice, bindInfoCount : uint32, pBindInfos : nativeptr<VkBindAccelerationStructureMemoryInfoNV>) = Loader<unit>.vkBindAccelerationStructureMemoryNV.Invoke(device, bindInfoCount, pBindInfos)
-        let vkCmdBuildAccelerationStructureNV(commandBuffer : VkCommandBuffer, pInfo : nativeptr<VkAccelerationStructureInfoNV>, instanceData : VkBuffer, instanceOffset : VkDeviceSize, update : VkBool32, dst : VkAccelerationStructureNV, src : VkAccelerationStructureNV, scratch : VkBuffer, scratchOffset : VkDeviceSize) = Loader<unit>.vkCmdBuildAccelerationStructureNV.Invoke(commandBuffer, pInfo, instanceData, instanceOffset, update, dst, src, scratch, scratchOffset)
-        let vkCmdCopyAccelerationStructureNV(commandBuffer : VkCommandBuffer, dst : VkAccelerationStructureNV, src : VkAccelerationStructureNV, mode : VkCopyAccelerationStructureModeNV) = Loader<unit>.vkCmdCopyAccelerationStructureNV.Invoke(commandBuffer, dst, src, mode)
+        let vkCmdBuildAccelerationStructureNV(commandBuffer : VkCommandBuffer, pInfo : nativeptr<VkAccelerationStructureInfoNV>, instanceData : VkBuffer, instanceOffset : VkDeviceSize, update : VkBool32, dst : VkAccelerationStructureKHR, src : VkAccelerationStructureKHR, scratch : VkBuffer, scratchOffset : VkDeviceSize) = Loader<unit>.vkCmdBuildAccelerationStructureNV.Invoke(commandBuffer, pInfo, instanceData, instanceOffset, update, dst, src, scratch, scratchOffset)
+        let vkCmdCopyAccelerationStructureNV(commandBuffer : VkCommandBuffer, dst : VkAccelerationStructureKHR, src : VkAccelerationStructureKHR, mode : VkCopyAccelerationStructureModeKHR) = Loader<unit>.vkCmdCopyAccelerationStructureNV.Invoke(commandBuffer, dst, src, mode)
         let vkCmdTraceRaysNV(commandBuffer : VkCommandBuffer, raygenShaderBindingTableBuffer : VkBuffer, raygenShaderBindingOffset : VkDeviceSize, missShaderBindingTableBuffer : VkBuffer, missShaderBindingOffset : VkDeviceSize, missShaderBindingStride : VkDeviceSize, hitShaderBindingTableBuffer : VkBuffer, hitShaderBindingOffset : VkDeviceSize, hitShaderBindingStride : VkDeviceSize, callableShaderBindingTableBuffer : VkBuffer, callableShaderBindingOffset : VkDeviceSize, callableShaderBindingStride : VkDeviceSize, width : uint32, height : uint32, depth : uint32) = Loader<unit>.vkCmdTraceRaysNV.Invoke(commandBuffer, raygenShaderBindingTableBuffer, raygenShaderBindingOffset, missShaderBindingTableBuffer, missShaderBindingOffset, missShaderBindingStride, hitShaderBindingTableBuffer, hitShaderBindingOffset, hitShaderBindingStride, callableShaderBindingTableBuffer, callableShaderBindingOffset, callableShaderBindingStride, width, height, depth)
         let vkCreateRayTracingPipelinesNV(device : VkDevice, pipelineCache : VkPipelineCache, createInfoCount : uint32, pCreateInfos : nativeptr<VkRayTracingPipelineCreateInfoNV>, pAllocator : nativeptr<VkAllocationCallbacks>, pPipelines : nativeptr<VkPipeline>) = Loader<unit>.vkCreateRayTracingPipelinesNV.Invoke(device, pipelineCache, createInfoCount, pCreateInfos, pAllocator, pPipelines)
-        let vkGetRayTracingShaderGroupHandlesNV(device : VkDevice, pipeline : VkPipeline, firstGroup : uint32, groupCount : uint32, dataSize : uint64, pData : nativeint) = Loader<unit>.vkGetRayTracingShaderGroupHandlesNV.Invoke(device, pipeline, firstGroup, groupCount, dataSize, pData)
-        let vkGetAccelerationStructureHandleNV(device : VkDevice, accelerationStructure : VkAccelerationStructureNV, dataSize : uint64, pData : nativeint) = Loader<unit>.vkGetAccelerationStructureHandleNV.Invoke(device, accelerationStructure, dataSize, pData)
-        let vkCmdWriteAccelerationStructuresPropertiesNV(commandBuffer : VkCommandBuffer, accelerationStructureCount : uint32, pAccelerationStructures : nativeptr<VkAccelerationStructureNV>, queryType : VkQueryType, queryPool : VkQueryPool, firstQuery : uint32) = Loader<unit>.vkCmdWriteAccelerationStructuresPropertiesNV.Invoke(commandBuffer, accelerationStructureCount, pAccelerationStructures, queryType, queryPool, firstQuery)
+        let vkGetAccelerationStructureHandleNV(device : VkDevice, accelerationStructure : VkAccelerationStructureKHR, dataSize : uint64, pData : nativeint) = Loader<unit>.vkGetAccelerationStructureHandleNV.Invoke(device, accelerationStructure, dataSize, pData)
         let vkCompileDeferredNV(device : VkDevice, pipeline : VkPipeline, shader : uint32) = Loader<unit>.vkCompileDeferredNV.Invoke(device, pipeline, shader)
 
 module NVRepresentativeFragmentTest =
     let Name = "VK_NV_representative_fragment_test"
     let Number = 167
-    
-    open EXTDebugReport
-    
-    
+
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceRepresentativeFragmentTestFeaturesNV = 
         struct
@@ -22386,27 +24641,20 @@ module NVRepresentativeFragmentTest =
         end
     
     
-    
 
 module NVSampleMaskOverrideCoverage =
     let Name = "VK_NV_sample_mask_override_coverage"
     let Number = 95
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module NVScissorExclusive =
     let Name = "VK_NV_scissor_exclusive"
     let Number = 206
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceExclusiveScissorFeaturesNV = 
         struct
@@ -22467,8 +24715,10 @@ module NVScissorExclusive =
         end
     
     
-    type VkDynamicState with
-         static member inline ExclusiveScissorNv = unbox<VkDynamicState> 1000205001
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkDynamicState with
+              static member inline ExclusiveScissorNv = unbox<VkDynamicState> 1000205001
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -22486,12 +24736,10 @@ module NVScissorExclusive =
 module NVShaderImageFootprint =
     let Name = "VK_NV_shader_image_footprint"
     let Number = 205
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceShaderImageFootprintFeaturesNV = 
         struct
@@ -22521,15 +24769,12 @@ module NVShaderImageFootprint =
         end
     
     
-    
 
 module NVShaderSmBuiltins =
     let Name = "VK_NV_shader_sm_builtins"
     let Number = 155
-    
-    open EXTDebugReport
-    
-    
+
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceShaderSMBuiltinsFeaturesNV = 
         struct
@@ -22590,28 +24835,25 @@ module NVShaderSmBuiltins =
         end
     
     
-    
 
 module NVShaderSubgroupPartitioned =
     let Name = "VK_NV_shader_subgroup_partitioned"
     let Number = 199
-    
-    open EXTDebugReport
-    
-    
-    
-    type VkSubgroupFeatureFlags with
-         static member inline PartitionedBitNv = unbox<VkSubgroupFeatureFlags> 256
+
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkSubgroupFeatureFlags with
+              static member inline PartitionedBitNv = unbox<VkSubgroupFeatureFlags> 256
     
 
 module NVShadingRateImage =
     let Name = "VK_NV_shading_rate_image"
     let Number = 165
-    
+
     let Required = [ KHRGetPhysicalDeviceProperties2.Name ]
     open KHRGetPhysicalDeviceProperties2
-    open EXTDebugReport
-    
+
     type VkShadingRatePaletteEntryNV = 
         | NoInvocations = 0
         | D16InvocationsPerPixel = 1
@@ -22632,7 +24874,7 @@ module NVShadingRateImage =
         | PixelMajor = 2
         | SampleMajor = 3
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkCoarseSampleLocationNV = 
         struct
@@ -22842,17 +25084,19 @@ module NVShadingRateImage =
         end
     
     
-    type VkAccessFlags with
-         static member inline ShadingRateImageReadBitNv = unbox<VkAccessFlags> 8388608
-    type VkDynamicState with
-         static member inline ViewportShadingRatePaletteNv = unbox<VkDynamicState> 1000164004
-         static member inline ViewportCoarseSampleOrderNv = unbox<VkDynamicState> 1000164006
-    type VkImageLayout with
-         static member inline ShadingRateOptimalNv = unbox<VkImageLayout> 1000164003
-    type VkImageUsageFlags with
-         static member inline ShadingRateImageBitNv = unbox<VkImageUsageFlags> 256
-    type VkPipelineStageFlags with
-         static member inline ShadingRateImageBitNv = unbox<VkPipelineStageFlags> 4194304
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkAccessFlags with
+              static member inline ShadingRateImageReadBitNv = unbox<VkAccessFlags> 8388608
+         type VkDynamicState with
+              static member inline ViewportShadingRatePaletteNv = unbox<VkDynamicState> 1000164004
+              static member inline ViewportCoarseSampleOrderNv = unbox<VkDynamicState> 1000164006
+         type VkImageLayout with
+              static member inline ShadingRateOptimalNv = unbox<VkImageLayout> 1000164003
+         type VkImageUsageFlags with
+              static member inline ShadingRateImageBitNv = unbox<VkImageUsageFlags> 256
+         type VkPipelineStageFlags with
+              static member inline ShadingRateImageBitNv = unbox<VkPipelineStageFlags> 4194304
     
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
@@ -22880,19 +25124,14 @@ module NVShadingRateImage =
 module NVViewportArray2 =
     let Name = "VK_NV_viewport_array2"
     let Number = 97
-    
-    open EXTDebugReport
-    
-    
-    
-    
+
+
 
 module NVViewportSwizzle =
     let Name = "VK_NV_viewport_swizzle"
     let Number = 99
-    
-    open EXTDebugReport
-    
+
+
     type VkViewportCoordinateSwizzleNV = 
         | PositiveX = 0
         | NegativeX = 1
@@ -22903,7 +25142,7 @@ module NVViewportSwizzle =
         | PositiveW = 6
         | NegativeW = 7
     
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkViewportSwizzleNV = 
         struct
@@ -22967,17 +25206,16 @@ module NVViewportSwizzle =
         end
     
     
-    
 
 module NVWin32KeyedMutex =
     let Name = "VK_NV_win32_keyed_mutex"
     let Number = 59
-    
+
     let Required = [ NVExternalMemoryWin32.Name ]
+    open NVExternalMemory
+    open NVExternalMemoryCapabilities
     open NVExternalMemoryWin32
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkWin32KeyedMutexAcquireReleaseInfoNV = 
         struct
@@ -23025,570 +25263,48 @@ module NVWin32KeyedMutex =
         end
     
     
-    
 
 module NVXDeviceGeneratedCommands =
     let Name = "VK_NVX_device_generated_commands"
     let Number = 87
-    
-    open EXTDebugReport
-    
-    [<Flags>]
-    type VkIndirectCommandsLayoutUsageFlagsNVX = 
-        | None = 0
-        | UnorderedSequencesBit = 0x00000001
-        | SparseSequencesBit = 0x00000002
-        | EmptyExecutionsBit = 0x00000004
-        | IndexedSequencesBit = 0x00000008
-    
-    type VkIndirectCommandsTokenTypeNVX = 
-        | Pipeline = 0
-        | DescriptorSet = 1
-        | IndexBuffer = 2
-        | VertexBuffer = 3
-        | PushConstant = 4
-        | DrawIndexed = 5
-        | Draw = 6
-        | Dispatch = 7
-    
-    [<Flags>]
-    type VkObjectEntryUsageFlagsNVX = 
-        | None = 0
-        | GraphicsBit = 0x00000001
-        | ComputeBit = 0x00000002
-    
-    type VkObjectEntryTypeNVX = 
-        | DescriptorSet = 0
-        | Pipeline = 1
-        | IndexBuffer = 2
-        | VertexBuffer = 3
-        | PushConstant = 4
-    
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkIndirectCommandsTokenNVX = 
-        struct
-            val mutable public tokenType : VkIndirectCommandsTokenTypeNVX
-            val mutable public buffer : VkBuffer
-            val mutable public offset : VkDeviceSize
-    
-            new(tokenType : VkIndirectCommandsTokenTypeNVX, buffer : VkBuffer, offset : VkDeviceSize) =
-                {
-                    tokenType = tokenType
-                    buffer = buffer
-                    offset = offset
-                }
-    
-            static member Empty =
-                VkIndirectCommandsTokenNVX(Unchecked.defaultof<VkIndirectCommandsTokenTypeNVX>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "tokenType = %A" x.tokenType
-                    sprintf "buffer = %A" x.buffer
-                    sprintf "offset = %A" x.offset
-                ] |> sprintf "VkIndirectCommandsTokenNVX { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkCmdProcessCommandsInfoNVX = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public objectTable : VkObjectTableNVX
-            val mutable public indirectCommandsLayout : VkIndirectCommandsLayoutNVX
-            val mutable public indirectCommandsTokenCount : uint32
-            val mutable public pIndirectCommandsTokens : nativeptr<VkIndirectCommandsTokenNVX>
-            val mutable public maxSequencesCount : uint32
-            val mutable public targetCommandBuffer : VkCommandBuffer
-            val mutable public sequencesCountBuffer : VkBuffer
-            val mutable public sequencesCountOffset : VkDeviceSize
-            val mutable public sequencesIndexBuffer : VkBuffer
-            val mutable public sequencesIndexOffset : VkDeviceSize
-    
-            new(pNext : nativeint, objectTable : VkObjectTableNVX, indirectCommandsLayout : VkIndirectCommandsLayoutNVX, indirectCommandsTokenCount : uint32, pIndirectCommandsTokens : nativeptr<VkIndirectCommandsTokenNVX>, maxSequencesCount : uint32, targetCommandBuffer : VkCommandBuffer, sequencesCountBuffer : VkBuffer, sequencesCountOffset : VkDeviceSize, sequencesIndexBuffer : VkBuffer, sequencesIndexOffset : VkDeviceSize) =
-                {
-                    sType = 1000086002u
-                    pNext = pNext
-                    objectTable = objectTable
-                    indirectCommandsLayout = indirectCommandsLayout
-                    indirectCommandsTokenCount = indirectCommandsTokenCount
-                    pIndirectCommandsTokens = pIndirectCommandsTokens
-                    maxSequencesCount = maxSequencesCount
-                    targetCommandBuffer = targetCommandBuffer
-                    sequencesCountBuffer = sequencesCountBuffer
-                    sequencesCountOffset = sequencesCountOffset
-                    sequencesIndexBuffer = sequencesIndexBuffer
-                    sequencesIndexOffset = sequencesIndexOffset
-                }
-    
-            new(objectTable : VkObjectTableNVX, indirectCommandsLayout : VkIndirectCommandsLayoutNVX, indirectCommandsTokenCount : uint32, pIndirectCommandsTokens : nativeptr<VkIndirectCommandsTokenNVX>, maxSequencesCount : uint32, targetCommandBuffer : VkCommandBuffer, sequencesCountBuffer : VkBuffer, sequencesCountOffset : VkDeviceSize, sequencesIndexBuffer : VkBuffer, sequencesIndexOffset : VkDeviceSize) =
-                VkCmdProcessCommandsInfoNVX(Unchecked.defaultof<nativeint>, objectTable, indirectCommandsLayout, indirectCommandsTokenCount, pIndirectCommandsTokens, maxSequencesCount, targetCommandBuffer, sequencesCountBuffer, sequencesCountOffset, sequencesIndexBuffer, sequencesIndexOffset)
-    
-            static member Empty =
-                VkCmdProcessCommandsInfoNVX(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkObjectTableNVX>, Unchecked.defaultof<VkIndirectCommandsLayoutNVX>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkIndirectCommandsTokenNVX>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkCommandBuffer>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "objectTable = %A" x.objectTable
-                    sprintf "indirectCommandsLayout = %A" x.indirectCommandsLayout
-                    sprintf "indirectCommandsTokenCount = %A" x.indirectCommandsTokenCount
-                    sprintf "pIndirectCommandsTokens = %A" x.pIndirectCommandsTokens
-                    sprintf "maxSequencesCount = %A" x.maxSequencesCount
-                    sprintf "targetCommandBuffer = %A" x.targetCommandBuffer
-                    sprintf "sequencesCountBuffer = %A" x.sequencesCountBuffer
-                    sprintf "sequencesCountOffset = %A" x.sequencesCountOffset
-                    sprintf "sequencesIndexBuffer = %A" x.sequencesIndexBuffer
-                    sprintf "sequencesIndexOffset = %A" x.sequencesIndexOffset
-                ] |> sprintf "VkCmdProcessCommandsInfoNVX { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkCmdReserveSpaceForCommandsInfoNVX = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public objectTable : VkObjectTableNVX
-            val mutable public indirectCommandsLayout : VkIndirectCommandsLayoutNVX
-            val mutable public maxSequencesCount : uint32
-    
-            new(pNext : nativeint, objectTable : VkObjectTableNVX, indirectCommandsLayout : VkIndirectCommandsLayoutNVX, maxSequencesCount : uint32) =
-                {
-                    sType = 1000086003u
-                    pNext = pNext
-                    objectTable = objectTable
-                    indirectCommandsLayout = indirectCommandsLayout
-                    maxSequencesCount = maxSequencesCount
-                }
-    
-            new(objectTable : VkObjectTableNVX, indirectCommandsLayout : VkIndirectCommandsLayoutNVX, maxSequencesCount : uint32) =
-                VkCmdReserveSpaceForCommandsInfoNVX(Unchecked.defaultof<nativeint>, objectTable, indirectCommandsLayout, maxSequencesCount)
-    
-            static member Empty =
-                VkCmdReserveSpaceForCommandsInfoNVX(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkObjectTableNVX>, Unchecked.defaultof<VkIndirectCommandsLayoutNVX>, Unchecked.defaultof<uint32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "objectTable = %A" x.objectTable
-                    sprintf "indirectCommandsLayout = %A" x.indirectCommandsLayout
-                    sprintf "maxSequencesCount = %A" x.maxSequencesCount
-                ] |> sprintf "VkCmdReserveSpaceForCommandsInfoNVX { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkDeviceGeneratedCommandsFeaturesNVX = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public computeBindingPointSupport : VkBool32
-    
-            new(pNext : nativeint, computeBindingPointSupport : VkBool32) =
-                {
-                    sType = 1000086005u
-                    pNext = pNext
-                    computeBindingPointSupport = computeBindingPointSupport
-                }
-    
-            new(computeBindingPointSupport : VkBool32) =
-                VkDeviceGeneratedCommandsFeaturesNVX(Unchecked.defaultof<nativeint>, computeBindingPointSupport)
-    
-            static member Empty =
-                VkDeviceGeneratedCommandsFeaturesNVX(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "computeBindingPointSupport = %A" x.computeBindingPointSupport
-                ] |> sprintf "VkDeviceGeneratedCommandsFeaturesNVX { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkDeviceGeneratedCommandsLimitsNVX = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public maxIndirectCommandsLayoutTokenCount : uint32
-            val mutable public maxObjectEntryCounts : uint32
-            val mutable public minSequenceCountBufferOffsetAlignment : uint32
-            val mutable public minSequenceIndexBufferOffsetAlignment : uint32
-            val mutable public minCommandsTokenBufferOffsetAlignment : uint32
-    
-            new(pNext : nativeint, maxIndirectCommandsLayoutTokenCount : uint32, maxObjectEntryCounts : uint32, minSequenceCountBufferOffsetAlignment : uint32, minSequenceIndexBufferOffsetAlignment : uint32, minCommandsTokenBufferOffsetAlignment : uint32) =
-                {
-                    sType = 1000086004u
-                    pNext = pNext
-                    maxIndirectCommandsLayoutTokenCount = maxIndirectCommandsLayoutTokenCount
-                    maxObjectEntryCounts = maxObjectEntryCounts
-                    minSequenceCountBufferOffsetAlignment = minSequenceCountBufferOffsetAlignment
-                    minSequenceIndexBufferOffsetAlignment = minSequenceIndexBufferOffsetAlignment
-                    minCommandsTokenBufferOffsetAlignment = minCommandsTokenBufferOffsetAlignment
-                }
-    
-            new(maxIndirectCommandsLayoutTokenCount : uint32, maxObjectEntryCounts : uint32, minSequenceCountBufferOffsetAlignment : uint32, minSequenceIndexBufferOffsetAlignment : uint32, minCommandsTokenBufferOffsetAlignment : uint32) =
-                VkDeviceGeneratedCommandsLimitsNVX(Unchecked.defaultof<nativeint>, maxIndirectCommandsLayoutTokenCount, maxObjectEntryCounts, minSequenceCountBufferOffsetAlignment, minSequenceIndexBufferOffsetAlignment, minCommandsTokenBufferOffsetAlignment)
-    
-            static member Empty =
-                VkDeviceGeneratedCommandsLimitsNVX(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "maxIndirectCommandsLayoutTokenCount = %A" x.maxIndirectCommandsLayoutTokenCount
-                    sprintf "maxObjectEntryCounts = %A" x.maxObjectEntryCounts
-                    sprintf "minSequenceCountBufferOffsetAlignment = %A" x.minSequenceCountBufferOffsetAlignment
-                    sprintf "minSequenceIndexBufferOffsetAlignment = %A" x.minSequenceIndexBufferOffsetAlignment
-                    sprintf "minCommandsTokenBufferOffsetAlignment = %A" x.minCommandsTokenBufferOffsetAlignment
-                ] |> sprintf "VkDeviceGeneratedCommandsLimitsNVX { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkIndirectCommandsLayoutTokenNVX = 
-        struct
-            val mutable public tokenType : VkIndirectCommandsTokenTypeNVX
-            val mutable public bindingUnit : uint32
-            val mutable public dynamicCount : uint32
-            val mutable public divisor : uint32
-    
-            new(tokenType : VkIndirectCommandsTokenTypeNVX, bindingUnit : uint32, dynamicCount : uint32, divisor : uint32) =
-                {
-                    tokenType = tokenType
-                    bindingUnit = bindingUnit
-                    dynamicCount = dynamicCount
-                    divisor = divisor
-                }
-    
-            static member Empty =
-                VkIndirectCommandsLayoutTokenNVX(Unchecked.defaultof<VkIndirectCommandsTokenTypeNVX>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "tokenType = %A" x.tokenType
-                    sprintf "bindingUnit = %A" x.bindingUnit
-                    sprintf "dynamicCount = %A" x.dynamicCount
-                    sprintf "divisor = %A" x.divisor
-                ] |> sprintf "VkIndirectCommandsLayoutTokenNVX { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkIndirectCommandsLayoutCreateInfoNVX = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public pipelineBindPoint : VkPipelineBindPoint
-            val mutable public flags : VkIndirectCommandsLayoutUsageFlagsNVX
-            val mutable public tokenCount : uint32
-            val mutable public pTokens : nativeptr<VkIndirectCommandsLayoutTokenNVX>
-    
-            new(pNext : nativeint, pipelineBindPoint : VkPipelineBindPoint, flags : VkIndirectCommandsLayoutUsageFlagsNVX, tokenCount : uint32, pTokens : nativeptr<VkIndirectCommandsLayoutTokenNVX>) =
-                {
-                    sType = 1000086001u
-                    pNext = pNext
-                    pipelineBindPoint = pipelineBindPoint
-                    flags = flags
-                    tokenCount = tokenCount
-                    pTokens = pTokens
-                }
-    
-            new(pipelineBindPoint : VkPipelineBindPoint, flags : VkIndirectCommandsLayoutUsageFlagsNVX, tokenCount : uint32, pTokens : nativeptr<VkIndirectCommandsLayoutTokenNVX>) =
-                VkIndirectCommandsLayoutCreateInfoNVX(Unchecked.defaultof<nativeint>, pipelineBindPoint, flags, tokenCount, pTokens)
-    
-            static member Empty =
-                VkIndirectCommandsLayoutCreateInfoNVX(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineBindPoint>, Unchecked.defaultof<VkIndirectCommandsLayoutUsageFlagsNVX>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkIndirectCommandsLayoutTokenNVX>>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "pipelineBindPoint = %A" x.pipelineBindPoint
-                    sprintf "flags = %A" x.flags
-                    sprintf "tokenCount = %A" x.tokenCount
-                    sprintf "pTokens = %A" x.pTokens
-                ] |> sprintf "VkIndirectCommandsLayoutCreateInfoNVX { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkObjectTableCreateInfoNVX = 
-        struct
-            val mutable public sType : uint32
-            val mutable public pNext : nativeint
-            val mutable public objectCount : uint32
-            val mutable public pObjectEntryTypes : nativeptr<VkObjectEntryTypeNVX>
-            val mutable public pObjectEntryCounts : nativeptr<uint32>
-            val mutable public pObjectEntryUsageFlags : nativeptr<VkObjectEntryUsageFlagsNVX>
-            val mutable public maxUniformBuffersPerDescriptor : uint32
-            val mutable public maxStorageBuffersPerDescriptor : uint32
-            val mutable public maxStorageImagesPerDescriptor : uint32
-            val mutable public maxSampledImagesPerDescriptor : uint32
-            val mutable public maxPipelineLayouts : uint32
-    
-            new(pNext : nativeint, objectCount : uint32, pObjectEntryTypes : nativeptr<VkObjectEntryTypeNVX>, pObjectEntryCounts : nativeptr<uint32>, pObjectEntryUsageFlags : nativeptr<VkObjectEntryUsageFlagsNVX>, maxUniformBuffersPerDescriptor : uint32, maxStorageBuffersPerDescriptor : uint32, maxStorageImagesPerDescriptor : uint32, maxSampledImagesPerDescriptor : uint32, maxPipelineLayouts : uint32) =
-                {
-                    sType = 1000086000u
-                    pNext = pNext
-                    objectCount = objectCount
-                    pObjectEntryTypes = pObjectEntryTypes
-                    pObjectEntryCounts = pObjectEntryCounts
-                    pObjectEntryUsageFlags = pObjectEntryUsageFlags
-                    maxUniformBuffersPerDescriptor = maxUniformBuffersPerDescriptor
-                    maxStorageBuffersPerDescriptor = maxStorageBuffersPerDescriptor
-                    maxStorageImagesPerDescriptor = maxStorageImagesPerDescriptor
-                    maxSampledImagesPerDescriptor = maxSampledImagesPerDescriptor
-                    maxPipelineLayouts = maxPipelineLayouts
-                }
-    
-            new(objectCount : uint32, pObjectEntryTypes : nativeptr<VkObjectEntryTypeNVX>, pObjectEntryCounts : nativeptr<uint32>, pObjectEntryUsageFlags : nativeptr<VkObjectEntryUsageFlagsNVX>, maxUniformBuffersPerDescriptor : uint32, maxStorageBuffersPerDescriptor : uint32, maxStorageImagesPerDescriptor : uint32, maxSampledImagesPerDescriptor : uint32, maxPipelineLayouts : uint32) =
-                VkObjectTableCreateInfoNVX(Unchecked.defaultof<nativeint>, objectCount, pObjectEntryTypes, pObjectEntryCounts, pObjectEntryUsageFlags, maxUniformBuffersPerDescriptor, maxStorageBuffersPerDescriptor, maxStorageImagesPerDescriptor, maxSampledImagesPerDescriptor, maxPipelineLayouts)
-    
-            static member Empty =
-                VkObjectTableCreateInfoNVX(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkObjectEntryTypeNVX>>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<nativeptr<VkObjectEntryUsageFlagsNVX>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "sType = %A" x.sType
-                    sprintf "pNext = %A" x.pNext
-                    sprintf "objectCount = %A" x.objectCount
-                    sprintf "pObjectEntryTypes = %A" x.pObjectEntryTypes
-                    sprintf "pObjectEntryCounts = %A" x.pObjectEntryCounts
-                    sprintf "pObjectEntryUsageFlags = %A" x.pObjectEntryUsageFlags
-                    sprintf "maxUniformBuffersPerDescriptor = %A" x.maxUniformBuffersPerDescriptor
-                    sprintf "maxStorageBuffersPerDescriptor = %A" x.maxStorageBuffersPerDescriptor
-                    sprintf "maxStorageImagesPerDescriptor = %A" x.maxStorageImagesPerDescriptor
-                    sprintf "maxSampledImagesPerDescriptor = %A" x.maxSampledImagesPerDescriptor
-                    sprintf "maxPipelineLayouts = %A" x.maxPipelineLayouts
-                ] |> sprintf "VkObjectTableCreateInfoNVX { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkObjectTableDescriptorSetEntryNVX = 
-        struct
-            val mutable public _type : VkObjectEntryTypeNVX
-            val mutable public flags : VkObjectEntryUsageFlagsNVX
-            val mutable public pipelineLayout : VkPipelineLayout
-            val mutable public descriptorSet : VkDescriptorSet
-    
-            new(_type : VkObjectEntryTypeNVX, flags : VkObjectEntryUsageFlagsNVX, pipelineLayout : VkPipelineLayout, descriptorSet : VkDescriptorSet) =
-                {
-                    _type = _type
-                    flags = flags
-                    pipelineLayout = pipelineLayout
-                    descriptorSet = descriptorSet
-                }
-    
-            static member Empty =
-                VkObjectTableDescriptorSetEntryNVX(Unchecked.defaultof<VkObjectEntryTypeNVX>, Unchecked.defaultof<VkObjectEntryUsageFlagsNVX>, Unchecked.defaultof<VkPipelineLayout>, Unchecked.defaultof<VkDescriptorSet>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "_type = %A" x._type
-                    sprintf "flags = %A" x.flags
-                    sprintf "pipelineLayout = %A" x.pipelineLayout
-                    sprintf "descriptorSet = %A" x.descriptorSet
-                ] |> sprintf "VkObjectTableDescriptorSetEntryNVX { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkObjectTableEntryNVX = 
-        struct
-            val mutable public _type : VkObjectEntryTypeNVX
-            val mutable public flags : VkObjectEntryUsageFlagsNVX
-    
-            new(_type : VkObjectEntryTypeNVX, flags : VkObjectEntryUsageFlagsNVX) =
-                {
-                    _type = _type
-                    flags = flags
-                }
-    
-            static member Empty =
-                VkObjectTableEntryNVX(Unchecked.defaultof<VkObjectEntryTypeNVX>, Unchecked.defaultof<VkObjectEntryUsageFlagsNVX>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "_type = %A" x._type
-                    sprintf "flags = %A" x.flags
-                ] |> sprintf "VkObjectTableEntryNVX { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkObjectTableIndexBufferEntryNVX = 
-        struct
-            val mutable public _type : VkObjectEntryTypeNVX
-            val mutable public flags : VkObjectEntryUsageFlagsNVX
-            val mutable public buffer : VkBuffer
-            val mutable public indexType : VkIndexType
-    
-            new(_type : VkObjectEntryTypeNVX, flags : VkObjectEntryUsageFlagsNVX, buffer : VkBuffer, indexType : VkIndexType) =
-                {
-                    _type = _type
-                    flags = flags
-                    buffer = buffer
-                    indexType = indexType
-                }
-    
-            static member Empty =
-                VkObjectTableIndexBufferEntryNVX(Unchecked.defaultof<VkObjectEntryTypeNVX>, Unchecked.defaultof<VkObjectEntryUsageFlagsNVX>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkIndexType>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "_type = %A" x._type
-                    sprintf "flags = %A" x.flags
-                    sprintf "buffer = %A" x.buffer
-                    sprintf "indexType = %A" x.indexType
-                ] |> sprintf "VkObjectTableIndexBufferEntryNVX { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkObjectTablePipelineEntryNVX = 
-        struct
-            val mutable public _type : VkObjectEntryTypeNVX
-            val mutable public flags : VkObjectEntryUsageFlagsNVX
-            val mutable public pipeline : VkPipeline
-    
-            new(_type : VkObjectEntryTypeNVX, flags : VkObjectEntryUsageFlagsNVX, pipeline : VkPipeline) =
-                {
-                    _type = _type
-                    flags = flags
-                    pipeline = pipeline
-                }
-    
-            static member Empty =
-                VkObjectTablePipelineEntryNVX(Unchecked.defaultof<VkObjectEntryTypeNVX>, Unchecked.defaultof<VkObjectEntryUsageFlagsNVX>, Unchecked.defaultof<VkPipeline>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "_type = %A" x._type
-                    sprintf "flags = %A" x.flags
-                    sprintf "pipeline = %A" x.pipeline
-                ] |> sprintf "VkObjectTablePipelineEntryNVX { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkObjectTablePushConstantEntryNVX = 
-        struct
-            val mutable public _type : VkObjectEntryTypeNVX
-            val mutable public flags : VkObjectEntryUsageFlagsNVX
-            val mutable public pipelineLayout : VkPipelineLayout
-            val mutable public stageFlags : VkShaderStageFlags
-    
-            new(_type : VkObjectEntryTypeNVX, flags : VkObjectEntryUsageFlagsNVX, pipelineLayout : VkPipelineLayout, stageFlags : VkShaderStageFlags) =
-                {
-                    _type = _type
-                    flags = flags
-                    pipelineLayout = pipelineLayout
-                    stageFlags = stageFlags
-                }
-    
-            static member Empty =
-                VkObjectTablePushConstantEntryNVX(Unchecked.defaultof<VkObjectEntryTypeNVX>, Unchecked.defaultof<VkObjectEntryUsageFlagsNVX>, Unchecked.defaultof<VkPipelineLayout>, Unchecked.defaultof<VkShaderStageFlags>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "_type = %A" x._type
-                    sprintf "flags = %A" x.flags
-                    sprintf "pipelineLayout = %A" x.pipelineLayout
-                    sprintf "stageFlags = %A" x.stageFlags
-                ] |> sprintf "VkObjectTablePushConstantEntryNVX { %s }"
-        end
-    
-    [<StructLayout(LayoutKind.Sequential)>]
-    type VkObjectTableVertexBufferEntryNVX = 
-        struct
-            val mutable public _type : VkObjectEntryTypeNVX
-            val mutable public flags : VkObjectEntryUsageFlagsNVX
-            val mutable public buffer : VkBuffer
-    
-            new(_type : VkObjectEntryTypeNVX, flags : VkObjectEntryUsageFlagsNVX, buffer : VkBuffer) =
-                {
-                    _type = _type
-                    flags = flags
-                    buffer = buffer
-                }
-    
-            static member Empty =
-                VkObjectTableVertexBufferEntryNVX(Unchecked.defaultof<VkObjectEntryTypeNVX>, Unchecked.defaultof<VkObjectEntryUsageFlagsNVX>, Unchecked.defaultof<VkBuffer>)
-    
-            override x.ToString() =
-                String.concat "; " [
-                    sprintf "_type = %A" x._type
-                    sprintf "flags = %A" x.flags
-                    sprintf "buffer = %A" x.buffer
-                ] |> sprintf "VkObjectTableVertexBufferEntryNVX { %s }"
-        end
-    
-    
-    type VkAccessFlags with
-         static member inline CommandProcessReadBitNvx = unbox<VkAccessFlags> 131072
-         static member inline CommandProcessWriteBitNvx = unbox<VkAccessFlags> 262144
-    type VkObjectType with
-         static member inline ObjectTableNvx = unbox<VkObjectType> 1000086000
-         static member inline IndirectCommandsLayoutNvx = unbox<VkObjectType> 1000086001
-    type VkPipelineStageFlags with
-         static member inline CommandProcessBitNvx = unbox<VkPipelineStageFlags> 131072
-    
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module VkRaw =
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkCmdProcessCommandsNVXDel = delegate of VkCommandBuffer * nativeptr<VkCmdProcessCommandsInfoNVX> -> unit
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkCmdReserveSpaceForCommandsNVXDel = delegate of VkCommandBuffer * nativeptr<VkCmdReserveSpaceForCommandsInfoNVX> -> unit
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkCreateIndirectCommandsLayoutNVXDel = delegate of VkDevice * nativeptr<VkIndirectCommandsLayoutCreateInfoNVX> * nativeptr<VkAllocationCallbacks> * nativeptr<VkIndirectCommandsLayoutNVX> -> VkResult
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkDestroyIndirectCommandsLayoutNVXDel = delegate of VkDevice * VkIndirectCommandsLayoutNVX * nativeptr<VkAllocationCallbacks> -> unit
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkCreateObjectTableNVXDel = delegate of VkDevice * nativeptr<VkObjectTableCreateInfoNVX> * nativeptr<VkAllocationCallbacks> * nativeptr<VkObjectTableNVX> -> VkResult
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkDestroyObjectTableNVXDel = delegate of VkDevice * VkObjectTableNVX * nativeptr<VkAllocationCallbacks> -> unit
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkRegisterObjectsNVXDel = delegate of VkDevice * VkObjectTableNVX * uint32 * nativeptr<nativeptr<VkObjectTableEntryNVX>> * nativeptr<uint32> -> VkResult
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkUnregisterObjectsNVXDel = delegate of VkDevice * VkObjectTableNVX * uint32 * nativeptr<VkObjectEntryTypeNVX> * nativeptr<uint32> -> VkResult
-        [<SuppressUnmanagedCodeSecurity>]
-        type VkGetPhysicalDeviceGeneratedCommandsPropertiesNVXDel = delegate of VkPhysicalDevice * nativeptr<VkDeviceGeneratedCommandsFeaturesNVX> * nativeptr<VkDeviceGeneratedCommandsLimitsNVX> -> unit
-        
-        [<AbstractClass; Sealed>]
-        type private Loader<'d> private() =
-            static do Report.Begin(3, "[Vulkan] loading VK_NVX_device_generated_commands")
-            static let s_vkCmdProcessCommandsNVXDel = VkRaw.vkImportInstanceDelegate<VkCmdProcessCommandsNVXDel> "vkCmdProcessCommandsNVX"
-            static let s_vkCmdReserveSpaceForCommandsNVXDel = VkRaw.vkImportInstanceDelegate<VkCmdReserveSpaceForCommandsNVXDel> "vkCmdReserveSpaceForCommandsNVX"
-            static let s_vkCreateIndirectCommandsLayoutNVXDel = VkRaw.vkImportInstanceDelegate<VkCreateIndirectCommandsLayoutNVXDel> "vkCreateIndirectCommandsLayoutNVX"
-            static let s_vkDestroyIndirectCommandsLayoutNVXDel = VkRaw.vkImportInstanceDelegate<VkDestroyIndirectCommandsLayoutNVXDel> "vkDestroyIndirectCommandsLayoutNVX"
-            static let s_vkCreateObjectTableNVXDel = VkRaw.vkImportInstanceDelegate<VkCreateObjectTableNVXDel> "vkCreateObjectTableNVX"
-            static let s_vkDestroyObjectTableNVXDel = VkRaw.vkImportInstanceDelegate<VkDestroyObjectTableNVXDel> "vkDestroyObjectTableNVX"
-            static let s_vkRegisterObjectsNVXDel = VkRaw.vkImportInstanceDelegate<VkRegisterObjectsNVXDel> "vkRegisterObjectsNVX"
-            static let s_vkUnregisterObjectsNVXDel = VkRaw.vkImportInstanceDelegate<VkUnregisterObjectsNVXDel> "vkUnregisterObjectsNVX"
-            static let s_vkGetPhysicalDeviceGeneratedCommandsPropertiesNVXDel = VkRaw.vkImportInstanceDelegate<VkGetPhysicalDeviceGeneratedCommandsPropertiesNVXDel> "vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX"
-            static do Report.End(3) |> ignore
-            static member vkCmdProcessCommandsNVX = s_vkCmdProcessCommandsNVXDel
-            static member vkCmdReserveSpaceForCommandsNVX = s_vkCmdReserveSpaceForCommandsNVXDel
-            static member vkCreateIndirectCommandsLayoutNVX = s_vkCreateIndirectCommandsLayoutNVXDel
-            static member vkDestroyIndirectCommandsLayoutNVX = s_vkDestroyIndirectCommandsLayoutNVXDel
-            static member vkCreateObjectTableNVX = s_vkCreateObjectTableNVXDel
-            static member vkDestroyObjectTableNVX = s_vkDestroyObjectTableNVXDel
-            static member vkRegisterObjectsNVX = s_vkRegisterObjectsNVXDel
-            static member vkUnregisterObjectsNVX = s_vkUnregisterObjectsNVXDel
-            static member vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX = s_vkGetPhysicalDeviceGeneratedCommandsPropertiesNVXDel
-        let vkCmdProcessCommandsNVX(commandBuffer : VkCommandBuffer, pProcessCommandsInfo : nativeptr<VkCmdProcessCommandsInfoNVX>) = Loader<unit>.vkCmdProcessCommandsNVX.Invoke(commandBuffer, pProcessCommandsInfo)
-        let vkCmdReserveSpaceForCommandsNVX(commandBuffer : VkCommandBuffer, pReserveSpaceInfo : nativeptr<VkCmdReserveSpaceForCommandsInfoNVX>) = Loader<unit>.vkCmdReserveSpaceForCommandsNVX.Invoke(commandBuffer, pReserveSpaceInfo)
-        let vkCreateIndirectCommandsLayoutNVX(device : VkDevice, pCreateInfo : nativeptr<VkIndirectCommandsLayoutCreateInfoNVX>, pAllocator : nativeptr<VkAllocationCallbacks>, pIndirectCommandsLayout : nativeptr<VkIndirectCommandsLayoutNVX>) = Loader<unit>.vkCreateIndirectCommandsLayoutNVX.Invoke(device, pCreateInfo, pAllocator, pIndirectCommandsLayout)
-        let vkDestroyIndirectCommandsLayoutNVX(device : VkDevice, indirectCommandsLayout : VkIndirectCommandsLayoutNVX, pAllocator : nativeptr<VkAllocationCallbacks>) = Loader<unit>.vkDestroyIndirectCommandsLayoutNVX.Invoke(device, indirectCommandsLayout, pAllocator)
-        let vkCreateObjectTableNVX(device : VkDevice, pCreateInfo : nativeptr<VkObjectTableCreateInfoNVX>, pAllocator : nativeptr<VkAllocationCallbacks>, pObjectTable : nativeptr<VkObjectTableNVX>) = Loader<unit>.vkCreateObjectTableNVX.Invoke(device, pCreateInfo, pAllocator, pObjectTable)
-        let vkDestroyObjectTableNVX(device : VkDevice, objectTable : VkObjectTableNVX, pAllocator : nativeptr<VkAllocationCallbacks>) = Loader<unit>.vkDestroyObjectTableNVX.Invoke(device, objectTable, pAllocator)
-        let vkRegisterObjectsNVX(device : VkDevice, objectTable : VkObjectTableNVX, objectCount : uint32, ppObjectTableEntries : nativeptr<nativeptr<VkObjectTableEntryNVX>>, pObjectIndices : nativeptr<uint32>) = Loader<unit>.vkRegisterObjectsNVX.Invoke(device, objectTable, objectCount, ppObjectTableEntries, pObjectIndices)
-        let vkUnregisterObjectsNVX(device : VkDevice, objectTable : VkObjectTableNVX, objectCount : uint32, pObjectEntryTypes : nativeptr<VkObjectEntryTypeNVX>, pObjectIndices : nativeptr<uint32>) = Loader<unit>.vkUnregisterObjectsNVX.Invoke(device, objectTable, objectCount, pObjectEntryTypes, pObjectIndices)
-        let vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX(physicalDevice : VkPhysicalDevice, pFeatures : nativeptr<VkDeviceGeneratedCommandsFeaturesNVX>, pLimits : nativeptr<VkDeviceGeneratedCommandsLimitsNVX>) = Loader<unit>.vkGetPhysicalDeviceGeneratedCommandsPropertiesNVX.Invoke(physicalDevice, pFeatures, pLimits)
+
+
 
 module NVXImageViewHandle =
     let Name = "VK_NVX_image_view_handle"
     let Number = 31
+
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkImageViewAddressPropertiesNVX = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public deviceAddress : VkDeviceAddress
+            val mutable public size : VkDeviceSize
     
-    open EXTDebugReport
+            new(pNext : nativeint, deviceAddress : VkDeviceAddress, size : VkDeviceSize) =
+                {
+                    sType = 1000030001u
+                    pNext = pNext
+                    deviceAddress = deviceAddress
+                    size = size
+                }
     
+            new(deviceAddress : VkDeviceAddress, size : VkDeviceSize) =
+                VkImageViewAddressPropertiesNVX(Unchecked.defaultof<nativeint>, deviceAddress, size)
+    
+            static member Empty =
+                VkImageViewAddressPropertiesNVX(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceAddress>, Unchecked.defaultof<VkDeviceSize>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "deviceAddress = %A" x.deviceAddress
+                    sprintf "size = %A" x.size
+                ] |> sprintf "VkImageViewAddressPropertiesNVX { %s }"
+        end
     
     [<StructLayout(LayoutKind.Sequential)>]
     type VkImageViewHandleInfoNVX = 
@@ -23625,29 +25341,32 @@ module NVXImageViewHandle =
         end
     
     
-    
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkGetImageViewHandleNVXDel = delegate of VkDevice * nativeptr<VkImageViewHandleInfoNVX> -> uint32
+        [<SuppressUnmanagedCodeSecurity>]
+        type VkGetImageViewAddressNVXDel = delegate of VkDevice * VkImageView * nativeptr<VkImageViewAddressPropertiesNVX> -> VkResult
         
         [<AbstractClass; Sealed>]
         type private Loader<'d> private() =
             static do Report.Begin(3, "[Vulkan] loading VK_NVX_image_view_handle")
             static let s_vkGetImageViewHandleNVXDel = VkRaw.vkImportInstanceDelegate<VkGetImageViewHandleNVXDel> "vkGetImageViewHandleNVX"
+            static let s_vkGetImageViewAddressNVXDel = VkRaw.vkImportInstanceDelegate<VkGetImageViewAddressNVXDel> "vkGetImageViewAddressNVX"
             static do Report.End(3) |> ignore
             static member vkGetImageViewHandleNVX = s_vkGetImageViewHandleNVXDel
+            static member vkGetImageViewAddressNVX = s_vkGetImageViewAddressNVXDel
         let vkGetImageViewHandleNVX(device : VkDevice, pInfo : nativeptr<VkImageViewHandleInfoNVX>) = Loader<unit>.vkGetImageViewHandleNVX.Invoke(device, pInfo)
+        let vkGetImageViewAddressNVX(device : VkDevice, imageView : VkImageView, pProperties : nativeptr<VkImageViewAddressPropertiesNVX>) = Loader<unit>.vkGetImageViewAddressNVX.Invoke(device, imageView, pProperties)
 
 module NVXMultiviewPerViewAttributes =
     let Name = "VK_NVX_multiview_per_view_attributes"
     let Number = 98
-    
+
     let Required = [ KHRMultiview.Name ]
+    open KHRGetPhysicalDeviceProperties2
     open KHRMultiview
-    open EXTDebugReport
-    
-    
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceMultiviewPerViewAttributesPropertiesNVX = 
         struct
@@ -23677,32 +25396,120 @@ module NVXMultiviewPerViewAttributes =
         end
     
     
-    type VkSubpassDescriptionFlags with
-         static member inline PerViewAttributesBitNvx = unbox<VkSubpassDescriptionFlags> 1
-         static member inline PerViewPositionXOnlyBitNvx = unbox<VkSubpassDescriptionFlags> 2
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkSubpassDescriptionFlags with
+              static member inline PerViewAttributesBitNvx = unbox<VkSubpassDescriptionFlags> 1
+              static member inline PerViewPositionXOnlyBitNvx = unbox<VkSubpassDescriptionFlags> 2
     
 
-module QCOMExtension172 =
-    let Name = "VK_QCOM_extension_172"
+module QCOMExtension173 =
+    let Name = "VK_QCOM_extension_173"
+    let Number = 173
+
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkBufferUsageFlags with
+              static member inline Reserved18BitQcom = unbox<VkBufferUsageFlags> 262144
+         type VkImageUsageFlags with
+              static member inline Reserved16BitQcom = unbox<VkImageUsageFlags> 65536
+              static member inline Reserved17BitQcom = unbox<VkImageUsageFlags> 131072
+    
+
+module QCOMRenderPassShaderResolve =
+    let Name = "VK_QCOM_render_pass_shader_resolve"
     let Number = 172
-    
-    open EXTDebugReport
-    
-    
-    
-    type VkSubpassDescriptionFlags with
-         static member inline Reserved2BitQcom = unbox<VkSubpassDescriptionFlags> 4
-         static member inline Reserved3BitQcom = unbox<VkSubpassDescriptionFlags> 8
+
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkSubpassDescriptionFlags with
+              static member inline FragmentRegionBitQcom = unbox<VkSubpassDescriptionFlags> 4
+              static member inline ShaderResolveBitQcom = unbox<VkSubpassDescriptionFlags> 8
     
 
-module QCOMExtension283 =
-    let Name = "VK_QCOM_extension_283"
+module QCOMRenderPassStoreOps =
+    let Name = "VK_QCOM_render_pass_store_ops"
+    let Number = 302
+
+
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkAttachmentStoreOp with
+              static member inline NoneQcom = unbox<VkAttachmentStoreOp> 1000301000
+    
+
+module QCOMRenderPassTransform =
+    let Name = "VK_QCOM_render_pass_transform"
     let Number = 283
+
+    let Required = [ KHRSurface.Name; KHRSwapchain.Name ]
+    open KHRSurface
+    open KHRSwapchain
+
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkCommandBufferInheritanceRenderPassTransformInfoQCOM = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public transform : VkSurfaceTransformFlagsKHR
+            val mutable public renderArea : VkRect2D
     
-    open EXTDebugReport
+            new(pNext : nativeint, transform : VkSurfaceTransformFlagsKHR, renderArea : VkRect2D) =
+                {
+                    sType = 1000282000u
+                    pNext = pNext
+                    transform = transform
+                    renderArea = renderArea
+                }
+    
+            new(transform : VkSurfaceTransformFlagsKHR, renderArea : VkRect2D) =
+                VkCommandBufferInheritanceRenderPassTransformInfoQCOM(Unchecked.defaultof<nativeint>, transform, renderArea)
+    
+            static member Empty =
+                VkCommandBufferInheritanceRenderPassTransformInfoQCOM(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkRect2D>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "transform = %A" x.transform
+                    sprintf "renderArea = %A" x.renderArea
+                ] |> sprintf "VkCommandBufferInheritanceRenderPassTransformInfoQCOM { %s }"
+        end
+    
+    [<StructLayout(LayoutKind.Sequential)>]
+    type VkRenderPassTransformBeginInfoQCOM = 
+        struct
+            val mutable public sType : uint32
+            val mutable public pNext : nativeint
+            val mutable public transform : VkSurfaceTransformFlagsKHR
+    
+            new(pNext : nativeint, transform : VkSurfaceTransformFlagsKHR) =
+                {
+                    sType = 1000282001u
+                    pNext = pNext
+                    transform = transform
+                }
+    
+            new(transform : VkSurfaceTransformFlagsKHR) =
+                VkRenderPassTransformBeginInfoQCOM(Unchecked.defaultof<nativeint>, transform)
+    
+            static member Empty =
+                VkRenderPassTransformBeginInfoQCOM(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>)
+    
+            override x.ToString() =
+                String.concat "; " [
+                    sprintf "sType = %A" x.sType
+                    sprintf "pNext = %A" x.pNext
+                    sprintf "transform = %A" x.transform
+                ] |> sprintf "VkRenderPassTransformBeginInfoQCOM { %s }"
+        end
     
     
-    
-    type VkRenderPassCreateFlags with
-         static member inline VkRenderPassReservedBit1Qcom = unbox<VkRenderPassCreateFlags> 2
+    [<AutoOpen>]
+    module EnumExtensions =
+         type VkRenderPassCreateFlags with
+              static member inline TransformBitQcom = unbox<VkRenderPassCreateFlags> 2
     

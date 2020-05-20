@@ -24,10 +24,10 @@ open System.Text.RegularExpressions
 
 
 [<AutoOpen>]
-module XmlStuff = 
+module XmlStuff =
     let xname s = XName.op_Implicit s
-    let attrib (e : XElement) s = 
-        let e = e.Attribute (xname s) 
+    let attrib (e : XElement) s =
+        let e = e.Attribute (xname s)
         if e = null then None
         else Some e.Value
 
@@ -45,14 +45,14 @@ module XmlStuff =
             ~~~(toInt32 (v.Substring(1)) b)
         elif v.StartsWith "0x" then
             toInt32 (v.Substring(2)) 16
-        
+
         else
             let m = numericValue.Match v
-        
+
             if m.Success then
                 let v = m.Groups.["value"].Value
                 if v.Contains "." then
-                    
+
                     System.Convert.ToSingle(v, System.Globalization.CultureInfo.InvariantCulture.NumberFormat) |> int
                 else
                     System.Convert.ToInt32(v, b)
@@ -61,58 +61,95 @@ module XmlStuff =
 
     let extensionEnumValue (dir : Option<string>) (e : int) (offset : int) =
         match dir with
-            | Some "-" -> 
+            | Some "-" ->
                 -(1000000000 + (e - 1) * 1000 + offset)
             | _ ->
                 1000000000 + (e - 1) * 1000 + offset
 
 
     let (|Enum|BitMask|Ext|Failure|) (e : XElement) =
-        match attrib e "value", attrib e "bitpos" with
-        | Some v, _ ->
-            Enum (toInt32 v 10)
+        let rec f e =
+            match attrib e "value", attrib e "bitpos" with
+            | Some v, _ ->
+                Enum (toInt32 v 10)
 
-        | _, Some bp -> 
-            BitMask (System.Int32.Parse bp)
-
-        | _ -> 
-            match attrib e "extnumber", attrib e "offset" with
-            | Some en, Some on ->
-                let en = toInt32 en 10
-                let on = toInt32 on 10
-                Ext (extensionEnumValue (attrib e "dir") en on)
+            | _, Some bp ->
+                BitMask (System.Int32.Parse bp)
 
             | _ ->
-                Failure
+                match attrib e "extnumber", attrib e "offset" with
+                | Some en, Some on ->
+                    let en = toInt32 en 10
+                    let on = toInt32 on 10
+                    Ext (extensionEnumValue (attrib e "dir") en on)
+
+                | _ ->
+                    Failure
+                    //let comment =
+                    //    attrib e "comment" |> Option.defaultValue ""
+
+                    //match attrib e "alias" with
+                    //| Some a when not (comment.Contains "Backwards-compatible") ->
+                    //    let ref =
+                    //        xname "enum"
+                    //        |> e.Ancestors().Descendants
+                    //        |> Seq.filter (fun e -> "name" |> attrib e |> Option.contains a)
+                    //        |> Seq.head
+
+                    //    // Find the reference element and set its relevant values to the current alias element, delete
+                    //    // the alias attribute and simply repeat the match
+                    //    let attributes = ["value"; "bitpos"; "extnumber"; "offset"]
+
+                    //    attributes
+                    //    |> List.map (fun name -> name, attrib ref name)
+                    //    |> List.iter (fun (name, value) ->
+                    //        value |> Option.iter (fun v -> e.SetAttributeValue(xname name, v))
+                    //    )
+
+                    //    e.SetAttributeValue(xname "alias", null)
+                    //    f e
+
+                    //| _ -> Failure
+
+        f e
 
 
 type Type =
     | Literal of string
     | Ptr of Type
     | FixedArray of Type * int
+    | FixedArray2d of Type * int * int
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Type =
     let private cleanRx = Regex @"([ \t\r\n]+|const)"
-    let private typeRx = Regex @"(?<name>[a-zA-Z_0-9]+)(\[(?<arr>.*)\])?(?<ptr>[\*]*)"
-    let private arrRx = Regex @"(?<name>[^\[]*)(\[(?<size>.*)\])?"
+    let private typeRx = Regex @"(?<name>[a-zA-Z_0-9]+)(\[(?<width>[a-zA-Z_0-9]+)\])?(\[(?<height>[a-zA-Z_0-9]+)\])?(?<ptr>[\*]*)"
+
+    let private tryMatch (regex : Regex) (str : string) =
+        let ret = regex.Match str
+        if ret.Success then Some ret else None
 
     let arraySize (defines : Map<string, string>) (s : string) =
         match System.Int32.TryParse s with
-            | (true, s) -> s
-            | _ -> 
-                match Map.tryFind s defines with
-                    | Some v ->
-                        match System.Int32.TryParse v with
-                            | (true, v) -> v
-                            | _ -> failwith "non-integer array-size"
-                    | _ -> failwithf "non-literal array-size: %A" s
+        | (true, s) -> s
+        | _ ->
+            match Map.tryFind s defines with
+            | Some v ->
+                match System.Int32.TryParse v with
+                | (true, v) -> v
+                | _ -> failwith "non-integer array-size"
+            | _ -> failwithf "non-literal array-size: %A" s
+
+    let arraySize2d (defines : Map<string, string>) (width : string) (height : string) =
+        let w = arraySize defines width
+        let h = arraySize defines height
+        w, h
 
     let parseTypeAndName (defined : Map<string, string>) (strangeType : string) (strangeName : string) =
         let cleaned = cleanRx.Replace(strangeType, "")
-        let m = typeRx.Match cleaned
 
-        if m.Success then
+        match cleaned |> tryMatch typeRx with
+        | Some m ->
             let id = m.Groups.["name"].Value
             let ptr = m.Groups.["ptr"].Length
 
@@ -120,41 +157,32 @@ module Type =
             for i in 1..ptr do
                 t <- Ptr(t)
 
-            let arrMatch = arrRx.Match strangeName
-            if arrMatch.Success then
-                let n = arrMatch.Groups.["name"].Value
-                let s = arrMatch.Groups.["size"].Value
+            // Array dimensions
+            let width = m.Groups.["width"].Value
+            let height = m.Groups.["height"].Value
 
-                let arrType = 
-                    match s with
-                        | "" -> t
-                        | _ -> FixedArray(t, arraySize defined s)
+            match width, height with
+            | "", "" -> t, strangeName
+            | w, "" -> FixedArray(t, arraySize defined w), strangeName
+            | w, h ->
+                let w, h = arraySize2d defined w h
+                FixedArray2d(t, w, h), strangeName
 
-                if m.Groups.["arr"].Success then
-                    FixedArray(arrType, arraySize defined m.Groups.["arr"].Value), n
-                else
-                    arrType, n
-            else
-                failwith "invalid name"
-
-        else
-            failwith "bad"
+        | _ ->
+            failwithf "failed to parse type %s" cleaned
 
     let rec baseType (t : Type) =
         match t with
-            | Literal t -> t
-            | Ptr(t) -> baseType t
-            | FixedArray(t,_) -> baseType t
-
-    let rec isPointer (t : Type) =
-        match t with
-            | Ptr(_) -> true
-            | _ -> false
+        | Literal t -> t
+        | Ptr t
+        | FixedArray (t, _)
+        | FixedArray2d (t, _, _) ->
+            baseType t
 
     let readXmlTypeAndName (defined : Map<string, string>) (e : XElement) =
         let strangeName = e.Element(xname "name").Value
         e.Elements(xname "comment").Remove()
-        let strangeType = 
+        let strangeType =
             let v = e.Value.Trim()
             let id = v.LastIndexOf(strangeName)
             if id < 0 then v
@@ -162,7 +190,7 @@ module Type =
 
         parseTypeAndName defined strangeType strangeName
 
-type EnumValue = 
+type EnumValue =
     | EnumValue of int
     | EnumBit of int
 
@@ -170,9 +198,28 @@ type Enum = { name : string; alternatives : list<string * EnumValue> }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Enum =
+
+    let baseName (suffices : string list) (e : string) =
+        let rec remove (str : string) =
+            let suffix = suffices |> List.filter str.EndsWith
+            match suffix with
+            | x :: _ -> str.Substring(0, str.Length - x.Length)
+            | [] -> str
+
+        let name = remove e
+        let suffix = "Flags"
+
+        if name.EndsWith suffix then
+            name.Substring(0, name.Length - suffix.Length)
+        else
+            name
+
+    let cleanName (name : string) =
+        name.Replace("FlagBits", "Flags")
+
     let valueToStr (v : EnumValue) =
         match v with
-        | EnumValue v -> sprintf "%d" v 
+        | EnumValue v -> sprintf "%d" v
         | EnumBit b -> sprintf "0x%08X" (1 <<< b)
 
     let tryGetValue (e : XElement) =
@@ -182,23 +229,23 @@ module Enum =
         | Ext value -> Some (EnumValue value)
         | _ ->
             printfn "Ignoring: %A" e
-            None 
+            None
 
     let tryRead (e : XElement) =
         match attrib e "name" with
             | Some name ->
-                let alternatives = 
+                let alternatives =
                     e.Descendants(xname "enum")
                         |> Seq.choose (fun kv ->
                             let name = attrib kv "name"
                             let value = tryGetValue kv
-                            value |> Option.map (fun v -> name.Value, v)  
+                            value |> Option.map (fun v -> name.Value, v)
                         )
                         |> Seq.toList
                 match alternatives with
-                    | [] -> 
+                    | [] ->
                         None
-                    | _ -> 
+                    | _ ->
                         Some { name = name; alternatives = alternatives }
             | None -> None
 
@@ -208,11 +255,11 @@ type StructField = {
     values : string option
 }
 
-type Struct = { 
+type Struct = {
     name : string
     fields : list<StructField>
     isUnion : bool
-    alias : Option<string> 
+    alias : Option<string>
 }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -222,16 +269,16 @@ module Struct =
         match attrib e "name" with
             | Some name ->
                 match attrib e "alias" with
-                    | Some alias -> 
+                    | Some alias ->
                         Some { name = name; fields = []; isUnion = isUnion; alias = Some alias }
-                    | None -> 
-                        let fields = 
+                    | None ->
+                        let fields =
                             e.Descendants (xname "member")
                                 |> Seq.map (fun m ->
                                     m.Elements(xname "comment").Remove()
 
                                     let name = m.Element(xname "name").Value
-                                    let t = 
+                                    let t =
                                         let v = m.Value.Trim()
                                         let id = v.LastIndexOf(name)
                                         if id < 0 then v
@@ -248,17 +295,17 @@ module Struct =
 
             | None -> None
 
-    let private dfs (graph : Map<'a, list<'a>>) visited start_node = 
-      let rec explore path visited node = 
-        if List.exists (fun n -> n = node) path    then failwith "cycle" else
-        if List.exists (fun n -> n = node) visited then visited else     
-          let new_path = node :: path in 
+    let private dfs (graph : Map<'a, list<'a>>) visited start_node =
+      let rec explore path visited node =
+        if List.exists (fun n -> n = node) path    then printfn "WARNING: Dependency cycle detected"; visited else
+        if List.exists (fun n -> n = node) visited then visited else
+          let new_path = node :: path in
           let edges    = Map.find node graph in
           let visited  = List.fold (explore new_path) visited edges in
           node :: visited
       in explore [] visited start_node
 
-    let toposort graph = 
+    let toposort graph =
       List.fold (fun visited (node,_) -> dfs graph visited node) [] (Map.toList graph)
 
     let topologicalSort (s : list<Struct>) : list<Struct> =
@@ -266,11 +313,11 @@ module Struct =
         let typeMap = s |> List.map (fun s -> s.name, s) |> Map.ofList
 
         let graph =
-            s |> List.map (fun s -> 
-                    let usedTypes = 
-                        s.fields 
-                          |> List.map (fun f -> f.typ) 
-                          |> List.map Type.baseType 
+            s |> List.map (fun s ->
+                    let usedTypes =
+                        s.fields
+                          |> List.map (fun f -> f.typ)
+                          |> List.map Type.baseType
                           |> List.choose (fun m -> Map.tryFind m typeMap)
 
                     s, usedTypes
@@ -280,17 +327,28 @@ module Struct =
 
         toposort graph |> List.rev
 
-type Alias = { baseType : Type; name : string }
+type Typedef = { name : string; baseType : Type }
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module Typedef =
+
+    let tryRead (defines : Map<string, string>) (e : XElement) =
+        match child e "name", child e "type" with
+        | Some n, Some t ->
+            let (t, n) = Type.parseTypeAndName defines t n
+            Some { name = n; baseType = t}
+
+        | _ -> None
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Alias =
-    let tryRead (defines : Map<string, string>) (e : XElement) =
-        match child e "name", child e "type" with
-            | Some name, Some t ->
-                let (t, n) = Type.parseTypeAndName defines t name
-                Some { baseType = t; name = n }
-            | _ -> None
 
+    let tryRead (e : XElement) =
+        match attrib e "name", attrib e "alias" with
+        | Some n, Some a ->
+            Some (Enum.cleanName n, Enum.cleanName a)
+
+        | _ -> None
 
 type Command = { returnType : Type; name : string; parameters : list<Type * string> }
 
@@ -316,10 +374,11 @@ type Extension =
         name            : string
         extName         : string
         number          : int
-        requires        : list<string>
+        requires        : Set<string>
         enumExtensions  : Map<string, list<string * int>>
         enums           : list<Enum>
         structs         : list<Struct>
+        aliases         : Map<string, string>
         commands        : list<Command>
         subExtensions   : list<Extension>
     }
@@ -327,7 +386,7 @@ type Extension =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Extension =
     let private dummyRx = System.Text.RegularExpressions.Regex @"VK_[A-Za-z]+_extension_([0-9]+)"
-    
+
     let isEmpty (e : Extension) =
         dummyRx.IsMatch e.name && Map.isEmpty e.enumExtensions && List.isEmpty e.enums && List.isEmpty e.structs && List.isEmpty e.commands
 
@@ -345,8 +404,8 @@ module XmlReader =
             |> List.ofSeq
 
     let defines (d : XElement) =
-        d.Descendants(xname "enums") 
-            |> Seq.filter (fun e -> attrib e "name" = Some "API Constants") 
+        d.Descendants(xname "enums")
+            |> Seq.filter (fun e -> attrib e "name" = Some "API Constants")
             |> Seq.collect (fun e ->
                   let choices = e.Descendants(xname "enum")
                   choices |> Seq.choose (fun c ->
@@ -367,12 +426,12 @@ module XmlReader =
 
     let extensionEnumValue (dir : Option<string>) (e : int) (offset : int) =
         match dir with
-            | Some "-" -> 
+            | Some "-" ->
                 -(1000000000 + (e - 1) * 1000 + offset)
             | _ ->
                 1000000000 + (e - 1) * 1000 + offset
 
-    let rec readExtension (e : XElement) (commands : list<Command>) (enums : list<Enum>) (structs : list<Struct>) =
+    let rec readExtension (e : XElement) (commands : list<Command>) (enums : list<Enum>) (structs : list<Struct>) (aliases : Map<string, string>) =
         let mutable scommands = commands
         let mutable senums = enums
         let mutable sstructs = structs
@@ -419,11 +478,11 @@ module XmlReader =
 
             result
 
-        let require, name, number = 
-            if e.Name.LocalName = "require" then 
+        let require, name, number =
+            if e.Name.LocalName = "require" then
                 let name = attrib e "extension"
                 Some e, name, Some "-1"
-            else 
+            else
                 let req = e.Descendants(xname "require") |> Seq.tryHead
                 let name = attrib e "name"
                 let number = attrib e "number"
@@ -441,7 +500,7 @@ module XmlReader =
                 let subExts =
                     [
                         for s in subExts do
-                            match readExtension s commands enums structs with
+                            match readExtension s commands enums structs aliases with
                                 | Some(sext, sscommands, ssenums, ssstructs) ->
                                     yield sext
                                     scommands <- sscommands
@@ -450,12 +509,12 @@ module XmlReader =
                                 | _ ->
                                     ()
                     ]
-                    
+
 
 
                 let number = System.Int32.Parse number
 
-                let requires = 
+                let requires =
                     match attrib e "requires" with
                         | Some v -> v.Split(',') |> Array.toList
                         | None -> []
@@ -463,9 +522,9 @@ module XmlReader =
 
 
                 let enumExtensions =
-                    r.Descendants(xname "enum") |> Seq.toList |> List.choose (fun e -> 
-                        let value = 
-                            match attrib e "offset", attrib e "bitpos" with  
+                    r.Descendants(xname "enum") |> Seq.toList |> List.choose (fun e ->
+                        let value =
+                            match attrib e "offset", attrib e "bitpos" with
                                 | Some o, _-> extensionEnumValue (attrib e "dir") number (System.Int32.Parse o) |> Some
                                 | None, Some p -> 1 <<< System.Int32.Parse p |> Some
                                 //| None, None, Some v -> System.Int32.Parse v |> Some
@@ -474,57 +533,61 @@ module XmlReader =
 
                         match attrib e "extends", value, attrib e "name" with
                             | Some baseType, Some value, Some name ->
-                                Some (baseType, name, value)    
+                                Some (baseType, name, value)
                             | _ ->
                                 None
                     )
 
 
-                let types = 
-                    r.Descendants(xname "type") 
+                let types =
+                    r.Descendants(xname "type")
                         |> Seq.toList
                         |> List.choose (fun t ->
-                            match attrib t "name" with  
-                                | Some name -> 
-                                    match removeEnum name with
-                                        | Some e -> Some (Choice1Of2 e)
-                                        | None ->
-                                            match removeStruct name with
-                                                | Some s -> Some (Choice2Of2 s)
-                                                | None -> 
-                                                    printfn "COULD NOT REMOVE TYPE: %A" name
-                                                    None
+                            match attrib t "name" with
+                            | Some name ->
+                                match removeEnum name with
+                                | Some e -> Some (Choice1Of3 e)
                                 | None ->
-                                    None
+                                    match removeStruct name with
+                                    | Some s -> Some (Choice2Of3 s)
+                                    | None ->
+                                        match aliases |> Map.tryFind name with
+                                        | Some a -> Some (Choice3Of3 (name, a))
+                                        | None ->
+                                            printfn "COULD NOT REMOVE TYPE: %A" name
+                                            None
+                            | None ->
+                                None
                         )
 
                 let commands =
                     r.Descendants(xname "command")
                         |> Seq.toList
                         |> List.choose (fun c ->
-                            match attrib c "name" with 
+                            match attrib c "name" with
                                 | Some name -> removeCmd name
                                 | None -> None
                         )
 
-                let enums = types |> List.choose (function Choice1Of2 e -> Some e | _ -> None)
-                let structs = types |> List.choose (function Choice2Of2 e -> Some e | _ -> None)
+                let enums = types |> List.choose (function Choice1Of3 e -> Some e | _ -> None)
+                let structs = types |> List.choose (function Choice2Of3 e -> Some e | _ -> None)
+                let aliases = types |> List.choose (function Choice3Of3 e -> Some e | _ -> None)
 
-
-
-                    
-                let groups = 
-                    enumExtensions |> List.groupBy (fun (b,_,_) -> b) |> List.map (fun (g,l) -> g, l |> List.map (fun (_,a,b) -> a, b)) |> Map.ofList
+                let groups =
+                    enumExtensions
+                    |> List.groupBy (fun (b,_,_) -> b) |> List.map (fun (g,l) -> g, l |> List.map (fun (_,a,b) -> a, b)) |> Map.ofList
+                    |> Map.filter (fun name _ -> name <> "VkStructureType")
 
 
                 let ext = {
                     name            = name
                     extName         = name
-                    requires        = requires
+                    requires        = requires |> Set.ofList
                     number          = number
                     enumExtensions  = groups
                     enums           = enums
                     structs         = structs
+                    aliases         = aliases |> Map.ofList
                     commands        = commands
                     subExtensions   = subExts
                 }
@@ -534,7 +597,7 @@ module XmlReader =
             | _ ->
                 None
 
-    let extensions (vk : XElement) (commands : list<Command>) (enums : list<Enum>) (structs : list<Struct>) =
+    let extensions (vk : XElement) (commands : list<Command>) (enums : list<Enum>) (structs : list<Struct>) (aliases : Map<string, string>) =
         let mutable commands = commands
         let mutable enums = enums
         let mutable structs = structs
@@ -542,7 +605,7 @@ module XmlReader =
         let extensions =
             [
                 for e in vk.Descendants(xname "extensions").Descendants(xname "extension") do
-                    match readExtension e commands enums structs with
+                    match readExtension e commands enums structs aliases with
                         | Some (r,c,e,s) ->
                             yield r
                             commands <- c
@@ -551,15 +614,15 @@ module XmlReader =
                         | None ->
                             ()
             ]
-            
-        
+
+
 
         extensions, commands, enums, structs
-        
+
 
     let enums (vk : XElement) =
         vk.Descendants(xname "enums")
-            |> Seq.filter (fun e -> attrib e "name" <> Some "API Constants") 
+            |> Seq.filter (fun e -> attrib e "name" <> Some "API Constants")
             |> Seq.choose Enum.tryRead
             |> Seq.toList
 
@@ -573,14 +636,14 @@ module XmlReader =
 
                 let mutable map = enums |> List.map (fun e -> e.name, e) |> Map.ofList
                 f11.Descendants(xname "enum")
-                    |> Seq.iter (fun e -> 
+                    |> Seq.iter (fun e ->
                         match attrib e "extends" with
                             | Some enumName ->
 
                                 match Map.tryFind enumName map with
                                     | Some baseEnum ->
                                         let name = (attrib e "name").Value
-  
+
                                         match Enum.tryGetValue e with
                                         | Some value ->
                                             let newEnum = { baseEnum with alternatives = (name, value) :: baseEnum.alternatives }
@@ -592,8 +655,8 @@ module XmlReader =
                             | None ->
                                 ()
                     )
-                       
-                       
+
+
                 enums |> List.map (fun e -> map.[e.name])
 
             | None ->
@@ -642,12 +705,19 @@ module XmlReader =
             |> Seq.choose (Struct.tryRead defines)
             |> Seq.toList
 
-    let aliases (defines : Map<string, string>) (vk : XElement) =
+    let typedefs (defines : Map<string, string>) (vk : XElement) =
         vk.Descendants(xname "types")
             |> Seq.collect (fun tc -> tc.Descendants (xname "type"))
-            |> Seq.filter (fun t -> attrib t "category" = Some "basetype" )
-            |> Seq.choose (Alias.tryRead defines)
+            |> Seq.filter (fun t ->  attrib t "category" = Some "basetype")
+            |> Seq.choose (Typedef.tryRead defines)
             |> Seq.toList
+
+    let aliases (vk : XElement) =
+        vk.Descendants(xname "types")
+            |> Seq.collect (fun tc -> tc.Descendants (xname "type"))
+            |> Seq.filter (fun t ->  attrib t "alias" |> Option.isSome)
+            |> Seq.choose Alias.tryRead
+            |> Map.ofSeq
 
     let handles (vk : XElement) =
         vk.Descendants(xname "types")
@@ -669,6 +739,7 @@ module FSharpWriter =
 
     let private uppercase = Regex @"[A-Z0-9]+"
     let private startsWithNumber = Regex @"^[0-9]+"
+
     let private removePrefix (p : string) (str : string) =
         if str.StartsWith p then str.Substring(p.Length)
         else str
@@ -677,7 +748,7 @@ module FSharpWriter =
         if str.EndsWith s then str.Substring(0, str.Length - s.Length)
         else str
 
-    let private avoidStartWithNumer (str : string) =
+    let private avoidStartWithNumber (str : string) =
         if startsWithNumber.IsMatch str then "D" + str
         else str
 
@@ -689,11 +760,11 @@ module FSharpWriter =
             |> String.concat ""
             |> removePrefix prefix
             |> removeSuffix suffix
-            |> avoidStartWithNumer
+            |> avoidStartWithNumber
 
     let addNoneCase (cases : list<string * EnumValue>) =
         let hasNoneCase =
-            cases |> List.exists (fun (_,v) -> 
+            cases |> List.exists (fun (_,v) ->
                 match v with
                     | EnumValue 0 -> true
                     | EnumBit -1 -> true
@@ -741,6 +812,13 @@ module FSharpWriter =
         printfn "type PFN_vkVoidFunction = nativeint"
         printfn ""
 
+    let missingExtensionReferences =
+        [
+            "KHRSamplerYcbcrConversion", ["EXTDebugReport"]
+            "KHRRayTracing", ["EXTDebugReport"]
+            "NVRayTracing", ["KHRRayTracing"]
+        ]
+        |> Map.ofList
 
     let missing() =
         printfn "// missing in vk.xml"
@@ -750,15 +828,8 @@ module FSharpWriter =
         printfn "type VkShaderCreateFlags = | MinValue = 0"
         printfn "type VkShaderModuleCreateFlags = | MinValue = 0"
         printfn "type VkMemoryMapFlags = | MinValue = 0"
-
-        // missing since new version
-        //printfn "type VkDisplayPlaneAlphaFlagsKHR = | MinValue = 0"
         printfn "type VkDisplaySurfaceCreateFlagsKHR = | MinValue = 0"
         printfn "type VkSwapchainCreateFlagsKHR = | MinValue = 0"
-        printfn "type VkSwapchainCreateFlagBitsKHR = | MinValue = 0"
-        //printfn "type VkSurfaceTransformFlagsKHR = | MinValue = 0"
-        //printfn "type VkCompositeAlphaFlagsKHR = | MinValue = 0"
-
         printfn "type VkPipelineLayoutCreateFlags = | MinValue = 0"
         printfn "type VkBufferViewCreateFlags = | MinValue = 0"
         printfn "type VkPipelineShaderStageCreateFlags = | MinValue = 0"
@@ -783,8 +854,6 @@ module FSharpWriter =
         printfn "type VkSubpassDescriptionFlags = | MinValue = 0"
         printfn "type VkRenderPassCreateFlags = | MinValue = 0"
         printfn "type VkSamplerCreateFlags = | MinValue = 0"
-        
-        printfn ""
         printfn "type VkAndroidSurfaceCreateFlagsKHR = | MinValue = 0"
         printfn "type VkDisplayModeCreateFlagsKHR = | MinValue = 0"
         printfn "type VkPipelineTessellationStateCreateFlags = | MinValue = 0"
@@ -793,28 +862,15 @@ module FSharpWriter =
         printfn "type VkWin32SurfaceCreateFlagsKHR = | MinValue = 0"
         printfn "type VkWaylandSurfaceCreateFlagsKHR = | MinValue = 0"
         printfn "type VkMirSurfaceCreateFlagsKHR = | MinValue = 0"
-
-        //printfn "type VkDebugReportFlagsEXT = | MinValue = 0"
         printfn "type PFN_vkDebugReportCallbackEXT = nativeint"
         printfn "type PFN_vkDebugUtilsMessengerCallbackEXT = nativeint"
-        printfn ""
         printfn "type VkExternalMemoryHandleTypeFlagsNV = | MinValue = 0"
         printfn "type VkExternalMemoryFeatureFlagsNV = | MinValue = 0"
         printfn "type VkIndirectCommandsLayoutUsageFlagsNVX = | MinValue = 0"
         printfn "type VkObjectEntryUsageFlagsNVX = | MinValue = 0"
-        printfn ""
         printfn "type VkDescriptorUpdateTemplateCreateFlags = | MinValue = 0"
-        //printfn "type VkDeviceGroupPresentModeFlagsKHR = | MinValue = 0"
-        printfn "type VkExternalFenceHandleTypeFlagsKHR = | MinValue = 0"
-        printfn "type VkExternalMemoryHandleTypeFlagsKHR = | MinValue = 0"
-        printfn "type VkExternalSemaphoreHandleTypeFlagsKHR = | MinValue = 0"
-        printfn "type VkExternalMemoryFeatureFlagsKHR = | MinValue = 0"
-        printfn "type VkExternalFenceFeatureFlagsKHR = | MinValue = 0"
-        printfn "type VkExternalSemaphoreFeatureFlagsKHR = | MinValue = 0"
         printfn "type VkAcquireProfilingLockFlagsKHR = | MinValue = 0"
         printfn "type VkIOSSurfaceCreateFlagsMVK = | MinValue = 0"
-        printfn "type VkFenceImportFlagsKHR = | MinValue = 0"
-        printfn "type VkSemaphoreImportFlagsKHR = | MinValue = 0"
         printfn "type VkMacOSSurfaceCreateFlagsMVK = | MinValue = 0"
         printfn "type VkMemoryAllocateFlagsKHX = | MinValue = 0"
         printfn "type VkPipelineCoverageModulationStateCreateFlagsNV = | MinValue = 0"
@@ -827,12 +883,8 @@ module FSharpWriter =
         printfn "type VkPeerMemoryFeatureFlagsKHX = | MinValue = 0"
         printfn "type VkCommandPoolTrimFlags = | MinValue = 0"
         printfn "type VkPipelineRasterizationConservativeStateCreateFlagsEXT = | MinValue = 0"
-        //printfn "type VkDescriptorBindingFlagsEXT = | MinValue = 0"
-
-
         printfn "type VkDebugUtilsMessengerCallbackDataFlagsEXT = | MinValue = 0"
         printfn "type VkDebugUtilsMessengerCreateFlagsEXT = | MinValue = 0"
-
         printfn "type VkHeadlessSurfaceCreateFlagsEXT = | MinValue = 0"
         printfn "type VkPipelineCompilerControlFlagsAMD = | MinValue = 0"
         printfn "type VkShaderCorePropertiesFlagsAMD = | MinValue = 0"
@@ -842,6 +894,9 @@ module FSharpWriter =
         printfn "type VkImagePipeSurfaceCreateFlagsFUCHSIA = | MinValue = 0"
         printfn "type VkStreamDescriptorSurfaceCreateFlagsGGP = | MinValue = 0"
         printfn "type VkPipelineCoverageReductionStateCreateFlagsNV = | MinValue = 0"
+        printfn "type VkPrivateDataSlotCreateFlagsEXT = | MinValue = 0"
+        printfn ""
+
 //    let extendedEnums() =
 //        printfn "[<AutoOpen>]"
 //        printfn "module WSIEnums = "
@@ -867,56 +922,91 @@ module FSharpWriter =
         printfn ""
 
     let cleanEnumName (e : string) =
-        if e.Contains "FlagBits" then e.Replace("FlagBits", "Flags") //Substring(0, e.Length - 8) + "Flags"
+        if e.Contains "FlagBits" then e.Replace("FlagBits", "Flags")
         else e
 
-    let enumExtensions (indent : string) (name : string) (exts : list<string * int>) =
+    let findEnumVendorSuffix (vendorTags : string list) (e : string) =
+        vendorTags
+        |> List.filter (fun tag -> e <> tag && e.EndsWith tag)
+        |> List.tryHead
+
+    let baseEnumName (vendorTags : string list) (e : string) =
+        let rec remove (str : string) =
+            let suffix = str |> findEnumVendorSuffix vendorTags
+            match suffix with
+            | Some x -> str.Substring(0, str.Length - x.Length) |> remove
+            | None -> str
+
+        let name = remove e
+        let suffix = "Flags"
+
+        if name.EndsWith suffix then
+            name.Substring(0, name.Length - suffix.Length)
+        else
+            name
+
+    let enumExtensions (indent : string) (vendorTags : list<string>) (ext : Extension) =
 
         let printfn fmt =
-            Printf.kprintf (fun str -> 
+            Printf.kprintf (fun str ->
                 printfn "%s%s" indent str
             ) fmt
 
-        let name = cleanEnumName name
-        
-        let prefix =
-            if name.EndsWith "Flags" then name.Substring(0,name.Length-5)
-            else name
+        let vendorTagsCamel =
+            vendorTags |> List.map (capsToCamelCase "" "")
 
-        let exts = exts |> List.map (fun (n,v) -> (capsToCamelCase prefix "" n, v))
+        if ext.enumExtensions.Count > 0 then
+            printfn "[<AutoOpen>]"
+            printfn "module EnumExtensions ="
 
-        if name <> "VkStructureType" then
-            printfn "type %s with" name
-            for (n,v) in exts do
-                printfn "     static member inline %s = unbox<%s> %d" n name v
+            for (name, values) in Map.toSeq ext.enumExtensions do
+
+                let name = cleanEnumName name
+                let baseName = baseEnumName vendorTags name
+
+                let exts = values |> List.map (fun (n, v) ->
+                    let camelCase = capsToCamelCase baseName "" n
+
+                    // Not sure if we should remove all the extension suffixes from enum extension values...
+                    let withoutExt = baseEnumName vendorTagsCamel camelCase
+
+                    // For now just remove the last one, if it matches the extension of the enum type itself
+                    // E.g. VkDebugReportObjectTypeEXT : AccelerationStructureKhrExt
+                    // becomes VkDebugReportObjectTypeEXT : AccelerationStructureKhr
+                    let enumSuff =
+                        name
+                        |> findEnumVendorSuffix vendorTags
+                        |> Option.toList
+                        |> List.map (capsToCamelCase "" "")
+
+                    let withoutExt = baseEnumName enumSuff camelCase
+
+                    withoutExt, v
+                )
+
+                printfn "     type %s with" name
+                for (n,v) in exts do
+                    printfn "          static member inline %s = unbox<%s> %d" n name v
+
+            printfn ""
 
     let enums (indent : string) (vendorTags : list<string>) (enums : list<Enum>) =
+        let vendorTagsCamel =
+            vendorTags |> List.map (capsToCamelCase "" "")
+
         for e in enums do
             let name = cleanEnumName e.name
+            let baseName = baseEnumName vendorTags name
 
-            let prefixAndTag =
-                vendorTags
-                |> List.collect (fun tag ->
-                    let t = capsToCamelCase "" "" tag
-                    [
-                        tag, t
-                        "Flags" + tag, t
-                    ]
-                )
-                |> List.append ["Flags", ""]
-                |> List.sortByDescending (fun (p, _) -> p.Length)
-                |> List.tryFind (fun (suffix, _) -> name.EndsWith suffix)
-                |> Option.map (fun (suffix, tag) -> name.Substring(0, name.Length - suffix.Length), tag)
+            let alternatives = e.alternatives |> List.map (fun (n, v) ->
+                let camelCase = capsToCamelCase baseName "" n
+                let withoutExt = baseEnumName vendorTagsCamel camelCase
 
-            let prefix, suffix =
-                match prefixAndTag with
-                | Some (prefix, tag) -> prefix, tag
-                | _ -> name, ""
-
-            let alternatives = e.alternatives |> List.map (fun (n,v) -> (capsToCamelCase prefix suffix n, v))
+                withoutExt, v
+            )
 
             let isFlag = isFlags alternatives
-            let alternatives = 
+            let alternatives =
                 if isFlag then addNoneCase alternatives
                 else alternatives
 
@@ -928,6 +1018,9 @@ module FSharpWriter =
                 for (n,v) in alternatives do
                     printfn  "%s    | %s = %s" indent n (Enum.valueToStr v)
                 printfn "%s" indent
+
+        if enums.Length > 0 then
+            printfn ""
 
     let knownTypes =
         Map.ofList [
@@ -985,16 +1078,27 @@ module FSharpWriter =
             | FixedArray(Literal "float", 4) -> "V4f"
             | FixedArray(Literal "uint8_t", 16) -> "Guid"
 
+            | FixedArray2d(Literal "int32_t", 2, 2) -> "M22i"
+            | FixedArray2d(Literal "int32_t", 3, 3) -> "M33i"
+            | FixedArray2d(Literal "int32_t", 4, 4) -> "M44i"
+            | FixedArray2d(Literal "int32_t", 2, 3) -> "M23i"
+            | FixedArray2d(Literal "int32_t", 3, 4) -> "M34i"
+            | FixedArray2d(Literal "float", 2, 2) -> "M22f"
+            | FixedArray2d(Literal "float", 3, 3) -> "M33f"
+            | FixedArray2d(Literal "float", 4, 4) -> "M44f"
+            | FixedArray2d(Literal "float", 2, 3) -> "M23f"
+            | FixedArray2d(Literal "float", 3, 4) -> "M34f"
+
             | Ptr(Literal "char") -> "cstr"
             | FixedArray(Literal "char", s) -> sprintf "String%d" s
             | Ptr(Literal "void") -> "nativeint"
-            | Literal n -> 
+            | Literal n ->
                 if n.Contains "FlagBits" then
                     n.Replace("FlagBits", "Flags") //.Substring(0, n.Length - 8) + "Flags"
                 else
                     match Map.tryFind n knownTypes with
                         | Some n -> n
-                        | None -> 
+                        | None ->
                             if n.StartsWith "Vk" || n.StartsWith "PFN" then n
                             elif n.StartsWith "Mir" || n.StartsWith "struct" then "nativeint"
                             else "nativeint" //failwithf "strange type: %A" n
@@ -1003,6 +1107,9 @@ module FSharpWriter =
             | FixedArray(t, s) ->
                 let t = typeName t
                 sprintf "%s_%d" t s
+            | FixedArray2d(t, w, h) ->
+                let t = typeName t
+                sprintf "%s_%d" t (w * h)
 
     let inlineArray (baseType : string) (baseTypeSize : int) (size : int) =
         let totalSize = size * baseTypeSize
@@ -1031,17 +1138,50 @@ module FSharpWriter =
         printfn "    end"
         printfn ""
 
+    let dependencies (indent : string) (indirectDeps : Map<string, string list>) (required : Set<string>) (name : string) (number : int) =
+
+        if not (Set.isEmpty required) then
+            if number >= 0 then
+                let exts = required |> Seq.map (sprintf "%s.Name") |> String.concat "; " |> sprintf "[ %s ]"
+                printfn "%slet Required = %s" indent exts
+
+        let missingDeps =
+            missingExtensionReferences
+            |> Map.tryFind name
+            |> Option.defaultValue []
+
+        let indirectDeps =
+            indirectDeps
+            |> Map.tryFind name
+            |> Option.defaultValue []
+
+        let deps =
+            List.concat [missingDeps; indirectDeps; required |> Set.toList]
+            |> Set.ofList
+
+        for d in deps do
+            printfn "%sopen %s" indent d
+
+        printfn ""
+
+    let aliases (indent : string) (aliases : Map<string, string>) =
+        for KeyValue (n, a) in aliases do
+            printfn "%stype %s = %s" indent n a
+
+        if aliases.Count > 0 then
+            printfn ""
+
     let structs (indent : string) (structureTypes : Map<string, string>) (structs : list<Struct>) =
 
         let printfn fmt =
-            Printf.kprintf (fun str -> 
+            Printf.kprintf (fun str ->
                 printfn "%s%s" indent str
             ) fmt
 
         let printfn' (tabs : int) fmt =
             let indent = String.replicate tabs "    "
 
-            Printf.kprintf (fun str -> 
+            Printf.kprintf (fun str ->
                 printfn "%s%s" indent str
             ) fmt
 
@@ -1092,8 +1232,8 @@ module FSharpWriter =
             match s.alias with
                 | Some alias ->
                     printfn "type %s = %s" s.name alias
-                | None -> 
-            
+                | None ->
+
                     if s.isUnion then printfn "[<StructLayout(LayoutKind.Explicit)>]"
                     else printfn "[<StructLayout(LayoutKind.Sequential)>]"
 
@@ -1120,7 +1260,7 @@ module FSharpWriter =
                         let value =
                             s.fields
                             |> List.tryFind (fun f -> f.name = "sType")
-                            |> Option.bind (fun f -> 
+                            |> Option.bind (fun f ->
                                 match f.values with
                                 | Some v -> structureTypes |> Map.tryFind v
                                 | None -> None
@@ -1164,9 +1304,9 @@ module FSharpWriter =
                             )
                             |> toFunctionCall 3 s.name
 
-                        | _ -> 
+                        | _ ->
                             ()
-                       
+
                     if not s.isUnion then
 
                         printfn ""
@@ -1182,7 +1322,7 @@ module FSharpWriter =
                         ]
 
                         assignments |> toConstructorBody 3
-                        
+
                         // Constructor without pNext
                         constructorWithoutNextPtr()
 
@@ -1192,10 +1332,10 @@ module FSharpWriter =
 
                         if s.name = "VkExtent3D" then
                             printfn ""
-                            printfn' 2 "new(w : int, h : int, d : int) = VkExtent3D(uint32 w, uint32 h, uint32 d)" 
+                            printfn' 2 "new(w : int, h : int, d : int) = VkExtent3D(uint32 w, uint32 h, uint32 d)"
                         elif s.name = "VkExtent2D" then
                             printfn ""
-                            printfn' 2 "new(w : int, h : int) = VkExtent2D(uint32 w, uint32 h)" 
+                            printfn' 2 "new(w : int, h : int) = VkExtent2D(uint32 w, uint32 h)"
 
 
                     let fieldSplice = s.fields |> List.map (fun f -> sprintf "%s = %%A" (fsharpName f.name))
@@ -1220,6 +1360,9 @@ module FSharpWriter =
                     elif s.name = "VkOffset3D" then
                         inlineArray "VkOffset3D" 12 2
 
+        if structs.Length > 0 then
+            printfn ""
+
     let globalStructs (structureTypes : Map<string, string>) (s : list<Struct>) =
         inlineArray "uint32" 4 32
         inlineArray "byte" 1 8
@@ -1227,10 +1370,11 @@ module FSharpWriter =
         inlineArray "VkDeviceSize" 8 16
         structs "" structureTypes s
 
-    let aliases (l : list<Alias>) =
-        for a in l do
-            printfn "type %s = %s" a.name (typeName a.baseType)
-
+    let typedefs (l : list<Typedef>) =
+        printfn "// Typedefs"
+        for x in l do
+            printfn "type %s = %s" x.name (typeName x.baseType)
+        printfn ""
 
     let handles (l : list<bool * string>) =
         for (nodisp, n) in l do
@@ -1265,14 +1409,14 @@ module FSharpWriter =
             | Ptr(Literal "char") -> "string"
             | FixedArray(Literal "char", s) -> sprintf "String%d" s
             | Ptr(Literal "void") -> "nativeint"
-            
-            | Literal n -> 
+
+            | Literal n ->
                 if n.EndsWith "FlagBits" then
                     n.Substring(0, n.Length - 8) + "Flags"
                 else
                     match Map.tryFind n knownTypes with
                         | Some n -> n
-                        | None -> 
+                        | None ->
                             if n.StartsWith "Vk" || n.StartsWith "PFN" then n
                             elif n.StartsWith "Mir" || n.StartsWith "struct" then "nativeint"
                             else "nativeint" //failwithf "strange type: %A" n
@@ -1282,6 +1426,9 @@ module FSharpWriter =
             | FixedArray(t, s) ->
                 let t = externTypeName t
                 sprintf "%s_%d" t s
+            | FixedArray2d(t, w, h) ->
+                let t = externTypeName t
+                sprintf "%s_%d" t (w * h)
 
     let commands (l : list<Command>) =
         printfn "module VkRaw = "
@@ -1295,10 +1442,10 @@ module FSharpWriter =
         printfn ""
         for c in l do
             if c.name = "vkCreateInstance" then
-                let args = c.parameters |> List.map (fun (t,n) -> sprintf "%s %s" (externTypeName t) (fsharpName n)) |> String.concat ", "                
+                let args = c.parameters |> List.map (fun (t,n) -> sprintf "%s %s" (externTypeName t) (fsharpName n)) |> String.concat ", "
                 printfn "    [<DllImport(lib, EntryPoint=\"%s\");SuppressUnmanagedCodeSecurity>]" c.name
                 printfn "    extern %s private _%s(%s)" (externTypeName c.returnType) c.name args
-                
+
 
 
                 let argDef = c.parameters |> List.map (fun (t,n) -> sprintf "%s : %s" (fsharpName n) (typeName t)) |> String.concat ", "
@@ -1306,18 +1453,18 @@ module FSharpWriter =
                 let instanceArgName = c.parameters |> List.pick (fun (t,n) -> match t with | Ptr(Literal "VkInstance") -> Some n | _ -> None)
 
                 printfn "    let vkCreateInstance(%s) = " argDef
-                printfn "        let res = _vkCreateInstance(%s)" argUse 
+                printfn "        let res = _vkCreateInstance(%s)" argUse
                 printfn "        if res = VkResult.VkSuccess then"
                 printfn "            activeInstance <- NativePtr.read %s" instanceArgName
                 printfn "        res"
-                printfn "    "
+                printfn ""
             else
                 let args = c.parameters |> List.map (fun (t,n) -> sprintf "%s %s" (externTypeName t) (fsharpName n)) |> String.concat ", "
                 printfn "    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]"
                 printfn "    extern %s %s(%s)" (externTypeName c.returnType) c.name args
 
-                
-        printfn "    "
+
+        printfn ""
         printfn "    [<CompilerMessage(\"vkImportInstanceDelegate is for internal use only\", 1337, IsError=false, IsHidden=true)>]"
         printfn "    let vkImportInstanceDelegate<'a>(name : string) = "
         printfn "        let ptr = vkGetInstanceProcAddr(activeInstance, name)"
@@ -1333,7 +1480,7 @@ module FSharpWriter =
 
     let camelCase (str : string) =
         let parts = System.Collections.Generic.List<string>()
-        
+
         let mutable str = str
         let mutable fi = str.IndexOf '_'
         while fi >= 0 do
@@ -1347,22 +1494,17 @@ module FSharpWriter =
 
         parts |> List.map (fun p -> p.Substring(0,1).ToUpper() + p.Substring(1).ToLower()) |> String.concat ""
 
+    let rec extension (indirectDeps : Map<string, list<string>>)
+                      (indent : string)
+                      (vendorTags : list<string>)
+                      (structureTypes : Map<string, string>)
+                      (e : Extension) =
 
-
-    let rec requires (mapping : Map<string, list<string>>) (name : string) =
-        match Map.tryFind name mapping with
-            | Some r -> 
-                r @ (r |> List.collect (requires mapping))
-            | None ->
-                []
-
-    let rec extension (mapping : Map<string, list<string>>) (indent : string) (vendorTags : list<string>) (structureTypes : Map<string, string>) (e : Extension) =
-        
         if not (List.isEmpty e.commands) || not (List.isEmpty e.structs) || not (List.isEmpty e.enums) || not (Map.isEmpty e.enumExtensions) || not (List.isEmpty e.subExtensions) || e.number >= 0 then
 
             let subindent = indent + "    "
             let printfn fmt =
-                Printf.kprintf (fun str -> 
+                Printf.kprintf (fun str ->
                     printfn "%s%s" indent str
                 ) fmt
 
@@ -1372,43 +1514,23 @@ module FSharpWriter =
             if e.number >= 0 then
                 printfn "    let Name = \"%s\"" e.extName
                 printfn "    let Number = %d" e.number
-                printfn "    "
+                printfn ""
 
-            let required =
-                requires mapping e.name
-                |> List.append e.requires
-                |> Set.ofList
-
-            if not (Set.isEmpty required) then
-                if e.number >= 0 then
-                    let exts = required |> Seq.map (sprintf "%s.Name") |> String.concat "; " |> sprintf "[ %s ]"
-                    printfn "    let Required = %s" exts
-
-                for r in required do
-                    printfn "    open %s" r
-                
-            if e.name <> "EXTDebugReport" then
-                printfn "    open EXTDebugReport"
-                printfn "    "
-
+            dependencies subindent indirectDeps e.requires e.name e.number
+            aliases subindent e.aliases
             enums subindent vendorTags e.enums
-            printfn "    "
-
             structs subindent structureTypes (Struct.topologicalSort e.structs)
-            printfn "    "
-            for (name, values) in Map.toSeq e.enumExtensions do
-                enumExtensions subindent name values
-            printfn "    "
+            enumExtensions subindent vendorTags e
 
             match e.commands with
                 | [] -> ()
-                | _ -> 
+                | _ ->
                     printfn "    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]"
                     printfn "    module VkRaw ="
                     for c in e.commands do
                         let delegateName = c.name.Substring(0,1).ToUpper() + c.name.Substring(1) + "Del"
                         let targs = c.parameters |> List.map (fun (t,n) -> (typeName t)) |> String.concat " * "
-                        let ret = 
+                        let ret =
                             match typeName c.returnType with
                                 | "void" -> "unit"
                                 | n -> n
@@ -1416,7 +1538,7 @@ module FSharpWriter =
                         let tDel = sprintf "%s -> %s" targs ret
                         printfn "        [<SuppressUnmanagedCodeSecurity>]"
                         printfn "        type %s = delegate of %s" delegateName tDel
-                        
+
                     printfn "        "
                     printfn "        [<AbstractClass; Sealed>]"
                     printfn "        type private Loader<'d> private() ="
@@ -1427,7 +1549,7 @@ module FSharpWriter =
                     printfn "            static do Report.End(3) |> ignore"
                     for c in e.commands do
                         printfn "            static member %s = s_%sDel" c.name c.name
-      
+
                     for c in e.commands do
                         let argDef = c.parameters |> List.map (fun (t,n) -> sprintf "%s : %s" (fsharpName n) (typeName t)) |> String.concat ", "
                         let argUse = c.parameters |> List.map (fun (_,n) -> (fsharpName n)) |> String.concat ", "
@@ -1435,20 +1557,29 @@ module FSharpWriter =
                         printfn "        let %s(%s) = Loader<unit>.%s.Invoke(%s)" c.name argDef c.name argUse
 
             for s in e.subExtensions do
-                extension mapping (indent + "    ") vendorTags structureTypes s
+                extension indirectDeps (indent + "    ") vendorTags structureTypes s
 
-    let topoExtensions (s : list<Extension>) : list<Extension> =
-        let typeMap = s |> List.map (fun s -> s.name, s) |> Map.ofList
+    let topoExtensions (extensions : list<Extension>) : list<Extension> =
+        let typeMap = extensions |> List.map (fun s -> s.name, s) |> Map.ofList
         let graph =
-            s |> List.map (fun s -> 
-                    let usedTypes = 
-                        (s.requires |> List.choose (fun m -> Map.tryFind m typeMap))
+            extensions |> List.map (fun s ->
+                    let requires =
+                        s.requires |> Set.toList |> List.choose (fun m -> Map.tryFind m typeMap)
 
-                    let usedTypes = 
-                        if s.name <> "EXTDebugReport" then
-                            Map.find "EXTDebugReport" typeMap :: usedTypes
-                        else 
-                            usedTypes
+                    let subExtensions =
+                        s.subExtensions |> List.choose (fun e -> Map.tryFind e.name typeMap)
+
+                    let missingReferences =
+                        missingExtensionReferences
+                        |> Map.tryFind s.name
+                        |> Option.defaultValue []
+                        |> List.choose (fun ref ->
+                            extensions |> List.tryFind (fun ext -> ext.name = ref)
+                        )
+
+                    let usedTypes =
+                        List.concat [requires; subExtensions; missingReferences]
+                        |> List.distinctBy (fun e -> e.name)
 
                     s, usedTypes
 
@@ -1457,7 +1588,7 @@ module FSharpWriter =
 
         Struct.toposort graph |> List.rev
 
-        
+
 
 
     let extensions (vendorTags : list<string>) (structureTypes : Map<string, string>) (extensions : list<Extension>) =
@@ -1476,41 +1607,33 @@ module FSharpWriter =
             res
 
         let rec substituteNames (e : Extension) =
-            { e with name = fullName e.name; requires = e.requires |> List.map fullName; subExtensions = e.subExtensions |> List.map substituteNames }
+            { e with name = fullName e.name; requires = e.requires |> Set.map fullName; subExtensions = e.subExtensions |> List.map substituteNames }
 
         let extensions = extensions |> List.map substituteNames
-        
-        let mapping = extensions |> List.map (fun e -> e.name, e.requires) |> Map.ofList
-        
+
+        // Transitive dependencies
+        let dependencies = extensions |> List.map (fun e -> e.name, e.requires) |> Map.ofList
+
         let rec traverse (name : string) =
-            match Map.tryFind name mapping with
+            match Map.tryFind name dependencies with
             | Some others ->
-                others |> Seq.map traverse |> Seq.concat |> Set.ofSeq
+                let children = others |> Seq.map traverse |> Seq.concat |> Set.ofSeq
+                others |> Set.union children
             | None ->
                 Set.ofList [ name ]
 
-        let mapping = mapping |> Map.map (fun name _ -> traverse name |> Set.remove name |> Set.toList)
-        let mapping = mapping |> Map.map (fun _ req -> List.filter (fun e -> Map.containsKey e mapping) req)
-
-
+        let dependencies = dependencies |> Map.map (fun name _ -> traverse name |> Set.remove name |> Set.toList)
+        let dependencies = dependencies |> Map.map (fun _ req -> List.filter (fun e -> Map.containsKey e dependencies) req)
 
         for e in topoExtensions extensions do
-            extension mapping "" vendorTags structureTypes e
+            extension dependencies "" vendorTags structureTypes e
 
+
+let run () =
 //
-//                    let args = c.parameters |> List.map (fun (t,n) -> sprintf "%s %s" (externTypeName t) (fsharpName n)) |> String.concat ", "
-//                    printfn "    [<DllImport(lib);SuppressUnmanagedCodeSecurity>]"
-//                    printfn "    extern %s %s(%s)" (externTypeName c.returnType) c.name args
-
-                
-
-
-
-let run () = 
-//    
 //    let dir = Path.GetTempPath()
 //    let file = Path.Combine(dir, "vk.xml")
-//    
+//
 //    let request = System.Net.HttpWebRequest.Create("https://raw.githubusercontent.com/KhronosGroup/Vulkan-Docs/1.0/src/spec/vk.xml")
 //    let response = request.GetResponse()
 //    let s = response.GetResponseStream()
@@ -1518,32 +1641,24 @@ let run () =
     let vk = XElement.Load(path)
     let vendorTags = XmlReader.vendorTags vk
     let defines = XmlReader.defines vk
-    let aliases = XmlReader.aliases defines vk
+    let typedefs = XmlReader.typedefs defines vk
+    let aliases = XmlReader.aliases vk
     let structureTypes = XmlReader.structureTypes vk
     let handles = XmlReader.handles vk
     let enums = XmlReader.enums vk
     let enums = XmlReader.enumExtends vk enums
     let structs = XmlReader.structs defines vk
     let commands = XmlReader.commands defines vk
-    let exts, commands, enums, structs = XmlReader.extensions vk commands enums structs
-
-
-
-
+    let exts, commands, enums, structs = XmlReader.extensions vk commands enums structs aliases
 
     FSharpWriter.header()
     FSharpWriter.missing()
     FSharpWriter.handles handles
-    FSharpWriter.aliases aliases
+    FSharpWriter.typedefs typedefs
     FSharpWriter.enums "" vendorTags enums
     FSharpWriter.globalStructs structureTypes (Struct.topologicalSort structs)
     FSharpWriter.commands commands
     FSharpWriter.extensions vendorTags structureTypes exts
-
-    
-
-
-
 
     let str = FSharpWriter.builder.ToString()
     FSharpWriter.builder.Clear() |> ignore
@@ -1593,7 +1708,7 @@ module PCI =
         printfn "open System.Collections.Generic"
         printfn "open Aardvark.Base"
 
-    
+
         printfn "module PCI = "
         printfn "    let vendors ="
         printfn "        Dictionary.ofArray [|"
@@ -1618,7 +1733,7 @@ module PCI =
 //        printfn "    let deviceName (id : int) ="
 //        printfn "        match devices.TryGetValue id with"
 //        printfn "            | (true, name) -> name"
-//        printfn "            | _ -> \"Unknown\""          
+//        printfn "            | _ -> \"Unknown\""
 
     let run() =
         builder.Clear() |> ignore
