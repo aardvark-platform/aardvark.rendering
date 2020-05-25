@@ -230,8 +230,8 @@ module PreparedPipelineState =
                             None
                         elif u.samplerCount = 1 then
                                   
-                            let (tex, sam) = u.samplerTextures.Head
-                            let texSym = Symbol.Create tex
+                            let (texName, sam) = u.samplerTextures.Head
+                            let texSym = Symbol.Create texName
 
                             let samRes = createSammy sam texSym
 
@@ -241,8 +241,12 @@ module PreparedPipelineState =
                                     match tex with
                                     | :? aval<ITexture> as value -> x.CreateTexture(value)
                                     | :? aval<IBackendTexture> as value -> x.CreateTexture'(value)
-                                    | _ -> x.CreateTexture(helper.NullTexture)
-                                | None -> x.CreateTexture(helper.NullTexture)
+                                    | _ -> 
+                                        Log.line "[GL] invalid texture type: %s %s -> expecting aval<ITexture> or aval<IBackendTexture>" texName (tex.GetType().Name)
+                                        x.CreateTexture(helper.NullTexture)
+                                | None -> 
+                                    Log.line "[GL] texture uniform \"%s\" not found" texName
+                                    x.CreateTexture(helper.NullTexture)
 
                             Some struct(Range1i(u.samplerBinding), (SingleBinding (texRes, samRes)))
 
