@@ -5,7 +5,7 @@ open System.Threading
 open System.Collections.Concurrent
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open OpenTK
 open OpenTK.Platform
 open OpenTK.Graphics
@@ -13,10 +13,10 @@ open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
 
 type StreamingTextureOld(ctx : Context, mipMap : bool) =
-    inherit Mod.AbstractMod<ITexture>()
+    inherit AVal.AbstractVal<ITexture>()
 
     let expectedLevels (size : V2i) = 
-        if mipMap then Fun.Min(size.X, size.Y) |> Fun.Log2 |> Fun.Ceiling |> int
+        if mipMap then 1 + max size.X size.Y |> Fun.Log2 |> Fun.Floor |> int
         else 1
 
     let mutable pbo = 0
@@ -319,10 +319,10 @@ module PixelBufferExtensions =
 
 
 type StreamingTexture(ctx : Context, mipMap : bool) =
-    inherit Mod.AbstractMod<ITexture>()
+    inherit AVal.AbstractVal<ITexture>()
 
     let expectedLevels (size : V2i) = 
-        if mipMap then Fun.Min(size.X, size.Y) |> Fun.Log2 |> Fun.Ceiling |> int
+        if mipMap then 1 + max size.X size.Y |> Fun.Log2 |> Fun.Floor |> int
         else 1
 
 
@@ -534,7 +534,7 @@ module StreamingTextureExtensions =
 
     type Context with
         member x.CreateStreamingTexture(mipMaps : bool) =
-            using x.ResourceLock (fun _ ->
+            Operators.using x.ResourceLock (fun _ ->
                 new StreamingTexture(x, mipMaps)
             )
 

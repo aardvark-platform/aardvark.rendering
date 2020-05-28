@@ -1,5 +1,7 @@
 ﻿namespace Aardvark.Rendering.GL
 
+open FSharp.Data.Traceable
+
 #nowarn "9"
 
 open System
@@ -10,7 +12,7 @@ open System.Collections.Generic
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Base.Runtime
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Rendering.GL
@@ -21,30 +23,32 @@ open Aardvark.Rendering.GL
 module RenderTasks =
 
     [<AbstractClass>]
-    type AbstractOpenGlRenderTask(manager : ResourceManager, fboSignature : IFramebufferSignature, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) =
+    type AbstractOpenGlRenderTask(manager : ResourceManager, fboSignature : IFramebufferSignature, config : aval<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) =
         inherit AbstractRenderTask()
         let ctx = manager.Context
         let renderTaskLock = RenderTaskLock()
         let manager = ResourceManager(manager, Some (fboSignature, renderTaskLock), shareTextures, shareBuffers)
         let allBuffers = manager.DrawBufferManager.CreateConfig(fboSignature.ColorAttachments |> Map.toSeq |> Seq.map (snd >> fst) |> Set.ofSeq)
-        let structureChanged = Mod.custom ignore
+        let structureChanged = AVal.custom ignore
         let runtimeStats = NativePtr.alloc 1
+        let resources = new Aardvark.Base.Rendering.ResourceInputSet()
 
         let mutable isDisposed = false
-        let currentContext = Mod.init Unchecked.defaultof<ContextHandle>
+        let currentContext = AVal.init Unchecked.defaultof<ContextHandle>
         let contextHandle = NativePtr.alloc 1
         do NativePtr.write contextHandle 0n
 
 
         let scope =
             { 
+                resources = resources
                 runtimeStats = runtimeStats
                 currentContext = currentContext
                 contextHandle = contextHandle
                 drawBuffers = NativePtr.toNativeInt allBuffers.Buffers
                 drawBufferCount = allBuffers.Count 
-                usedTextureSlots = RefRef HRefSet.empty
-                usedUniformBufferSlots = RefRef HRefSet.empty
+                usedTextureSlots = RefRef CountingHashSet.empty
+                usedUniformBufferSlots = RefRef CountingHashSet.empty
                 structuralChange = structureChanged
                 task = RenderTask.empty
                 tags = Map.empty
@@ -53,6 +57,8 @@ module RenderTasks =
         let beforeRender = new System.Reactive.Subjects.Subject<unit>()
         let afterRender = new System.Reactive.Subjects.Subject<unit>()
         
+        member x.Resources = resources
+
         member x.BeforeRender = beforeRender
         member x.AfterRender = afterRender
 
@@ -156,10 +162,10 @@ module RenderTasks =
                 failwithf "incompatible FramebufferSignature\nexpected: %A but got: %A" fboSignature fbo.Signature
 
             use __ = ctx.ResourceLock 
-            if currentContext.UnsafeCache <> ctx.CurrentContextHandle.Value then
+            if currentContext.Value <> ctx.CurrentContextHandle.Value then
                 let intCtx = ctx.CurrentContextHandle.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
                 NativePtr.write contextHandle intCtx.Context.Handle
-                transact (fun () -> Mod.change currentContext ctx.CurrentContextHandle.Value)
+                transact (fun () -> currentContext.Value <- ctx.CurrentContextHandle.Value)
 
             let fbo =
                 match fbo with
@@ -196,7 +202,7 @@ module RenderTasks =
         let sortWatch           = Stopwatch()
         //let runWatch            = OpenGlStopwatch()
 
-        let fragments = HashSet<RenderFragment>()
+        let fragments = System.Collections.Generic.HashSet<RenderFragment>()
 
         member x.ProgramUpdate (t : RenderToken, f : unit -> 'a) =
             if RenderToken.isEmpty t then
@@ -288,9 +294,9 @@ module RenderTasks =
             
 
 
-    type StaticOrderSubTask(ctx : Context, scope : CompilerInfo, config : IMod<BackendConfiguration>) =
+    type StaticOrderSubTask(ctx : Context, scope : CompilerInfo, config : aval<BackendConfiguration>) =
         inherit AbstractSubTask()
-        let objects : cset<PreparedCommand> = CSet.ofList [new EpilogCommand(ctx)]
+        let objects : cset<PreparedCommand> = cset [new EpilogCommand(ctx) :> PreparedCommand]
 
         let mutable hasProgram = false
         let mutable currentConfig = BackendConfiguration.Default
@@ -386,21 +392,72 @@ module RenderTasks =
                 objects.Remove o |> ignore
             )
 
-    type RenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, config : IMod<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
+
+    
+    type NewRenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, config : aval<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
+        inherit AbstractOpenGlRenderTask(man, fboSignature, config, shareTextures, shareBuffers)
+        
+        let primitivesGenerated = OpenGlQuery(QueryTarget.PrimitivesGenerated)
+
+        let rec hook (r : IRenderObject) =
+            match r with
+                | :? RenderObject as o -> this.HookRenderObject o :> IRenderObject
+                | :? MultiRenderObject as o -> MultiRenderObject(o.Children |> List.map hook) :> IRenderObject
+                | _ -> r
+
+        let mainCommand = Command.ofRenderObjects fboSignature this.ResourceManager (ASet.map hook objects)
+
+        
+        override x.Use(action : unit -> 'a) = action()
+
+        override x.ProcessDeltas(token : AdaptiveToken, rt : RenderToken) =
+            x.Resources.Update(token, rt)
+            mainCommand.Update(token, x.Scope)
+            
+        override x.Update(token : AdaptiveToken, rt : RenderToken) =
+            x.Resources.Update(token, rt)
+            mainCommand.Update(token, x.Scope)
+            
+        override x.UpdateResources(token : AdaptiveToken, rt : RenderToken) =
+            x.Resources.Update(token, rt)
+            mainCommand.Update(token, x.Scope)
+
+            
+        override x.Release2() =
+            mainCommand.Free(x.Scope)
+
+        override x.Perform(token : AdaptiveToken, rt : RenderToken, fbo : Framebuffer, output : OutputDescription) =
+            x.ResourceManager.DrawBufferManager.Write(fbo)
+
+            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then
+                primitivesGenerated.Restart()
+
+            mainCommand.Update(token, x.Scope)
+            mainCommand.Run()
+
+            if RuntimeConfig.SyncUploadsAndFrames then
+                GL.Sync()
+            
+            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then 
+                primitivesGenerated.Stop()
+                rt.AddPrimitiveCount(primitivesGenerated.Value)
+
+
+
+    type RenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, config : aval<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
         inherit AbstractOpenGlRenderTask(man, fboSignature, config, shareTextures, shareBuffers)
         
         let ctx = man.Context
-        let resources = new Aardvark.Base.Rendering.ResourceInputSet()
         let inputSet = InputSet(this) 
         //let resourceUpdateWatch = OpenGlStopwatch()
-        let structuralChange = Mod.init ()
+        let structuralChange = AVal.init ()
         
         let primitivesGenerated = OpenGlQuery(QueryTarget.PrimitivesGenerated)
         
-        let add (ro : PreparedCommand) = 
+        let add (self : RenderTask) (ro : PreparedCommand) = 
             let all = ro.Resources
-            for r in all do resources.Add(r)
-            ro.AddCleanup(fun () -> for r in all do resources.Remove r)
+            for r in all do self.Resources.Add(r)
+            ro.AddCleanup(fun () -> for r in all do self.Resources.Remove r)
             ro
             
         let rec hook (r : IRenderObject) =
@@ -409,7 +466,7 @@ module RenderTasks =
                 | :? MultiRenderObject as o -> MultiRenderObject(o.Children |> List.map hook) :> IRenderObject
                 | _ -> r
 
-        let preparedObjects = objects |> ASet.mapUse (hook >> PreparedCommand.ofRenderObject fboSignature this.ResourceManager >> add)
+        let preparedObjects = objects |> ASet.map (hook >> PreparedCommand.ofRenderObject fboSignature this.ResourceManager >> add this)
         let preparedObjectReader = preparedObjects.GetReader()
 
         let mutable subtasks = Map.empty
@@ -434,9 +491,9 @@ module RenderTasks =
             
             let sw = Stopwatch.StartNew()
 
-            let deltas = preparedObjectReader.GetOperations x
+            let deltas = preparedObjectReader.GetChanges x
 
-            if not (HDeltaSet.isEmpty deltas) then
+            if not (HashSetDelta.isEmpty deltas) then
                 parent.StructureChanged()
 
             let mutable added = 0
@@ -451,18 +508,19 @@ module RenderTasks =
                     | Rem(_,v) ->
                         let task = getSubTask v.Pass
                         removed <- removed + 1
-                        task.Remove v      
+                        task.Remove v   
+                        v.Dispose()
                         
             if added > 0 || removed > 0 then
                 Log.line "[GL] RenderObjects: +%d/-%d (%dms)" added removed sw.ElapsedMilliseconds
             t.RenderObjectDeltas(added, removed)
 
-        let updateResources (x : AdaptiveToken) (t : RenderToken) =
+        let updateResources (x : AdaptiveToken) (self : RenderTask) (t : RenderToken) =
             if RenderToken.isEmpty t then
-                resources.Update(x, t)
+                self.Resources.Update(x, t)
             else
                 //resourceUpdateWatch.Restart()
-                resources.Update(x, t)
+                self.Resources.Update(x, t)
                 //resourceUpdateWatch.Stop()
 
                 //t.AddResourceUpdate(resourceUpdateWatch.ElapsedCPU, resourceUpdateWatch.ElapsedGPU)
@@ -472,7 +530,7 @@ module RenderTasks =
             processDeltas token x t
 
         override x.UpdateResources(token,t) =
-            updateResources token t
+            updateResources token x t
 
         override x.Perform(token : AdaptiveToken, rt : RenderToken, fbo : Framebuffer, output : OutputDescription) =
             x.ResourceManager.DrawBufferManager.Write(fbo)
@@ -501,8 +559,7 @@ module RenderTasks =
             for ro in preparedObjectReader.State do
                 ro.Dispose()
 
-            preparedObjectReader.Dispose()
-            resources.Dispose() // should be 0 after disposing all RenderObjects
+            x.Resources.Dispose() // should be 0 after disposing all RenderObjects
             for (_,t) in Map.toSeq subtasks do
                 t.Dispose()
 
@@ -514,26 +571,26 @@ module RenderTasks =
         override x.Use (f : unit -> 'a) =
             lock x (fun () ->
                 x.RenderTaskLock.Run (fun () ->
-                    lock resources (fun () ->
+                    lock x.Resources (fun () ->
                         f()
                     )
                 )
             )
 
-    type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : IMod<list<Option<C4f>>>, depth : IMod<Option<float>>, ctx : Context) =
+    type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : aval<list<Option<C4f>>>, depth : aval<Option<float>>, ctx : Context) =
         inherit AbstractRenderTask()
 
         override x.PerformUpdate(token, t) = ()
         override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription) =
             let fbo = desc.framebuffer
-            using ctx.ResourceLock (fun _ ->
+            Operators.using ctx.ResourceLock (fun _ ->
 
                 let old = Array.create 4 0
                 let mutable oldFbo = 0
-                OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.Viewport, old)
-                OpenTK.Graphics.OpenGL.GL.GetInteger(OpenTK.Graphics.OpenGL.GetPName.FramebufferBinding, &oldFbo)
+                GL.GetInteger(GetPName.Viewport, old)
+                GL.GetInteger(GetPName.FramebufferBinding, &oldFbo)
 
-                let handle = fbo.GetHandle null |> unbox<int>
+                let handle = fbo.GetHandle Unchecked.defaultof<_> |> unbox<int>
 
                 if ExecutionContext.framebuffersSupported then
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
@@ -597,9 +654,11 @@ module RenderTasks =
             )
 
         override x.Release() =
-            color.RemoveOutput x
-            depth.RemoveOutput x
+            color.Outputs.Remove x |> ignore
+            depth.Outputs.Remove x |> ignore
         override x.FramebufferSignature = fboSignature |> Some
         override x.Runtime = runtime |> Some
 
         override x.Use f = lock x f
+
+

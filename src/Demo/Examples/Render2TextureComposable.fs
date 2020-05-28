@@ -18,10 +18,10 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Interactive
 
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Base.Incremental.Operators // loads operators such as ~~ and %+ for conveniently creating and modifying mods
+open FSharp.Data.Adaptive.Operators // loads operators such as ~~ and %+ for conveniently creating and modifying mods
 
 
 module Render2TextureComposable = 
@@ -36,7 +36,7 @@ module Render2TextureComposable =
         // A tutorial on awesome functional reactivity is out of the scope of this example
         let initial = V3d(3,3,3)
         let startTime = ref DateTime.Now
-        win.Time |> Mod.map (fun t -> 
+        win.Time |> AVal.map (fun t -> 
             let dt = t - !startTime
             let p = Trafo3d.RotationZ(dt.TotalSeconds * 0.8).Forward.TransformPos(initial)
             CameraView.lookAt p V3d.OOO V3d.OOI |> CameraView.viewTrafo

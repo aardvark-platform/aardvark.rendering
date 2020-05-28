@@ -39,7 +39,7 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Interactive
 
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -63,12 +63,12 @@ module Tutorial =
     let cameraView = 
         CameraView.lookAt (V3d(6.0, 6.0, 6.0)) V3d.Zero V3d.OOI
             |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
-            |> Mod.map CameraView.viewTrafo
+            |> AVal.map CameraView.viewTrafo
 
     let projection = 
         win.Sizes 
-            |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
-            |> Mod.map Frustum.projTrafo
+            |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
+            |> AVal.map Frustum.projTrafo
 
     // for construction view and projection matrices there are convinience functions in the Interactive class, e.g.
     let cameraView_ = Interactive.ControlledViewTrafo (V3d.III * 3.0) V3d.Zero

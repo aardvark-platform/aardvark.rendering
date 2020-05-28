@@ -8,82 +8,12 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open System.Diagnostics
 open System.Collections.Generic
 open Aardvark.Base.Runtime
 open FShade
 #nowarn "9"
-// #nowarn "51"
-#nowarn "44"
-
-[<Obsolete>] // TODO remove "nowarn 44" when deleting this
-type private MappedBuffer(d : Device, store : ResizeBuffer) =
-    inherit ConstantMod<IBuffer>(store)
-
-    let onDispose = Event<_>()
-
-    interface IDisposable with
-        member x.Dispose() = 
-            onDispose.Trigger()
-            d |> ResizeBuffer.delete store
-
-    interface ILockedResource with
-        member x.Lock = store.Lock
-        member x.OnLock u = ()
-        member x.OnUnlock u = ()
-
-    interface IMappedBuffer with
-        member x.Write(sourcePtr, offset, size) = store.UseWrite(int64 offset, int64 size, fun dst -> Marshal.Copy(sourcePtr, dst, size))
-        member x.Read(targetPtr, offset, size) = store.UseWrite(int64 offset, int64 size, fun src -> Marshal.Copy(src, targetPtr, size))
-        member x.Capacity = nativeint store.Capacity
-        member x.Resize(newCapacity) = store.Resize(int64 newCapacity) 
-        member x.OnDispose = onDispose.Publish :> IObservable<_>
-        member x.UseRead(offset, size, f) = store.UseRead(int64 offset, int64 size, f)
-        member x.UseWrite(offset, size, f) = store.UseWrite(int64 offset, int64 size, f)
-
-[<Obsolete>] // TODO remove "nowarn 44" when deleting this
-type private MappedIndirectBuffer private(device : Device, indexed : bool, store : ResizeBuffer, indirect : IndirectBuffer) =
-    inherit ConstantMod<IIndirectBuffer>(indirect)
-    static let drawCallSize = int64 sizeof<DrawCallInfo>
-
-    let transform (c : DrawCallInfo) =
-        if indexed then 
-            let mutable c = c
-            Fun.Swap(&c.BaseVertex, &c.FirstInstance)
-            c
-        else
-            c
-
-    new(device : Device, indexed : bool, store : ResizeBuffer) = new MappedIndirectBuffer(device, indexed, store, new IndirectBuffer(device, store.Handle, Unchecked.defaultof<_>, 0))
-
-    interface IDisposable with
-        member x.Dispose() = 
-            device |> ResizeBuffer.delete store
-
-    interface ILockedResource with
-        member x.Lock = store.Lock
-        member x.OnLock u = ()
-        member x.OnUnlock u = ()
-
-    interface IMappedIndirectBuffer with
-        member x.Indexed = indexed
-        member x.Resize cnt = store.Resize (int64 cnt * drawCallSize)
-        member x.Capacity = store.Capacity / drawCallSize |> int
-        member x.Count 
-            with get() = indirect.Count
-            and set c = indirect.Count <- c
-
-        member x.Item
-            with get (i : int) =
-                let res = store.UseRead(int64 i * drawCallSize, drawCallSize, NativeInt.read<DrawCallInfo>)
-                transform res
-
-            and set (i : int) (v : DrawCallInfo) =
-                let v = transform v
-                store.UseWrite(int64 i * drawCallSize, drawCallSize, fun ptr -> NativeInt.write ptr v)
-
-
 
 
 type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug : bool) as this =
@@ -134,7 +64,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
     let ignored : HashSet<Guid> =
-        HashSet.empty
+        Aardvark.Base.HashSet.empty
 
     let debugBreak (msg : DebugMessage) =
         if Debugger.IsAttached then
@@ -188,16 +118,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = failf "not implemented"
     member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = failf "not implemented"
 
-    [<Obsolete>] // TODO remove "nowarn 44" when deleting this
-    member x.CreateMappedBuffer() =
-        let store = device |> ResizeBuffer.create VkBufferUsageFlags.VertexBufferBit
-        new MappedBuffer(device, store) :> IMappedBuffer
-
-    [<Obsolete>] // TODO remove "nowarn 44" when deleting this
-    member x.CreateMappedIndirectBuffer(indexed : bool) =
-        let store = device |> ResizeBuffer.create VkBufferUsageFlags.IndirectBufferBit
-        new MappedIndirectBuffer(device, indexed, store) :> IMappedIndirectBuffer
-
     member x.CreateStreamingTexture (mipMaps : bool) = failf "not implemented"
     member x.DeleteStreamingTexture (texture : IStreamingTexture) = failf "not implemented"
 
@@ -232,15 +152,15 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let set = EffectDebugger.Hook set
         new Temp.CommandTask(device, unbox renderPass, RuntimeCommand.Render set) :> IRenderTask
         //new RenderTask.DependentRenderTask(device, unbox renderPass, set, true, true) :> IRenderTask
-        //new RenderTasks.RenderTask(device, unbox renderPass, set, Mod.constant engine, shareTextures, shareBuffers) :> IRenderTask
+        //new RenderTasks.RenderTask(device, unbox renderPass, set, AVal.constant engine, shareTextures, shareBuffers) :> IRenderTask
 
-    member x.CompileClear(signature : IFramebufferSignature, color : IMod<Map<Symbol, C4f>>, depth : IMod<Option<float>>) : IRenderTask =
+    member x.CompileClear(signature : IFramebufferSignature, color : aval<Map<Symbol, C4f>>, depth : aval<Option<float>>) : IRenderTask =
         let pass = unbox<RenderPass> signature
         let colors = 
             pass.ColorAttachments 
             |> Map.toSeq 
             |> Seq.map (fun (_,(sem,att)) -> 
-                sem, color |> Mod.map (fun c -> 
+                sem, color |> AVal.map (fun c -> 
                             match Map.tryFind sem c with 
                             | None -> 
                                 Log.warn "no clear color defined for sem: %A. Using black." sem
@@ -249,7 +169,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                      )
                ) 
             |> Map.ofSeq
-        new RenderTask.ClearTask(device, unbox signature, colors, depth, Some (Mod.constant 0u)) :> IRenderTask
+        new RenderTask.ClearTask(device, unbox signature, colors, depth, Some (AVal.constant 0u)) :> IRenderTask
 
 
 
@@ -300,8 +220,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.DeletRenderbuffer(t : IRenderbuffer) =
         device.Delete(unbox<Image> t)
 
-    member x.PrepareBuffer (t : IBuffer) =
-        device.CreateBuffer(VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit, t) :> IBackendBuffer
+    member x.PrepareBuffer (t : IBuffer, usage : BufferUsage) =
+        let flags = Buffer.toVkUsage usage
+        device.CreateBuffer(flags, t) :> IBackendBuffer
 
     member x.DeleteBuffer(t : IBackendBuffer) =
         device.Delete(unbox<Buffer> t)
@@ -481,16 +402,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     interface IDisposable with
         member x.Dispose() = x.Dispose() 
 
-    member x.CreateBuffer(size : nativeint) =
-        let usage =
-            VkBufferUsageFlags.TransferSrcBit ||| 
-            VkBufferUsageFlags.TransferDstBit ||| 
-            VkBufferUsageFlags.StorageBufferBit ||| 
-            VkBufferUsageFlags.VertexBufferBit |||
-            VkBufferUsageFlags.IndexBufferBit ||| 
-            VkBufferUsageFlags.IndirectBufferBit 
-
-        device.CreateBuffer(usage, int64 size)
+    member x.CreateBuffer(size : nativeint, usage : BufferUsage) =
+        let flags = Buffer.toVkUsage usage
+        device.CreateBuffer(flags, int64 size)
 
     member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (int64 size)
@@ -695,7 +609,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.PrepareRenderObject(fboSignature, rj) = x.PrepareRenderObject(fboSignature, rj)
         member x.PrepareTexture(t) = x.PrepareTexture(t)
         member x.DeleteTexture(t) = x.DeleteTexture(t)
-        member x.PrepareBuffer(b) = x.PrepareBuffer(b)
+        member x.PrepareBuffer(b, u) = x.PrepareBuffer(b, u)
         member x.DeleteBuffer(b) = x.DeleteBuffer(b)
 
         member x.DeleteRenderbuffer(b) = x.DeletRenderbuffer(b)
@@ -719,15 +633,12 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
         member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)
-        [<Obsolete>] // TODO remove "nowarn 44" when deleting this
-        member x.CreateMappedBuffer() = x.CreateMappedBuffer()
-        [<Obsolete>] // TODO remove "nowarn 44" when deleting this
-        member x.CreateMappedIndirectBuffer(indexed) = x.CreateMappedIndirectBuffer(indexed)
+        
         member x.CreateGeometryPool(types) = new GeometryPoolUtilities.GeometryPool(device, types) :> IGeometryPool
 
 
 
-        member x.CreateBuffer(size : nativeint) = x.CreateBuffer(size) :> IBackendBuffer
+        member x.CreateBuffer(size : nativeint, usage : BufferUsage) = x.CreateBuffer(size, usage) :> IBackendBuffer
 
         member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
             x.Copy(src, dst, dstOffset, size)

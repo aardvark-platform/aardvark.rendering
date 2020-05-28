@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.Base.Rendering
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open FShade
 open Microsoft.FSharp.Quotations
 open Aardvark.Base.Rendering.Effects

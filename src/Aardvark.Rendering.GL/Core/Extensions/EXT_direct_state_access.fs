@@ -17,11 +17,12 @@ open Aardvark.Rendering.GL
 module EXT_direct_state_access =
     type GL private() =
 
-        static let supported = ExtensionHelpers.isSupported (Version(4,5,0)) "GL_EXT_direct_state_access"
+        static let supported = ExtensionHelpers.isSupported (Version(4,5)) "GL_EXT_direct_state_access"
+        static let bufferStorage = ExtensionHelpers.isSupported (Version(4,4)) "GL_ARB_buffer_storage"
 
         static member EXT_direct_state_access = supported
 
-        static member NamedBufferData(buffer : int, size : nativeint, data : nativeint, usage : BufferUsageHint) =
+        static member NamedBufferData(buffer : int, size : nativeint, data : nativeint, usage : OpenTK.Graphics.OpenGL4.BufferUsageHint) =
             if supported then
                 GL.Ext.NamedBufferData(buffer, size, data, usage)
             else
@@ -65,10 +66,16 @@ module EXT_direct_state_access =
 
         static member NamedBufferStorage(buffer: int, size : nativeint, data : nativeint, flags: BufferStorageFlags) =
             if supported then
-                GL.Ext.NamedBufferStorage(buffer, size, data, flags)
+                if bufferStorage then
+                    GL.Ext.NamedBufferStorage(buffer, size, data, flags)
+                else
+                    GL.Ext.NamedBufferData(buffer, size, data, BufferUsageHint.DynamicDraw)
             else
                 bindBuffer buffer (fun t ->
-                    GL.BufferStorage(t, size, data, flags)
+                    if bufferStorage then
+                        GL.BufferStorage(t, size, data, flags)
+                    else
+                        GL.BufferData(t, size, data, BufferUsageHint.DynamicDraw)
                 )
 
         static member MapNamedBuffer(buffer: int, access : OpenTK.Graphics.OpenGL4.BufferAccess) =

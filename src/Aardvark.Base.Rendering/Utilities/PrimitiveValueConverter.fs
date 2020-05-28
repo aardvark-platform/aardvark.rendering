@@ -6,7 +6,7 @@ open Aardvark.Base
 open System.Reflection
 open System.Runtime.InteropServices
 open Microsoft.FSharp.Reflection
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 
 module PrimitiveValueConverter =
@@ -1218,8 +1218,8 @@ module PrimitiveValueConverter =
 
     [<AbstractClass>]
     type private AdaptiveConverter<'a>() =
-        abstract member Convert : IMod -> IMod<'a>
-        abstract member Convert : IMod<Array> -> IMod<'a[]>
+        abstract member Convert : IAdaptiveValue -> aval<'a>
+        abstract member Convert : aval<Array> -> aval<'a[]>
 
     type private AdaptiveConverter<'a, 'b> private() =
         inherit AdaptiveConverter<'b>()
@@ -1228,11 +1228,11 @@ module PrimitiveValueConverter =
 
         static member Instance = instance
 
-        override x.Convert (m : IMod) =
-            m |> unbox<IMod<'a>> |> Mod.map conv
+        override x.Convert (m : IAdaptiveValue) =
+            m |> unbox<aval<'a>> |> AVal.map conv
 
-        override x.Convert (m : IMod<Array>) =
-            m |> Mod.map (fun arr -> arr |> unbox<'a[]> |> Array.map conv)
+        override x.Convert (m : aval<Array>) =
+            m |> AVal.map (fun arr -> arr |> unbox<'a[]> |> Array.map conv)
 
     let private staticFieldCache = Dict<Type * string, obj>()
     let private getStaticField (name : string) (t : Type) : 'a =
@@ -1241,20 +1241,16 @@ module PrimitiveValueConverter =
             p.GetValue(null)
         ) |> unbox<'a>
 
-    let convertArray (inputElementType : Type) (m : IMod<Array>) : IMod<'a[]> =
+    let convertArray (inputElementType : Type) (m : aval<Array>) : aval<'a[]> =
         if inputElementType = typeof<'a> then
-            m |> Mod.map (fun a -> unbox a)
+            m |> AVal.map (fun a -> unbox a)
         else
             let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputElementType; typeof<'a> |]
             let converter : AdaptiveConverter<'a> = tconv |> getStaticField "Instance"
             converter.Convert(m)
 
-    let convertValue (m : IMod) : IMod<'a> =
-        let inputType =
-            match m.GetType() with
-                | ModOf t -> t
-                | _ -> failwith ""
-
+    let convertValue (m : IAdaptiveValue) : aval<'a> =
+        let inputType = m.ContentType
         if inputType = typeof<'a> then
             unbox m
         else

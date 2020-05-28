@@ -4,6 +4,7 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>Aardvark.Rendering.Text</AssemblyName>
     <OutputType>Library</OutputType>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <OutputPath>..\..\bin\Debug\</OutputPath>
@@ -13,9 +14,13 @@
     <OutputPath>..\..\bin\Release</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <EmbeddedResource Include="resources\Symbola.ttf" />
     <Compile Include="PathSegment.fs" />
+    <Compile Include="BvhInternal.fs" />
+    <Compile Include="PathTessellator.fs" />
     <Compile Include="Path.fs" />
     <Compile Include="Font.fs" />
+    <Compile Include="FontSquirrel.fs" />
     <Compile Include="Text.fs" />
     <Compile Include="SceneGraph.fs" />
     <Compile Include="Markdown.fs" />

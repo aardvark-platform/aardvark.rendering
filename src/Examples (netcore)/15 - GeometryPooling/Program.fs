@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -30,7 +30,7 @@ module Shader =
 let main argv = 
     
     // first we need to initialize Aardvark's core components
-    Ag.initialize()
+    
     Aardvark.Init()
 
     Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- true
@@ -52,13 +52,20 @@ let main argv =
             uniformTypes = Map.ofList ["Offset", typeof<V4f>]
         }
 
-    let showScene = Mod.init true
-    let scale = Mod.init 1.0f
+    let showScene = AVal.init true
+    let scale = AVal.init 1.0f
 
     let rnd = RandomSystem()
-    let set : cset<IndexedGeometry * V4f> = CSet.empty
+    let set : cset<IndexedGeometry * V4f> = 
+        cset(
+            List.init 10 (fun _ ->    
+                let pos = V4d(rnd.UniformV3d(),1.0).ToV4f() * 5.0f
+                let geo = rnd.UniformInt(geometries.Length)
+                (geometries.[geo], pos)
+            )            
+        )
 
-    let node = Sg.indirect signature (set |> ASet.map (fun (ig,pos) -> ig,Map.ofList ["Offset", scale |> Mod.map (fun s -> (pos * s * V4f.One)) :> IMod]))
+    let node = Sg.indirect signature (set |> ASet.map (fun (ig,pos) -> ig,Map.ofList ["Offset", scale |> AVal.map (fun s -> (pos * s * V4f.One)) :> IAdaptiveValue]))
 
     let sg =
         node 
@@ -70,7 +77,7 @@ let main argv =
            }
     
     let sg =
-        Sg.dynamic (showScene |> Mod.map (function true -> sg | _ -> Sg.empty))
+        Sg.dynamic (showScene |> AVal.map (function true -> sg | _ -> Sg.empty))
 
 
     let win = window {
@@ -83,15 +90,15 @@ let main argv =
 
     win.Keyboard.DownWithRepeats.Values.Add(fun k -> 
         match k with
-            | Keys.Subtract -> 
+            | Keys.Subtract | Keys.OemMinus -> 
                 if set.Count > 0 then
                     transact (fun _ -> 
                         let geo = rnd.UniformInt(set.Count)
-                        let el = Seq.item geo set
+                        let el = Seq.item geo (AVal.force (set :> aset<_>).Content)
                         set.Remove(el) |> ignore
                     )
                 printfn "count: %A" set.Count
-            | Keys.Add -> 
+            | Keys.Add | Keys.OemPlus -> 
                 transact (fun _ -> 
                     let pos = V4d(rnd.UniformV3d(),1.0).ToV4f() * 5.0f
                     let geo = rnd.UniformInt(geometries.Length)
@@ -102,7 +109,7 @@ let main argv =
                 transact (fun _ -> 
                     scale.Value <- scale.Value + 0.2f
                 )
-            | Keys.Multiply -> 
+            | Keys.Multiply | Keys.P -> 
                 transact (fun _ -> 
                     for i in 1 .. 100 do
                         let pos = V4d(rnd.UniformV3d(),1.0).ToV4f() * 5.0f
@@ -114,7 +121,7 @@ let main argv =
                 transact (fun _ -> 
                     set.Clear()
                 )
-            | Keys.PageUp ->
+            | Keys.PageUp | Keys.Space ->
                 transact (fun () -> showScene.Value <- not showScene.Value)
 
             | _ -> ()

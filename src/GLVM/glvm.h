@@ -75,6 +75,8 @@ static PFNGLDELETEVERTEXARRAYSPROC						glDeleteVertexArrays;
 static PFNGLENABLEVERTEXATTRIBARRAYPROC					glEnableVertexAttribArray;
 static PFNGLDISABLEVERTEXATTRIBARRAYPROC				glDisableVertexAttribArray;
 static PFNGLVERTEXATTRIBDIVISORPROC						glVertexAttribDivisor;
+static PFNGLDRAWARRAYSINDIRECTPROC                      glDrawArraysIndirect;
+static PFNGLDRAWELEMENTSINDIRECTPROC                    glDrawElementsIndirect;
 #else
 typedef void (APIENTRYP PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEPROC) (GLenum mode, GLint first, GLsizei count, GLsizei primcount, GLuint baseinstance);
 typedef void (APIENTRYP PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC) (GLenum mode, GLsizei count, GLenum type, const void *indices, GLsizei primcount, GLint basevertex, GLuint baseinstance);
@@ -87,6 +89,7 @@ static PFNGLDRAWARRAYSINSTANCEDBASEINSTANCEPROC			glDrawArraysInstancedBaseInsta
 static PFNGLDRAWELEMENTSINSTANCEDBASEVERTEXBASEINSTANCEPROC		glDrawElementsInstancedBaseVertexBaseInstance;
 static PFNGLMULTIDRAWARRAYSINDIRECTPROC					glMultiDrawArraysIndirect;
 static PFNGLMULTIDRAWELEMENTSINDIRECTPROC				glMultiDrawElementsIndirect;
+
 
 typedef void (APIENTRYP PFNGLBINDTEXTURESPROC) (GLuint first, GLsizei count, const GLuint *textures);
 typedef void (APIENTRYP PFNGLBINDSAMPLERSPROC) (GLuint first, GLsizei count, const GLuint *samplers);
@@ -204,10 +207,11 @@ typedef struct {
 	int RemovedInstructions;
 } Statistics;
 
-typedef struct HandleAndCountStruct {
+typedef struct IndirctDrawArgsStruct {
 	int Handle;
 	int Count;
-} HandleAndCount;
+	int Stride;
+} IndirctDrawArgs;
 
 
 DllExport(void) vmInit();
@@ -235,8 +239,8 @@ DllExport(void) hglCleanup(void* ctx);
 DllExport(void) hglDrawArrays(RuntimeStats* stats, int* isActive, BeginMode* mode, DrawCallInfoList* infos);
 DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, DrawCallInfoList* infos);
 
-DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, HandleAndCount* handleAndCount);
-DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, HandleAndCount* handleAndCount);
+DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, IndirctDrawArgsStruct* handleAndCount);
+DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, IndirctDrawArgsStruct* handleAndCount);
 DllExport(void) hglSetDepthTest(DepthTestMode* mode);
 DllExport(void) hglSetDepthBias(DepthBiasInfo* state);
 DllExport(void) hglSetCullFace(GLenum* face);

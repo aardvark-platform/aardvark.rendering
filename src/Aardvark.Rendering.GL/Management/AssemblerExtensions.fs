@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.Rendering.GL
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.ShaderReflection
 open Aardvark.Base.Rendering
 open Aardvark.Base.Runtime
@@ -9,6 +9,7 @@ open Microsoft.FSharp.NativeInterop
 open OpenTK
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
+open FSharp.Data.Traceable
 
 #nowarn "9"
 
@@ -60,7 +61,7 @@ type ICommandStream =
     
     abstract member BindBufferRangeFixed : target : BufferRangeTarget * slot : int * b : nativeptr<int> * offset : nativeint * size : nativeint -> unit 
 
-    abstract member NamedBufferData : buffer : int * size : nativeint * data : nativeint * usage : BufferUsageHint -> unit 
+    abstract member NamedBufferData : buffer : int * size : nativeint * data : nativeint * usage : OpenTK.Graphics.OpenGL4.BufferUsageHint -> unit 
     abstract member NamedBufferSubData : buffer : int * offset : nativeint * size : nativeint * data : nativeint -> unit 
     
 
@@ -90,8 +91,8 @@ type ICommandStream =
 
     abstract member DrawArrays : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * calls : nativeptr<DrawCallInfoList> -> unit 
     abstract member DrawElements : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indexType : int * calls : nativeptr<DrawCallInfoList> -> unit 
-    abstract member DrawArraysIndirect : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indirect : nativeptr<V2i> -> unit 
-    abstract member DrawElementsIndirect : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indexType : int * indirect : nativeptr<V2i> -> unit 
+    abstract member DrawArraysIndirect : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indirect : nativeptr<IndirectDrawArgs> -> unit 
+    abstract member DrawElementsIndirect : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indexType : int * indirect : nativeptr<IndirectDrawArgs> -> unit 
     
     abstract member ClearColor : c : nativeptr<C4f> -> unit 
     abstract member ClearDepth : c : nativeptr<float> -> unit 
@@ -407,7 +408,7 @@ module GLAssemblerExtensions =
             s.PushArg(int target)
             s.Call(OpenGl.Pointers.BindBufferRange)
 
-        member this.NamedBufferData(buffer : int, size : nativeint, data : nativeint, usage : BufferUsageHint) =
+        member this.NamedBufferData(buffer : int, size : nativeint, data : nativeint, usage : OpenTK.Graphics.OpenGL4.BufferUsageHint) =
             s.BeginCall(4)
             s.PushArg (int usage)
             s.PushArg data
@@ -596,7 +597,7 @@ module GLAssemblerExtensions =
             s.PushArg(NativePtr.toNativeInt stats)
             s.Call(OpenGl.Pointers.HDrawElements)
 
-        member this.DrawArraysIndirect(stats : nativeptr<V2i>, isActive : nativeptr<int>, beginMode : nativeptr<GLBeginMode>, indirect : nativeptr<V2i>) =
+        member this.DrawArraysIndirect(stats : nativeptr<V2i>, isActive : nativeptr<int>, beginMode : nativeptr<GLBeginMode>, indirect : nativeptr<IndirectDrawArgs>) =
             s.BeginCall(4)
             s.PushArg(NativePtr.toNativeInt indirect)
             s.PushArg(NativePtr.toNativeInt beginMode)
@@ -604,7 +605,7 @@ module GLAssemblerExtensions =
             s.PushArg(NativePtr.toNativeInt stats)
             s.Call(OpenGl.Pointers.HDrawArraysIndirect)
             
-        member this.DrawElementsIndirect(stats : nativeptr<V2i>, isActive : nativeptr<int>, beginMode : nativeptr<GLBeginMode>, indexType : int, indirect : nativeptr<V2i>) =
+        member this.DrawElementsIndirect(stats : nativeptr<V2i>, isActive : nativeptr<int>, beginMode : nativeptr<GLBeginMode>, indexType : int, indirect : nativeptr<IndirectDrawArgs>) =
             s.BeginCall(5)
             s.PushArg(NativePtr.toNativeInt indirect)
             s.PushArg(indexType)
@@ -727,9 +728,9 @@ module GLAssemblerExtensions =
             member this.DispatchCompute(gx: int, gy: int, gz: int) = this.DispatchCompute(gx, gy, gz)
             member this.DispatchCompute(groups: nativeptr<V3i>) = this.DispatchCompute(groups)
             member this.DrawArrays(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, calls: nativeptr<DrawCallInfoList>) = this.DrawArrays(stats, isActive, beginMode, calls)
-            member this.DrawArraysIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indirect: nativeptr<V2i>) = this.DrawArraysIndirect(stats, isActive, beginMode, indirect)
+            member this.DrawArraysIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indirect: nativeptr<IndirectDrawArgs>) = this.DrawArraysIndirect(stats, isActive, beginMode, indirect)
             member this.DrawElements(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, calls: nativeptr<DrawCallInfoList>) = this.DrawElements(stats, isActive, beginMode, indexType, calls)
-            member this.DrawElementsIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, indirect: nativeptr<V2i>) = this.DrawElementsIndirect(stats, isActive, beginMode, indexType, indirect)
+            member this.DrawElementsIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, indirect: nativeptr<IndirectDrawArgs>) = this.DrawElementsIndirect(stats, isActive, beginMode, indexType, indirect)
             member this.Enable(v: int) = this.Enable(v)
             member this.Enable(v: nativeptr<int>) = this.Enable(v)
             member this.EndQuery(target: QueryTarget) = this.EndQuery(target)
@@ -738,7 +739,7 @@ module GLAssemblerExtensions =
             member this.Get(pname: GetIndexedPName, index: int, ptr: nativeptr<'a>) = this.Get(pname, index, ptr)
             member this.GetQueryObject(query: nativeptr<int>, param: GetQueryObjectParam, ptr: nativeptr<'a>) = this.GetQueryObject(query, param, ptr)
             member this.GetQueryObject(query: int, param: GetQueryObjectParam, ptr: nativeptr<'a>) = this.GetQueryObject(query, param, ptr)
-            member this.NamedBufferData(buffer: int, size: nativeint, data: nativeint, usage: BufferUsageHint) = this.NamedBufferData(buffer, size, data, usage)
+            member this.NamedBufferData(buffer: int, size: nativeint, data: nativeint, usage: OpenTK.Graphics.OpenGL4.BufferUsageHint) = this.NamedBufferData(buffer, size, data, usage)
             member this.NamedBufferSubData(buffer: int, offset: nativeint, size: nativeint, data: nativeint) = this.NamedBufferSubData(buffer, offset, size, data)
             member this.QueryCounter(target: QueryCounterTarget, id: int) = this.QueryCounter(target, id)
             member this.QueryCounter(target: QueryCounterTarget, id: nativeptr<int>) = this.QueryCounter(target, id)
@@ -776,6 +777,7 @@ module GLAssemblerExtensions =
             member this.CallIndirect(ptr) = this.CallIndirect(ptr)
             member this.Call(ptr : nativeint, arg : int) = this.Call(ptr, arg)
             member this.MemoryBarrier(flags : MemoryBarrierFlags) = this.MemoryBarrier(flags)
+
     type private DebugCallbackDelegate = delegate of int -> unit
     type DebugCommandStream(inner : ICommandStream) =
         let commands = System.Collections.Generic.List<string * obj[]>()
@@ -825,9 +827,9 @@ module GLAssemblerExtensions =
             member x.DispatchCompute(gx: int, gy: int, gz: int) = inner.DispatchCompute(gx, gy, gz); x.Append("DispatchCompute", gx, gy, gz)
             member x.DispatchCompute(groups: nativeptr<V3i>) = inner.DispatchCompute(groups); x.Append("DispatchCompute", groups)
             member x.DrawArrays(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, calls: nativeptr<DrawCallInfoList>) = inner.DrawArrays(stats, isActive, beginMode, calls); x.Append("DrawArrays", stats, isActive, beginMode, calls)
-            member x.DrawArraysIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indirect: nativeptr<V2i>) = inner.DrawArraysIndirect(stats, isActive, beginMode, indirect); x.Append("DrawArraysIndirect", stats, isActive, beginMode, indirect)
+            member x.DrawArraysIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indirect: nativeptr<IndirectDrawArgs>) = inner.DrawArraysIndirect(stats, isActive, beginMode, indirect); x.Append("DrawArraysIndirect", stats, isActive, beginMode, indirect)
             member x.DrawElements(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, calls: nativeptr<DrawCallInfoList>) = inner.DrawElements(stats, isActive, beginMode, indexType, calls); x.Append("DrawElements", stats, isActive, beginMode, indexType, calls)
-            member x.DrawElementsIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, indirect: nativeptr<V2i>) = inner.DrawElementsIndirect(stats, isActive, beginMode, indexType, indirect); x.Append("DrawElementsIndirect", stats, isActive, beginMode, indexType, indirect)
+            member x.DrawElementsIndirect(stats: nativeptr<V2i>, isActive: nativeptr<int>, beginMode: nativeptr<GLBeginMode>, indexType: int, indirect: nativeptr<IndirectDrawArgs>) = inner.DrawElementsIndirect(stats, isActive, beginMode, indexType, indirect); x.Append("DrawElementsIndirect", stats, isActive, beginMode, indexType, indirect)
             member x.Enable(v: int) = inner.Enable(v); x.Append("Enable", v)
             member x.Enable(v: nativeptr<int>) = inner.Enable(v); x.Append("Enable", v)
             member x.EndQuery(target: QueryTarget) = inner.EndQuery(target); x.Append("EndQuery", target)
@@ -836,7 +838,7 @@ module GLAssemblerExtensions =
             member x.Get(pname: GetIndexedPName, index: int, ptr: nativeptr<'a>) = inner.Get(pname, index, ptr); x.Append("Get", pname, index, ptr)
             member x.GetQueryObject(query: nativeptr<int>, param: GetQueryObjectParam, ptr: nativeptr<'a>) = inner.GetQueryObject(query, param, ptr); x.Append("GetQueryObject", query, param, ptr)
             member x.GetQueryObject(query: int, param: GetQueryObjectParam, ptr: nativeptr<'a>) = inner.GetQueryObject(query, param, ptr); x.Append("GetQueryObject", query, param, ptr)
-            member x.NamedBufferData(buffer: int, size: nativeint, data: nativeint, usage: BufferUsageHint) = inner.NamedBufferData(buffer, size, data, usage); x.Append("NamedBufferData", buffer, size, data, usage)
+            member x.NamedBufferData(buffer: int, size: nativeint, data: nativeint, usage: OpenTK.Graphics.OpenGL4.BufferUsageHint) = inner.NamedBufferData(buffer, size, data, usage); x.Append("NamedBufferData", buffer, size, data, usage)
             member x.NamedBufferSubData(buffer: int, offset: nativeint, size: nativeint, data: nativeint) = inner.NamedBufferSubData(buffer, offset, size, data); x.Append("NamedBufferSubData", buffer, offset, size, data)
             member x.QueryCounter(target: QueryCounterTarget, id: int) = inner.QueryCounter(target, id); x.Append("QueryCounter", target, id)
             member x.QueryCounter(target: QueryCounterTarget, id: nativeptr<int>) = inner.QueryCounter(target, id); x.Append("QueryCounter", target, id)
@@ -928,7 +930,7 @@ module GLAssemblerExtensions =
                 calls.Pointer
             )
 
-        member inline x.DrawArraysIndirect(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indirect : IResource<_, V2i>) =
+        member inline x.DrawArraysIndirect(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indirect : IResource<_, IndirectDrawArgs>) =
             x.DrawArraysIndirect(
                 stats,
                 isActive.Pointer,
@@ -936,7 +938,7 @@ module GLAssemblerExtensions =
                 indirect.Pointer
             )
          
-        member inline x.DrawElementsIndirect(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indexType : int, indirect : IResource<_, V2i>) =
+        member inline x.DrawElementsIndirect(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indexType : int, indirect : IResource<_, IndirectDrawArgs>) =
             x.DrawElementsIndirect(
                 stats,
                 isActive.Pointer,
@@ -1014,16 +1016,444 @@ type RefRef<'a> =
 
 type CompilerInfo =
     {
+        resources               : ResourceInputSet
         contextHandle           : nativeptr<nativeint>
         runtimeStats            : nativeptr<V2i>
-        currentContext          : IMod<ContextHandle>
+        currentContext          : aval<ContextHandle>
         drawBuffers             : nativeint
         drawBufferCount         : int
         
-        structuralChange        : IMod<unit>
-        usedTextureSlots        : RefRef<hrefset<int>>
-        usedUniformBufferSlots  : RefRef<hrefset<int>>
+        structuralChange        : aval<unit>
+        usedTextureSlots        : RefRef<CountingHashSet<int>>
+        usedUniformBufferSlots  : RefRef<CountingHashSet<int>>
 
         task                    : IRenderTask
         tags                    : Map<string, obj>
     }
+
+
+    
+[<AutoOpen>]
+module rec ChangeableProgram = 
+    open Microsoft.FSharp.NativeInterop
+    open System.IO
+    open System.Runtime.InteropServices
+    open Aardvark.Base.Management
+    open Aardvark.Base.Runtime
+
+    module Memory =
+        let executable : Memory<nativeint> =
+            {
+                malloc = ExecutableMemory.alloc
+                mfree = ExecutableMemory.free
+                mcopy = fun (src : nativeint) (srcOff : nativeint) (dst : nativeint) (dstOff : nativeint) (size : nativeint) -> Marshal.Copy(src + srcOff, dst + dstOff, size)
+                mrealloc = fun (old : nativeint) (oldSize : nativeint) (newSize : nativeint) ->
+                    let n = ExecutableMemory.alloc newSize
+                    Marshal.Copy(old, n, min oldSize newSize)
+                    ExecutableMemory.free old oldSize
+                    n
+            }
+
+    [<AbstractClass>]
+    type IAdaptivePinning() =
+        abstract member Pin : object : IAdaptiveObject * evaluate : (AdaptiveToken -> 'a) * release : (unit -> unit) -> nativeptr<'a>
+        abstract member Pin : action : (unit -> unit) -> nativeint
+
+        member x.Pin(value : aval<'a>) =
+            x.Pin(value, value.GetValue, id)
+
+        member x.Pin(p : FragmentProgram) =
+            p.Acquire()
+            x.Pin(p, (fun t -> p.Update t; 0), p.Dispose) |> ignore
+            p.EntryPointer
+
+
+    type AdaptivePinning () =
+        inherit AdaptiveObject() 
+
+        let dirty = Dict<IAdaptiveObject, AdaptiveToken -> unit>()
+        let pointers = Dict<IAdaptiveObject, ref<int> * (unit -> unit) * nativeint>()
+        let targets = Dict<nativeint, AdaptiveToken -> unit>()
+
+        member x.Dispose() =
+            for KeyValue(o, (r, release, ptr)) in pointers do 
+                o.Outputs.Remove x |> ignore
+                release()
+                Marshal.FreeHGlobal ptr
+            dirty.Clear()
+            pointers.Clear()
+            targets.Clear()
+
+        override x.InputChangedObject(t : obj, o : IAdaptiveObject) =
+            lock pointers (fun () ->
+                match pointers.TryGetValue o with
+                | (true, (_, _, ptr)) ->
+                    match targets.TryGetValue ptr with
+                    | (true, write) -> dirty.[o] <- write
+                    | _ -> ()
+                | _ ->
+                    ()
+            )
+
+        member x.Remove(value : IAdaptiveObject) =
+            lock pointers (fun () ->
+                match pointers.TryGetValue value with
+                | (true, (ref, release, ptr)) ->
+                    ref := !ref - 1
+                    if !ref = 0 then
+                        pointers.Remove value |> ignore
+                        targets.Remove ptr |> ignore
+                        value.Outputs.Remove x |> ignore
+                        dirty.Remove value |> ignore
+                        release()
+                | _ ->
+                    ()
+            )
+
+        member x.Add(value : IAdaptiveObject, evaluate : AdaptiveToken -> 'a, release : unit -> unit) =
+            lock pointers (fun () ->
+                let ref, _, ptr = pointers.GetOrCreate(value, fun _ -> ref 0, release, Marshal.AllocHGlobal sizeof<'a>)
+                ref := !ref + 1
+                if !ref = 1 then
+                    let write(token : AdaptiveToken) =
+                        let v = evaluate token
+                        NativeInt.write ptr v
+                    targets.[ptr] <- write
+                    x.EvaluateAlways AdaptiveToken.Top (fun t -> write t)
+
+                { new System.IDisposable with 
+                    member __.Dispose() = 
+                        x.Remove value 
+                }, NativePtr.ofNativeInt<'a> ptr
+            )
+
+        member x.Update(token : AdaptiveToken) =
+            x.EvaluateIfNeeded token () (fun token ->
+                for write in dirty.Values do write token
+            )
+
+        interface System.IDisposable with
+            member x.Dispose() = x.Dispose()
+
+    type ProgramFragment internal(parent : FragmentProgram, block : Block<nativeint>, pinned : System.Collections.Generic.List<System.IDisposable>) =
+        let mutable block = block
+
+        static let assemble (action : IAssemblerStream -> unit) =
+            use ms = new MemoryStream()
+            use ass = AssemblerStream.ofStream ms
+            action ass
+            ms.ToArray()
+
+        static let jumpSize = 
+            assemble (fun s -> 
+                s.Jump 34325324
+            ) |> Array.length
+
+        static let jumpDistance (lOffset : nativeint) (lSize : nativeint) (rOffset : nativeint) =
+            let jumpEnd = lOffset + lSize
+            int (rOffset - jumpEnd)
+
+        let mutable prev : option<ProgramFragment> = None
+        let mutable next : option<ProgramFragment> = None
+
+        member private x.WriteJumpTo(jumpTarget : nativeint) =
+            parent.Use(block, fun ptr offset size ->
+                let d = jumpDistance block.Offset block.Size jumpTarget
+                use m = new UnmanagedMemoryStream(NativePtr.ofNativeInt (ptr + offset + size - nativeint jumpSize), int64 jumpSize, int64 jumpSize, FileAccess.ReadWrite)
+                use ass = AssemblerStream.ofStream m
+                ass.Jump d
+            )
+
+        member x.Mutate(action : IAssemblerStream -> IAdaptivePinning -> unit) =
+            use ms = new MemoryStream()
+            use ass = AssemblerStream.ofStream ms
+
+            let o = pinned.ToArray()
+            pinned.Clear()
+            let p =
+                { new IAdaptivePinning() with
+                    member x.Pin(value : IAdaptiveObject, eval : AdaptiveToken -> 'a, release : unit -> unit) =
+                        let d, ptr = parent.Pinning.Add(value, eval, release)
+                        pinned.Add d
+                        ptr
+                    member x.Pin(action : unit -> unit) =
+                        let pd = Marshal.PinDelegate(System.Action(action))
+                        pinned.Add pd
+                        pd.Pointer
+
+                }
+
+            action ass p
+            for o in o do o.Dispose()
+
+            let jumpTarget =
+                match next with
+                | Some n -> n.Offset
+                | None -> parent.Epilog.Offset
+
+            let newSize =
+                nativeint ms.Length + 
+                nativeint jumpSize
+
+            if newSize <> block.Size then 
+                parent.Free block
+                let n = parent.Alloc(newSize)
+                block <- n
+                match prev with
+                | Some p -> p.WriteJumpTo block.Offset
+                | None -> ()
+
+            ass.Jump(jumpDistance block.Offset block.Size jumpTarget)
+            let arr = ms.ToArray()
+            parent.Use(block, fun basePtr offset _size ->
+                Marshal.Copy(arr, 0, basePtr + offset, arr.Length)
+            )
+
+        member x.IsDisposed =
+            parent.IsDisposed || block.IsFree
+
+        member x.Dispose() =
+            if not x.IsDisposed then 
+                for p in pinned do p.Dispose()
+                match prev with
+                | Some p -> p.Next <- next
+                | None -> ()
+                prev <- None
+                next <- None
+                parent.Free block
+
+        member x.Offset = 
+            if x.IsDisposed then raise <| System.ObjectDisposedException "CodeFragment"
+            block.Offset
+
+        member x.Prev
+            with get() = 
+                if x.IsDisposed then raise <| System.ObjectDisposedException "CodeFragment"
+                prev
+            and private set p = 
+                if x.IsDisposed then raise <| System.ObjectDisposedException "CodeFragment"
+                prev <- p
+
+        member x.Next
+            with get() = 
+                if x.IsDisposed then raise <| System.ObjectDisposedException "CodeFragment"
+                next
+            and set n =
+                if x.IsDisposed then raise <| System.ObjectDisposedException "CodeFragment"
+                next <- n
+                let jumpTarget = 
+                    match n with
+                    | Some n -> 
+                        n.Prev <- Some x
+                        n.Offset
+                    | None -> 
+                        parent.Epilog.Offset
+
+                x.WriteJumpTo jumpTarget
+
+        interface System.IDisposable with
+            member x.Dispose() = x.Dispose()
+
+    type FragmentProgram() as this =
+        inherit AdaptiveObject()
+
+        let mutable refCount = 1
+
+        let memory = 
+            new Management.MemoryManager<_>(Memory.executable, 16n)
+
+        let pinning = new AdaptivePinning()
+
+        static let assemble (action : IAssemblerStream -> unit) =
+            use ms = new MemoryStream()
+            use ass = AssemblerStream.ofStream ms
+            action ass
+            ms.ToArray()
+            
+        static let epilog = 
+            assemble (fun s -> 
+                s.EndFunction()
+                s.Ret()
+            )
+            
+        static let jumpSize = 
+            assemble (fun s -> 
+                s.Jump 34325324
+            ) |> Array.length
+
+        static let prologSize = 
+            assemble (fun s -> 
+                s.BeginFunction()
+                s.Jump 34325324
+            ) |> Array.length
+
+        static let jumpDistance (lOffset : nativeint) (lSize : nativeint) (rOffset : nativeint) =
+            let jumpEnd = lOffset + lSize
+            int (rOffset - jumpEnd)
+
+        let epilog =
+            lazy (
+                let block = memory.Alloc(nativeint epilog.Length)
+                memory.Use(block, fun basePtr offset _size ->
+                    Marshal.Copy(epilog, 0, basePtr + offset, epilog.Length)
+                )
+                block
+            )
+
+            
+
+        let mutable run : option<unit -> unit> = None
+        let prologBlock =
+
+            let block = memory.Alloc (nativeint prologSize)
+            memory.Use(block, fun basePtr offset _size ->
+                use ms = new MemoryStream()
+                use ass = AssemblerStream.ofStream ms
+
+                ass.BeginFunction()
+                ass.Jump (jumpDistance block.Offset block.Size epilog.Value.Offset)
+
+                let arr = ms.ToArray()
+                Marshal.Copy(arr, 0, basePtr + offset, arr.Length)
+
+            )
+            block
+            
+        let mutable entryPointer = 
+            let ptr = NativePtr.alloc 1
+            NativePtr.write ptr (memory.UnsafePointer + prologBlock.Offset)
+            ptr
+
+        let mutable prologFragment = None
+
+        let getProlog() = 
+            match prologFragment with
+            | Some f -> f
+            | None ->
+                let f = new ProgramFragment(this, prologBlock, System.Collections.Generic.List())
+                prologFragment <- Some f
+                f
+
+            //new CodeFragment(this, block)
+
+        let fixEntry() =
+            let ptr = memory.UnsafePointer + prologBlock.Offset
+            let o = NativePtr.read entryPointer
+            if o <> ptr then
+                NativePtr.write entryPointer ptr
+                run <- None
+
+        member x.IsDisposed =
+            entryPointer = NativePtr.zero
+
+        member x.Dispose() =
+            if not x.IsDisposed && System.Threading.Interlocked.Decrement(&refCount) = 0 then
+                pinning.Dispose()
+                memory.Dispose()
+                NativePtr.free entryPointer
+                entryPointer <- NativePtr.zero
+                run <- None
+
+        member internal x.Epilog : Block<nativeint> = epilog.Value
+
+        member internal x.Alloc(newSize : nativeint) =
+            let b = memory.Alloc(newSize)
+            fixEntry()
+            b
+
+        member internal x.Free(b : Block<nativeint>) =
+            memory.Free(b)
+            fixEntry()
+
+        member internal x.Use<'a>(block : Block<nativeint>, action : nativeint -> nativeint -> nativeint -> 'a) : 'a =
+            memory.Use<'a>(block, action)
+
+        member internal x.Pinning : AdaptivePinning = pinning
+
+        member internal x.Acquire() =
+            System.Threading.Interlocked.Increment(&refCount) |> ignore
+
+
+        member x.EntryPointer =
+            entryPointer
+
+        member internal x.Update(token : AdaptiveToken) =
+            x.EvaluateIfNeeded token () (fun token ->
+                pinning.Update token
+            )
+
+        member x.Run() =
+            match run with
+            | Some run -> run()
+            | None ->
+                if x.IsDisposed then raise <| System.ObjectDisposedException "FragmentProgram"
+                let ptr = NativePtr.read entryPointer
+                let r = UnmanagedFunctions.wrap ptr
+                run <- Some r
+                r()
+                
+        member x.Run(token : AdaptiveToken) =
+            x.Update token
+            x.Run()
+
+        member x.First
+            with get() = 
+                if x.IsDisposed then raise <| System.ObjectDisposedException("FragmentProgram")
+                getProlog().Next
+            and set f = 
+                if x.IsDisposed then raise <| System.ObjectDisposedException("FragmentProgram")
+                getProlog().Next <- f
+
+        member x.NewFragment(write : IAssemblerStream -> IAdaptivePinning -> unit) =
+            if x.IsDisposed then raise <| System.ObjectDisposedException("FragmentProgram")
+            use ms = new MemoryStream()
+            use ass = AssemblerStream.ofStream ms
+
+            let disposables = System.Collections.Generic.List<System.IDisposable>()
+            let p =
+                { new IAdaptivePinning() with
+                    member x.Pin(value : IAdaptiveObject, eval : AdaptiveToken -> 'a, release : unit -> unit) =
+                        let d, ptr = pinning.Add(value, eval, release)
+                        disposables.Add d
+                        ptr
+                    member x.Pin(action : unit -> unit) =
+                        let pd = Marshal.PinDelegate(System.Action(action))
+                        disposables.Add pd
+                        pd.Pointer
+                }
+
+            write ass p
+
+            let blockSize =
+                nativeint ms.Length +
+                nativeint jumpSize
+
+            let block = memory.Alloc blockSize
+            fixEntry()
+            ass.Jump (jumpDistance block.Offset block.Size epilog.Value.Offset)
+            let arr = ms.ToArray()
+            
+            memory.Use(block, fun basePtr offset _size ->
+                Marshal.Copy(arr, 0, basePtr + offset, arr.Length)
+            )
+
+            new ProgramFragment(x, block, disposables)
+
+        interface System.IDisposable with
+            member x.Dispose() = x.Dispose()
+       
+    type IAssemblerStream with
+        member x.Print (pinning : IAdaptivePinning) fmt = 
+            fmt |> Printf.kprintf (fun str ->
+                let ptr = pinning.Pin (fun () -> Log.line "%s" str)
+                x.BeginCall(0)
+                x.Call ptr
+            )
+        
+        member x.Call(program : FragmentProgram, pinning : IAdaptivePinning) =
+            let ptr = pinning.Pin(program)
+            for r in x.CalleeSavedRegisters do x.Push r
+            x.BeginCall 0
+            x.CallIndirect ptr
+            for r in x.CalleeSavedRegisters do x.Pop r
+     

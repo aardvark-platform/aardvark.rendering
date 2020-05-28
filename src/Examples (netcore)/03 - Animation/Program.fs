@@ -1,13 +1,13 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open System.Threading
 [<EntryPoint>]
 let main argv = 
     
-    Ag.initialize()
+    
     Aardvark.Init()
 
     // window { ... } is similar to show { ... } but instead
@@ -25,9 +25,9 @@ let main argv =
     // define a dynamic transformation depending on the window's time
     // This time is a special value that can be used for animations which
     // will be evaluated when rendering the scene
-    let dynamicTrafo = //Trafo3d.Identity |> Mod.constant
+    let dynamicTrafo = //Trafo3d.Identity |> AVal.constant
         let startTime = System.DateTime.Now
-        win.Time |> Mod.map (fun t ->
+        win.Time |> AVal.map (fun t ->
             let t = (t - startTime).TotalSeconds
             Trafo3d.RotationZ (0.5 * t)
         )
@@ -37,7 +37,7 @@ let main argv =
 
     let sg = 
         // create a red box with a simple shader
-        Sg.box (Mod.constant color) (Mod.constant box)
+        Sg.box (AVal.constant color) (AVal.constant box)
             |> Sg.shader {
                 do! DefaultSurfaces.trafo
                 do! DefaultSurfaces.simpleLighting

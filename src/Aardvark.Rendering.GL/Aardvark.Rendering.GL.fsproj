@@ -4,6 +4,7 @@
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>Aardvark.Rendering.GL</AssemblyName>
     <OutputType>Library</OutputType>	
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <OutputPath>..\..\bin\Debug\</OutputPath>
@@ -12,6 +13,17 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <OutputPath>..\..\bin\Release</OutputPath>
   </PropertyGroup>
+  <Target Name="CopyGLVM" AfterTargets="Build">
+    <Copy Condition="'$(OS)' == 'Windows_NT'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\glvm.dll" DestinationFolder="$(OutputPath)" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Windows_NT'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\glvm.dll" DestinationFolder="$(OutputPath)..\netcoreapp3.1" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Windows_NT'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\glvm.dll" DestinationFolder="$(OutputPath)..\net471" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'OSX'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.GL\mac\AMD64\glvm.dylib" DestinationFolder="$(OutputPath)" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'OSX'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.GL\mac\AMD64\glvm.dylib" DestinationFolder="$(OutputPath)..\netcoreapp3.1" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'OSX'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.GL\mac\AMD64\glvm.dylib" DestinationFolder="$(OutputPath)..\net471" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.GL\linux\AMD64\glvm.so" DestinationFolder="$(OutputPath)" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.GL\linux\AMD64\glvm.so" DestinationFolder="$(OutputPath)..\netcoreapp3.1" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.GL\linux\AMD64\glvm.so" DestinationFolder="$(OutputPath)..\net471" ContinueOnError="true" />
+  </Target>
   <ItemGroup>
     <None Include="Wrapper\gl.xml" />
     <None Include="Wrapper\Generator.fsx" />

@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.SceneGraph
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Base.Rendering
 
@@ -11,31 +11,45 @@ module LodTreeRendering =
 
     type LodTreeRenderConfig =
         {
-            budget : IMod<int64>
-            splitfactor : IMod<float>
-            time : IMod<System.DateTime>
-            maxSplits : IMod<int>
-            renderBounds : IMod<bool>
-            stats : IModRef<LodRendererStats>
-            pickTrees : Option<mmap<ILodTreeNode,SimplePickTree>>
+            budget : aval<int64>
+            splitfactor : aval<float>
+            time : aval<System.DateTime>
+            maxSplits : aval<int>
+            renderBounds : aval<bool>
+            stats : cval<LodRendererStats>
+            pickTrees : Option<cmap<ILodTreeNode,SimplePickTree>>
             alphaToCoverage : bool
         }
 
     module LodTreeRenderConfig =
+        let private time =
+            let sw = System.Diagnostics.Stopwatch.StartNew()
+            let start = System.DateTime.Now
+
+            let self = ref Unchecked.defaultof<aval<System.DateTime>>
+
+            self :=
+                AVal.custom (fun t -> 
+                    let now = start + sw.Elapsed
+                    AdaptiveObject.RunAfterEvaluate (fun () -> self.Value.MarkOutdated())
+                    now
+                )
+            !self
+
         let simple =
             {
-                budget = Mod.constant -1L
-                splitfactor = Mod.constant 0.4
-                time = Mod.time
-                maxSplits = Mod.constant System.Environment.ProcessorCount
-                renderBounds = Mod.constant false
-                stats = Mod.init Unchecked.defaultof<_>
+                budget = AVal.constant -1L
+                splitfactor = AVal.constant 0.4
+                time = time
+                maxSplits = AVal.constant System.Environment.ProcessorCount
+                renderBounds = AVal.constant false
+                stats = AVal.init Unchecked.defaultof<_>
                 pickTrees = None
                 alphaToCoverage = false
             }
 
     module Sg = 
-        type LodTreeNode(stats : IModRef<LodRendererStats>, pickTrees : Option<mmap<ILodTreeNode,SimplePickTree>>, alphaToCoverage : bool, budget : IMod<int64>, splitfactor : IMod<float>, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<System.DateTime>, clouds : aset<LodTreeInstance>) =
+        type LodTreeNode(stats : cval<LodRendererStats>, pickTrees : Option<cmap<ILodTreeNode,SimplePickTree>>, alphaToCoverage : bool, budget : aval<int64>, splitfactor : aval<float>, renderBounds : aval<bool>, maxSplits : aval<int>, time : aval<System.DateTime>, clouds : aset<LodTreeInstance>) =
             member x.Time = time
             member x.Clouds = clouds
             member x.MaxSplits = maxSplits
@@ -48,9 +62,9 @@ module LodTreeRendering =
             member x.SplitFactor = splitfactor
             interface ISg
 
-            new(stats : IModRef<LodRendererStats>, pickTrees : mmap<ILodTreeNode,SimplePickTree>, alphaToCoverage : bool, budget : IMod<int64>, splitfactor : IMod<float>, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<System.DateTime>, clouds : aset<LodTreeInstance>) =
+            new(stats : cval<LodRendererStats>, pickTrees : cmap<ILodTreeNode,SimplePickTree>, alphaToCoverage : bool, budget : aval<int64>, splitfactor : aval<float>, renderBounds : aval<bool>, maxSplits : aval<int>, time : aval<System.DateTime>, clouds : aset<LodTreeInstance>) =
                 LodTreeNode(stats, Some pickTrees, alphaToCoverage, budget, splitfactor, renderBounds, maxSplits, time, clouds)
-            new(stats : IModRef<LodRendererStats>, alphaToCoverage : bool, budget : IMod<int64>, splitfactor : IMod<float>, renderBounds : IMod<bool>, maxSplits : IMod<int>, time : IMod<System.DateTime>, clouds : aset<LodTreeInstance>) =
+            new(stats : cval<LodRendererStats>, alphaToCoverage : bool, budget : aval<int64>, splitfactor : aval<float>, renderBounds : aval<bool>, maxSplits : aval<int>, time : aval<System.DateTime>, clouds : aset<LodTreeInstance>) =
                 LodTreeNode(stats, None, alphaToCoverage, budget, splitfactor, renderBounds, maxSplits, time, clouds)
 
         let lodTree (cfg : LodTreeRenderConfig) (data : aset<LodTreeInstance>) =
@@ -61,20 +75,19 @@ namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
 open Aardvark.Base.Ag
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph  
 
-[<Semantic>]
+[<Rule>]
 type LodNodeSem() =
-    member x.RenderObjects(sg : Sg.LodTreeNode) =
-        let scope = Ag.getContext()
+    member x.RenderObjects(sg : Sg.LodTreeNode, scope : Ag.Scope) =
         let state = PipelineState.ofScope scope
-        let surface = sg.Surface
-        let pass = sg.RenderPass
+        let surface = scope.Surface
+        let pass = scope.RenderPass
 
-        let model = sg.ModelTrafo
-        let view = sg.ViewTrafo
-        let proj = sg.ProjTrafo
+        let model = scope.ModelTrafo
+        let view = scope.ViewTrafo
+        let proj = scope.ProjTrafo
 
         let id = newId()
         let obj =

@@ -3,7 +3,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open System.Reactive
 open System.Reactive.Linq
 open System.Runtime.CompilerServices
@@ -18,10 +18,10 @@ type MouseButtons =
 
 
 type IMouse =
-    abstract member Position : IMod<PixelPosition>
-    abstract member IsDown : MouseButtons -> IMod<bool>
-    abstract member TotalScroll : IMod<float>
-    abstract member Inside : IMod<bool>
+    abstract member Position : aval<PixelPosition>
+    abstract member IsDown : MouseButtons -> aval<bool>
+    abstract member TotalScroll : aval<float>
+    abstract member Inside : aval<bool>
 
     abstract member Down : IEvent<MouseButtons>
     abstract member Up : IEvent<MouseButtons>
@@ -33,10 +33,10 @@ type IMouse =
     abstract member Leave : IEvent<PixelPosition> 
 
 type EventMouse(autoGenerateClickEvents : bool) =
-    let position = Mod.init <| PixelPosition()
-    let buttons = ConcurrentDictionary<MouseButtons, ModRef<bool>>()
-    let scroll = Mod.init 0.0
-    let inside = Mod.init false
+    let position = AVal.init <| PixelPosition()
+    let buttons = ConcurrentDictionary<MouseButtons, cval<bool>>()
+    let scroll = cval 0.0
+    let inside = cval false
 
     let downEvent = EventSource<MouseButtons>()
     let upEvent = EventSource<MouseButtons>()
@@ -50,10 +50,10 @@ type EventMouse(autoGenerateClickEvents : bool) =
 
     let setPos (p : PixelPosition) =
         if p <> position.GetValue() then
-            Mod.change position p
+            position.Value <- p
 
     let getDown button =
-        buttons.GetOrAdd(button, fun b -> Mod.init false)
+        buttons.GetOrAdd(button, fun b -> AVal.init false)
 
     let downPosAndTime = System.Collections.Generic.Dictionary<MouseButtons, int * DateTime * PixelPosition>()
 
@@ -108,12 +108,12 @@ type EventMouse(autoGenerateClickEvents : bool) =
 
     default x.Down(pos : PixelPosition, b : MouseButtons) =
         let m = getDown b
-        transact (fun () -> Mod.change m true; setPos pos)
+        transact (fun () -> m.Value <- true; setPos pos)
         handleDown pos b
 
     default x.Up(pos : PixelPosition, b : MouseButtons) =
         let m = getDown b
-        transact (fun () -> Mod.change m false; setPos pos)
+        transact (fun () -> m.Value <- false; setPos pos)
         handleUp pos b
 
 
@@ -126,15 +126,15 @@ type EventMouse(autoGenerateClickEvents : bool) =
         doubleClickEvent.Emit b
 
     default x.Scroll(pos : PixelPosition, b : float) =
-        transact (fun () -> Mod.change scroll (scroll.GetValue() + b); setPos pos)
+        transact (fun () -> scroll.Value <- scroll.Value + b; setPos pos)
         scrollEvent.Emit b
 
     default x.Enter(p : PixelPosition) =
-        transact (fun () -> Mod.change inside true; setPos p)
+        transact (fun () -> inside.Value <- true; setPos p)
         enterEvent.Emit p
 
     default x.Leave(p : PixelPosition) =
-        transact (fun () -> Mod.change inside false; setPos p)
+        transact (fun () -> inside.Value <- false; setPos p)
         leaveEvent.Emit p
 
     default x.Move(p : PixelPosition) =
@@ -145,7 +145,7 @@ type EventMouse(autoGenerateClickEvents : bool) =
     
     member x.Use(o : IMouse) =
         let pos = o.Position
-        let loc() = Mod.force pos
+        let loc() = AVal.force pos
         let subscriptions =
             [
                 o.Down.Values.Subscribe(fun v -> x.Down(loc(), v))
@@ -164,10 +164,10 @@ type EventMouse(autoGenerateClickEvents : bool) =
 
 
     interface IMouse with
-        member x.Position = position :> IMod<_>
-        member x.IsDown button = getDown button :> IMod<_>
-        member x.TotalScroll = scroll :> IMod<_>
-        member x.Inside = inside :> IMod<_>
+        member x.Position = position :> aval<_>
+        member x.IsDown button = getDown button :> aval<_>
+        member x.TotalScroll = scroll :> aval<_>
+        member x.Inside = inside :> aval<_>
         
         member x.Down = downEvent :> IEvent<_>
         member x.Up = upEvent :> IEvent<_>
@@ -197,7 +197,7 @@ type EventMouse(autoGenerateClickEvents : bool) =
 //    | MouseLeave of PixelPosition
 //
 //type IMouse =
-//    //abstract member Position : IMod<PixelPosition>
+//    //abstract member Position : aval<PixelPosition>
 //    abstract member Events : IEvent<MouseEvent>
 //
 //[<AutoOpen>]

@@ -1,7 +1,5 @@
 ﻿namespace Aardvark.Application.WPF
 
-#if WINDOWS
-
 
 open System
 open System.Runtime.InteropServices
@@ -55,6 +53,11 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) a
     member x.ContextHandle = ctrl.ContextHandle
 
     member x.Time = ctrl.Time
+
+    member x.SubSampling
+        with get() = ctrl.SubSampling
+        and set v = ctrl.SubSampling <- v
+
     interface IRenderTarget with
         member x.FramebufferSignature = ctrl.FramebufferSignature
         member x.Samples = ctrl.Samples
@@ -63,10 +66,10 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) a
         member x.RenderTask
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
-
+        member x.SubSampling 
+            with get() = x.SubSampling
+            and set v = x.SubSampling <- v
         member x.Sizes = x.Sizes
         member x.BeforeRender = ctrl.BeforeRender
         member x.AfterRender = ctrl.AfterRender
     new(context, enableDebug) = new OpenGlRenderControl(context, enableDebug, 1)
-
-#endif

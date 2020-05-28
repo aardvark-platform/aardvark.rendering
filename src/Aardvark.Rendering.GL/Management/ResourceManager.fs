@@ -8,7 +8,7 @@ open System.Threading
 open System.Collections.Concurrent
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base.ShaderReflection
@@ -62,7 +62,7 @@ type UniformBufferManager(ctx : Context) =
     let viewCache = ResourceCache<UniformBufferView, int>(None, None)
     let rw = new ReaderWriterLockSlim()
 
-    member x.CreateUniformBuffer(block : FShade.GLSL.GLSLUniformBuffer, scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<IMod>) : IResource<UniformBufferView, int> =
+    member x.CreateUniformBuffer(block : FShade.GLSL.GLSLUniformBuffer, scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<IAdaptiveValue>) : IResource<UniformBufferView, int> =
         let values =
             block.ubFields 
             |> List.map (fun f ->
@@ -196,9 +196,10 @@ and DrawBufferManager (signature : IFramebufferSignature) =
 
 
 type CastResource<'a, 'b when 'a : equality and 'b : equality>(inner : IResource<'a>) =
-    inherit AdaptiveDecorator(inner)
+    inherit AdaptiveObject()
     static let th = typeof<'b>
-    let handle = inner.Handle |> Mod.cast
+    let handle = inner.Handle |> AVal.map unbox
+
     member x.Inner = inner
 
     override x.GetHashCode() = inner.GetHashCode()
@@ -207,12 +208,18 @@ type CastResource<'a, 'b when 'a : equality and 'b : equality>(inner : IResource
             | :? CastResource<'a,'b> as o -> inner.Equals o.Inner
             | _ -> false
 
+    member x.Update(token : AdaptiveToken, rt : RenderToken) =
+        x.EvaluateIfNeeded token () (fun token ->
+            inner.Update(token, rt)
+        )
+
     interface IResource with  
+        member x.Id = inner.Id
         member x.HandleType = th
         member x.Dispose() = inner.Dispose()
         member x.AddRef() = inner.AddRef()
         member x.RemoveRef() = inner.RemoveRef()
-        member x.Update(caller, token) = inner.Update(caller, token)
+        member x.Update(caller, token) = x.Update(caller, token)
         member x.Info = inner.Info
         member x.IsDisposed = inner.IsDisposed
         member x.Kind = inner.Kind
@@ -284,19 +291,19 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let uniformBufferManager = UniformBufferManager ctx
 
     let hasTessDrawModeCache = 
-        ConcurrentDictionary<IndexedGeometryMode, UnaryCache<IMod<Program>, IMod<GLBeginMode>>>()
+        ConcurrentDictionary<IndexedGeometryMode, UnaryCache<aval<Program>, aval<GLBeginMode>>>()
         
     let getTessDrawModeCache (mode : IndexedGeometryMode) =
         hasTessDrawModeCache.GetOrAdd(mode, fun mode ->
-            UnaryCache(Mod.map (fun t -> ctx.ToBeginMode(mode, t.HasTessellation)))
+            UnaryCache(AVal.map (fun t -> ctx.ToBeginMode(mode, t.HasTessellation)))
         )
 
     let ifaceSlotCache = ConcurrentDictionary<FShade.GLSL.GLSLProgramInterface, InterfaceSlots>()
 
-    let textureArrayCache = UnaryCache<IMod<ITexture[]>, ConcurrentDictionary<int, List<IResource<Texture,V2i>>>>(fun ta -> ConcurrentDictionary<int, List<IResource<Texture,V2i>>>())
+    let textureArrayCache = UnaryCache<aval<ITexture[]>, ConcurrentDictionary<int, List<IResource<Texture,V2i>>>>(fun ta -> ConcurrentDictionary<int, List<IResource<Texture,V2i>>>())
 
-    let staticSamplerStateCache = ConcurrentDictionary<FShade.SamplerState, IMod<SamplerStateDescription>>()
-    let dynamicSamplerStateCache = ConcurrentDictionary<Symbol * SamplerStateDescription, UnaryCache<IMod<(Symbol -> SamplerStateDescription -> SamplerStateDescription)>, IMod<SamplerStateDescription>>>()
+    let staticSamplerStateCache = ConcurrentDictionary<FShade.SamplerState, aval<SamplerStateDescription>>()
+    let dynamicSamplerStateCache = ConcurrentDictionary<Symbol * SamplerStateDescription, UnaryCache<aval<(Symbol -> SamplerStateDescription -> SamplerStateDescription)>, aval<SamplerStateDescription>>>()
     let samplerDescriptionCache = ConcurrentDictionary<FShade.SamplerState, SamplerStateDescription>() 
     
     member private x.BufferManager = bufferManager
@@ -304,7 +311,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member private x.BufferCache            : ResourceCache<Buffer, int>                    = bufferCache
     member private x.TextureCache           : ResourceCache<Texture, V2i>                   = textureCache
-    member private x.IndirectBufferCache    : ResourceCache<IndirectBuffer, V2i>            = indirectBufferCache
+    member private x.IndirectBufferCache    : ResourceCache<GLIndirectBuffer, IndirectDrawArgs> = indirectBufferCache
     member private x.SamplerCache           : ResourceCache<Sampler, int>                   = samplerCache
     member private x.VertexInputCache       : ResourceCache<VertexInputBindingHandle, int>  = vertexInputCache
     member private x.UniformLocationCache   : ResourceCache<UniformLocation, nativeint>     = uniformLocationCache
@@ -333,11 +340,11 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 //            let res = x.CreateSurface(signature, surf)
 //            new CastResource<_, _>(res) :> IResource<_>
 
-        member x.CreateBuffer (data : IMod<IBuffer>) =
+        member x.CreateBuffer (data : aval<IBuffer>) =
             let res = x.CreateBuffer(data)
             new CastResource<_, _>(res) :> IResource<_>
 
-        member x.CreateTexture (data : IMod<ITexture>) =
+        member x.CreateTexture (data : aval<ITexture>) =
             let res = x.CreateTexture(data)
             new CastResource<_, _>(res) :> IResource<_>
 
@@ -346,7 +353,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member x.DrawBufferManager = drawBufferManager.Value
     member x.Context = ctx
         
-    member x.CreateBuffer(data : IMod<IBuffer>) =
+    member x.CreateBuffer(data : aval<IBuffer>) =
         match data with
             | :? IAdaptiveBuffer as data ->
                 bufferCache.GetOrCreate(
@@ -381,7 +388,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 )
 
             | :? SingleValueBuffer as v ->
-                bufferCache.GetOrCreate(Mod.constant 0, fun () -> {
+                bufferCache.GetOrCreate(AVal.constant 0, fun () -> {
                     create = fun b      -> new Buffer(ctx, 0n, 0)
                     update = fun h b    -> h
                     delete = fun h      -> ()
@@ -400,7 +407,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                     kind = ResourceKind.Buffer
                 })
 
-    member x.CreateTexture(data : IMod<ITexture>) : IResource<Texture, V2i> =
+    member x.CreateTexture(data : aval<ITexture>) : IResource<Texture, V2i> =
         textureCache.GetOrCreate<ITexture>(data, fun () -> {
             create = fun b      -> textureManager.Create b
             update = fun h b    -> textureManager.Update(h, b)
@@ -410,7 +417,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Texture
         })
 
-    member x.CreateTexture'(data : IMod<IBackendTexture>) : IResource<Texture, V2i> =
+    member x.CreateTexture'(data : aval<IBackendTexture>) : IResource<Texture, V2i> =
         textureCache.GetOrCreate<IBackendTexture>(data, fun () -> {
             create = fun b      -> textureManager.Create b
             update = fun h b    -> textureManager.Update(h, b)
@@ -420,26 +427,73 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Texture
         })
 
-    member x.CreateIndirectBuffer(indexed : bool, data : IMod<IIndirectBuffer>) =
-        indirectBufferCache.GetOrCreate<IIndirectBuffer>(data, [indexed :> obj], fun () -> {
-            create = fun b   -> ctx.CreateIndirect(indexed, b)
-            update = fun h b -> ctx.UploadIndirect(h, indexed, b); h
-            delete = fun h   -> ctx.Delete h
+    member x.CreateIndirectBuffer(indexed : bool, data : aval<IndirectBuffer>) =
+        
+        // TODO: proper cache for transformIndirectData -> if transform necessary duplicates are uploaded at the moment
+
+        let transformIndirectData (buffer : IBuffer) =
+            match buffer with
+            | :? ArrayBuffer as ab ->
+                match ab.Data with
+                | :? (DrawCallInfo[]) as data -> 
+                    let transformed = data |> Array.map (fun dc -> 
+                                DrawCallInfo(
+                                    FaceVertexCount = dc.FaceVertexCount,
+                                    InstanceCount = dc.InstanceCount,
+                                    FirstIndex = dc.FirstIndex,
+                                    BaseVertex = dc.FirstInstance,
+                                    FirstInstance = dc.BaseVertex
+                                ))
+                    ArrayBuffer(transformed) :> IBuffer
+                | _ -> failwith "[GL] IndirectBuffer data supposed to be DrawCallInfo[]"
+            | :? SingleValueBuffer as sb -> failwith "TODO"
+            | _ -> 
+                buffer
+
+        indirectBufferCache.GetOrCreate<IndirectBuffer>(data, [indexed :> obj], fun () -> {
+            create = fun b   -> let (buffer, own) =
+                                    match b.Buffer with
+                                    | :? Buffer -> 
+                                        (b.Buffer :?> Buffer, false)
+                                    | _ -> 
+                                        let layoutedData = if indexed then transformIndirectData b.Buffer else b.Buffer
+                                        (bufferManager.Create(layoutedData), true)
+
+                                GLIndirectBuffer(buffer, b.Count, b.Stride, b.Indexed, own)
+
+            update = fun h b -> if h.Indexed <> b.Indexed then
+                                    failwith "[GL] cannot change Indexed option of IndirectBuffer"
+
+                                let buffer =
+                                    match b.Buffer with
+                                    | :? Buffer -> 
+                                        if h.OwnResource then 
+                                            failwith "[GL] cannot change IndirectBuffer type"
+                                        b.Buffer :?> Buffer
+                                    | _ -> 
+                                        if not h.OwnResource then 
+                                            failwith "[GL] cannot change IndirectBuffer type"
+                                        let layoutedData = if indexed then transformIndirectData b.Buffer else b.Buffer
+                                        bufferManager.Update(h.Buffer, layoutedData)
+
+                                GLIndirectBuffer(buffer, b.Count, b.Stride, b.Indexed, h.OwnResource)
+
+            delete = fun h   -> if h.OwnResource then bufferManager.Delete(h.Buffer)
             info =   fun h   -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo
-            view =   fun h   -> V2i(h.Buffer.Handle, h.Count)
+            view =   fun h   -> IndirectDrawArgs(h.Buffer.Handle, h.Count, h.Stride)
             kind = ResourceKind.IndirectBuffer
         })
 
     member x.GetSamplerStateDescription(samplerState : FShade.SamplerState) =
         samplerDescriptionCache.GetOrAdd(samplerState, fun sam -> sam.SamplerStateDescription)
 
-    member x.GetDynamicSamplerState(texName : Symbol, samplerState : SamplerStateDescription, modifier : IMod<(Symbol -> SamplerStateDescription -> SamplerStateDescription)>) : IMod<SamplerStateDescription> =
+    member x.GetDynamicSamplerState(texName : Symbol, samplerState : SamplerStateDescription, modifier : aval<(Symbol -> SamplerStateDescription -> SamplerStateDescription)>) : aval<SamplerStateDescription> =
         dynamicSamplerStateCache.GetOrAdd((texName, samplerState), fun (sym, sam) ->
-            UnaryCache(fun modi -> modi |> Mod.map (fun f -> f sym sam))
+            UnaryCache(fun modi -> modi |> AVal.map (fun f -> f sym sam))
         ).Invoke(modifier)
 
     member x.GetStaticSamplerState(samplerState : FShade.SamplerState) =
-        staticSamplerStateCache.GetOrAdd(samplerState, fun sam -> Mod.constant (sam.SamplerStateDescription))
+        staticSamplerStateCache.GetOrAdd(samplerState, fun sam -> AVal.constant (sam.SamplerStateDescription))
 
     member x.GetInterfaceSlots(iface : FShade.GLSL.GLSLProgramInterface) = 
         ifaceSlotCache.GetOrAdd(iface, (fun iface ->
@@ -464,15 +518,15 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
         iface, programHandle
 
-    member x.CreateTextureArray (slotCount : int, texArr : IMod<ITexture[]>) : List<IResource<Texture, V2i>> =
+    member x.CreateTextureArray (slotCount : int, texArr : aval<ITexture[]>) : List<IResource<Texture, V2i>> =
         
         let slotCountCache = textureArrayCache.Invoke(texArr)
         slotCountCache.GetOrAdd(slotCount, fun slotCount -> 
                 List.init slotCount (fun i ->
-                        x.CreateTexture(texArr |> Mod.map (fun (t : ITexture[]) -> if i < t.Length then t.[i] else NullTexture() :> _)))
+                        x.CreateTexture(texArr |> AVal.map (fun (t : ITexture[]) -> if i < t.Length then t.[i] else NullTexture() :> _)))
             )
 
-    member x.CreateSampler (sam : IMod<SamplerStateDescription>) =
+    member x.CreateSampler (sam : aval<SamplerStateDescription>) =
         samplerCache.GetOrCreate<SamplerStateDescription>(sam, fun () -> {
             create = fun b      -> ctx.CreateSampler b
             update = fun h b    -> ctx.Update(h,b); h
@@ -747,7 +801,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
  
  
       
-    member x.CreateIsActive(value : IMod<bool>) =
+    member x.CreateIsActive(value : aval<bool>) =
         isActiveCache.GetOrCreate(value, fun () -> {
             create = fun b      -> b
             update = fun h b    -> b
@@ -757,7 +811,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
       
-    member x.CreateBeginMode(prog : IMod<Program>, drawMode : IndexedGeometryMode) =
+    member x.CreateBeginMode(prog : aval<Program>, drawMode : IndexedGeometryMode) =
         let mode = getTessDrawModeCache(drawMode).Invoke(prog)
         beginModeCache.GetOrCreate(mode, fun () -> {
             create = fun b      -> b
@@ -768,7 +822,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-    member x.CreateDrawCallInfoList(value : IMod<list<DrawCallInfo>>) =
+    member x.CreateDrawCallInfoList(value : aval<list<DrawCallInfo>>) =
         drawCallInfoCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.CreateDrawCallInfoList(List.toArray b)
             update = fun h b    -> ctx.Update(h,List.toArray b)
@@ -778,7 +832,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-    member x.CreateDepthTest(value : IMod<DepthTestMode>) =
+    member x.CreateDepthTest(value : aval<DepthTestMode>) =
         depthTestCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.ToDepthTest b
             update = fun h b    -> ctx.ToDepthTest b
@@ -788,7 +842,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-    member x.CreateDepthBias(value : IMod<DepthBiasState>) =
+    member x.CreateDepthBias(value : aval<DepthBiasState>) =
         depthBiasCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.ToDepthBias b
             update = fun h b    -> ctx.ToDepthBias b
@@ -798,7 +852,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-    member x.CreateCullMode(value : IMod<CullMode>) =
+    member x.CreateCullMode(value : aval<CullMode>) =
         cullModeCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.ToCullMode b
             update = fun h b    -> ctx.ToCullMode b
@@ -808,7 +862,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-    member x.CreateFrontFace(mode : IMod<WindingOrder>) =
+    member x.CreateFrontFace(mode : aval<WindingOrder>) =
         frontFaceCache.GetOrCreate(mode, fun () -> {
             create = fun b      -> ctx.ToFrontFace b
             update = fun h b    -> ctx.ToFrontFace b
@@ -818,7 +872,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-    member x.CreatePolygonMode(value : IMod<FillMode>) =
+    member x.CreatePolygonMode(value : aval<FillMode>) =
         polygonModeCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.ToPolygonMode(b)
             update = fun h b    -> ctx.ToPolygonMode(b)
@@ -828,7 +882,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-    member x.CreateBlendMode(value : IMod<BlendMode>) =
+    member x.CreateBlendMode(value : aval<BlendMode>) =
         blendModeCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.ToBlendMode b
             update = fun h b    -> ctx.ToBlendMode b
@@ -838,7 +892,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-    member x.CreateStencilMode(value : IMod<StencilMode>) =
+    member x.CreateStencilMode(value : aval<StencilMode>) =
         stencilModeCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.ToStencilMode b
             update = fun h b    -> ctx.ToStencilMode b
@@ -848,7 +902,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-    member x.CreateFlag (value : IMod<bool>) =
+    member x.CreateFlag (value : aval<bool>) =
         flagCache.GetOrCreate(value, fun () -> {
             create = fun b      -> b
             update = fun h b    -> b

@@ -1,11 +1,9 @@
 ﻿namespace Aardvark.Application.WPF
 
-#if WINDOWS
-
 open System
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
@@ -260,7 +258,7 @@ module WGLDXContextExtensions =
             GL.DrawBuffer(DrawBufferMode.ColorAttachment0)
 
             if flip then
-                GL.BlitFramebuffer(0, 0, size.X, size.Y, 0, size.Y - 1, size.X, -1, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest)
+                GL.BlitFramebuffer(0, 0, size.X, size.Y, 0, size.Y, size.X, 0, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest)
             else
                 GL.BlitFramebuffer(0, 0, size.X, size.Y, 0, 0, size.X, size.Y, ClearBufferMask.ColorBufferBit, BlitFramebufferFilter.Nearest)
             GL.Check "blit failed"
@@ -391,25 +389,32 @@ module WGLDXContextExtensions =
 
             new D3DRenderbuffer(ctx, resolveBuffer, renderBuffer, size, format, samples, surface, shareHandle)
 
+type private DummyObject() =
+    inherit AdaptiveObject()
+
 type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
     inherit UserControl()
 
     let ctx = runtime.Context
-    let handle = ContextHandle.create(true)
+    let handle = ContextHandleOpenTK.create(false)
 
     let img = System.Windows.Interop.D3DImage()
     let content = Windows.Controls.Image(Source = img)
-    do content.Stretch <- Media.Stretch.Fill
+
+    do content.Margin <- Thickness(0.0)
+    do content.HorizontalAlignment <- HorizontalAlignment.Stretch
+    do content.VerticalAlignment <- VerticalAlignment.Stretch
+    do content.Stretch <- Media.Stretch.UniformToFill
     do this.Content <- content
 
     let mutable pending = 1
     let trigger() = pending <- 1
 
-    let caller = AdaptiveObject()
+    let caller = DummyObject()
     let subscription = caller.AddMarkingCallback trigger
     do this.SizeChanged.Add (fun _ -> trigger())
 
-    let size = Mod.init V2i.II
+    let size = AVal.init V2i.II
 
     let mutable renderTask = RenderTask.empty
 
@@ -426,7 +431,7 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
 
     let startTime = DateTime.Now
     let sw = System.Diagnostics.Stopwatch.StartNew()
-    let time = Mod.custom (fun _ -> startTime + sw.Elapsed)
+    let time = AVal.custom (fun _ -> startTime + sw.Elapsed)
     
     let mutable running = false
     let mutable color : Option<D3DRenderbuffer> = None
@@ -512,7 +517,7 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
 
         if Interlocked.CompareExchange(&isRendering, 1, 0) = 0  then
             if Interlocked.Exchange(&pending, 0) = 1 then
-                let s = V2i(this.ActualWidth, this.ActualHeight)
+                let s = V2i(round this.ActualWidth, round this.ActualHeight)
                 if s.AllDifferent 0 then
                     let sctx = DispatcherSynchronizationContext.Current
 
@@ -552,6 +557,7 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
                     Async.Start doit
             else
                 isRendering <- 0
+
     let renderTimer = 
         running <- true
         DispatcherTimer(
@@ -614,6 +620,7 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
 
         x.MouseDown.Add (fun e ->
             let button = button e.ChangedButton
+            x.Focus() |> ignore
             mouse.Down(mousePos(), button)
         )
 
@@ -621,8 +628,6 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
             let button = button e.ChangedButton
             mouse.Up(mousePos(), button)
         )
-
-        (mouse :> IMouse).Click.Values.Add(fun _ -> x.Focus() |> ignore)
 
         x.MouseMove.Add (fun e ->
             mouse.Move(mousePos())
@@ -684,10 +689,14 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
         with get() = renderTask
         and set t = renderTask <- t
 
-    member x.Sizes = size :> IMod<_>
+    member x.Sizes = size :> aval<_>
     
     member x.BeforeRender = beforeRender
     member x.AfterRender = afterRender
+    
+    member x.SubSampling
+        with get() = 1.0
+        and set v = if v <> 1.0 then failwith "[OpenGLSharing] SubSampling not implemented"
 
     interface IRenderTarget with
         member x.FramebufferSignature = x.FramebufferSignature
@@ -697,6 +706,9 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
         member x.RenderTask
             with get() = x.RenderTask
             and set t = x.RenderTask <- t
+        member x.SubSampling
+            with get() = x.SubSampling
+            and set v = x.SubSampling <- v
         member x.Sizes = x.Sizes
         member x.BeforeRender = beforeRender.Publish
         member x.AfterRender = afterRender.Publish
@@ -704,6 +716,3 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
     interface IRenderControl with
         member x.Mouse = mouse :> IMouse
         member x.Keyboard = keyboard :> IKeyboard
-
-
-#endif

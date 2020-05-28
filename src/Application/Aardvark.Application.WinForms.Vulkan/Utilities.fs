@@ -5,7 +5,7 @@ open Aardvark.Application
 open Aardvark.Application.WinForms
 open System.Windows.Forms
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open System.Runtime.InteropServices

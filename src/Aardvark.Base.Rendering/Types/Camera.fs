@@ -349,8 +349,8 @@ module ViewProjection =
         let mutable closest = V3d.Zero
         let mutable farthest = V3d.Zero
         bounds.GetMinMaxInDirection(forward, &closest, &farthest)
-        let near = V3d.Distance(viewPos, closest)
-        let far = V3d.Distance(viewPos, farthest)
+        let near = Vec.distance viewPos closest
+        let far = Vec.distance viewPos farthest
 
 
 

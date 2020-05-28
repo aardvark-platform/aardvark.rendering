@@ -11,7 +11,7 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Interactive
 
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -37,7 +37,7 @@ module Instancing =
     let sg =
         cylinder
             //|> Sg.ofIndexedGeometry
-            |> Sg.instancedGeometry (Mod.constant trafos)
+            |> Sg.instancedGeometry (AVal.constant trafos)
             |> Sg.effect [
                 DefaultSurfaces.instanceTrafo |> toEffect        
                 DefaultSurfaces.trafo |> toEffect

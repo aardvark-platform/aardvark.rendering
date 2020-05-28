@@ -10,12 +10,12 @@ namespace Examples
 open System
 open System.Collections.Generic
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 open Aardvark.Rendering.Interactive
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 
 module IndexedGeometry = 
@@ -29,7 +29,7 @@ module IndexedGeometry =
     let s = IndexedGeometryPrimitives.wireframeSubdivisionSphere
                     (Sphere3d((V3d.III),0.5)) 4  (C4b(240,150,200))
 
-    let frustum = Mod.init 
+    let frustum = AVal.init 
                     (Frustum.perspective 60.0 0.1 100.0 0.75)
 
     let rand = RandomSystem()
@@ -44,7 +44,7 @@ module IndexedGeometry =
                                     ,rand.UniformV3d(Box3d.Unit)+t)))
                 |> Array.map ( fun tri -> tri, (rand.UniformC3f().ToC4b()))
 
-    let tris = Mod.init (getSomeTris ())
+    let tris = AVal.init (getSomeTris ())
     let resetTris ()= transact ( fun _ -> tris.Value <- (getSomeTris()) )
 
     let sglol = 
@@ -97,15 +97,15 @@ module IndexedGeometry =
 
         prims
             |> List.map Sg.ofIndexedGeometry
-            |> Sg.group'
-            |> Sg.andAlso (tris |> Mod.map (IndexedGeometryPrimitives.triangles)
-                                |> Mod.map (Sg.ofIndexedGeometry)
+            |> Sg.ofList
+            |> Sg.andAlso (tris |> AVal.map (IndexedGeometryPrimitives.triangles)
+                                |> AVal.map (Sg.ofIndexedGeometry)
                                 |> Sg.dynamic)
             |> Sg.viewTrafo Interactive.DefaultViewTrafo
             |> Sg.projTrafo Interactive.DefaultProjTrafo
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.vertexColor |> toEffect]
-            |> Sg.fillMode (Mod.constant FillMode.Fill)
-            |> Sg.cullMode (Mod.constant CullMode.Back)
+            |> Sg.fillMode (AVal.constant FillMode.Fill)
+            |> Sg.cullMode (AVal.constant CullMode.Back)
 
     let run () =
         Aardvark.Rendering.Interactive.FsiSetup.defaultCamera <- false

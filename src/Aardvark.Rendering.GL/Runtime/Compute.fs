@@ -10,7 +10,7 @@ open Aardvark.Base.Rendering
 open Aardvark.Rendering
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open FShade
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base.ShaderReflection
@@ -30,7 +30,7 @@ type internal Bound =
 
 type ComputeShaderInputBinding(shader : ComputeShader) =
     let ctx = shader.Context
-    let mutable dirtyBuffers = HashSet<UniformBuffer>()
+    let mutable dirtyBuffers = System.Collections.Generic.HashSet<UniformBuffer>()
     let mutable references : Map<string, list<ComputeShaderInputReference>>  = Map.empty
 
     let addReference (name : string) (r : ComputeShaderInputReference) =
@@ -106,7 +106,7 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
             stream.BindTexture(target, tex.Handle)
             stream.BindSampler(l, sampler.Handle)
 
-    member internal x.Bind(boundThings : HashSet<Bound>) =
+    member internal x.Bind(boundThings : System.Collections.Generic.HashSet<Bound>) =
         for (l, b) in uniformBuffers do
             ctx.Upload b
             GL.BindBufferRange(BufferRangeTarget.UniformBuffer, l, b.Handle, 0n, nativeint b.Size)
@@ -181,7 +181,7 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
         use __ = ctx.ResourceLock
         let dirty = 
             lock dirtyBuffers (fun () -> 
-                let arr = HashSet.toArray dirtyBuffers
+                let arr = Aardvark.Base.HashSet.toArray dirtyBuffers
                 dirtyBuffers.Clear()
                 arr
             )
@@ -335,7 +335,7 @@ type private GLCompute(ctx : Context) =
 
 
 
-    member private x.Run(i : ComputeCommand, boundThings : HashSet<Bound>) =
+    member private x.Run(i : ComputeCommand, boundThings : System.Collections.Generic.HashSet<Bound>) =
         match i with
             | ComputeCommand.BindCmd shader ->
                 let shader = unbox<ComputeShader> shader
@@ -407,7 +407,7 @@ type private GLCompute(ctx : Context) =
     
     member x.Run(i : list<ComputeCommand>) =
         use __ = ctx.ResourceLock
-        let boundThings = HashSet<_>()
+        let boundThings = System.Collections.Generic.HashSet<_>()
         for i in i do x.Run(i, boundThings)
         for b in boundThings do
             match b with
@@ -431,7 +431,7 @@ module GLComputeExtensions =
     type Context with
 
         member x.TryCompileKernel (code : string, iface : FShade.GLSL.GLSLProgramInterface, localSize : V3i) =
-            using x.ResourceLock (fun token ->
+            Operators.using x.ResourceLock (fun token ->
                 match x.TryCompileCompute(true, code) with
                     | Success prog ->
                         let kernel = new ComputeShader({ prog with Interface = iface }, localSize)

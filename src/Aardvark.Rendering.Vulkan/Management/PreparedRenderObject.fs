@@ -8,7 +8,7 @@ open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 #nowarn "9"
 // #nowarn "51"
@@ -30,7 +30,7 @@ type PreparedRenderObject =
         isActive                : INativeResourceLocation<int>
         activation              : IDisposable
     }
-    member x.DrawCallInfos = x.original.DrawCallInfos
+    member x.DrawCalls = x.original.DrawCalls
     member x.RenderPass = x.original.RenderPass
     member x.AttributeScope = x.original.AttributeScope
 
@@ -109,12 +109,12 @@ type DevicePreparedRenderObjectExtensions private() =
                     ds.Bindings |> Array.choosei (fun i b ->
                         match b.Parameter with
                             | UniformBlockParameter block ->
-                                let buffer = this.CreateUniformBuffer(Ag.emptyScope, block, ro.Uniforms, SymDict.empty)
+                                let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, ro.Uniforms, SymDict.empty)
                                 resources.Add buffer
                                 AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
 
                             | StorageBufferParameter block ->
-                                let buffer = this.CreateStorageBuffer(Ag.emptyScope, block, ro.Uniforms, SymDict.empty)
+                                let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, ro.Uniforms, SymDict.empty)
                                 AdaptiveDescriptor.AdaptiveStorageBuffer (i, buffer) |> Some
 
                             | SamplerParameter sam ->
@@ -129,12 +129,12 @@ type DevicePreparedRenderObjectExtensions private() =
                                                 let textureName = Symbol.Create textureName
                                                 let samplerState = samplerState.SamplerStateDescription
 
-                                                match ro.Uniforms.TryGetUniform(Ag.emptyScope, textureName) with
-                                                | Some (:? IMod<ITexture> as tex) ->
+                                                match ro.Uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                                                | Some (:? aval<ITexture> as tex) ->
 
                                                     let tex = this.CreateImage(tex)
                                                     let view = this.CreateImageView(sam.samplerType, tex)
-                                                    let sam = this.CreateSampler(Mod.constant samplerState)
+                                                    let sam = this.CreateSampler(AVal.constant samplerState)
 
                                                     Some(view, sam)
 
@@ -149,8 +149,8 @@ type DevicePreparedRenderObjectExtensions private() =
                             | ImageParameter img ->
                                 let viewSam = 
                                     let textureName = Symbol.Create img.imageName
-                                    match ro.Uniforms.TryGetUniform(Ag.emptyScope, textureName) with
-                                    | Some (:? IMod<ITexture> as tex) ->
+                                    match ro.Uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                                    | Some (:? aval<ITexture> as tex) ->
 
                                         let tex = this.CreateImage(tex)
                                         let view = this.CreateImageView(img.imageType, tex)
@@ -209,7 +209,7 @@ type DevicePreparedRenderObjectExtensions private() =
 
 
         let inputAssembly = this.CreateInputAssemblyState(ro.Mode, program)
-        let inputState = this.CreateVertexInputState(programLayout.PipelineInfo, Mod.constant (VertexInputState.create bufferFormats))
+        let inputState = this.CreateVertexInputState(programLayout.PipelineInfo, AVal.constant (VertexInputState.create bufferFormats))
         let rasterizerState = this.CreateRasterizerState(ro.DepthTest, ro.DepthBias, ro.CullMode, ro.FrontFace, ro.FillMode)
         let colorBlendState = this.CreateColorBlendState(renderPass, ro.WriteBuffers, ro.BlendMode)
         let depthStencilState = this.CreateDepthStencilState(writeDepth, ro.DepthTest, ro.StencilMode)
@@ -242,11 +242,11 @@ type DevicePreparedRenderObjectExtensions private() =
             
 
         let calls =
-            match ro.IndirectBuffer with
-                | null -> 
-                    this.CreateDrawCall(indexed, ro.DrawCallInfos)
-                | b -> 
-                    let indirect = this.CreateIndirectBuffer(indexed, b)
+            match ro.DrawCalls with
+                | Direct dir -> 
+                    this.CreateDrawCall(indexed, dir)
+                | Indirect indir -> 
+                    let indirect = this.CreateIndirectBuffer(indexed, indir)
                     this.CreateDrawCall(indexed, indirect)
         resources.Add calls
         let bindings =
@@ -290,12 +290,12 @@ type DevicePreparedRenderObjectExtensions private() =
                     ds.Bindings |> Array.choosei (fun i b ->
                         match b.Parameter with
                             | UniformBlockParameter block ->
-                                let buffer = this.CreateUniformBuffer(Ag.emptyScope, block, uniforms, SymDict.empty)
+                                let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
                                 resources.Add buffer
                                 AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
 
                             | StorageBufferParameter block ->
-                                let buffer = this.CreateStorageBuffer(Ag.emptyScope, block, uniforms, SymDict.empty)
+                                let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
                                 AdaptiveDescriptor.AdaptiveStorageBuffer (i, buffer) |> Some
 
                             | SamplerParameter sam ->
@@ -310,12 +310,12 @@ type DevicePreparedRenderObjectExtensions private() =
                                                 let textureName = Symbol.Create textureName
                                                 let samplerState = samplerState.SamplerStateDescription
 
-                                                match uniforms.TryGetUniform(Ag.emptyScope, textureName) with
-                                                | Some (:? IMod<ITexture> as tex) ->
+                                                match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                                                | Some (:? aval<ITexture> as tex) ->
 
                                                     let tex = this.CreateImage(tex)
                                                     let view = this.CreateImageView(sam.samplerType, tex)
-                                                    let sam = this.CreateSampler(Mod.constant samplerState)
+                                                    let sam = this.CreateSampler(AVal.constant samplerState)
 
                                                     Some(view, sam)
 
@@ -330,8 +330,8 @@ type DevicePreparedRenderObjectExtensions private() =
                             | ImageParameter img ->
                                 let viewSam = 
                                     let textureName = Symbol.Create img.imageName
-                                    match uniforms.TryGetUniform(Ag.emptyScope, textureName) with
-                                    | Some (:? IMod<ITexture> as tex) ->
+                                    match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                                    | Some (:? aval<ITexture> as tex) ->
 
                                         let tex = this.CreateImage(tex)
                                         let view = this.CreateImageView(img.imageType, tex)

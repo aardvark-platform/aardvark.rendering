@@ -4,10 +4,9 @@ Aardvark.Base.Runtime
 FShade.Core
 FShade.GLSL
 FSharp.Core
-SharpDX.Direct3D9
 Unofficial.OpenTK
-Unofficial.OpenTK.GLControl
 Unofficial.Typography
+Unofficial.AssimpNet
 Unofficial.LibTessDotNet
 CommonMark.NET
 GLSLangSharp

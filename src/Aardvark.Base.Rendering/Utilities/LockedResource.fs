@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.Base
 
 open System
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 type ResourceUsage =
     | Access = 1
@@ -33,11 +33,13 @@ module LockedResource =
         try f()
         finally r.Lock.Exit(r.OnUnlock)
 
+open FSharp.Data.Traceable
 type RenderTaskLock() =
-    let lockedResources = ReferenceCountingSet<ILockedResource>()
+    let lockObj = obj()
+    let mutable lockedResources : CountingHashSet<ILockedResource> = CountingHashSet.empty
 
     member x.Run f = 
-        let res = lock lockedResources (fun () -> Seq.toArray lockedResources)
+        let res = lock lockObj (fun () -> CountingHashSet.toArray lockedResources)
         for l in res do l.Lock.Enter(ResourceUsage.Render, l.OnLock)
         try f()
         finally for l in res do l.Lock.Exit(l.OnUnlock)
@@ -48,8 +50,8 @@ type RenderTaskLock() =
     member x.Update f = failwith ""
     
     member x.Add(r : ILockedResource) =
-        lock lockedResources (fun () -> lockedResources.Add r |> ignore)
+        lock lockObj (fun () -> lockedResources <- lockedResources.Add r)
 
     member x.Remove(r : ILockedResource) =
-        lock lockedResources (fun () -> lockedResources.Remove r |> ignore)
+        lock lockObj (fun () -> lockedResources <- lockedResources.Remove r)
 

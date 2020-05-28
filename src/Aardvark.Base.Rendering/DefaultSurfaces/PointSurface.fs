@@ -2,7 +2,7 @@
 
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open FShade
  
 module PointSurface =

@@ -14,6 +14,7 @@ open System.Runtime.InteropServices
 
 open Aardvark.Base
 open Aardvark.Prinziple
+open FSharp.Data.Adaptive
 
 [<AutoOpen>]
 module Aara =
@@ -113,7 +114,7 @@ module Aara =
 
     let createIndex2 (vi : Matrix<V3f>) (invalids : int64[])=
 
-        let invalids = invalids |> Array.map (fun x -> (x, x)) |> HMap.ofArray
+        let invalids = invalids |> Array.map (fun x -> (x, x)) |> HashMap.ofArray
 
         let dx = vi.Info.DX
         let dy = vi.Info.DY
@@ -123,7 +124,7 @@ module Aara =
         
         vi.SubMatrix(V2l.Zero,vi.Size-V2l.II).ForeachXYIndex(fun x y index -> 
 
-            let inv = invalids |> HMap.tryFind index
+            let inv = invalids |> HashMap.tryFind index
 
             match inv with
                 | Some _ ->

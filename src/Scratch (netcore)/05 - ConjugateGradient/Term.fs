@@ -1,6 +1,7 @@
 ﻿namespace ConjugateGradient
 
 open Aardvark.Base
+open FSharp.Data.Adaptive
 
 [<StructuredFormatDisplay("{AsString}")>]
 type Term<'c when 'c : equality> =
@@ -11,7 +12,7 @@ type Term<'c when 'c : equality> =
 
     | Sum of list<Term<'c>>
     | Product of list<Term<'c>>
-    | Power of Term<'c> * Term<'c>
+    | Power_ of Term<'c> * Term<'c>
 
     | Sine of Term<'c>
     | Cosine of Term<'c>
@@ -24,7 +25,7 @@ type Term<'c when 'c : equality> =
     static member Sin(a : Term<'c>) = Sine a
     static member Cos(a : Term<'c>) = Cosine a
     static member Tan(a : Term<'c>) = Tangent a
-    static member Exp(a : Term<'c>) = Power(Value System.Math.E, a)
+    static member Exp(a : Term<'c>) = Power_(Value System.Math.E, a)
     static member Abs(a : Term<'c>) = Absolute(a)
 
     static member (~-) (v : Term<'c>) = Negate v
@@ -47,18 +48,18 @@ type Term<'c when 'c : equality> =
     static member (*) (l : Term<'c>, r : int) = Product [l;Value (float r)]
     static member (*) (l : int, r : Term<'c>) = Product [Value(float l);r]
 
-    static member (/) (l : Term<'c>, r : Term<'c>) = Product [l;Power(r, Value -1.0)]
+    static member (/) (l : Term<'c>, r : Term<'c>) = Product [l;Power_(r, Value -1.0)]
     static member (/) (l : Term<'c>, r : float) = Product [l;Value(1.0/r)]
-    static member (/) (l : float, r : Term<'c>) = Product [Value l;Power(r, Value -1.0)]
+    static member (/) (l : float, r : Term<'c>) = Product [Value l;Power_(r, Value -1.0)]
     static member (/) (l : Term<'c>, r : int) = Product [l;Value(1.0/float r)]
-    static member (/) (l : int, r : Term<'c>) = Product [Value (float l);Power(r, Value -1.0)]
+    static member (/) (l : int, r : Term<'c>) = Product [Value (float l);Power_(r, Value -1.0)]
 
-    static member Pow (l : Term<'c>, r : Term<'c>) = Power(l,r)
-    static member Pow (l : Term<'c>, r : float) = Power(l,Value r)
-    static member Pow (l : Term<'c>, r : int) = Power(l,Value (float r))
+    static member Pow (l : Term<'c>, r : Term<'c>) = Power_(l,r)
+    static member Pow (l : Term<'c>, r : float) = Power_(l,Value r)
+    static member Pow (l : Term<'c>, r : int) = Power_(l,Value (float r))
 
-    static member Sqrt(l : Term<'c>) = Power(l, Value 0.5)
-    static member Cbrt(l : Term<'c>) = Power(l, Value (1.0 / 3.0))
+    static member Sqrt(l : Term<'c>) = Power_(l, Value 0.5)
+    static member Cbrt(l : Term<'c>) = Power_(l, Value (1.0 / 3.0))
     
 
     static member Zero : Term<'c> = Value 0.0
@@ -85,7 +86,7 @@ type Term<'c when 'c : equality> =
                 | _, Parameter _ -> 1
 
                 | Negate l, Negate r 
-                | Power(l,_), Power(r,_)
+                | Power_(l,_), Power_(r,_)
                 | Sine l, Sine r
                 | Cosine l, Cosine r
                 | Tangent l, Tangent r
@@ -135,10 +136,10 @@ type Term<'c when 'c : equality> =
 
             | Product(vs) ->
         
-                let neg, pos = vs |> List.partition (function Power(a, Value e) when e < 0.0 -> true | _ -> false)
+                let neg, pos = vs |> List.partition (function Power_(a, Value e) when e < 0.0 -> true | _ -> false)
 
                 let pos = pos |> List.sortWith cmp |> List.map toString
-                let neg = neg |> List.sortWith cmp |> List.map (function (Power(a,Value e)) -> toString (Power(a, Value -e)) | _ -> failwith "")
+                let neg = neg |> List.sortWith cmp |> List.map (function (Power_(a,Value e)) -> toString (Power_(a, Value -e)) | _ -> failwith "")
 
                 let conc (sep : string) (ls : list<string>) =
                     match ls with
@@ -158,10 +159,10 @@ type Term<'c when 'c : equality> =
                         
 
             | Negate(l) -> sprintf "-%s" (toString l)
-            | Power(l,Value 0.5) -> sprintf "sqrt(%s)" (toString l)
-            | Power(l,Value 1.0) -> (toString l)
-            | Power(l,Value -1.0) -> sprintf "1.0 / %s" (toString l)
-            | Power(l,r) -> sprintf "%s**%s" (toString l) (toString r)
+            | Power_(l,Value 0.5) -> sprintf "sqrt(%s)" (toString l)
+            | Power_(l,Value 1.0) -> (toString l)
+            | Power_(l,Value -1.0) -> sprintf "1.0 / %s" (toString l)
+            | Power_(l,r) -> sprintf "%s**%s" (toString l) (toString r)
             | Logarithm a -> sprintf "log(%s)" (toString a)
        
 
@@ -173,7 +174,7 @@ module TermPatterns =
             | Sum es        -> Some(Sum, es)
             | Product es    -> Some(Product, es)
             | Negate e      -> Some(List.head >> Negate, [e])
-            | Power(a,e)    -> Some((function [a;e] -> Power(a,e) | _ -> failwith "invalid argument count"), [a;e])
+            | Power_(a,e)    -> Some((function [a;e] -> Power_(a,e) | _ -> failwith "invalid argument count"), [a;e])
             | Sine e        -> Some(List.head >> Sine, [e])
             | Cosine e      -> Some(List.head >> Cosine, [e])
             | Tangent e     -> Some(List.head >> Tangent, [e])
@@ -350,7 +351,7 @@ module TermPatterns =
 
 
     let internal findCommon (l : list<list<Term<'c>>>) =
-        let terms = l |> List.collect id |> HSet.ofList
+        let terms = l |> List.collect id |> HashSet.ofList
 
         let rec tryRemove (e : Term<'c>) (l : list<Term<'c>>) =
             match l with
@@ -360,14 +361,14 @@ module TermPatterns =
                         Some r
                     else
                         match h, e with
-                            | Power(a,Value ae), Power(b,Value be) when be > 0.0 && a = b && ae >= be ->
-                                Some(Power(a, Value (ae - be)) :: r)
+                            | Power_(a,Value ae), Power_(b,Value be) when be > 0.0 && a = b && ae >= be ->
+                                Some(Power_(a, Value (ae - be)) :: r)
                             
-                            | Power(a,Value ae), Power(b,Value be) when be < 0.0 && a = b && ae <= be ->
-                                Some(Power(a, Value (ae - be)) :: r)
+                            | Power_(a,Value ae), Power_(b,Value be) when be < 0.0 && a = b && ae <= be ->
+                                Some(Power_(a, Value (ae - be)) :: r)
                             
-                            | Power(a,Value ae), b when a = b && ae >= 1.0 ->
-                                Some(Power(a, Value (ae - 1.0)) :: r)
+                            | Power_(a,Value ae), b when a = b && ae >= 1.0 ->
+                                Some(Power_(a, Value (ae - 1.0)) :: r)
                                 
 
                             | _ ->
@@ -376,7 +377,7 @@ module TermPatterns =
                                     | None -> None
 
         let mutable l = l
-        let mutable common = HSet.empty
+        let mutable common = HashSet.empty
         for t in terms do
             let mutable failed = false
             let nl =
@@ -387,13 +388,13 @@ module TermPatterns =
                 )
 
             if not failed then
-                common <- HSet.add t common
+                common <- HashSet.add t common
                 l <- nl
 
-        if HSet.isEmpty common then
+        if HashSet.isEmpty common then
             None
         else
-            Some (HSet.toList common, l)
+            Some (HashSet.toList common, l)
 
 
     let rec (|Factorize|_|) (e : Term<'c>) =
@@ -470,20 +471,20 @@ module Term =
 
         let sinDivCos a b =
             match a, b with
-                | Sine(a), Power(Cosine(b), Value -1.0) 
-                | Power(Cosine(b), Value -1.0), Sine(a) when a = b ->
+                | Sine(a), Power_(Cosine(b), Value -1.0) 
+                | Power_(Cosine(b), Value -1.0), Sine(a) when a = b ->
                     Some (Tangent(a))
                     
-                | Cosine(a), Power(Sine(b), Value -1.0) 
-                | Power(Sine(b), Value -1.0), Cosine(a) when a = b ->
+                | Cosine(a), Power_(Sine(b), Value -1.0) 
+                | Power_(Sine(b), Value -1.0), Cosine(a) when a = b ->
                     Some (1.0 / Tangent(a))
                 | _ ->
                     None
 
         let sinAddCosSquared a b =
             match a, b with
-                | Power(Sine(a), Value 2.0), Power(Cosine(b), Value 2.0) 
-                | Power(Cosine(b), Value 2.0), Power(Sine(a), Value 2.0) when a = b ->
+                | Power_(Sine(a), Value 2.0), Power_(Cosine(b), Value 2.0) 
+                | Power_(Cosine(b), Value 2.0), Power_(Sine(a), Value 2.0) when a = b ->
                     Some (Value 1.0)
 
                 | _ ->
@@ -501,22 +502,22 @@ module Term =
             function Sum(Any isSum (s, rest)) -> Some (Sum (s @ rest)) | _ -> None
             function Product(Any isProduct (s, rest)) -> Some (Product (s @ rest)) | _ -> None
             function Negate(Sum ls) -> Some (Sum (List.map Negate ls)) | _ -> None
-            function Power(Power(a,e0), e1) -> Some (Power(a, e0 * e1)) | _ -> None
+            function Power_(Power_(a,e0), e1) -> Some (Power_(a, e0 * e1)) | _ -> None
             function Sine(Negate a) -> Some (Negate (Sine a)) | _ -> None
             function Tangent(Negate a) -> Some (Negate (Tangent a)) | _ -> None
             function Cosine(Negate a) -> Some (Cosine a) | _ -> None
             function Logarithm(Value v) -> Some (Value (log v)) | _ -> None
-            function Logarithm(Power(a,e)) -> Some (log a * e) | _ -> None
+            function Logarithm(Power_(a,e)) -> Some (log a * e) | _ -> None
             function Negate(Value a) -> Some (Value -a) | _ -> None
-            function Power(Value a, Value e) -> Some (Value (a ** e)) | _ -> None
-            function Power(Product ps, e) -> Some (Product (List.map (fun p -> Power(p,e)) ps)) | _ -> None
+            function Power_(Value a, Value e) -> Some (Value (a ** e)) | _ -> None
+            function Power_(Product ps, e) -> Some (Product (List.map (fun p -> Power_(p,e)) ps)) | _ -> None
             function Negate(Product (Any isValue (v,rest))) -> Some (Product (Value -v :: rest)) | _ -> None
-            function Power(a, One) -> Some a | _ -> None
-            function Power(a, Zero) -> Some (Value 1.0) | _ -> None
+            function Power_(a, One) -> Some a | _ -> None
+            function Power_(a, Zero) -> Some (Value 1.0) | _ -> None
             function Absolute(Value a) -> Some (Value (abs a)) | _ -> None
             function Absolute(Negate a) -> Some (Absolute a) | _ -> None
-            function Absolute(Power(a, Value e)) when e % 2.0 = 0.0 -> Some (Power(a, Value e)) | _ -> None
-            function Power(Absolute a, Value e) when e % 2.0 = 0.0 -> Some (Power(a, Value e)) | _ -> None
+            function Absolute(Power_(a, Value e)) when e % 2.0 = 0.0 -> Some (Power_(a, Value e)) | _ -> None
+            function Power_(Absolute a, Value e) when e % 2.0 = 0.0 -> Some (Power_(a, Value e)) | _ -> None
 
             function Sine(Value a) -> Some (Value (sin a)) | _ -> None
             function Cosine(Value a) -> Some (Value (cos a)) | _ -> None
@@ -556,11 +557,11 @@ module Term =
                 Some(a, Value 2.0) 
             else 
                 match a, b with
-                    | a, Power(b,f) 
-                    | Power(b,f), a  when a = b -> 
+                    | a, Power_(b,f) 
+                    | Power_(b,f), a  when a = b -> 
                         Some(a, Sum [f; Value 1.0])
 
-                    | Power(a,e0), Power(b,e1) when a = b ->
+                    | Power_(a,e0), Power_(b,e1) when a = b ->
                         Some(a, Sum [e0; e1])
                     
                     | _ -> None
@@ -569,7 +570,7 @@ module Term =
         
         baseSimplifyRules @ [
             function Sum(AnyTwo isLog (a,b,rest)) -> Some (Sum (log (a * b) :: rest)) | _ -> None
-            function Product(AnyPair eqm ((a,e), rest)) -> Some (Product (Power(a,e) :: rest)) | _ -> None
+            function Product(AnyPair eqm ((a,e), rest)) -> Some (Product (Power_(a,e) :: rest)) | _ -> None
             function Sum(AnyPair eqa ((f,a), rest)) -> Some (Sum (Product [f; a] :: rest)) | _ -> None
             function (Factorize(e)) -> Some e | _ -> None
         ]
@@ -618,15 +619,15 @@ module Term =
         usedUniforms Set.empty e
 
     let parameters (e : Term<'c>) =
-        let rec usedParameters (acc : hmap<string, hset<'c>>) (e : Term<'c>) =
+        let rec usedParameters (acc : HashMap<string, HashSet<'c>>) (e : Term<'c>) =
             match e with
                 | Parameter(name, i) ->
-                    acc |> HMap.alter name (Option.defaultValue HSet.empty >> HSet.add i >> Some)
+                    acc |> HashMap.alter name (Option.defaultValue HashSet.empty >> HashSet.add i >> Some)
                 | Combination(_, args) ->
                     args |> List.fold usedParameters acc
                 | _ ->
                     acc
-        usedParameters HMap.empty e
+        usedParameters HashMap.empty e
         
     let parameterNames (e : Term<'c>) =
         let rec usedParameterNames (acc : Set<string>) (e : Term<'c>) =
@@ -682,17 +683,17 @@ module Term =
                 | Tangent a ->
                     (1.0 + Tangent(a) ** 2) * derivative name i a
 
-                | Power(E, x) ->
-                    Power(Value Constant.E, x) * derivative name i x
+                | Power_(E, x) ->
+                    Power_(Value Constant.E, x) * derivative name i x
 
-                | Power(a, Value e) ->
-                    e * Power(a, Value (e - 1.0)) * derivative name i a
+                | Power_(a, Value e) ->
+                    e * Power_(a, Value (e - 1.0)) * derivative name i a
 
-                | Power(Value a, e) ->
-                    Power(Value a, e) * log a * derivative  name i e
+                | Power_(Value a, e) ->
+                    Power_(Value a, e) * log a * derivative  name i e
 
-                | Power(f,g) ->
-                    Power(f, g - 1.0) * (g * derivative name i f + f * log f * derivative name i g)
+                | Power_(f,g) ->
+                    Power_(f, g - 1.0) * (g * derivative name i f + f * log f * derivative name i g)
 
                 | Logarithm a ->
                     (1.0 / a) * derivative name i a
@@ -710,13 +711,13 @@ module Term =
 
     let allDerivatives (name : string) (e : Term<'c>) =
         let used = parameters e
-        match HMap.tryFind name used with
+        match HashMap.tryFind name used with
             | None ->
-                HMap.empty
+                HashMap.empty
             | Some cs ->    
                 cs 
                 |> Seq.map (fun i -> i, derivative name i e)
-                |> HMap.ofSeq
+                |> HashMap.ofSeq
                 
     let toString (e : Term<'a>) = e.ToString()
        
@@ -734,20 +735,20 @@ module Term =
         baseSimplifyRules @ [
 
             function Product(Any isSum (s, rest)) -> s |> List.map (fun s -> Product (s :: rest)) |> Sum |> Some | _ -> None
-            function Power(Product xs, e) -> Some (Product (xs |> List.map (fun x -> Power(x, e)))) | _ -> None
-            function Power(Sum xs, Value e) when Fun.IsTiny(Fun.Frac e) && e > 0.0 -> Some (power xs (int e)) | _ -> None
-            function Power(Negate a, Value e) when Fun.IsTiny(Fun.Frac e) && int (abs e) % 2 = 0 -> Some (Power(a, Value e)) | _ -> None
-            function Power(Negate a, Value e) when Fun.IsTiny(Fun.Frac e) && int (abs e) % 2 = 1 -> Some (Negate (Power(a, Value e))) | _ -> None
+            function Power_(Product xs, e) -> Some (Product (xs |> List.map (fun x -> Power_(x, e)))) | _ -> None
+            function Power_(Sum xs, Value e) when Fun.IsTiny(Fun.Frac e) && e > 0.0 -> Some (power xs (int e)) | _ -> None
+            function Power_(Negate a, Value e) when Fun.IsTiny(Fun.Frac e) && int (abs e) % 2 = 0 -> Some (Power_(a, Value e)) | _ -> None
+            function Power_(Negate a, Value e) when Fun.IsTiny(Fun.Frac e) && int (abs e) % 2 = 1 -> Some (Negate (Power_(a, Value e))) | _ -> None
             
 
-            function Logarithm(Power(a,e)) -> Some (e * log a) | _ -> None
+            function Logarithm(Power_(a,e)) -> Some (e * log a) | _ -> None
             function Logarithm(Product a) -> Some (List.sumBy log a) | _ -> None
             function Logarithm(One) -> Some Term.Zero | _ -> None
             
             function Sine(Sum (a :: b)) -> Some (sin a * cos (Sum b) + cos a * sin (Sum b)) | _ -> None
             function Cosine(Sum (a :: b)) -> Some (cos a * cos (Sum b) - sin a * sin (Sum b)) | _ -> None
             
-            function Power(s, Value e) when float (int e) = e && e > 0.0 -> Some (Product [s; Power(s, Value (e - 1.0))]) | _ -> None
+            function Power_(s, Value e) when float (int e) = e && e > 0.0 -> Some (Product [s; Power_(s, Value (e - 1.0))]) | _ -> None
         ]
 
     let factorize (name : string) (t : Term<'a>) =
@@ -790,9 +791,9 @@ module Term =
                 | Factorize (Product es) ->
                     isolate name (Product es)
 
-                | Power(a, e) ->
+                | Power_(a, e) ->
                     let (f,a) = isolate name a
-                    Power(f,e), Power(a, e)
+                    Power_(f,e), Power_(a, e)
 
                 | Parameter _ | Value _
                 | Sine _ | Cosine _ | Tangent _ | Sum _ | Logarithm _ | Absolute _ ->
@@ -1139,7 +1140,7 @@ module Term =
                 | Parameter(name, i) -> 
                     get name (Some i) 1 :> Expr
 
-                | Power(Uniform name, Value e) when float (int e) = e ->
+                | Power_(Uniform name, Value e) when float (int e) = e ->
                     if e > 0.0 then
                         get name None (int e) :> Expr
                     else
@@ -1147,10 +1148,10 @@ module Term =
                         div <@@ 1.0 @@> v 
                         
                 
-                | Power(Parameter(name, i), Value e) when float (int e) = e ->
+                | Power_(Parameter(name, i), Value e) when float (int e) = e ->
                     get name (Some i) (int e) :> Expr
 
-                | Power(E, value) ->
+                | Power_(E, value) ->
                     let v = toExpr value
                     <@@ (%rreal.exp) (%%v) @@>
 
@@ -1178,12 +1179,12 @@ module Term =
                     let e = toExpr a
                     negate e
                 
-                | Power(a, MinusOne) ->
+                | Power_(a, MinusOne) ->
                     let a = toExpr a
                     let one = real.one
                     div <@@ one @@> a
                     
-                | Power(a, b) ->
+                | Power_(a, b) ->
                     let a = toExpr a
                     let b = toExpr b
                     pow a b
@@ -1210,9 +1211,9 @@ module Term =
 
                
                 | Product vs ->
-                    let neg, pos = vs |> List.partition (function Power(a, Value e) when e < 0.0 -> true | _ -> false)
+                    let neg, pos = vs |> List.partition (function Power_(a, Value e) when e < 0.0 -> true | _ -> false)
                     let pos = pos |> List.map toExpr
-                    let neg = neg |> List.map (function (Power(a,Value e)) -> toExpr (Power(a, Value -e)) | _ -> failwith "")
+                    let neg = neg |> List.map (function (Power_(a,Value e)) -> toExpr (Power_(a, Value -e)) | _ -> failwith "")
 
                     match pos, neg with
                     | [], [] -> 

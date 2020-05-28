@@ -4,10 +4,9 @@ open System
 open System.Windows.Forms
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
 open Aardvark.Application
-
 
 type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
     do if forceNvidia then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
@@ -17,7 +16,9 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
        with e -> Report.Warn("Could not set UnhandledExceptionMode.")
 
     let runtime = new Runtime()
-    let ctx = new Context(runtime, enableDebug)
+    let ctx = 
+        let resourceContexts = Array.init 2 (fun _ -> ContextHandleOpenTK.create enableDebug)
+        new Context(runtime, enableDebug, resourceContexts, fun () -> ContextHandleOpenTK.create enableDebug)
     do runtime.Context <- ctx
  
     let defaultCachePath =
@@ -43,7 +44,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
 //                ctx.CurrentContextHandle <- Some handle
 //                ContextHandle.Current <- Some handle
 
-                using ctx.ResourceLock (fun _ ->
+                Operators.using ctx.ResourceLock (fun _ ->
 
                     Log.startTimed "initializing OpenGL runtime"
 
@@ -97,13 +98,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
                 init ctx 
             | _ ->
                 failwithf "unknown control type: %A" ctrl
-        
 
-    member x.CreateGameWindow(?samples : int) =
-        let samples = defaultArg samples 1
-        let w = new GameWindow(runtime, enableDebug, samples)
-        init ctx 
-        w
 
     interface IApplication with
         member x.Initialize(ctrl : IRenderControl, samples : int) = x.Initialize(ctrl, samples)

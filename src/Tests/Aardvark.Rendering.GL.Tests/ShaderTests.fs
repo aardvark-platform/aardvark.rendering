@@ -5,9 +5,9 @@ open NUnit.Framework
 open FsUnit
 open Aardvark.Rendering.GL
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Application
 open System.Diagnostics
 open Aardvark.SceneGraph.Semantics
@@ -55,7 +55,7 @@ module ShaderTests =
     [<Test>]
     let ``[Shader] prepare signature``() =
         use runtime = new Runtime()
-        use ctx = new Context(runtime, false)
+        use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
         runtime.Context <- ctx
 
         let signature =

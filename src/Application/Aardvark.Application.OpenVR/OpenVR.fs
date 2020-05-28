@@ -4,10 +4,11 @@ open System
 open Valve.VR
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.SceneGraph
+open FSharp.Data.Traceable
 
 #nowarn "9"
 
@@ -67,8 +68,8 @@ module Unhate =
  
     let private allFlags = unbox<Flags> 0x07
  
-    let private all = List<ModRef<Flags>>()
-    let private trafos = Dict<string, ModRef<Flags>>()
+    let private all = List<cval<Flags>>()
+    let private trafos = Dict<string, cval<Flags>>()
  
  
     let unhate() =
@@ -94,18 +95,18 @@ module Unhate =
             printf "%s: %A " name v.Value
         printfn ""
  
-    let register (name : string) (m : IMod<Trafo3d>) =
+    let register (name : string) (m : aval<Trafo3d>) =
         let flags = trafos.GetOrCreate(name, fun _ ->
-            let m = Mod.init Flags.None
+            let m = AVal.init Flags.None
             all.Add m
             m
         )
-        Mod.map2 applyFlags flags m
+        AVal.map2 applyFlags flags m
  
 module UnhateTest =
     let run() =
         let trafo =
-                Mod.init (Trafo3d.Translation(5.0, 6.0, 7.0))
+                AVal.init (Trafo3d.Translation(5.0, 6.0, 7.0))
                 |> Unhate.register "a"
  
         while true do
@@ -150,15 +151,15 @@ module VrTrafo =
     let inline inverse (t : Trafo3d) = t.Inverse
 
 type MotionState() =
-    let isValid = Mod.init false
-    let pose = Mod.init Trafo3d.Identity
-    let angularVelocity = Mod.init V3d.Zero
-    let velocity = Mod.init V3d.Zero
+    let isValid = AVal.init false
+    let pose = AVal.init Trafo3d.Identity
+    let angularVelocity = AVal.init V3d.Zero
+    let velocity = AVal.init V3d.Zero
 
-    member x.IsValid = isValid :> IMod<_>
-    member x.Pose = pose :> IMod<_>
-    member x.Velocity = velocity :> IMod<_>
-    member x.AngularVelocity = angularVelocity :> IMod<_>
+    member x.IsValid = isValid :> aval<_>
+    member x.Pose = pose :> aval<_>
+    member x.Velocity = velocity :> aval<_>
+    member x.AngularVelocity = angularVelocity :> aval<_>
 
     member x.Update(newPose : byref<TrackedDevicePose_t>) =
         if newPose.bDeviceIsConnected && newPose.bPoseIsValid && newPose.eTrackingResult = ETrackingResult.Running_OK then
@@ -230,12 +231,12 @@ module RenderModels =
 
 
         let indexBuffer = ArrayBuffer(index) //NativeMemoryBuffer(NativePtr.toNativeInt m.IndexData, int m.TriangleCount * 3 * sizeof<uint16>)
-        let indexBufferView = BufferView(Mod.constant (indexBuffer :> IBuffer), typeof<int>)
+        let indexBufferView = BufferView(AVal.constant (indexBuffer :> IBuffer), typeof<int>)
 
         //let vertexBuffer = NativeMemoryBuffer(NativePtr.toNativeInt m.VertexData, int m.VertexCount * sizeof<Vertex>) :> IBuffer
-        let positions = BufferView(Mod.constant (ArrayBuffer(positions) :> IBuffer), typeof<V3f>)
-        let normals = BufferView(Mod.constant (ArrayBuffer(normals) :> IBuffer), typeof<V3f>)
-        let coords = BufferView(Mod.constant (ArrayBuffer(tc) :> IBuffer), typeof<V2f>)
+        let positions = BufferView(AVal.constant (ArrayBuffer(positions) :> IBuffer), typeof<V3f>)
+        let normals = BufferView(AVal.constant (ArrayBuffer(normals) :> IBuffer), typeof<V3f>)
+        let coords = BufferView(AVal.constant (ArrayBuffer(tc) :> IBuffer), typeof<V2f>)
 
         let sg = 
             Sg.VertexIndexApplicator(indexBufferView, Sg.render mode call) :> ISg 
@@ -367,9 +368,9 @@ type VrDevice(system : CVRSystem, deviceType : VrDeviceType, index : int) =
         events.Trigger(evt)
 
 and VrAxis(system : CVRSystem, axisType : EVRControllerAxisType, deviceIndex : int, axisIndex : int) =
-    let touched = Mod.init false
-    let pressed = Mod.init false
-    let position = Mod.init None
+    let touched = AVal.init false
+    let pressed = AVal.init false
+    let position = AVal.init None
     
     let touch = Event<unit>()
     let untouch = Event<unit>()
@@ -379,9 +380,9 @@ and VrAxis(system : CVRSystem, axisType : EVRControllerAxisType, deviceIndex : i
     override x.ToString() =
         sprintf "{ device = %d; axis = %d }" deviceIndex axisIndex
 
-    member x.Touched = touched :> IMod<_>
-    member x.Pressed = pressed :> IMod<_>
-    member x.Position = position :> IMod<_>
+    member x.Touched = touched :> aval<_>
+    member x.Pressed = pressed :> aval<_>
+    member x.Position = position :> aval<_>
     member x.Touch = touch.Publish
     member x.UnTouch = untouch.Publish
     member x.Press = press.Publish
@@ -480,8 +481,8 @@ type VrTexture =
 type VrRenderInfo =
     {
         framebufferSize     : V2i
-        viewTrafos          : IMod<Trafo3d[]>
-        projTrafos          : IMod<Trafo3d[]>
+        viewTrafos          : aval<Trafo3d[]>
+        projTrafos          : aval<Trafo3d[]>
     }
 
     //let swProcessEvents = Stopwatch()
@@ -520,13 +521,13 @@ module VrSystemStats =
     open Aardvark.SceneGraph
     open FShade
 
-    let toStackedGraph (stats : IMod<VrSystemStats>) =
+    let toStackedGraph (stats : aval<VrSystemStats>) =
         
         let col (v : int) =
             C4b(byte (v >>> 16), byte (v >>> 8), byte v)
 
         let trafosAndColors =
-            stats |> Mod.map (fun s ->
+            stats |> AVal.map (fun s ->
                 
 
                 let timesAndColors =
@@ -563,8 +564,8 @@ module VrSystemStats =
                 trafos, colors
             )
 
-        let trafos = Mod.map (fun (t,_) -> t :> System.Array) trafosAndColors
-        let colors = Mod.map (fun (_,c) -> c :> System.Array) trafosAndColors
+        let trafos = AVal.map (fun (t,_) -> t :> System.Array) trafosAndColors
+        let colors = AVal.map (fun (_,c) -> c :> System.Array) trafosAndColors
 
         let baseBox = 
             Sg.box' C4b.White (Box3d(V3d.Zero, V3d.III))
@@ -620,8 +621,8 @@ type VrSystem(appType : VrApplicationType) =
                     yield None
         |]
         
-    let connectedDevices = Mod.custom (fun _ -> lock deviceCache (fun () -> Seq.choose id deviceCache |> HRefSet.ofSeq))
-    let connectedAll = connectedDevices |> ASet.ofMod
+    let connectedDevices = AVal.custom (fun _ -> lock deviceCache (fun () -> Seq.choose id deviceCache |> HashSet.ofSeq))
+    let connectedAll = connectedDevices |> ASet.ofAVal
     let connectedHmds = connectedAll |> ASet.filter (fun d -> d.Type = VrDeviceType.Hmd)
     let connectedControllers = connectedAll |> ASet.filter (fun d -> d.Type = VrDeviceType.Controller)
     
@@ -766,6 +767,7 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
     static let sGCoord = Symbol.Create "GCoord"
     static let sBCoord = Symbol.Create "BCoord"
 
+    let mutable adjustSize = adjustSize
 
     let hiddenAreaMesh =
         let lMesh = system.System.GetHiddenAreaMesh(EVREye.Eye_Left, EHiddenAreaMeshType.k_eHiddenAreaMesh_Standard)
@@ -901,12 +903,12 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
             Log.error "[OpenVR] %A: %s" err str
             //failwithf "[OpenVR] %A: %s" err str
 
-    let depthRange = Range1d(0.15, 1000.0) |> Mod.init
+    let depthRange = Range1d(0.15, 1000.0) |> AVal.init
 
     let projections =
         //let headToEye = system.GetEyeToHeadTransform(EVREye.Eye_Right) |> Trafo.ofHmdMatrix34 |> Trafo.inverse
         //let headToEye = Trafo3d.Scale(1.0, 1.0, -1.0) * headToEye
-        depthRange |> Mod.map (fun range ->
+        depthRange |> AVal.map (fun range ->
             let proj = system.System.GetProjectionMatrix(EVREye.Eye_Left, float32 range.Min, float32 range.Max)
             let lProj = VrTrafo.ofHmdMatrix44 proj
 
@@ -915,14 +917,20 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
             [| lProj; rProj|]
         )
 
-    let desiredSize =
-        lazy (
+    let mutable desiredSize : option<V2i> = None
+    
+    let getDesiredSize() =
+        match desiredSize with
+        | Some s -> s
+        | None -> 
             let mutable width = 0u
             let mutable height = 0u
             system.System.GetRecommendedRenderTargetSize(&width,&height)
             let s = adjustSize(V2i(int width, int height))
-            V2i(max 1 s.X, max 1 s.Y)
-        )
+            let s = V2i(max 1 s.X, max 1 s.Y)
+            desiredSize <- Some s
+            s
+       
 
 
     let view (t : Trafo3d) =
@@ -936,16 +944,22 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
             view * rHeadToEye
         |]
 
-    let infos =
-        lazy (
-            hmds() |> Seq.toArray |> Array.map (fun hmd ->
-                {
-                    framebufferSize = desiredSize.Value
-                    viewTrafos = hmd.MotionState.Pose |> Mod.map view  //CameraView.lookAt (V3d(3,4,5)) V3d.Zero V3d.OOI |> CameraView.viewTrafo |> Mod.constant //hmd.MotionState.Pose |> Mod.map Trafo.inverse |> Unhate.register "viewTrafo"
-                    projTrafos = projections
-                }
-            )
-        )
+    let mutable infos : VrRenderInfo[] = null
+
+    let getInfos() =
+        if isNull infos then
+            let res =
+                hmds() |> Seq.toArray |> Array.map (fun hmd ->
+                    {
+                        framebufferSize = getDesiredSize()
+                        viewTrafos = hmd.MotionState.Pose |> AVal.map view  //CameraView.lookAt (V3d(3,4,5)) V3d.Zero V3d.OOI |> CameraView.viewTrafo |> AVal.constant //hmd.MotionState.Pose |> AVal.map Trafo.inverse |> Unhate.register "viewTrafo"
+                        projTrafos = projections
+                    }
+                )
+            infos <- res
+            res
+        else
+            infos
 
     let mutable backgroundColor = C4f.Black
 
@@ -992,12 +1006,12 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
 
     member x.System = system
     member x.Compositor = compositor
-    member x.DesiredSize = desiredSize.Value
+    member x.DesiredSize = getDesiredSize()
 
     member x.Shutdown() =
         running <- false
 
-    member x.Info = infos.Value.[0]
+    member x.Info = getInfos().[0]
 
     member x.HiddenAreaMesh = hiddenAreaMesh
 
@@ -1044,100 +1058,101 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
     member x.IsRunning with get() = running
 
     member x.UpdateFrame(lTex : VrTexture, rTex : VrTexture) =
-    
-        swTotal.Start()
-        swProcessEvents.Start()
-        let events = system.ProcessEvents()
-        swProcessEvents.Stop()
+        lock x (fun () ->
+            swTotal.Start()
+            swProcessEvents.Start()
+            let events = system.ProcessEvents()
+            swProcessEvents.Stop()
 
-        if system.ShutdownRequested then
-            x.Shutdown()
-        else
-
-            swWaitPoses.Start()
-            let err = x.Use (fun () -> compositor.WaitGetPoses(renderPoses, gamePoses))
-            swWaitPoses.Stop()
-
-            if err = EVRCompositorError.None then
-                swUpdatePoses.Start()
-                // update all poses
-                transact (fun () ->
-                    system.UpdatePoses(renderPoses)
-                )
-
-                x.UpdatePoses(renderPoses)
-                swUpdatePoses.Stop()
-
-                swProcessEvents.Start()
-                for evt in events do
-                    x.ProcessEvent evt // user application event processing
-                swProcessEvents.Stop()
-            
-                // render for all HMDs
-                for hmd in hmds() do
-                                         
-                    if hmd.MotionState.IsValid.GetValue() then
-                        swRender.Start()
-                        x.Render()
-                        swRender.Stop()
-
-                        swSubmit.Start()
-                        x.Use(fun () ->
-                            compositor.Submit(EVREye.Eye_Left, &lTex.Info, &lTex.Bounds, lTex.Flags) |> check "submit left"
-                            //x.AfterSubmit()
-                            compositor.Submit(EVREye.Eye_Right, &rTex.Info, &rTex.Bounds, rTex.Flags) |> check "submit right"
-                            //x.AfterSubmit()
-                        )
-                        swSubmit.Stop()
+            if system.ShutdownRequested then
+                x.Shutdown()
             else
-                Log.error "[OpenVR] %A" err
+
+                swWaitPoses.Start()
+                let err = x.Use (fun () -> compositor.WaitGetPoses(renderPoses, gamePoses))
+                swWaitPoses.Stop()
+
+                if err = EVRCompositorError.None then
+                    swUpdatePoses.Start()
+                    // update all poses
+                    transact (fun () ->
+                        system.UpdatePoses(renderPoses)
+                    )
+
+                    x.UpdatePoses(renderPoses)
+                    swUpdatePoses.Stop()
+
+                    swProcessEvents.Start()
+                    for evt in events do
+                        x.ProcessEvent evt // user application event processing
+                    swProcessEvents.Stop()
             
-            swTotal.Stop()
-            frameCount <- frameCount + 1
+                    // render for all HMDs
+                    for hmd in hmds() do
+                                         
+                        if hmd.MotionState.IsValid.GetValue() then
+                            swRender.Start()
+                            x.Render()
+                            swRender.Stop()
 
-            if frameCount >= statFrameCount then
-                let r = x.GetRenderStats()
-                x.ResetRenderStats()
+                            swSubmit.Start()
+                            x.Use(fun () ->
+                                compositor.Submit(EVREye.Eye_Left, &lTex.Info, &lTex.Bounds, lTex.Flags) |> check "submit left"
+                                //x.AfterSubmit()
+                                compositor.Submit(EVREye.Eye_Right, &rTex.Info, &rTex.Bounds, rTex.Flags) |> check "submit right"
+                                //x.AfterSubmit()
+                            )
+                            swSubmit.Stop()
+                else
+                    Log.error "[OpenVR] %A" err
+            
+                swTotal.Stop()
+                frameCount <- frameCount + 1
 
-                let stats = 
-                    {
-                        ProcessEvents   = swProcessEvents.MicroTime / frameCount
-                        WaitGetPoses    = swWaitPoses.MicroTime / frameCount
-                        UpdatePoses     = swUpdatePoses.MicroTime / frameCount
-                        Render          = 
-                            { 
-                                Total   = r.Total / frameCount
-                                Clear   = r.Clear / frameCount
-                                Render  = r.Render / frameCount
-                                Resolve = r.Resolve / frameCount
-                            }
-                        Submit          = swSubmit.MicroTime / frameCount
-                        Total           = swTotal.MicroTime / frameCount
-                        FrameCount      = frameCount
-                    }
+                if frameCount >= statFrameCount then
+                    let r = x.GetRenderStats()
+                    x.ResetRenderStats()
+
+                    let stats = 
+                        {
+                            ProcessEvents   = swProcessEvents.MicroTime / frameCount
+                            WaitGetPoses    = swWaitPoses.MicroTime / frameCount
+                            UpdatePoses     = swUpdatePoses.MicroTime / frameCount
+                            Render          = 
+                                { 
+                                    Total   = r.Total / frameCount
+                                    Clear   = r.Clear / frameCount
+                                    Render  = r.Render / frameCount
+                                    Resolve = r.Resolve / frameCount
+                                }
+                            Submit          = swSubmit.MicroTime / frameCount
+                            Total           = swTotal.MicroTime / frameCount
+                            FrameCount      = frameCount
+                        }
                     
-                evtStatistics.Emit(stats)
+                    evtStatistics.Emit(stats)
 
-                swProcessEvents.Reset()
-                swWaitPoses.Reset()
-                swUpdatePoses.Reset()
-                swSubmit.Reset()
-                swTotal.Reset()
-                swRender.Reset()
-                frameCount <- 0
+                    swProcessEvents.Reset()
+                    swWaitPoses.Reset()
+                    swUpdatePoses.Reset()
+                    swSubmit.Reset()
+                    swTotal.Reset()
+                    swRender.Reset()
+                    frameCount <- 0
+        )
 
     member x.Run () =
         if isDisposed then raise <| ObjectDisposedException("VrRenderer")
         running <- true
-        let (lTex, rTex) =
-            match textures with
-            | Some t -> t
-            | None ->
-                let t = x.OnLoad infos.Value.[0] 
-                textures <- Some t
-                t
 
         while running do
+            let (lTex, rTex) =
+                match textures with
+                | Some t -> t
+                | None ->
+                    let t = x.OnLoad (getInfos().[0])
+                    textures <- Some t
+                    t
             x.UpdateFrame(lTex, rTex)
 
     member x.Dispose() =
@@ -1158,6 +1173,21 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
                 ()
             x.Release()
 
+    member x.AdjustSize 
+        with get() = adjustSize
+        and set v = 
+            lock x (fun () ->
+                adjustSize <- v
+                infos <- null
+                desiredSize <- None
+                match textures with
+                | Some (l,r) ->
+                    l.Dispose()
+                    r.Dispose()
+                    textures <- None
+                | None ->
+                    ()
+            )
 
     member x.Hmd = hmds() |> Seq.head
 

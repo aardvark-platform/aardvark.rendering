@@ -4,7 +4,7 @@ open System.Runtime.InteropServices
 open System.Collections.Generic
 
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 
 type ISg = 
@@ -12,7 +12,7 @@ type ISg =
 
 type IApplicator =
     inherit ISg
-    abstract member Child : IMod<ISg>
+    abstract member Child : aval<ISg>
 
 type IGroup =
     inherit ISg
@@ -20,15 +20,15 @@ type IGroup =
 
 module private Providers =
 
-    type SimpleUniformHolder(values : Map<Symbol, IMod>) =
+    type SimpleUniformHolder(values : Map<Symbol, IAdaptiveValue>) =
         interface IUniformProvider with
             member x.TryGetUniform (scope,name) = Map.tryFind name values
             member x.Dispose() = ()
 
-        new (l : list<Symbol * IMod>) = new SimpleUniformHolder(Map.ofList l)
+        new (l : list<Symbol * IAdaptiveValue>) = new SimpleUniformHolder(Map.ofList l)
 
-    type ScopeDependentUniformHolder(values : Map<Symbol, Scope -> IMod>) =
-        let cache = Dictionary<Scope * Symbol, Option<IMod>>()
+    type ScopeDependentUniformHolder(values : Map<Symbol, Scope -> IAdaptiveValue>) =
+        let cache = Dictionary<Scope * Symbol, Option<IAdaptiveValue>>()
 
         interface IUniformProvider with
             member x.Dispose () = cache.Clear()
@@ -54,18 +54,18 @@ module private Providers =
             match cache with
                 | Some c -> c
                 | None -> 
-                    match scope.TryGetAttributeValue attName with
-                        | Success map ->
+                    match scope.TryGetInherited attName with
+                        | Some (:? Map<Symbol, BufferView> as map) ->
                             cache <- Some map
                             map
-                        | Error e ->
+                        | _ ->
                             failwithf "could not get atttribute map %A for %A" attName scope
 
         interface IAttributeProvider with
 
             member x.Dispose() =
                 cache <- None
-                scope <- emptyScope
+                scope <- Ag.Scope.Root
 
             member x.All =
                 getMap() |> Map.toSeq
@@ -87,7 +87,7 @@ module private Providers =
                     match ig.IndexedAttributes.TryGetValue s with
                         | (true, att) -> 
                             let t = att.GetType().GetElementType()
-                            let v = BufferView(Mod.constant (ArrayBuffer att :> IBuffer), t)
+                            let v = BufferView(AVal.constant (ArrayBuffer att :> IBuffer), t)
 
                             cache.[s] <- v
                             Some v
@@ -111,7 +111,7 @@ module private Providers =
 
     type UniformProvider(scope : Scope,  uniforms : list<IUniformProvider>, attributeProviders : list<IAttributeProvider>) =
         let mutable scope = scope
-        let mutable cache = SymbolDict<IMod>()
+        let mutable cache = SymbolDict<IAdaptiveValue>()
 
         
         member x.TryGetUniform(dynamicScope, s : Symbol) =
@@ -120,7 +120,7 @@ module private Providers =
                 let nullResource = 
                     attributeProviders |> List.tryPick (fun p ->
                         match p.TryGetAttribute s with
-                         | Some v -> Some (not v.IsSingleValue) //v.Buffer |> Mod.map (not << NullResources.isNullResource) |> Some
+                         | Some v -> Some (not v.IsSingleValue) //v.Buffer |> AVal.map (not << NullResources.isNullResource) |> Some
                          | None -> None
                     )
                 match nullResource with
@@ -139,27 +139,27 @@ module private Providers =
                             cache.Add(s, cs)
                             Some cs
                         | None -> 
-                            match scope.TryGetAttributeValue (str) with
-                                | Success (v : IMod) -> 
-                                    let cs = v
-                                    cache.Add(s, cs)
-                                    Some cs
-                                | _ ->
-                                    if str.StartsWith("Has") then
-                                        let baseName = str.Substring(3).ToSymbol()
-                                        let sourceUniform = x.TryGetUniform(dynamicScope, baseName)
-                                        match sourceUniform with    
-                                            | Some v -> 
-                                                NullResources.isValidResourceAdaptive v :> IMod |> Some 
-                                            | None -> 
-                                                baseName |> contains |> Mod.constant :> IMod |> Some
-                                    else None
+                            match scope.TryGetAttributeValue<IAdaptiveValue> (str) with
+                            | Some v -> 
+                                let cs = v
+                                cache.Add(s, cs)
+                                Some cs
+                            | _ ->
+                                if str.StartsWith("Has") then
+                                    let baseName = str.Substring(3).ToSymbol()
+                                    let sourceUniform = x.TryGetUniform(dynamicScope, baseName)
+                                    match sourceUniform with    
+                                        | Some v -> 
+                                            NullResources.isValidResourceAdaptive v :> IAdaptiveValue |> Some 
+                                        | None -> 
+                                            baseName |> contains |> AVal.constant :> IAdaptiveValue |> Some
+                                else None
 
         interface IUniformProvider with
 
             member x.Dispose() =
                 cache.Clear()
-                scope <- emptyScope
+                scope <- Ag.Scope.Root
 
             member x.TryGetUniform(dynamicScope,s) = x.TryGetUniform(dynamicScope,s)
 

@@ -24,7 +24,7 @@ open OpenTK.Platform
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open System.Reflection
 open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.GL
@@ -97,7 +97,7 @@ module UniformBufferExtensions =
 
     type Context with
         member x.CreateUniformBuffer(dataSize : nativeint) =
-            using x.ResourceLock (fun _ ->
+            Operators.using x.ResourceLock (fun _ ->
                 
                 let handle = GL.GenBuffer()
                 GL.Check "could not create uniform buffer"
@@ -111,7 +111,7 @@ module UniformBufferExtensions =
 
 
         member x.CreateUniformBuffer(block : ShaderBlock) =
-            using x.ResourceLock (fun _ ->
+            Operators.using x.ResourceLock (fun _ ->
                 
                 let handle = GL.GenBuffer()
                 GL.Check "could not create uniform buffer"
@@ -124,7 +124,7 @@ module UniformBufferExtensions =
             )
 
         member x.Delete(b : UniformBuffer) =
-            using x.ResourceLock (fun _ ->
+            Operators.using x.ResourceLock (fun _ ->
                 GL.DeleteBuffer(b.Handle)
                 GL.Check "could not delete uniform buffer"
 
@@ -135,7 +135,7 @@ module UniformBufferExtensions =
         member x.Upload(b : UniformBuffer) =
             if b.Dirty then
                 b.Dirty <- false
-                using x.ResourceLock (fun _ ->
+                Operators.using x.ResourceLock (fun _ ->
                     GL.NamedBufferSubData(b.Handle, 0n, nativeint b.Size, b.Data)
                     GL.Check "could not upload uniform buffer" 
                 )

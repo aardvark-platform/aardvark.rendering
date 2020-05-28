@@ -9,7 +9,8 @@ open Aardvark.Base.Sorting
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
-open Aardvark.Base.Incremental
+open FSharp.Data.Traceable
+open FSharp.Data.Adaptive
 open System.Diagnostics
 open System.Collections.Generic
 open Aardvark.Base.Runtime
@@ -59,7 +60,7 @@ type ResourceManagerExtensions private() =
             |> Map.ofList
 
         let inputState =
-            this.CreateVertexInputState(layout.PipelineInfo, Mod.constant (VertexInputState.ofTypes inputs))
+            this.CreateVertexInputState(layout.PipelineInfo, AVal.constant (VertexInputState.ofTypes inputs))
 
         let inputAssembly =
             this.CreateInputAssemblyState(state.geometryMode, program)
@@ -154,8 +155,8 @@ type ResourceManagerExtensions private() =
 module private RuntimeCommands =
     [<AutoOpen>]
     module Helpers = 
-        let consume (r : HashSet<'a>) =
-            let arr = HashSet.toArray r
+        let consume (r : System.Collections.Generic.HashSet<'a>) =
+            let arr = Aardvark.Base.HashSet.toArray r
             r.Clear()
             arr
             
@@ -167,15 +168,15 @@ module private RuntimeCommands =
         let dispose (d : #IDisposable) =
             d.Dispose()
 
-        module HDeltaSet =
-            let iter (add : 'a -> unit) (rem : 'a -> unit) (set : hdeltaset<'a>) =
+        module HashSetDelta =
+            let iter (add : 'a -> unit) (rem : 'a -> unit) (set : HashSetDelta<'a>) =
                 set |> Seq.iter (function Add(_,o) -> add o | _ -> ())
                 set |> Seq.iter (function Rem(_,o) -> rem o | _ -> ())
 
-        module PDeltaList =
-            let iter (set : Index -> 'a -> unit) (remove : Index -> unit) (deltas : pdeltalist<'a>) =
-                deltas |> PDeltaList.toSeq |> Seq.iter (function (i,Set v) -> set i v | _ -> ())
-                deltas |> PDeltaList.toSeq |> Seq.iter (function (i,Remove) -> remove i | _ -> ())
+        module IndexListDelta =
+            let iter (set : Index -> 'a -> unit) (remove : Index -> unit) (deltas : IndexListDelta<'a>) =
+                deltas |> IndexListDelta.toSeq |> Seq.iter (function (i,Set v) -> set i v | _ -> ())
+                deltas |> IndexListDelta.toSeq |> Seq.iter (function (i,Remove) -> remove i | _ -> ())
 
 
         module Shader =
@@ -260,7 +261,7 @@ module private RuntimeCommands =
                 member x.Offset = nativeint offset
                 member x.Size = nativeint size
 
-        type UniformWriter(offset : nativeint, target : Map<string, int * IMod * UniformWriters.IWriter>) =
+        type UniformWriter(offset : nativeint, target : Map<string, int * IAdaptiveValue * UniformWriters.IWriter>) =
             inherit AdaptiveObject()
 
             member x.Write(token : AdaptiveToken, ptr : Map<string, nativeint>) =
@@ -272,7 +273,7 @@ module private RuntimeCommands =
                             | _ -> ()
                 )
 
-        type InstanceBufferSlot internal(manager : MemoryManager<_>, values : Map<string, int * IMod * UniformWriters.IWriter>[], dirtySet : HashSet<UniformWriter>, parent : IAdaptiveObject) =
+        type InstanceBufferSlot internal(manager : MemoryManager<_>, values : Map<string, int * IAdaptiveValue * UniformWriters.IWriter>[], dirtySet : HashSet<UniformWriter>, parent : IAdaptiveObject) =
             
             let mutable block = manager.Alloc(nativeint values.Length)
             let writers = 
@@ -554,13 +555,13 @@ module private RuntimeCommands =
                             )
                 map Map.empty (Map.toList buffers)
 
-            override x.InputChanged(t,o) =
-                base.InputChanged(t,o)
+            override x.InputChangedObject(t,o) =
+                base.InputChangedObject(t,o)
                 match o with
                     | :? UniformWriter as w -> lock dirty (fun () -> dirty.Add w |> ignore)
                     | _ -> ()
 
-            member x.NewSlot(values : Map<string, IMod>) =
+            member x.NewSlot(values : Map<string, IAdaptiveValue>) =
                 let values =
                     writers |> Map.map (fun name writer ->
                         match Map.tryFind name values with
@@ -698,6 +699,7 @@ module private RuntimeCommands =
     type PreparedCommand() =
         inherit AdaptiveObject()
 
+        let id = newId()
         let stream = new VKVM.CommandStream()
 
         let mutable prev : Option<PreparedCommand> = None
@@ -735,8 +737,9 @@ module private RuntimeCommands =
         abstract member Compile : AdaptiveToken * VKVM.CommandStream -> unit
         abstract member Free : unit -> unit
 
-        default x.GroupKey = [x.Id :> obj]
+        default x.GroupKey = [id :> obj]
 
+        member x.Id = id
         member x.Stream = check(); stream
 
         member x.Update(t : AdaptiveToken) =
@@ -771,11 +774,11 @@ module private RuntimeCommands =
 
         let boundingBox =
             lazy (
-                match Ag.tryGetSynAttribute o.AttributeScope "GlobalBoundingBox" with
-                    | Some (:? IMod<Box3d> as b) -> b
-                    | _ -> 
-                        Log.warn "[Vulkan] no bounding box for Object %A" o.AttributeScope
-                        Mod.constant Box3d.Unit
+                match o.AttributeScope.TryGetSynthesized<aval<Box3d>>("GlobalBoundingBox") with
+                | Some b -> b
+                | _ -> 
+                    Log.warn "[Vulkan] no bounding box for Object %A" o.AttributeScope
+                    AVal.constant Box3d.Unit
             )
 
         static let rec hook (task : AbstractRenderTask) (o : IRenderObject) =
@@ -895,37 +898,56 @@ module private RuntimeCommands =
                 override x.Compile(_,_) = ()
             }
         
-        let trie = Trie<PreparedCommand>()
-        do trie.Add([], firstCommand)
+        let trie = OrderMaintenanceTrie<obj,PreparedCommand>()
+        do trie.Set([], firstCommand) |> ignore
 
-        override x.First = trie.First.Value
-        override x.Last = trie.Last.Value
+        override x.First = trie.First.Value.Value
+        override x.Last = trie.Last.Value.Value
 
         override x.Add(cmd : PreparedCommand) =
-            trie.Add(cmd.GroupKey, cmd)
-            match trie.Last with
-                | Some last -> 
-                    let next = x.Next |> Option.map (fun n -> n.First)
-                    last.Next <- next
-                    match next with
-                        | Some n -> n.Prev <- Some last
-                        | None -> ()
+            let o : list<obj> = cmd.GroupKey
+            let ref = trie.Set(cmd.GroupKey, cmd)
+            match ref.Prev with
+            | ValueNone -> ()
+            | ValueSome v -> 
+                v.Value.Next <- Some cmd
+                cmd.Prev <- Some v.Value
+            match ref.Next with
+            | ValueNone -> ()
+            | ValueSome next -> 
+                next.Value.Prev <- Some cmd
+                cmd.Next <- Some next.Value
 
-                | None ->
-                    failwith "[Vulkan] empty CommandBucket"
+            match trie.Last with
+            | ValueNone -> failwith "[Vulkan] empty CommandBucket"
+            | ValueSome l -> 
+                let next = x.Next |> Option.map (fun n -> n.First)
+                l.Value.Next <- next
+                match next with
+                | None -> ()
+                | Some n -> n.Prev <- Some l.Value
 
         override x.Remove(cmd : PreparedCommand) =
-            let res = trie.Remove(cmd.GroupKey)
-            match trie.Last with
-                | Some last -> 
-                    let next = x.Next  |> Option.map (fun n -> n.First)
-                    last.Next <- next
+            let res = trie.TryRemove(cmd.GroupKey)
+            match res with
+            | ValueNone -> false
+            | ValueSome (prev,next) -> 
+                match prev,next with
+                | ValueSome prev, ValueSome next -> 
+                    prev.Value.Next <- Some next.Value
+                    next.Value.Prev <- Some prev.Value
+                | ValueSome last, ValueNone  -> 
+                    let next = x.Next |> Option.map (fun n -> n.First)
+                    last.Value.Next <- next
                     match next with
-                        | Some n -> n.Prev <- Some last
-                        | None -> ()
-                | None ->
-                    failwith "[Vulkan] empty CommandBucket"
-            res
+                    | None -> ()
+                    | Some n -> n.Prev <- Some last.Value
+                | ValueNone, ValueSome next ->
+                    firstCommand.Next <- Some next.Value
+                    next.Value.Prev <- Some firstCommand
+                | _ -> ()
+                true
+
 
         override x.Release() =
             firstCommand.Dispose()
@@ -938,7 +960,7 @@ module private RuntimeCommands =
     and SortedCommandBucket(order : RenderPassOrder) =
         inherit CommandBucket()
         
-        let commands = Dict<RenderObjectCommand, IMod<float>>()
+        let commands = Dict<RenderObjectCommand, aval<float>>()
 
         let firstCommand =
             { new PreparedCommand() with
@@ -964,11 +986,11 @@ module private RuntimeCommands =
                 let u = cmd.Uniforms
                     
                 let box = cmd.BoundingBox
-                let view = u.TryGetUniform(Ag.emptyScope, Symbol.Create "ViewTrafo")
-                let proj = u.TryGetUniform(Ag.emptyScope, Symbol.Create "ProjTrafo")
+                let view = u.TryGetUniform(Ag.Scope.Root, Symbol.Create "ViewTrafo")
+                let proj = u.TryGetUniform(Ag.Scope.Root, Symbol.Create "ProjTrafo")
                 match view, proj with
-                    | Some (:? IMod<Trafo3d> as v), Some (:? IMod<Trafo3d> as p) ->
-                        Mod.custom (fun t ->
+                    | Some (:? aval<Trafo3d> as v), Some (:? aval<Trafo3d> as p) ->
+                        AVal.custom (fun t ->
                             let v = v.GetValue t
                             let p = p.GetValue t
                             let box = box.GetValue t
@@ -976,8 +998,8 @@ module private RuntimeCommands =
                             pp.Z
                         )
 
-                    | Some (:? IMod<Trafo3d[]> as v), Some (:? IMod<Trafo3d> as p) ->
-                        Mod.custom (fun t ->
+                    | Some (:? aval<Trafo3d[]> as v), Some (:? aval<Trafo3d> as p) ->
+                        AVal.custom (fun t ->
                             let v = v.GetValue t
                             let p = p.GetValue t
                             let box = box.GetValue t
@@ -985,8 +1007,8 @@ module private RuntimeCommands =
                             pp |> Seq.map (fun pp -> pp.Z) |> Seq.min
                         )
                         
-                    | Some (:? IMod<Trafo3d> as v), Some (:? IMod<Trafo3d[]> as p) ->
-                        Mod.custom (fun t ->
+                    | Some (:? aval<Trafo3d> as v), Some (:? aval<Trafo3d[]> as p) ->
+                        AVal.custom (fun t ->
                             let v = v.GetValue t
                             let p = p.GetValue t
                             let box = box.GetValue t
@@ -994,8 +1016,8 @@ module private RuntimeCommands =
                             pp |> Seq.map (fun pp -> pp.Z) |> Seq.min
                         )
 
-                    | Some (:? IMod<Trafo3d[]> as v), Some (:? IMod<Trafo3d[]> as p) ->
-                        Mod.custom (fun t ->
+                    | Some (:? aval<Trafo3d[]> as v), Some (:? aval<Trafo3d[]> as p) ->
+                        AVal.custom (fun t ->
                             let v = v.GetValue t
                             let p = p.GetValue t
                             let box = box.GetValue t
@@ -1040,7 +1062,7 @@ module private RuntimeCommands =
     and UnorderedRenderObjectCommand(compiler : Compiler, objects : aset<IRenderObject>) =
         inherit PreparedCommand()
 
-        let reader = objects.GetReader()
+        let mutable reader = objects.GetReader()
 
 
 
@@ -1111,7 +1133,7 @@ module private RuntimeCommands =
                     ()
             
 
-        override x.InputChanged(_,i) =
+        override x.InputChangedObject(_,i) =
             match i with
                 | :? PreparedCommand as c ->
                     // should be unreachable
@@ -1126,7 +1148,7 @@ module private RuntimeCommands =
             // clear all caches
             cache.Clear()
             dirty.Clear()
-            reader.Dispose()
+            reader <- Unchecked.defaultof<_>
 
             // free the entry-command
             for (KeyValue(_,b)) in trie do b.Dispose()
@@ -1134,11 +1156,11 @@ module private RuntimeCommands =
 
 
         override x.Compile(token, stream) =
-            let deltas = reader.GetOperations token
+            let deltas = reader.GetChanges token
 
             // process all pending deltas ensuring that all Adds are processed before all Rems 
             // allowing resources to 'survive' the update
-            deltas |> HDeltaSet.iter (insert token) (remove)
+            deltas |> HashSetDelta.iter (insert token) (remove)
 
             // get and update the dirty PreparedCommands (can be non-empty due to CommandNode)
             let dirty = lock dirty (fun () -> consume dirty)
@@ -1157,7 +1179,7 @@ module private RuntimeCommands =
 
 
     /// Clearing the current Framebuffer using the supplied values
-    and ClearCommand(compiler : Compiler, colors : Map<Symbol, IMod<C4f>>, depth : Option<IMod<float>>, stencil : Option<IMod<uint32>>) =
+    and ClearCommand(compiler : Compiler, colors : Map<Symbol, aval<C4f>>, depth : Option<aval<float>>, stencil : Option<aval<uint32>>) =
         inherit PreparedCommand()
 
         override x.Compile(token, stream) =
@@ -1262,7 +1284,7 @@ module private RuntimeCommands =
     and OrderedCommand(compiler : Compiler, commands : alist<RuntimeCommand>) =
         inherit PreparedCommand()
 
-        let reader = commands.GetReader()
+        let mutable reader = commands.GetReader()
 
         let first = new VKVM.CommandStream()
         let cache = SortedDictionaryExt<Index, PreparedCommand>(compare)
@@ -1318,7 +1340,7 @@ module private RuntimeCommands =
                 | _ ->
                     ()
 
-        override x.InputChanged(_,i) =
+        override x.InputChangedObject(_,i) =
             match i with
                 | :? PreparedCommand as c ->
                     lock dirty (fun () -> dirty.Add c |> ignore)
@@ -1326,11 +1348,11 @@ module private RuntimeCommands =
                     ()
 
         override x.Compile(token, stream) =
-            let deltas = reader.GetOperations token
+            let deltas = reader.GetChanges token
 
             // process all operations making sure that all Sets are performed 
             // before all Removes, allowing resources 'survive' the update
-            deltas |> PDeltaList.iter (set token) (remove)
+            deltas |> IndexListDelta.iter (set token) (remove)
 
             // update all dirty inner commands
             let dirty = lock dirty (fun () -> consume dirty)
@@ -1341,14 +1363,14 @@ module private RuntimeCommands =
             stream.Call(first) |> ignore
 
         override x.Free() =
-            reader.Dispose()
+            reader <- Unchecked.defaultof<_>
             cache |> Seq.iter (fun (KeyValue(_,v)) -> v.Dispose())
             cache.Clear()
             dirty.Clear()
             first.Dispose()
 
     /// Conditionally dispatching between two commands (while keeping both updated)
-    and IfThenElseCommand(compiler : Compiler, condition : IMod<bool>, ifTrue : RuntimeCommand, ifFalse : RuntimeCommand) =
+    and IfThenElseCommand(compiler : Compiler, condition : aval<bool>, ifTrue : RuntimeCommand, ifFalse : RuntimeCommand) =
         inherit PreparedCommand()
 
         let ifTrue = compiler.Compile ifTrue
@@ -1372,7 +1394,7 @@ module private RuntimeCommands =
             else stream.Call(ifFalse.Stream) |> ignore
             
     /// Conditionally dispatching between two commands (while keeping only the active one alive)
-    and StructuralIfThenElseCommand(compiler : Compiler, condition : IMod<bool>, ifTrue : RuntimeCommand, ifFalse : RuntimeCommand) =
+    and StructuralIfThenElseCommand(compiler : Compiler, condition : aval<bool>, ifTrue : RuntimeCommand, ifFalse : RuntimeCommand) =
         inherit PreparedCommand()
 
         let mutable cache : Option<bool * PreparedCommand> = None
@@ -1461,7 +1483,7 @@ module private RuntimeCommands =
     and GroupedCommand(compiler : Compiler, surface : Aardvark.Base.Surface, state : PipelineState, geometries : aset<Geometry>) =
         inherit PreparedCommand()
             
-        let reader = geometries.GetReader()
+        let mutable reader = geometries.GetReader()
 
         // entry and exit streams for the entire GroupedCommand
         let first = new VKVM.CommandStream()
@@ -1533,7 +1555,7 @@ module private RuntimeCommands =
                     failf "removing a Geometry from a GroupedCommand that has never been added"
 
         override x.Free() =
-            reader.Dispose()
+            reader <- Unchecked.defaultof<_>
             first.Dispose()
             match preparedPipeline with
                 | Some p ->
@@ -1548,8 +1570,8 @@ module private RuntimeCommands =
 
         override x.Compile(token, stream) =
             let pipeline = getPipeline stream
-            let ops = reader.GetOperations token
-            ops |> HDeltaSet.iter (add token pipeline) (remove)
+            let ops = reader.GetChanges token
+            ops |> HashSetDelta.iter (add token pipeline) (remove)
 
     and BindPipelineCommand(compiler : Compiler, surface : Aardvark.Base.Surface, state : PipelineState) =
         inherit PreparedCommand()
@@ -1626,17 +1648,17 @@ module private RuntimeCommands =
 
         let activeSet = HashSet<GeometryCommand>()
 
-        let mutable activeDelta = HDeltaSet.empty
+        let mutable activeDelta = HashSetDelta.empty
 
 
         let activate (cmd : GeometryCommand) =
             lock first (fun () ->
-                activeDelta <- HDeltaSet.add (Add cmd) activeDelta
+                activeDelta <- HashSetDelta.add (Add cmd) activeDelta
             )
 
         let deactivate (cmd : GeometryCommand) =
             lock first (fun () ->
-                activeDelta <- HDeltaSet.add (Rem cmd) activeDelta
+                activeDelta <- HashSetDelta.add (Rem cmd) activeDelta
             )
 
         let realActivate (cmd : GeometryCommand) =
@@ -1708,11 +1730,11 @@ module private RuntimeCommands =
             let activeDelta =
                 lock first (fun () ->
                     let res = activeDelta
-                    activeDelta <- HDeltaSet.empty
+                    activeDelta <- HashSetDelta.empty
                     res
                 )
 
-            activeDelta |> HDeltaSet.iter realActivate realDeactivate
+            activeDelta |> HashSetDelta.iter realActivate realDeactivate
        
             
             let dead = lock toDelete (fun () -> consumeList toDelete)
@@ -1721,12 +1743,15 @@ module private RuntimeCommands =
             //innerCompiler.resources.Update(token) |> ignore
             ()
 
-    and Reader<'a> = AdaptiveToken -> hset<'a> -> hdeltaset<'a>
+    and Reader<'a> = AdaptiveToken -> HashSet<'a> -> HashSetDelta<'a>
 
-    and IndirectDrawCommand(compiler : Compiler, effect : FShade.Effect, state : PipelineState, newReader : unit -> IOpReader<hdeltaset<IndexedGeometry>>) =
+    and private DummyObject() =
+        inherit AdaptiveObject()
+
+    and IndirectDrawCommand(compiler : Compiler, effect : FShade.Effect, state : PipelineState, newReader : unit -> IOpReader<HashSetDelta<IndexedGeometry>>) =
         inherit PreparedCommand()
 
-        let reader = newReader()
+        let mutable reader = newReader()
 
         // entry and exit streams for the entire GroupedCommand
         let first = new VKVM.CommandStream()
@@ -1802,9 +1827,9 @@ module private RuntimeCommands =
                     instanceInputs |> Map.map (fun name _ ->
                         let name = Symbol.Create name
                         match g.SingleAttributes.TryGetValue name with
-                            | (true, (:? IMod as a)) -> a
+                            | (true, (:? IAdaptiveValue as a)) -> a
                             | _ -> 
-                                match pipeline.ppUniforms.TryGetUniform(Ag.emptyScope, name) with
+                                match pipeline.ppUniforms.TryGetUniform(Ag.Scope.Root, name) with
                                     | Some a -> a
                                     | None -> failwithf "[Vulkan] could not get uniform %A" name
                     )
@@ -1836,18 +1861,18 @@ module private RuntimeCommands =
         let getIndirect (blockId : int) =
             indirectBuffers.GetOrCreate(blockId, fun _ -> new ResizableIndirectBuffer(compiler.manager.Device, initialIndirectBufferSize))
 
-        let active = History<hrefset<_>, hdeltaset<_>>(HRefSet.trace)
+        let active = History<CountingHashSet<_>, HashSetDelta<_>>(CountingHashSet.trace)
         let activeReader = active.NewReader()
 
         let deltaLock = obj()
-        let mutable pendingDeltas = HDeltaSet.empty
+        let mutable pendingDeltas = HashSetDelta.empty
 
         let mutable running = true
         let pending = MVar.create ()
 
         let puller =
             startThread "Puller" <| fun () ->
-                let o = AdaptiveObject()
+                let o = DummyObject()
                 use s = o.AddMarkingCallback (MVar.put pending)
 
                 while running do
@@ -1855,11 +1880,11 @@ module private RuntimeCommands =
                     if running then
                         let ops = 
                             o.EvaluateAlways AdaptiveToken.Top (fun token ->
-                                reader.GetOperations token
+                                reader.GetChanges token
                             )
 
                         lock deltaLock (fun () ->
-                            pendingDeltas <- HDeltaSet.combine pendingDeltas ops
+                            pendingDeltas <- HashSetDelta.combine pendingDeltas ops
                             Monitor.PulseAll deltaLock
                         )
 
@@ -1871,11 +1896,11 @@ module private RuntimeCommands =
                 while running do
                     let ops = 
                         lock deltaLock (fun () ->
-                            while running && HDeltaSet.isEmpty pendingDeltas do
+                            while running && HashSetDelta.isEmpty pendingDeltas do
                                 Monitor.Wait deltaLock |> ignore
 
                             let mutable rest = pendingDeltas
-                            let mutable taken = HDeltaSet.empty
+                            let mutable taken = HashSetDelta.empty
                             let mutable complexity = 0
                             use e = (pendingDeltas :> seq<_>).GetEnumerator()
                             while complexity < deltaBatchComplexity && e.MoveNext() do
@@ -1886,8 +1911,8 @@ module private RuntimeCommands =
                                         | _ -> remComplexity
 
                                 complexity <- complexity + opComplexity
-                                taken <- HDeltaSet.add op taken
-                                rest <- HDeltaSet.remove op rest
+                                taken <- HashSetDelta.add op taken
+                                rest <- HashSetDelta.remove op rest
 
                             pendingDeltas <- rest
                             taken
@@ -1896,9 +1921,9 @@ module private RuntimeCommands =
 //                            mine
                         )
 
-                    if running && not (HDeltaSet.isEmpty ops) then
+                    if running && not (HashSetDelta.isEmpty ops) then
                         let activeOps =
-                            ops |> HDeltaSet.map (fun op ->
+                            ops |> HashSetDelta.map (fun op ->
                                 match op with
                                     | Add(_,g) ->
                                         let vSlot, uSlot = prepare g
@@ -1958,12 +1983,12 @@ module private RuntimeCommands =
 
             indirectBuffers.Clear()
             slots.Clear()
-            reader.Dispose()
+            reader <- Unchecked.defaultof<_>
 
         override x.Compile(token : AdaptiveToken, stream : VKVM.CommandStream) =
             init stream
 
-            let deltas = activeReader.GetOperations token
+            let deltas = activeReader.GetChanges token
 
 
             let mutable adds = 0
@@ -2055,8 +2080,8 @@ module private RuntimeCommands =
             manager         : ResourceManager
             renderPass      : RenderPass
             stats           : nativeptr<V2i>
-            viewports       : IMod<Box2i[]>
-            scissors        : IMod<Box2i[]>
+            viewports       : aval<Box2i[]>
+            scissors        : aval<Box2i[]>
         }
 
         member x.Compile (cmd : RuntimeCommand) : PreparedCommand =
@@ -2100,8 +2125,8 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
     inherit AbstractRenderTask()
 
     let pool = device.GraphicsFamily.CreateCommandPool()
-    let viewports = Mod.init [||]
-    let scissors = Mod.init [||]
+    let viewports = AVal.init [||]
+    let scissors = AVal.init [||]
 
     let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
     let inner = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)

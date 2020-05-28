@@ -5,7 +5,7 @@ namespace Aardvark.Application.Slim
 open System
 open System.IO
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Application
 open Aardvark.Rendering.Vulkan
 
@@ -78,7 +78,7 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
 
     let startTime = DateTime.Now
     let sw = System.Diagnostics.Stopwatch.StartNew()
-    let time = Mod.custom (fun _ -> startTime + sw.Elapsed) 
+    let time = AVal.custom (fun _ -> startTime + sw.Elapsed) 
     
     let frameWatch = System.Diagnostics.Stopwatch()
     let mutable frameCount = 0
@@ -136,12 +136,12 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
 
         let k = x.Keyboard
         k.KeyDown(Keys.End).Values.Add (fun () ->
-            if Mod.force k.Control then
+            if AVal.force k.Control then
                 x.RenderAsFastAsPossible <- not x.RenderAsFastAsPossible
         )
     
         k.KeyDown(Keys.Enter).Values.Add(fun () ->
-            if Mod.force k.Alt && Mod.force k.Shift then
+            if AVal.force k.Alt && AVal.force k.Shift then
                 x.Fullscreen <- not x.Fullscreen
         )
 
@@ -207,7 +207,7 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
             )
 
         eAfterRender.Trigger()
-        transact time.MarkOutdated
+        AdaptiveObject.RunAfterEvaluate time.MarkOutdated
         if rafap then x.Invalidate()
 
    
@@ -223,6 +223,9 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
     
     member x.AverageFrameTime = totalTime / float frameCount
 
+    member x.SubSampling
+        with get() =  1.0
+        and set v = if v <> 1.0 then failwithf "[Vulkan] SubSampling not implemented"
 
     interface IRenderTarget with
         member this.AfterRender = this.AfterRender
@@ -231,6 +234,9 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
         member this.RenderTask
             with get () = this.RenderTask
             and set v = this.RenderTask <- v
+        member x.SubSampling
+            with get() = x.SubSampling
+            and set v = x.SubSampling <- v
         member this.Runtime = this.Runtime :> IRuntime
         member this.Samples = this.Samples
         member this.Sizes = this.Sizes

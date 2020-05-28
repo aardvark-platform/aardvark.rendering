@@ -1,7 +1,8 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <TargetFramework>netstandard2.0</TargetFramework>	
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <OutputPath>..\..\..\bin\Debug\</OutputPath>
@@ -10,7 +11,20 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <OutputPath>..\..\..\bin\Release\</OutputPath>
   </PropertyGroup>
+  <Target Name="CopyGLFW" AfterTargets="Build">
+    <Copy Condition="'$(OS)' == 'Windows_NT'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\windows\AMD64\glfw3.dll" DestinationFolder="$(OutputPath)" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Windows_NT'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\windows\AMD64\glfw3.dll" DestinationFolder="$(OutputPath)..\netcoreapp3.1" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Windows_NT'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\windows\AMD64\glfw3.dll" DestinationFolder="$(OutputPath)..\net471" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'OSX'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\mac\AMD64\libglfw.3.dylib" DestinationFolder="$(OutputPath)" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'OSX'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\mac\AMD64\libglfw.3.dylib" DestinationFolder="$(OutputPath)..\netcoreapp3.1" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'OSX'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\mac\AMD64\libglfw.3.dylib" DestinationFolder="$(OutputPath)..\net471" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\linux\AMD64\libglfw.so.3" DestinationFolder="$(OutputPath)" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\linux\AMD64\libglfw.so.3" DestinationFolder="$(OutputPath)..\netcoreapp3.1" ContinueOnError="true" />
+    <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\..\lib\Native\Aardvark.Application.Slim.GL\linux\AMD64\libglfw.so.3" DestinationFolder="$(OutputPath)..\net471" ContinueOnError="true" />
+  </Target>
   <ItemGroup>
+    <EmbeddedResource Include="resources\aardvark.png" />
+    <Compile Include="GLFW.fs" />
     <Compile Include="GameWindow.fs" />
     <Compile Include="Application.fs" />
   </ItemGroup>

@@ -8,7 +8,7 @@ open FShade
 open FShade.GLSL
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.Base.Management
 open Aardvark.Base.Runtime
@@ -575,14 +575,15 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
 
     let dirty = System.Collections.Generic.HashSet<int>()
     let mutable count = 0
+    let mutable stride = 20
 
     let bufferHandles = NativePtr.allocArray [| V3i(buffer.Handle, bbuffer.Handle, count) |]
-    let indirectHandle = NativePtr.allocArray [| V2i(buffer.Handle, count) |]
+    let indirectHandle = NativePtr.allocArray [| IndirectDrawArgs(buffer.Handle, count, stride) |]
     let computeSize = NativePtr.allocArray [| V3i.Zero |]
 
     let updatePointers() =
         NativePtr.write bufferHandles (V3i(buffer.Handle, bbuffer.Handle, count))
-        NativePtr.write indirectHandle (V2i(buffer.Handle, count))
+        NativePtr.write indirectHandle (IndirectDrawArgs(buffer.Handle, count, stride))
         NativePtr.write computeSize (V3i(ceilDiv count 64, 1, 1))
 
     let oldProgram = NativePtr.allocArray [| 0 |]
@@ -617,7 +618,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
                         let cfg = signature.EffectConfig(Range1d(-1.0, 1.0), false)
                         effect
                         |> Effect.toModule cfg
-                        |> ModuleCompiler.compileGLSL430
+                        |> ModuleCompiler.compileGLSL ctx.FShadeBackend
                     )
 
                 match ctx.TryCompileProgram(effect.Id, signature, shader) with
@@ -792,7 +793,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
 
 
     member x.Buffer =
-        Aardvark.Rendering.GL.IndirectBufferExtensions.IndirectBuffer(buffer, count, sizeof<DrawCallInfo>, false)
+        Aardvark.Base.IndirectBuffer(buffer :> IBuffer, count, sizeof<DrawCallInfo>, false)
 
     member x.BoundsBuffer =
         bbuffer
@@ -836,7 +837,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
 
             
         let h = NativePtr.read indirectHandle
-        if h.Y > 0 then
+        if h.Count > 0 then
             before(s)
             if alphaToCoverage then 
                 s.Enable(int EnableCap.SampleAlphaToCoverage)
@@ -1081,11 +1082,11 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
 
         let viewProj =
             match Uniforms.tryGetDerivedUniform "ModelViewProjTrafo" s.pUniformProvider with
-            | Some (:? IMod<Trafo3d> as mvp) -> mvp
+            | Some (:? aval<Trafo3d> as mvp) -> mvp
             | _ -> 
-                match s.pUniformProvider.TryGetUniform(Ag.emptyScope, Symbol.Create "ModelViewProjTrafo") with
-                | Some (:? IMod<Trafo3d> as mvp) -> mvp
-                | _ -> Mod.constant Trafo3d.Identity
+                match s.pUniformProvider.TryGetUniform(Ag.Scope.Root, Symbol.Create "ModelViewProjTrafo") with
+                | Some (:? aval<Trafo3d> as mvp) -> mvp
+                | _ -> AVal.constant Trafo3d.Identity
 
         let res = 
             { new Resource<Trafo3d, M44f>(ResourceKind.UniformLocation) with
@@ -1124,7 +1125,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     let program = new ChangeableNativeProgram<_, _>((fun a s -> compile a (AssemblerCommandStream s)), NativeStats.Zero, (+), (-))
     let puller = 
         { new AdaptiveObject() with
-            override x.Mark() =
+            override x.MarkObject() =
                 NativePtr.write isOutdated 1
                 true
         }
@@ -1289,7 +1290,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
         lock puller (fun () ->
             if tasks.Add info.task then
                 assert (info.task.OutOfDate)
-                puller.AddOutput(info.task) |> ignore
+                puller.Outputs.Add(info.task) |> ignore
         )
             
         let mvpRes = mvpResource

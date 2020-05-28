@@ -190,7 +190,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                 | :? PhysicalDeviceGroup as g -> g.Devices
                 | _ -> [| chosenDevice |]
 
-        let chosenDevices = HSet.ofArray devices
+        let chosenDevices = HashSet.ofArray devices
 
         let caps = 
             [
@@ -226,12 +226,12 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                 let mutable index = 0
                 for d in devices do
                     let l =
-                        if HSet.contains d chosenDevices then l
+                        if HashSet.contains d chosenDevices then l
                         else l.WithVerbosity(l.Verbosity + 1)
 
 
                     l.section "%d:" index (fun () ->
-                        if HSet.contains d chosenDevices then 
+                        if HashSet.contains d chosenDevices then 
                             l.line "CHOSEN DEVICE"
                         l.line "type:     %A" d.Type
                         l.line "vendor:   %s" d.Vendor

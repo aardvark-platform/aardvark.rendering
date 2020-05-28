@@ -1,12 +1,32 @@
 ﻿namespace Aardvark.Base
 
 open System
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 open Aardvark.Base.Rendering
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
+
+type ConstantVal<'T>(value : 'T) =
+    inherit ConstantObject()
+
+    interface IAdaptiveValue with
+        member x.ContentType = typeof<'T>
+        member x.GetValueUntyped _ = value :> obj
+
+    interface aval<'T> with
+        member x.GetValue _ = value
+
+
+[<AutoOpen>]
+module IdGenerator =
+    open System.Threading
+
+    let mutable private currentId = 0
+    let newId() =
+        Interlocked.Increment(&currentId)
+
 
 [<AllowNullLiteral>]
 type ISurface = interface end
@@ -26,7 +46,7 @@ type IAttributeProvider =
 [<AllowNullLiteral>]
 type IUniformProvider =
     inherit IDisposable
-    abstract member TryGetUniform : scope : Ag.Scope * name : Symbol -> Option<IMod>
+    abstract member TryGetUniform : scope : Ag.Scope * name : Symbol -> Option<IAdaptiveValue>
 
 
 type AttributeProvider private() =
@@ -158,7 +178,7 @@ type UniformProvider private() =
             
         }
 
-    static member ofDict (values : SymbolDict<IMod>) =
+    static member ofDict (values : SymbolDict<IAdaptiveValue>) =
         { new IUniformProvider with
             member x.Dispose() = ()
             member x.TryGetUniform(scope : Ag.Scope, name : Symbol) =
@@ -167,39 +187,39 @@ type UniformProvider private() =
                     | _ -> None
         }
 
-    static member ofMap (values : Map<Symbol, IMod>) =
+    static member ofMap (values : Map<Symbol, IAdaptiveValue>) =
         { new IUniformProvider with
             member x.Dispose() = ()
             member x.TryGetUniform(scope : Ag.Scope, name : Symbol) = Map.tryFind name values
         }
 
-    static member ofList (values : list<Symbol * IMod>) =
+    static member ofList (values : list<Symbol * IAdaptiveValue>) =
         values |> Map.ofList |> UniformProvider.ofMap
 
-    static member ofSeq (values : seq<Symbol * IMod>) =
+    static member ofSeq (values : seq<Symbol * IAdaptiveValue>) =
         values |> Map.ofSeq |> UniformProvider.ofMap
 
     
-    static member ofDict (values : Dict<string, IMod>) =
-        let d = SymbolDict<IMod>()
+    static member ofDict (values : Dict<string, IAdaptiveValue>) =
+        let d = SymbolDict<IAdaptiveValue>()
         for (KeyValue(k,v)) in values do d.[Symbol.Create k] <- v
         UniformProvider.ofDict d
     
-    static member ofDict (values : System.Collections.Generic.Dictionary<string, IMod>) =
-        let d = SymbolDict<IMod>()
+    static member ofDict (values : System.Collections.Generic.Dictionary<string, IAdaptiveValue>) =
+        let d = SymbolDict<IAdaptiveValue>()
         for (KeyValue(k,v)) in values do d.[Symbol.Create k] <- v
         UniformProvider.ofDict d
 
-    static member ofMap (values : Map<string, IMod>) =
-        let d = SymbolDict<IMod>()
+    static member ofMap (values : Map<string, IAdaptiveValue>) =
+        let d = SymbolDict<IAdaptiveValue>()
         for (KeyValue(k,v)) in values do d.[Symbol.Create k] <- v
         UniformProvider.ofDict d
 
-    static member ofList (values : list<string * IMod>) =
+    static member ofList (values : list<string * IAdaptiveValue>) =
         UniformProvider.ofSeq values
 
-    static member ofSeq (values : seq<string * IMod>) =
-        let d = SymbolDict<IMod>()
+    static member ofSeq (values : seq<string * IAdaptiveValue>) =
+        let d = SymbolDict<IAdaptiveValue>()
         for (k,v) in values do d.[Symbol.Create k] <- v
         UniformProvider.ofDict d
 
@@ -218,10 +238,13 @@ type IRenderObject =
 [<RequireQualifiedAccess>]
 type Surface =
     | FShadeSimple of FShade.Effect
-    | FShade of (FShade.EffectConfig -> FShade.EffectInputLayout * IMod<FShade.Imperative.Module>)
+    | FShade of (FShade.EffectConfig -> FShade.EffectInputLayout * aval<FShade.Imperative.Module>)
     | Backend of ISurface
     | None
 
+type DrawCalls =
+    | Direct of aval<list<DrawCallInfo>> // F# list seriously !?
+    | Indirect of aval<IndirectBuffer>
 
 [<CustomEquality>]
 [<CustomComparison>]
@@ -230,23 +253,22 @@ type RenderObject =
         Id : int
         mutable AttributeScope : Ag.Scope
                 
-        mutable IsActive            : IMod<bool>
+        mutable IsActive            : aval<bool>
         mutable RenderPass          : RenderPass
                 
-        mutable DrawCallInfos       : IMod<list<DrawCallInfo>>
-        mutable IndirectBuffer      : IMod<IIndirectBuffer>
+        mutable DrawCalls           : DrawCalls
         mutable Mode                : IndexedGeometryMode
         
 
         mutable Surface             : Surface
                               
-        mutable DepthTest           : IMod<DepthTestMode>
-        mutable DepthBias           : IMod<DepthBiasState>
-        mutable CullMode            : IMod<CullMode>
-        mutable FrontFace           : IMod<WindingOrder>
-        mutable BlendMode           : IMod<BlendMode>
-        mutable FillMode            : IMod<FillMode>
-        mutable StencilMode         : IMod<StencilMode>
+        mutable DepthTest           : aval<DepthTestMode>
+        mutable DepthBias           : aval<DepthBiasState>
+        mutable CullMode            : aval<CullMode>
+        mutable FrontFace           : aval<WindingOrder>
+        mutable BlendMode           : aval<BlendMode>
+        mutable FillMode            : aval<FillMode>
+        mutable StencilMode         : aval<StencilMode>
                 
         mutable Indices             : Option<BufferView>
         mutable InstanceAttributes  : IAttributeProvider
@@ -254,8 +276,8 @@ type RenderObject =
                 
         mutable Uniforms            : IUniformProvider
 
-        mutable ConservativeRaster  : IMod<bool>
-        mutable Multisample         : IMod<bool>
+        mutable ConservativeRaster  : aval<bool>
+        mutable Multisample         : aval<bool>
 
         mutable Activate            : unit -> IDisposable
         mutable WriteBuffers        : Option<Set<Symbol>>
@@ -267,33 +289,32 @@ type RenderObject =
         member x.AttributeScope = x.AttributeScope
 
     member x.Path = 
-        if System.Object.ReferenceEquals(x.AttributeScope,Ag.emptyScope) 
+        if System.Object.ReferenceEquals(x.AttributeScope,Ag.Scope.Root) 
         then "EMPTY" 
-        else x.AttributeScope.Path
+        else string x.AttributeScope
 
     static member Create() =
         { Id = newId()
-          AttributeScope = Ag.emptyScope
-          IsActive = null
+          AttributeScope = Ag.Scope.Root
+          IsActive = Unchecked.defaultof<_>
           RenderPass = RenderPass.main
-          DrawCallInfos = null
-          IndirectBuffer = null
+          DrawCalls = Unchecked.defaultof<_>
 
           Mode = IndexedGeometryMode.TriangleList
           Surface = Surface.None
-          DepthTest = null
-          DepthBias = null
-          CullMode = null
-          FrontFace = null
-          BlendMode = null
-          FillMode = null
-          StencilMode = null
+          DepthTest = Unchecked.defaultof<_>
+          DepthBias = Unchecked.defaultof<_>
+          CullMode = Unchecked.defaultof<_>
+          FrontFace = Unchecked.defaultof<_>
+          BlendMode = Unchecked.defaultof<_>
+          FillMode = Unchecked.defaultof<_>
+          StencilMode = Unchecked.defaultof<_>
           Indices = None
-          InstanceAttributes = null
-          VertexAttributes = null
-          Uniforms = null
-          ConservativeRaster = null
-          Multisample = null
+          InstanceAttributes = Unchecked.defaultof<_>
+          VertexAttributes = Unchecked.defaultof<_>
+          Uniforms = Unchecked.defaultof<_>
+          ConservativeRaster = Unchecked.defaultof<_>
+          Multisample = Unchecked.defaultof<_>
           Activate = nopActivate
           WriteBuffers = None
         }
@@ -331,23 +352,22 @@ module RenderObjectExtensions =
 
     let private empty =
         { Id = -1
-          AttributeScope = Ag.emptyScope
-          IsActive = null
+          AttributeScope = Ag.Scope.Root
+          IsActive = Unchecked.defaultof<_>
           RenderPass = RenderPass.main
-          DrawCallInfos = null
-          IndirectBuffer = null
+          DrawCalls = Unchecked.defaultof<_>
           Mode = IndexedGeometryMode.TriangleList
           Surface = Surface.None
-          DepthTest = null
-          DepthBias = null
-          CullMode = null
-          FrontFace = null
-          BlendMode = null
-          FillMode = null
-          StencilMode = null
+          DepthTest = Unchecked.defaultof<_>
+          DepthBias = Unchecked.defaultof<_>
+          CullMode = Unchecked.defaultof<_>
+          FrontFace = Unchecked.defaultof<_>
+          BlendMode = Unchecked.defaultof<_>
+          FillMode = Unchecked.defaultof<_>
+          StencilMode = Unchecked.defaultof<_>
           Indices = None
-          ConservativeRaster = null
-          Multisample = null
+          ConservativeRaster = Unchecked.defaultof<_>
+          Multisample = Unchecked.defaultof<_>
           InstanceAttributes = emptyAttributes
           VertexAttributes = emptyAttributes
           Uniforms = emptyUniforms
@@ -388,14 +408,14 @@ type MultiRenderObject(children : list<IRenderObject>) =
 
 type PipelineState =
     {
-        depthTest           : IMod<DepthTestMode>
-        depthBias           : IMod<DepthBiasState>
-        cullMode            : IMod<CullMode>
-        frontFace           : IMod<WindingOrder>
-        blendMode           : IMod<BlendMode>
-        fillMode            : IMod<FillMode>
-        stencilMode         : IMod<StencilMode>
-        multisample         : IMod<bool>
+        depthTest           : aval<DepthTestMode>
+        depthBias           : aval<DepthBiasState>
+        cullMode            : aval<CullMode>
+        frontFace           : aval<WindingOrder>
+        blendMode           : aval<BlendMode>
+        fillMode            : aval<FillMode>
+        stencilMode         : aval<StencilMode>
+        multisample         : aval<bool>
         writeBuffers        : Option<Set<Symbol>>
         globalUniforms      : IUniformProvider
 
@@ -407,29 +427,29 @@ type PipelineState =
 [<ReferenceEquality>]
 type Geometry =
     {
-        vertexAttributes    : Map<Symbol, IMod<IBuffer>>
+        vertexAttributes    : Map<Symbol, aval<IBuffer>>
         indices             : Option<Aardvark.Base.BufferView>
-        uniforms            : Map<string, IMod>
-        call                : IMod<list<DrawCallInfo>>
+        uniforms            : Map<string, IAdaptiveValue>
+        call                : aval<list<DrawCallInfo>>
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Geometry =
-    let ofIndexedGeometry (uniforms : Map<string, IMod>) (g : IndexedGeometry) =
+    let ofIndexedGeometry (uniforms : Map<string, IAdaptiveValue>) (g : IndexedGeometry) =
         let index, fvc = 
             match g.IndexArray with
                 | null -> 
                     let anyAtt = g.IndexedAttributes.Values |> Seq.head
                     None, anyAtt.Length
                 | index -> 
-                    let buffer = Mod.constant (ArrayBuffer(index) :> IBuffer)
+                    let buffer = AVal.constant (ArrayBuffer(index) :> IBuffer)
                     let view = BufferView(buffer, index.GetType().GetElementType())
 
                     Some view, index.Length
 
         let attributes = 
             g.IndexedAttributes |> SymDict.toMap |> Map.map (fun name att ->
-                let buffer = Mod.constant (ArrayBuffer(att) :> IBuffer)
+                let buffer = AVal.constant (ArrayBuffer(att) :> IBuffer)
                 buffer
             )
 
@@ -437,13 +457,13 @@ module Geometry =
             if isNull g.SingleAttributes then
                 Map.empty
             else
-                let tc = typedefof<ConstantMod<_>>
+                let tc = typedefof<ConstantVal<_>>
                 g.SingleAttributes |> SymDict.toSeq |> Seq.choose (fun (name, value) ->
                     try
                         let vt = value.GetType()
                         let t = tc.MakeGenericType(vt)
                         let ctor = t.GetConstructor [| vt |]
-                        Some (name.ToString(), ctor.Invoke([| value |]) |> unbox<IMod>)
+                        Some (name.ToString(), ctor.Invoke([| value |]) |> unbox<IAdaptiveValue>)
                     with _ ->
                         None
                 )
@@ -456,7 +476,7 @@ module Geometry =
             vertexAttributes    = attributes
             indices             = index
             uniforms            = Map.union gUniforms uniforms
-            call                = Mod.constant [call]
+            call                = AVal.constant [call]
         }
 
 
@@ -468,11 +488,11 @@ type RuntimeCommand =
     | EmptyCmd
     | RenderCmd of objects : aset<IRenderObject>
     | OrderedCmd of commands : alist<RuntimeCommand>
-    | IfThenElseCmd of condition : IMod<bool> * ifTrue : RuntimeCommand * ifFalse : RuntimeCommand
-    | ClearCmd of colors : Map<Symbol, IMod<C4f>> * depth : Option<IMod<float>> * stencil : Option<IMod<uint32>>
+    | IfThenElseCmd of condition : aval<bool> * ifTrue : RuntimeCommand * ifFalse : RuntimeCommand
+    | ClearCmd of colors : Map<Symbol, aval<C4f>> * depth : Option<aval<float>> * stencil : Option<aval<uint32>>
     
 
-    | DispatchCmd of shader : IComputeShader * groups : IMod<V3i> * arguments : Map<string, obj>
+    | DispatchCmd of shader : IComputeShader * groups : aval<V3i> * arguments : Map<string, obj>
     | GeometriesCmd of surface : Surface * pipeline : PipelineState * geometries : aset<Geometry>
     | LodTreeCmd of surface : Surface * pipeline : PipelineState * geometries : LodTreeLoader<Geometry>
     | GeometriesSimpleCmd of effect : FShade.Effect * pipeline : PipelineState * geometries : aset<IndexedGeometry>
@@ -483,16 +503,16 @@ type RuntimeCommand =
     static member Render(objects : aset<IRenderObject>) =
         RuntimeCommand.RenderCmd(objects)
         
-    static member Dispatch(shader : IComputeShader, groups : IMod<V3i>, arguments : Map<string, obj>) =
+    static member Dispatch(shader : IComputeShader, groups : aval<V3i>, arguments : Map<string, obj>) =
         RuntimeCommand.DispatchCmd(shader, groups, arguments)
         
-    static member Clear(colors : Map<Symbol, IMod<C4f>>, depth : Option<IMod<float>>, stencil : Option<IMod<uint32>>) =
+    static member Clear(colors : Map<Symbol, aval<C4f>>, depth : Option<aval<float>>, stencil : Option<aval<uint32>>) =
         RuntimeCommand.ClearCmd(colors, depth, stencil)
 
     static member Ordered(commands : alist<RuntimeCommand>) =
         RuntimeCommand.OrderedCmd(commands)
 
-    static member IfThenElse(condition : IMod<bool>, ifTrue : RuntimeCommand, ifFalse : RuntimeCommand) =
+    static member IfThenElse(condition : aval<bool>, ifTrue : RuntimeCommand, ifFalse : RuntimeCommand) =
         RuntimeCommand.IfThenElseCmd(condition, ifTrue, ifFalse)
 
     static member Geometries(surface : Surface, pipeline : PipelineState, geometries : aset<Geometry>) =
@@ -501,14 +521,14 @@ type RuntimeCommand =
     static member Geometries(surface : FShade.Effect, pipeline : PipelineState, geometries : aset<IndexedGeometry>) =
         RuntimeCommand.GeometriesSimpleCmd(surface, pipeline, geometries)
 
-    static member Geometries(effects : FShade.Effect[], activeEffect : IMod<int>, pipeline : PipelineState, geometries : aset<Geometry>) =
+    static member Geometries(effects : FShade.Effect[], activeEffect : aval<int>, pipeline : PipelineState, geometries : aset<Geometry>) =
         let surface = 
             Surface.FShade (fun cfg ->
                 let modules = effects |> Array.map (FShade.Effect.toModule cfg)
                 let signature = FShade.EffectInputLayout.ofModules modules
                 let modules = modules |> Array.map (FShade.EffectInputLayout.apply signature)
 
-                signature, activeEffect |> Mod.map (Array.get modules)
+                signature, activeEffect |> AVal.map (Array.get modules)
             )
         RuntimeCommand.GeometriesCmd(surface, pipeline, geometries)
 
@@ -542,7 +562,7 @@ type IAdaptiveBufferReader =
     abstract member GetDirtyRanges : AdaptiveToken -> INativeBuffer * RangeSet
 
 type IAdaptiveBuffer =
-    inherit IMod<IBuffer>
+    inherit aval<IBuffer>
     abstract member GetReader : unit -> IAdaptiveBufferReader
 
 
@@ -554,29 +574,31 @@ type EffectDebugger private() =
                 match o.Surface with
                     | Surface.FShadeSimple e ->
                         match FShade.EffectDebugger.register e with
-                            | Some (:? IMod<FShade.Effect> as e) ->
-                                e |> Mod.map (fun e -> { o with Id = newId(); Surface = Surface.FShadeSimple e } :> IRenderObject)
+                            | Some (:? aval<FShade.Effect> as e) ->
+                                e |> AVal.map (fun e -> { o with Id = newId(); Surface = Surface.FShadeSimple e } :> IRenderObject)
                             | _ ->
-                                Mod.constant (o :> IRenderObject)
+                                AVal.constant (o :> IRenderObject)
                     | _ ->
-                        Mod.constant (o :> IRenderObject)
+                        AVal.constant (o :> IRenderObject)
 
             | :? MultiRenderObject as m ->
                 let mods = m.Children |> List.map hookObject
 
                 if mods |> List.forall (fun m -> m.IsConstant) then
-                    Mod.constant (m :> IRenderObject)
+                    AVal.constant (m :> IRenderObject)
                 else
-                    mods |> Mod.mapN (fun ros -> MultiRenderObject(Seq.toList ros) :> IRenderObject)
+                    AVal.custom (fun t ->
+                        mods |> List.map (fun m -> m.GetValue t) |> MultiRenderObject :> IRenderObject
+                    )
 
             | _ ->
-                Mod.constant o
+                AVal.constant o
 
     static member Hook (o : IRenderObject) = hookObject o
     static member Hook (set : aset<IRenderObject>) =
         match FShade.EffectDebugger.registerFun with
             | Some _ ->
-                set |> ASet.mapM EffectDebugger.Hook
+                set |> ASet.mapA EffectDebugger.Hook
             | None ->
                 set
 
@@ -621,7 +643,7 @@ module AttributePackingV2 =
 
         member x.Dispose() =
             if Interlocked.Exchange(&realCapacity, -1) >= 0 then
-                b.RemoveOutput x
+                b.Outputs.Remove x |> ignore
                 remove x
                 dirtyRanges <- RangeSet.empty
                 dirtyCapacity <- -1
@@ -664,8 +686,8 @@ module AttributePackingV2 =
             )
         action.Invoke(index, src, dst)
 
-    type private AdaptiveBuffer(sem : Symbol, elementType : Type, updateLayout : IMod<Dictionary<IndexedGeometry, managedptr>>) =
-        inherit Mod.AbstractMod<IBuffer>()
+    type private AdaptiveBuffer(sem : Symbol, elementType : Type, updateLayout : aval<Dictionary<IndexedGeometry, managedptr>>) =
+        inherit AVal.AbstractVal<IBuffer>()
 
         let readers = HashSet<AdaptiveBufferReader>()
         let elementSize = Marshal.SizeOf elementType
@@ -790,7 +812,7 @@ module AttributePackingV2 =
             member x.GetReader() = x.GetReader()
 
     type Packer(set : aset<IndexedGeometry>, elementTypes : Map<Symbol, Type>) =
-        inherit Mod.AbstractMod<Dictionary<IndexedGeometry, managedptr>>()
+        inherit AVal.AbstractVal<Dictionary<IndexedGeometry, managedptr>>()
         let shrinkThreshold = 0.5
         
         let lockObj = obj()
@@ -847,7 +869,7 @@ module AttributePackingV2 =
             )
 
         override x.Compute(token) =
-            let deltas = reader.GetOperations token
+            let deltas = reader.GetChanges token
 
             for d in deltas do
                 match d with
@@ -915,7 +937,7 @@ module AttributePackingV2 =
             }
 
         member x.DrawCallInfos =
-            Mod.custom (fun self ->
+            AVal.custom (fun self ->
                 x.GetValue self |> ignore
 
                 drawRanges
@@ -971,7 +993,7 @@ module GeometrySetUtilities =
 
         member x.Dispose() =
             if Interlocked.Exchange(&realCapacity, -1) >= 0 then
-                b.RemoveOutput x
+                b.Outputs.Remove x |> ignore
                 remove x
                 dirtyRanges <- RangeSet.empty
                 dirtyCapacity <- -1
@@ -983,7 +1005,7 @@ module GeometrySetUtilities =
             member x.GetDirtyRanges(caller) = x.GetDirtyRanges(caller)
 
     type ChangeableBuffer(initialCapacity : int) =
-        inherit Mod.AbstractMod<IBuffer>()
+        inherit AVal.AbstractVal<IBuffer>()
 
         let rw = new ReaderWriterLockSlim()
         let mutable capacity = nativeint initialCapacity
@@ -994,7 +1016,7 @@ module GeometrySetUtilities =
             lock readers (fun () -> readers.Remove r |> ignore)
 
         let addDirty (r : Range1i) =
-            let all = lock readers (fun () -> readers |> HashSet.toArray)
+            let all = lock readers (fun () -> readers |> Aardvark.Base.HashSet.toArray)
             all |> Array.iter (fun reader -> 
                 reader.Resize capacity
                 reader.AddDirty r
@@ -1068,7 +1090,7 @@ module GeometrySetUtilities =
         new() = ChangeableBuffer(0)
 
     type GeometryPacker(attributeTypes : Map<Symbol, Type>) =
-        inherit Mod.AbstractMod<RangeSet>()
+        inherit AVal.AbstractVal<RangeSet>()
 
         let manager = MemoryManager.createNop()
         let locations = ConcurrentDictionary<IndexedGeometry, managedptr>()
@@ -1166,7 +1188,7 @@ module GeometrySetUtilities =
                     false
 
         member x.GetBuffer (sem : Symbol) =
-            getBuffer sem  :> IMod<IBuffer>
+            getBuffer sem  :> aval<IBuffer>
 
         member x.Dispose() =
             let old = Interlocked.Exchange(&buffers, ConcurrentDictionary())

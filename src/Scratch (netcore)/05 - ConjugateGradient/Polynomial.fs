@@ -2,6 +2,7 @@
 
 open Microsoft.FSharp.Quotations
 open Aardvark.Base
+open FSharp.Data.Adaptive
 
 [<AutoOpen>]
 module private PolynomialHelpers =
@@ -19,19 +20,19 @@ module private PolynomialHelpers =
         while cond() do action()
 
 
-    let cross<'p, 'c> (num : Real<'c>) (l : hmap<hmap<string * 'p, int>, 'c>) (r : hmap<hmap<string * 'p, int>, 'c>) : hmap<hmap<string * 'p, int>, 'c> =
-        let l = l |> HMap.toList
-        let r = r |> HMap.toList
+    let cross<'p, 'c> (num : Real<'c>) (l : HashMap<HashMap<string * 'p, int>, 'c>) (r : HashMap<HashMap<string * 'p, int>, 'c>) : HashMap<HashMap<string * 'p, int>, 'c> =
+        let l = l |> HashMap.toList
+        let r = r |> HashMap.toList
 
         let inline union (_) (l : int) (r : int) =
             l + r
 
-        let mutable res = HMap.empty
+        let mutable res = HashMap.empty
         for ((lk, lv), (rk, rv)) in List.allPairs l r do
-            let k = HMap.unionWith union lk rk
+            let k = HashMap.unionWith union lk rk
             let v = num.mul lv rv
             if not (num.isTiny v) then
-                res <- HMap.alter k (Option.defaultValue num.zero >> num.add v >> Some) res
+                res <- HashMap.alter k (Option.defaultValue num.zero >> num.add v >> Some) res
         res
 
     let inline toOption (v : float) =
@@ -54,24 +55,24 @@ module private PolynomialHelpers =
             res
 
 [<StructuredFormatDisplay("{AsString}")>]
-type Polynomial<'p, 'c> (coeff : hmap<hmap<string * 'p, int>, 'c>) =
+type Polynomial<'p, 'c> (coeff : HashMap<HashMap<string * 'p, int>, 'c>) =
 
     let names =  
-        lazy ( coeff |> HMap.toSeq |> Seq.collect (fst >> HMap.toSeq >> Seq.map (fst >> fst)) |> Set.ofSeq )
+        lazy ( coeff |> HashMap.toSeq |> Seq.collect (fst >> HashMap.toSeq >> Seq.map (fst >> fst)) |> Set.ofSeq )
 
     let degrees =
         lazy (
-            if HMap.isEmpty coeff then
-                HMap.empty
+            if HashMap.isEmpty coeff then
+                HashMap.empty
             else
                 names.Value |> Seq.map (fun name ->
-                    name, lazy (coeff |> HMap.toSeq |> Seq.map (fun (k,_) -> k |> HMap.toSeq |> Seq.filter (fun ((n,_),_) -> n = name) |> Seq.sumBy snd) |> Seq.max)
+                    name, lazy (coeff |> HashMap.toSeq |> Seq.map (fun (k,_) -> k |> HashMap.toSeq |> Seq.filter (fun ((n,_),_) -> n = name) |> Seq.sumBy snd) |> Seq.max)
                 )
-                |> HMap.ofSeq
+                |> HashMap.ofSeq
         )
 
     let degree (name : string) = 
-        match HMap.tryFind name degrees.Value with
+        match HashMap.tryFind name degrees.Value with
             | Some v -> v.Value
             | None -> 0
 
@@ -91,7 +92,7 @@ type Polynomial<'p, 'c> (coeff : hmap<hmap<string * 'p, int>, 'c>) =
             if num.isTiny r then None
             else Some r
 
-        Polynomial(HMap.choose merge l.coefficients)
+        Polynomial(HashMap.choose merge l.coefficients)
 
     static member private map2 (f : 'c -> 'c -> 'c) (l : Polynomial<'p, 'c>) (r : Polynomial<'p, 'c>)=
         let merge _ (l : Option<'c>) (r : Option<'c>) =
@@ -104,13 +105,13 @@ type Polynomial<'p, 'c> (coeff : hmap<hmap<string * 'p, int>, 'c>) =
                     match r with
                         | Some r -> f num.zero r |> toOption
                         | None -> f num.zero num.zero |> toOption
-        Polynomial(HMap.choose2 merge l.coefficients r.coefficients)
+        Polynomial(HashMap.choose2 merge l.coefficients r.coefficients)
         
 
-    static member Parameter(name : string, p : 'p) = Polynomial<'p, 'c> (HMap.ofList [ HMap.ofList [(name,p), 1], num.one ])
-    static member Constant v = Polynomial<'p, 'c> (HMap.ofList [ HMap.empty, v ])
-    static member Zero = Polynomial<'p, 'c> (HMap.empty)
-    static member One = Polynomial<'p, 'c> (HMap.ofList [ HMap.empty, num.one ])
+    static member Parameter(name : string, p : 'p) = Polynomial<'p, 'c> (HashMap.ofList [ HashMap.ofList [(name,p), 1], num.one ])
+    static member Constant v = Polynomial<'p, 'c> (HashMap.ofList [ HashMap.empty, v ])
+    static member Zero = Polynomial<'p, 'c> (HashMap.empty)
+    static member One = Polynomial<'p, 'c> (HashMap.ofList [ HashMap.empty, num.one ])
     
     static member (~-) (l : Polynomial<'p, 'c>) = Polynomial<'p, 'c>.map num.neg l
     
@@ -120,13 +121,13 @@ type Polynomial<'p, 'c> (coeff : hmap<hmap<string * 'p, int>, 'c>) =
         if num.isTiny l then
             r
         else
-            Polynomial(HMap.alter HMap.empty (fun o -> match o with | None -> Some l | Some r -> toOption (l <+> r)) r.coefficients )
+            Polynomial(HashMap.alter HashMap.empty (fun o -> match o with | None -> Some l | Some r -> toOption (l <+> r)) r.coefficients )
 
     static member (+) (l : Polynomial<'p, 'c>, r : 'c) = 
         if num.isTiny r then
             l
         else
-            Polynomial(HMap.alter HMap.empty (fun o -> match o with | None -> Some r | Some l -> toOption (l <+> r)) l.coefficients )
+            Polynomial(HashMap.alter HashMap.empty (fun o -> match o with | None -> Some r | Some l -> toOption (l <+> r)) l.coefficients )
        
 
     static member (-) (l : Polynomial<'p, 'c>, r : Polynomial<'p, 'c>) = Polynomial<'p, 'c>.map2 num.sub l r
@@ -146,11 +147,11 @@ type Polynomial<'p, 'c> (coeff : hmap<hmap<string * 'p, int>, 'c>) =
         else l * Polynomial<'p,'c>.Pow(l, r - 1)
 
     override x.ToString() =
-        if HMap.isEmpty x.coefficients then
+        if HashMap.isEmpty x.coefficients then
             "0"
         else
-            let paramStr (p : hmap<string * 'p, int>) =
-                p |> HMap.toSeq |> Seq.map (fun ((name,p),e) -> 
+            let paramStr (p : HashMap<string * 'p, int>) =
+                p |> HashMap.toSeq |> Seq.map (fun ((name,p),e) -> 
                     let p = 
                         if typeof<'p> = typeof<int> then sprintf "(%A)" p
                         else sprintf "%A" p
@@ -162,8 +163,8 @@ type Polynomial<'p, 'c> (coeff : hmap<hmap<string * 'p, int>, 'c>) =
                 |> String.concat "*"
         
             x.coefficients 
-            |> HMap.toSeq 
-            |> Seq.sortByDescending (fun (p,_) -> p |> HMap.toSeq |> Seq.sumBy snd)
+            |> HashMap.toSeq 
+            |> Seq.sortByDescending (fun (p,_) -> p |> HashMap.toSeq |> Seq.sumBy snd)
             |> Seq.mapi (fun i (p,f) ->
                 let op, f = 
                     if i = 0 then
@@ -173,7 +174,7 @@ type Polynomial<'p, 'c> (coeff : hmap<hmap<string * 'p, int>, 'c>) =
                     else
                         " - ", num.neg f
                     
-                if HMap.isEmpty p then
+                if HashMap.isEmpty p then
                     sprintf "%s%A" op f
                 else
                     let isOne = num.isTiny (num.sub f num.one)
@@ -193,13 +194,13 @@ type Polynomial<'p, 'c> (coeff : hmap<hmap<string * 'p, int>, 'c>) =
 
     member private x.AsString = x.ToString()
 
-    member x.Evaluate(v : hmap<string * 'p, 'c>) =
+    member x.Evaluate(v : HashMap<string * 'p, 'c>) =
         x.coefficients 
-        |> HMap.toSeq
+        |> HashMap.toSeq
         |> Seq.fold (fun s (k,f) ->
             let factor = 
-                k |> HMap.toSeq |> Seq.fold (fun r (p,e) -> 
-                    match HMap.tryFind p v with
+                k |> HashMap.toSeq |> Seq.fold (fun r (p,e) -> 
+                    match HashMap.tryFind p v with
                         | Some v -> num.mul r (num.pow v e)
                         | _ -> r
                 ) f
@@ -209,18 +210,18 @@ type Polynomial<'p, 'c> (coeff : hmap<hmap<string * 'p, int>, 'c>) =
 
     member x.Derivative(name : string, p : 'p) =
         let p = (name,p)
-        let mutable coeff = HMap.empty
-        for (c, v) in HMap.toSeq x.coefficients do
-             match HMap.tryFind p c with
+        let mutable coeff = HashMap.empty
+        for (c, v) in HashMap.toSeq x.coefficients do
+             match HashMap.tryFind p c with
                     | Some e ->
                         if e = 1 then
-                            let c' = HMap.remove p c
+                            let c' = HashMap.remove p c
                             let v' = v <*> (num.fromInt e)
-                            coeff <- HMap.alter c' (function Some o -> toOption (v' <+> o) | None -> toOption v') coeff
+                            coeff <- HashMap.alter c' (function Some o -> toOption (v' <+> o) | None -> toOption v') coeff
                         else
-                            let c' = HMap.add p (e-1) c
+                            let c' = HashMap.add p (e-1) c
                             let v' = v <*> (num.fromInt e)
-                            coeff <- HMap.alter c' (function Some o -> toOption (v' <+> o) | None -> toOption v') coeff
+                            coeff <- HashMap.alter c' (function Some o -> toOption (v' <+> o) | None -> toOption v') coeff
 
                             
                     | None ->
@@ -229,9 +230,9 @@ type Polynomial<'p, 'c> (coeff : hmap<hmap<string * 'p, int>, 'c>) =
         Polynomial(coeff)
 
     member x.Substitute(substitution : string -> 'p -> Option<Polynomial<'p, 'c>>) =
-        coeff |> HMap.toSeq |> Seq.fold (fun p (k,v) ->
+        coeff |> HashMap.toSeq |> Seq.fold (fun p (k,v) ->
             let coeff =
-                k |> HMap.toSeq |> Seq.fold (fun p ((n,i),e) ->
+                k |> HashMap.toSeq |> Seq.fold (fun p ((n,i),e) ->
                     let s = 
                         match substitution n i with
                             | Some pp -> pp ** e
@@ -243,30 +244,30 @@ type Polynomial<'p, 'c> (coeff : hmap<hmap<string * 'p, int>, 'c>) =
         ) Polynomial<'p, 'c>.Zero
 
     member x.Rename(action : 'p -> 'p) =
-        let mutable res = HMap.empty
+        let mutable res = HashMap.empty
 
         for (m,f) in coeff do
-            let mutable m1 = HMap.empty
-            for ((name,idx),e) in HMap.toSeq m do
+            let mutable m1 = HashMap.empty
+            for ((name,idx),e) in HashMap.toSeq m do
                 let k = (name, action idx)
                 let update v =
                     match v with
                         | None -> Some e
                         | Some o -> Some (o + e)
                         
-                m1 <- HMap.alter k update m1
+                m1 <- HashMap.alter k update m1
                 
             let update v =
                 match v with
                     | None -> Some f
                     | Some o -> Some (num.add o f)
                         
-            res <- HMap.alter m1 update res
+            res <- HashMap.alter m1 update res
         Polynomial res
 
     member x.ConstantPart(variables : Set<string>) =
         let res = 
-            coeff |> HMap.filter (fun m f ->
+            coeff |> HashMap.filter (fun m f ->
                 m |> Seq.forall (fun ((n,_),_) -> not (Set.contains n variables))
             )
         Polynomial res
@@ -276,7 +277,7 @@ type Polynomial<'p, 'c> (coeff : hmap<hmap<string * 'p, int>, 'c>) =
 
     member x.WithoutConstant(variables : Set<string>) =
         let res = 
-            coeff |> HMap.filter (fun m f ->
+            coeff |> HashMap.filter (fun m f ->
                 m |> Seq.exists (fun ((n,_),_) -> Set.contains n variables)
             )
         Polynomial res
@@ -285,37 +286,37 @@ type Polynomial<'p, 'c> (coeff : hmap<hmap<string * 'p, int>, 'c>) =
         x.WithoutConstant(Set.singleton name)
 
     member x.FreeParameters =
-        let mutable res = HMap.empty
-        let all = x.coefficients |> HMap.toSeq |> Seq.collect (fun (k,_) -> k |> HMap.toSeq |> Seq.map (fun (k,_) -> k)) 
+        let mutable res = HashMap.empty
+        let all = x.coefficients |> HashMap.toSeq |> Seq.collect (fun (k,_) -> k |> HashMap.toSeq |> Seq.map (fun (k,_) -> k)) 
         for (name, pi) in all do
-            res <- HMap.alter name (fun s -> s |> Option.defaultValue HSet.empty |> HSet.add pi |> Some) res
+            res <- HashMap.alter name (fun s -> s |> Option.defaultValue HashSet.empty |> HashSet.add pi |> Some) res
 
         res
 
     member x.AllDerivatives(name : string) =
-        match HMap.tryFind name x.FreeParameters with
+        match HashMap.tryFind name x.FreeParameters with
             | Some parameters -> 
                 parameters |> Seq.map (fun p ->
                     p, x.Derivative(name, p)
                 )
-                |> HMap.ofSeq
+                |> HashMap.ofSeq
             | None ->
-                HMap.empty
+                HashMap.empty
         
     member x.AllSecondDerivatives(name : string) =
-        match HMap.tryFind name x.FreeParameters with
+        match HashMap.tryFind name x.FreeParameters with
             | Some free -> 
                 Seq.allPairs free free 
                 |> Seq.choose (fun (p0, p1) ->
                     let d = x.Derivative(name, p0).Derivative(name, p1)
-                    if HMap.isEmpty d.coefficients then
+                    if HashMap.isEmpty d.coefficients then
                         None
                     else
                         Some ((p0, p1), d)
                 )
-                |> HMap.ofSeq
+                |> HashMap.ofSeq
             | None ->
-                HMap.empty
+                HashMap.empty
 
 [<AutoOpen>]
 module PolynomialExtensions =
@@ -352,7 +353,7 @@ module PolynomialExtensions =
     let param : Param = null
     let inline (?) (v : Param) (name : string) : 'p -> Polynomial<'p, 'c> =
         let num = RealInstances.instance<'c>
-        fun i -> Polynomial<'p, 'c> ( HMap.ofList [ HMap.ofList [(name, i), 1], num.one ] )
+        fun i -> Polynomial<'p, 'c> ( HashMap.ofList [ HashMap.ofList [(name, i), 1], num.one ] )
 
 module Polynomial =
 
@@ -368,7 +369,7 @@ module Polynomial =
     let inline derivative (name : string) (i : 'p) (p : Polynomial<'p, 'c>) = p.Derivative(name, i)
 
     let inline parameters (p : Polynomial<'p, 'c>) = p.FreeParameters
-    let inline evaluate (values : hmap<string * 'p, 'c>) (p : Polynomial<'p, 'c>) = p.Evaluate(values)
+    let inline evaluate (values : HashMap<string * 'p, 'c>) (p : Polynomial<'p, 'c>) = p.Evaluate(values)
 
 
 
@@ -482,9 +483,9 @@ module Polynomial =
                         bindings.[(name,i,e)] <- (v, ex :> Expr)
                         Expr.Var(v) |> Expr.Cast
 
-        let factor (m : hmap<string * 'p, int>) =
+        let factor (m : HashMap<string * 'p, int>) =
             let factors =
-                m |> HMap.toList |> List.map (fun ((name,i),e) -> get name i e)
+                m |> HashMap.toList |> List.map (fun ((name,i),e) -> get name i e)
 
             let acc (s : Option<Expr<'c>>) (e : Expr<'c>) =
                 match s with
@@ -495,7 +496,7 @@ module Polynomial =
 
         let sum =
             let summands = 
-                p.coefficients |> HMap.toList |> List.map (fun (c,f) -> 
+                p.coefficients |> HashMap.toList |> List.map (fun (c,f) -> 
                     match factor c with
                         | Some c -> 
                             if real.isTiny (real.sub f real.one) then c

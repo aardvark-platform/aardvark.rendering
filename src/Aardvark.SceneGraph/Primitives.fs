@@ -9,7 +9,7 @@ open System.Collections.Generic
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 #nowarn "9"
 #nowarn "51"
@@ -391,7 +391,7 @@ module SgPrimitives =
         let unitCone (tess : int) = Cone.get tess
 
     module Sg =
-        open Aardvark.Base.Incremental.Operators
+        open FSharp.Data.Adaptive.Operators
 
         let private unitWireBoxGeometry =
             let box = Box3d.Unit
@@ -452,9 +452,9 @@ module SgPrimitives =
 
             drawCall
                 |> Sg.render IndexedGeometryMode.TriangleStrip 
-                |> Sg.vertexAttribute DefaultSemantic.Positions (Mod.constant positions)
-                |> Sg.vertexAttribute DefaultSemantic.Normals (Mod.constant normals)
-                |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (Mod.constant texcoords)
+                |> Sg.vertexAttribute DefaultSemantic.Positions (AVal.constant positions)
+                |> Sg.vertexAttribute DefaultSemantic.Normals (AVal.constant normals)
+                |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (AVal.constant texcoords)
 
         let fullScreenQuad =
             quad
@@ -472,25 +472,25 @@ module SgPrimitives =
 
             drawCall
                 |> Sg.render IndexedGeometryMode.TriangleStrip 
-                |> Sg.vertexAttribute DefaultSemantic.Positions (Mod.constant positions)
-                |> Sg.vertexAttribute DefaultSemantic.Normals (Mod.constant normals)
-                |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (Mod.constant texcoords)
+                |> Sg.vertexAttribute DefaultSemantic.Positions (AVal.constant positions)
+                |> Sg.vertexAttribute DefaultSemantic.Normals (AVal.constant normals)
+                |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (AVal.constant texcoords)
 
-        let coordinateCross (size : IMod<float>) =  
+        let coordinateCross (size : aval<float>) =  
             let drawCall = DrawCallInfo(FaceVertexCount = 6, InstanceCount = 1)
 
             drawCall
                 |> Sg.render IndexedGeometryMode.LineList
                 |> Sg.vertexAttribute' DefaultSemantic.Positions [| V3f.OOO; V3f.IOO; V3f.OOO; V3f.OIO; V3f.OOO; V3f.OOI |]
                 |> Sg.vertexAttribute' DefaultSemantic.Colors [| C4b.Red; C4b.Red; C4b.Green; C4b.Green; C4b.Blue; C4b.Blue |]
-                |> Sg.trafo (size |> Mod.map Trafo3d.Scale)
+                |> Sg.trafo (size |> AVal.map Trafo3d.Scale)
 
         let coordinateCross' (size : float) = 
-            coordinateCross (Mod.constant size)
+            coordinateCross (AVal.constant size)
 
-        let box (color : IMod<C4b>) (bounds : IMod<Box3d>) =
-            let trafo = bounds |> Mod.map (fun box -> Trafo3d.Scale(box.Size) * Trafo3d.Translation(box.Min))
-            let color = color |> Mod.map (fun c -> c.ToC4f().ToV4f())
+        let box (color : aval<C4b>) (bounds : aval<Box3d>) =
+            let trafo = bounds |> AVal.map (fun box -> Trafo3d.Scale(box.Size) * Trafo3d.Translation(box.Min))
+            let color = color |> AVal.map (fun c -> c.ToC4f().ToV4f())
             unitBox
                 |> Sg.vertexBufferValue DefaultSemantic.Colors color
                 |> Sg.trafo trafo
@@ -498,9 +498,9 @@ module SgPrimitives =
         let box' (color : C4b) (bounds : Box3d) =
             box ~~color ~~bounds
             
-        let wireBox (color : IMod<C4b>) (bounds : IMod<Box3d>) =
-            let trafo = bounds |> Mod.map (fun box -> Trafo3d.Scale(box.Size) * Trafo3d.Translation(box.Min))
-            let color = color |> Mod.map (fun c -> c.ToC4f().ToV4f())
+        let wireBox (color : aval<C4b>) (bounds : aval<Box3d>) =
+            let trafo = bounds |> AVal.map (fun box -> Trafo3d.Scale(box.Size) * Trafo3d.Translation(box.Min))
+            let color = color |> AVal.map (fun c -> c.ToC4f().ToV4f())
             unitWireBoxGeometry
                 |> Sg.vertexBufferValue DefaultSemantic.Colors color
                 |> Sg.trafo trafo
@@ -509,19 +509,19 @@ module SgPrimitives =
             wireBox ~~color ~~bounds
 
 
-        let frustum (color : IMod<C4b>) (view : IMod<CameraView>) (proj : IMod<Frustum>) =
-            let invViewProj = Mod.map2 (fun v p -> (CameraView.viewTrafo v * Frustum.projTrafo p).Inverse) view proj
+        let frustum (color : aval<C4b>) (view : aval<CameraView>) (proj : aval<Frustum>) =
+            let invViewProj = AVal.map2 (fun v p -> (CameraView.viewTrafo v * Frustum.projTrafo p).Inverse) view proj
 
             Box3d(-V3d.III, V3d.III)
-                |> Mod.constant
+                |> AVal.constant
                 |> wireBox color
                 |> Sg.trafo invViewProj
 
-        let lines (color : IMod<C4b>) (lines : IMod<Line3d[]>) =
+        let lines (color : aval<C4b>) (lines : aval<Line3d[]>) =
             
 
             let call = 
-                lines |> Mod.map (fun lines ->
+                lines |> AVal.map (fun lines ->
                     DrawCallInfo(
                         FaceVertexCount = 2 * lines.Length,
                         InstanceCount = 1
@@ -529,17 +529,17 @@ module SgPrimitives =
                 )
 
             let positions =
-                lines |> Mod.map (fun l ->
+                lines |> AVal.map (fun l ->
                     l |> Array.collect (fun l -> [|V3f l.P0; V3f l.P1|])
                 )
             
             Sg.RenderNode(call, IndexedGeometryMode.LineList)
                 |> Sg.vertexAttribute DefaultSemantic.Positions positions
-                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f().ToV4f()))
+                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> AVal.map (fun c -> c.ToC4f().ToV4f()))
 
-        let triangles (color : IMod<C4b>) (triangles : IMod<Triangle3d[]>) =
+        let triangles (color : aval<C4b>) (triangles : aval<Triangle3d[]>) =
             let call = 
-                triangles |> Mod.map (fun triangles ->
+                triangles |> AVal.map (fun triangles ->
                     DrawCallInfo(
                         FaceVertexCount = 3 * triangles.Length,
                         InstanceCount = 1
@@ -547,62 +547,62 @@ module SgPrimitives =
                 )
 
             let positions =
-                triangles |> Mod.map (fun l ->
+                triangles |> AVal.map (fun l ->
                     l |> Array.collect (fun l -> [|V3f l.P0; V3f l.P1; V3f l.P2|])
                 )
 
             let normals =
-                triangles |> Mod.map (fun l ->
+                triangles |> AVal.map (fun l ->
                     l |> Array.collect (fun l -> [|V3f l.Normal; V3f l.Normal; V3f l.Normal|])
                 )
             
             Sg.RenderNode(call, IndexedGeometryMode.TriangleList)
                 |> Sg.vertexAttribute DefaultSemantic.Positions positions
                 |> Sg.vertexAttribute DefaultSemantic.Normals normals
-                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f().ToV4f()))
+                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> AVal.map (fun c -> c.ToC4f().ToV4f()))
 
         let triangles' (color : C4b) (tris : Triangle3d[]) =
-            triangles (Mod.constant color) (Mod.constant tris)
+            triangles (AVal.constant color) (AVal.constant tris)
 
         /// creates a subdivision sphere, where level is the subdivision level
-        let unitSphere (level : int) (color : IMod<C4b>) =
+        let unitSphere (level : int) (color : aval<C4b>) =
             Sphere.getSg level
-                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f() |> V4f))
+                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> AVal.map (fun c -> c.ToC4f() |> V4f))
 
         /// creates a subdivision sphere, where level is the subdivision level
-        let sphere (level : int) (color : IMod<C4b>) (radius : IMod<float>)  =
+        let sphere (level : int) (color : aval<C4b>) (radius : aval<float>)  =
             Sphere.getSg level
-                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f() |> V4f))
-                |> Sg.trafo (radius |> Mod.map Trafo3d.Scale)
+                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> AVal.map (fun c -> c.ToC4f() |> V4f))
+                |> Sg.trafo (radius |> AVal.map Trafo3d.Scale)
 
         /// creates a subdivision sphere, where level is the subdivision level
         let unitSphere' (level : int) (color : C4b) =
-            unitSphere level (Mod.constant color)
+            unitSphere level (AVal.constant color)
            
         /// creates a subdivision sphere, where level is the subdivision level
         let sphere' (level : int) (color : C4b) (radius : float) =
-            sphere level (Mod.constant color) (Mod.constant radius)
+            sphere level (AVal.constant color) (AVal.constant radius)
 
-        let cylinder (tess : int) (color : IMod<C4b>) (radius : IMod<float>) (height : IMod<float>) =
-            let trafo = Mod.map2 (fun r h -> Trafo3d.Scale(r,r,h)) radius height
+        let cylinder (tess : int) (color : aval<C4b>) (radius : aval<float>) (height : aval<float>) =
+            let trafo = AVal.map2 (fun r h -> Trafo3d.Scale(r,r,h)) radius height
             Cylinder.getSg tess
-                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f() |> V4f))
+                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> AVal.map (fun c -> c.ToC4f() |> V4f))
                 |> Sg.trafo trafo
 
         let cylinder' (tess : int) (color : C4b) (radius : float) (height : float) =
             let trafo = Trafo3d.Scale(radius,radius,height)
             Cylinder.getSg tess
-                |> Sg.vertexBufferValue DefaultSemantic.Colors (color.ToC4f() |> V4f |> Mod.constant)
+                |> Sg.vertexBufferValue DefaultSemantic.Colors (color.ToC4f() |> V4f |> AVal.constant)
                 |> Sg.transform trafo
 
-        let cone (tess : int) (color : IMod<C4b>) (radius : IMod<float>) (height : IMod<float>) =
-            let trafo = Mod.map2 (fun r h -> Trafo3d.Scale(r,r,h)) radius height
+        let cone (tess : int) (color : aval<C4b>) (radius : aval<float>) (height : aval<float>) =
+            let trafo = AVal.map2 (fun r h -> Trafo3d.Scale(r,r,h)) radius height
             Cone.getSg tess
-                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> Mod.map (fun c -> c.ToC4f() |> V4f))
+                |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> AVal.map (fun c -> c.ToC4f() |> V4f))
                 |> Sg.trafo trafo
 
         let cone' (tess : int) (color : C4b) (radius : float) (height : float) =
-            let trafo = Trafo3d.Scale(radius,radius,height) |> Mod.constant
+            let trafo = Trafo3d.Scale(radius,radius,height) |> AVal.constant
             Cone.getSg tess
-                |> Sg.vertexBufferValue DefaultSemantic.Colors (color.ToC4f() |> V4f |> Mod.constant)
+                |> Sg.vertexBufferValue DefaultSemantic.Colors (color.ToC4f() |> V4f |> AVal.constant)
                 |> Sg.trafo trafo

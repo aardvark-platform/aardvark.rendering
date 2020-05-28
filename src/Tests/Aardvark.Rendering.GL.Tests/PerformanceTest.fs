@@ -4,7 +4,7 @@ open System
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Interactive
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
@@ -26,8 +26,8 @@ module RandomCubesPerformanceTest =
         use app = new OpenGlApplication()
 
         let initialView = CameraView.LookAt(180.0 * V3d.III, V3d.OOO, V3d.OOI)
-        let perspective = Mod.constant (Frustum.perspective 60.0 0.1 1000.0 1.0)
-        let cameraView  = Mod.constant initialView
+        let perspective = AVal.constant (Frustum.perspective 60.0 0.1 1000.0 1.0)
+        let cameraView  = AVal.constant initialView
 
         let candidates = 
             [| for _ in 1 .. 9 do yield Sg.box' C4b.Red Box3d.Unit |]
@@ -41,13 +41,13 @@ module RandomCubesPerformanceTest =
         let objects = 
             [ for x in 1 .. 25000 do
                 let r = rnd.Next(candidates.Length)
-                yield Sg.trafo (nextTrafo () |> Mod.constant) candidates.[r]
-            ] |> Sg.group
+                yield Sg.trafo (nextTrafo () |> AVal.constant) candidates.[r]
+            ] |> Sg.ofList
 
         let sg =
             objects
-                |> Sg.viewTrafo (cameraView  |> Mod.map CameraView.viewTrafo )
-                |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
+                |> Sg.viewTrafo (cameraView  |> AVal.map CameraView.viewTrafo )
+                |> Sg.projTrafo (perspective |> AVal.map Frustum.projTrafo    )
                 |> Sg.effect [ 
                     DefaultSurfaces.trafo |> toEffect
                     DefaultSurfaces.constantColor (C4f(1.0,1.0,1.0,0.2)) |> toEffect 
@@ -61,15 +61,15 @@ module RandomCubesPerformanceTest =
                 DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
             ]
 
-        let fbo = app.Runtime.CreateFramebuffer(signature, Mod.constant (V2i(1024, 1024)))
+        let fbo = app.Runtime.CreateFramebuffer(signature, AVal.constant (V2i(1024, 1024)))
         fbo.Acquire()
 
         let fbo = fbo.GetValue()
 
         let task = 
             RenderTask.ofList [
-                app.Runtime.CompileClear(signature, Mod.constant C4f.Black, Mod.constant 1.0)
-                app.Runtime.CompileRender(signature, config, sg.RenderObjects())
+                app.Runtime.CompileClear(signature, AVal.constant C4f.Black, AVal.constant 1.0)
+                app.Runtime.CompileRender(signature, config, sg.RenderObjects(Ag.Scope.Root))
             ]
 
         for i in 1..10 do
@@ -104,11 +104,11 @@ module RandomCubesPerformanceTest =
         Aardvark.Init()
 
         use app = new OpenGlApplication()
-        let win = app.CreateGameWindow(1)
+        let win = app.CreateSimpleRenderWindow(1)
 
         let initialView = CameraView.LookAt(180.0 * V3d.III, V3d.OOO, V3d.OOI)
         let perspective = 
-            win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
+            win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
         let cameraView  = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
 
         let candidates = 
@@ -123,20 +123,20 @@ module RandomCubesPerformanceTest =
         let objects = 
             [ for x in 1 .. 25000 do
                 let r = rnd.Next(candidates.Length)
-                yield Sg.trafo (nextTrafo () |> Mod.constant) candidates.[r]
-            ] |> Sg.group
+                yield Sg.trafo (nextTrafo () |> AVal.constant) candidates.[r]
+            ] |> Sg.ofList
 
         let sg =
             objects
-                |> Sg.viewTrafo (cameraView  |> Mod.map CameraView.viewTrafo )
-                |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
+                |> Sg.viewTrafo (cameraView  |> AVal.map CameraView.viewTrafo )
+                |> Sg.projTrafo (perspective |> AVal.map Frustum.projTrafo    )
                 |> Sg.effect [ 
                     DefaultSurfaces.trafo |> toEffect
                     DefaultSurfaces.constantColor (C4f(1.0,1.0,1.0,0.2)) |> toEffect 
                 ]
 
         let config = BackendConfiguration.Native
-        win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, config, sg.RenderObjects())
+        win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, config, sg.RenderObjects(Ag.Scope.Root))
 
         win.Run()
 
@@ -164,11 +164,11 @@ module RenderTaskPerformance =
         Aardvark.Init()
 
         use app = new OpenGlApplication()
-        let win = app.CreateGameWindow(1)
+        let win = app.CreateSimpleRenderWindow(1)
 
         let initialView = CameraView.LookAt(V3d.III, V3d.OOO, V3d.OOI)
         let perspective = 
-            win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
+            win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y))
         let cameraView  = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
 
         let candidates = 
@@ -183,10 +183,10 @@ module RenderTaskPerformance =
         let objects = 
             [ for x in 0 .. 20 do
                 let r = rnd.Next(candidates.Length)
-                yield Sg.trafo (nextTrafo () |> Mod.constant) candidates.[r]
-            ] |> Sg.group
+                yield Sg.trafo (nextTrafo () |> AVal.constant) candidates.[r]
+            ] |> Sg.ofList
 
-        let renderObjects = Semantics.RenderObjectSemantics.Semantic.renderObjects objects
+        let renderObjects = Semantics.RenderObjectSemantics.Semantic.renderObjects Ag.Scope.Root objects
 
         let transparency = RenderPass.after "nam" RenderPassOrder.Arbitrary RenderPass.main
        
@@ -194,12 +194,12 @@ module RenderTaskPerformance =
 
         let renderObjects =
             objects
-                |> Sg.viewTrafo (cameraView  |> Mod.map CameraView.viewTrafo )
-                |> Sg.projTrafo (perspective |> Mod.map Frustum.projTrafo    )
+                |> Sg.viewTrafo (cameraView  |> AVal.map CameraView.viewTrafo )
+                |> Sg.projTrafo (perspective |> AVal.map Frustum.projTrafo    )
                 |> Sg.surface s
                 |> Sg.pass transparency
-                |> Sg.blendMode (Mod.constant BlendMode.Blend)
-                |> Semantics.RenderObjectSemantics.Semantic.renderObjects
+                |> Sg.blendMode (AVal.constant BlendMode.Blend)
+                |> Semantics.RenderObjectSemantics.Semantic.renderObjects Ag.Scope.Root
 
 
         let framebuffers =
@@ -292,17 +292,17 @@ module StartupPerformance =
 
             let objectsSg = 
                 [ for x in objects do
-                    yield Sg.trafo (nextTrafo () |> Mod.constant) x
-                ] |> Sg.group
+                    yield Sg.trafo (nextTrafo () |> AVal.constant) x
+                ] |> Sg.ofList
 
             let sg =
                 objectsSg
-                    |> Sg.viewTrafo (Mod.constant cameraView.ViewTrafo)
-                    |> Sg.projTrafo (Mod.constant (Frustum.projTrafo cameraProj))
+                    |> Sg.viewTrafo (AVal.constant cameraView.ViewTrafo)
+                    |> Sg.projTrafo (AVal.constant (Frustum.projTrafo cameraProj))
                     |> Sg.surface effect
 
             Report.BeginTimed("Gathering render objects")
-            let renderObjects = ASet.toArray (sg.RenderObjects())
+            let renderObjects = ASet.force (sg.RenderObjects(Ag.Scope.Root))
             Report.End() |> ignore
 
             Report.BeginTimed("Preparing render objects")
@@ -311,7 +311,7 @@ module StartupPerformance =
 
             printfn "start your engine!!!"
             Console.ReadLine() |> ignore
-            let renderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofArray preparedRenderObjects)
+            let renderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofHashSet preparedRenderObjects)
             let sw = System.Diagnostics.Stopwatch()
             Report.BeginTimed("Preparing Task")
             sw.Start()
@@ -409,12 +409,12 @@ module IsActiveFlagPerformance =
             Report.BeginTimed("Generating Geometries")
 
             let r = System.Random()
-            let isActives = Array.init n (fun _ -> Mod.init (r.NextDouble() > 0.5))
+            let isActives = Array.init n (fun _ -> AVal.init (r.NextDouble() > 0.5))
             let sphere = Sg.sphere' 2 C4b.Red 1.0
             let objects = 
                 [| for i in 1 .. n - 1 do 
                     let sg = Sg.onOff isActives.[i] sphere
-                    yield Sg.uniform "Blah" (Mod.init C4b.Red) sg 
+                    yield Sg.uniform "Blah" (AVal.init C4b.Red) sg 
                 |]
             Report.End() |> ignore
 
@@ -426,17 +426,17 @@ module IsActiveFlagPerformance =
 
             let objectsSg = 
                 [ for x in objects do
-                    yield Sg.trafo (nextTrafo () |> Mod.constant) x
-                ] |> Sg.group
+                    yield Sg.trafo (nextTrafo () |> AVal.constant) x
+                ] |> Sg.ofList
 
             let sg =
                 objectsSg
-                    |> Sg.viewTrafo (Mod.constant cameraView.ViewTrafo)
-                    |> Sg.projTrafo (Mod.constant (Frustum.projTrafo cameraProj))
+                    |> Sg.viewTrafo (AVal.constant cameraView.ViewTrafo)
+                    |> Sg.projTrafo (AVal.constant (Frustum.projTrafo cameraProj))
                     |> Sg.surface effect
 
             Report.BeginTimed("Gathering render objects")
-            let renderObjects = ASet.toArray (sg.RenderObjects())
+            let renderObjects = ASet.force (sg.RenderObjects(Ag.Scope.Root))
             Report.End() |> ignore
 
             Report.BeginTimed("Preparing render objects")
@@ -446,11 +446,11 @@ module IsActiveFlagPerformance =
             printfn "start your engine!!!"
             //Console.ReadLine() |> ignore
 
-            let secondRenderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofArray preparedRenderObjects)
+            let secondRenderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofHashSet preparedRenderObjects)
             secondRenderTask.Run(RenderToken.Empty, fbo)
             secondRenderTask.Dispose()
 
-            let renderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofArray preparedRenderObjects)
+            let renderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofHashSet preparedRenderObjects)
             
 
             let sw = System.Diagnostics.Stopwatch()
@@ -487,7 +487,7 @@ module IsActiveFlagPerformance =
             sw.Restart()
             transact (fun () -> 
             for o in 0 .. i - 1 do
-                Mod.change isActiveFlags.[o] (not isActiveFlags.[o].Value)
+                isActiveFlags.[o].Value <- (not isActiveFlags.[o].Value)
             )
             sw.Stop()
             let elapsed = renderFrame()

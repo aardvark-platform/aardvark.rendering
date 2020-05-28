@@ -38,7 +38,7 @@ module InteractiveHelper =
             printfn "temp for native dependencies: %s" currentDir
             loadPluginsManually []
             Mod.initialize()
-            Ag.initialize()
+            
             let gl = Assembly.Load("Aardvark.Rendering.GL")
             let vk = Assembly.Load("Aardvark.Rendering.Vulkan")
             Aardvark.Init(currentDir)

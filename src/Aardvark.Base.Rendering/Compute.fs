@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.Base
 
 open System
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 open Aardvark.Base.Rendering
 open Microsoft.FSharp.NativeInterop

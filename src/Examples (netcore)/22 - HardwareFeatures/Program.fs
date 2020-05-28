@@ -12,7 +12,7 @@ The purpose is to show performance and startup cost tradeoffs. For real usage se
 
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.SceneGraph.Semantics
@@ -24,7 +24,7 @@ type IRenderTask with
         match x.FramebufferSignature with
             | Some signature ->
                 let runtime = signature.Runtime
-                let tempFbo = runtime.CreateFramebuffer(signature, Mod.constant(V2i(16,16)))
+                let tempFbo = runtime.CreateFramebuffer(signature, AVal.constant(V2i(16,16)))
                 tempFbo.Acquire()
                 x.Run(RenderToken.Empty, tempFbo.GetValue())
                 tempFbo.Release()
@@ -55,7 +55,7 @@ module Shader =
         }
 
 let createNaive (runtime : IRuntime) (signature : IFramebufferSignature) (backendConfiguration : BackendConfiguration) 
-                (viewTrafo : IMod<Trafo3d>) (projTrafo : IMod<Trafo3d>) 
+                (viewTrafo : aval<Trafo3d>) (projTrafo : aval<Trafo3d>) 
                 (geometry : IndexedGeometry) (trafos : Trafo3d[]) =
 
     let object = 
@@ -63,7 +63,7 @@ let createNaive (runtime : IRuntime) (signature : IFramebufferSignature) (backen
 
     let objects = 
         [| for t in trafos do 
-            yield Sg.trafo (Mod.constant t) object 
+            yield Sg.trafo (AVal.constant t) object 
         |] |> Sg.ofSeq
   
     let sg = 
@@ -83,7 +83,7 @@ let createNaive (runtime : IRuntime) (signature : IFramebufferSignature) (backen
     r
 
 let createInstanced (runtime : IRuntime) (signature : IFramebufferSignature) (backendConfiguration : BackendConfiguration) 
-                    (viewTrafo : IMod<Trafo3d>) (projTrafo : IMod<Trafo3d>) 
+                    (viewTrafo : aval<Trafo3d>) (projTrafo : aval<Trafo3d>) 
                     (geometry : IndexedGeometry) (trafos : Trafo3d[]) =
 
     // here we use low level draw call construction. Sg.instanced would work as well of course.
@@ -119,7 +119,7 @@ let createInstanced (runtime : IRuntime) (signature : IFramebufferSignature) (ba
 
 
 let createIndirect (runtime : IRuntime) (signature : IFramebufferSignature) (backendConfiguration : BackendConfiguration)  
-                   (viewTrafo : IMod<Trafo3d>) (projTrafo : IMod<Trafo3d>) 
+                   (viewTrafo : aval<Trafo3d>) (projTrafo : aval<Trafo3d>) 
                    (geometry : IndexedGeometry) (trafos : Trafo3d[]) =
 
     // for the sake of demonstration, we create an array of draw call infos which use firstInstance 
@@ -136,10 +136,10 @@ let createIndirect (runtime : IRuntime) (signature : IFramebufferSignature) (bac
            )
                   
     // simply wrap the drawcall infos array into buffers
-    let indirect = IndirectBuffer(ArrayBuffer drawCallInfos, drawCallInfos.Length) :> IIndirectBuffer
+    let indirect = IndirectBuffer.ofArray false drawCallInfos
   
     let sg = 
-        Sg.indirectDraw IndexedGeometryMode.TriangleList (Mod.constant indirect)
+        Sg.indirectDraw IndexedGeometryMode.TriangleList (AVal.constant indirect)
             |> Sg.vertexArray DefaultSemantic.Positions geometry.IndexedAttributes.[DefaultSemantic.Positions]
             |> Sg.vertexArray DefaultSemantic.Normals geometry.IndexedAttributes.[DefaultSemantic.Normals]
             // apply instance array as usual
@@ -160,7 +160,7 @@ let createIndirect (runtime : IRuntime) (signature : IFramebufferSignature) (bac
     r
 
 let renderObjectBased (runtime : IRuntime) (signature : IFramebufferSignature) (backendConfiguration : BackendConfiguration) 
-                      (viewTrafo : IMod<Trafo3d>) (projTrafo : IMod<Trafo3d>) 
+                      (viewTrafo : aval<Trafo3d>) (projTrafo : aval<Trafo3d>) 
                       (geometry : IndexedGeometry) (trafos : Trafo3d[])  =
 
     // since it is painful to construct render objects from scratch we create a template render object which
@@ -177,19 +177,19 @@ let renderObjectBased (runtime : IRuntime) (signature : IFramebufferSignature) (
 
     // extract the render object using the scene graph semantics
     let template =
-        template.RenderObjects() |> ASet.toList |> List.head |> unbox<RenderObject>
+        template.RenderObjects(Ag.Scope.Root).Content |> AVal.force |> HashSet.toList |> List.head |> unbox<RenderObject>
 
     // since we left the world of composable scene graphs we need to apply all typically automatically constructed
     // uniform values by hand. 
-    let cam = viewTrafo |> Mod.map (fun v -> v.Backward.TransformPosProj V3d.Zero)
+    let cam = viewTrafo |> AVal.map (fun v -> v.Backward.TransformPosProj V3d.Zero)
 
     let uniforms (t : Trafo3d) =
         UniformProvider.ofList [
-            "ModelTrafo", Mod.constant t :> IMod
-            "ViewTrafo", viewTrafo :> IMod
-            "CameraLocation", cam :> IMod
-            "LightLocation", cam :> IMod
-            "ProjTrafo", projTrafo :> IMod
+            "ModelTrafo", AVal.constant t :> IAdaptiveValue
+            "ViewTrafo", viewTrafo :> IAdaptiveValue
+            "CameraLocation", cam :> IAdaptiveValue
+            "LightLocation", cam :> IAdaptiveValue
+            "ProjTrafo", projTrafo :> IAdaptiveValue
         ]
 
     // next instantiate the objects (using copy)
@@ -213,7 +213,7 @@ let renderObjectBased (runtime : IRuntime) (signature : IFramebufferSignature) (
 [<EntryPoint>]
 let main argv = 
     
-    Ag.initialize()
+    
     Aardvark.Init()
 
     // uncomment/comment to switch between the backends
@@ -230,7 +230,7 @@ let main argv =
 
     let initialView = CameraView.LookAt(V3d(10.0,10.0,10.0), V3d.Zero, V3d.OOI)
     let frustum = 
-        win.Sizes |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 150.0 (float s.X / float s.Y))
+        win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 150.0 (float s.X / float s.Y))
 
     let cameraView = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
 
@@ -247,8 +247,8 @@ let main argv =
     // create render tasks for all previously mentioned variants
     let config = BackendConfiguration.Default
     let geometry = Primitives.unitBox 
-    let viewTrafo = cameraView |> Mod.map CameraView.viewTrafo
-    let projTrafo = frustum |> Mod.map Frustum.projTrafo
+    let viewTrafo = cameraView |> AVal.map CameraView.viewTrafo
+    let projTrafo = frustum |> AVal.map Frustum.projTrafo
 
     let variants = 
         [|
@@ -271,8 +271,8 @@ let main argv =
 
 
     // use this mutable to switch between render task variants.
-    let variant = Mod.init 0
-    let fps = Mod.init 0.0
+    let variant = AVal.init 0
+    let fps = AVal.init 0.0
 
     win.Keyboard.KeyDown(Keys.V).Values.Add(fun _ -> 
         transact (fun () -> 
@@ -312,7 +312,7 @@ let main argv =
     Async.Start puller
     let overlayTask =
         let str =
-            Mod.custom (fun t ->
+            AVal.custom (fun t ->
                 let variant = variant.GetValue t 
                 let fps = fps.GetValue t
                 let fps = if fps <= 0.0 then "" else sprintf "%.0ffps" fps
@@ -321,7 +321,7 @@ let main argv =
             )
 
         let trafo =
-            win.Sizes |> Mod.map (fun size ->
+            win.Sizes |> AVal.map (fun size ->
                 let px = 2.0 / V2d size
                 Trafo3d.Scale(0.1) *
                 Trafo3d.Scale(1.0, float size.X / float size.Y, 1.0) *

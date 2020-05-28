@@ -10,7 +10,7 @@ open FShade
 open FShade.GLSL
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.Base.Management
 open Aardvark.Base.Runtime
@@ -24,16 +24,16 @@ open Aardvark.Rendering.GL
 module LodTreeHelpers =
 
     module HMap =
-        let keys (m : hmap<'a, 'b>) =
-            HSet.ofSeq (Seq.map fst (HMap.toSeq m))
+        let keys (m : HashMap<'a, 'b>) =
+            HashSet.ofSeq (Seq.map fst (HashMap.toSeq m))
 
-        let applySetDelta (set : hdeltaset<'a>) (value : 'b) (m : hmap<'a, 'b>) =
+        let applySetDelta (set : HashSetDelta<'a>) (value : 'b) (m : HashMap<'a, 'b>) =
             let delta = 
-                set |> HDeltaSet.toHMap |> HMap.map (fun e r ->
+                set |> HashSetDelta.toHashMap |> HashMap.map (fun e r ->
                     if r > 0 then Set value
                     else Remove
-                )
-            HMap.applyDelta m delta |> fst
+                ) |> HashMapDelta.ofHashMap
+            HashMap.applyDelta m delta |> fst
 
 
 
@@ -115,8 +115,8 @@ module LodTreeHelpers =
     [<StructuredFormatDisplay("{AsString}")>]
     type AtomicOperation<'a, 'b> =
         {
-            keys : hset<'a>
-            ops : hmap<'a, Operation<'b>>
+            keys : HashSet<'a>
+            ops : HashMap<'a, Operation<'b>>
         }
             
         override x.ToString() =
@@ -129,11 +129,11 @@ module LodTreeHelpers =
         member x.Inverse =
             {
                 keys = x.keys
-                ops = x.ops |> HMap.map (fun _ o -> o.Inverse)
+                ops = x.ops |> HashMap.map (fun _ o -> o.Inverse)
             }
 
-        static member Empty : AtomicOperation<'a, 'b> = { keys = HSet.empty; ops = HMap.empty }
-        static member Zero : AtomicOperation<'a, 'b> = { keys = HSet.empty; ops = HMap.empty }
+        static member Empty : AtomicOperation<'a, 'b> = { keys = HashSet.empty; ops = HashMap.empty }
+        static member Zero : AtomicOperation<'a, 'b> = { keys = HashSet.empty; ops = HashMap.empty }
 
         static member (+) (l : AtomicOperation<'a, 'b>, r : AtomicOperation<'a, 'b>) =
             let merge (key : 'a) (l : Option<Operation<'b>>) (r : Option<Operation<'b>>) =
@@ -147,43 +147,43 @@ module LodTreeHelpers =
                         | Nop -> None
                         | op -> Some op
 
-            let ops = HMap.choose2 merge l.ops r.ops 
-            let keys = HMap.keys ops
+            let ops = HashMap.choose2 merge l.ops r.ops 
+            let keys = HashMap.keys ops
             { ops = ops; keys = keys }
             
-        member x.IsEmpty = HMap.isEmpty x.ops
+        member x.IsEmpty = HashMap.isEmpty x.ops
             
     module AtomicOperation =
 
         let empty<'a, 'b> = AtomicOperation<'a, 'b>.Empty
         
-        let ofHMap (ops : hmap<'a, Operation<'b>>) =
-            let keys = HMap.keys ops
+        let ofHMap (ops : HashMap<'a, Operation<'b>>) =
+            let keys = HashMap.keys ops
             { ops = ops; keys = keys }
 
         let ofSeq (s : seq<'a * Operation<'b>>) =
-            let ops = HMap.ofSeq s
-            let keys = HMap.keys ops
+            let ops = HashMap.ofSeq s
+            let keys = HashMap.keys ops
             { ops = ops; keys = keys }
                 
         let ofList (l : list<'a * Operation<'b>>) = ofSeq l
         let ofArray (a : array<'a * Operation<'b>>) = ofSeq a
 
-    type AtomicQueue<'a, 'b> private(classId : uint64, classes : hmap<'a, uint64>, values : MapExt<uint64, AtomicOperation<'a, 'b>>) =
-        let classId = if HMap.isEmpty classes then 0UL else classId
+    type AtomicQueue<'a, 'b> private(classId : uint64, classes : HashMap<'a, uint64>, values : MapExt<uint64, AtomicOperation<'a, 'b>>) =
+        let classId = if HashMap.isEmpty classes then 0UL else classId
 
-        static let empty = AtomicQueue<'a, 'b>(0UL, HMap.empty, MapExt.empty)
+        static let empty = AtomicQueue<'a, 'b>(0UL, HashMap.empty, MapExt.empty)
 
         static member Empty = empty
 
         member x.Enqueue(op : AtomicOperation<'a, 'b>) =
             if not op.IsEmpty then
-                let clazzes = op.keys |> HSet.choose (fun k -> HMap.tryFind k classes)
+                let clazzes = op.keys |> HashSet.choose (fun k -> HashMap.tryFind k classes)
 
                 if clazzes.Count = 0 then
                     let id = classId
                     let classId = id + 1UL
-                    let classes = op.keys |> Seq.fold (fun c k -> HMap.add k id c) classes
+                    let classes = op.keys |> Seq.fold (fun c k -> HashMap.add k id c) classes
                     let values = MapExt.add id op values
                     AtomicQueue(classId, classes, values)
                         
@@ -195,9 +195,9 @@ module LodTreeHelpers =
                         match MapExt.tryRemove c values with
                         | Some (o, rest) ->
                             values <- rest
-                            classes <- op.keys |> HSet.fold (fun cs c -> HMap.remove c cs) classes
+                            classes <- op.keys |> HashSet.fold (fun cs c -> HashMap.remove c cs) classes
                             // may not overlap here
-                            result <- { ops = HMap.union result.ops o.ops; keys = HSet.union result.keys o.keys } //result + o
+                            result <- { ops = HashMap.union result.ops o.ops; keys = HashSet.union result.keys o.keys } //result + o
 
                         | None ->
                             ()
@@ -209,7 +209,7 @@ module LodTreeHelpers =
                         let id = classId
                         let classId = id + 1UL
 
-                        let classes = result.keys |> HSet.fold (fun cs c -> HMap.add c id cs) classes
+                        let classes = result.keys |> HashSet.fold (fun cs c -> HashMap.add c id cs) classes
                         let values = MapExt.add id result values
                         AtomicQueue(classId, classes, values)
                             
@@ -223,7 +223,7 @@ module LodTreeHelpers =
             | Some clazz ->
                 let v = values.[clazz]
                 let values = MapExt.remove clazz values
-                let classes = v.keys |> HSet.fold (fun cs c -> HMap.remove c cs) classes
+                let classes = v.keys |> HashSet.fold (fun cs c -> HashMap.remove c cs) classes
                 let newQueue = AtomicQueue(classId, classes, values)
                 Some (v, newQueue)
 
@@ -346,27 +346,31 @@ module LodTreeHelpers =
     type TreeNode<'a> =
         {
             original : ILodTreeNode
-            value : 'a
+            value : option<'a>
             children : list<TreeNode<'a>>
         }
 
 
     module SimplePickTree =
         
-        let rec ofTreeNode (trafo : IMod<Trafo3d>) (v : TreeNode<GeometryPoolInstance>) =
-            let positions = v.value.geometry.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
-            let bounds = v.original.WorldCellBoundingBox
+        let rec ofTreeNode (trafo : aval<Trafo3d>) (v : TreeNode<GeometryPoolInstance>) =
+            match v.value with
+            | Some value -> 
+                let positions = value.geometry.IndexedAttributes.[DefaultSemantic.Positions] |> unbox<V3f[]>
+                let bounds = v.original.WorldCellBoundingBox
             
-            SimplePickTree (
-                v.original,
-                bounds,
-                positions,
-                trafo,
-                v.original.Root.DataTrafo,
-                v.value.geometry.IndexedAttributes |> SymDict.toSeq |> MapExt.ofSeq,
-                v.value.uniforms,
-                lazy (v.children |> List.map (ofTreeNode trafo))
-            )
+                SimplePickTree (
+                    v.original,
+                    bounds,
+                    positions,
+                    trafo,
+                    v.original.Root.DataTrafo,
+                    value.geometry.IndexedAttributes |> SymDict.toSeq |> MapExt.ofSeq,
+                    value.uniforms,
+                    lazy (v.children |> List.choose (ofTreeNode trafo))
+                ) |> Some
+            | None ->
+                None
 
     module TreeHelpers =
 
@@ -395,7 +399,7 @@ module LodTreeHelpers =
             let mutable quality = 0.0
             let mutable cnt = 0
 
-            let dead = HashSet<ILodTreeNode>()
+            let dead = System.Collections.Generic.HashSet<ILodTreeNode>()
 
             for t in ts do 
                 size <- size + int64 t.DataSize
@@ -449,8 +453,8 @@ module LodTreeHelpers =
                 let struct (qn,_,_) = queue.HeapDequeue(cmp)
                 0.5 * (qn + quality), size
    
-    type TaskTreeNode<'a> internal(state : TaskTreeState, mapping : CancellationToken -> ILodTreeNode -> Task<'a>, rootId : int, original : ILodTreeNode) =
-        static let neverTask = TaskCompletionSource<'a>().Task
+    type TaskTreeNode<'a> internal(state : TaskTreeState, mapping : CancellationToken -> ILodTreeNode -> Task<option<'a>>, rootId : int, original : ILodTreeNode) =
+        static let neverTask = TaskCompletionSource<option<'a>>().Task
         static let cmp = Func<float * _, float * _, int>(fun (a,_) (b,_) -> compare a b)
 
         let mutable cancel = Some (new CancellationTokenSource())
@@ -459,7 +463,7 @@ module LodTreeHelpers =
             state.AddRunning()
             let c = cancel.Value
             let s = c.Token.Register(fun _ -> state.RemoveRunning())
-            (mapping c.Token original).ContinueWith(fun (t : Task<'a>) -> 
+            (mapping c.Token original).ContinueWith(fun (t : Task<option<'a>>) -> 
                 c.Cancel()
                 s.Dispose()
                 c.Dispose()
@@ -579,7 +583,7 @@ module LodTreeHelpers =
             | TAdd _ | TRem _ | TCollapse _ -> true
             | _ -> false
 
-    type TaskTree<'a>(mapping : CancellationToken -> ILodTreeNode -> Task<'a>, rootId : int) =
+    type TaskTree<'a>(mapping : CancellationToken -> ILodTreeNode -> Task<option<'a>>, rootId : int) =
         static let cmp = Func<float * _, float * _, int>(fun (a,_) (b,_) -> compare a b)
         static let cmpNode = Func<float * ILodTreeNode, float * ILodTreeNode, int>(fun (a,_) (b,_) -> compare a b)
 
@@ -608,7 +612,7 @@ module LodTreeHelpers =
 
             | None -> 
                 let create () =
-                    let n = TaskTreeNode(state, mapping, rootId, t)
+                    let n = TaskTreeNode<'a>(state, mapping, rootId, t)
                     root <- Some n
                     n.Task.ContinueWith (fun (t : Task<_>) -> MVar.put state.trigger ()) |> ignore
 
@@ -683,14 +687,20 @@ module LodTreeHelpers =
         let rec kill (t : TreeNode<'a>) =
             match t.children with
             | [] -> 
-                AtomicOperation.ofList [t.original, { alloc = -1; active = -1; value = None }]
+                match t.value with
+                | Some _ -> AtomicOperation.ofList [t.original, { alloc = -1; active = -1; value = None }]
+                | None -> AtomicOperation.empty
             | cs ->
-                let mutable op = AtomicOperation.ofList [t.original, { alloc = -1; active = 0; value = None }]
+                let mutable op = 
+                    match t.value with
+                    | Some _ -> AtomicOperation.ofList [t.original, { alloc = -1; active = 0; value = None }]
+                    | None -> AtomicOperation.empty
+
                 for c in cs do
                     op <- op + kill c
                 op
 
-        let rec snap (n : TaskTreeNode<'a>) =
+        let rec snap (n : TaskTreeNode<'a>) : option<TreeNode<'a>> =
             match n.TryValue with
             | Some v -> 
                 let nc = n.Children
@@ -722,11 +732,18 @@ module LodTreeHelpers =
             | None, Some n ->
                 let qc = ref AtomicQueue.empty
                 n.children |> List.iter (fun c -> traverse2 qc None (Some c))
-                let op = 
-                    AtomicQueue.toOperation !qc +
-                    AtomicOperation.ofList [ n.original, Operation.Alloc(n.value, List.isEmpty n.children) ]
+                let op = AtomicQueue.toOperation !qc
+
+                match n.value with
+                | Some value ->
+                    let op = 
+                        op +
+                        AtomicOperation.ofList [ n.original, Operation.Alloc(value, List.isEmpty n.children) ]
                          
-                lock q (fun () -> q := AtomicQueue.enqueue op !q) 
+                    lock q (fun () -> q := AtomicQueue.enqueue op !q) 
+                | None ->
+                    lock q (fun () -> q := AtomicQueue.enqueue op !q) 
+
             | Some o, Some n ->
                 assert (Unchecked.equals o.original n.original)
                 match o.children, n.children with
@@ -737,7 +754,7 @@ module LodTreeHelpers =
                     oc |> List.iter (fun c -> traverse2 qc (Some c) None)
                     let op = 
                         AtomicQueue.toOperation !qc +
-                        AtomicOperation.ofList [ n.original, Operation.Activate ]
+                        (match n.value with | Some _ -> AtomicOperation.ofList [ n.original, Operation.Activate ] | _ -> AtomicOperation.empty)
                         
                     lock q (fun () -> q := AtomicQueue.enqueue op !q) 
 
@@ -746,7 +763,7 @@ module LodTreeHelpers =
                     nc |> List.iter (fun c -> traverse2 qc None (Some c))
                     let op = 
                         AtomicQueue.toOperation !qc +
-                        AtomicOperation.ofList [ n.original, Operation.Deactivate ]
+                        (match n.value with | Some _ -> AtomicOperation.ofList [ n.original, Operation.Deactivate ] | _ -> AtomicOperation.empty)
                         
                     lock q (fun () -> q := AtomicQueue.enqueue op !q) 
 
@@ -968,7 +985,7 @@ module LodTreeHelpers =
 
     //type Delta =
     //    {
-    //        deltas          : hmap<ILodTreeNode, int * NodeOperation>
+    //        deltas          : HashMap<ILodTreeNode, int * NodeOperation>
     //        splitCount      : int
     //        collapseCount   : int
     //        allocSize       : int64
@@ -977,7 +994,7 @@ module LodTreeHelpers =
 
     //    static member Empty =
     //        {
-    //            deltas = HMap.empty; splitCount = 0; collapseCount = 0; allocSize = 0L; freeSize = 0L
+    //            deltas = HashMap.empty; splitCount = 0; collapseCount = 0; allocSize = 0L; freeSize = 0L
     //        }
 
     //module MaterializedTree =
@@ -1095,14 +1112,14 @@ module LodTreeHelpers =
 
     //                    | [], _     ->
     //                        { acc with
-    //                            deltas = HMap.add n.original (n.rootId, NodeOperation.Split) acc.deltas
+    //                            deltas = HashMap.add n.original (n.rootId, NodeOperation.Split) acc.deltas
     //                            splitCount = 1 + acc.splitCount
     //                            allocSize = int64 n.original.DataSize + acc.allocSize
     //                        }
     //                    | oc, []    -> 
     //                        let children = allChildren o |> Seq.map original |> Seq.toList
     //                        { acc with
-    //                            deltas = HMap.add n.original (n.rootId, NodeOperation.Collapse(children)) acc.deltas
+    //                            deltas = HashMap.add n.original (n.rootId, NodeOperation.Collapse(children)) acc.deltas
     //                            collapseCount = 1 + acc.collapseCount
     //                            freeSize = children |> List.fold (fun s c -> s + int64 c.DataSize) acc.freeSize
     //                        }
@@ -1255,8 +1272,8 @@ module LodTreeHelpers =
                     let delta = b * a.Inverse
 
                     let dRot = Rot3d.FromAngleAxis(delta.Rot.ToAngleAxis() * t)
-                    let dTrans = delta.Rot.InvTransformDir(delta.Trans) * t
-                    let dScaled = Euclidean3d(dRot, dRot.TransformDir dTrans)
+                    let dTrans = delta.Rot.InvTransform(delta.Trans) * t
+                    let dScaled = Euclidean3d(dRot, dRot.Transform dTrans)
 
                     dScaled * a
             )
@@ -1274,7 +1291,7 @@ module LodTreeHelpers =
             mutable count : int
         }
 
-    let inline (%*) a b = Mod.map2 (*) a b
+    let inline (%*) a b = AVal.map2 (*) a b
 
 
 
@@ -1288,9 +1305,9 @@ module private Assertions =
 
 type LodRenderingInfo =
     {
-        quality         : IModRef<float>
-        maxQuality      : IModRef<float>
-        renderBounds    : IMod<bool>
+        quality         : cval<float>
+        maxQuality      : cval<float>
+        renderBounds    : aval<bool>
     }
 
 type UniqueTree(id : Guid, root : Option<UniqueTree>, parent : Option<ILodTreeNode>, inner : ILodTreeNode) =
@@ -1358,7 +1375,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
     let reader =
         let roots = roots |> ASet.map (fun r -> { r with root = UniqueTree(Guid.NewGuid(), None, None, r.root) :> ILodTreeNode })
         roots.GetReader()
-    let euclideanView = config.view |> Mod.map Euclidean3d
+    let euclideanView = config.view |> AVal.map Euclidean3d.FromTrafo3d
 
   
     let loadTimes = System.Collections.Concurrent.ConcurrentDictionary<Symbol, Regression>()
@@ -1380,21 +1397,21 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
 
     let cache = Dict<ILodTreeNode, PoolSlot>()
 
-    let needUpdate = Mod.init ()
+    let needUpdate = AVal.init ()
     let renderDelta : ref<AtomicQueue<ILodTreeNode, GeometryPoolInstance>> = ref AtomicQueue.empty
 
     let pRenderBounds : nativeptr<int> = 
         NativePtr.allocArray [| (if config.renderBounds.GetValue() then 1 else 0) |]
 
     let rootIdsLock = obj()
-    let rootIds : ModRef<hmap<ILodTreeNode, int>> = Mod.init HMap.empty
+    let rootIds : cval<HashMap<ILodTreeNode, int>> = cval HashMap.empty
 
-    let mutable rootUniforms : hmap<ILodTreeNode, MapExt<string, IMod>> = HMap.empty
-    let toFreeUniforms : ref<hset<ILodTreeNode>> = ref HSet.empty
+    let mutable rootUniforms : HashMap<ILodTreeNode, MapExt<string, IAdaptiveValue>> = HashMap.empty
+    let toFreeUniforms : ref<HashSet<ILodTreeNode>> = ref HashSet.empty
         
-    let rootUniformCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, System.Collections.Concurrent.ConcurrentDictionary<string, Option<IMod>>>()
-    let rootTrafoCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, IMod<Trafo3d>>()
-    let rootTrafoWorldCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, IMod<Trafo3d>>()
+    let rootUniformCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, System.Collections.Concurrent.ConcurrentDictionary<string, Option<IAdaptiveValue>>>()
+    let rootTrafoCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, aval<Trafo3d>>()
+    let rootTrafoWorldCache = System.Collections.Concurrent.ConcurrentDictionary<ILodTreeNode, aval<Trafo3d>>()
     
 
 
@@ -1402,48 +1419,48 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
     let getRootTrafo (root : ILodTreeNode) =
         let root = root.Root
         rootTrafoCache.GetOrAdd(root, fun root ->
-            match HMap.tryFind root rootUniforms with
+            match HashMap.tryFind root rootUniforms with
             | Some table -> 
                 match MapExt.tryFind "ModelTrafo" table with
-                | Some (:? IMod<Trafo3d> as m) -> (m |> Mod.map ( fun m -> root.DataTrafo * m )) %* config.model
-                | _ -> config.model |> Mod.map ( fun m -> root.DataTrafo * m )
+                | Some (:? aval<Trafo3d> as m) -> (m |> AVal.map ( fun m -> root.DataTrafo * m )) %* config.model
+                | _ -> config.model |> AVal.map ( fun m -> root.DataTrafo * m )
             | None ->
                 Log.error "bad trafo"
-                config.model |> Mod.map ( fun m -> root.DataTrafo * m )
+                config.model |> AVal.map ( fun m -> root.DataTrafo * m )
         )
-    let getRootUniform (name : string) (root : ILodTreeNode) : Option<IMod> =
+    let getRootUniform (name : string) (root : ILodTreeNode) : Option<IAdaptiveValue> =
         let root = root.Root
         let rootCache = rootUniformCache.GetOrAdd(root, fun root -> System.Collections.Concurrent.ConcurrentDictionary())
         rootCache.GetOrAdd(name, fun name ->
             match name with
-            | "ModelTrafos"              -> getRootTrafo root :> IMod |> Some
-            | "ModelTrafosInv"           -> getRootTrafo root |> Mod.map (fun t -> t.Inverse) :> IMod |> Some
+            | "ModelTrafos"              -> getRootTrafo root :> IAdaptiveValue |> Some
+            | "ModelTrafosInv"           -> getRootTrafo root |> AVal.map (fun t -> t.Inverse) :> IAdaptiveValue |> Some
 
-            | "ModelViewTrafos"          -> Mod.map2 (fun a b -> a * b) (getRootTrafo root) config.view :> IMod |> Some
-            | "ModelViewTrafosInv"       -> getRootTrafo root %* config.view |> Mod.map (fun t -> t.Inverse) :> IMod |> Some
+            | "ModelViewTrafos"          -> AVal.map2 (fun a b -> a * b) (getRootTrafo root) config.view :> IAdaptiveValue |> Some
+            | "ModelViewTrafosInv"       -> getRootTrafo root %* config.view |> AVal.map (fun t -> t.Inverse) :> IAdaptiveValue |> Some
 
-            | "ModelViewProjTrafos"      -> getRootTrafo root %* config.view %* config.proj :> IMod |> Some
-            | "ModelViewProjTrafosInv"   -> getRootTrafo root %* config.view %* config.proj |> Mod.map (fun t -> t.Inverse) :> IMod |> Some
+            | "ModelViewProjTrafos"      -> getRootTrafo root %* config.view %* config.proj :> IAdaptiveValue |> Some
+            | "ModelViewProjTrafosInv"   -> getRootTrafo root %* config.view %* config.proj |> AVal.map (fun t -> t.Inverse) :> IAdaptiveValue |> Some
 
-            | "NormalMatrices"           -> getRootTrafo root |> Mod.map (fun t -> M33d.op_Explicit t.Backward.Transposed):> IMod |> Some
-            | "NormalMatricesInv"        -> getRootTrafo root |> Mod.map (fun t -> M33d.op_Explicit t.Forward.Transposed):> IMod |> Some
+            | "NormalMatrices"           -> getRootTrafo root |> AVal.map (fun t -> M33d.op_Explicit t.Backward.Transposed):> IAdaptiveValue |> Some
+            | "NormalMatricesInv"        -> getRootTrafo root |> AVal.map (fun t -> M33d.op_Explicit t.Forward.Transposed):> IAdaptiveValue |> Some
             | _ -> 
-                match HMap.tryFind root rootUniforms with
+                match HashMap.tryFind root rootUniforms with
                 | Some table -> MapExt.tryFind name table
                 | None -> None
         )
 
     let getRootId (root : ILodTreeNode) =   
         let root = root.Root
-        match HMap.tryFind root rootIds.Value with
+        match HashMap.tryFind root rootIds.Value with
         | Some id -> 
             id
         | None ->
             transact (fun () -> 
                 lock rootIdsLock (fun () ->
-                    let ids = Set.ofSeq (Seq.map snd (HMap.toSeq rootIds.Value))
+                    let ids = Set.ofSeq (Seq.map snd (HashMap.toSeq rootIds.Value))
                     let free = Seq.initInfinite id |> Seq.find (fun i -> not (Set.contains i ids))
-                    let n = HMap.add root free rootIds.Value
+                    let n = HashMap.add root free rootIds.Value
                     rootIds.Value <- n
                     free
                 )
@@ -1455,7 +1472,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
         rootTrafoCache.TryRemove root |> ignore
         transact (fun () ->
             lock rootIdsLock (fun () ->
-                rootIds.Value <- HMap.remove root rootIds.Value
+                rootIds.Value <- HashMap.remove root rootIds.Value
             )
         )
 
@@ -1468,17 +1485,17 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                 let conv = PrimitiveValueConverter.convert typ
                     
                 let content =
-                    Mod.custom (fun t ->
+                    AVal.custom (fun t ->
                         let ids = rootIds.GetValue t
-                        if HMap.isEmpty ids then
+                        if HashMap.isEmpty ids then
                             ArrayBuffer (System.Array.CreateInstance(typ, 0)) :> IBuffer
                         else
-                            let maxId = ids |> HMap.toSeq |> Seq.map snd |> Seq.max
+                            let maxId = ids |> HashMap.toSeq |> Seq.map snd |> Seq.max
                             let data = System.Array.CreateInstance(typ, 1 + maxId)
-                            ids |> HMap.iter (fun root id ->
+                            ids |> HashMap.iter (fun root id ->
                                 match getRootUniform name root with
                                 | Some v ->
-                                    let vc = v.GetValue(t) |> conv
+                                    let vc = v.GetValueUntyped(t) |> conv
                                     data.SetValue(vc, id)
                                 | None ->
                                     ()
@@ -1499,17 +1516,17 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
 
     let activeBuffer =
         let data = 
-            Mod.custom (fun t ->
+            AVal.custom (fun t ->
                 let ids = rootIds.GetValue t
-                if HMap.isEmpty ids then
+                if HashMap.isEmpty ids then
                     ArrayBuffer (Array.empty<int>) :> IBuffer
                 else
-                    let maxId = ids |> HMap.toSeq |> Seq.map snd |> Seq.max
+                    let maxId = ids |> HashMap.toSeq |> Seq.map snd |> Seq.max
                     let data : int[] = Array.zeroCreate (1 + maxId)
-                    ids |> HMap.iter (fun root id ->
+                    ids |> HashMap.iter (fun root id ->
                         match getRootUniform "TreeActive" root with
                         | Some v ->
-                            match v.GetValue(t) with
+                            match v.GetValueUntyped(t) with
                             | :? bool as b ->
                                 data.[id] <- (if b then 1 else 0)
                             | _ ->
@@ -1523,17 +1540,17 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
 
     let modelViewProjBuffer =
         let data = 
-            Mod.custom (fun t ->
+            AVal.custom (fun t ->
                 let ids = rootIds.GetValue t
-                if HMap.isEmpty ids then
+                if HashMap.isEmpty ids then
                     ArrayBuffer (Array.empty<M44f>) :> IBuffer
                 else
-                    let maxId = ids |> HMap.toSeq |> Seq.map snd |> Seq.max
+                    let maxId = ids |> HashMap.toSeq |> Seq.map snd |> Seq.max
                     let data : M44f[] = Array.zeroCreate (1 + maxId)
-                    ids |> HMap.iter (fun root id ->
+                    ids |> HashMap.iter (fun root id ->
                         match getRootUniform "ModelViewProjTrafos" root with
                         | Some v ->
-                            match v.GetValue(t) with
+                            match v.GetValueUntyped(t) with
                             | :? Trafo3d as b ->
                                 data.[id] <- M44f.op_Explicit b.Forward
                             | _ ->
@@ -1568,7 +1585,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
             
     let performOp (state : RenderState) (parentOp : AtomicOperation<ILodTreeNode, GeometryPoolInstance>) (node : ILodTreeNode) (op : Operation<GeometryPoolInstance>) =
         let rootId = 
-            match HMap.tryFind node.Root rootIds.Value with
+            match HashMap.tryFind node.Root rootIds.Value with
             | Some id -> id
             | _ -> -1
             
@@ -1596,9 +1613,9 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
             | Free ac ->
                 if node.Level = 0 then
                     lock toFreeUniforms (fun () ->
-                        toFreeUniforms := HSet.add node !toFreeUniforms
+                        toFreeUniforms := HashSet.add node !toFreeUniforms
                     )
-                    //rootUniforms <- HMap.remove node rootUniforms
+                    //rootUniforms <- HashMap.remove node rootUniforms
                     //freeRootId node
 
                 match cache.TryRemove node with
@@ -1649,7 +1666,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                 ()
             
     let perform (state : RenderState) (op : AtomicOperation<ILodTreeNode, GeometryPoolInstance>) =
-        op.ops |> HMap.iter (performOp state op)
+        op.ops |> HashMap.iter (performOp state op)
 
     let rec enter (l : obj) =
         let gotLock = Monitor.TryEnter(l, 5)
@@ -1788,10 +1805,10 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
     let cameraPrediction, puller, thread =
         let prediction = Prediction.euclidean (MicroTime(TimeSpan.FromMilliseconds 55.0))
         let rootLock = obj()
-        let mutable roots : hmap<ILodTreeNode, TaskTree<GeometryPoolInstance>> = HMap.empty
+        let mutable roots : HashMap<ILodTreeNode, TaskTree<GeometryPoolInstance>> = HashMap.empty
         let mutable lastQ = 0.0
-        let mutable lastRoots = HMap.empty
-        let mutable readers : hmap<ILodTreeNode, TaskTreeReader<_>> = HMap.empty
+        let mutable lastRoots = HashMap.empty
+        let mutable readers : HashMap<ILodTreeNode, TaskTreeReader<_>> = HashMap.empty
             
         let changesPending = MVar.create ()
 
@@ -1859,7 +1876,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         let q = maxQualityTime.Average |> MicroTime.FromMilliseconds
                         ()
 
-                        //let roots = readers |> HMap.keys |> Seq.map string |> String.concat ", "
+                        //let roots = readers |> HashMap.keys |> Seq.map string |> String.concat ", "
                         //Log.line "%s" roots
 
                         //Log.line "q: %.2f m: %A (%A) r: %A l : %s mq: %A e: %A u: %A c: %d s: %d t: %d d: %A" 
@@ -1889,20 +1906,20 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                             let roots = roots
                             let removed = List<Option<ILodTreeNode> * TaskTreeReader<_>>()
 
-                            let delta = HMap.computeDelta lastRoots roots
+                            let delta = HashMap.computeDelta lastRoots roots
                             lastRoots <- roots
 
                             for k, op in delta do
                                 match op with
                                 | Remove ->
-                                    match HMap.tryRemove k readers with
+                                    match HashMap.tryRemove k readers with
                                     | Some (r, rs) ->
                                         readers <- rs
                                         removed.Add((Some k, r))
                                     | None ->
                                         Log.error "[Lod] free of unknown: %A" (k.GetHashCode())
                                 | Set v ->
-                                    match HMap.tryFind k readers with
+                                    match HashMap.tryFind k readers with
                                     | Some o ->
                                         Log.error "[Lod] double add %A" k
                                         removed.Add (None, o)
@@ -1910,11 +1927,11 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                                         //rootUniformCache.TryRemove k |> ignore
                                         //rootTrafoCache.TryRemove k |> ignore
                                         //transact (fun () -> rootIds.MarkOutdated())
-                                        readers <- HMap.add k r readers
+                                        readers <- HashMap.add k r readers
 
                                     | None ->
                                         let r = TaskTreeReader(v)
-                                        readers <- HMap.add k r readers
+                                        readers <- HashMap.add k r readers
                             readers, removed
                         )
 
@@ -1922,7 +1939,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         match root with
                         | Some root -> 
                             match pickTrees with
-                            | Some mm -> transact (fun () -> mm.Value <- mm.Value |> HMap.remove root)
+                            | Some mm -> transact (fun () -> mm.Value <- mm.Value |> HashMap.remove root)
                             | None -> ()
                         | None ->
                             ()
@@ -1933,11 +1950,11 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         match pickTrees with
                         | Some mm ->
                             let trafo = getRootTrafo root
-                            let picky = r.State |> Option.map (fun s -> SimplePickTree.ofTreeNode trafo s)
+                            let picky = r.State |> Option.bind (fun s -> SimplePickTree.ofTreeNode trafo s)
                             transact (fun () -> 
                                 match picky with
-                                | Some picky -> mm.Value <- mm.Value |> HMap.add root picky
-                                | None -> mm.Value <- mm.Value |> HMap.remove root
+                                | Some picky -> mm.Value <- mm.Value |> HashMap.add root picky
+                                | None -> mm.Value <- mm.Value |> HashMap.remove root
                             )
                         | None ->
                             ()
@@ -1946,7 +1963,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                 for (root,r) in readers do
                     match pickTrees with
                     | Some mm -> 
-                        transact (fun () -> mm.Value <- mm.Value |> HMap.remove root)
+                        transact (fun () -> mm.Value <- mm.Value |> HashMap.remove root)
                     | None -> ()
                     r.Destroy(renderDelta)
             )
@@ -1971,24 +1988,28 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         let startTime = time()
                         let (g,u) = node.GetData(ct, wantedInputs)
 
-                        let cnt = 
-                            match Seq.tryHead u with
-                            | Some (KeyValue(_, (v : Array) )) -> v.Length
-                            | _ -> 1
+                        if g.FaceVertexCount <= 0 then
+                            None
+                        else
 
-                        let u = MapExt.add "TreeId" (Array.create cnt rootId :> System.Array) u
-                        let loaded = GeometryPoolInstance.ofGeometry signature g u
+                            let cnt = 
+                                match Seq.tryHead u with
+                                | Some (KeyValue(_, (v : Array) )) -> v.Length
+                                | _ -> 1
+
+                            let u = MapExt.add "TreeId" (Array.create cnt rootId :> System.Array) u
+                            let loaded = GeometryPoolInstance.ofGeometry signature g u
                                 
-                        let endTime = time()
-                        addLoadTime node.DataSource node.DataSize (endTime - startTime)
+                            let endTime = time()
+                            addLoadTime node.DataSource node.DataSize (endTime - startTime)
 
                         
 
-                        if not ct.IsCancellationRequested then
-                            let res = cont ct node loaded
-                            res
-                        else
-                            raise <| OperationCanceledException()
+                            if not ct.IsCancellationRequested then
+                                let res = cont ct node loaded
+                                Some res
+                            else
+                                raise <| OperationCanceledException()
                     )
 
                       
@@ -2004,7 +2025,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
 
                 let mutable lastMaxQ = 0.0
                 try 
-                    let mutable deltas = HDeltaSet.empty
+                    let mutable deltas = HashSetDelta.empty
                     let reg = shutdown.Token.Register (System.Action(MVar.put notConverged))
                     while not shutdown.IsCancellationRequested do
                         timer.Wait()
@@ -2017,26 +2038,26 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         let maxSplits = config.maxSplits.GetValue AdaptiveToken.Top
                           
                         deltas <-   
-                            let ops = reader.GetOperations AdaptiveToken.Top
-                            HDeltaSet.combine deltas ops
+                            let ops = reader.GetChanges AdaptiveToken.Top
+                            HashSetDelta.combine deltas ops
 
                         let toFree = 
                             lock toFreeUniforms (fun () ->
                                 let r = !toFreeUniforms
-                                toFreeUniforms := HSet.empty
+                                toFreeUniforms := HashSet.empty
                                 r
                             )
 
-                        toFree |> HSet.iter ( fun node -> 
+                        toFree |> HashSet.iter ( fun node -> 
                             freeRootId node
-                            rootUniforms <- HMap.remove node rootUniforms
+                            rootUniforms <- HashMap.remove node rootUniforms
                         )
                         
 
                         if maxSplits > 0 then
                             let ops =
                                 let d = deltas
-                                deltas <- HDeltaSet.empty
+                                deltas <- HashSetDelta.empty
                                 d
 
                             //if ops.Count > 0 then
@@ -2060,19 +2081,19 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                                             match o with
                                             | Add(_,i) ->
                                                 let r = i.root
-                                                match HMap.tryFind r roots with
+                                                match HashMap.tryFind r roots with
                                                 | Some o ->
                                                     Log.error "[Lod] add of existing root %A" i.root
                                                 | None -> 
                                                     let u = i.uniforms
-                                                    rootUniforms <- HMap.add r u rootUniforms
+                                                    rootUniforms <- HashMap.add r u rootUniforms
                                                     let rid = getRootId r
                                                     let load ct n = load ct rid n (fun _ _ r -> r)
-                                                    roots <- HMap.add r (TaskTree(load, rid)) roots
+                                                    roots <- HashMap.add r (TaskTree(load, rid)) roots
 
                                             | Rem(_,i) ->
                                                 let r = i.root
-                                                match HMap.tryRemove r roots with
+                                                match HashMap.tryRemove r roots with
                                                 | Some (_, rest) ->
                                                     
                                                     roots <- rest
@@ -2154,7 +2175,6 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
         cameraPrediction.Join()
         thread.Join()
         puller.Join()
-        reader.Dispose()
         inner.Dispose()
         loadTimes.Clear()
         for slot in cache.Values do pool.Free slot

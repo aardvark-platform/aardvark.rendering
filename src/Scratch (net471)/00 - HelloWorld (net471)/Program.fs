@@ -1,11 +1,10 @@
 ﻿open System
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open Aardvark.Application.WinForms.Vulkan
 
 // This example illustrates how to create a simple render window. 
 // In contrast to the rest of the examples (beginning from 01-Triangle), we use
@@ -15,22 +14,35 @@ open Aardvark.Application.WinForms.Vulkan
 // show/window computation expression builders (which reduces code duplication
 // in this case) to setup applications.
 
-[<EntryPoint>]
+[<EntryPoint; STAThread>]
 let main argv = 
-    
     // first we need to initialize Aardvark's core components
-    Ag.initialize()
     Aardvark.Init()
 
     // create an OpenGL/Vulkan application. Use the use keyword (using in C#) in order to
     // properly dipose resources on shutdown...
-    use app = new VulkanApplication()
+    use app = new OpenGlApplication()
     // SimpleRenderWindow is a System.Windows.Forms.Form which contains a render control
     // of course you can a custum form and add a control to it.
     // Note that there is also a WPF binding for OpenGL. For more complex GUIs however,
     // we recommend using aardvark-media anyways..
-    let win = app.CreateSimpleRenderWindow(samples = 8)
-    //win.Title <- "Hello Aardvark"
+    let win = app.CreateSimpleRenderWindow(8)
+
+    // the following shows how `SubSampling` and `Samples` can be used to control render-quality.
+    // Since this is currently only available for OpenGL we need to unsafely get the "real" OpenGlRenderControl.
+    win.Keyboard.Down.Values.Add(fun k ->
+        match k with
+        | Keys.OemPlus -> 
+            let n = win.SubSampling * Constant.Sqrt2 |> clamp 0.015625 2.0
+            win.SubSampling <- n
+            Log.warn "SubSampling: %A" win.SubSampling
+        | Keys.OemMinus -> 
+            let n = win.SubSampling / Constant.Sqrt2 |> clamp 0.015625 2.0
+            win.SubSampling <- n
+            Log.warn "SubSampling: %A" win.SubSampling
+        | _ ->
+            ()
+    )
 
     // Given eye, target and sky vector we compute our initial camera pose
     let initialView = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
@@ -40,7 +52,7 @@ let main argv =
         win.Sizes 
             // construct a standard perspective frustum (60 degrees horizontal field of view,
             // near plane 0.1, far plane 50.0 and aspect ratio x/y.
-            |> Mod.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
+            |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
 
     // create a controlled camera using the window mouse and keyboard input devices
     // the window also provides a so called time mod, which serves as tick signal to create
@@ -74,9 +86,9 @@ let main argv =
                     DefaultSurfaces.simpleLighting        |> toEffect
                 ]
             // extract our viewTrafo from the dynamic cameraView and attach it to the scene graphs viewTrafo 
-            |> Sg.viewTrafo (cameraView  |> Mod.map CameraView.viewTrafo )
+            |> Sg.viewTrafo (cameraView  |> AVal.map CameraView.viewTrafo )
             // compute a projection trafo, given the frustum contained in frustum
-            |> Sg.projTrafo (frustum |> Mod.map Frustum.projTrafo    )
+            |> Sg.projTrafo (frustum |> AVal.map Frustum.projTrafo    )
 
 
     let renderTask = 

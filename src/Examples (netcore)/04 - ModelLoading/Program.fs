@@ -1,14 +1,14 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.IO
 open Aardvark.Application
+open System
 
-[<EntryPoint>]
+[<EntryPoint; STAThread>]
 let main argv = 
     
-    Ag.initialize()
     Aardvark.Init()
 
     

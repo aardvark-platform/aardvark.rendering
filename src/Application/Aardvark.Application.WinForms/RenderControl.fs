@@ -4,36 +4,35 @@ open System
 open System.Windows.Forms
 open System.Drawing
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.Application
 
 
 type RenderControl() as this =
     inherit Control()
 
+    let mutable subsampling = 1.0
     let mutable renderTask : Option<IRenderTask> = None
     let mutable impl : Option<IRenderTarget> = None
     let mutable ctrl : Option<Control> = None
 
     let keyboard = new Keyboard()
     let mouse = new Mouse()
-    let sizes = Mod.init (V2i.II)
-    let focus = Mod.init false
-    let mutable inner : Option<IMod<DateTime>> = None
+    let sizes = AVal.init (V2i.II)
+    let focus = AVal.init false
+    let mutable inner : Option<aval<DateTime>> = None
 
     let beforeRender = Event<unit>()
     let afterRender = Event<unit>()
 
     let onGotFocus (sender : obj) (e : EventArgs) =
-        transact(fun () ->
-            Mod.change focus true)
+        transact(fun () -> focus.Value <- true)
 
     let onLostFocus (sender : obj) (e : EventArgs) =
-        transact(fun () ->
-            Mod.change focus false)
+        transact(fun () -> focus.Value <- false)
 
     let time = 
-        Mod.custom (fun s -> 
+        AVal.custom (fun s -> 
             match inner with
                 | Some m -> m.GetValue s
                 | None -> DateTime.Now
@@ -48,7 +47,7 @@ type RenderControl() as this =
             | Some i -> 
                 c.GotFocus.RemoveHandler gotFocusHandler
                 c.LostFocus.RemoveHandler lostFocusHandler
-                i.Time.RemoveOutput time
+                i.Time.Outputs.Remove time |> ignore
             | None -> 
                 ()
 
@@ -70,10 +69,12 @@ type RenderControl() as this =
             | Some task -> cr.RenderTask <- task
             | None -> ()
 
+        cr.SubSampling <- subsampling
+
         transact(fun () ->
             inner <- Some cr.Time
-            Mod.change focus c.Focused
-            cr.Time.AddOutput(time)
+            focus.Value <- c.Focused
+            cr.Time.Outputs.Add time |> ignore
         )
         ctrl <- Some c
         impl <- Some cr
@@ -111,15 +112,15 @@ type RenderControl() as this =
             let point = ctrl.PointToScreen(Point(0,0))
             V2i(point.X, point.Y)
 
-        let res = Mod.init (currentPos())
+        let res = AVal.init (currentPos())
 
         let update (s : obj) (e : EventArgs) =
             transact (fun () ->
-                Mod.change res (currentPos())
+                res.Value <- currentPos()
             )
 
         let d = subscribeToLocationChange ctrl (EventHandler update)
-        d, res :> IMod<_>
+        d, res :> aval<_>
 
     let locationAndSub = lazy ( getScreenLocation this )
 
@@ -137,13 +138,13 @@ type RenderControl() as this =
 
     override x.OnResize(e) =
         base.OnResize(e)
-        transact (fun () -> Mod.change sizes (V2i(x.ClientSize.Width, x.ClientSize.Height)))
+        transact (fun () -> sizes.Value <- (V2i(x.ClientSize.Width, x.ClientSize.Height)))
     
     //override x.OnDpiChangedBeforeParent(e) =
     //    Log.warn "asdasdasdasd"
     //    base.OnDpiChangedBeforeParent(e)
 
-    member x.Sizes = sizes :> IMod<V2i>
+    member x.Sizes = sizes :> aval<V2i>
     member x.Samples = impl.Value.Samples
     member x.Keyboard = keyboard :> IKeyboard
     member x.Mouse = mouse :> IMouse
@@ -159,14 +160,28 @@ type RenderControl() as this =
     member x.FramebufferSignature = impl.Value.FramebufferSignature
     member x.Runtime = impl.Value.Runtime
     member x.Time = time
-    member x.Focus = focus :> IMod<_>
+    member x.Focus = focus :> aval<_>
     
+    member x.SubSampling 
+        with get() = subsampling
+        and set v =
+            subsampling <- v
+            match impl with
+            | Some i -> i.SubSampling <- v
+            | None -> ()
+            
+
     [<CLIEvent>]
     member x.BeforeRender = beforeRender.Publish
     [<CLIEvent>]
     member x.AfterRender = afterRender.Publish
 
     interface IRenderControl with
+        
+        member x.SubSampling
+            with get() = x.SubSampling
+            and set v = x.SubSampling <- v
+
         member x.FramebufferSignature = impl.Value.FramebufferSignature
         member x.Runtime = impl.Value.Runtime
         member x.Time = time

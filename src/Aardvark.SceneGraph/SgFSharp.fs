@@ -9,7 +9,7 @@ open System.Collections.Generic
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 #nowarn "9"
 #nowarn "51"
@@ -19,41 +19,34 @@ module SgFSharp =
 
     module Sg =
 
-        let uniform (name : string) (value : IMod<'a>) (sg : ISg) =
-            Sg.UniformApplicator(name, value :> IMod, sg) :> ISg
+        let uniform (name : string) (value : aval<'a>) (sg : ISg) =
+            Sg.UniformApplicator(name, value :> IAdaptiveValue, sg) :> ISg
 
-        let trafo (m : IMod<Trafo3d>) (sg : ISg) =
+        let trafo (m : aval<Trafo3d>) (sg : ISg) =
             Sg.TrafoApplicator(m, sg) :> ISg
 
-        let viewTrafo (m : IMod<Trafo3d>) (sg : ISg) =
+        let viewTrafo (m : aval<Trafo3d>) (sg : ISg) =
             Sg.ViewTrafoApplicator(m, sg) :> ISg
 
-        let projTrafo (m : IMod<Trafo3d>) (sg : ISg) =
+        let projTrafo (m : aval<Trafo3d>) (sg : ISg) =
             Sg.ProjectionTrafoApplicator(m, sg) :> ISg
 
         let scale (s : float) (sg : ISg) =
-            sg |> trafo (s |> Trafo3d.Scale |> Mod.constant)
+            sg |> trafo (s |> Trafo3d.Scale |> AVal.constant)
 
         let translate (x : float) (y : float) (z : float) (sg : ISg) =
-            sg |> trafo (Trafo3d.Translation(x,y,z) |> Mod.constant)
+            sg |> trafo (Trafo3d.Translation(x,y,z) |> AVal.constant)
 
         let transform (t : Trafo3d) (sg : ISg) =
-            sg |> trafo (t |> Mod.constant)
+            sg |> trafo (t |> AVal.constant)
 
 
 
-        let camera (cam : IMod<Camera>) (sg : ISg) =
-            sg |> viewTrafo (cam |> Mod.map Camera.viewTrafo) |> projTrafo (cam |> Mod.map Camera.projTrafo)
+        let camera (cam : aval<Camera>) (sg : ISg) =
+            sg |> viewTrafo (cam |> AVal.map Camera.viewTrafo) |> projTrafo (cam |> AVal.map Camera.projTrafo)
 
         let surface (m : ISurface) (sg : ISg) =
             Sg.SurfaceApplicator(Surface.Backend m, sg) :> ISg
-
-        let group (s : seq<ISg>) =
-            Sg.Group s
-
-        let group' (s : seq<ISg>) =
-            Sg.Group s :> ISg
-
 
         let set (set : aset<ISg>) =
             Sg.Set(set) :> ISg
@@ -72,40 +65,40 @@ module SgFSharp =
 
 
         let andAlso (sg : ISg) (andSg : ISg) = 
-            Sg.Group [sg;andSg] :> ISg
+            Sg.Set [sg; andSg] :> ISg
 
         let geometrySet mode attributeTypes (geometries : aset<_>) =
             Sg.GeometrySet(geometries,mode,attributeTypes) :> ISg
 
-        let dynamic (s : IMod<ISg>) = 
+        let dynamic (s : aval<ISg>) = 
             Sg.DynamicNode(s) :> ISg
 
-        let onOff (active : IMod<bool>) (sg : ISg) =
+        let onOff (active : aval<bool>) (sg : ISg) =
             Sg.OnOffNode(active, sg) :> ISg
 
-        let texture (sem : Symbol) (tex : IMod<ITexture>) (sg : ISg) =
+        let texture (sem : Symbol) (tex : aval<ITexture>) (sg : ISg) =
             Sg.TextureApplicator(sem, tex, sg) :> ISg
 
-        let diffuseTexture (tex : IMod<ITexture>) (sg : ISg) = 
+        let diffuseTexture (tex : aval<ITexture>) (sg : ISg) = 
             texture DefaultSemantic.DiffuseColorTexture tex sg
 
         let diffuseTexture' (tex : ITexture) (sg : ISg) = 
-            texture DefaultSemantic.DiffuseColorTexture (Mod.constant tex) sg
+            texture DefaultSemantic.DiffuseColorTexture (AVal.constant tex) sg
 
         let diffuseFileTexture' (path : string) (wantMipMaps : bool) (sg : ISg) = 
-            texture DefaultSemantic.DiffuseColorTexture (Mod.constant (FileTexture(path, wantMipMaps) :> ITexture)) sg
+            texture DefaultSemantic.DiffuseColorTexture (AVal.constant (FileTexture(path, wantMipMaps) :> ITexture)) sg
 
         let fileTexture (sym : Symbol) (path : string) (wantMipMaps : bool) (sg : ISg) = 
-            texture sym (Mod.constant (FileTexture(path, wantMipMaps) :> ITexture)) sg
+            texture sym (AVal.constant (FileTexture(path, wantMipMaps) :> ITexture)) sg
 
-        let scopeDependentTexture (sem : Symbol) (tex : Scope -> IMod<ITexture>) (sg : ISg) =
-            Sg.UniformApplicator(new Providers.ScopeDependentUniformHolder([sem, fun s -> tex s :> IMod]), sg) :> ISg
+        let scopeDependentTexture (sem : Symbol) (tex : Scope -> aval<ITexture>) (sg : ISg) =
+            Sg.UniformApplicator(new Providers.ScopeDependentUniformHolder([sem, fun s -> tex s :> IAdaptiveValue]), sg) :> ISg
 
-        let scopeDependentDiffuseTexture (tex : Scope -> IMod<ITexture>) (sg : ISg) =
+        let scopeDependentDiffuseTexture (tex : Scope -> aval<ITexture>) (sg : ISg) =
             scopeDependentTexture DefaultSemantic.DiffuseColorTexture tex sg
 
-        let runtimeDependentTexture (sem : Symbol) (tex : IRuntime -> IMod<ITexture>) (sg : ISg) =
-            let cache = Dictionary<IRuntime, IMod<ITexture>>()
+        let runtimeDependentTexture (sem : Symbol) (tex : IRuntime -> aval<ITexture>) (sg : ISg) =
+            let cache = Dictionary<IRuntime, aval<ITexture>>()
             let tex runtime =
                 match cache.TryGetValue runtime with
                     | (true, v) -> v
@@ -116,10 +109,10 @@ module SgFSharp =
 
             scopeDependentTexture sem (fun s -> s?Runtime |> tex) sg
 
-        let runtimeDependentDiffuseTexture(tex : IRuntime -> IMod<ITexture>) (sg : ISg) =
+        let runtimeDependentDiffuseTexture(tex : IRuntime -> aval<ITexture>) (sg : ISg) =
             runtimeDependentTexture DefaultSemantic.DiffuseColorTexture tex sg
 
-        let samplerState (sem : Symbol) (state : IMod<Option<SamplerStateDescription>>) (sg : ISg) =
+        let samplerState (sem : Symbol) (state : aval<Option<SamplerStateDescription>>) (sg : ISg) =
             let modifier =   
                 adaptive {
                     let! user = state
@@ -133,7 +126,7 @@ module SgFSharp =
                 }
             sg |> uniform (string DefaultSemantic.SamplerStateModifier) modifier
 
-        let modifySamplerState (sem : Symbol) (modifier : IMod<SamplerStateDescription -> SamplerStateDescription>) (sg : ISg) =
+        let modifySamplerState (sem : Symbol) (modifier : aval<SamplerStateDescription -> SamplerStateDescription>) (sg : ISg) =
             let modifier =   
                 adaptive {
                     let! modifier = modifier
@@ -145,75 +138,75 @@ module SgFSharp =
                 }
             sg |> uniform (string DefaultSemantic.SamplerStateModifier) modifier
 
-        let conservativeRaster (m : IMod<bool>) (sg : ISg) =
-            Sg.ConservativeRasterApplicator(m, Mod.constant sg) :> ISg
+        let conservativeRaster (m : aval<bool>) (sg : ISg) =
+            Sg.ConservativeRasterApplicator(m, AVal.constant sg) :> ISg
             
-        let multisample (m : IMod<bool>) (sg : ISg) =
-            Sg.MultisampleApplicator(m, Mod.constant sg) :> ISg
+        let multisample (m : aval<bool>) (sg : ISg) =
+            Sg.MultisampleApplicator(m, AVal.constant sg) :> ISg
 
-        let fillMode (m : IMod<FillMode>) (sg : ISg) =
+        let fillMode (m : aval<FillMode>) (sg : ISg) =
             Sg.FillModeApplicator(m, sg) :> ISg
         
-        let blendMode (m : IMod<BlendMode>) (sg : ISg) =
+        let blendMode (m : aval<BlendMode>) (sg : ISg) =
             Sg.BlendModeApplicator(m, sg) :> ISg
 
-        let cullMode (m : IMod<CullMode>) (sg : ISg) =
+        let cullMode (m : aval<CullMode>) (sg : ISg) =
             Sg.CullModeApplicator(m, sg) :> ISg
 
-        let stencilMode (m : IMod<StencilMode>) (sg : ISg) =
+        let stencilMode (m : aval<StencilMode>) (sg : ISg) =
             Sg.StencilModeApplicator(m,sg) :> ISg
 
-        let depthTest (m : IMod<DepthTestMode>) (sg : ISg) =
+        let depthTest (m : aval<DepthTestMode>) (sg : ISg) =
             Sg.DepthTestModeApplicator(m, sg) :> ISg
 
         let writeBuffers' (buffers : Set<Symbol>) (sg : ISg) =
-            Sg.WriteBuffersApplicator(Some buffers, Mod.constant sg) :> ISg
+            Sg.WriteBuffersApplicator(Some buffers, AVal.constant sg) :> ISg
 
         let writeBuffers (buffers : Option<Set<Symbol>>) (sg : ISg) =
-            Sg.WriteBuffersApplicator(buffers, Mod.constant sg) :> ISg
+            Sg.WriteBuffersApplicator(buffers, AVal.constant sg) :> ISg
 
-        let colorMask (maskRgba : IMod<bool * bool * bool * bool>) (sg : ISg) =
-            Sg.ColorWriteMaskApplicator(maskRgba, Mod.constant sg)
+        let colorMask (maskRgba : aval<bool * bool * bool * bool>) (sg : ISg) =
+            Sg.ColorWriteMaskApplicator(maskRgba, AVal.constant sg)
 
-        let depthMask (depthWriteEnabled : IMod<bool>) (sg : ISg) =
-            Sg.DepthWriteMaskApplicator(depthWriteEnabled, Mod.constant sg)
+        let depthMask (depthWriteEnabled : aval<bool>) (sg : ISg) =
+            Sg.DepthWriteMaskApplicator(depthWriteEnabled, AVal.constant sg)
 
-        let depthBias (m : IMod<DepthBiasState>) (sg: ISg) =
+        let depthBias (m : aval<DepthBiasState>) (sg: ISg) =
             Sg.DepthBiasApplicator(m, sg) :> ISg
 
-        let frontFace (m : IMod<WindingOrder>) (sg: ISg) = 
+        let frontFace (m : aval<WindingOrder>) (sg: ISg) = 
             Sg.FrontFaceApplicator(m, sg) :> ISg
 
-        let private arrayModCache = ConditionalWeakTable<IMod, IMod<Array>>()
-        let private bufferModCache = ConditionalWeakTable<IMod, BufferView>()
+        let private arrayModCache = ConditionalWeakTable<IAdaptiveValue, aval<Array>>()
+        let private bufferModCache = ConditionalWeakTable<IAdaptiveValue, BufferView>()
 
-        let private modOfArray (m : IMod<'a[]>) =
-            match arrayModCache.TryGetValue (m :> IMod) with
+        let private modOfArray (m : aval<'a[]>) =
+            match arrayModCache.TryGetValue (m :> IAdaptiveValue) with
                 | (true, r) -> r
                 | _ -> 
-                    let r = m |> Mod.map (fun a -> a :> Array)
+                    let r = m |> AVal.map (fun a -> a :> Array)
                     arrayModCache.Add(m, r)
                     r
 
-        let private bufferOfArray (m : IMod<'a[]>) =
-            match bufferModCache.TryGetValue (m :> IMod) with
+        let private bufferOfArray (m : aval<'a[]>) =
+            match bufferModCache.TryGetValue (m :> IAdaptiveValue) with
                 | (true, r) -> r
                 | _ -> 
-                    let b = m |> Mod.map (fun a -> ArrayBuffer a :> IBuffer)
+                    let b = m |> AVal.map (fun a -> ArrayBuffer a :> IBuffer)
                     let r = BufferView(b, typeof<'a>)
                     bufferModCache.Add(m, r)
                     r
 
-        let vertexAttribute<'a when 'a : struct> (s : Symbol) (value : IMod<'a[]>) (sg : ISg) =
-            let view = BufferView(value |> Mod.map (fun data -> ArrayBuffer(data) :> IBuffer), typeof<'a>)
-            Sg.VertexAttributeApplicator(Map.ofList [s, view], Mod.constant sg) :> ISg
+        let vertexAttribute<'a when 'a : struct> (s : Symbol) (value : aval<'a[]>) (sg : ISg) =
+            let view = BufferView(value |> AVal.map (fun data -> ArrayBuffer(data) :> IBuffer), typeof<'a>)
+            Sg.VertexAttributeApplicator(Map.ofList [s, view], AVal.constant sg) :> ISg
 
-        let index<'a when 'a : struct> (value : IMod<'a[]>) (sg : ISg) =
+        let index<'a when 'a : struct> (value : aval<'a[]>) (sg : ISg) =
             Sg.VertexIndexApplicator(bufferOfArray value, sg) :> ISg
 
         let vertexAttribute'<'a when 'a : struct> (s : Symbol) (value : 'a[]) (sg : ISg) =
-            let view = BufferView(Mod.constant (ArrayBuffer(value :> Array) :> IBuffer), typeof<'a>)
-            Sg.VertexAttributeApplicator(Map.ofList [s, view], Mod.constant sg) :> ISg
+            let view = BufferView(AVal.constant (ArrayBuffer(value :> Array) :> IBuffer), typeof<'a>)
+            Sg.VertexAttributeApplicator(Map.ofList [s, view], AVal.constant sg) :> ISg
 
         let index'<'a when 'a : struct> (value : 'a[]) (sg : ISg) =
             Sg.VertexIndexApplicator(BufferView.ofArray value, sg) :> ISg
@@ -222,17 +215,17 @@ module SgFSharp =
             Sg.VertexAttributeApplicator(s, view, sg) :> ISg
 
         let vertexArray (s : Symbol) (value : System.Array) (sg : ISg) =
-            let view = BufferView(Mod.constant (ArrayBuffer value :> IBuffer), value.GetType().GetElementType())
-            Sg.VertexAttributeApplicator(Map.ofList [s, view], Mod.constant sg) :> ISg
+            let view = BufferView(AVal.constant (ArrayBuffer value :> IBuffer), value.GetType().GetElementType())
+            Sg.VertexAttributeApplicator(Map.ofList [s, view], AVal.constant sg) :> ISg
 
         let instanceBuffer (s : Symbol) (view : BufferView) (sg : ISg) =
             Sg.InstanceAttributeApplicator(s, view, sg) :> ISg
 
         let instanceArray (s : Symbol) (value : System.Array) (sg : ISg) =
-            let view = BufferView(Mod.constant (ArrayBuffer value :> IBuffer), value.GetType().GetElementType())
+            let view = BufferView(AVal.constant (ArrayBuffer value :> IBuffer), value.GetType().GetElementType())
             Sg.InstanceAttributeApplicator(s, view, sg) :> ISg
 
-        let vertexBufferValue (s : Symbol) (value : IMod<V4f>) (sg : ISg) =
+        let vertexBufferValue (s : Symbol) (value : aval<V4f>) (sg : ISg) =
             let view = BufferView(SingleValueBuffer(value), typeof<V4f>)
             Sg.VertexAttributeApplicator(s, view, sg) :> ISg
 
@@ -251,14 +244,14 @@ module SgFSharp =
         let render (mode : IndexedGeometryMode) (call : DrawCallInfo) =
             Sg.RenderNode(call,mode) 
             
-        let indirectDraw (mode : IndexedGeometryMode) (buffer : IMod<IIndirectBuffer>) =
+        let indirectDraw (mode : IndexedGeometryMode) (buffer : aval<IndirectBuffer>) =
             Sg.IndirectRenderNode(buffer, mode) :> ISg
 
         let ofIndexedGeometry (g : IndexedGeometry) =
             let attributes = 
                 g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) -> 
                     let t = v.GetType().GetElementType()
-                    let view = BufferView(Mod.constant (ArrayBuffer(v) :> IBuffer), t)
+                    let view = BufferView(AVal.constant (ArrayBuffer(v) :> IBuffer), t)
 
                     k, view
                 ) |> Map.ofSeq
@@ -357,7 +350,7 @@ module SgFSharp =
 
             let views = SymbolDict()
             let target = Array.zeroCreate (count * vertexSize)
-            let buffer = Mod.constant (ArrayBuffer target :> IBuffer)
+            let buffer = AVal.constant (ArrayBuffer target :> IBuffer)
             let mutable current = 0
             for vi in 0..count-1 do
                 for (sem, t, size, a) in arrays do
@@ -396,11 +389,11 @@ module SgFSharp =
             else
                 sg
 
-        let instancedGeometry (trafos : IMod<Trafo3d[]>) (g : IndexedGeometry) =
+        let instancedGeometry (trafos : aval<Trafo3d[]>) (g : IndexedGeometry) =
             let vertexAttributes = 
                 g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) -> 
                     let t = v.GetType().GetElementType()
-                    let view = BufferView(Mod.constant (ArrayBuffer(v) :> IBuffer), t)
+                    let view = BufferView(AVal.constant (ArrayBuffer(v) :> IBuffer), t)
 
                     k, view
                 ) |> Map.ofSeq
@@ -411,7 +404,7 @@ module SgFSharp =
                 else
                     null, g.IndexedAttributes.[DefaultSemantic.Positions].Length
 
-            let call = trafos |> Mod.map (fun t ->
+            let call = trafos |> AVal.map (fun t ->
                     DrawCallInfo(
                         FaceVertexCount = faceVertexCount,
                         FirstIndex = 0,
@@ -429,8 +422,8 @@ module SgFSharp =
                 else
                     sg
 
-            let m44Trafos = trafos |> Mod.map (fun a -> a |> Array.map (fun (t : Trafo3d) -> (M44f.op_Explicit t.Forward)) :> Array)
-            let m44View = BufferView(m44Trafos |> Mod.map (fun a -> ArrayBuffer a :> IBuffer), typeof<M44f>)
+            let m44Trafos = trafos |> AVal.map (fun a -> a |> Array.map (fun (t : Trafo3d) -> (M44f.op_Explicit t.Forward)) :> Array)
+            let m44View = BufferView(m44Trafos |> AVal.map (fun a -> ArrayBuffer a :> IBuffer), typeof<M44f>)
 
             Sg.InstanceAttributeApplicator([DefaultSemantic.InstanceTrafo, m44View] |> Map.ofList, sg) :> ISg
 
@@ -452,13 +445,13 @@ module SgFSharp =
 
                 smallest
 
-            let bb = this?GlobalBoundingBox() : IMod<Box3d>
+            let bb = this?GlobalBoundingBox(Ag.Scope.Root) : aval<Box3d>
 
             printfn "normalizing from: %A" ( bb.GetValue() )
 
             let transformBox (sbox : Box3d) = Trafo3d.Translation(-sbox.Center) * Trafo3d.Scale(getBoxScale sbox box) * Trafo3d.Translation(box.Center)
 
-            Sg.TrafoApplicator(Mod.map transformBox bb, this) :> ISg
+            Sg.TrafoApplicator(AVal.map transformBox bb, this) :> ISg
 
         let normalizeTo (box : Box3d) (this : ISg) =
 
@@ -476,17 +469,15 @@ module SgFSharp =
 
                 smallest
 
-            let bb = this?GlobalBoundingBox() : IMod<Box3d>
+            let bb = this?GlobalBoundingBox(Ag.Scope.Root) : aval<Box3d>
 
             let transformBox (sbox : Box3d) = Trafo3d.Translation(-sbox.Center) * Trafo3d.Scale(getBoxScale sbox box) * Trafo3d.Translation(box.Center)
 
-            Sg.TrafoApplicator(bb.GetValue() |> transformBox |> Mod.constant, this) :> ISg
+            Sg.TrafoApplicator(bb.GetValue() |> transformBox |> AVal.constant, this) :> ISg
 
         let normalizeAdaptive sg = sg |> normalizeToAdaptive ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) ) 
         
         let normalize sg = sg |> normalizeTo ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) ) 
-
-        let loadAsync (fboSignature : IFramebufferSignature) (sg : ISg) = Sg.AsyncLoadApplicator(fboSignature, Mod.constant sg) :> ISg
 
         let adapter (o : obj) = Sg.AdapterNode(o) :> ISg
 

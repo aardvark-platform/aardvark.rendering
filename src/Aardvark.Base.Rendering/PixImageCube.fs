@@ -27,7 +27,7 @@ module FSharpPixImageCubeExtensions =
                     | Some t -> t
                     | None -> 
                         Log.warn "incomplete CubeMap trafo"
-                        (side, ImageTrafo.Rot0)
+                        (side, ImageTrafo.Identity)
 
             )
 
@@ -66,70 +66,70 @@ module FSharpPixImageCubeExtensions =
 
             let private composeTable =
                 Dictionary.ofList [
-                    (ImageTrafo.Rot0, ImageTrafo.Rot0), ImageTrafo.Rot0
-                    (ImageTrafo.Rot0, ImageTrafo.Rot90), ImageTrafo.Rot90
-                    (ImageTrafo.Rot0, ImageTrafo.Rot180), ImageTrafo.Rot180
-                    (ImageTrafo.Rot0, ImageTrafo.Rot270), ImageTrafo.Rot270
-                    (ImageTrafo.Rot0, ImageTrafo.MirrorX), ImageTrafo.MirrorX
-                    (ImageTrafo.Rot0, ImageTrafo.Transpose), ImageTrafo.Transpose
-                    (ImageTrafo.Rot0, ImageTrafo.MirrorY), ImageTrafo.MirrorY
-                    (ImageTrafo.Rot0, ImageTrafo.Transverse), ImageTrafo.Transverse
-                    (ImageTrafo.Rot90, ImageTrafo.Rot0), ImageTrafo.Rot90
+                    (ImageTrafo.Identity, ImageTrafo.Identity), ImageTrafo.Identity
+                    (ImageTrafo.Identity, ImageTrafo.Rot90), ImageTrafo.Rot90
+                    (ImageTrafo.Identity, ImageTrafo.Rot180), ImageTrafo.Rot180
+                    (ImageTrafo.Identity, ImageTrafo.Rot270), ImageTrafo.Rot270
+                    (ImageTrafo.Identity, ImageTrafo.MirrorX), ImageTrafo.MirrorX
+                    (ImageTrafo.Identity, ImageTrafo.Transpose), ImageTrafo.Transpose
+                    (ImageTrafo.Identity, ImageTrafo.MirrorY), ImageTrafo.MirrorY
+                    (ImageTrafo.Identity, ImageTrafo.Transverse), ImageTrafo.Transverse
+                    (ImageTrafo.Rot90, ImageTrafo.Identity), ImageTrafo.Rot90
                     (ImageTrafo.Rot90, ImageTrafo.Rot90), ImageTrafo.Rot180
                     (ImageTrafo.Rot90, ImageTrafo.Rot180), ImageTrafo.Rot270
-                    (ImageTrafo.Rot90, ImageTrafo.Rot270), ImageTrafo.Rot0
+                    (ImageTrafo.Rot90, ImageTrafo.Rot270), ImageTrafo.Identity
                     (ImageTrafo.Rot90, ImageTrafo.MirrorX), ImageTrafo.Transverse
                     (ImageTrafo.Rot90, ImageTrafo.Transpose), ImageTrafo.MirrorX
                     (ImageTrafo.Rot90, ImageTrafo.MirrorY), ImageTrafo.Transpose
                     (ImageTrafo.Rot90, ImageTrafo.Transverse), ImageTrafo.MirrorY
-                    (ImageTrafo.Rot180, ImageTrafo.Rot0), ImageTrafo.Rot180
+                    (ImageTrafo.Rot180, ImageTrafo.Identity), ImageTrafo.Rot180
                     (ImageTrafo.Rot180, ImageTrafo.Rot90), ImageTrafo.Rot270
-                    (ImageTrafo.Rot180, ImageTrafo.Rot180), ImageTrafo.Rot0
+                    (ImageTrafo.Rot180, ImageTrafo.Rot180), ImageTrafo.Identity
                     (ImageTrafo.Rot180, ImageTrafo.Rot270), ImageTrafo.Rot90
                     (ImageTrafo.Rot180, ImageTrafo.MirrorX), ImageTrafo.MirrorY
                     (ImageTrafo.Rot180, ImageTrafo.Transpose), ImageTrafo.Transverse
                     (ImageTrafo.Rot180, ImageTrafo.MirrorY), ImageTrafo.MirrorX
                     (ImageTrafo.Rot180, ImageTrafo.Transverse), ImageTrafo.Transpose
-                    (ImageTrafo.Rot270, ImageTrafo.Rot0), ImageTrafo.Rot270
-                    (ImageTrafo.Rot270, ImageTrafo.Rot90), ImageTrafo.Rot0
+                    (ImageTrafo.Rot270, ImageTrafo.Identity), ImageTrafo.Rot270
+                    (ImageTrafo.Rot270, ImageTrafo.Rot90), ImageTrafo.Identity
                     (ImageTrafo.Rot270, ImageTrafo.Rot180), ImageTrafo.Rot90
                     (ImageTrafo.Rot270, ImageTrafo.Rot270), ImageTrafo.Rot180
                     (ImageTrafo.Rot270, ImageTrafo.MirrorX), ImageTrafo.Transpose
                     (ImageTrafo.Rot270, ImageTrafo.Transpose), ImageTrafo.MirrorY
                     (ImageTrafo.Rot270, ImageTrafo.MirrorY), ImageTrafo.Transverse
                     (ImageTrafo.Rot270, ImageTrafo.Transverse), ImageTrafo.MirrorX
-                    (ImageTrafo.MirrorX, ImageTrafo.Rot0), ImageTrafo.MirrorX
+                    (ImageTrafo.MirrorX, ImageTrafo.Identity), ImageTrafo.MirrorX
                     (ImageTrafo.MirrorX, ImageTrafo.Rot90), ImageTrafo.Transpose
                     (ImageTrafo.MirrorX, ImageTrafo.Rot180), ImageTrafo.MirrorY
                     (ImageTrafo.MirrorX, ImageTrafo.Rot270), ImageTrafo.Transverse
-                    (ImageTrafo.MirrorX, ImageTrafo.MirrorX), ImageTrafo.Rot0
+                    (ImageTrafo.MirrorX, ImageTrafo.MirrorX), ImageTrafo.Identity
                     (ImageTrafo.MirrorX, ImageTrafo.Transpose), ImageTrafo.Rot90
                     (ImageTrafo.MirrorX, ImageTrafo.MirrorY), ImageTrafo.Rot180
                     (ImageTrafo.MirrorX, ImageTrafo.Transverse), ImageTrafo.Rot270
-                    (ImageTrafo.Transpose, ImageTrafo.Rot0), ImageTrafo.Transpose
+                    (ImageTrafo.Transpose, ImageTrafo.Identity), ImageTrafo.Transpose
                     (ImageTrafo.Transpose, ImageTrafo.Rot90), ImageTrafo.MirrorY
                     (ImageTrafo.Transpose, ImageTrafo.Rot180), ImageTrafo.Transverse
                     (ImageTrafo.Transpose, ImageTrafo.Rot270), ImageTrafo.MirrorX
                     (ImageTrafo.Transpose, ImageTrafo.MirrorX), ImageTrafo.Rot270
-                    (ImageTrafo.Transpose, ImageTrafo.Transpose), ImageTrafo.Rot0
+                    (ImageTrafo.Transpose, ImageTrafo.Transpose), ImageTrafo.Identity
                     (ImageTrafo.Transpose, ImageTrafo.MirrorY), ImageTrafo.Rot90
                     (ImageTrafo.Transpose, ImageTrafo.Transverse), ImageTrafo.Rot180
-                    (ImageTrafo.MirrorY, ImageTrafo.Rot0), ImageTrafo.MirrorY
+                    (ImageTrafo.MirrorY, ImageTrafo.Identity), ImageTrafo.MirrorY
                     (ImageTrafo.MirrorY, ImageTrafo.Rot90), ImageTrafo.Transverse
                     (ImageTrafo.MirrorY, ImageTrafo.Rot180), ImageTrafo.MirrorX
                     (ImageTrafo.MirrorY, ImageTrafo.Rot270), ImageTrafo.Transpose
                     (ImageTrafo.MirrorY, ImageTrafo.MirrorX), ImageTrafo.Rot180
                     (ImageTrafo.MirrorY, ImageTrafo.Transpose), ImageTrafo.Rot270
-                    (ImageTrafo.MirrorY, ImageTrafo.MirrorY), ImageTrafo.Rot0
+                    (ImageTrafo.MirrorY, ImageTrafo.MirrorY), ImageTrafo.Identity
                     (ImageTrafo.MirrorY, ImageTrafo.Transverse), ImageTrafo.Rot90
-                    (ImageTrafo.Transverse, ImageTrafo.Rot0), ImageTrafo.Transverse
+                    (ImageTrafo.Transverse, ImageTrafo.Identity), ImageTrafo.Transverse
                     (ImageTrafo.Transverse, ImageTrafo.Rot90), ImageTrafo.MirrorX
                     (ImageTrafo.Transverse, ImageTrafo.Rot180), ImageTrafo.Transpose
                     (ImageTrafo.Transverse, ImageTrafo.Rot270), ImageTrafo.MirrorY
                     (ImageTrafo.Transverse, ImageTrafo.MirrorX), ImageTrafo.Rot90
                     (ImageTrafo.Transverse, ImageTrafo.Transpose), ImageTrafo.Rot180
                     (ImageTrafo.Transverse, ImageTrafo.MirrorY), ImageTrafo.Rot270
-                    (ImageTrafo.Transverse, ImageTrafo.Transverse), ImageTrafo.Rot0
+                    (ImageTrafo.Transverse, ImageTrafo.Transverse), ImageTrafo.Identity
                 ]
 
             let private composeTrafo (l : ImageTrafo) (r : ImageTrafo) =
@@ -137,12 +137,12 @@ module FSharpPixImageCubeExtensions =
 
             let private identity =
                 Map.ofList [
-                    CubeSide.PositiveX, (CubeSide.PositiveX, ImageTrafo.Rot0)
-                    CubeSide.PositiveY, (CubeSide.PositiveY, ImageTrafo.Rot0)
-                    CubeSide.PositiveZ, (CubeSide.PositiveZ, ImageTrafo.Rot0)
-                    CubeSide.NegativeX, (CubeSide.NegativeX, ImageTrafo.Rot0)
-                    CubeSide.NegativeY, (CubeSide.NegativeY, ImageTrafo.Rot0)
-                    CubeSide.NegativeZ, (CubeSide.NegativeZ, ImageTrafo.Rot0)
+                    CubeSide.PositiveX, (CubeSide.PositiveX, ImageTrafo.Identity)
+                    CubeSide.PositiveY, (CubeSide.PositiveY, ImageTrafo.Identity)
+                    CubeSide.PositiveZ, (CubeSide.PositiveZ, ImageTrafo.Identity)
+                    CubeSide.NegativeX, (CubeSide.NegativeX, ImageTrafo.Identity)
+                    CubeSide.NegativeY, (CubeSide.NegativeY, ImageTrafo.Identity)
+                    CubeSide.NegativeZ, (CubeSide.NegativeZ, ImageTrafo.Identity)
                 ]
 
             let private compose (l : Map<CubeSide, CubeSide * ImageTrafo>) (r : Map<CubeSide, CubeSide * ImageTrafo>) : Map<CubeSide, CubeSide * ImageTrafo> =
@@ -159,9 +159,9 @@ module FSharpPixImageCubeExtensions =
                 Map.ofList [
                     CubeSide.PositiveX, (CubeSide.PositiveX, ImageTrafo.Rot90)   
                     CubeSide.NegativeX, (CubeSide.NegativeX, ImageTrafo.Rot270)   
-                    CubeSide.PositiveZ, (CubeSide.NegativeY, ImageTrafo.Rot0)   
+                    CubeSide.PositiveZ, (CubeSide.NegativeY, ImageTrafo.Identity)   
                     CubeSide.NegativeZ, (CubeSide.PositiveY, ImageTrafo.Rot180)   
-                    CubeSide.PositiveY, (CubeSide.PositiveZ, ImageTrafo.Rot0)   
+                    CubeSide.PositiveY, (CubeSide.PositiveZ, ImageTrafo.Identity)   
                     CubeSide.NegativeY, (CubeSide.NegativeZ, ImageTrafo.Rot180)   
                 ]
 
@@ -171,10 +171,10 @@ module FSharpPixImageCubeExtensions =
 
             let RotY90 =
                 Map.ofList [
-                    CubeSide.PositiveX, (CubeSide.NegativeZ, ImageTrafo.Rot0)   
-                    CubeSide.NegativeX, (CubeSide.PositiveZ, ImageTrafo.Rot0)   
-                    CubeSide.PositiveZ, (CubeSide.PositiveX, ImageTrafo.Rot0)   
-                    CubeSide.NegativeZ, (CubeSide.NegativeX, ImageTrafo.Rot0)   
+                    CubeSide.PositiveX, (CubeSide.NegativeZ, ImageTrafo.Identity)   
+                    CubeSide.NegativeX, (CubeSide.PositiveZ, ImageTrafo.Identity)   
+                    CubeSide.PositiveZ, (CubeSide.PositiveX, ImageTrafo.Identity)   
+                    CubeSide.NegativeZ, (CubeSide.NegativeX, ImageTrafo.Identity)   
                     CubeSide.NegativeY, (CubeSide.NegativeY, ImageTrafo.Rot270)   
                     CubeSide.PositiveY, (CubeSide.PositiveY, ImageTrafo.Rot90)   
                 ]
@@ -246,8 +246,8 @@ module FSharpPixImageCubeExtensions =
                     CubeSide.NegativeX, (CubeSide.NegativeX, ImageTrafo.MirrorY)   
                     CubeSide.PositiveZ, (CubeSide.NegativeZ, ImageTrafo.Rot180)   
                     CubeSide.NegativeZ, (CubeSide.PositiveZ, ImageTrafo.Rot180)   
-                    CubeSide.PositiveY, (CubeSide.PositiveY, ImageTrafo.Rot0)   
-                    CubeSide.NegativeY, (CubeSide.NegativeY, ImageTrafo.Rot0)   
+                    CubeSide.PositiveY, (CubeSide.PositiveY, ImageTrafo.Identity)   
+                    CubeSide.NegativeY, (CubeSide.NegativeY, ImageTrafo.Identity)   
                 ]
 
         let load (faceFiles : list<CubeSide * string>) =
@@ -323,7 +323,7 @@ type PixImageCubeExtensions private() =
                 | (true, t) -> t.E0, t.E1
                 | _ ->
                     Log.warn "incomplete CubeMap trafo" 
-                    side, ImageTrafo.Rot0
+                    side, ImageTrafo.Identity
         )
    
 

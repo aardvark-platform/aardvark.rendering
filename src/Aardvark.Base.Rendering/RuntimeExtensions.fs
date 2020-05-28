@@ -2,7 +2,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open System.Collections.Generic
 open Aardvark.Base.Rendering
 open System.Runtime.CompilerServices
@@ -38,26 +38,26 @@ type RuntimeExtensions private() =
 
 
     [<Extension>]
-    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, colors : IMod<seq<Symbol * C4f>>, depth : IMod<float>) =
-        this.CompileClear(signature, colors |> Mod.map Map.ofSeq, depth |> Mod.map Some)
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, colors : aval<seq<Symbol * C4f>>, depth : aval<float>) =
+        this.CompileClear(signature, colors |> AVal.map Map.ofSeq, depth |> AVal.map Some)
 
 
     [<Extension>]
-    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, colors : IMod<list<Symbol * C4f>>, depth : IMod<float>) =
-        this.CompileClear(signature, colors |> Mod.map Map.ofList, depth |> Mod.map Some)
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, colors : aval<list<Symbol * C4f>>, depth : aval<float>) =
+        this.CompileClear(signature, colors |> AVal.map Map.ofList, depth |> AVal.map Some)
 
 
     [<Extension>]
-    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, color : IMod<C4f>, depth : IMod<float>) =
-        this.CompileClear(signature, color |> Mod.map (fun c -> Map.ofList [DefaultSemantic.Colors, c]), depth |> Mod.map Some)
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, color : aval<C4f>, depth : aval<float>) =
+        this.CompileClear(signature, color |> AVal.map (fun c -> Map.ofList [DefaultSemantic.Colors, c]), depth |> AVal.map Some)
 
     [<Extension>]
-    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, color : IMod<C4f>) =
-        this.CompileClear(signature, color |> Mod.map (fun c -> Map.ofList [DefaultSemantic.Colors, c]), Mod.constant None)
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, color : aval<C4f>) =
+        this.CompileClear(signature, color |> AVal.map (fun c -> Map.ofList [DefaultSemantic.Colors, c]), AVal.constant None)
 
     [<Extension>]
-    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, depth : IMod<float>) =
-        this.CompileClear(signature, Mod.constant Map.empty, depth |> Mod.map Some)
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, depth : aval<float>) =
+        this.CompileClear(signature, AVal.constant Map.empty, depth |> AVal.map Some)
 
     [<Extension>]
     static member Download(this : IRuntime, texture : IBackendTexture, level : int, slice : int, format : PixFormat) =

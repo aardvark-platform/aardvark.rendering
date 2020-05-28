@@ -4,12 +4,12 @@
 open System
 open System.IO
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open Aardvark.Base.Incremental.Operators
+open FSharp.Data.Adaptive.Operators
 open Aardvark.Base.Rendering
 open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.Text
@@ -369,7 +369,7 @@ module Eigi =
 
         let sw = System.Diagnostics.Stopwatch()
         sw.Start()
-        let time = win.Time |> Mod.map (fun _ -> sw.Elapsed.TotalSeconds) //Mod.init 0.0
+        let time = win.Time |> AVal.map (fun _ -> sw.Elapsed.TotalSeconds) //AVal.init 0.0
 
         let idle    = Range1d(50.0, 100.0)
         let walk    = Range1d(0.0, 36.0)
@@ -390,9 +390,9 @@ module Eigi =
                     t <- t + dt
             |]
 
-        let numFrames = animation.frames // |> Mod.map (fun (a,_) -> a.frames)
-        let numBones = animation.interpolate 0.0 |> Array.length // |> Mod.map (fun (a,_) -> a.interpolate 0.0 |> Array.length)
-        let fps = animation.framesPerSecond // |> Mod.map (fun (a,_) -> a.framesPerSecond)
+        let numFrames = animation.frames // |> AVal.map (fun (a,_) -> a.frames)
+        let numBones = animation.interpolate 0.0 |> Array.length // |> AVal.map (fun (a,_) -> a.interpolate 0.0 |> Array.length)
+        let fps = animation.framesPerSecond // |> AVal.map (fun (a,_) -> a.framesPerSecond)
 
         let trafos =
             let s = V2i(5, 5)
@@ -404,17 +404,17 @@ module Eigi =
 
         let timeOffsets =
             let rand = RandomSystem()
-            Array.init trafos.Length (fun i -> rand.UniformFloat() * 3.0f) :> System.Array |> Mod.constant
+            Array.init trafos.Length (fun i -> rand.UniformFloat() * 3.0f) :> System.Array |> AVal.constant
 
         let frameRanges =
             let rand = RandomSystem()
             Array.init trafos.Length (fun i -> 
                 let range = arr.[rand.UniformInt(arr.Length)]
                 V2f(float32 range.Min, float32 range.Max)
-            ) :> System.Array |> Mod.constant
+            ) :> System.Array |> AVal.constant
 
-        let instanced (trafos : IMod<Trafo3d[]>) (sg : ISg) =
-            let trafos = trafos |> Mod.map (fun t -> t :> System.Array)
+        let instanced (trafos : aval<Trafo3d[]>) (sg : ISg) =
+            let trafos = trafos |> AVal.map (fun t -> t :> System.Array)
             let uniforms =
                 Map.ofList [
                     "ModelTrafo", (typeof<Trafo3d>, trafos)
@@ -436,7 +436,7 @@ module Eigi =
 
                 |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero) * Trafo3d.Scale 20.0)
 
-                //|> instanced (Mod.constant trafos)
+                //|> instanced (AVal.constant trafos)
 
                 // apply all shaders we have
                 |> Sg.shader {

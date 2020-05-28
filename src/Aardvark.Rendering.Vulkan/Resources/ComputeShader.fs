@@ -12,6 +12,7 @@ open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 open System.Collections.Generic
 open Microsoft.FSharp.Core.LanguagePrimitives.IntrinsicOperators
+open FSharp.Data.Adaptive
 
 #nowarn "9"
 // #nowarn "51"
@@ -86,11 +87,12 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
             | FShade.GLSL.GLSLType.Image _ -> "image"
             | FShade.GLSL.GLSLType.Sampler _ -> "sampler"
             | FShade.GLSL.GLSLType.DynamicArray(t,_) -> sprintf "%s[]" (prettyName t) 
-    
+            | FShade.GLSL.GLSLType.Intrinsic str -> str
+
     let device = shader.Device
     let lockObj = obj()
     let mutable disposables : MapExt<int * int * int, IDisposable> = MapExt.empty
-    let mutable dirtyBuffers = ref HSet.empty
+    let mutable dirtyBuffers = ref HashSet.empty
     let mutable pendingWrites = MapExt.empty
 
     let changed = Event<unit>()
@@ -134,7 +136,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                 | UniformRef(buffer, offset, targetType) ->
                     let w = UniformWriters.getWriter offset targetType (value.GetType())
                     w.WriteUnsafeValue(value, buffer.Storage.Pointer)
-                    dirtyBuffers <- ref <| HSet.add buffer !dirtyBuffers
+                    dirtyBuffers <- ref <| HashSet.add buffer !dirtyBuffers
 
                 | StorageImageRef(set, binding, info) ->
                     let view, res = 
@@ -211,10 +213,10 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
 
     let flush() =
         lock lockObj (fun () ->
-            let buffers = !Interlocked.Exchange(&dirtyBuffers, ref HSet.empty)
+            let buffers = !Interlocked.Exchange(&dirtyBuffers, ref HashSet.empty)
             let writes = Interlocked.Exchange(&pendingWrites, MapExt.empty)
 
-            if not (HSet.isEmpty buffers) then
+            if not (HashSet.isEmpty buffers) then
                 use token = device.Token
                 for b in buffers do device.Upload b
                 token.Sync()
@@ -226,7 +228,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
 
     let release() =
         lock lockObj (fun () ->
-            dirtyBuffers <- ref HSet.empty
+            dirtyBuffers <- ref HashSet.empty
             pendingWrites <- MapExt.empty
             for (_,d) in MapExt.toSeq disposables do d.Dispose()
             for b in buffers do device.Delete b
@@ -249,7 +251,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                         Disposable.Empty
                 }
 
-    let missingNames = HashSet (Map.toSeq references |> Seq.map fst)
+    let missingNames = System.Collections.Generic.HashSet (Map.toSeq references |> Seq.map fst)
 
     member private x.AsString =
         references 
@@ -462,9 +464,9 @@ module ``Compute Commands`` =
                     device          : Device
                     downloads       : list<Buffer * HostMemory>
                     uploads         : list<HostMemory * Buffer>
-                    inputs          : hset<InputBinding>
-                    initialLayouts  : hmap<Image, VkImageLayout>
-                    imageLayouts    : hmap<Image, VkImageLayout>
+                    inputs          : HashSet<InputBinding>
+                    initialLayouts  : HashMap<Image, VkImageLayout>
+                    imageLayouts    : HashMap<Image, VkImageLayout>
                 }
 
             [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -472,7 +474,7 @@ module ``Compute Commands`` =
                 let device = State.get |> State.map (fun s -> s.device)
 
                 let addInput (i : InputBinding) : State<CompilerState, unit> =
-                    State.modify (fun s -> { s with inputs = HSet.add i s.inputs })
+                    State.modify (fun s -> { s with inputs = HashSet.add i s.inputs })
 
                 let download (stream : VKVM.CommandStream) (src : Buffer) (srcOffset : nativeint) (dst : HostMemory) (size : nativeint) =
                     state {
@@ -492,13 +494,13 @@ module ``Compute Commands`` =
 
                 let transformLayout (image : Image) (newLayout : VkImageLayout) =
                     State.custom (fun s ->
-                        match HMap.tryFind image s.imageLayouts with
+                        match HashMap.tryFind image s.imageLayouts with
                             | Some o ->
-                                let s = { s with imageLayouts = HMap.add image newLayout s.imageLayouts }
+                                let s = { s with imageLayouts = HashMap.add image newLayout s.imageLayouts }
                                 s, o
                             | None ->
                                 let o = image.Layout
-                                let s = { s with imageLayouts = HMap.add image newLayout s.imageLayouts; initialLayouts = HMap.add image o s.initialLayouts }
+                                let s = { s with imageLayouts = HashMap.add image newLayout s.imageLayouts; initialLayouts = HashMap.add image o s.initialLayouts }
                                 s, o
                     )
 
@@ -743,7 +745,7 @@ module ``Compute Commands`` =
                 let changed () = Interlocked.Exchange(&dirty, 1) |> ignore
 
                 let subscriptions =
-                    state.inputs |> HSet.toList |> List.map (fun i -> i.Changed.Subscribe changed)
+                    state.inputs |> HashSet.toList |> List.map (fun i -> i.Changed.Subscribe changed)
 
                 let uploads =
                     state.uploads |> List.map (fun (src, dst) ->
@@ -779,8 +781,8 @@ module ``Compute Commands`` =
                                     )
                     )
 
-                do  for (image, init) in HMap.toSeq state.initialLayouts do
-                        match HMap.tryFind image state.imageLayouts with
+                do  for (image, init) in HashMap.toSeq state.initialLayouts do
+                        match HashMap.tryFind image state.imageLayouts with
                             | Some current when current<> init ->
                                 stream.TransformLayout(image, current, init) |> ignore
                             | _ ->
@@ -1019,7 +1021,7 @@ module ``Compute Commands`` =
                                     { s with
                                         uploads = s.uploads @ o.uploads
                                         downloads = s.downloads @ o.downloads
-                                        inputs = HSet.union s.inputs o.inputs
+                                        inputs = HashSet.union s.inputs o.inputs
                                     }
                                 )
                                 stream.Call(other.Stream) |> ignore
@@ -1031,7 +1033,7 @@ module ``Compute Commands`` =
         let compile (cmds : list<ComputeCommand>) (device : Device) =
             let stream = new VKVM.CommandStream()
             
-            let mutable state = { device = device; uploads = []; downloads = []; inputs = HSet.empty; imageLayouts = HMap.empty; initialLayouts = HMap.empty }
+            let mutable state = { device = device; uploads = []; downloads = []; inputs = HashSet.empty; imageLayouts = HashMap.empty; initialLayouts = HashMap.empty }
             for cmd in cmds do
                 let c = compileS cmd stream
                 c.Run(&state)

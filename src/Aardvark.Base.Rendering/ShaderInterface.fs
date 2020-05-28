@@ -3,7 +3,7 @@
 open System
 open System.Runtime.CompilerServices
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 
 type ShaderParameterType =
     | Bool
@@ -392,7 +392,7 @@ module ShaderParameterWriter =
     open System.Reflection
     open System.Runtime.InteropServices
     open System.Collections.Concurrent
-    open Aardvark.Base.Incremental
+    open FSharp.Data.Adaptive
 
 
     [<AbstractClass>]
@@ -417,9 +417,9 @@ module ShaderParameterWriter =
 
         override x.WriteUnsafe(target, value) = x.Write(target, unbox<'a> value)
 
-        override this.Bind(m : IMod) =
+        override this.Bind(m : IAdaptiveValue) =
             match m with
-                | :? IMod<'a> as m ->
+                | :? aval<'a> as m ->
                     { new AdaptiveWriter() with
                         member x.PerformWrite (token : AdaptiveToken, target : nativeint) =
                             let value = m.GetValue token
@@ -430,7 +430,7 @@ module ShaderParameterWriter =
                     failwith "not possible"
 
     and Writer() =
-        abstract member Bind : IMod -> IAdaptiveWriter
+        abstract member Bind : IAdaptiveValue -> IAdaptiveWriter
         default x.Bind m = failwith "not possible"
         
         abstract member WriteUnsafe : target : nativeint * value : obj -> unit
@@ -859,23 +859,23 @@ module ShaderParameterWriter =
     let writer<'a> (target : ShaderParameterType) : Writer<'a> =
         get typeof<'a> target |> unbox<Writer<'a>>
 
-    let adaptive (input : IMod) (target : ShaderParameterType) : IAdaptiveWriter =
-        let contentType = input.GetType().GetInterface(typedefof<IMod<_>>.Name).GetGenericArguments().[0]
+    let adaptive (input : IAdaptiveValue) (target : ShaderParameterType) : IAdaptiveWriter =
+        let contentType = input.GetType().GetInterface(typedefof<aval<_>>.Name).GetGenericArguments().[0]
         let writer = get contentType target
         writer.Bind input
 
 
 
 module ShaderBlockWriter =
-    open Aardvark.Base.Incremental
+    open FSharp.Data.Adaptive
     
-    let writers (resolve : string -> Option<IMod>) (block : ShaderBlock) =
+    let writers (resolve : string -> Option<IAdaptiveValue>) (block : ShaderBlock) =
         block.Fields |> List.map (fun (f : ShaderBlockField) ->
             match f.Path with
                 | ShaderPath.Value name -> 
                     match resolve name with
                         | Some m ->
-                            let contentType = m.GetType().GetInterface(typedefof<IMod<_>>.Name).GetGenericArguments().[0]
+                            let contentType = m.GetType().GetInterface(typedefof<aval<_>>.Name).GetGenericArguments().[0]
                             let writer = ShaderParameterWriter.get contentType f.Type
                             writer.Bind m
                         | None ->

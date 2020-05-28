@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open FShade
@@ -9,15 +9,15 @@ open FShade
 
 module Sg =
 
-    let changeableSurface (compile : EffectConfig -> EffectInputLayout * IMod<FShade.Imperative.Module>) (sg : ISg) =
+    let changeableSurface (compile : EffectConfig -> EffectInputLayout * aval<FShade.Imperative.Module>) (sg : ISg) =
         Sg.SurfaceApplicator(Surface.FShade compile, sg) :> ISg
 
-    let effectPool (active : IMod<int>) (effects : Effect[]) (sg : ISg) =
+    let effectPool (active : aval<int>) (effects : Effect[]) (sg : ISg) =
         let compile (cfg : EffectConfig) =
             let modules1 = effects |> Array.map (Effect.toModule cfg)
             let layout = EffectInputLayout.ofModules modules1
             let modules = modules1 |> Array.map (EffectInputLayout.apply layout)
-            let current = active |> Mod.map (fun i -> modules.[i % modules.Length])
+            let current = active |> AVal.map (fun i -> modules.[i % modules.Length])
             layout, current
 
         changeableSurface compile sg
@@ -33,7 +33,7 @@ module Sg =
 let main argv = 
     
     // first we need to initialize Aardvark's core components
-    Ag.initialize()
+    
     Aardvark.Init()
 
     let win =
@@ -44,7 +44,7 @@ let main argv =
             samples 8
         }
 
-    let activeShader = Mod.init 0
+    let activeShader = AVal.init 0
 
     let effects =
         [|

@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
@@ -10,7 +10,7 @@ open Aardvark.Application
 let main argv = 
     
     // first we need to initialize Aardvark's core components
-    Ag.initialize()
+    
     Aardvark.Init()
 
     // then we define some vertex attributes for our triangle
@@ -24,8 +24,8 @@ let main argv =
             // apply the attributes we have (position, color) to the draw-call
             // NOTE that aardvark figures out how many triangles are rendered automatically
             //      in this simple case (Sg.render provides a more flexible API for creating draw-calls)
-            |> Sg.vertexAttribute DefaultSemantic.Positions (Mod.constant positions)
-            |> Sg.vertexAttribute DefaultSemantic.Colors (Mod.constant colors)
+            |> Sg.vertexAttribute DefaultSemantic.Positions (AVal.constant positions)
+            |> Sg.vertexAttribute DefaultSemantic.Colors (AVal.constant colors)
 
             // apply a simple shader defined in the core libraries
             // interpolating per-vertex colors for each fragment 

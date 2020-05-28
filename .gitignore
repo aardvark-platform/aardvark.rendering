@@ -1,3 +1,4 @@
+**/.ionide
 bin/Release
 bin/Debug
 !/bin/*.nuspec
@@ -48,3 +49,4 @@ src/GLVM/*.dylib
 /.paket/Paket.Restore.targets
 /src/Aardvark.Base.Rendering/.vs/Aardvark.Base.Rendering/v15/*.suo
 /.vs
+**/Aardvark.log

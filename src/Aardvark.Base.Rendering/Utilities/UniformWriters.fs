@@ -6,7 +6,7 @@ open System.Reflection.Emit
 open Microsoft.FSharp.Reflection
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
-open Aardvark.Base.Incremental
+open FSharp.Data.Adaptive
 open FShade.GLSL
 
 #nowarn "9"
@@ -84,6 +84,7 @@ module GLSLType =
             | Image _ -> failwith "[UniformWriter] image does not have a size"
             | Sampler _ -> failwith "[UniformWriter] sampler does not have a size"
             | DynamicArray _ -> failwith "[UniformWriter] dynamic arrays do not have a size"
+            | Intrinsic _ -> failwith "[UniformWriter] dynamic arrays do not have a size"
 
 
 
@@ -167,7 +168,7 @@ module UniformWriters =
             member x.IsPrimitive = x.IsPrimitive
             member x.ValueType = typeof<'a>
             member x.Write(caller, value, ptr) =
-                let value = unbox<IMod<'a>> value
+                let value = unbox<aval<'a>> value
                 x.Write(value.GetValue caller, ptr)
 
             member x.WriteUnsafeValue(value, ptr) =
