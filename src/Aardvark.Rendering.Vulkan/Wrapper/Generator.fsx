@@ -1,4 +1,5 @@
 ﻿#r "System.Xml.dll"
+#r "System.Xml.dll"
 #r "System.Xml.Linq.dll"
 
 open System.Xml.Linq
@@ -764,15 +765,37 @@ module FSharpWriter =
 
     let addNoneCase (cases : list<string * EnumValue>) =
         let hasNoneCase =
-            cases |> List.exists (fun (_,v) ->
-                match v with
-                    | EnumValue 0 -> true
-                    | EnumBit -1 -> true
-                    | _ -> false
+            cases |> List.exists (fun (n, v) ->
+                match n, v with
+                | "None", _ -> true
+                | _, EnumValue 0 -> true
+                | _, EnumBit -1 -> true
+                | _ -> false
             )
 
         if not hasNoneCase then
             ("None", EnumValue 0)::cases
+        else
+            cases
+
+    let addAllCase (cases : list<string * EnumValue>) =
+        let value =
+            cases |> List.fold (fun x (_, v) ->
+                match v with
+                | EnumBit b -> x ||| (1 <<< b)
+                | _ -> x
+            ) 0
+
+        let hasAllCase =
+            cases |> List.exists (fun (n, v) ->
+                match n, v with
+                | "All", _ -> true
+                | _, EnumValue v when cases.Length > 1 -> v = value
+                | _ -> false
+            )
+
+        if not hasAllCase then
+            ("All", EnumValue value)::cases
         else
             cases
 
@@ -1007,7 +1030,7 @@ module FSharpWriter =
 
             let isFlag = isFlags alternatives
             let alternatives =
-                if isFlag then addNoneCase alternatives
+                if isFlag then alternatives |> addNoneCase |> addAllCase
                 else alternatives
 
             if name <> "VkStructureType" then

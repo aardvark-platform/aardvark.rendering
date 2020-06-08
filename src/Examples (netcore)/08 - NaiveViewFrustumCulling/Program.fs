@@ -57,7 +57,7 @@ let main argv =
     let cullTask =
         let ndc = Box3d(-V3d.III, V3d.III)
         let mutable lastVisibleCnt = 0
-        RenderTask.custom (fun (task,token,output) -> 
+        RenderTask.custom (fun (task,token,output,queries) -> 
             let view = cameraView.GetValue()
             let frustum = frustum.GetValue ()
             let viewProj = CameraView.viewTrafo view * Frustum.projTrafo frustum

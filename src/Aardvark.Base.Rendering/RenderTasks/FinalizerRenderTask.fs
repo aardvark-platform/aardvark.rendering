@@ -22,7 +22,7 @@ type FinalizerRenderTask(inner : IRenderTask) =
         )
 
     override x.Release() = x.Dispose true
-    override x.Perform(token, t, fbo) = inner.Run(token, t, fbo)
+    override x.Perform(token, t, fbo, queries) = inner.Run(token, t, fbo, queries)
     override x.PerformUpdate(token, t) = inner.Update(token, t)
     override x.FramebufferSignature = inner.FramebufferSignature
     override x.Runtime = inner.Runtime

@@ -634,6 +634,11 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture =
             ctx.CreateTextureView(unbox<Texture> texture, levels, slices, isArray) :> IBackendTexture
 
+        member x.CreateTimeQuery() = failwith "not supported"
+        member x.CreateOcclusionQuery(precise) = failwith "not supported"
+        member x.CreatePipelineQuery(statistics) = failwith "not supported"
+        member x.SupportedPipelineStatistics = PipelineStatistics.All
+
     
     member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
         let src = unbox<Texture> src

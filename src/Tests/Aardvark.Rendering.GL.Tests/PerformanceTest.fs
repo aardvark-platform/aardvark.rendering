@@ -228,10 +228,14 @@ module RenderTaskPerformance =
             ]
 
         let customTask = 
-            RenderTask.custom (fun (s,t,output) ->
+            RenderTask.custom (fun (s,t,output,queries) ->
+                queries.Begin()
+
                 for i in 0 .. 100 do
                     for (r,fbo) in renderTasks do
-                        r.Run(t, output.framebuffer)
+                        r.Run(t, output.framebuffer, queries)
+
+                queries.End()
             )
 
         win.RenderTask <- customTask

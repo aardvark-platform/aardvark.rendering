@@ -298,8 +298,8 @@ let main argv =
         Log.line "using: %s" variantNames.[variant.Value]
     )
     let task = 
-        RenderTask.custom (fun (task,token,desc) -> 
-            variants.[variant.Value].Run(token,desc)
+        RenderTask.custom (fun (task,token,desc,queries) -> 
+            variants.[variant.Value].Run(token,desc,queries)
         )
 
     let puller =

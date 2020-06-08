@@ -927,7 +927,7 @@ module RenderTask =
         override x.Use(f : unit -> 'r) =
             f()
 
-        override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription) =
+        override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription, queries : IQuery) =
             x.OutOfDate <- true
             let range = 
                 { 
@@ -1013,7 +1013,7 @@ module RenderTask =
 
         let mutable reader = objects.GetReader()
 
-        override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription) =
+        override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription, queries : IQuery) =
             x.OutOfDate <- true
             let deltas = reader.GetChanges token
             if not (HashSetDelta.isEmpty deltas) then
@@ -1024,7 +1024,7 @@ module RenderTask =
                             | Rem(_,o) -> x.Remove o |> ignore
                 )
 
-            base.Perform(token, rt, desc)
+            base.Perform(token, rt, desc, queries)
 
         override x.Runtime = Some device.Runtime
 
@@ -1063,7 +1063,7 @@ module RenderTask =
                 | _ ->
                     ImageAspect.None
 
-        member x.Run(caller : AdaptiveToken, t : RenderToken, outputs : OutputDescription) =
+        member x.Run(caller : AdaptiveToken, t : RenderToken, outputs : OutputDescription, queries : IQuery) =
             x.EvaluateAlways caller (fun caller ->
                 let fbo = unbox<Framebuffer> outputs.framebuffer
                 use token = device.Token
@@ -1072,8 +1072,14 @@ module RenderTask =
                 let depth = clearDepth.GetValue caller
                 let stencil = match clearStencil with | Some c -> c.GetValue(caller) |> Some | _ -> None
 
+                let vulkanQueries = queries.ToVulkanQuery()
+
+                queries.Begin()
 
                 token.enqueue {
+                    for q in vulkanQueries do
+                        do! Command.Begin q
+
                     let views = fbo.ImageViews
                     for (index, color) in colors do
                         let image = views.[index].Image
@@ -1086,14 +1092,20 @@ module RenderTask =
                             | Some d, None      -> do! Command.ClearDepthStencil(image.[ImageAspect.Depth], d, 0u)
                             | None, Some s      -> do! Command.ClearDepthStencil(image.[ImageAspect.Stencil], 0.0, s)
                             | None, None        -> ()
+
+                    for q in vulkanQueries do
+                        do! Command.End q
                 }
+
+                queries.End()
+
                 token.Sync()
             )
 
         interface IRenderTask with
             member x.Id = id
             member x.Update(c, t) = ()
-            member x.Run(c,t,o) = x.Run(c,t,o)
+            member x.Run(c,t,o,q) = x.Run(c,t,o,q)
             member x.Dispose() = 
                 cmd.Dispose()
                 pool.Dispose()

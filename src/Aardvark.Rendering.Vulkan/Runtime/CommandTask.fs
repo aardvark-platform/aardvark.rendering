@@ -2124,7 +2124,7 @@ module private RuntimeCommands =
 type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeCommand) as this =
     inherit AbstractRenderTask()
 
-    let pool = device.GraphicsFamily.CreateCommandPool()
+    let pool = device.GraphicsFamily.CreateCommandPool(CommandPoolFlags.ResetBuffer)
     let viewports = AVal.init [||]
     let scissors = AVal.init [||]
 
@@ -2176,23 +2176,24 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
     override x.Use(f : unit -> 'r) =
         f()
 
-    override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription) =
+    override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription, queries : IQuery) =
         x.OutOfDate <- true
+
+        let vulkanQueries = queries.ToVulkanQuery()
 
         let fbo =
             match desc.framebuffer with
                 | :? Framebuffer as fbo -> fbo
                 | fbo -> failwithf "unsupported framebuffer: %A" fbo
-   
+
         let ranges =
-            let range = 
-                { 
-                    frMin = desc.viewport.Min; 
+            let range =
+                {
+                    frMin = desc.viewport.Min;
                     frMax = desc.viewport.Max;
                     frLayers = Range1i(0,renderPass.LayerCount-1)
                 }
             range.Split(int device.AllCount)
-            
 
         let sc =
             if device.AllCount > 1u then
@@ -2200,7 +2201,7 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
                     [| desc.viewport |]
                 else
                     ranges |> Array.map (fun { frMin = min; frMax = max } -> Box2i(min, max))
-                        
+
             else
                 [| desc.viewport |]
 
@@ -2213,8 +2214,7 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
                 transact (fun () -> viewports.Value <- vp; scissors.Value <- sc)
                 true
 
-        use tt = device.Token
-        let commandChanged = 
+        let commandChanged =
             lock compiled (fun () ->
                 if compiled.OutOfDate then
                     compiled.Update(token)
@@ -2223,7 +2223,7 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
                     false
             )
 
-        let resourcesChanged = 
+        let resourcesChanged =
             resources.Update(token)
 
         let framebufferChanged =
@@ -2242,12 +2242,11 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
                     if framebufferChanged then yield "framebuffer"
                 ]
                 |> sprintf "{ %s }"
-            
+
             if Config.showRecompile then
                 Log.line "[Vulkan] recompile commands: %s" cause
 
-            inner.Reset()
-            inner.Begin(renderPass, fbo, CommandBufferUsage.RenderPassContinue)
+            inner.Begin(renderPass, fbo, CommandBufferUsage.RenderPassContinue, true)
 
             inner.enqueue {
                 do! Command.SetViewports(vp)
@@ -2256,14 +2255,16 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
 
             inner.AppendCommand()
             compiled.Stream.Run(inner.Handle)
-                
+
             inner.End()
 
+        queries.Begin()
 
-        tt.Sync()
-
-        cmd.Reset()
         cmd.Begin(renderPass, CommandBufferUsage.OneTimeSubmit)
+
+        for q in vulkanQueries do
+            q.Begin cmd
+
         cmd.enqueue {
             let oldLayouts = Array.zeroCreate fbo.ImageViews.Length
             for i in 0 .. fbo.ImageViews.Length - 1 do
@@ -2280,42 +2281,27 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
 
             if ranges.Length > 1 then
                 let deviceCount = int device.AllCount
-                    
+
                 for (sem,a) in Map.toSeq fbo.Attachments do
                     transact (fun () ->
                         let v = a.Image.Version
                         lock v (fun () -> v.Value <- v.Value + 1)
                     )
 
-//
-//                    // remove!!!!
-//                    if sem <> DefaultSemantic.Depth then 
-//                        do! Command.TransformLayout(a.Image, VkImageLayout.TransferSrcOptimal)
-//                        let img = a.Image
-//                        let layers = a.ArrayRange
-//                        let layerCount = 1 + layers.Max - layers.Min
-//                        
-//                        let aspect =
-//                            match VkFormat.toImageKind img.Format with
-//                                | ImageKind.Depth -> ImageAspect.Depth
-//                                | ImageKind.DepthStencil  -> ImageAspect.DepthStencil
-//                                | _ -> ImageAspect.Color 
-//
-//                        let subResource = img.[aspect, a.MipLevelRange.Min]
-//                        let ranges =
-//                            ranges |> Array.map (fun { frMin = min; frMax = max; frLayers = layers} ->
-//                                layers, Box3i(V3i(min,0), V3i(max, 0))
-//                            )
-//
-//                        ()
-//                        do! Command.SyncPeers(subResource, ranges)
-
-
             for i in 0 .. fbo.ImageViews.Length - 1 do
                 let img = fbo.ImageViews.[i].Image
                 do! Command.TransformLayout(img, oldLayouts.[i])
-        }   
+        }
+
+        for q in vulkanQueries do
+            q.End cmd
+
         cmd.End()
+
+        queries.End()
+
+        use tt = device.Token
+        tt.Sync()
 
         device.GraphicsFamily.RunSynchronously cmd
 

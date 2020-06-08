@@ -76,15 +76,22 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
     let mutable swapchain : Option<Swapchain> = None
     let mutable rafap = false
 
-    let startTime = DateTime.Now
-    let sw = System.Diagnostics.Stopwatch.StartNew()
-    let time = AVal.custom (fun _ -> startTime + sw.Elapsed) 
+    let time =
+        let start = System.DateTime.Now
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        AVal.custom (fun _ ->
+            start + sw.Elapsed
+        )
     
-    let frameWatch = System.Diagnostics.Stopwatch()
     let mutable frameCount = 0
     let mutable totalTime = MicroTime.Zero
-    let mutable baseTitle = ""
+    let mutable totalGpuTime = MicroTime.Zero
+    let mutable averageFrameTime = MicroTime.Zero
+    let mutable averageGpuTime = MicroTime.Zero
+    let mutable measureGpuTime = true
+    let sw = System.Diagnostics.Stopwatch()
 
+    let mutable gpuQuery = Unchecked.defaultof<_>
 
     let eBeforeRender = FSharp.Control.Event<unit>()
     let eAfterRender =  FSharp.Control.Event<unit>()
@@ -97,14 +104,23 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
                 Log.error "[Vulkan] cannot create device for window: %A" info
                 failwithf "[Vulkan] cannot create device for window: %A" info
     
-    member x.NewFrame (t : MicroTime) = 
+    member x.NewFrame (t : MicroTime, gpu : MicroTime) = 
         frameCount <- frameCount + 1
         totalTime <- totalTime + t
+        totalGpuTime <- totalGpuTime + gpu
         if frameCount > 50 then
-            let fps = float frameCount / totalTime.TotalSeconds
-            base.Title <- DefaultText.baseText + sprintf " (%.3f fps)" fps
+            averageFrameTime <- totalTime / frameCount
+            averageGpuTime <- totalGpuTime / frameCount
+
+            if measureGpuTime then
+                let r = 100.0 * (averageGpuTime / averageFrameTime)
+                base.Title <- sprintf "%s (%A/%.1f%%)" DefaultText.baseText averageFrameTime r
+            else
+                base.Title <- sprintf "%s (%A)" DefaultText.baseText averageFrameTime
+
             frameCount <- 0
             totalTime <- MicroTime.Zero
+            totalGpuTime <- MicroTime.Zero
         ()
     member x.RenderTask
         with get() = 
@@ -133,6 +149,7 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
         let info = unbox<OpenTK.Platform.IWindowInfo> x.WindowInfo
         surface <- createSurface info
         swapchainDesc <- device.CreateSwapchainDescription(surface, mode)
+        gpuQuery <- runtime.CreateTimeQuery()
 
         let k = x.Keyboard
         k.KeyDown(Keys.End).Values.Add (fun () ->
@@ -156,11 +173,6 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
 
             invalidSize <- newInvalidSize
         )
-        
-        let sw = System.Diagnostics.Stopwatch()
-        eBeforeRender.Publish.Add sw.Restart
-        eAfterRender.Publish.Add (fun () -> sw.Stop(); x.NewFrame sw.MicroTime)
-        
 
     override x.OnUnload() =
         match swapchain with
@@ -180,9 +192,13 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
         resizeSub.Dispose()
         resizeSub <- noDispose
 
+        gpuQuery.Dispose()
+
         ()
 
     override x.OnRender() =
+        sw.Restart()
+
         transact time.MarkOutdated
         eBeforeRender.Trigger()
         let s = surface.Size
@@ -202,11 +218,27 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
                         swapchain <- Some c
                         c
 
+            let queries =
+                if measureGpuTime then
+                    gpuQuery :> IQuery
+                else
+                    Queries.empty :> IQuery
+
             swapchain.RenderFrame(fun framebuffer ->
-                task.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer framebuffer)
+                task.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer framebuffer, queries)
             )
 
         eAfterRender.Trigger()
+
+        let gpuTime =
+            if measureGpuTime && s.AllGreater 0 then
+                gpuQuery.TryGetResult(true) |> Option.defaultValue MicroTime.Zero
+            else
+                MicroTime.Zero
+
+        sw.Stop()
+        x.NewFrame(sw.MicroTime, gpuTime)
+
         AdaptiveObject.RunAfterEvaluate time.MarkOutdated
         if rafap then x.Invalidate()
 
@@ -221,7 +253,12 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
         swapchainDesc.samples
     member this.Time = time
     
-    member x.AverageFrameTime = totalTime / float frameCount
+    member x.AverageFrameTime = averageFrameTime
+    member x.AverageGPUFrameTime = averageGpuTime
+
+    member x.MeasureGpuTime
+        with get() = measureGpuTime
+        and set v = measureGpuTime <- v
 
     member x.SubSampling
         with get() =  1.0
@@ -272,8 +309,10 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
     let requestedLayers =
         [
             if debug then
+                yield Instance.Layers.Validation
                 yield Instance.Layers.StandardValidation
-                yield "VK_LAYER_LUNARG_assistant_layer"
+                yield Instance.Layers.AssistantLayer
+                //yield Instance.Layers.ApiDump
                 //yield Instance.Layers.Nsight
                 //yield Instance.Layers.SwapChain
                 //yield Instance.Layers.DrawState
@@ -288,15 +327,26 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
         ]
 
     let instance = 
-        let availableExtensions =
-            Instance.GlobalExtensions |> Seq.map (fun e -> e.name) |> Set.ofSeq
+        let isExtensionAvailable ext =
+            Instance.GlobalExtensions |> Seq.exists (fun e -> e.name = ext)
 
-        let availableLayers =
-            Instance.AvailableLayers |> Seq.map (fun l -> l.name) |> Set.ofSeq
+        let isLayerAvailable layer =
+            Instance.AvailableLayers |> Seq.exists (fun l -> l.name = layer)
+
+        // Report missing extensions and layers
+        let reportMissing (name : string) (available : string -> bool) (objects : string list) =
+            objects
+            |> List.filter (available >> not)
+            |> List.iter (fun x ->
+                Log.warn "Requested Vulkan %s not available: %s" name x
+            )
+
+        requestedExtensions |> reportMissing "extension" isExtensionAvailable
+        requestedLayers |> reportMissing "validation layer" isLayerAvailable
 
         // create an instance
-        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
-        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers)
+        let enabledExtensions = requestedExtensions |> List.filter isExtensionAvailable
+        let enabledLayers = requestedLayers |> List.filter isLayerAvailable
     
         new Instance(Version(1,1,0), enabledLayers, enabledExtensions)
 

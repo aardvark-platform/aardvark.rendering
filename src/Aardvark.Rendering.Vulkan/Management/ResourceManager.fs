@@ -947,7 +947,7 @@ module Resources =
                             renderPass.Handle,
                             0u,
                             basePipeline,
-                            0
+                            -1
                         )
 
                     VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, pDesc, NativePtr.zero, pHandle)

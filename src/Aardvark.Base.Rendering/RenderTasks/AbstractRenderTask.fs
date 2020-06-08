@@ -107,7 +107,7 @@ type AbstractRenderTask() =
     abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
     abstract member PerformUpdate : AdaptiveToken * RenderToken -> unit
-    abstract member Perform : AdaptiveToken * RenderToken * OutputDescription -> unit
+    abstract member Perform : AdaptiveToken * RenderToken * OutputDescription * IQuery -> unit
     abstract member Release : unit -> unit
     abstract member Use : (unit -> 'a) -> 'a
 
@@ -116,11 +116,11 @@ type AbstractRenderTask() =
             x.Release()
 
     member x.FrameId = frameId
-    member x.Run(token : AdaptiveToken, t : RenderToken, out : OutputDescription) =
+    member x.Run(token : AdaptiveToken, t : RenderToken, out : OutputDescription, queries : IQuery) =
         x.EvaluateAlways token (fun token ->
             x.OutOfDate <- true
             x.UseValues(token, out, fun token ->
-                x.Perform(token, t, out)
+                x.Perform(token, t, out, queries)
                 frameId <- frameId + 1UL
             )
         )
@@ -140,5 +140,5 @@ type AbstractRenderTask() =
         member x.Runtime = x.Runtime
         member x.FrameId = frameId
         member x.Update(token,t) = x.Update(token,t)
-        member x.Run(token, t,out) = x.Run(token, t,out)
+        member x.Run(token, t, out, queries) = x.Run(token, t, out, queries)
         member x.Use f = x.Use f

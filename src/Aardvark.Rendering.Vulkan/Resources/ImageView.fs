@@ -268,7 +268,7 @@ module ImageView =
             return ImageView(device, !!pHandle, img, viewType, levelRange, arrayRange, isResolved)
         }
 
-    let createOutpuView (img : Image) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
+    let createOutputView (img : Image) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
         let levels = 1 + levelRange.Max - levelRange.Min |> min img.MipMapLevels
         let slices = 1 + arrayRange.Max - arrayRange.Min |> min img.Count
         if levels < 1 then failf "cannot create image view with level-count: %A" levels
@@ -361,23 +361,23 @@ type ContextImageViewExtensions private() =
 
     [<Extension>]
     static member inline CreateOutputImageView(this : Device, image : Image, levelRange : Range1i, arrayRange : Range1i) =
-        this |> ImageView.createOutpuView image levelRange arrayRange
+        this |> ImageView.createOutputView image levelRange arrayRange
 
     [<Extension>]
     static member inline CreateOutputImageView(this : Device, image : Image, baseLevel : int, levels : int, baseSlice : int, slices : int) =
-        this |> ImageView.createOutpuView image (Range1i(baseLevel, baseLevel + levels - 1)) (Range1i(baseSlice, baseSlice + slices - 1))
+        this |> ImageView.createOutputView image (Range1i(baseLevel, baseLevel + levels - 1)) (Range1i(baseSlice, baseSlice + slices - 1))
 
     [<Extension>]
     static member inline CreateOutputImageView(this : Device, image : Image, levelRange : Range1i) =
-        this |> ImageView.createOutpuView image levelRange (Range1i(0, image.Count - 1))
+        this |> ImageView.createOutputView image levelRange (Range1i(0, image.Count - 1))
 
     [<Extension>]
     static member inline CreateOutputImageView(this : Device, image : Image) =
-        this |> ImageView.createOutpuView image (Range1i(0, image.MipMapLevels - 1)) (Range1i(0, image.Count - 1))
+        this |> ImageView.createOutputView image (Range1i(0, image.MipMapLevels - 1)) (Range1i(0, image.Count - 1))
 
     [<Extension>]
     static member inline CreateOutputImageView(this : Device, image : Image, level : int, slice : int) =
-        this |> ImageView.createOutpuView image (Range1i(level, level)) (Range1i(slice, slice))
+        this |> ImageView.createOutputView image (Range1i(level, level)) (Range1i(slice, slice))
 
 
 

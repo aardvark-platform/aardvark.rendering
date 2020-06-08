@@ -965,6 +965,7 @@ type VkObjectType =
 
 [<Flags>]
 type VkQueueFlags = 
+    | All = 31
     | None = 0
     | ProtectedBit = 0x00000010
     | GraphicsBit = 0x00000001
@@ -974,6 +975,7 @@ type VkQueueFlags =
 
 [<Flags>]
 type VkMemoryPropertyFlags = 
+    | All = 63
     | None = 0
     | ProtectedBit = 0x00000020
     | DeviceLocalBit = 0x00000001
@@ -984,12 +986,14 @@ type VkMemoryPropertyFlags =
 
 [<Flags>]
 type VkMemoryHeapFlags = 
+    | All = 3
     | None = 0
     | MultiInstanceBit = 0x00000002
     | DeviceLocalBit = 0x00000001
 
 [<Flags>]
 type VkAccessFlags = 
+    | All = 131071
     | None = 0
     | IndirectCommandReadBit = 0x00000001
     | IndexReadBit = 0x00000002
@@ -1011,6 +1015,7 @@ type VkAccessFlags =
 
 [<Flags>]
 type VkBufferUsageFlags = 
+    | All = 511
     | None = 0
     | TransferSrcBit = 0x00000001
     | TransferDstBit = 0x00000002
@@ -1024,6 +1029,7 @@ type VkBufferUsageFlags =
 
 [<Flags>]
 type VkBufferCreateFlags = 
+    | All = 15
     | None = 0
     | ProtectedBit = 0x00000008
     | SparseBindingBit = 0x00000001
@@ -1044,6 +1050,7 @@ type VkShaderStageFlags =
 
 [<Flags>]
 type VkImageUsageFlags = 
+    | All = 255
     | None = 0
     | TransferSrcBit = 0x00000001
     | TransferDstBit = 0x00000002
@@ -1056,6 +1063,7 @@ type VkImageUsageFlags =
 
 [<Flags>]
 type VkImageCreateFlags = 
+    | All = 4095
     | None = 0
     | DisjointBit = 0x00000200
     | ProtectedBit = 0x00000800
@@ -1072,6 +1080,7 @@ type VkImageCreateFlags =
 
 [<Flags>]
 type VkPipelineCreateFlags = 
+    | All = 31
     | None = 0
     | DispatchBaseBit = 0x00000010
     | ViewIndexFromDeviceIndexBit = 0x00000008
@@ -1081,6 +1090,7 @@ type VkPipelineCreateFlags =
 
 [<Flags>]
 type VkColorComponentFlags = 
+    | All = 15
     | None = 0
     | RBit = 0x00000001
     | GBit = 0x00000002
@@ -1089,11 +1099,13 @@ type VkColorComponentFlags =
 
 [<Flags>]
 type VkFenceCreateFlags = 
+    | All = 1
     | None = 0
     | SignaledBit = 0x00000001
 
 [<Flags>]
 type VkFormatFeatureFlags = 
+    | All = 16703487
     | None = 0
     | CositedChromaSamplesBit = 0x00800000
     | DisjointBit = 0x00400000
@@ -1120,11 +1132,13 @@ type VkFormatFeatureFlags =
 
 [<Flags>]
 type VkQueryControlFlags = 
+    | All = 1
     | None = 0
     | PreciseBit = 0x00000001
 
 [<Flags>]
 type VkQueryResultFlags = 
+    | All = 15
     | None = 0
     | D64Bit = 0x00000001
     | WaitBit = 0x00000002
@@ -1133,6 +1147,7 @@ type VkQueryResultFlags =
 
 [<Flags>]
 type VkCommandBufferUsageFlags = 
+    | All = 7
     | None = 0
     | OneTimeSubmitBit = 0x00000001
     | RenderPassContinueBit = 0x00000002
@@ -1140,6 +1155,7 @@ type VkCommandBufferUsageFlags =
 
 [<Flags>]
 type VkQueryPipelineStatisticFlags = 
+    | All = 2047
     | None = 0
     | InputAssemblyVerticesBit = 0x00000001
     | InputAssemblyPrimitivesBit = 0x00000002
@@ -1155,6 +1171,7 @@ type VkQueryPipelineStatisticFlags =
 
 [<Flags>]
 type VkImageAspectFlags = 
+    | All = 127
     | None = 0
     | Plane2Bit = 0x00000040
     | Plane1Bit = 0x00000020
@@ -1166,6 +1183,7 @@ type VkImageAspectFlags =
 
 [<Flags>]
 type VkSparseImageFormatFlags = 
+    | All = 7
     | None = 0
     | SingleMiptailBit = 0x00000001
     | AlignedMipSizeBit = 0x00000002
@@ -1173,11 +1191,13 @@ type VkSparseImageFormatFlags =
 
 [<Flags>]
 type VkSparseMemoryBindFlags = 
+    | All = 1
     | None = 0
     | MetadataBit = 0x00000001
 
 [<Flags>]
 type VkPipelineStageFlags = 
+    | All = 131071
     | None = 0
     | TopOfPipeBit = 0x00000001
     | DrawIndirectBit = 0x00000002
@@ -1199,6 +1219,7 @@ type VkPipelineStageFlags =
 
 [<Flags>]
 type VkCommandPoolCreateFlags = 
+    | All = 7
     | None = 0
     | ProtectedBit = 0x00000004
     | TransientBit = 0x00000001
@@ -1206,16 +1227,19 @@ type VkCommandPoolCreateFlags =
 
 [<Flags>]
 type VkCommandPoolResetFlags = 
+    | All = 1
     | None = 0
     | ReleaseResourcesBit = 0x00000001
 
 [<Flags>]
 type VkCommandBufferResetFlags = 
+    | All = 1
     | None = 0
     | ReleaseResourcesBit = 0x00000001
 
 [<Flags>]
 type VkSampleCountFlags = 
+    | All = 127
     | None = 0
     | D1Bit = 0x00000001
     | D2Bit = 0x00000002
@@ -1227,6 +1251,7 @@ type VkSampleCountFlags =
 
 [<Flags>]
 type VkAttachmentDescriptionFlags = 
+    | All = 1
     | None = 0
     | MayAliasBit = 0x00000001
 
@@ -1239,11 +1264,13 @@ type VkStencilFaceFlags =
 
 [<Flags>]
 type VkDescriptorPoolCreateFlags = 
+    | All = 1
     | None = 0
     | FreeDescriptorSetBit = 0x00000001
 
 [<Flags>]
 type VkDependencyFlags = 
+    | All = 7
     | None = 0
     | ViewLocalBit = 0x00000002
     | DeviceGroupBit = 0x00000004
@@ -1255,11 +1282,13 @@ type VkSemaphoreType =
 
 [<Flags>]
 type VkSemaphoreWaitFlags = 
+    | All = 1
     | None = 0
     | AnyBit = 0x00000001
 
 [<Flags>]
 type VkSubgroupFeatureFlags = 
+    | All = 255
     | None = 0
     | BasicBit = 0x00000001
     | VoteBit = 0x00000002
@@ -1272,6 +1301,7 @@ type VkSubgroupFeatureFlags =
 
 [<Flags>]
 type VkExternalMemoryHandleTypeFlags = 
+    | All = 127
     | None = 0
     | OpaqueFdBit = 0x00000001
     | OpaqueWin32Bit = 0x00000002
@@ -1283,6 +1313,7 @@ type VkExternalMemoryHandleTypeFlags =
 
 [<Flags>]
 type VkExternalMemoryFeatureFlags = 
+    | All = 7
     | None = 0
     | DedicatedOnlyBit = 0x00000001
     | ExportableBit = 0x00000002
@@ -1290,6 +1321,7 @@ type VkExternalMemoryFeatureFlags =
 
 [<Flags>]
 type VkExternalSemaphoreHandleTypeFlags = 
+    | All = 31
     | None = 0
     | OpaqueFdBit = 0x00000001
     | OpaqueWin32Bit = 0x00000002
@@ -1299,17 +1331,20 @@ type VkExternalSemaphoreHandleTypeFlags =
 
 [<Flags>]
 type VkExternalSemaphoreFeatureFlags = 
+    | All = 3
     | None = 0
     | ExportableBit = 0x00000001
     | ImportableBit = 0x00000002
 
 [<Flags>]
 type VkSemaphoreImportFlags = 
+    | All = 1
     | None = 0
     | TemporaryBit = 0x00000001
 
 [<Flags>]
 type VkExternalFenceHandleTypeFlags = 
+    | All = 15
     | None = 0
     | OpaqueFdBit = 0x00000001
     | OpaqueWin32Bit = 0x00000002
@@ -1318,17 +1353,20 @@ type VkExternalFenceHandleTypeFlags =
 
 [<Flags>]
 type VkExternalFenceFeatureFlags = 
+    | All = 3
     | None = 0
     | ExportableBit = 0x00000001
     | ImportableBit = 0x00000002
 
 [<Flags>]
 type VkFenceImportFlags = 
+    | All = 1
     | None = 0
     | TemporaryBit = 0x00000001
 
 [<Flags>]
 type VkPeerMemoryFeatureFlags = 
+    | All = 15
     | None = 0
     | CopySrcBit = 0x00000001
     | CopyDstBit = 0x00000002
@@ -1337,11 +1375,13 @@ type VkPeerMemoryFeatureFlags =
 
 [<Flags>]
 type VkMemoryAllocateFlags = 
+    | All = 1
     | None = 0
     | DeviceMaskBit = 0x00000001
 
 [<Flags>]
 type VkDeviceGroupPresentModeFlagsKHR = 
+    | All = 15
     | None = 0
     | LocalBit = 0x00000001
     | RemoteBit = 0x00000002
@@ -1378,6 +1418,7 @@ type VkChromaLocation =
 
 [<Flags>]
 type VkDebugUtilsMessageSeverityFlagsEXT = 
+    | All = 4369
     | None = 0
     | VerboseBit = 0x00000001
     | InfoBit = 0x00000010
@@ -1386,6 +1427,7 @@ type VkDebugUtilsMessageSeverityFlagsEXT =
 
 [<Flags>]
 type VkDebugUtilsMessageTypeFlagsEXT = 
+    | All = 7
     | None = 0
     | GeneralBit = 0x00000001
     | ValidationBit = 0x00000002
@@ -1393,6 +1435,7 @@ type VkDebugUtilsMessageTypeFlagsEXT =
 
 [<Flags>]
 type VkDescriptorBindingFlags = 
+    | All = 15
     | None = 0
     | UpdateAfterBindBit = 0x00000001
     | UpdateUnusedWhilePendingBit = 0x00000002
@@ -1423,6 +1466,7 @@ type VkDriverId =
 
 [<Flags>]
 type VkResolveModeFlags = 
+    | All = 15
     | None = 0
     | SampleZeroBit = 0x00000001
     | AverageBit = 0x00000002
@@ -10581,6 +10625,7 @@ module KHRSurface =
 
     [<Flags>]
     type VkSurfaceTransformFlagsKHR = 
+        | All = 511
         | None = 0
         | IdentityBit = 0x00000001
         | Rotate90Bit = 0x00000002
@@ -10603,6 +10648,7 @@ module KHRSurface =
     
     [<Flags>]
     type VkCompositeAlphaFlagsKHR = 
+        | All = 15
         | None = 0
         | OpaqueBit = 0x00000001
         | PreMultipliedBit = 0x00000002
@@ -11665,6 +11711,7 @@ module EXTDebugReport =
 
     [<Flags>]
     type VkDebugReportFlagsEXT = 
+        | All = 31
         | None = 0
         | InformationBit = 0x00000001
         | WarningBit = 0x00000002
@@ -12042,6 +12089,7 @@ module ANDROIDNativeBuffer =
 
     [<Flags>]
     type VkSwapchainImageUsageFlagsANDROID = 
+        | All = 1
         | None = 0
         | SharedBit = 0x00000001
     
@@ -12202,6 +12250,7 @@ module KHRDisplay =
 
     [<Flags>]
     type VkDisplayPlaneAlphaFlagsKHR = 
+        | All = 15
         | None = 0
         | OpaqueBit = 0x00000001
         | GlobalBit = 0x00000002
@@ -12907,6 +12956,7 @@ module EXTConditionalRendering =
 
     [<Flags>]
     type VkConditionalRenderingFlagsEXT = 
+        | All = 1
         | None = 0
         | InvertedBit = 0x00000001
     
@@ -13862,6 +13912,7 @@ module EXTDisplaySurfaceCounter =
 
     [<Flags>]
     type VkSurfaceCounterFlagsEXT = 
+        | All = 1
         | None = 0
         | Vblank = 0x00000001
     
@@ -14707,6 +14758,7 @@ module KHRDeviceGroup =
 
         [<Flags>]
         type VkDeviceGroupPresentModeFlagsKHR = 
+            | All = 15
             | None = 0
             | LocalBit = 0x00000001
             | RemoteBit = 0x00000002
@@ -16115,6 +16167,7 @@ module EXTPipelineCreationFeedback =
 
     [<Flags>]
     type VkPipelineCreationFeedbackFlagsEXT = 
+        | All = 7
         | None = 0
         | ValidBit = 0x00000001
         | ApplicationPipelineCacheHitBit = 0x00000002
@@ -17015,6 +17068,7 @@ module EXTToolingInfo =
 
     [<Flags>]
     type VkToolPurposeFlagsEXT = 
+        | All = 31
         | None = 0
         | ValidationBit = 0x00000001
         | ProfilingBit = 0x00000002
@@ -19738,6 +19792,7 @@ module KHRPerformanceQuery =
 
     [<Flags>]
     type VkPerformanceCounterDescriptionFlagsKHR = 
+        | All = 3
         | None = 0
         | PerformanceImpacting = 0x00000001
         | ConcurrentlyImpacted = 0x00000002
@@ -20393,12 +20448,14 @@ module KHRRayTracing =
     
     [<Flags>]
     type VkGeometryFlagsKHR = 
+        | All = 3
         | None = 0
         | OpaqueBit = 0x00000001
         | NoDuplicateAnyHitInvocationBit = 0x00000002
     
     [<Flags>]
     type VkGeometryInstanceFlagsKHR = 
+        | All = 15
         | None = 0
         | TriangleFacingCullDisableBit = 0x00000001
         | TriangleFrontCounterclockwiseBit = 0x00000002
@@ -20407,6 +20464,7 @@ module KHRRayTracing =
     
     [<Flags>]
     type VkBuildAccelerationStructureFlagsKHR = 
+        | All = 31
         | None = 0
         | AllowUpdateBit = 0x00000001
         | AllowCompactionBit = 0x00000002
@@ -22992,6 +23050,7 @@ module NVDeviceDiagnosticsConfig =
 
     [<Flags>]
     type VkDeviceDiagnosticsConfigFlagsNV = 
+        | All = 7
         | None = 0
         | EnableShaderDebugInfoBit = 0x00000001
         | EnableResourceTrackingBit = 0x00000002
@@ -23063,6 +23122,7 @@ module NVDeviceGeneratedCommands =
 
     [<Flags>]
     type VkIndirectStateFlagsNV = 
+        | All = 1
         | None = 0
         | FlagFrontfaceBit = 0x00000001
     
@@ -23078,6 +23138,7 @@ module NVDeviceGeneratedCommands =
     
     [<Flags>]
     type VkIndirectCommandsLayoutUsageFlagsNV = 
+        | All = 7
         | None = 0
         | ExplicitPreprocessBit = 0x00000001
         | IndexedSequencesBit = 0x00000002
@@ -23638,6 +23699,7 @@ module NVExternalMemoryCapabilities =
 
     [<Flags>]
     type VkExternalMemoryHandleTypeFlagsNV = 
+        | All = 15
         | None = 0
         | OpaqueWin32Bit = 0x00000001
         | OpaqueWin32KmtBit = 0x00000002
@@ -23646,6 +23708,7 @@ module NVExternalMemoryCapabilities =
     
     [<Flags>]
     type VkExternalMemoryFeatureFlagsNV = 
+        | All = 7
         | None = 0
         | DedicatedOnlyBit = 0x00000001
         | ExportableBit = 0x00000002

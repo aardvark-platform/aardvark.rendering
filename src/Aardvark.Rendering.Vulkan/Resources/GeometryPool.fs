@@ -806,17 +806,18 @@ module GeometryPoolUtilities =
                     let offset = elemSize * int64 ptr.Offset
                     let size = elemSize * int64 fvc
 
-                    match geometry.IndexedAttributes.TryGetValue sem with
-                        | (true, arr) ->
-                            assert(arr.GetType().GetElementType() = elemType)
-                            let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
-                            try buffer.Write(offset, size, gc.AddrOfPinnedObject())
-                            finally gc.Free()
+                    if size > 0L then
+                        match geometry.IndexedAttributes.TryGetValue sem with
+                            | (true, arr) ->
+                                assert(arr.GetType().GetElementType() = elemType)
+                                let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
+                                try buffer.Write(offset, size, gc.AddrOfPinnedObject())
+                                finally gc.Free()
 
-                            //t.Enqueue buffer.Flush
+                                //t.Enqueue buffer.Flush
 
-                        | _ ->
-                            ()
+                            | _ ->
+                                ()
 
                 Interlocked.Increment(&count) |> ignore
                 ptr

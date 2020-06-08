@@ -37,9 +37,13 @@ type SequentialRenderTask(tasks : IRenderTask[]) =
         for t in tasks do
             t.Update(token, rt)
 
-    override x.Perform(token : AdaptiveToken, rt : RenderToken, output : OutputDescription) =
+    override x.Perform(token : AdaptiveToken, rt : RenderToken, output : OutputDescription, queries : IQuery) =
+        queries.Begin()
+
         for t in tasks do
-            t.Run(token, rt, output)
+            t.Run(token, rt, output, queries)
+
+        queries.End()
 
     override x.FramebufferSignature = signature.Value
     override x.Runtime = runtime

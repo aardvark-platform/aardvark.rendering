@@ -547,6 +547,8 @@ module Instance =
         let Trace               = "VK_LAYER_LUNARG_vktrace"
         let ParameterValidation = "VK_LAYER_LUNARG_parameter_validation"
         let CoreValidation      = "VK_LAYER_LUNARG_core_validation"
+        let AssistantLayer      = "VK_LAYER_LUNARG_assistant_layer"
+        let Validation          = "VK_LAYER_KHRONOS_validation"
 
 
         let Nsight              = "VK_LAYER_NV_nsight"

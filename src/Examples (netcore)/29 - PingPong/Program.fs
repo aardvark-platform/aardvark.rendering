@@ -105,13 +105,15 @@ let main argv =
     // this a custom render task which call others and can be chained with outer render tasks
     // we need this to control where to render to
     let renderToTarget =
-        RenderTask.custom (fun (self,token,outputDesc) -> 
+        RenderTask.custom (fun (self,token,outputDesc,queries) -> 
             // choose where to render to
             let target = fbos.[(currentTexture.Value+1)%2]
             // manually clear and render to target
             let output = OutputDescription.ofFramebuffer target
-            clear.Run(self, token, output)
-            task.Run(self, token,output)
+            queries.Begin()
+            clear.Run(self, token, output, queries)
+            task.Run(self, token, output, queries)
+            queries.End()
         )
 
     // just visualize using fullscreen quad

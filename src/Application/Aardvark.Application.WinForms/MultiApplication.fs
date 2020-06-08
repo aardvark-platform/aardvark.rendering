@@ -38,11 +38,11 @@ type MultiRenderTask(runtime : MultiRuntime, signature : IFramebufferSignature, 
         member x.FrameId = tasks |> Seq.map (fun t -> t.FrameId) |> Seq.max
         member x.FramebufferSignature = Some signature
         member x.Runtime = Some (runtime :> IRuntime)
-        member x.Run(t,rt,o) =
+        member x.Run(t,rt,o,q) =
             x.EvaluateAlways t (fun t ->
                 let current = o.framebuffer.Signature.Runtime
                 let index = runtime.Runtimes.IndexOf (current :?> IRuntime)
-                tasks.[index].Run(t, rt, o)
+                tasks.[index].Run(t, rt, o, q)
             )
 
 and MultiFramebufferSignature(runtime : IRuntime, signatures : IFramebufferSignature[]) =
@@ -402,6 +402,11 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<float>, stencil : Option<int>) = failwith "not implemented"
 
         member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture = failwith "not implemented"
+
+        member x.CreateTimeQuery() = failwith ""
+        member x.CreateOcclusionQuery(precise) = failwith ""
+        member x.CreatePipelineQuery(statistics) = failwith ""
+        member x.SupportedPipelineStatistics = Set.empty
 
 type MultiApplication(apps : IApplication[]) =
     

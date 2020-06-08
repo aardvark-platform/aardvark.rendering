@@ -13,7 +13,7 @@ type IRenderTask =
     abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
     abstract member Update : AdaptiveToken * RenderToken -> unit
-    abstract member Run : AdaptiveToken * RenderToken * OutputDescription -> unit
+    abstract member Run : AdaptiveToken * RenderToken * OutputDescription * IQuery -> unit
     abstract member FrameId : uint64
     abstract member Use : (unit -> 'a) -> 'a
 
@@ -21,6 +21,7 @@ type IRenderTask =
 and IRuntime =
     inherit IFramebufferRuntime
     inherit IComputeRuntime
+    inherit IQueryRuntime
 
     abstract member OnDispose : IEvent<unit>
     abstract member ResourceManager : IResourceManager
@@ -40,10 +41,37 @@ and IRuntime =
 
 [<Extension>]
 type RenderTaskRunExtensions() =
+    // Overloads with queries
+    [<Extension>]
+    static member Run(t : IRenderTask, token : RenderToken, fbo : IFramebuffer, queries : IQuery) =
+        t.Run(AdaptiveToken.Top, token, OutputDescription.ofFramebuffer fbo, queries)
+
+    [<Extension>]
+    static member Run(t : IRenderTask, token : RenderToken, fbo : OutputDescription, queries : IQuery) =
+        t.Run(AdaptiveToken.Top, token, fbo, queries)
+
+    // Overloads with Queries struct
+    [<Extension>]
+    static member Run(t : IRenderTask, token : RenderToken, fbo : IFramebuffer, queries : Queries) =
+        t.Run(AdaptiveToken.Top, token, OutputDescription.ofFramebuffer fbo, queries :> IQuery)
+
+    [<Extension>]
+    static member Run(t : IRenderTask, token : RenderToken, fbo : OutputDescription, queries : Queries) =
+        t.Run(AdaptiveToken.Top, token, fbo, queries :> IQuery)
+
+    [<Extension>]
+    static member Run(t : IRenderTask, token : AdaptiveToken, renderToken : RenderToken, fbo : OutputDescription, queries : Queries) =
+        t.Run(token, renderToken, fbo, queries :> IQuery)
+
+    // Overloads without queries
     [<Extension>]
     static member Run(t : IRenderTask, token : RenderToken, fbo : IFramebuffer) =
-        t.Run(AdaptiveToken.Top, token, OutputDescription.ofFramebuffer fbo)
+        t.Run(AdaptiveToken.Top, token, OutputDescription.ofFramebuffer fbo, Queries.empty)
 
     [<Extension>]
     static member Run(t : IRenderTask, token : RenderToken, fbo : OutputDescription) =
-        t.Run(AdaptiveToken.Top, token, fbo)
+        t.Run(AdaptiveToken.Top, token, fbo, Queries.empty)
+
+    [<Extension>]
+    static member Run(t : IRenderTask, token : AdaptiveToken, renderToken : RenderToken, fbo : OutputDescription) =
+        t.Run(token, renderToken, fbo, Queries.empty)

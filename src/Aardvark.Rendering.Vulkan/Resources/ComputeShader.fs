@@ -731,7 +731,7 @@ module ``Compute Commands`` =
                     let threadLocal = 
                         commandPools.GetOrAdd(device, fun device ->
                             new ThreadLocal<CommandPool>(fun () ->
-                                let pool = device.GraphicsFamily.CreateCommandPool()
+                                let pool = device.GraphicsFamily.CreateCommandPool(CommandPoolFlags.Transient)
                                 device.OnDispose.Add (fun () -> pool.Dispose())
                                 pool
                             )

@@ -544,6 +544,19 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             do! Command.TransformLayout(dst.Image, dstLayout)
         }
 
+    // Queries
+    member x.CreateTimeQuery() =
+        new TimeQuery(device) :> ITimeQuery
+
+    member x.CreateOcclusionQuery(precise : bool) =
+        new OcclusionQuery(device, precise) :> IOcclusionQuery
+
+    member x.CreatePipelineQuery(statistics : Set<PipelineStatistics>) =
+        new PipelineQuery(device, statistics) :> IPipelineQuery
+
+    member x.SupportedPipelineStatistics =
+        PipelineStatistics.All
+
 
     interface IRuntime with
 
@@ -660,3 +673,15 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture =
             failwith "not implemented"
+
+        member x.CreateTimeQuery() =
+            x.CreateTimeQuery()
+
+        member x.CreateOcclusionQuery(precise) =
+            x.CreateOcclusionQuery(precise)
+
+        member x.CreatePipelineQuery(statistics) =
+            x.CreatePipelineQuery(statistics)
+
+        member x.SupportedPipelineStatistics =
+            x.SupportedPipelineStatistics

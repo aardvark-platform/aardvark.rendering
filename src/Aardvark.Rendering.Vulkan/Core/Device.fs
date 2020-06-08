@@ -655,6 +655,8 @@ and CopyEngine(family : DeviceQueueFamily) =
                 stream.Clear()
 
                 let conts = System.Collections.Generic.List<unit -> unit>()
+
+                pool.Reset()
                 cmd.Begin(CommandBufferUsage.OneTimeSubmit)
                 cmd.AppendCommand()
 
@@ -1227,7 +1229,7 @@ and DeviceTemporaryCommandPool(family : DeviceQueueFamily) =
             | _ ->
                 if Interlocked.Exchange(&disposeInstalled, 1) = 0 then
                     family.Device.OnDispose.Add dispose
-                { new CommandPool(family.Device, family.Index, family) with
+                { new CommandPool(family.Device, family.Index, family, CommandPoolFlags.ResetBuffer) with
                     override x.Dispose() =
                         bag.Add x
                 }
@@ -1255,7 +1257,12 @@ and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues :
 
     [<Obsolete>]
     member x.DefaultCommandPool = defaultPool
-    member x.CreateCommandPool() = new CommandPool(device, info.index, x)
+
+    member x.CreateCommandPool () =
+        new CommandPool(device, info.index, x)
+
+    member x.CreateCommandPool (flags : CommandPoolFlags) =
+        new CommandPool(device, info.index, x, flags)
 
     member x.Start (cmd : QueueCommand) : DeviceTask =
         thread.Value.Enqueue cmd
@@ -1348,11 +1355,17 @@ and DeviceCommandPool internal(device : Device, index : int, queueFamily : Devic
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-and CommandPool internal(device : Device, familyIndex : int, queueFamily : DeviceQueueFamily) =
+and [<Flags>] CommandPoolFlags =
+    | None          = 0
+    | Transient     = 1
+    | ResetBuffer   = 2
+    | Protected     = 4
+
+and CommandPool internal(device : Device, familyIndex : int, queueFamily : DeviceQueueFamily, flags : CommandPoolFlags) =
     let mutable handle =
         let createInfo =
             VkCommandPoolCreateInfo(
-                VkCommandPoolCreateFlags.ResetCommandBufferBit,
+                flags |> int |> unbox,
                 uint32 familyIndex
             )
         createInfo |> pin (fun pCreate ->
@@ -1363,14 +1376,20 @@ and CommandPool internal(device : Device, familyIndex : int, queueFamily : Devic
             )
         )
 
+    internal new(device : Device, familyIndex : int, queueFamily : DeviceQueueFamily) =
+        new CommandPool(device, familyIndex, queueFamily, CommandPoolFlags.None)
+
     member x.Device = device
     member x.QueueFamily = queueFamily
     member x.Handle = handle
 
+    member x.Reset() =
+        VkRaw.vkResetCommandPool(device.Handle, handle, VkCommandPoolResetFlags.None)
+            |> check "failed to reset command pool"
+
     member x.Destroy() =
         if handle.IsValid && device.Handle <> 0n then
             VkRaw.vkDestroyCommandPool(device.Handle, handle, NativePtr.zero)
-        
 
     abstract member Dispose : unit -> unit
     default x.Dispose() = x.Destroy()
@@ -1380,7 +1399,7 @@ and CommandPool internal(device : Device, familyIndex : int, queueFamily : Devic
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : DeviceQueueFamily, level : CommandBufferLevel) =   
+and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : DeviceQueueFamily, level : CommandBufferLevel) =
 
     let mutable handle = 
         native {
@@ -1405,6 +1424,52 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
         for c in cleanupTasks do c.Dispose()
         cleanupTasks.Clear()
 
+    let beginPrimary (usage : CommandBufferUsage) =
+        native {
+            let! pInfo =
+                VkCommandBufferBeginInfo(
+                    unbox (int usage),
+                    NativePtr.zero
+                )
+
+            VkRaw.vkBeginCommandBuffer(handle, pInfo)
+                |> check "could not begin command buffer"
+        }
+
+    let beginSecondary (pass : VkRenderPass) (framebuffer : VkFramebuffer) (inheritQueries : bool) (usage : CommandBufferUsage) =
+        native {
+            let occlusion, control, statistics =
+                match inheritQueries with
+                | true -> 1u, VkQueryControlFlags.All, VkQueryPipelineStatisticFlags.All
+                | _ -> 0u, VkQueryControlFlags.None, VkQueryPipelineStatisticFlags.None
+
+            let! pInheritanceInfo =
+                VkCommandBufferInheritanceInfo(
+                    pass, 0u, framebuffer,
+                    occlusion, control, statistics
+                )
+
+            let! pInfo =
+                VkCommandBufferBeginInfo(
+                    unbox (int usage),
+                    pInheritanceInfo
+                )
+
+            VkRaw.vkBeginCommandBuffer(handle, pInfo)
+                |> check "could not begin command buffer"
+        }
+
+    let beginBuffer (pass : VkRenderPass) (framebuffer : VkFramebuffer) (inheritQueries : bool) (usage : CommandBufferUsage) =
+        cleanup()
+
+        match level with
+        | CommandBufferLevel.Primary -> beginPrimary usage
+        | CommandBufferLevel.Secondary -> beginSecondary pass framebuffer inheritQueries usage
+        | _ -> failwith "unknown command buffer level"
+
+        commands <- 0
+        recording <- true
+
     member x.Reset() =
         cleanup()
 
@@ -1413,91 +1478,20 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
         commands <- 0
         recording <- false
 
+    member x.Begin(pass : Resource<VkRenderPass>, framebuffer : Resource<VkFramebuffer>, usage : CommandBufferUsage, inheritQueries : bool) =
+        beginBuffer pass.Handle framebuffer.Handle inheritQueries usage
+
     member x.Begin(usage : CommandBufferUsage) =
-        native {
-            cleanup()
-            let! pInh =
-                VkCommandBufferInheritanceInfo(
-                    VkRenderPass.Null, 0u,
-                    VkFramebuffer.Null, 
-                    0u,
-                    VkQueryControlFlags.None,
-                    VkQueryPipelineStatisticFlags.None
-                )
-            let! pNext =
-                if device.AllCount > 1u then
-                    VkDeviceGroupCommandBufferBeginInfo(
-                        device.AllMask
-                    ) |> Some
-                else 
-                    None
+        beginBuffer VkRenderPass.Null VkFramebuffer.Null false usage
 
-            let! pInfo =
-                VkCommandBufferBeginInfo(
-                    NativePtr.toNativeInt pNext,
-                    unbox (int usage),
-                    pInh
-                )
-            VkRaw.vkBeginCommandBuffer(handle, pInfo)
-                |> check "could not begin command buffer"
-        }
-
-        commands <- 0
-        recording <- true
+    member x.Begin(usage : CommandBufferUsage, inheritQueries : bool) =
+        beginBuffer VkRenderPass.Null VkFramebuffer.Null inheritQueries usage
 
     member x.Begin(pass : Resource<VkRenderPass>, usage : CommandBufferUsage) =
-        cleanup()
-        let inh =
-            VkCommandBufferInheritanceInfo(
-                pass.Handle, 0u,
-                VkFramebuffer.Null, 
-                0u,
-                VkQueryControlFlags.None,
-                VkQueryPipelineStatisticFlags.None
-            )
-
-        inh |> pin (fun pInh ->
-            let info =
-                VkCommandBufferBeginInfo(
-                    unbox (int usage),
-                    pInh
-                )
-            info |> pin (fun pInfo ->
-                VkRaw.vkBeginCommandBuffer(handle, pInfo)
-                    |> check "could not begin command buffer"
-            )
-        )
-
-        commands <- 0
-        recording <- true
+        beginBuffer pass.Handle VkFramebuffer.Null false usage
 
     member x.Begin(pass : Resource<VkRenderPass>, framebuffer : Resource<VkFramebuffer>, usage : CommandBufferUsage) =
-        cleanup()
-        let inh =
-            VkCommandBufferInheritanceInfo(
-                pass.Handle, 0u,
-                framebuffer.Handle, 
-                0u,
-                VkQueryControlFlags.None,
-                VkQueryPipelineStatisticFlags.None
-            )
-            
-        inh |> pin (fun pInh ->
-            let info =
-                VkCommandBufferBeginInfo(
-                    unbox (int usage),
-                    pInh
-                )
-            
-            info |> pin (fun pInfo ->
-                VkRaw.vkBeginCommandBuffer(handle, pInfo)
-                    |> check "could not begin command buffer"
-            )
-        )
-
-        commands <- 0
-        recording <- true
-
+        beginBuffer pass.Handle framebuffer.Handle false usage
 
     member x.End() =
         VkRaw.vkEndCommandBuffer(handle)
@@ -2642,7 +2636,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
 
     let run (queue : DeviceQueue) () =
         let device = queue.Device
-        let pool = queue.Family.CreateCommandPool()
+        let pool = queue.Family.CreateCommandPool(CommandPoolFlags.Transient)
         let fence = device.CreateFence()
         try
             while running do

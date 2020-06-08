@@ -59,8 +59,8 @@ module VkSurfaceTransformFlagsKHR =
             ImageTrafo.Transverse,      VkSurfaceTransformFlagsKHR.HorizontalMirrorRotate270Bit
         ]
 
-    let toImageTrafo =
-        LookupTable.lookupTable [
+    let toImageTrafo' =
+        LookupTable.lookupTable' [
            VkSurfaceTransformFlagsKHR.IdentityBit,                      ImageTrafo.Identity
            VkSurfaceTransformFlagsKHR.Rotate90Bit,                      ImageTrafo.Rot90
            VkSurfaceTransformFlagsKHR.Rotate180Bit,                     ImageTrafo.Rot180
@@ -71,11 +71,14 @@ module VkSurfaceTransformFlagsKHR =
            VkSurfaceTransformFlagsKHR.HorizontalMirrorRotate270Bit,     ImageTrafo.Transverse
         ]
 
+    let toImageTrafo =
+        toImageTrafo' >> Option.get
+
     let toImageTrafos (flags : VkSurfaceTransformFlagsKHR) =
         let values = Enum.GetValues(typeof<VkSurfaceTransformFlagsKHR>) |> unbox<VkSurfaceTransformFlagsKHR[]>
         values 
             |> Seq.filter (fun v -> (flags &&& v) <> VkSurfaceTransformFlagsKHR.None)
-            |> Seq.map toImageTrafo
+            |> Seq.choose toImageTrafo'
             |> Set.ofSeq
 
 type Surface(device : Device, handle : VkSurfaceKHR) =

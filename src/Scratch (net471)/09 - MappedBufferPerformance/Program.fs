@@ -118,7 +118,7 @@ let main argv =
 
     let renderTask = 
         
-        RenderTask.custom (fun (self,token,outputDesc) -> 
+        RenderTask.custom (fun (self,token,outputDesc,queries) -> 
             win.Time.GetValue self |> ignore
 
             transact(fun () -> 
@@ -134,7 +134,7 @@ let main argv =
                         t.Value <- Trafo3d.RotationZInDegrees(rotation) * t.Value)
                 )
             
-            renderTask.Run(self, token, outputDesc)
+            renderTask.Run(self, token, outputDesc,queries)
         )
         
     win.RenderTask <- renderTask

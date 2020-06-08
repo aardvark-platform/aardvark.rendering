@@ -8,10 +8,10 @@ module RenderTask =
 
     let empty = EmptyRenderTask.Instance
 
-    let ofAFun (f : afun<AdaptiveToken * RenderToken * OutputDescription, unit>) =
+    let ofAFun (f : afun<AdaptiveToken * RenderToken * OutputDescription * IQuery, unit>) =
         new CustomRenderTask(f) :> IRenderTask
 
-    let custom (f : AdaptiveToken * RenderToken * OutputDescription -> unit) =
+    let custom (f : AdaptiveToken * RenderToken * OutputDescription * IQuery -> unit) =
         new CustomRenderTask(AFun.create f) :> IRenderTask
 
     let before (f : unit -> unit) (t : IRenderTask) =
@@ -97,7 +97,7 @@ module RenderTask =
     let log fmt =
         Printf.kprintf (fun str ->
             let task =
-                custom (fun (self, token, out) ->
+                custom (fun (self, token, out, queries) ->
                     Log.line "%s" str
                 )
 
@@ -117,7 +117,7 @@ module ``RenderTask Builder`` =
 
         member x.Bind(f : unit -> unit, c : unit -> Result) : Result =
             let task =
-                RenderTask.custom (fun (self, token, out) ->
+                RenderTask.custom (fun (self, token, out, queries) ->
                     f()
                 )
             (AList.single task)::c()

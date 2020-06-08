@@ -241,11 +241,14 @@ module private DebugReportHelpers =
             let flags = VkDebugUtilsMessageSeverityFlagsEXT.ofMessageSeverity severity
             native {
                 let! str = msg
+
+                // Validation layer insists on a non-null string here for some reason...
+                let! name = ""
                 
                 let! pObjectName =
                     VkDebugUtilsObjectNameInfoEXT(
                         VkObjectType.Instance, uint64 instance.Handle,
-                        NativePtr.zero
+                        name
                     )
 
                 let! pInfo = 
