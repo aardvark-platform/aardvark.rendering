@@ -192,13 +192,13 @@ module PatchFileInfo =
             Name                = name
             TagList             = patch |> get "TagList" |> split
 
-            GeometryType        = patch |> get "GeometryType"        |> geomtryType
-            QuadVertexSortOrder = patch |> get "QuadVertexSortOrder" |> majority
+            GeometryType        = patch |> get "GeometryType"           |> geomtryType
+            QuadVertexSortOrder = patch |> tryGet "QuadVertexSortOrder" |> Option.map majority |> Option.defaultValue VertexOrder.ColumnMajor
                                                                       
-            Local2Global        = patch |> get "Local2Global"        |> M44d.Parse |> trafo
-            GlobalBoundingBox   = patch |> get "GlobalBoundingBox"   |> Box3d.Parse
-            LocalBoundingBox    = patch |> get "LocalBoundingBox"    |> Box3d.Parse
-
+            Local2Global        = patch |> get "Local2Global"           |> M44d.Parse |> trafo
+            GlobalBoundingBox   = patch |> get "GlobalBoundingBox"      |> Box3d.Parse
+            LocalBoundingBox    = patch |> get "LocalBoundingBox"       |> Box3d.Parse
+                                                                        
             Local2Global2d      = local2Global2d
             GlobalBoundingBox2d = globalBoundingBox2d
             LocalBoundingBox2d  = localBoundingBox2d
