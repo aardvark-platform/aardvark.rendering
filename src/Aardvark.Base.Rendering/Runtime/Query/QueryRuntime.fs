@@ -24,7 +24,12 @@ type IQueryRuntime =
 [<AbstractClass; Sealed; Extension>]
 type IQueryRuntimeExtensions private() =
 
-    /// Creates an occlusion query.
+    /// Creates a precise occlusion query.
     [<Extension>]
     static member CreateOcclusionQuery(this : IQueryRuntime) =
         this.CreateOcclusionQuery(true)
+
+    /// Creates a pipeline statistics query, enabling all supported statistics.
+    [<Extension>]
+    static member CreatePipelineQuery(this : IQueryRuntime) =
+        this.CreatePipelineQuery(this.SupportedPipelineStatistics)

@@ -74,6 +74,8 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
         handle.IsCurrent
 
     member x.MakeCurrent() =
+        Monitor.Enter l
+
         match ContextHandle.Current with
             | Some handle -> handle.ReleaseCurrent()
             | _ -> ()
@@ -109,6 +111,8 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
         else
             Log.warn "cannot release context which is not current"
         ContextHandle.Current <- None
+
+        Monitor.Exit l
 
     member x.Use (action : unit -> 'a) =
         match ContextHandle.Current with
@@ -149,7 +153,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
             )
 
     member x.AttachDebugOutputIfNeeded() =
-        x.AttachDebugOutputIfNeeded false
+        x.AttachDebugOutputIfNeeded true
 
     member x.DebugOutputEnabled
         with get() = debugOutputEnabled

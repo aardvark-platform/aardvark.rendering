@@ -12,8 +12,8 @@ module private PipelineQueryHelpers =
             VertexShaderInvocations, VkQueryPipelineStatisticFlags.VertexShaderInvocationsBit
             GeometryShaderInvocations, VkQueryPipelineStatisticFlags.GeometryShaderInvocationsBit
             GeometryShaderPrimitives, VkQueryPipelineStatisticFlags.GeometryShaderPrimitivesBit
-            ClippingInvocations, VkQueryPipelineStatisticFlags.ClippingInvocationsBit
-            ClippingPrimitives, VkQueryPipelineStatisticFlags.ClippingPrimitivesBit
+            ClippingInputPrimitives, VkQueryPipelineStatisticFlags.ClippingInvocationsBit
+            ClippingOutputPrimitives, VkQueryPipelineStatisticFlags.ClippingPrimitivesBit
             FragmentShaderInvocations, VkQueryPipelineStatisticFlags.FragmentShaderInvocationsBit
             TesselationControlShaderPatches, VkQueryPipelineStatisticFlags.TessellationControlShaderPatchesBit
             TesselationEvaluationShaderInvocations, VkQueryPipelineStatisticFlags.TessellationEvaluationShaderInvocationsBit

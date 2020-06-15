@@ -28,10 +28,10 @@ type VulkanQuery(device : Device, typ : VkQueryType, flags : VkQueryPipelineStat
     // Pools that are currently being used
     let mutable activePools = []
 
-    // Flags to indicate if queue was inactive when Begin() was called.
+    // Flag to indicate if query was inactive when Begin() was called.
     let mutable wasInactive = true
 
-    // The current level of the queue, i.e. of the nested Begin-End pairs.
+    // The current level of the query, i.e. of the nested Begin-End pairs.
     let mutable currentLevel = 0
 
     // Cached results from the active pools
@@ -124,7 +124,7 @@ type VulkanQuery(device : Device, typ : VkQueryType, flags : VkQueryPipelineStat
     /// Locks the query and resets results and pools.
     member x.Begin() =
         Monitor.Enter x
-        currentLevel <- currentLevel + 1
+        inc &currentLevel
 
         // Just entered the top-level begin-end pair -> reset
         if currentLevel = 1 then
@@ -133,12 +133,12 @@ type VulkanQuery(device : Device, typ : VkQueryType, flags : VkQueryPipelineStat
 
     /// Unlocks the query
     member x.End() =
-        currentLevel <- currentLevel - 1
+        dec &currentLevel
 
-        // If we left the top-level begin-end pair, the queue was previously
+        // If we left the top-level begin-end pair, the query was previously
         // inactive, and now has active pools, we can notify other threads to try
         // query results again.
-        if currentLevel = 1 && wasInactive && not activePools.IsEmpty then
+        if currentLevel = 0 && wasInactive && not activePools.IsEmpty then
             Monitor.PulseAll x
 
         Monitor.Exit x

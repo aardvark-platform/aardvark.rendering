@@ -52,8 +52,8 @@ type PipelineStatistics =
     | VertexShaderInvocations
     | GeometryShaderInvocations
     | GeometryShaderPrimitives
-    | ClippingInvocations
-    | ClippingPrimitives
+    | ClippingInputPrimitives
+    | ClippingOutputPrimitives
     | FragmentShaderInvocations
     | TesselationControlShaderPatches
     | TesselationEvaluationShaderInvocations
@@ -68,8 +68,8 @@ type PipelineStatistics =
             VertexShaderInvocations
             GeometryShaderInvocations
             GeometryShaderPrimitives
-            ClippingInvocations
-            ClippingPrimitives
+            ClippingInputPrimitives
+            ClippingOutputPrimitives
             FragmentShaderInvocations
             TesselationControlShaderPatches
             TesselationEvaluationShaderInvocations

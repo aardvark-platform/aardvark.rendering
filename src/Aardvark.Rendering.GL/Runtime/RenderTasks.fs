@@ -181,8 +181,14 @@ module RenderTasks =
             renderTaskLock.Run (fun () ->
                 beforeRender.OnNext()
                 NativePtr.write runtimeStats V2i.Zero
-                let stats = x.Perform(token, t, fbo, desc)
+
+                queries.Begin()
+
+                x.Perform(token, t, fbo, desc)
                 GL.Check "[RenderTask.Run] Perform"
+
+                queries.End()
+   
                 afterRender.OnNext()
                 let rt = NativePtr.read runtimeStats
                 t.AddDrawCalls(rt.X, rt.Y)
@@ -573,6 +579,8 @@ module RenderTasks =
             let fbo = desc.framebuffer
             Operators.using ctx.ResourceLock (fun _ ->
 
+                queries.Begin()
+
                 let old = Array.create 4 0
                 let mutable oldFbo = 0
                 GL.GetInteger(GetPName.Viewport, old)
@@ -639,6 +647,8 @@ module RenderTasks =
 
                 GL.Viewport(old.[0], old.[1], old.[2], old.[3])
                 GL.Check "could not bind framebuffer"
+
+                queries.End()
             )
 
         override x.Release() =
