@@ -389,7 +389,7 @@ NUGET
       System.Threading (>= 4.3) - restriction: || (&& (== net471) (< net45)) (== netcoreapp3.1) (== netstandard2.0)
     System.Memory (4.5.4)
       System.Buffers (>= 4.5.1) - restriction: || (== net471) (&& (== netcoreapp3.1) (>= monotouch)) (&& (== netcoreapp3.1) (>= net461)) (&& (== netcoreapp3.1) (< netcoreapp2.0)) (&& (== netcoreapp3.1) (< netstandard1.1)) (&& (== netcoreapp3.1) (< netstandard2.0)) (&& (== netcoreapp3.1) (>= xamarinios)) (&& (== netcoreapp3.1) (>= xamarinmac)) (&& (== netcoreapp3.1) (>= xamarintvos)) (&& (== netcoreapp3.1) (>= xamarinwatchos)) (== netstandard2.0)
-      System.Numerics.Vectors (>= 4.4) - restriction: || (&& (== net471) (< net45)) (&& (== netcoreapp3.1) (< netcoreapp2.0)) (== netstandard2.0)
+      System.Numerics.Vectors (>= 4.4) - restriction: || (&& (== net471) (== netcoreapp3.1)) (&& (== net471) (< net45)) (&& (== netcoreapp3.1) (< netcoreapp2.0)) (== netstandard2.0)
       System.Numerics.Vectors (>= 4.5) - restriction: || (== net471) (&& (== netcoreapp3.1) (>= net461)) (&& (== netstandard2.0) (>= net461))
       System.Runtime.CompilerServices.Unsafe (>= 4.5.3) - restriction: || (== net471) (&& (== netcoreapp3.1) (>= monotouch)) (&& (== netcoreapp3.1) (>= net461)) (&& (== netcoreapp3.1) (< netcoreapp2.0)) (&& (== netcoreapp3.1) (< netcoreapp2.1)) (&& (== netcoreapp3.1) (< netstandard1.1)) (&& (== netcoreapp3.1) (< netstandard2.0)) (&& (== netcoreapp3.1) (>= uap10.1)) (&& (== netcoreapp3.1) (>= xamarinios)) (&& (== netcoreapp3.1) (>= xamarinmac)) (&& (== netcoreapp3.1) (>= xamarintvos)) (&& (== netcoreapp3.1) (>= xamarinwatchos)) (== netstandard2.0)
     System.Net.Http (4.3.4) - restriction: || (&& (== net471) (< net45)) (== netcoreapp3.1) (== netstandard2.0)

@@ -39,6 +39,7 @@
     <Compile Include="Core\Extensions.fs" />
     <Compile Include="Core\Extensions\EXT_direct_state_access.fs" />
     <Compile Include="Core\Extensions\ARB_sparse_buffer.fs" />
+    <Compile Include="Core\Extensions\ARB_pipeline_statistics_query.fs" />
     <Compile Include="Instructions\OpenGL.fs" />
     <Compile Include="Instructions\CompileContext.fs" />
     <Compile Include="Instructions\Translations.fs" />
@@ -66,6 +67,7 @@
     <Compile Include="Runtime\Query\TimeQuery.fs" />
     <Compile Include="Runtime\Query\OcclusionQuery.fs" />
     <Compile Include="Runtime\Query\GeometryQuery.fs" />
+    <Compile Include="Runtime\Query\PipelineQuery.fs" />
     <Compile Include="Runtime\Statistics.fs" />
     <Compile Include="Runtime\RenderTasks.fs" />
     <Compile Include="Runtime\Compute.fs" />

@@ -7,17 +7,17 @@ module private PipelineQueryHelpers =
 
     let base2VulkanFlags =
         LookupTable.lookupTable [
-            InputAssemblyVertices, VkQueryPipelineStatisticFlags.InputAssemblyVerticesBit
-            InputAssemblyPrimitives, VkQueryPipelineStatisticFlags.InputAssemblyPrimitivesBit
-            VertexShaderInvocations, VkQueryPipelineStatisticFlags.VertexShaderInvocationsBit
-            GeometryShaderInvocations, VkQueryPipelineStatisticFlags.GeometryShaderInvocationsBit
-            GeometryShaderPrimitives, VkQueryPipelineStatisticFlags.GeometryShaderPrimitivesBit
-            ClippingInputPrimitives, VkQueryPipelineStatisticFlags.ClippingInvocationsBit
-            ClippingOutputPrimitives, VkQueryPipelineStatisticFlags.ClippingPrimitivesBit
-            FragmentShaderInvocations, VkQueryPipelineStatisticFlags.FragmentShaderInvocationsBit
-            TesselationControlShaderPatches, VkQueryPipelineStatisticFlags.TessellationControlShaderPatchesBit
+            InputAssemblyVertices,                  VkQueryPipelineStatisticFlags.InputAssemblyVerticesBit
+            InputAssemblyPrimitives,                VkQueryPipelineStatisticFlags.InputAssemblyPrimitivesBit
+            VertexShaderInvocations,                VkQueryPipelineStatisticFlags.VertexShaderInvocationsBit
+            GeometryShaderInvocations,              VkQueryPipelineStatisticFlags.GeometryShaderInvocationsBit
+            GeometryShaderPrimitives,               VkQueryPipelineStatisticFlags.GeometryShaderPrimitivesBit
+            ClippingInputPrimitives,                VkQueryPipelineStatisticFlags.ClippingInvocationsBit
+            ClippingOutputPrimitives,               VkQueryPipelineStatisticFlags.ClippingPrimitivesBit
+            FragmentShaderInvocations,              VkQueryPipelineStatisticFlags.FragmentShaderInvocationsBit
+            TesselationControlShaderPatches,        VkQueryPipelineStatisticFlags.TessellationControlShaderPatchesBit
             TesselationEvaluationShaderInvocations, VkQueryPipelineStatisticFlags.TessellationEvaluationShaderInvocationsBit
-            ComputeShaderInvocations, VkQueryPipelineStatisticFlags.ComputeShaderInvocationsBit
+            ComputeShaderInvocations,               VkQueryPipelineStatisticFlags.ComputeShaderInvocationsBit
         ]
 
     // Computes a vulkan bit field based on the set of flags
@@ -32,17 +32,25 @@ module private PipelineQueryHelpers =
 type PipelineQuery(device : Device, enabledStatistics : Set<PipelineStatistics>) =
     inherit VulkanQuery(device, VkQueryType.PipelineStatistics, getVulkanFlags enabledStatistics, Set.count enabledStatistics, 1)
 
+    let supported (stat : PipelineStatistics) =
+        enabledStatistics |> Set.contains stat
+
+    let validate (statistics : Set<PipelineStatistics>) =
+        statistics
+        |> Set.filter (supported >> not)
+        |> Set.iter (failwithf "Query does not support '%A' statistic")
+
     let sumArrays (arrays : uint64[] list) =
         arrays |> List.fold (fun sum x ->
             Array.map2 (+) sum x
         ) (Array.zeroCreate enabledStatistics.Count)
 
     let compute (statistics : Set<PipelineStatistics>) (data : uint64[]) =
-        statistics |> Set.toList |> List.map (fun s ->
+        statistics |> Seq.map (fun s ->
             let i = enabledStatistics |> getFlagIndex s
             s, data.[i]
         )
-        |> Map.ofList
+        |> Map.ofSeq
 
     interface IPipelineQuery with
 
@@ -50,9 +58,11 @@ type PipelineQuery(device : Device, enabledStatistics : Set<PipelineStatistics>)
             x.TryGetResults(false) |> Option.isSome
 
         member x.TryGetResult(statistics : Set<PipelineStatistics>, reset : bool) =
+            validate statistics
             x.TryGetResults(reset) |> Option.map (sumArrays >> compute statistics)
 
         member x.GetResult(statistics : Set<PipelineStatistics>, reset : bool) =
+            validate statistics
             x.GetResults(reset) |> sumArrays |> compute statistics
 
         member x.Statistics = enabledStatistics

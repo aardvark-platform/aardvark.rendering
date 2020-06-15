@@ -641,10 +641,20 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             new OcclusionQuery(ctx, precise) :> IOcclusionQuery
 
         member x.CreatePipelineQuery(statistics) =
-            new GeometryQuery(ctx) :> IPipelineQuery
+            use __ = ctx.ResourceLock
+
+            if GL.ARB_pipeline_statistics_query then
+                new PipelineQuery(ctx, statistics) :> IPipelineQuery
+            else
+                new GeometryQuery(ctx) :> IPipelineQuery
 
         member x.SupportedPipelineStatistics =
-            Set.singleton ClippingInputPrimitives
+            use __ = ctx.ResourceLock
+
+            if GL.ARB_pipeline_statistics_query then
+                PipelineStatistics.All
+            else
+                Set.singleton ClippingInputPrimitives
 
     
     member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =

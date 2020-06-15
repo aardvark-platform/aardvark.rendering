@@ -143,9 +143,27 @@ module private ``Query Helpers`` =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
+[<RequireQualifiedAccess>]
+type QueryType =
+    | Single of target : QueryTarget * count : int
+    | Multiple of targets : Set<QueryTarget>
+
+    with
+
+    /// Targets of this query type.
+    member x.Targets =
+        match x with
+        | Single (t, _) -> Set.singleton t
+        | Multiple t -> t
+
+    /// Total number of required query handles.
+    member x.Count =
+        match x with
+        | Single (_, n) -> n
+        | Multiple t -> t.Count
 
 [<AbstractClass>]
-type Query(ctx : Context, target : QueryTarget, queryCount : int) =
+type Query(ctx : Context, typ : QueryType) =
 
     // List of all queries that have been allocated.
     let queries = List<GLQuery>()
@@ -181,21 +199,33 @@ type Query(ctx : Context, target : QueryTarget, queryCount : int) =
             availableQueries.Enqueue q
 
         if availableQueries.IsEmpty() then
-            let q = new GLQuery (ctx, queryCount, returnToQueue)
+            let q = new GLQuery (ctx, typ.Count, returnToQueue)
             queries.Add q
             q
         else
             availableQueries.Dequeue()
 
+    /// Creates a query for a single target
+    new(ctx : Context, target : QueryTarget, queryCount : int) =
+        new Query(ctx, QueryType.Single (target, queryCount))
+
     abstract member BeginQuery : int[] -> unit
     default x.BeginQuery(queries : int[]) =
-        GL.BeginQuery(target, queries.[0])
-        GL.Check "could not begin query"
+        let mutable idx = 0
+
+        for target in typ.Targets do
+            GL.BeginQuery(target, queries.[idx])
+            GL.Check "could not begin query"
+
+            inc &idx
+
+        assert (idx = typ.Count)
 
     abstract member EndQuery : int[] -> unit
     default x.EndQuery(_ : int[]) =
-        GL.EndQuery(target)
-        GL.Check "could not end query"
+        for target in typ.Targets do
+            GL.EndQuery(target)
+            GL.Check "could not end query"
 
     /// Waits until there is an active query, increments the ref counter, releases the global lock,
     /// calls the function on the query, and finally decrements the ref counter.
