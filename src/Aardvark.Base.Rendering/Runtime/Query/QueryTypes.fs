@@ -100,6 +100,17 @@ type IQueryResultsExtensions private() =
         this.GetResult(args, false)
 
     /// Tries to retrieve the result of the query without blocking.
+    [<Extension>]
+    static member TryGetResult(this : IQuery<unit, 'a>) =
+        this.TryGetResult((), false)
+
+    /// Retrieves the result of the query.
+    /// If the result is not ready, the call blocks until it is.
+    [<Extension>]
+    static member GetResult(this : IQuery<unit, 'a>) =
+        this.GetResult((), false)
+
+    /// Tries to retrieve the result of the query without blocking.
     /// If reset is set to true, the query is reset if the result was ready.
     [<Extension>]
     static member TryGetResult(this : IQuery<unit, 'a>, reset : bool) =

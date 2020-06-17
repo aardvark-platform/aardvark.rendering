@@ -3,11 +3,11 @@
 open Aardvark.Base
 
 type OcclusionQuery(device : Device, precise : bool) =
-    inherit VulkanQuery(device, VkQueryType.Occlusion, VkQueryPipelineStatisticFlags.None, 1, 1)
+    inherit Query(device, QueryType.Occlusion, 1)
 
     // Sums the subquery results
-    let compute (data : List<uint64[]>) =
-        data |> List.sumBy Array.head
+    let compute (data : uint64[][]) =
+        data |> Array.sumBy Array.head
 
     override x.Begin (cmd : CommandBuffer, pool : QueryPool) =
         cmd.Enqueue <| Command.BeginQuery(pool, 0, if precise then VkQueryControlFlags.PreciseBit else VkQueryControlFlags.None)

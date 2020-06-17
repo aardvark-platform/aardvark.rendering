@@ -30,7 +30,7 @@ module private PipelineQueryHelpers =
 
 
 type PipelineQuery(device : Device, enabledStatistics : Set<PipelineStatistics>) =
-    inherit VulkanQuery(device, VkQueryType.PipelineStatistics, getVulkanFlags enabledStatistics, Set.count enabledStatistics, 1)
+    inherit Query(device, QueryType.PipelineStatistics (getVulkanFlags enabledStatistics, Set.count enabledStatistics), 1)
 
     let supported (stat : PipelineStatistics) =
         enabledStatistics |> Set.contains stat
@@ -40,8 +40,8 @@ type PipelineQuery(device : Device, enabledStatistics : Set<PipelineStatistics>)
         |> Set.filter (supported >> not)
         |> Set.iter (failwithf "Query does not support '%A' statistic")
 
-    let sumArrays (arrays : uint64[] list) =
-        arrays |> List.fold (fun sum x ->
+    let sumArrays (arrays : uint64[][]) =
+        arrays |> Array.fold (fun sum x ->
             Array.map2 (+) sum x
         ) (Array.zeroCreate enabledStatistics.Count)
 

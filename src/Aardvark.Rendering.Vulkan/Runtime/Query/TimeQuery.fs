@@ -4,17 +4,17 @@ open System
 open Aardvark.Base
 
 type TimeQuery(device : Device) =
-    inherit VulkanQuery(device, VkQueryType.Timestamp, VkQueryPipelineStatisticFlags.None, 1, 2)
+    inherit Query(device, QueryType.Timestamp, 2)
 
     // Nanoseconds per timestamp tick
     let period = device.PhysicalDevice.Limits.Precision.TimestampPeriod
 
     // Computes the duration based on the query results
-    let compute (data : List<uint64[]>) =
+    let compute (data : uint64[][]) =
         let toNanoSeconds (t : uint64[]) =
              (period * float (t.[1] - t.[0])) |> int64 |> MicroTime.FromNanoseconds
 
-        data |> List.sumBy toNanoSeconds
+        data |> Array.sumBy toNanoSeconds
 
     // Writes the time stamp value to the first query
     override x.Begin (cmd : CommandBuffer, pool : QueryPool) =
