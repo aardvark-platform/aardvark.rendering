@@ -82,6 +82,7 @@
     <Compile Include="Runtime\Query\QueryRuntime.fs" />
     <Compile Include="Runtime\Query\Queries.fs" />
     <Compile Include="Runtime\Query\QueryHandle.fs" />
+    <Compile Include="Runtime\Query\MultiQuery.fs" />
     <Compile Include="Runtime\Query\ConcurrentQuery.fs" />
     <Compile Include="Runtime\BackendConfiguration.fs" />
     <Compile Include="Runtime\ResourceManager.fs" />

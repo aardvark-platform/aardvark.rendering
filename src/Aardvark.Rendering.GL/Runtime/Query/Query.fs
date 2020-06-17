@@ -3,94 +3,65 @@
 open Aardvark.Base
 open OpenTK.Graphics.OpenGL4
 
-[<AutoOpen>]
-module private ``Query Helpers`` =
+type QueryHandle(handle : int) =
+    inherit AbstractQueryHandle<int, uint64>(handle)
 
-    type QueryHandle(handle : int) =
-        inherit AbstractQueryHandle<int, uint64>(handle)
+    new() =
+        let h = GL.GenQuery()
+        GL.Check "failed to generate query"
+        new QueryHandle(h)
 
-        new() =
-            let h = GL.GenQuery()
-            GL.Check "failed to generate query"
-            new QueryHandle(h)
+    override x.GetValues(h : int) =
+        let mutable value = 0L
 
-        override x.GetValues(h : int) =
-            let mutable value = 0L
+        GL.GetQueryObject(h, GetQueryObjectParam.QueryResult, &value)
+        GL.Check "could not retrieve query result"
 
-            GL.GetQueryObject(h, GetQueryObjectParam.QueryResult, &value)
+        uint64 value
+
+    override x.TryGetValues(h : int) =
+        let mutable value = 0L
+
+        GL.GetQueryObject(h, GetQueryObjectParam.QueryResultAvailable, &value)
+        GL.Check "could not retrieve query status"
+
+        if value > 0L then
+            GL.GetQueryObject(h, GetQueryObjectParam.QueryResultNoWait, &value)
             GL.Check "could not retrieve query result"
 
-            uint64 value
+            Some (uint64 value)
+        else
+            None
 
-        override x.TryGetValues(h : int) =
-            let mutable value = 0L
+    override x.DeleteHandle(h : int) =
+        GL.DeleteQuery(h)
+        GL.Check "failed to delete query"
 
-            GL.GetQueryObject(h, GetQueryObjectParam.QueryResultAvailable, &value)
-            GL.Check "could not retrieve query status"
-
-            if value > 0L then
-                GL.GetQueryObject(h, GetQueryObjectParam.QueryResultNoWait, &value)
-                GL.Check "could not retrieve query result"
-
-                Some (uint64 value)
-            else
-                None
-
-        override x.DeleteHandle(h : int) =
-            GL.DeleteQuery(h)
-            GL.Check "failed to delete query"
 
 type InternalQuery(ctx : Context, count : int) =
-    inherit RefCountedQuery<uint64[]>()
+    inherit MultiQuery<QueryHandle, uint64>()
 
     // The handle of the context the query is being used on
     let mutable owner = None
 
-    // The handles of the queries
-    let mutable handles : QueryHandle[] = Array.empty
-
-    // Deletes the query handles
-    let deleteHandles() =
-        handles |> Array.iter (fun x -> x.Dispose())
-        handles <- Array.empty
-
-    // Gets or creates query handles
-    let createHandles() =
-        if handles.Length <> count then
+    /// Gets the GL handles of the queries.
+    member x.NativeHandles =
+        if not x.IsActive then
             owner <- ctx.CurrentContextHandle
-            handles <- Array.init count (fun _ -> new QueryHandle())
+            x.Handles.AddRange <| Seq.init count (fun _ -> new QueryHandle())
 
-        handles
-
-    /// Gets the handles of the queries.
-    member x.Handles =
-        createHandles() |> Array.map (fun h -> h.Native)
-
-    // GL queries are always active.
-    override x.IsActive = true
-
-    /// Clears the cached results
-    override x.Reset() =
-        handles |> Array.iter (fun h -> h.Reset())
+        x.Handles |> Seq.map (fun x -> x.Native) |> Seq.toArray
 
     /// Gets the results of the queries.
     override x.GetResults() =
         use __ = ctx.RenderingLock owner.Value
-        handles |> Array.map (fun r -> r.GetResult())
+        base.GetResults()
 
     /// Tries to get the results of the queries.
     override x.TryGetResults() =
         use __ = ctx.RenderingLock owner.Value
-        let r = handles |> Array.choose (fun r -> r.TryGetResult())
+        base.TryGetResults()
 
-        if r.Length < handles.Length then
-            None
-        else
-            Some r
-
-    /// Disposes the query.
-    override x.Dispose() =
-        deleteHandles()
 
 [<RequireQualifiedAccess>]
 type QueryType =
@@ -111,9 +82,10 @@ type QueryType =
         | Single (_, n) -> n
         | Multiple t -> t.Count
 
+
 [<AbstractClass>]
 type Query(ctx : Context, typ : QueryType) =
-    inherit ConcurrentQuery<InternalQuery, uint64[]>()
+    inherit ConcurrentQuery<InternalQuery, uint64>()
 
     /// Creates a query for a single target
     new(ctx : Context, target : QueryTarget, queryCount : int) =
@@ -123,7 +95,7 @@ type Query(ctx : Context, typ : QueryType) =
         new InternalQuery (ctx, typ.Count)
 
     override x.BeginQuery(query : InternalQuery) =
-        let handles = query.Handles
+        let handles = query.NativeHandles
         let mutable idx = 0
 
         for target in typ.Targets do

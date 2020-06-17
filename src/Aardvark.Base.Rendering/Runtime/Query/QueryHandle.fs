@@ -2,6 +2,19 @@
 
 open System
 
+/// Interface for query handles that allow retrieving and caching query results.
+type IQueryHandle<'Result> =
+    inherit IDisposable
+
+    /// Clears the cached result.
+    abstract member Reset : unit -> unit
+
+    /// Blocks and gets the result.
+    abstract member GetResult : unit -> 'Result
+
+    /// Gets the result if available.
+    abstract member TryGetResult : unit -> 'Result option
+
 /// Base type for query handles that allow retrieving and caching query results.
 [<AbstractClass>]
 type AbstractQueryHandle<'Handle, 'Result>(handle : 'Handle) =
@@ -46,6 +59,13 @@ type AbstractQueryHandle<'Handle, 'Result>(handle : 'Handle) =
     /// Disposes of the query handle.
     member x.Dispose() =
         x.DeleteHandle handle
+
+    interface IQueryHandle<'Result> with
+        member x.Reset() = x.Reset()
+
+        member x.GetResult() = x.GetResult()
+
+        member x.TryGetResult() = x.TryGetResult()
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

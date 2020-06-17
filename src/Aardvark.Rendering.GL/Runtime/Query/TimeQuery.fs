@@ -10,11 +10,11 @@ type TimeQuery(ctx : Context) =
         (data.[1] - data.[0]) |> int64 |> MicroTime.FromNanoseconds
 
     override x.BeginQuery(query : InternalQuery) =
-        GL.QueryCounter(query.Handles.[0], QueryCounterTarget.Timestamp)
+        GL.QueryCounter(query.NativeHandles.[0], QueryCounterTarget.Timestamp)
         GL.Check "failed to write timestamp"
 
     override x.EndQuery(query : InternalQuery) =
-        GL.QueryCounter(query.Handles.[1], QueryCounterTarget.Timestamp)
+        GL.QueryCounter(query.NativeHandles.[1], QueryCounterTarget.Timestamp)
         GL.Check "failed to write timestamp"
 
     interface ITimeQuery with

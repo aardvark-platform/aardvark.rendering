@@ -5,51 +5,10 @@ open System.Threading
 open System.Collections.Generic
 open Aardvark.Base
 
-/// Base class for reference counted queries.
-[<AbstractClass>]
-type RefCountedQuery<'Result>() =
-
-    let mutable refCount = 0
-
-    /// Indicates whether the query is currently in use (i.e. reference counter is greater than zero).
-    member x.InUse =
-        refCount > 0
-
-    /// Increments the reference count.
-    member x.Acquire() =
-        inc &refCount
-
-    /// Decrements the reference count.
-    member x.Release() =
-        dec &refCount
-
-    /// Sets the reference count to zero.
-    member x.ReleaseAll() =
-        refCount <- 0
-
-    /// Returns whether the query is active.
-    abstract member IsActive : bool
-
-    /// Resets the query so it can be reused.
-    abstract member Reset : unit -> unit
-
-    /// Blocks to retrieve the query results.
-    abstract member GetResults : unit -> 'Result
-
-    /// Retrieves the query results if available.
-    abstract member TryGetResults : unit -> 'Result option
-
-    /// Disposes the query and all handles.
-    abstract member Dispose : unit -> unit
-
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
-
-
 /// Base class for queries that manage multiple reference counted queries to support
 /// the concurrent retrieval of results.
 [<AbstractClass>]
-type ConcurrentQuery<'Query, 'Result when 'Query :> RefCountedQuery<'Result>>() =
+type ConcurrentQuery<'Query, 'Result when 'Query :> IMultiQuery<'Result>>() =
 
     // List of all queries that have been allocated.
     let queries = List<'Query>()
@@ -83,7 +42,7 @@ type ConcurrentQuery<'Query, 'Result when 'Query :> RefCountedQuery<'Result>>() 
     // Creates or gets a query that is currently unused.
     member private x.GetQuery() =
         let reused =
-            queries |> Seq.tryFind (fun q -> not q.InUse)
+            queries |> Seq.tryFind (fun q -> not q.IsUsed)
 
         match reused with
         | Some q ->

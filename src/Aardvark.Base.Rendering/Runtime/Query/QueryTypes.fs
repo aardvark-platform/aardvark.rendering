@@ -2,6 +2,7 @@
 
 open System
 open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
 
 /// Interface for GPU queries.
 type IQuery =
@@ -100,73 +101,40 @@ type IQueryResultsExtensions private() =
         this.GetResult(args, false)
 
     /// Tries to retrieve the result of the query without blocking.
-    [<Extension>]
-    static member TryGetResult(this : IQuery<unit, 'a>) =
-        this.TryGetResult((), false)
-
-    /// Retrieves the result of the query.
-    /// If the result is not ready, the call blocks until it is.
-    [<Extension>]
-    static member GetResult(this : IQuery<unit, 'a>) =
-        this.GetResult((), false)
-
-    /// Tries to retrieve the result of the query without blocking.
     /// If reset is set to true, the query is reset if the result was ready.
     [<Extension>]
-    static member TryGetResult(this : IQuery<unit, 'a>, reset : bool) =
+    static member TryGetResult(this : IQuery<unit, 'a>, [<Optional; DefaultParameterValue(false)>] reset : bool) =
         this.TryGetResult((), reset)
 
     /// Retrieves the result of the query.
     /// If the result is not ready, the call blocks until it is.
     /// If reset is set to true, the query is reset.
     [<Extension>]
-    static member GetResult(this : IQuery<unit, 'a>, reset : bool) =
+    static member GetResult(this : IQuery<unit, 'a>, [<Optional; DefaultParameterValue(false)>] reset : bool) =
         this.GetResult((), reset)
 
     /// Tries to retrieve the result of the query without blocking.
     /// If reset is set to true, the query is reset if the result was ready.
     [<Extension>]
-    static member TryGetResult(this : IPipelineQuery, statistic : PipelineStatistics, reset : bool) =
+    static member TryGetResult(this : IPipelineQuery, statistic : PipelineStatistics, [<Optional; DefaultParameterValue(false)>] reset : bool) =
         this.TryGetResult(Set.singleton statistic, reset) |> Option.map (Map.find statistic)
 
     /// Retrieves the result of the query.
     /// If the result is not ready, the call blocks until it is.
     /// If reset is set to true, the query is reset.
     [<Extension>]
-    static member GetResult(this : IPipelineQuery, statistic : PipelineStatistics, reset : bool) =
+    static member GetResult(this : IPipelineQuery, statistic : PipelineStatistics, [<Optional; DefaultParameterValue(false)>] reset : bool) =
         this.GetResult(Set.singleton statistic, reset) |> Map.find statistic
-
-    /// Tries to retrieve the result of the query without blocking.
-    [<Extension>]
-    static member TryGetResult(this : IPipelineQuery, statistic : PipelineStatistics) =
-        this.TryGetResult(Set.singleton statistic, false) |> Option.map (Map.find statistic)
-
-    /// Retrieves the result of the query.
-    /// If the result is not ready, the call blocks until it is.
-    [<Extension>]
-    static member GetResult(this : IPipelineQuery, statistic : PipelineStatistics) =
-        this.GetResult(Set.singleton statistic, false) |> Map.find statistic
 
     /// Tries to retrieve the result of the query without blocking.
     /// If reset is set to true, the query is reset if the result was ready.
     [<Extension>]
-    static member TryGetResult(this : IPipelineQuery, reset : bool) =
+    static member TryGetResult(this : IPipelineQuery, [<Optional; DefaultParameterValue(false)>] reset : bool) =
         this.TryGetResult(this.Statistics, reset)
 
     /// Retrieves the result of the query.
     /// If the result is not ready, the call blocks until it is.
     /// If reset is set to true, the query is reset.
     [<Extension>]
-    static member GetResult(this : IPipelineQuery, reset : bool) =
+    static member GetResult(this : IPipelineQuery, [<Optional; DefaultParameterValue(false)>] reset : bool) =
         this.GetResult(this.Statistics, reset)
-
-    /// Tries to retrieve the result of the query without blocking.
-    [<Extension>]
-    static member TryGetResult(this : IPipelineQuery) =
-        this.TryGetResult(this.Statistics)
-
-    /// Retrieves the result of the query.
-    /// If the result is not ready, the call blocks until it is.
-    [<Extension>]
-    static member GetResult(this : IPipelineQuery) =
-        this.GetResult(this.Statistics)

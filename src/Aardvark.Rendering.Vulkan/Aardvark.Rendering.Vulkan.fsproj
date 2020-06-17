@@ -64,7 +64,6 @@
     <Compile Include="Swapchain\Swapchain.fs" />
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
-    <Compile Include="Runtime\Query\InternalQuery.fs" />
     <Compile Include="Runtime\Query\Query.fs" />
     <Compile Include="Runtime\Query\TimeQuery.fs" />
     <Compile Include="Runtime\Query\OcclusionQuery.fs" />
