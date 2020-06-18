@@ -23,23 +23,19 @@ module private ``Pipeline Query Helpers`` =
 
     // Returns the index of the statistic in the query result buffer
     let getFlagIndex (f : PipelineStatistics) (flags : Set<PipelineStatistics>) =
-        flags |> Seq.sortBy base2GLTarget |> Seq.findIndex ((=) f)
+        flags |> Seq.sortBy base2GLTarget |> Seq.tryFindIndex ((=) f)
 
 type PipelineQuery(ctx : Context, enabledStatistics : Set<PipelineStatistics>) =
     inherit Query(ctx, enabledStatistics |> Set.map base2GLTarget |> QueryType.Multiple)
 
-    let supported (stat : PipelineStatistics) =
-        enabledStatistics |> Set.contains stat
-
-    let validate (statistics : Set<PipelineStatistics>) =
-        statistics
-        |> Set.filter (supported >> not)
-        |> Set.iter (failwithf "Query does not support '%A' statistic")
-
     let compute (statistics : Set<PipelineStatistics>) (data : uint64[]) =
         statistics |> Seq.map (fun s ->
-            let i = enabledStatistics |> getFlagIndex s
-            s, data.[i]
+            let value =
+                match enabledStatistics |> getFlagIndex s with
+                | Some i -> data.[i]
+                | None -> 0UL
+
+            s, value
         )
         |> Map.ofSeq
 
@@ -48,11 +44,9 @@ type PipelineQuery(ctx : Context, enabledStatistics : Set<PipelineStatistics>) =
             x.TryGetResults(false) |> Option.isSome
 
         member x.GetResult(statistics : Set<PipelineStatistics>, reset : bool) =
-            validate statistics
             x.GetResults(reset) |> compute statistics
 
         member x.TryGetResult(statistics : Set<PipelineStatistics>, reset : bool) =
-            validate statistics
             x.TryGetResults(reset) |> Option.map (compute statistics)
 
         member x.Statistics =

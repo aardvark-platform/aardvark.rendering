@@ -50,19 +50,6 @@ type RenderTaskRunExtensions() =
     static member Run(t : IRenderTask, token : RenderToken, fbo : OutputDescription, queries : IQuery) =
         t.Run(AdaptiveToken.Top, token, fbo, queries)
 
-    // Overloads with Queries struct
-    [<Extension>]
-    static member Run(t : IRenderTask, token : RenderToken, fbo : IFramebuffer, queries : Queries) =
-        t.Run(AdaptiveToken.Top, token, OutputDescription.ofFramebuffer fbo, queries :> IQuery)
-
-    [<Extension>]
-    static member Run(t : IRenderTask, token : RenderToken, fbo : OutputDescription, queries : Queries) =
-        t.Run(AdaptiveToken.Top, token, fbo, queries :> IQuery)
-
-    [<Extension>]
-    static member Run(t : IRenderTask, token : AdaptiveToken, renderToken : RenderToken, fbo : OutputDescription, queries : Queries) =
-        t.Run(token, renderToken, fbo, queries :> IQuery)
-
     // Overloads without queries
     [<Extension>]
     static member Run(t : IRenderTask, token : RenderToken, fbo : IFramebuffer) =

@@ -573,8 +573,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.DeleteComputeShader (shader : IComputeShader) =
             ComputeShader.delete (unbox shader)
 
-        member x.Run (commands : list<ComputeCommand>) =
-            ComputeCommand.run commands device
+        member x.Run (commands : list<ComputeCommand>, queries : IQuery) =
+            ComputeCommand.run commands queries device
 
         member x.Compile (commands : list<ComputeCommand>) =
             ComputeCommand.compile commands device

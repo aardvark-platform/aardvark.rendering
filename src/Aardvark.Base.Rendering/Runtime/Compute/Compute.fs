@@ -45,7 +45,7 @@ and IComputeRuntime =
     abstract member CreateComputeShader : FShade.ComputeShader -> IComputeShader
     abstract member DeleteComputeShader : IComputeShader -> unit
     abstract member NewInputBinding : IComputeShader -> IComputeShaderInputBinding
-    abstract member Run : list<ComputeCommand> -> unit
+    abstract member Run : list<ComputeCommand> * IQuery -> unit
     abstract member Compile : list<ComputeCommand> -> ComputeProgram<unit>
 
 and [<AbstractClass>]
@@ -53,8 +53,8 @@ and [<AbstractClass>]
 
     let mutable onDispose : list<unit -> unit> = []
 
-    abstract member Run : unit -> 'r
-    abstract member RunUnit : unit -> unit
+    abstract member Run : IQuery -> 'r
+    abstract member RunUnit : IQuery -> unit
     abstract member Release : unit -> unit
 
     member x.Dispose() =
@@ -64,8 +64,14 @@ and [<AbstractClass>]
 
     member x.OnDispose(f : unit -> unit) = onDispose <- f :: onDispose
 
-    default x.Run() = x.RunUnit(); Unchecked.defaultof<'r>
-    default x.RunUnit() = x.Run() |> ignore
+    member x.Run() =
+        x.Run Queries.empty
+
+    member x.RunUnit() =
+        x.RunUnit Queries.empty
+
+    default x.Run(queries : IQuery) = x.RunUnit(queries); Unchecked.defaultof<'r>
+    default x.RunUnit(queries : IQuery) = x.Run(queries) |> ignore
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -165,61 +171,112 @@ type IComputeRuntimeExtensions private() =
     static member CreateComputeShader (this : IComputeRuntime, shader : 'a -> 'b) =
         let sh = FShade.ComputeShader.ofFunction this.MaxLocalSize shader
         this.CreateComputeShader(sh)
-        
+
     [<Extension>]
-    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V3i, input : IComputeShaderInputBinding) =
-        this.Run [
+    static member Run (this : IComputeRuntime, commands : list<ComputeCommand>) =
+        this.Run(commands, Queries.empty)
+
+    // Invoke overloads with queries
+    [<Extension>]
+    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V3i, input : IComputeShaderInputBinding, queries : IQuery) =
+        this.Run([
             ComputeCommand.Bind cShader
             ComputeCommand.SetInput input
             ComputeCommand.Dispatch groupCount
-        ]
-        
-    [<Extension>]
-    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V2i, input : IComputeShaderInputBinding) =
-        IComputeRuntimeExtensions.Invoke(this, cShader, V3i(groupCount, 1), input)
+        ], queries)
 
     [<Extension>]
-    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : int, input : IComputeShaderInputBinding) =
-        IComputeRuntimeExtensions.Invoke(this, cShader, V3i(groupCount, 1, 1), input)
+    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V2i, input : IComputeShaderInputBinding, queries : IQuery) =
+        IComputeRuntimeExtensions.Invoke(this, cShader, V3i(groupCount, 1), input, queries)
 
     [<Extension>]
-    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V3i, values : seq<string * obj>) =
+    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : int, input : IComputeShaderInputBinding, queries : IQuery) =
+        IComputeRuntimeExtensions.Invoke(this, cShader, V3i(groupCount, 1, 1), input, queries)
+
+    [<Extension>]
+    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V3i, values : seq<string * obj>, queries : IQuery) =
         use i = this.NewInputBinding cShader
         for (name, value) in values do
             i.[name] <- value
         i.Flush()
-        IComputeRuntimeExtensions.Invoke(this, cShader, groupCount, i)
+        IComputeRuntimeExtensions.Invoke(this, cShader, groupCount, i, queries)
+
+    [<Extension>]
+    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V2i, values : seq<string * obj>, queries : IQuery) =
+        IComputeRuntimeExtensions.Invoke(this, cShader, V3i(groupCount, 1), values, queries)
+
+    [<Extension>]
+    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : int, values : seq<string * obj>, queries : IQuery) =
+        IComputeRuntimeExtensions.Invoke(this, cShader, V3i(groupCount, 1, 1), values, queries)
+
+    [<Extension>]
+    static member Invoke (cShader : IComputeShader, groupCount : V3i, input : IComputeShaderInputBinding, queries : IQuery) =
+        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, input, queries)
+
+    [<Extension>]
+    static member Invoke (cShader : IComputeShader, groupCount : V2i, input : IComputeShaderInputBinding, queries : IQuery) =
+        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, input, queries)
+
+    [<Extension>]
+    static member Invoke (cShader : IComputeShader, groupCount : int, input : IComputeShaderInputBinding, queries : IQuery) =
+        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, input, queries)
+
+    [<Extension>]
+    static member Invoke (cShader : IComputeShader, groupCount : V3i, values : seq<string * obj>, queries : IQuery) =
+        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, values, queries)
+
+    [<Extension>]
+    static member Invoke (cShader : IComputeShader, groupCount : V2i, values : seq<string * obj>, queries : IQuery) =
+        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, values, queries)
+
+    [<Extension>]
+    static member Invoke (cShader : IComputeShader, groupCount : int, values : seq<string * obj>, queries : IQuery) =
+        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, values, queries)
+
+    // Invoke overloads without queries
+    [<Extension>]
+    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V3i, input : IComputeShaderInputBinding) =
+        this.Invoke(cShader, groupCount, input, Queries.empty)
+    [<Extension>]
+    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V2i, input : IComputeShaderInputBinding) =
+        this.Invoke(cShader, groupCount, input, Queries.empty)
+
+    [<Extension>]
+    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : int, input : IComputeShaderInputBinding) =
+        this.Invoke(cShader, groupCount, input, Queries.empty)
+
+    [<Extension>]
+    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V3i, values : seq<string * obj>) =
+        this.Invoke(cShader, groupCount, values, Queries.empty)
 
     [<Extension>]
     static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V2i, values : seq<string * obj>) =
-        IComputeRuntimeExtensions.Invoke(this, cShader, V3i(groupCount, 1), values)
+        this.Invoke(cShader, groupCount, values, Queries.empty)
 
     [<Extension>]
     static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : int, values : seq<string * obj>) =
-        IComputeRuntimeExtensions.Invoke(this, cShader, V3i(groupCount, 1, 1), values)
-
+        this.Invoke(cShader, groupCount, values, Queries.empty)
 
     [<Extension>]
     static member Invoke (cShader : IComputeShader, groupCount : V3i, input : IComputeShaderInputBinding) =
-        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, input)
+        cShader.Invoke(groupCount, input, Queries.empty)
 
     [<Extension>]
     static member Invoke (cShader : IComputeShader, groupCount : V2i, input : IComputeShaderInputBinding) =
-        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, input)
+        cShader.Invoke(groupCount, input, Queries.empty)
 
     [<Extension>]
     static member Invoke (cShader : IComputeShader, groupCount : int, input : IComputeShaderInputBinding) =
-        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, input)
+        cShader.Invoke(groupCount, input, Queries.empty)
 
-    
     [<Extension>]
     static member Invoke (cShader : IComputeShader, groupCount : V3i, values : seq<string * obj>) =
-        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, values)
+        cShader.Invoke(groupCount, values, Queries.empty)
 
     [<Extension>]
     static member Invoke (cShader : IComputeShader, groupCount : V2i, values : seq<string * obj>) =
-        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, values)
+        cShader.Invoke(groupCount, values, Queries.empty)
 
     [<Extension>]
     static member Invoke (cShader : IComputeShader, groupCount : int, values : seq<string * obj>) =
-        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, values)
+        cShader.Invoke(groupCount, values, Queries.empty)

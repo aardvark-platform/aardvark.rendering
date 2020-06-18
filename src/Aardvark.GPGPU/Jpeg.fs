@@ -1557,15 +1557,18 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         result
 
 
-    member x.Compress(image : ITextureSubResource) =
+    member x.Compress(image : ITextureSubResource, queries : IQuery) =
         assert (image.Size.XY = size)
         dctInput.["InputImage"] <- image.Texture
         dctInput.["ImageLevel"] <- image.Level
         dctInput.Flush()
 
-        overallCommand.Run()
+        overallCommand.Run(queries)
 
         x.Download()
+
+    member x.Compress(image : ITextureSubResource) =
+        x.Compress(image, Queries.empty)
 
     member x.Dispose() =
         dctInput.Dispose()

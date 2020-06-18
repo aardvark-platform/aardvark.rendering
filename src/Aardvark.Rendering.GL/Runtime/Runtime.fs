@@ -511,12 +511,12 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateComputeShader (c : FShade.ComputeShader) = ctx.CompileKernel c :> IComputeShader
         member x.NewInputBinding(c : IComputeShader) = new ComputeShaderInputBinding(unbox c) :> IComputeShaderInputBinding
         member x.DeleteComputeShader (shader : IComputeShader) = ctx.Delete(unbox<GL.ComputeShader> shader)
-        member x.Run (commands : list<ComputeCommand>) = ctx.Run commands
+        member x.Run (commands : list<ComputeCommand>, queries : IQuery) = ctx.Run(commands, queries)
         member x.Compile (commands : list<ComputeCommand>) =
             let x = x :> IComputeRuntime
             { new ComputeProgram<unit>() with
-                member __.RunUnit() =
-                    x.Run(commands)
+                member __.RunUnit(queries) =
+                    x.Run(commands, queries)
                 member x.Release() =
                     ()
             }

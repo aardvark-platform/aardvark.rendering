@@ -26,19 +26,11 @@ module private PipelineQueryHelpers =
 
     // Returns the index of the statistic in the query result buffer
     let getFlagIndex (f : PipelineStatistics) (flags : Set<PipelineStatistics>) =
-        flags |> Set.toList |> List.sortBy base2VulkanFlags |> List.findIndex ((=) f)
+        flags |> Set.toList |> List.sortBy base2VulkanFlags |> List.tryFindIndex ((=) f)
 
 
 type PipelineQuery(device : Device, enabledStatistics : Set<PipelineStatistics>) =
     inherit Query(device, QueryType.PipelineStatistics (getVulkanFlags enabledStatistics, Set.count enabledStatistics), 1)
-
-    let supported (stat : PipelineStatistics) =
-        enabledStatistics |> Set.contains stat
-
-    let validate (statistics : Set<PipelineStatistics>) =
-        statistics
-        |> Set.filter (supported >> not)
-        |> Set.iter (failwithf "Query does not support '%A' statistic")
 
     let sumArrays (arrays : uint64[][]) =
         arrays |> Array.fold (fun sum x ->
@@ -47,8 +39,12 @@ type PipelineQuery(device : Device, enabledStatistics : Set<PipelineStatistics>)
 
     let compute (statistics : Set<PipelineStatistics>) (data : uint64[]) =
         statistics |> Seq.map (fun s ->
-            let i = enabledStatistics |> getFlagIndex s
-            s, data.[i]
+            let value =
+                match enabledStatistics |> getFlagIndex s with
+                | Some i -> data.[i]
+                | None -> 0UL
+
+            s, value
         )
         |> Map.ofSeq
 
@@ -58,11 +54,9 @@ type PipelineQuery(device : Device, enabledStatistics : Set<PipelineStatistics>)
             x.TryGetResults(false) |> Option.isSome
 
         member x.TryGetResult(statistics : Set<PipelineStatistics>, reset : bool) =
-            validate statistics
             x.TryGetResults(reset) |> Option.map (sumArrays >> compute statistics)
 
         member x.GetResult(statistics : Set<PipelineStatistics>, reset : bool) =
-            validate statistics
             x.GetResults(reset) |> sumArrays |> compute statistics
 
         member x.Statistics = enabledStatistics

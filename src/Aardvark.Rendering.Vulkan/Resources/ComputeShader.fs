@@ -446,7 +446,6 @@ module ``Compute Commands`` =
     module ComputeCommand =
         open Aardvark.Base.Monads.State
 
-
         let private accessFlags =
             LookupTable.lookupTable [
                 ResourceAccess.ShaderRead, VkAccessFlags.ShaderReadBit
@@ -804,17 +803,32 @@ module ``Compute Commands`` =
                     for (b,_) in state.downloads do device.Delete b
                     stream.Dispose()
 
-                override x.RunUnit() =
+                override x.RunUnit(queries : IQuery) =
                     let isChanged = Interlocked.Exchange(&dirty, 0) = 1
+                    let vulkanQueries = queries.ToVulkanQuery()
 
                     for u in uploads do u()
                 
                     let pool = getPool device
                     use cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
+
+                    queries.Begin()
+
                     cmd.Begin(CommandBufferUsage.OneTimeSubmit)
+
+                    for q in vulkanQueries do
+                        q.Begin cmd
+
                     cmd.AppendCommand()
                     stream.Run(cmd.Handle)
+
+                    for q in vulkanQueries do
+                        q.End cmd
+
                     cmd.End()
+
+                    queries.End()
+
                     device.GraphicsFamily.RunSynchronously cmd
 
                     for d in downloads do d()
@@ -1040,10 +1054,23 @@ module ``Compute Commands`` =
 
             new ComputeProgram(stream, state) :> ComputeProgram<unit>
     
-        let run (cmds : list<ComputeCommand>) (device : Device) =
+        let run (cmds : list<ComputeCommand>) (queries : IQuery) (device : Device) =
+            let vulkanQueries = queries.ToVulkanQuery()
+
+            queries.Begin()
+
             device.perform {
-                for cmd in cmds do do! toCommand cmd device
+                for q in vulkanQueries do
+                    do! Command.Begin q
+
+                for cmd in cmds do
+                    do! toCommand cmd device
+
+                for q in vulkanQueries do
+                    do! Command.End q
             }
+
+            queries.End()
             
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ComputeShader =  

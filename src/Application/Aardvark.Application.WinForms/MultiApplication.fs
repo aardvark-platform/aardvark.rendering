@@ -393,7 +393,7 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.CreateComputeShader (c : FShade.ComputeShader) = failwith ""
         member x.NewInputBinding(c : IComputeShader) = failwith ""
         member x.DeleteComputeShader (shader : IComputeShader) = failwith ""
-        member x.Run (commands : list<ComputeCommand>) = failwith ""
+        member x.Run (commands : list<ComputeCommand>, queries : IQuery) = failwith ""
         member x.Compile (commands : list<ComputeCommand>) = failwith ""
 
         member x.Clear(fbo : IFramebuffer, clearColors : Map<Symbol,C4f>, depth : Option<float>, stencil : Option<int>) = failwith "not implemented"

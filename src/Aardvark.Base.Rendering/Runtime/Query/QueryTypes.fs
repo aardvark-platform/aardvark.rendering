@@ -129,6 +129,19 @@ type IQueryResultsExtensions private() =
     /// Tries to retrieve the result of the query without blocking.
     /// If reset is set to true, the query is reset if the result was ready.
     [<Extension>]
+    static member TryGetResult(this : IPipelineQuery, statistics : PipelineStatistics seq, [<Optional; DefaultParameterValue(false)>] reset : bool) =
+        this.TryGetResult(Set.ofSeq statistics, reset)
+
+    /// Retrieves the result of the query.
+    /// If the result is not ready, the call blocks until it is.
+    /// If reset is set to true, the query is reset.
+    [<Extension>]
+    static member GetResult(this : IPipelineQuery, statistics : PipelineStatistics seq, [<Optional; DefaultParameterValue(false)>] reset : bool) =
+        this.GetResult(Set.ofSeq statistics, reset)
+
+    /// Tries to retrieve the result of the query without blocking.
+    /// If reset is set to true, the query is reset if the result was ready.
+    [<Extension>]
     static member TryGetResult(this : IPipelineQuery, [<Optional; DefaultParameterValue(false)>] reset : bool) =
         this.TryGetResult(this.Statistics, reset)
 

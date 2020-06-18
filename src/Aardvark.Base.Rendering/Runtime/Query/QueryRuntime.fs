@@ -33,3 +33,14 @@ type IQueryRuntimeExtensions private() =
     [<Extension>]
     static member CreatePipelineQuery(this : IQueryRuntime) =
         this.CreatePipelineQuery(this.SupportedPipelineStatistics)
+
+    /// Creates a pipeline statistics query, enabling a single statistic.
+    [<Extension>]
+    static member CreatePipelineQuery(this : IQueryRuntime, statistic : PipelineStatistics) =
+        this.CreatePipelineQuery(Set.singleton statistic)
+
+    /// Creates a pipeline statistics query.
+    /// The parameter statistics determines what kind of statistics can be queried.
+    [<Extension>]
+    static member CreatePipelineQuery(this : IQueryRuntime, statistics : PipelineStatistics seq) =
+        this.CreatePipelineQuery(Set.ofSeq statistics)
