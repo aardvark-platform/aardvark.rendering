@@ -205,24 +205,92 @@ module Frustum =
         t.Forward.M30.IsTiny() && t.Forward.M31.IsTiny() && t.Forward.M32.IsTiny()
 
     let ofTrafo (t : Trafo3d) =
-        let bw = t.Backward
-        let far = 1.0 / (bw.M32 + bw.M33)
-        let near = 1.0 / bw.M33
-        let cx = bw.M03 * near
-        let cy = bw.M13 * near
-        let hsx = bw.M00 * near
-        let hsy = bw.M11 * near
         let isOrtho = isTrafoOrtho t
+        let m = t.Forward
+        if not isOrtho then
 
-        {
-            left = cx - hsx
-            right = cx + hsx
-            top = cy + hsy
-            bottom = cy - hsy
-            near = near
-            far = far
-            isOrtho = isOrtho
-        }
+            let r = (1.0 + m.M22) / (m.M22 - 1.0)
+            let far     = (r - 1.0) * m.M23 / (2.0 * r)
+            let near    = r * far
+            let top     = (1.0 + m.M12) * near / m.M11
+            let bottom  = (m.M12 - 1.0) * near / m.M11
+            let left    = (m.M02 - 1.0) * near / m.M00
+            let right   = (1.0 + m.M02) * near / m.M00
+
+
+            {
+                isOrtho = false
+                left = left
+                right = right
+                top = top
+                bottom = bottom
+                near = near
+                far = far
+            }
+        else
+            let left        = -(1.0 + m.M03) / m.M00
+            let right       = (1.0 - m.M03) / m.M00
+            let bottom      = -(1.0 + m.M13) / m.M11
+            let top         = (1.0 - m.M13) / m.M11
+            let far         = -(1.0 + m.M23) / m.M22
+            let near        = (1.0 - m.M23) / m.M22
+            {
+                isOrtho = true
+                left = left
+                right = right
+                top = top
+                bottom = bottom
+                near = near
+                far = far
+            }
+
+    let withNear (near : float) (f : Frustum) =    
+        if f.isOrtho then
+            { f with near = near }
+        else
+            let factor = near / f.near
+            {
+                isOrtho = false
+                near = near
+                far = f.far
+                left = factor * f.left
+                right = factor * f.right
+                top = factor * f.top
+                bottom = factor * f.bottom
+            }
+
+    let withFar (far : float) (f : Frustum) =    
+        { f with far = far }
+        
+    let aspect { left = l; right = r; top = t; bottom = b } = 
+        (r - l) / (t - b)
+
+    let withAspect (newAspect : float) ( { left = l; right = r; top = t; bottom = b } as f )  = 
+        let factor = newAspect / aspect f
+        { f with right = factor * r; left  = factor * l }
+
+    let withHorizontalFieldOfViewInDegrees (angleInDegrees : float) (frustum : Frustum) =
+        if frustum.isOrtho then
+            frustum
+        else
+            let lt = atan2 frustum.left frustum.near
+            let rt = atan2 frustum.right frustum.near
+
+            let total = rt - lt
+            let f = angleInDegrees / total
+
+            let ll = lt * f
+            let rr = rt * f
+
+            let l = tan ll * frustum.near
+            let r = tan rr * frustum.near
+
+
+            let t = tan (atan2 frustum.top frustum.near * f) * frustum.near
+            let b = tan (atan2 frustum.bottom frustum.near * f) * frustum.near
+
+            { frustum with left = l; right = r; top = t; bottom = b }
+
 
     [<Obsolete("use projTrafo instead")>]
     let toTrafo f : Trafo3d = projTrafo f
@@ -238,10 +306,6 @@ module Frustum =
     let inline bottom (f : Frustum) = f.bottom
     let inline top    (f : Frustum) = f.top
 
-    let aspect { left = l; right = r; top = t; bottom = b } = (r - l) / (t - b)
-    let withAspect (newAspect : float) ( { left = l; right = r; top = t; bottom = b } as f )  = 
-        let factor = newAspect / aspect f
-        { f with right = factor * r; left  = factor * l }
 
     [<Obsolete("use pickRayDirection instead")>]
     let unproject { near = n } (xyOnPlane : V2d) = Ray3d(V3d.Zero, V3d(xyOnPlane, -n))
