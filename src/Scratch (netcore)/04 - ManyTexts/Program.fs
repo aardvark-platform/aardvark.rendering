@@ -142,11 +142,11 @@ let main argv =
             trafo, shape
         )
 
-    win.Keyboard.KeyDown(Keys.Add).Values.Add(fun () ->
+    win.Keyboard.KeyDown(Keys.OemPlus).Values.Add(fun () ->
         transact (fun () -> bias.Value <- bias.Value * 2.0)
         printfn "bias: %.10f" bias.Value
     )
-    win.Keyboard.KeyDown(Keys.Subtract).Values.Add(fun () ->
+    win.Keyboard.KeyDown(Keys.OemMinus).Values.Add(fun () ->
         transact (fun () -> bias.Value <- bias.Value / 2.0)
         printfn "bias: %.10f" bias.Value
     )
