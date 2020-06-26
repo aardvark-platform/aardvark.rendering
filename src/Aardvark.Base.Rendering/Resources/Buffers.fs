@@ -232,7 +232,10 @@ module BufferView =
                         | :? ArrayBuffer as a when stride = elementSize && offset = 0 ->
                             if count = a.Data.Length then 
                                 a.Data
-                            else
+                            else 
+                                if count > a.Data.Length then
+                                    raise <| IndexOutOfRangeException("[BufferView] trying to download too many elements from ArrayBuffer")
+
                                 let res = Array.CreateInstance(elementType, count)
                                 Array.Copy(a.Data, res, count)
                                 res
@@ -240,7 +243,7 @@ module BufferView =
                         | :? INativeBuffer as b ->
                             let available = (b.SizeInBytes - view.Offset) / elementSize
                             if count > available then
-                                raise <| IndexOutOfRangeException("[BufferView] trying to download too many elements")
+                                raise <| IndexOutOfRangeException("[BufferView] trying to download too many elements from NativeBuffer")
 
                             b.Use (fun ptr -> reader.Read(ptr + nativeint offset, count, stride))
 
