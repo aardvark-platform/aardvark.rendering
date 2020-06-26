@@ -367,20 +367,20 @@ type VertexBuffer(ctx : Context, semantics : MapExt<string, Type>, count : int) 
             use __ = ctx.ResourceLock
             
             let count = data |> MapExt.toSeq |> Seq.map (fun (_,a) -> a.Length) |> Seq.min
-
             buffers |> MapExt.iter (fun sem (buffer, elemSize,_) ->
-                let offset = nativeint startIndex * nativeint elemSize
                 let size = nativeint count * nativeint elemSize
-                let ptr = ctx.MapBufferRange(buffer, offset, size, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapInvalidateRangeBit ||| BufferAccessMask.MapUnsynchronizedBit)
+                if size > 0n then
+                    let offset = nativeint startIndex * nativeint elemSize
+                    let ptr = ctx.MapBufferRange(buffer, offset, size, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapInvalidateRangeBit ||| BufferAccessMask.MapUnsynchronizedBit)
 
-                match MapExt.tryFind sem data with
-                    | Some data ->  
-                        let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-                        try Marshal.Copy(gc.AddrOfPinnedObject(), ptr, size)
-                        finally gc.Free()
-                    | _ -> 
-                        Marshal.Set(ptr, 0, size)
-                ctx.UnmapBuffer(buffer)
+                    match MapExt.tryFind sem data with
+                        | Some data ->  
+                            let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
+                            try Marshal.Copy(gc.AddrOfPinnedObject(), ptr, size)
+                            finally gc.Free()
+                        | _ -> 
+                            Marshal.Set(ptr, 0, size)
+                    ctx.UnmapBuffer(buffer)
             )
         )
 
