@@ -88,26 +88,29 @@ module BufferView =
             else view.Stride
 
         match view.SingleValue with
-        | Some value ->
-            value |> AVal.map (fun v -> reader.Initialize(v, count))
-        | _ ->
-            view.Buffer |> AVal.map (fun b ->
-                match b with
-                | :? ArrayBuffer as a when stride = elementSize && offset = 0 ->
-                    if count = a.Data.Length then
-                        a.Data
-                    else
-                        let res = Array.CreateInstance(elementType, count)
-                        Array.Copy(a.Data, res, count)
-                        res
+            | Some value ->
+                value |> AVal.map (fun v -> reader.Initialize(v, count))
+            | _ ->
+                view.Buffer |> AVal.map (fun b ->
+                    match b with
+                        | :? ArrayBuffer as a when stride = elementSize && offset = 0 ->
+                            if count = a.Data.Length then
+                                a.Data
+                            else
+                                if count > a.Data.Length then
+                                    raise <| IndexOutOfRangeException("[BufferView] trying to download too many elements from ArrayBuffer")
 
-                | :? INativeBuffer as b ->
-                    let available = (b.SizeInBytes - view.Offset) / elementSize
-                    if count > available then
-                        raise <| IndexOutOfRangeException("[BufferView] trying to download too many elements")
+                                let res = Array.CreateInstance(elementType, count)
+                                Array.Copy(a.Data, res, count)
+                                res
 
-                    b.Use (fun ptr -> reader.Read(ptr + nativeint offset, count, stride))
+                        | :? INativeBuffer as b ->
+                            let available = (b.SizeInBytes - view.Offset) / elementSize
+                            if count > available then
+                                raise <| IndexOutOfRangeException("[BufferView] trying to download too many elements from NativeBuffer")
 
-                | _ ->
-                    failwith "[BufferView] unknown buffer-type"
-            )
+                            b.Use (fun ptr -> reader.Read(ptr + nativeint offset, count, stride))
+
+                        | _ ->
+                            failwith "[BufferView] unknown buffer-type"
+                )
