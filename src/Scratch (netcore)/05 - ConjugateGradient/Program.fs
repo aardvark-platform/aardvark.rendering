@@ -61,9 +61,6 @@ module ConjugateGradientShaders =
         let w = 6.0 - x - y - z
         V4d(x, y, z, w) * (1.0/6.0)
 
-    [<GLSLIntrinsic("mix({1}, {2}, {0})")>]
-    let mix (t : float) (a : V4d) (b : V4d) : V4d = onlyInShaderCode "mix"
-
 
     let w0 (a : float) = (1.0/6.0)*(a*(a*(-a + 3.0) - 3.0) + 1.0)
     let w1 (a : float) = (1.0/6.0)*(a*a*(3.0*a - 6.0) + 4.0)

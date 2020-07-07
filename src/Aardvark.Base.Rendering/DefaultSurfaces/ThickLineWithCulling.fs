@@ -14,10 +14,7 @@ module ThickLineWithCulling =
         [<Semantic("LineCoord")>]   lc      : V2d
         [<Semantic("Width")>]       w       : float
     }
-        
-    [<GLSLIntrinsic("mix({0}, {1}, {2})")>]
-    let Lerp (a : V4d) (b : V4d) (s : float) : V4d = failwith ""
-
+    
     let internal thickLineWithCulling (line : Line<ThickLineVertexWithClipDistance>) =
         triangle {
             let t = uniform.LineWidth
@@ -26,8 +23,9 @@ module ThickLineWithCulling =
             let pp0 = line.P0.pos
             let pp1 = line.P1.pos
 
-            let pp0 = if pp0.Z < 0.0 then (Lerp pp1 pp0 (pp1.Z / (pp1.Z - pp0.Z))) else pp0
-            let pp1 = if pp1.Z < 0.0 then (Lerp pp0 pp1 (pp0.Z / (pp0.Z - pp1.Z))) else pp1
+            // NOTE: clips by z=0 assuming DX clip space [0, 1] -> clipping too early in GL with default depth range [-1, 1]
+            let pp0 = if pp0.Z < 0.0 then (lerp pp1 pp0 (pp1.Z / (pp1.Z - pp0.Z))) else pp0
+            let pp1 = if pp1.Z < 0.0 then (lerp pp0 pp1 (pp0.Z / (pp0.Z - pp1.Z))) else pp1
 
             let p0 = pp0.XYZ / pp0.W
             let p1 = pp1.XYZ / pp1.W
