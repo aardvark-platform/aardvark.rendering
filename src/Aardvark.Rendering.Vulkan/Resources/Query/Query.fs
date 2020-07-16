@@ -18,7 +18,7 @@ type IVulkanQuery =
 type QueryType =
     | Occlusion
     | Timestamp
-    | PipelineStatistics of flags : VkQueryPipelineStatisticFlags *  valuesPerQuery : int
+    | PipelineStatistics of flags : VkQueryPipelineStatisticFlags * valuesPerQuery : int
 
     /// Returns the number of values returned by the query.
     member x.ValuesPerQuery =
