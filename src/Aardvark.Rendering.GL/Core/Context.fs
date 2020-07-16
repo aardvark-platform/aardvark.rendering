@@ -150,7 +150,16 @@ type MemoryUsage() =
 /// </summary>
 [<AllowNullLiteral>]
 type Context(runtime : IRuntime, enableDebug : bool, resourceContexts : ContextHandle[], createContext : unit -> ContextHandle) =
+
+    static let defaultShaderCachePath = 
+                        Some (Path.combine [
+                                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
+                                "Aardvark"
+                                "OpenGlShaderCache"
+                             ])
+
     static let nopDisposable = { new IDisposable with member x.Dispose() = () }
+
     //let resourceContexts = ContextHandle.createContexts enableDebug resourceContextCount
     let resourceContextCount = resourceContexts.Length
 
@@ -167,8 +176,10 @@ type Context(runtime : IRuntime, enableDebug : bool, resourceContexts : ContextH
     let mutable packAlignment = None
 
     let mutable shaderCachePath : Option<string> = None
-
+    
     member x.CreateContext() = createContext()
+
+    static member DefaultShaderCachePath = defaultShaderCachePath
 
     member x.ShaderCachePath
         with get() = shaderCachePath

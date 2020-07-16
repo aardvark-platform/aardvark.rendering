@@ -39,16 +39,19 @@ module Driver =
         else v
 
     let parseVersion (str : string) =
-        let m = versionRx.Match str
-        if m.Success then
-            let str = m.Value
-
-            let v = str.Split('.') |> Array.map Int32.Parse |> Array.map clean |> Array.map string |> String.concat "."
-
-            Version.Parse v
+        if str.IsEmptyOrNull() then
+            Version()
         else
-            failwithf "could not read version from: %A" str
+            let m = versionRx.Match str
+            if m.Success then
+                let str = m.Value
 
+                let v = str.Split('.') |> Array.map Int32.Parse |> Array.map clean |> Array.map string |> String.concat "."
+
+                Version.Parse v
+            else
+                Log.warn "could not read version from: %A" str
+                Version()
 
 
     let readInfo() =

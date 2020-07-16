@@ -332,7 +332,7 @@ module RenderingTests =
 
         use runtime = new Runtime()
         use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
-        runtime.Context <- ctx
+        runtime.Initialize(ctx)
 
         let size = V2i(1024,768)
         
@@ -395,7 +395,7 @@ module RenderingTests =
 
         use runtime = new Runtime()
         use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
-        runtime.Context <- ctx
+        runtime.Initialize(ctx)
 
         let size = V2i(1024,768)
         let color = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
@@ -491,7 +491,7 @@ module RenderingTests =
 
         use runtime = new Runtime()
         use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
-        runtime.Context <- ctx
+        runtime.Initialize(ctx)
 
         using ctx.ResourceLock (fun _ -> 
             Log.line "vendor:   %s" runtime.Context.Driver.vendor
@@ -606,7 +606,7 @@ module RenderingTests =
 
         use runtime = new Runtime()
         use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
-        runtime.Context <- ctx
+        runtime.Initialize(ctx)
 
         using ctx.ResourceLock (fun _ -> 
             Log.line "vendor:   %s" runtime.Context.Driver.vendor
@@ -742,7 +742,7 @@ module UseTest =
 
         use runtime = new Runtime()
         use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
-        runtime.Context <- ctx
+        runtime.Initialize(ctx)
 
         let size = V2i(1024,1024)
         
