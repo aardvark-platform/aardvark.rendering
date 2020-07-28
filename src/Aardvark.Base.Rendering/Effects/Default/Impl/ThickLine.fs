@@ -13,9 +13,6 @@ module ThickLine =
         [<Semantic("Width")>]       w       : float
     }
 
-    [<GLSLIntrinsic("mix({0}, {1}, {2})")>]
-    let Lerp (a : V4d) (b : V4d) (s : float) : V4d = failwith ""
-
     [<ReflectedDefinition>]
     let clipLine (plane : V4d) (p0 : ref<V4d>) (p1 : ref<V4d>) =
         let h0 = Vec.dot plane !p0
