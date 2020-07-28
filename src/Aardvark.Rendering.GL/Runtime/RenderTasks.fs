@@ -153,7 +153,7 @@ module RenderTasks =
                 x.Release2()
         override x.FramebufferSignature = Some fboSignature
         override x.Runtime = Some ctx.Runtime
-        override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription, queries : IQuery) =
+        override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription, sync : TaskSync, queries : IQuery) =
             
             GL.Check "[RenderTask.Run] Entry"
 
@@ -575,7 +575,7 @@ module RenderTasks =
         inherit AbstractRenderTask()
 
         override x.PerformUpdate(token, t) = ()
-        override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription, queries : IQuery) =
+        override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription, sync : TaskSync, queries : IQuery) =
             let fbo = desc.framebuffer
             Operators.using ctx.ResourceLock (fun _ ->
 

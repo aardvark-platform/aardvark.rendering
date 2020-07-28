@@ -57,6 +57,7 @@
     <Compile Include="Resources\CommandResources.fs" />
     <Compile Include="Resources\GeometryPool.fs" />
     <Compile Include="Resources\SparseImage.fs" />
+    <Compile Include="Resources\Sync.fs" />
     <Compile Include="Resources\Query\QueryPool.fs" />
     <Compile Include="Resources\Query\Query.fs" />
     <Compile Include="Resources\Query\TimeQuery.fs" />

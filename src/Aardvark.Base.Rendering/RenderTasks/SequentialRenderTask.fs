@@ -37,11 +37,14 @@ type SequentialRenderTask(tasks : IRenderTask[]) =
         for t in tasks do
             t.Update(token, rt)
 
-    override x.Perform(token : AdaptiveToken, rt : RenderToken, output : OutputDescription, queries : IQuery) =
+    override x.Perform(token : AdaptiveToken, renderToken : RenderToken, output : OutputDescription, sync : TaskSync, queries : IQuery) =
         queries.Begin()
 
-        for t in tasks do
-            t.Run(token, rt, output, queries)
+        let sync = sync |> TaskSync.sequential tasks.Length
+
+        tasks |> Array.iteri (fun i t ->
+            t.Run(token, renderToken, output, sync.[i], queries)
+        )
 
         queries.End()
 

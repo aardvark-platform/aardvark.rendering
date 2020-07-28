@@ -81,14 +81,18 @@ type AListRenderTask(tasks : alist<IRenderTask>) as this =
         for t in reader.State do
             t.Update(token, rt)
 
-    override x.Perform(token, rt, fbo, queries) =
+    override x.Perform(token, rt, fbo, sync, queries) =
         processDeltas(token)
 
         queries.Begin()
 
+        let tasks = reader.State
+        let sync = sync |> TaskSync.sequential tasks.Count
+
         // TODO: order may be invalid
-        for t in reader.State do
-            t.Run(token, rt, fbo, queries)
+        tasks |> Seq.iteri (fun i t ->
+            t.Run(token, rt, fbo, sync.[i], queries)
+        )
 
         queries.End()
 

@@ -2176,7 +2176,7 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
     override x.Use(f : unit -> 'r) =
         f()
 
-    override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription, queries : IQuery) =
+    override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription, sync : TaskSync, queries : IQuery) =
         x.OutOfDate <- true
 
         let vulkanQueries = queries.ToVulkanQuery()
@@ -2265,43 +2265,43 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
         for q in vulkanQueries do
             q.Begin cmd
 
-        cmd.enqueue {
-            let oldLayouts = Array.zeroCreate fbo.ImageViews.Length
-            for i in 0 .. fbo.ImageViews.Length - 1 do
-                let img = fbo.ImageViews.[i].Image
-                oldLayouts.[i] <- img.Layout
-                if VkFormat.hasDepth img.Format then
-                    do! Command.TransformLayout(img, VkImageLayout.DepthStencilAttachmentOptimal)
-                else
-                    do! Command.TransformLayout(img, VkImageLayout.ColorAttachmentOptimal)
+        let images =
+            fbo.ImageViews |> Array.map (fun view -> view.Image)
 
-            do! Command.BeginPass(renderPass, fbo, false)
-            do! Command.Execute [inner]
-            do! Command.EndPass
+        images |> Image.Layouts (fun layouts ->
+            cmd.enqueue {
+                for i in 0 .. images.Length - 1 do
+                    if VkFormat.hasDepth images.[i].Format then
+                        do! Command.TransformLayout(images.[i], VkImageLayout.DepthStencilAttachmentOptimal)
+                    else
+                        do! Command.TransformLayout(images.[i], VkImageLayout.ColorAttachmentOptimal)
 
-            if ranges.Length > 1 then
-                let deviceCount = int device.AllCount
+                do! Command.BeginPass(renderPass, fbo, false)
+                do! Command.Execute [inner]
+                do! Command.EndPass
 
-                for (sem,a) in Map.toSeq fbo.Attachments do
-                    transact (fun () ->
-                        let v = a.Image.Version
-                        lock v (fun () -> v.Value <- v.Value + 1)
-                    )
+                if ranges.Length > 1 then
+                    let deviceCount = int device.AllCount
 
-            for i in 0 .. fbo.ImageViews.Length - 1 do
-                let img = fbo.ImageViews.[i].Image
-                do! Command.TransformLayout(img, oldLayouts.[i])
-        }
+                    for (sem,a) in Map.toSeq fbo.Attachments do
+                        transact (fun () ->
+                            let v = a.Image.Version
+                            lock v (fun () -> v.Value <- v.Value + 1)
+                        )
 
-        for q in vulkanQueries do
-            q.End cmd
+                for i in 0 .. images.Length - 1 do
+                    do! Command.TransformLayout(images.[i], layouts.[i])
+            }
 
-        cmd.End()
+            for q in vulkanQueries do
+                q.End cmd
 
-        queries.End()
+            cmd.End()
 
-        use tt = device.Token
-        tt.Sync()
+            queries.End()
 
-        device.GraphicsFamily.RunSynchronously cmd
+            use tt = device.Token
+            tt.Sync()
 
+            device.GraphicsFamily.RunSynchronously(cmd, sync.CommandSync)
+        )

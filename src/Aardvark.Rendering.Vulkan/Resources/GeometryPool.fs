@@ -647,7 +647,6 @@ module GeometryPoolUtilities =
                     | _ ->
                         device.GraphicsFamily.RunSynchronously(
                             QueueCommand.ExecuteCommand(
-                                [], [],
                                 { new Command() with
                                     member x.Compatible = QueueFlags.All
                                     member x.Enqueue(cmd) =
@@ -657,7 +656,8 @@ module GeometryPoolUtilities =
                                             VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, pCopyInfo)
                                             return Disposable.Empty
                                         }
-                                }
+                                },
+                                CommandSync.None
                             )
                         )
 

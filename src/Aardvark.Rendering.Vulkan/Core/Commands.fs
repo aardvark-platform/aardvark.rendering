@@ -223,13 +223,17 @@ type CommandBufferExtensions private() =
             failf "could not enqueue command"
 
     [<Extension>]
-    static member RunSynchronously(this : DeviceQueueFamily, cmd : ICommand) =
+    static member RunSynchronously(this : DeviceQueueFamily, cmd : ICommand, sync : ICommandSync) =
         use pool = this.TakeCommandPool()
         use buffer = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
         buffer.Begin(CommandBufferUsage.OneTimeSubmit)
         CommandBufferExtensions.Enqueue(buffer, cmd)
         buffer.End()
-        this.RunSynchronously(buffer)
+        this.RunSynchronously(buffer, sync)
+
+    [<Extension>]
+    static member RunSynchronously(this : DeviceQueueFamily, cmd : ICommand) =
+        this.RunSynchronously(cmd, CommandSync.None)
 
     [<Extension>]
     static member Compile(this : CommandPool, level : CommandBufferLevel, cmd : ICommand) =
@@ -304,7 +308,7 @@ module CommandAPI =
             f()
 
         member x.Bind(m : QueueCommand, f : unit -> 'a) =
-            buffer.Enqueue m
+            buffer.Run m
             f()
 
         member x.Return(v : 'a) = v

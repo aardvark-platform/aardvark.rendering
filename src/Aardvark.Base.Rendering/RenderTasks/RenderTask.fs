@@ -8,10 +8,10 @@ module RenderTask =
 
     let empty = EmptyRenderTask.Instance
 
-    let ofAFun (f : afun<AdaptiveToken * RenderToken * OutputDescription * IQuery, unit>) =
+    let ofAFun (f : afun<AdaptiveToken * RenderToken * OutputDescription * TaskSync * IQuery, unit>) =
         new CustomRenderTask(f) :> IRenderTask
 
-    let custom (f : AdaptiveToken * RenderToken * OutputDescription * IQuery -> unit) =
+    let custom (f : AdaptiveToken * RenderToken * OutputDescription * TaskSync * IQuery -> unit) =
         new CustomRenderTask(AFun.create f) :> IRenderTask
 
     let before (f : unit -> unit) (t : IRenderTask) =
@@ -77,7 +77,8 @@ module RenderTask =
         let clear = runtime.CompileClear(signature, ~~clearColors, ~~1.0)
         let fbo = runtime.CreateFramebuffer(signature, sem, size)
 
-        let res = new SequentialRenderTask([|clear; task|]) |> renderTo fbo
+        let task = new SequentialRenderTask([|clear; task|])
+        let res = task.RenderTo(fbo, dispose = true)
         sem |> Seq.map (fun k -> k, getResult k res) |> Map.ofSeq
 
     let renderToColor (size : aval<V2i>) (task : IRenderTask) =
@@ -97,7 +98,7 @@ module RenderTask =
     let log fmt =
         Printf.kprintf (fun str ->
             let task =
-                custom (fun (self, token, out, queries) ->
+                custom (fun (self, token, out, sync, queries) ->
                     Log.line "%s" str
                 )
 
@@ -117,7 +118,7 @@ module ``RenderTask Builder`` =
 
         member x.Bind(f : unit -> unit, c : unit -> Result) : Result =
             let task =
-                RenderTask.custom (fun (self, token, out, queries) ->
+                RenderTask.custom (fun (self, token, out, sync, queries) ->
                     f()
                 )
             (AList.single task)::c()

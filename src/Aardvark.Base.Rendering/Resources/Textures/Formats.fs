@@ -368,6 +368,8 @@ module TextureFormat =
 
     let toDownloadFormat =
         LookupTable.lookupTable [
+            TextureFormat.Bgra8, PixFormat.ByteBGRA
+            TextureFormat.Bgr8, PixFormat.ByteBGR
             TextureFormat.Rgba8, PixFormat.ByteRGBA
             TextureFormat.Rgb8, PixFormat.ByteRGB
             TextureFormat.CompressedRgb, PixFormat.ByteRGB

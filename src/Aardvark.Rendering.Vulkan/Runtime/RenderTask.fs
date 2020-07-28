@@ -927,7 +927,7 @@ module RenderTask =
         override x.Use(f : unit -> 'r) =
             f()
 
-        override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription, queries : IQuery) =
+        override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription, sync : TaskSync, queries : IQuery) =
             x.OutOfDate <- true
             let range = 
                 { 
@@ -959,61 +959,62 @@ module RenderTask =
             let passCmds = passes.Values |> Seq.map (fun p -> p.GetValue(token)) |> Seq.toList
             tt.Sync()
 
+            let images =
+                fbo.ImageViews |> Array.map (fun view -> view.Image)
 
             cmd.Reset()
             cmd.Begin(renderPass, CommandBufferUsage.OneTimeSubmit)
-            cmd.enqueue {
-                let oldLayouts = Array.zeroCreate fbo.ImageViews.Length
-                for i in 0 .. fbo.ImageViews.Length - 1 do
-                    let img = fbo.ImageViews.[i].Image
-                    oldLayouts.[i] <- img.Layout
-                    if VkFormat.hasDepth img.Format then
-                        do! Command.TransformLayout(img, VkImageLayout.DepthStencilAttachmentOptimal)
-                    else
-                        do! Command.TransformLayout(img, VkImageLayout.ColorAttachmentOptimal)
 
-                do! Command.BeginPass(renderPass, fbo, false)
-                do! Command.Execute passCmds
-                do! Command.EndPass
+            images |> Image.Layouts (fun layouts ->
+                cmd.enqueue {
+                    for i in 0 .. images.Length - 1 do
+                        if VkFormat.hasDepth images.[i].Format then
+                            do! Command.TransformLayout(images.[i], VkImageLayout.DepthStencilAttachmentOptimal)
+                        else
+                            do! Command.TransformLayout(images.[i], VkImageLayout.ColorAttachmentOptimal)
 
-                if ranges.Length > 1 then
-                    let deviceCount = int device.AllCount
+                    do! Command.BeginPass(renderPass, fbo, false)
+                    do! Command.Execute passCmds
+                    do! Command.EndPass
+
+                    if ranges.Length > 1 then
+                        let deviceCount = int device.AllCount
                     
-                    for (sem,a) in Map.toSeq fbo.Attachments do
-                        if sem <> DefaultSemantic.Depth then 
-                            let img = a.Image
-                            let layers = a.ArrayRange
-                            let layerCount = 1 + layers.Max - layers.Min
+                        for (sem,a) in Map.toSeq fbo.Attachments do
+                            if sem <> DefaultSemantic.Depth then 
+                                let img = a.Image
+                                let layers = a.ArrayRange
+                                let layerCount = 1 + layers.Max - layers.Min
                         
-                            let aspect =
-                                match VkFormat.toImageKind img.Format with
-                                    | ImageKind.Depth -> ImageAspect.Depth
-                                    | ImageKind.DepthStencil  -> ImageAspect.DepthStencil
-                                    | _ -> ImageAspect.Color 
+                                let aspect =
+                                    match VkFormat.toImageKind img.Format with
+                                        | ImageKind.Depth -> ImageAspect.Depth
+                                        | ImageKind.DepthStencil  -> ImageAspect.DepthStencil
+                                        | _ -> ImageAspect.Color 
 
-                            let subResource = img.[aspect, a.MipLevelRange.Min]
-                            let ranges =
-                                ranges |> Array.map (fun { frMin = min; frMax = max; frLayers = layers} ->
-                                    layers, Box3i(V3i(min,0), V3i(max, 0))
-                                )
+                                let subResource = img.[aspect, a.MipLevelRange.Min]
+                                let ranges =
+                                    ranges |> Array.map (fun { frMin = min; frMax = max; frLayers = layers} ->
+                                        layers, Box3i(V3i(min,0), V3i(max, 0))
+                                    )
 
-                            do! Command.SyncPeers(subResource, ranges)
+                                do! Command.SyncPeers(subResource, ranges)
 
-                    
-                for i in 0 .. fbo.ImageViews.Length - 1 do
-                    let img = fbo.ImageViews.[i].Image
-                    do! Command.TransformLayout(img, oldLayouts.[i])
-            }   
-            cmd.End()
+                    for i in 0 .. images.Length - 1 do
+                        do! Command.TransformLayout(images.[i], layouts.[i])
+                }
 
-            device.GraphicsFamily.RunSynchronously cmd
+                cmd.End()
+
+                device.GraphicsFamily.RunSynchronously cmd
+            )
             
     type DependentRenderTask(device : Device, renderPass : RenderPass, objects : aset<IRenderObject>, shareTextures : bool, shareBuffers : bool) =
         inherit RenderTask(device, renderPass, shareTextures, shareBuffers)
 
         let mutable reader = objects.GetReader()
 
-        override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription, queries : IQuery) =
+        override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription, sync : TaskSync, queries : IQuery) =
             x.OutOfDate <- true
             let deltas = reader.GetChanges token
             if not (HashSetDelta.isEmpty deltas) then
@@ -1024,7 +1025,7 @@ module RenderTask =
                             | Rem(_,o) -> x.Remove o |> ignore
                 )
 
-            base.Perform(token, rt, desc, queries)
+            base.Perform(token, rt, desc, sync, queries)
 
         override x.Runtime = Some device.Runtime
 
@@ -1063,7 +1064,7 @@ module RenderTask =
                 | _ ->
                     ImageAspect.None
 
-        member x.Run(caller : AdaptiveToken, t : RenderToken, outputs : OutputDescription, queries : IQuery) =
+        member x.Run(caller : AdaptiveToken, t : RenderToken, outputs : OutputDescription, sync : TaskSync, queries : IQuery) =
             x.EvaluateAlways caller (fun caller ->
                 let fbo = unbox<Framebuffer> outputs.framebuffer
                 use token = device.Token
@@ -1099,13 +1100,13 @@ module RenderTask =
 
                 queries.End()
 
-                token.Sync()
+                token.Sync(sync.CommandSync)
             )
 
         interface IRenderTask with
             member x.Id = id
             member x.Update(c, t) = ()
-            member x.Run(c,t,o,q) = x.Run(c,t,o,q)
+            member x.Run(c,t,o,s,q) = x.Run(c,t,o,s,q)
             member x.Dispose() = 
                 cmd.Dispose()
                 pool.Dispose()

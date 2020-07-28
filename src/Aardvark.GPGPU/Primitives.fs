@@ -623,9 +623,9 @@ type private Map<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : ICompu
         )
         prog
 
-    member x.Run(input : IBufferVector<'a>, output : IBufferVector<'b>, queries : IQuery) =
+    member x.Run(input : IBufferVector<'a>, output : IBufferVector<'b>, sync : TaskSync, queries : IQuery) =
         let args, cmd = build input output
-        runtime.Run(cmd, queries)
+        runtime.Run(cmd, sync, queries)
         args.Dispose()
 
         
@@ -708,10 +708,10 @@ type private Scan<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Expr<
         )
         prog
         
-    member x.Run (input : IBufferVector<'a>, output : IBufferVector<'a>, queries : IQuery) =
+    member x.Run (input : IBufferVector<'a>, output : IBufferVector<'a>, sync : TaskSync, queries : IQuery) =
         let args = System.Collections.Generic.HashSet<IComputeShaderInputBinding>()
         let cmd = build args input output
-        runtime.Run(cmd, queries)
+        runtime.Run(cmd, sync, queries)
         for a in args do a.Dispose()
         args.Clear()
   
@@ -769,11 +769,11 @@ type private Reduce<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Exp
  
     member x.ReduceShader = reduce
 
-    member x.Run(input : IBufferVector<'a>, queries : IQuery) =
+    member x.Run(input : IBufferVector<'a>, sync : TaskSync, queries : IQuery) =
         let args = System.Collections.Generic.HashSet<System.IDisposable>()
         let target : 'a[] = Array.zeroCreate 1
         let cmd = build args input target
-        runtime.Run(cmd, queries)
+        runtime.Run(cmd, sync, queries)
         for a in args do a.Dispose()
         target.[0]
         
@@ -788,8 +788,8 @@ type private Reduce<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Exp
                 prog.Dispose()
                 for a in args do a.Dispose()
                 args.Clear()
-            member x.Run(queries) =
-                prog.Run(queries)
+            member x.Run(sync, queries) =
+                prog.Run(sync, queries)
                 target.[0]
 
         }
@@ -875,11 +875,11 @@ type private MapReduce<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : 
         else
             cmd
 
-    member x.Run(input : IBufferVector<'a>, queries : IQuery) =
+    member x.Run(input : IBufferVector<'a>, sync : TaskSync, queries : IQuery) =
         let args = System.Collections.Generic.HashSet<System.IDisposable>()
         let target : 'b[] = Array.zeroCreate 1
         let cmd = buildTop args input target
-        runtime.Run(cmd, queries)
+        runtime.Run(cmd, sync, queries)
         for a in args do a.Dispose()
         target.[0]
         
@@ -894,8 +894,8 @@ type private MapReduce<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : 
                 prog.Dispose()
                 for a in args do a.Dispose()
                 args.Clear()
-            member x.Run(queries) =
-                prog.Run(queries)
+            member x.Run(sync, queries) =
+                prog.Run(sync, queries)
                 target.[0]
 
         }
@@ -1031,11 +1031,11 @@ type private MapReduceImage<'b when 'b : unmanaged>(runtime : IComputeRuntime, r
         | d ->  
             failwithf "cannot reduce image with dimension: %A" d
 
-    member x.Run(input : ITextureSubResource, queries : IQuery) =
+    member x.Run(input : ITextureSubResource, sync : TaskSync, queries : IQuery) =
         let args = System.Collections.Generic.HashSet<System.IDisposable>()
         let target : 'b[] = Array.zeroCreate 1
         let cmd = buildTop args input target
-        runtime.Run(cmd, queries)
+        runtime.Run(cmd, sync, queries)
         for a in args do a.Dispose()
         target.[0]
         
@@ -1050,8 +1050,8 @@ type private MapReduceImage<'b when 'b : unmanaged>(runtime : IComputeRuntime, r
                 prog.Dispose()
                 for a in args do a.Dispose()
                 args.Clear()
-            member x.Run(queries) =
-                prog.Run(queries)
+            member x.Run(sync, queries) =
+                prog.Run(sync, queries)
                 target.[0]
 
         }
@@ -1267,10 +1267,10 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
         )
         prog
         
-    member x.Run (input : ITextureSubResource, output : ITextureSubResource, queries : IQuery) =
+    member x.Run (input : ITextureSubResource, output : ITextureSubResource, sync : TaskSync, queries : IQuery) =
         let args = System.Collections.Generic.HashSet<IComputeShaderInputBinding>()
         let cmd = build args input output
-        runtime.Run(cmd, queries)
+        runtime.Run(cmd, sync, queries)
         for a in args do a.Dispose()
         args.Clear()
   
@@ -1364,70 +1364,70 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
         let s = getSum typeof<'a> |> unbox<Reduce<'a>>
         s.Compile(b)
 
-    // Overloads with queries
-    member x.Scan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>, queries : IQuery) =
+    // Overloads with sync and queries
+    member x.Scan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>, sync : TaskSync, queries : IQuery) =
         let scanner = getScanner add
-        scanner.Run(input, output, queries)
+        scanner.Run(input, output, sync, queries)
 
-    member x.Scan(add : Expr<V4d -> V4d -> V4d>, input : ITextureSubResource, output : ITextureSubResource, queries : IQuery) =
+    member x.Scan(add : Expr<V4d -> V4d -> V4d>, input : ITextureSubResource, output : ITextureSubResource, sync : TaskSync, queries : IQuery) =
         let scanner = getImageScanner2d add
-        scanner.Run(input, output, queries)
+        scanner.Run(input, output, sync, queries)
 
-    member x.Fold(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, queries : IQuery) =
+    member x.Fold(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, sync : TaskSync, queries : IQuery) =
         let folder = getReducer add
-        folder.Run(input, queries)
+        folder.Run(input, sync, queries)
 
-    member x.MapReduce(map : Expr<int -> 'a -> 'b>, add : Expr<'b -> 'b -> 'b>, input : IBufferVector<'a>, queries : IQuery) =
+    member x.MapReduce(map : Expr<int -> 'a -> 'b>, add : Expr<'b -> 'b -> 'b>, input : IBufferVector<'a>, sync : TaskSync, queries : IQuery) =
         let reducer = getMapReducer map add
-        reducer.Run(input, queries)
+        reducer.Run(input, sync, queries)
 
-    member x.MapReduce(map : Expr<V3i -> V4f -> 'b>, add : Expr<'b -> 'b -> 'b>, input : ITextureSubResource, queries : IQuery) =
+    member x.MapReduce(map : Expr<V3i -> V4f -> 'b>, add : Expr<'b -> 'b -> 'b>, input : ITextureSubResource, sync : TaskSync, queries : IQuery) =
         let reducer = getImageMapReducer map add
-        reducer.Run(input, queries)
+        reducer.Run(input, sync, queries)
 
-    member x.Sum(input : ITextureSubResource, queries : IQuery) =
+    member x.Sum(input : ITextureSubResource, sync : TaskSync, queries : IQuery) =
         if input.Size.AllGreaterOrEqual 1 then
             let reducer = getImageMapReducer <@ fun _ v -> v @> <@ (+) @>
-            reducer.Run(input, queries)
+            reducer.Run(input, sync, queries)
         else
             V4f.Zero
 
-    member x.Min(input : ITextureSubResource, queries : IQuery) =
+    member x.Min(input : ITextureSubResource, sync : TaskSync, queries : IQuery) =
         let reducer = getImageMapReducer <@ fun i v -> v @> <@ fun l r -> V4f(min l.X r.X, min l.Y r.Y, min l.Z r.Z, min l.W r.W) @>
-        reducer.Run(input, queries)
+        reducer.Run(input, sync, queries)
 
-    member x.Map(map : Expr<int -> 'a -> 'b>, input : IBufferVector<'a>, output : IBufferVector<'b>, queries : IQuery) =
+    member x.Map(map : Expr<int -> 'a -> 'b>, input : IBufferVector<'a>, output : IBufferVector<'b>, sync : TaskSync, queries : IQuery) =
         let mapper = getMapper map
-        mapper.Run(input, output, queries)
+        mapper.Run(input, output, sync, queries)
 
-    member x.Sum(b : IBufferVector<'a>, queries : IQuery) : 'a =
+    member x.Sum(b : IBufferVector<'a>, sync : TaskSync, queries : IQuery) : 'a =
         let s = getSum typeof<'a> |> unbox<Reduce<'a>>
-        s.Run(b, queries)
+        s.Run(b, sync, queries)
 
-    // Overloads without queries
+    // Overloads without sync and queries
     member x.Scan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>) =
-        x.Scan(add, input, output, Queries.empty)
+        x.Scan(add, input, output, TaskSync.none, Queries.empty)
 
     member x.Scan(add : Expr<V4d -> V4d -> V4d>, input : ITextureSubResource, output : ITextureSubResource) =
-        x.Scan(add, input, output, Queries.empty)
+        x.Scan(add, input, output, TaskSync.none, Queries.empty)
 
     member x.Fold(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>) =
-        x.Fold(add, input, Queries.empty)
+        x.Fold(add, input, TaskSync.none, Queries.empty)
 
     member x.MapReduce(map : Expr<int -> 'a -> 'b>, add : Expr<'b -> 'b -> 'b>, input : IBufferVector<'a>) =
-        x.MapReduce(map, add, input, Queries.empty)
+        x.MapReduce(map, add, input, TaskSync.none, Queries.empty)
 
     member x.MapReduce(map : Expr<V3i -> V4f -> 'b>, add : Expr<'b -> 'b -> 'b>, input : ITextureSubResource) =
-        x.MapReduce(map, add, input, Queries.empty)
+        x.MapReduce(map, add, input, TaskSync.none, Queries.empty)
 
     member x.Sum(input : ITextureSubResource) =
-        x.Sum(input, Queries.empty)
+        x.Sum(input, TaskSync.none, Queries.empty)
 
     member x.Min(input : ITextureSubResource) =
-        x.Min(input, Queries.empty)
+        x.Min(input, TaskSync.none, Queries.empty)
 
     member x.Map(map : Expr<int -> 'a -> 'b>, input : IBufferVector<'a>, output : IBufferVector<'b>) =
-        x.Map(map, input, output, Queries.empty)
+        x.Map(map, input, output, TaskSync.none, Queries.empty)
 
     member x.Sum(b : IBufferVector<'a>) =
-        x.Sum(b, Queries.empty)
+        x.Sum(b, TaskSync.none, Queries.empty)

@@ -228,7 +228,7 @@ module RenderTaskPerformance =
             ]
 
         let customTask = 
-            RenderTask.custom (fun (s,t,output,queries) ->
+            RenderTask.custom (fun (s,t,output,sync,queries) ->
                 queries.Begin()
 
                 for i in 0 .. 100 do

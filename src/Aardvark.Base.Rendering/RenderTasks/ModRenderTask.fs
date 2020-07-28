@@ -38,9 +38,9 @@ type ModRenderTask(input : aval<IRenderTask>) =
         let ni = updateInner t token
         ni.Update(token, t)
 
-    override x.Perform(token, t, fbo, queries) =
+    override x.Perform(token, t, fbo, sync, queries) =
         let ni = updateInner t token
-        ni.Run(token, t, fbo, queries)
+        ni.Run(token, t, fbo, sync, queries)
 
     override x.Release() =
         input.Outputs.Remove x |> ignore

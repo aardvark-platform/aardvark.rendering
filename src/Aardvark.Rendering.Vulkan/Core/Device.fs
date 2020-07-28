@@ -21,8 +21,8 @@ type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
         10 + flagScore * f.count
 
     member x.Take(caps : QueueFlags, count : int) =
-        let families = 
-            available 
+        let families =
+            available
                 |> Array.toList
                 |> List.indexed
                 |> List.filter (fun (i, f) -> f.count > 0 && (f.flags &&& caps) = caps)
@@ -41,19 +41,19 @@ type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
                     available.[i] <- { f with count = f.count - missing }
                     usedQueues.[f.index] <- missing
                     missing <- 0
-     
+
         usedQueues
             |> Dictionary.toList
-            |> List.map (fun (i,cnt) -> allFamilies.[i], cnt)    
+            |> List.map (fun (i,cnt) -> allFamilies.[i], cnt)
 
     member x.TryTakeSingleFamily(caps : QueueFlags, count : int) =
-        let families = 
-            available 
+        let families =
+            available
                 |> Array.toList
                 |> List.indexed
                 |> List.filter (fun (i, f) -> f.count > 0 && (f.flags &&& caps) = caps)
                 |> List.sortByDescending (snd >> familyScore)
-        
+
         let mutable chosen = None
 
         for (i, f) in families  do
@@ -63,24 +63,24 @@ type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
                     chosen <- Some (f.index, count)
 
         match chosen with
-            | Some (familyIndex, count) -> 
+            | Some (familyIndex, count) ->
                 Some (allFamilies.[familyIndex], count)
 
             | None ->
                 match families with
                     | [] -> None
-                    | (_, fam) :: _ -> 
+                    | (_, fam) :: _ ->
                         available.[fam.index] <- { fam with count = 0 }
                         Some (allFamilies.[fam.index], fam.count)
 
     member x.TryTakeExplicit(min : QueueFlags, notMax : QueueFlags, count : int) =
-        let families = 
-            available 
+        let families =
+            available
                 |> Array.toList
                 |> List.indexed
                 |> List.filter (fun (i, f) -> f.count > 0 && (f.flags &&& notMax) = QueueFlags.None && (f.flags &&& min) = min)
                 |> List.sortByDescending (snd >> familyScore)
-        
+
         let mutable chosen = None
 
         for (i, f) in families  do
@@ -90,13 +90,13 @@ type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
                     chosen <- Some (f.index, count)
 
         match chosen with
-            | Some (familyIndex, count) -> 
+            | Some (familyIndex, count) ->
                 Some (allFamilies.[familyIndex], count)
 
             | None ->
                 match families with
                     | [] -> None
-                    | (_, fam) :: _ -> 
+                    | (_, fam) :: _ ->
                         available.[fam.index] <- { fam with count = 0 }
                         Some (allFamilies.[fam.index], fam.count)
 
@@ -119,22 +119,22 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     let computeQueues   = pool.TryTakeExplicit(QueueFlags.Compute, QueueFlags.Graphics, 1)
     let transferQueues  = pool.TryTakeExplicit(QueueFlags.Transfer, QueueFlags.Compute ||| QueueFlags.Graphics, 1)
     let onDispose = Event<unit>()
-    
+
     let mutable shaderCachePath : Option<string> = None
     let mutable validateShaderCaches = false
     let mutable debugReportActive = true
 
-    let allIndicesArr = 
+    let allIndicesArr =
         [|
             let mutable mask = 1u
             for i in 0u .. 31u do
                 if dev.DeviceMask &&& mask <> 0u then
                     yield i
                 mask <- mask <<< 1
-                
+
         |]
 
-    let allIndices = 
+    let allIndices =
         let ptr = NativePtr.alloc allIndicesArr.Length
         for i in 0 .. allIndicesArr.Length - 1 do
             NativePtr.set ptr i allIndicesArr.[i]
@@ -145,11 +145,11 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     let extensions =
         let availableExtensions = physical.GlobalExtensions |> Seq.map (fun e -> e.name.ToLower(), e.name) |> Dictionary.ofSeq
         //let availableLayerNames = physical.AvailableLayers |> Seq.map (fun l -> l.name.ToLower(), l) |> Map.ofSeq
-        //let enabledLayers = 
+        //let enabledLayers =
         //    wantedLayers |> Set.filter (fun name ->
         //        let name = name.ToLower()
         //        match Map.tryFind name availableLayerNames with
-        //            | Some layer -> 
+        //            | Some layer ->
         //                VkRaw.debug "enabled layer %A" name
         //                for e in layer.extensions do
         //                    availableExtensions.[e.name.ToLower()] <- e.name
@@ -163,10 +163,10 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
             wantedExtensions |> List.choose (fun name ->
                 let name = name.ToLower()
                 match availableExtensions.TryGetValue name with
-                    | (true, realName) -> 
+                    | (true, realName) ->
                         VkRaw.debug "enabled extension %A" name
                         Some realName
-                    | _ -> 
+                    | _ ->
                         VkRaw.warn "could not enable device-extension '%s' since it is not available" name
                         None
             )
@@ -190,8 +190,8 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
                     | (true, o) -> counts.[fam.index] <- o + cnt
                     | _ -> counts.[fam.index] <- cnt
 
-            counts 
-                |> Dictionary.toArray 
+            counts
+                |> Dictionary.toArray
                 |> Array.map (fun (familyIndex, count) ->
                     VkDeviceQueueCreateInfo(
                         VkDeviceQueueCreateFlags.MinValue,
@@ -206,7 +206,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
             let extensions = List.toArray extensions
             let! pExtensions = extensions
 
-            let features = 
+            let features =
                 temporary<VkPhysicalDeviceFeatures, VkPhysicalDeviceFeatures> (fun pFeatures ->
                     VkRaw.vkGetPhysicalDeviceFeatures(physical.Handle, pFeatures)
                     NativePtr.read pFeatures
@@ -220,7 +220,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
                     uint32 deviceGroup.Length,
                     pDevices
                 )
-                
+
             let next = if isGroup then NativePtr.toNativeInt pGroupInfo else 0n
             let! pFeatures = features
             let! pInfo =
@@ -233,7 +233,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
                     pFeatures
                 )
             let! pDevice = VkDevice.Zero
-            
+
             VkRaw.vkCreateDevice(physical.Handle,pInfo, NativePtr.zero, pDevice)
                 |> check "could not create device"
 
@@ -273,7 +273,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
             Option.toArray transferFamily
         ]
 
-    let usedFamilies = 
+    let usedFamilies =
         List.concat [ Option.toList graphicsQueues; Option.toList computeQueues; Option.toList transferQueues ]
             |> List.map (fun (f,_) -> f.index)
             |> Set.ofList
@@ -297,7 +297,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
         else VkSharingMode.Concurrent
 
 
-    let memories = 
+    let memories =
         physical.MemoryTypes |> Array.map (fun t ->
             new DeviceHeap(this, physical, t, t.heap)
         )
@@ -313,13 +313,13 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
 
     let uploadMode =
         if deviceMemory.IsHostVisible then
-            UploadMode.Direct 
+            UploadMode.Direct
         else
             match transferFamily with
                 | Some _ -> UploadMode.Async
                 | None -> UploadMode.Sync
 
-    let copyEngine = 
+    let copyEngine =
         lazy (
             match transferFamily with
                 | Some pool -> new CopyEngine(pool)
@@ -328,7 +328,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
 
     member x.CopyEngine = copyEngine.Value
 
-    member x.DebugReportActive 
+    member x.DebugReportActive
         with get() = debugReportActive
         and set v = debugReportActive <- v
 
@@ -338,15 +338,15 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
 
     member x.ShaderCachePath
         with get() = shaderCachePath
-        and set v = 
-            match v with    
+        and set v =
+            match v with
                 | Some path ->
                     try
-                        if not (System.IO.Directory.Exists path) then System.IO.Directory.CreateDirectory path |> ignore 
+                        if not (System.IO.Directory.Exists path) then System.IO.Directory.CreateDirectory path |> ignore
                         shaderCachePath <- Some path
                     with _ ->
                         shaderCachePath <- None
-                | None -> 
+                | None ->
                     shaderCachePath <- None
 
     member x.UploadMode = uploadMode
@@ -367,7 +367,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
         match caches.TryGetValue cacheName with
             | (true, (:? IDeviceCache<'b> as c)) -> c.Revoke value
             | _ -> ()
-                
+
 
     member x.ComputeToken =
         let ref = currentResourceToken.Value
@@ -378,7 +378,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
             | None ->
                 let t = new DeviceToken(computeFamily.Value, ref)
                 ref := Some t
-                t 
+                t
 
     member x.Token =
         let ref = currentResourceToken.Value
@@ -389,7 +389,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
             | None ->
                 let t = new DeviceToken(graphicsFamily.Value, ref)
                 ref := Some t
-                t 
+                t
 
     member x.UnsafeCurrentToken =
         !currentResourceToken.Value
@@ -398,10 +398,10 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
         let ref = currentResourceToken.Value
         ref := t
 
-    member x.Sync() =
+    member x.Sync(sync : ICommandSync) =
         let ref = currentResourceToken.Value
         match !ref with
-            | Some t -> t.Sync()
+            | Some t -> t.Sync(sync)
             | _ -> ()
 
     member x.Runtime
@@ -410,7 +410,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
 
     [<Obsolete>]
     member x.QueueFamilies = queueFamilies
-    
+
     member x.EnabledExtensions = extensions
 
     member x.MinMemoryMapAlignment = memoryLimits.MinMemoryMapAlignment
@@ -430,17 +430,17 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     member internal x.AllIndices = allIndices
     member x.AllIndicesArr = allIndicesArr
 
-    member x.GraphicsFamily : DeviceQueueFamily  = 
+    member x.GraphicsFamily : DeviceQueueFamily  =
         match graphicsFamily with
             | Some pool -> pool
             | None -> failf "the device does not support graphics-queues"
 
-    member x.ComputeFamily = 
+    member x.ComputeFamily =
         match computeFamily with
             | Some pool -> pool
             | None -> failf "the device does not support compute-queues"
 
-    member x.TransferFamily = 
+    member x.TransferFamily =
         match transferFamily with
             | Some pool -> pool
             | None -> failf "the device does not support transfer-queues"
@@ -458,7 +458,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     member x.Dispose() =
         if not instance.IsDisposed then
             let o = Interlocked.Exchange(&isDisposed, 1)
-            if o = 0 then 
+            if o = 0 then
                 if copyEngine.IsValueCreated then
                     copyEngine.Value.Dispose()
 
@@ -497,7 +497,7 @@ and DeviceCache<'a, 'b when 'b :> RefCountedResource>(device : Device) =
         )
 
     member x.Invoke(value : 'a, create : 'a -> 'b) : 'b =
-        lock store (fun () -> 
+        lock store (fun () ->
             let create (value : 'a) =
                 let res = create value
                 back.[res] <- value
@@ -511,7 +511,7 @@ and DeviceCache<'a, 'b when 'b :> RefCountedResource>(device : Device) =
         lock store (fun () ->
             if Interlocked.Decrement(&thing.RefCount) = 0 then
                 match back.TryRemove thing with
-                    | (true, key) -> 
+                    | (true, key) ->
                         store.Remove key |> ignore
                         thing.Destroy()
                     | _ ->
@@ -541,15 +541,15 @@ and [<RequireQualifiedAccess>] CopyCommand =
 
     static member Copy(src : VkBuffer, srcOffset : int64, dst : VkBuffer, dstOffset : int64, size : int64) =
         CopyCommand.BufferToBufferCmd(
-            src, 
-            dst, 
+            src,
+            dst,
             VkBufferCopy(uint64 srcOffset, uint64 dstOffset, uint64 size)
         )
 
     static member Copy(src : VkBuffer, srcOffset : int64, dst : VkImage, dstLayout : VkImageLayout, format : VkFormat, info : VkBufferImageCopy) =
-        let sizeInBytes = 
+        let sizeInBytes =
             int64 info.imageExtent.width *
-            int64 info.imageExtent.height * 
+            int64 info.imageExtent.height *
             int64 info.imageExtent.depth *
             int64 (VkFormat.sizeInBytes format)
 
@@ -560,9 +560,9 @@ and [<RequireQualifiedAccess>] CopyCommand =
         )
 
     static member Copy(src : VkImage, srcLayout : VkImageLayout, dst : VkBuffer, format : VkFormat, info : VkBufferImageCopy) =
-        let sizeInBytes = 
+        let sizeInBytes =
             int64 info.imageExtent.width *
-            int64 info.imageExtent.height * 
+            int64 info.imageExtent.height *
             int64 info.imageExtent.depth *
             int64 (VkFormat.sizeInBytes format)
 
@@ -594,7 +594,7 @@ and CopyEngine(family : DeviceQueueFamily) =
     let familyIndex = family.Index
 
     //let trigger = new MultimediaTimer.Trigger(1)  // was for batching, introduces latency
-   
+
     let maxCommandSize = 16L <<< 30
 
     // queue
@@ -628,12 +628,12 @@ and CopyEngine(family : DeviceQueueFamily) =
             // now: latency or batch updates. how to allow both
             //trigger.Wait()
 
-            
 
-            let copies, totalSize = 
+
+            let copies, totalSize =
                 lock lockObj (fun () ->
 
-                    if not running then 
+                    if not running then
                         empty, 0L
                     else
                         while pending.Count = 0 && running do Monitor.Wait lockObj |> ignore
@@ -765,7 +765,7 @@ and CopyEngine(family : DeviceQueueFamily) =
                         VkRaw.vkQueueSubmit(queue.Handle, 1u, pSubmit, fence.Handle) |> ignore
                     )
                 )
-                lock enqueueMon (fun () -> 
+                lock enqueueMon (fun () ->
                     vDone <- vEnqueue
                     Monitor.PulseAll enqueueMon
                 )
@@ -781,19 +781,19 @@ and CopyEngine(family : DeviceQueueFamily) =
                         copiedSize <- copiedSize + totalSize
                         copyTime <- copyTime + sw.MicroTime
                     )
-            
+
                 for c in conts do c()
 
         fence.Dispose()
 
-    let threads = 
-        family.Queues |> List.take 1 |> List.map (fun (q : DeviceQueue) -> 
+    let threads =
+        family.Queues |> List.take 1 |> List.map (fun (q : DeviceQueue) ->
             let name = sprintf "VulkanUploader%d" q.Index
-            let thread = 
+            let thread =
                 Thread(
-                    ThreadStart(run name q), 
-                    IsBackground = true, 
-                    Name = name, 
+                    ThreadStart(run name q),
+                    IsBackground = true,
+                    Name = name,
                     Priority = ThreadPriority.AboveNormal
                 )
             thread.Start()
@@ -820,7 +820,7 @@ and CopyEngine(family : DeviceQueueFamily) =
 
 
     member x.Cancel() =
-        let wait = 
+        let wait =
             lock lockObj (fun () ->
                 if running then
                     running <- false
@@ -835,12 +835,12 @@ and CopyEngine(family : DeviceQueueFamily) =
             threads |> List.iter (fun t -> t.Join())
 
     member x.Enqueue(commands : seq<CopyCommand>) =
-        let size = 
+        let size =
             lock lockObj (fun () ->
                 pending.AddRange commands
-                        
+
                 //pending.AddRange commands
-                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L 
+                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L
                 totalSize <- totalSize + s
 
                 Monitor.PulseAll lockObj
@@ -851,12 +851,12 @@ and CopyEngine(family : DeviceQueueFamily) =
 
     member x.EnqueueSafe(commands : seq<CopyCommand>) =
         let v = Interlocked.Increment(&vEnqueue)
-        let size = 
+        let size =
             lock lockObj (fun () ->
                 pending.AddRange commands
-                        
+
                 //pending.AddRange commands
-                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L 
+                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L
                 totalSize <- totalSize + s
 
                 Monitor.PulseAll lockObj
@@ -864,7 +864,7 @@ and CopyEngine(family : DeviceQueueFamily) =
                 s
             )
 
-        lock enqueueMon (fun () -> 
+        lock enqueueMon (fun () ->
             while vDone < v do
                 Monitor.Wait enqueueMon |> ignore
         )
@@ -895,7 +895,7 @@ and CopyEngine(family : DeviceQueueFamily) =
 
     member x.Enqueue(c : CopyCommand) =
         x.Enqueue (Seq.singleton c)
-          
+
     member x.Dispose() = x.Cancel()
 
     interface IDisposable with
@@ -929,13 +929,13 @@ and [<AbstractClass>] Resource<'a when 'a : unmanaged and 'a : equality> =
         override x.IsValid =
             not x.Device.IsDisposed && x.Handle <> Unchecked.defaultof<_>
 
-        new(device : Device, handle : 'a) = 
+        new(device : Device, handle : 'a) =
             { inherit Resource(device); Handle = handle }
     end
 
 
 and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : QueueFamilyInfo, index : int) =
-    let handle = 
+    let handle =
         temporary<VkQueue, VkQueue> (fun pQueue ->
             VkRaw.vkGetDeviceQueue(deviceHandle, uint32 familyInfo.index, uint32 index, pQueue)
             NativePtr.read pQueue
@@ -976,7 +976,7 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
 
                 native {
                     let! pGroupInfos = groupInfos
-                    let binds = 
+                    let binds =
                         let mutable gi = 0
                         binds |> Array.collect (fun b ->
                             device.AllIndicesArr |> Array.map (fun i ->
@@ -995,7 +995,7 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                     return VkRaw.vkQueueBindSparse(handle, uint32 binds.Length, pBinds, fence)
                 }
         )
-        
+
     member private x.SubmitPrivate(cmds : list<CommandBuffer>, waitFor : list<Semaphore>, signal : list<Semaphore>, fence : Option<Fence>) =
         lock x (fun () ->
             let waitFor = waitFor |> List.map (fun s -> s.Handle) |> List.toArray
@@ -1021,7 +1021,7 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                     let waitCount, pWaitIndices =
                         if waitFor.Length > 0 then device.AllCount, device.AllIndices
                         else 0u, NativePtr.zero
-                    
+
                     let signalCount, pSignalIndices =
                         if waitFor.Length > 0 then device.AllCount, device.AllIndices
                         else 0u, NativePtr.zero
@@ -1044,7 +1044,7 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                         submit |> pin (fun pSubmit ->
                             VkRaw.vkQueueSubmit(handle, 1u, pSubmit, fence)
                                 |> check "could not submit command buffer"
-                        )   
+                        )
                     )
 
                 else
@@ -1054,7 +1054,7 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
                             uint32 cmds.Length, pCmds,
                             uint32 signal.Length, pSignal
                         )
-                        
+
                     submit |> pin (fun pSubmit ->
                         VkRaw.vkQueueSubmit(handle, 1u, pSubmit, fence)
                             |> check "could not submit command buffer"
@@ -1066,7 +1066,7 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
     member x.Submit(cmds : list<CommandBuffer>, waitFor : list<Semaphore>, signal : list<Semaphore>, fence : Option<Fence>) =
         x.SubmitPrivate(cmds, waitFor, signal, fence)
 
-   
+
     [<Obsolete>]
     member x.RunSynchronously(cmd : CommandBuffer) =
         if cmd.IsRecording then
@@ -1120,7 +1120,7 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
         let sem = device.CreateSemaphore()
         x.SubmitPrivate([cmd], waitFor, [sem], None)
         sem
-        
+
     [<Obsolete>]
     member x.StartAsync(cmd : CommandBuffer) =
         if cmd.IsRecording then
@@ -1129,14 +1129,14 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
         let sem = device.CreateSemaphore()
         x.SubmitPrivate([cmd], [], [sem], None)
         sem
-        
+
     [<Obsolete>]
     member x.Wait(sem : Semaphore) =
         let f = device.CreateFence()
         x.SubmitPrivate([], [sem], [], Some f)
         f.Wait()
         f.Dispose()
-        
+
     [<Obsolete>]
     member x.Wait(sems : seq<Semaphore>) =
         let f = device.CreateFence()
@@ -1153,12 +1153,12 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
 
 and DeviceQueuePool internal(device : Device, queues : list<DeviceQueueFamily>) =
     let available : HashSet<QueueFlags> = queues |> List.collect (fun f -> Enum.allSubFlags f.Flags) |> HashSet.ofList
-    let store : MultiTable<DeviceQueueFamily, DeviceQueue> = 
-        queues 
-            |> List.collect (fun f -> f.Queues |> List.map (fun q -> f, q)) 
+    let store : MultiTable<DeviceQueueFamily, DeviceQueue> =
+        queues
+            |> List.collect (fun f -> f.Queues |> List.map (fun q -> f, q))
             |> MultiTable
 
-    
+
     let changed = new AutoResetEvent(false)
 
     let checkFlags (cap : QueueFlags) (f : DeviceQueueFamily) =
@@ -1224,7 +1224,7 @@ and DeviceTemporaryCommandPool(family : DeviceQueueFamily) =
 
     member x.Take() =
         match bag.TryTake() with
-            | (true, pool) -> 
+            | (true, pool) ->
                 pool
             | _ ->
                 if Interlocked.Exchange(&disposeInstalled, 1) = 0 then
@@ -1243,7 +1243,7 @@ and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues :
 
     let defaultPool = new DeviceCommandPool(device, info.index, this)
     let tempPool = new DeviceTemporaryCommandPool(this)
-    
+
     let thread = lazy (new DeviceQueueThread(this))
 
 
@@ -1266,7 +1266,7 @@ and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues :
 
     member x.Start (cmd : QueueCommand) : DeviceTask =
         thread.Value.Enqueue cmd
-        
+
     member x.Start (priority : int, cmd : QueueCommand) : DeviceTask =
         thread.Value.Enqueue(priority, cmd)
 
@@ -1274,23 +1274,35 @@ and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues :
         let t = thread.Value.Enqueue cmd
         t.Wait()
         if t.IsFaulted then raise t.Exception
-        
+
     member x.RunSynchronously(priority : int, cmd : QueueCommand) : unit =
         let t = thread.Value.Enqueue(priority, cmd)
         t.Wait()
         if t.IsFaulted then raise t.Exception
 
+    member x.Start (cmd : CommandBuffer, sync : ICommandSync) =
+        x.Start(QueueCommand.Submit([cmd], sync))
+
+    member x.Start (priority : int, cmd : CommandBuffer, sync : ICommandSync) =
+        x.Start(priority, QueueCommand.Submit([cmd], sync))
+
     member x.Start (cmd : CommandBuffer) =
-        x.Start(QueueCommand.Submit([], [], [cmd]))
-        
+        x.Start(cmd, CommandSync.None)
+
     member x.Start (priority : int, cmd : CommandBuffer) =
-        x.Start(priority, QueueCommand.Submit([], [], [cmd]))
-        
+        x.Start(priority, cmd, CommandSync.None)
+
+    member x.RunSynchronously (cmd : CommandBuffer, sync : ICommandSync) =
+        x.RunSynchronously (QueueCommand.Submit([cmd], sync))
+
+    member x.RunSynchronously (priority : int, cmd : CommandBuffer, sync : ICommandSync) =
+        x.RunSynchronously (priority, QueueCommand.Submit([cmd], sync))
+
     member x.RunSynchronously (cmd : CommandBuffer) =
-        x.RunSynchronously (QueueCommand.Submit([], [], [cmd]))
-        
+        x.RunSynchronously (cmd, CommandSync.None)
+
     member x.RunSynchronously (priority : int, cmd : CommandBuffer) =
-        x.RunSynchronously (priority, QueueCommand.Submit([], [], [cmd]))
+        x.RunSynchronously (priority, cmd, CommandSync.None)
 
     [<Obsolete>]
     member x.GetQueue () : DeviceQueue =
@@ -1314,7 +1326,7 @@ and DeviceCommandPool internal(device : Device, index : int, queueFamily : Devic
                 VkCommandPoolCreateFlags.ResetCommandBufferBit,
                 uint32 index
             )
-        let handle = 
+        let handle =
             createInfo |> pin (fun pCreate ->
                 temporary<VkCommandPool,VkCommandPool> (fun pHandle ->
                     VkRaw.vkCreateCommandPool(device.Handle, pCreate, NativePtr.zero, pHandle)
@@ -1347,7 +1359,7 @@ and DeviceCommandPool internal(device : Device, index : int, queueFamily : Devic
             let all = allPools |> Seq.toArray
             allPools.Clear()
             handles.Dispose()
-            all |> Seq.iter (fun h -> 
+            all |> Seq.iter (fun h ->
                 if h.IsValid then
                     VkRaw.vkDestroyCommandPool(device.Handle, h, NativePtr.zero)
             )
@@ -1401,7 +1413,7 @@ and CommandPool internal(device : Device, familyIndex : int, queueFamily : Devic
 
 and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : DeviceQueueFamily, level : CommandBufferLevel) =
 
-    let mutable handle = 
+    let mutable handle =
         native {
             let! pInfo =
                 VkCommandBufferAllocateInfo(
@@ -1419,7 +1431,7 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
     let mutable commands = 0
     let mutable recording = false
     let cleanupTasks = List<IDisposable>()
-    
+
     let cleanup() =
         for c in cleanupTasks do c.Dispose()
         cleanupTasks.Clear()
@@ -1509,7 +1521,7 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
     member x.Reset(e : Event, flags : VkPipelineStageFlags) =
         x.AppendCommand()
         VkRaw.vkCmdResetEvent(handle, e.Handle, flags)
- 
+
     member x.WaitAll(e : Event[]) =
         x.AppendCommand()
         native {
@@ -1561,13 +1573,13 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
     member private x.Dispose(disposing : bool) =
         if handle <> 0n && device.Handle <> 0n then
             cleanup()
-            
+
             handle |> pin (fun pHandle -> VkRaw.vkFreeCommandBuffers(device.Handle, pool, 1u, pHandle))
             handle <- 0n
 
-        if disposing then 
+        if disposing then
             GC.SuppressFinalize(x)
-        else 
+        else
             Log.warn "GC found leaking commandbuffer"
 
     member x.Dispose() = x.Dispose(true)
@@ -1581,7 +1593,7 @@ and Fence internal(device : Device, signaled : bool) =
 
     let pFence : nativeptr<VkFence> = NativePtr.alloc 1
 
-    do 
+    do
         native {
             let! pInfo =
                 VkFenceCreateInfo(
@@ -1640,13 +1652,13 @@ and Fence internal(device : Device, signaled : bool) =
     member x.TryWait(timeoutInNanoseconds : int64) =
         let waitResult = VkRaw.vkWaitForFences(device.Handle, 1u, pFence, 1u, uint64 timeoutInNanoseconds)
         match waitResult with
-            | VkResult.VkTimeout -> 
+            | VkResult.VkTimeout ->
                 false
-            | VkResult.VkSuccess -> 
+            | VkResult.VkSuccess ->
                 true
-            | err -> 
+            | err ->
                 failf "could not wait for fences: %A" err
-    
+
     member x.TryWait() = x.TryWait(-1L)
 
     member x.Dispose() =
@@ -1657,21 +1669,24 @@ and Fence internal(device : Device, signaled : bool) =
                 NativePtr.write pFence VkFence.Null
             NativePtr.free pFence
 
-    member x.Wait(timeoutInNanoseconds : int64) = 
+    member x.Wait(timeoutInNanoseconds : int64) =
         if not (x.TryWait(timeoutInNanoseconds)) then
             raise <| TimeoutException("Fence")
 
-    member x.Wait() = 
+    member x.Wait() =
         if not (x.TryWait()) then
             raise <| TimeoutException("Fence")
 
 
     new(device : Device) = new Fence(device, false)
 
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
 and Semaphore internal(device : Device) =
 
 
-    let mutable handle = 
+    let mutable handle =
         let info = VkSemaphoreCreateInfo.Empty
 
         info |> pin (fun pInfo ->
@@ -1687,9 +1702,10 @@ and Semaphore internal(device : Device) =
 
     member x.Set() =
         if handle.IsValid then
-            device.GraphicsFamily.RunSynchronously(QueueCommand.Submit([], [x], []))
+            let sync = CommandSync({ waitFor = []; signal = [x] }, None, None)
+            device.GraphicsFamily.RunSynchronously(QueueCommand.Submit([], sync))
         else
-            failf "cannot signal disposed fence" 
+            failf "cannot signal disposed fence"
 
     member x.Dispose() =
         if handle.IsValid && device.Handle <> 0n then
@@ -1723,15 +1739,15 @@ and Event internal(device : Device) =
             else failf "could not get event status"
         else
             failf "could not get event status"
-           
+
     member x.Set() =
         VkRaw.vkSetEvent(device.Handle, handle)
             |> check "could not set event"
-           
+
     member x.Reset() =
         VkRaw.vkResetEvent(device.Handle, handle)
             |> check "could not set event"
-            
+
     member x.Dispose() =
         if handle.IsValid && device.Handle <> 0n then
             VkRaw.vkDestroyEvent(device.Handle, handle, NativePtr.zero)
@@ -1756,7 +1772,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                 uint32 memory.index
             )
 
-        let mem = 
+        let mem =
             info |> pin (fun pInfo ->
                 temporary<VkDeviceMemory, VkDeviceMemory> (fun pHandle ->
                     VkRaw.vkAllocateMemory(device.Handle, pInfo, NativePtr.zero, pHandle)
@@ -1765,7 +1781,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                 )
             )
 
-        let hostPtr = 
+        let hostPtr =
             if hostVisible then
                 temporary<nativeint, nativeint> (fun pPtr ->
                     VkRaw.vkMapMemory(device.Handle, mem, 0UL, 16UL, VkMemoryMapFlags.MinValue, pPtr)
@@ -1794,7 +1810,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
     member x.IsHostVisible = hostVisible
     member x.IsHostCoherent = memory.flags.HasFlag MemoryFlags.HostCoherent
 
-    member x.Null = 
+    member x.Null =
         lock x (fun () ->
             match nullptr with
                 | Some ptr -> ptr
@@ -1827,8 +1843,8 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                             NativePtr.read pHandle
                         )
                     )
-            
-                let hostPtr = 
+
+                let hostPtr =
                     if hostVisible then
                         temporary<nativeint, nativeint> (fun pPtr ->
                             VkRaw.vkMapMemory(device.Handle, mem, 0UL, uint64 size, VkMemoryMapFlags.MinValue, pPtr)
@@ -1851,7 +1867,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
             match x.TryAllocRaw size with
                 | (true, ptr) -> ptr
                 | _ -> failf "could not allocate %A (only %A available)" (Mem size) heap.Available
-            
+
     member x.TryAllocRaw(mem : Mem, [<Out>] ptr : byref<DeviceMemory>) = x.TryAllocRaw(mem.Bytes, &ptr)
     member x.TryAllocRaw(mem : VkDeviceSize, [<Out>] ptr : byref<DeviceMemory>) = x.TryAllocRaw(int64 mem, &ptr)
     member x.AllocRaw(mem : Mem) = x.AllocRaw(mem.Bytes)
@@ -1872,15 +1888,15 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
 
     member x.Dispose() =
         match nullptr with
-            | Some ptr -> 
+            | Some ptr ->
                 VkRaw.vkFreeMemory(device.Handle, ptr.Handle, NativePtr.zero)
                 nullptr <- None
             | None -> ()
-        
+
     member x.Clear() =
 
         match nullptr with
-            | Some ptr -> 
+            | Some ptr ->
                 VkRaw.vkFreeMemory(device.Handle, ptr.Handle, NativePtr.zero)
                 nullptr <- None
             | None -> ()
@@ -1916,7 +1932,7 @@ and [<AllowNullLiteral>] DeviceBlock(manager : DeviceMemoryManager, mem : Device
         manager.Free x
 
 and DeviceFreeList() =
-    
+
     static let comparer =
         { new System.Collections.Generic.IComparer<DeviceBlock> with
             member x.Compare(l : DeviceBlock, r : DeviceBlock) =
@@ -1928,11 +1944,11 @@ and DeviceFreeList() =
                 else
                     let c = compare l.Size r.Size
                     if c <> 0 then c
-                    else 
-                        let c = compare l.Offset r.Offset     
+                    else
+                        let c = compare l.Offset r.Offset
                         if c <> 0 then c
-                        else 
-                            let c = compare l.Memory.Handle.Handle r.Memory.Handle.Handle  
+                        else
+                            let c = compare l.Memory.Handle.Handle r.Memory.Handle.Handle
                             if c = 0 then 0
                             else c
         }
@@ -1948,7 +1964,7 @@ and DeviceFreeList() =
         let min = new DeviceBlock(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1L, size, false, null, null)
         let view = store.GetViewBetween(min, null)
 
-        let res = 
+        let res =
             view |> Seq.tryFind (fun b ->
                 let o = next align b.Offset
                 let s = b.Size - (o - b.Offset)
@@ -1956,7 +1972,7 @@ and DeviceFreeList() =
             )
 
         match res with
-            | Some res -> 
+            | Some res ->
                 store.Remove res |> ignore
                 Some res
             | None ->
@@ -1974,8 +1990,8 @@ and DeviceFreeList() =
 and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSize : int64) =
     static let next (align : int64) (v : int64) =
         if v % align = 0L then v
-        else v + (align - v % align)    
-  
+        else v + (align - v % align)
+
     let free = DeviceFreeList()
     let blocks = System.Collections.Generic.HashSet<DeviceMemory>()
     let mutable allocatedMemory = 0L
@@ -2022,9 +2038,9 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
 
                             free.Insert(l)
                             b.Offset <- alignedOffset
-                            b.Size <- alignedSize    
+                            b.Size <- alignedSize
 
-                
+
                         if alignedSize > size then
                             let r = new DeviceBlock(x, b.Memory, alignedOffset + size, alignedSize - size, true, b, b.Next)
                             if not (isNull r.Next) then r.Next.Prev <- r
@@ -2045,7 +2061,7 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
         if not b.IsFree then
             lock free (fun () ->
                 let old = b
-                    
+
                 let b = new DeviceBlock(x, b.Memory, b.Offset, b.Size, b.IsFree, b.Prev, b.Next)
                 if not (isNull b.Prev) then b.Prev.Next <- b
                 if not (isNull b.Next) then b.Next.Prev <- b
@@ -2063,7 +2079,7 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
                 let mutable isLast = isNull next
                 if not isFirst && prev.IsFree then
                     free.Remove(prev) |> ignore
-                        
+
                     b.Prev <- prev.Prev
                     if isNull b.Prev then isFirst <- true
                     else b.Prev.Next <- b
@@ -2101,7 +2117,7 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
             allocatedMemory <- 0L
             usedMemory <- 0L
         )
-            
+
 
 and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int64, hostPtr : nativeint) =
     inherit DevicePtr(Unchecked.defaultof<_>, 0L, size)
@@ -2189,7 +2205,7 @@ and [<AllowNullLiteral>] DevicePtr internal(memory : DeviceMemory, offset : int6
             try
                 let ptr = memory.HostPointer + nativeint x.Offset
                 f ptr
-            finally 
+            finally
                 if not memory.Heap.IsHostCoherent then
                     let range = VkMappedMemoryRange(memory.Handle, uint64 x.Offset, uint64 x.Size)
                     range |> pin (fun pRange ->
@@ -2229,15 +2245,72 @@ and BufferBind =
         mem : DevicePtr
     }
 
+/// Struct to pass semaphores to command submission controlling device - device synchronization.
+and DeviceSync =
+    {
+        waitFor     : Semaphore list
+        signal      : Semaphore list
+    }
+
+    with
+    
+    static member None =
+        { waitFor = []; signal = []}
+
+    static member X =
+        { new ICommandSync with
+            member x.Submit(f) = f SubmitInfo.None
+            member x.SubmitAsync(f) = f SubmitInfoAsync.None
+        }
+
+/// Synchronization info for command submissions.
+and SubmitInfo =
+    {
+        device : DeviceSync
+        event : EventWaitHandle option
+    }
+
+    with static member None =
+            { device = DeviceSync.None; event = None }
+
+and ICommandSync =
+    abstract member Submit : (SubmitInfo -> 'a) -> 'a
+    abstract member SubmitAsync : (SubmitInfoAsync -> 'a) -> 'a
+
+and CommandSync(device : DeviceSync, event : EventWaitHandle option, fence : Fence option) =
+
+    let submitInfo =
+        { device = device; event = event }
+
+    let submitInfoAsync =
+        { device = device; fence = fence }
+
+    interface ICommandSync with
+        member x.Submit(f) = f submitInfo
+        member x.SubmitAsync(f) = f submitInfoAsync
+
+    static member None =
+        CommandSync(DeviceSync.None, None, None)
+
+/// Synchronization info for asynchronous command submissions.
+and SubmitInfoAsync =
+    {
+        device : DeviceSync
+        fence : Fence option
+    }
+
+    with static member None =
+            { device = DeviceSync.None; fence = None }
+
 and QueueCommand =
-    | Submit of waitFor : list<Semaphore> * signal : list<Semaphore> * cmds : list<CommandBuffer>
+    | Submit of cmds : list<CommandBuffer> * sync : ICommandSync
+    | SubmitAsync of cmds : list<CommandBuffer> * sync : ICommandSync
     | BindSparse of imageBinds : list<ImageBind> * bufferBinds : list<BufferBind>
     | AcquireNextImage of swapchain : VkSwapchainKHR * buffer : ref<uint32>
     | Present of swapchain : VkSwapchainKHR * buffer : ref<uint32>
-        
-    | ExecuteCommand of waitFor : list<Semaphore> * signal : list<Semaphore> * cmd : ICommand
+    | ExecuteCommand of cmd : ICommand * sync : ICommandSync
     | Atomically of children : list<QueueCommand>
-    | Custom of (DeviceQueue -> Fence -> unit)
+    | Custom of (DeviceQueue -> Fence -> unit)  // TODO: Use SubmitInfo? Is this even used at all?
 
 and DeviceTask(parent : DeviceQueueThread, priority : int) =
     let lockObj = obj()
@@ -2268,9 +2341,9 @@ and DeviceTask(parent : DeviceQueueThread, priority : int) =
             status <- 1
             Monitor.PulseAll lockObj
         )
-            
+
     member internal x.SetFinished() =
-        let conts = 
+        let conts =
             lock lockObj (fun () ->
                 if status <> 1 then Log.error "finished task that is not in running state"
                 status <- 2
@@ -2288,7 +2361,7 @@ and DeviceTask(parent : DeviceQueueThread, priority : int) =
         for (p,c,t) in conts do parent.Enqueue(p, c, t)
 
     member internal x.SetFaulted(e : exn) =
-        let conts = 
+        let conts =
             lock lockObj (fun () ->
                 if status <> 1 then Log.error "faulted task that is not in running state"
                 status <- 3
@@ -2309,7 +2382,7 @@ and DeviceTask(parent : DeviceQueueThread, priority : int) =
             while status < 2 do
                 Monitor.Wait lockObj |> ignore
         )
-        
+
     member x.IsRunning =
         lock lockObj (fun () ->
             status = 1
@@ -2342,7 +2415,7 @@ and DeviceTask(parent : DeviceQueueThread, priority : int) =
         lock lockObj (fun () ->
             kill <- f :: kill
         )
-        
+
 
     member x.ContinueWith (priority : int, cmd : QueueCommand) =
         lock lockObj (fun () ->
@@ -2354,7 +2427,7 @@ and DeviceTask(parent : DeviceQueueThread, priority : int) =
             elif status = 2 then
                 parent.Enqueue(priority,cmd)
 
-            else (* status = 3 *) 
+            else (* status = 3 *)
                 DeviceTask.CreateFaulted(ex)
         )
 
@@ -2362,16 +2435,16 @@ and DeviceTask(parent : DeviceQueueThread, priority : int) =
         x.ContinueWith(priority, cmd)
 
 and DeviceQueueThread(family : DeviceQueueFamily) =
-    
+
     let mutable running = true
-    
+
     let pending = SortedDictionary<int, Queue<QueueCommand * DeviceTask>>()
 
     let enqueue (priority : int) (item : QueueCommand) (task : DeviceTask) =
         match pending.TryGetValue priority with
-            | (true, queue) -> 
+            | (true, queue) ->
                 queue.Enqueue (item, task)
-            | _ -> 
+            | _ ->
                 let q = Queue()
                 pending.[priority] <- q
                 q.Enqueue (item, task)
@@ -2387,13 +2460,16 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
         else
             failwith "empty queue"
 
-    let submit (queue : DeviceQueue) (waitFor : list<Semaphore>) (signal : list<Semaphore>) (cmds : list<CommandBuffer>) (fence : Fence) =
+    let submit (queue : DeviceQueue) (waitFor : list<Semaphore>) (signal : list<Semaphore>) (cmds : list<CommandBuffer>) (fence : Fence option) =
         let device = queue.Device
         let waitFor = waitFor |> List.map (fun s -> s.Handle) |> List.toArray
         let masks = Array.init waitFor.Length (fun _ -> int VkPipelineStageFlags.TopOfPipeBit)
         let signal = signal |> List.map (fun s -> s.Handle) |> List.toArray
         let cmds = cmds |> List.map (fun cmd -> cmd.Handle) |> List.toArray
-        let fence = fence.Handle
+        let fence =
+            fence
+            |> Option.map (fun f -> f.Handle)
+            |> Option.defaultValue VkFence.Null
 
         native {
             let! pSignal = signal
@@ -2408,12 +2484,12 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                 let waitCount, pWaitIndices =
                     if waitFor.Length > 0 then device.AllCount, device.AllIndices
                     else 0u, NativePtr.zero
-                    
+
                 let signalCount, pSignalIndices =
                     if waitFor.Length > 0 then device.AllCount, device.AllIndices
                     else 0u, NativePtr.zero
-                    
-                let! pExt = 
+
+                let! pExt =
                     [|
                         VkDeviceGroupSubmitInfo(
                             waitCount, pWaitIndices,
@@ -2421,8 +2497,8 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                             signalCount, pSignalIndices
                         )
                     |]
-                    
-                let! pSubmit = 
+
+                let! pSubmit =
                     [|
                         VkSubmitInfo(
                             NativePtr.toNativeInt pExt,
@@ -2436,7 +2512,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                     |> check "could not submit command buffer"
 
             else
-                let! pSubmit = 
+                let! pSubmit =
                     [|
                         VkSubmitInfo(
                             uint32 waitFor.Length, pWaitFor, NativePtr.cast pMasks,
@@ -2463,8 +2539,8 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                     uint64 b.mem.Offset,
                     VkSparseMemoryBindFlags.None
                 )
-            )  
-                
+            )
+
         let bufferBinds = bufferBinds |> List.toArray
         let bufferBindsNative =
             bufferBinds |> Array.map (fun b ->
@@ -2477,7 +2553,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                 )
             )
 
-        native { 
+        native {
             let! pImageBinds = imageBindsNative
             let! pBufferBinds = bufferBindsNative
 
@@ -2487,7 +2563,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                         imageBinds.[bi].image,
                         1u, NativePtr.add pImageBinds bi
                     )
-                )  
+                )
 
             let! pBufferBindInfos =
                 Array.init bufferBinds.Length (fun bi ->
@@ -2500,7 +2576,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
             if device.IsDeviceGroup then
                 let deviceCount = int device.AllCount
 
-                let! pGroupInfos = 
+                let! pGroupInfos =
                     Array.init deviceCount (fun di ->
                         VkDeviceGroupBindSparseInfo(
                             uint32 di, uint32 di
@@ -2568,8 +2644,8 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                         pResult
                     )
                 |]
-                
-            VkRaw.vkQueuePresentKHR(queue.Handle, pInfo) 
+
+            VkRaw.vkQueuePresentKHR(queue.Handle, pInfo)
                 |> check "could not acquire image"
 
             VkRaw.vkQueueWaitIdle(queue.Handle)
@@ -2585,10 +2661,23 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                 fence.Reset()
                 action queue fence
 
-            | QueueCommand.Submit(waitFor, signal, cmds) ->
+            | QueueCommand.Submit(cmds, sync) ->
                 fence.Reset()
-                submit queue waitFor signal cmds fence
+
+                let event =
+                    sync.Submit(fun info ->
+                        submit queue info.device.waitFor info.device.signal cmds (Some fence)
+                        info.event
+                    )
+
                 fence.Wait()
+                event |> Option.iter (fun e -> e.Set() |> ignore)
+
+            | QueueCommand.SubmitAsync(cmds, sync) ->
+                sync.SubmitAsync (fun info ->
+                    info.fence |> Option.iter (fun f -> f.Reset())
+                    submit queue info.device.waitFor info.device.signal cmds info.fence
+                )
 
             | QueueCommand.BindSparse (imageBinds, bufferBinds) ->
                 fence.Reset()
@@ -2603,7 +2692,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
             | QueueCommand.Present(chain, buffer) ->
                 present queue chain buffer
 
-            | QueueCommand.ExecuteCommand(waitFor, signal, cmd) ->
+            | QueueCommand.ExecuteCommand(cmd, sync) ->
                 let buffer = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
                 buffer.Begin(CommandBufferUsage.OneTimeSubmit)
 
@@ -2611,8 +2700,15 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                 if cmd.TryEnqueue(buffer, &disp) then
                     buffer.End()
                     fence.Reset()
-                    submit queue waitFor signal [buffer] fence
+
+                    let event =
+                        sync.Submit(fun info ->
+                            submit queue info.device.waitFor info.device.signal [buffer] (Some fence)
+                            info.event
+                        )
+
                     fence.Wait()
+                    event |> Option.iter (fun e -> e.Set() |> ignore)
 
                 if not (isNull disp) then disp.Dispose()
                 buffer.Dispose()
@@ -2620,7 +2716,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
             | QueueCommand.Atomically many ->
                 Log.warn "atomic"
                 for m in many do perform queue pool m fence
-                    
+
 
         ()
 
@@ -2630,14 +2726,15 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
             | QueueCommand.Atomically l -> l |> List.map toString |> String.concat "; " |> sprintf "[%s]"
             | QueueCommand.BindSparse _ -> "BindSparse"
             | QueueCommand.Present _ -> "Present"
-            | QueueCommand.Submit(_,_,cmd) -> sprintf "Submit%d" (List.length cmd)
+            | QueueCommand.Submit(cmd,_) -> sprintf "Submit%d" (List.length cmd)
+            | QueueCommand.SubmitAsync(cmd,_) -> sprintf "SubmitAsync%d" (List.length cmd)
             | QueueCommand.Custom _ -> "Custom"
             | ExecuteCommand _ -> "Execute"
 
     let run (queue : DeviceQueue) () =
         let device = queue.Device
-        let pool = queue.Family.CreateCommandPool(CommandPoolFlags.Transient)
-        let fence = device.CreateFence()
+        use pool = queue.Family.CreateCommandPool(CommandPoolFlags.Transient)
+        use fence = device.CreateFence()
         try
             while running do
                 let priority, item, tcs =
@@ -2655,16 +2752,13 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                     tcs.SetFinished ()
                 with
                     e -> tcs.SetFaulted e
-                    
-        with 
+
+        with
             | :? OperationCanceledException -> ()
             | e -> Log.error "[Vulkan] DeviceQueueThread faulted: %A" e
 
-        fence.Dispose()
-        pool.Dispose()
-
-    let threads = 
-        family.Queues |> List.map (fun q -> 
+    let threads =
+        family.Queues |> List.map (fun q ->
             let thread = Thread(ThreadStart(run q), IsBackground = true)
             thread.Start()
             thread
@@ -2722,7 +2816,7 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
         for d in disposables do d.Dispose()
         disposables.Clear()
         match current with
-            | Some b -> 
+            | Some b ->
                 b.Dispose()
                 current <- None
             | _ -> ()
@@ -2745,18 +2839,28 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
             cleanup()
             failf "could not enqueue command: %A" cmd
 
-    let flush(priority : int) =
+    let run (getCommand : CommandBuffer -> QueueCommand) (priority : int) =
         match current with
-            | Some buffer ->
-                buffer.End()
-                if not buffer.IsEmpty then
-                    family.RunSynchronously(priority, QueueCommand.Submit([], [], [buffer]))
+        | Some buffer ->
+            buffer.End()
+            if not buffer.IsEmpty then
+                family.RunSynchronously(priority, getCommand buffer)
 
-                buffer.Dispose()
-                current <- None
+            buffer.Dispose()
+            current <- None
 
-            | None ->
-                ()
+        | None ->
+            ()
+
+    let flush (priority : int) (sync : ICommandSync) =
+        run (fun buffer ->
+            QueueCommand.SubmitAsync([buffer], sync)
+        ) priority
+
+    let sync (priority : int) (sync : ICommandSync) =
+        run (fun buffer ->
+            QueueCommand.Submit([buffer], sync)
+        ) priority
 
     let syncTask (priority : int) : DeviceTask =
         match current with
@@ -2767,26 +2871,45 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
                     let task = family.Start(priority, buffer)
                     task.AddCleanup buffer.Dispose
                     task
-                else 
+                else
                     DeviceTask.Finished
             | None ->
                 DeviceTask.Finished
-        
 
+    /// Submits the current command buffer to a queue.
+    member x.Flush(priority : int, sync : ICommandSync) =
+        check()
+        flush priority sync
+
+    /// Submits the current command buffer to a queue.
+    member x.Flush(sync : ICommandSync) =
+        x.Flush(3, sync)
+
+    /// Submits the current command buffer to a queue.
     member x.Flush() =
+        x.Flush(3, CommandSync.None)
+
+    /// Submits the current command buffer to a queue and blocks
+    /// until execution is finished.
+    member x.Sync(priority : int, cmdSync : ICommandSync) =
         check()
-        flush(3)
+        sync priority cmdSync
 
-    member x.Sync(priority : int) =
-        check()
-        flush(priority)
+    /// Submits the current command buffer to a queue and blocks
+    /// until execution is finished.
+    member x.Sync(sync : ICommandSync) =
+        x.Sync(3, sync)
 
-    member x.Sync() = x.Sync(3)
+    /// Submits the current command buffer to a queue and blocks
+    /// until execution is finished.
+    member x.Sync() =
+        x.Sync(3, CommandSync.None)
 
+    /// Submits the current command buffer to a queue and returns a DeviceTask
+    /// to wait on.
     member x.SyncTask(priority : int) =
         check()
         syncTask priority
-
 
     member x.AddCleanup(f : unit -> unit) =
         check()
@@ -2795,11 +2918,10 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
     member x.Enqueue (cmd : ICommand) =
         check()
         match current with
-            | Some buffer -> 
+            | Some buffer ->
                 enqueue buffer cmd
-                
+
             | None ->
-                
                 let pool =
                     match pool with
                         | Some p -> p
@@ -2813,9 +2935,8 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
                 current <- Some buffer
                 enqueue buffer cmd
 
-    member x.Enqueue (cmd : QueueCommand) =
-        check()
-        flush(3)
+    member x.Run (cmd : QueueCommand) =
+        x.Sync()
 
         family.RunSynchronously cmd
 //        let task =
@@ -2826,18 +2947,18 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
 //        lastTask <- Some task
 
 
-    member internal x.AddRef() = 
+    member internal x.AddRef() =
         check()
         refCount <- refCount + 1
 
-    member internal x.RemoveRef(priority : int) = 
+    member internal x.RemoveRef(priority : int) =
         check()
         refCount <- refCount - 1
-        if refCount = 0 then 
+        if refCount = 0 then
             ref := None
-            x.Sync(priority)
+            x.Sync(priority, CommandSync.None)
             cleanup()
-            
+
     member x.Dispose(priority : int) =
         check()
         x.RemoveRef(priority)
@@ -2904,7 +3025,7 @@ type DeviceExtensions private() =
         if preferDevice then
             match tryFindDeviceMemory bits 0 this.Memories with
                  | Some mem -> mem
-                 | None -> 
+                 | None ->
                     match tryFindMemory bits 0 this.Memories with
                         | Some mem -> mem
                         | None -> failf "could not find compatible memory for types: %A" bits
@@ -2918,7 +3039,7 @@ type DeviceExtensions private() =
         if preferDevice then
             match tryAllocDevice reqs 0 this.Memories with
                  | Some mem -> mem
-                 | None -> 
+                 | None ->
                     match tryAlloc reqs 0 this.Memories with
                         | Some mem -> mem
                         | None -> failf "could not find compatible memory for %A" reqs

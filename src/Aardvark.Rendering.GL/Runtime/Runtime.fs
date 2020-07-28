@@ -137,7 +137,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
     
         member x.DeviceCount = 1
 
-        member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) : unit =
+        member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i, sync : TaskSync) : unit =
             use __ = ctx.ResourceLock
 
             let slice = dst.Slice
@@ -248,7 +248,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             GL.BindBuffer(BufferTarget.PixelUnpackBuffer,0)
             GL.DeleteBuffer(temp)
 
-        member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) : unit =
+        member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i, sync : TaskSync) : unit =
             use __ = ctx.ResourceLock
 
             let slice = src.Slice
@@ -327,7 +327,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             GL.BindBuffer(BufferTarget.PixelPackBuffer,0)
             GL.DeleteBuffer(temp)
 
-        member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) : unit =
+        member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i, sync : TaskSync) : unit =
             use __ = ctx.ResourceLock
 
             let args (t : IFramebufferOutput) =
@@ -422,29 +422,29 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
             ()
 
-        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)
-        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) = x.Download(t, level, slice, target)
-        member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = x.Upload(t, level, slice, source)
-        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = x.DownloadStencil(t, level, slice, target)
-        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = x.DownloadDepth(t, level, slice, target)
+        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage, sync : TaskSync) = x.Download(t, level, slice, target)
+        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume, sync : TaskSync) = x.Download(t, level, slice, target)
+        member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage, sync : TaskSync) = x.Upload(t, level, slice, source)
+        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>, sync : TaskSync) = x.DownloadStencil(t, level, slice, target)
+        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>, sync : TaskSync) = x.DownloadDepth(t, level, slice, target)
 
-        member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
-        member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
+        member x.ResolveMultisamples(source, target, trafo, sync) = x.ResolveMultisamples(source, target, trafo)
+        member x.GenerateMipMaps(t : IBackendTexture, sync : TaskSync) = x.GenerateMipMaps t
         member x.ContextLock = ctx.ResourceLock
         member x.CompileRender (signature, engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(signature, engine,set)
         member x.CompileClear(signature, color, depth) = x.CompileClear(signature, color, depth)
       
         ///NOTE: OpenGL does not care about 
         member x.CreateBuffer(size : nativeint, usage : BufferUsage) = x.CreateBuffer(size) :> IBackendBuffer
-        member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = x.Upload(src, dst, dstOffset, size)
-        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) = x.Download(src, srcOffset, dst, size)
-        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = 
+        member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint, sync : TaskSync) = x.Upload(src, dst, dstOffset, size)
+        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint, sync : TaskSync) = x.Download(src, srcOffset, dst, size)
+        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint, sync : TaskSync) = 
             x.Copy(src, srcOffset, dst, dstOffset, size)
             
         member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) : unit -> unit =
             failwith ""
 
-        member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
+        member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int, sync : TaskSync) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
         member x.PrepareSurface (signature, s : ISurface) : IBackendSurface = x.PrepareSurface(signature, s)
         member x.DeleteSurface (s : IBackendSurface) = 
             match s with
@@ -453,13 +453,13 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) = x.PrepareRenderObject(fboSignature, rj)
 
-        member x.PrepareTexture (t : ITexture) = x.PrepareTexture t :> IBackendTexture
+        member x.PrepareTexture (t : ITexture, sync : TaskSync) = x.PrepareTexture t :> IBackendTexture
         member x.DeleteTexture (t : IBackendTexture) =
             match t with
                 | :? Texture as t -> x.DeleteTexture t
                 | _ -> failwithf "unsupported texture-type: %A" t
 
-        member x.PrepareBuffer (b : IBuffer, usage : BufferUsage) = x.PrepareBuffer b :> IBackendBuffer
+        member x.PrepareBuffer (b : IBuffer, usage : BufferUsage, sync : TaskSync) = x.PrepareBuffer b :> IBackendBuffer
         member x.DeleteBuffer (b : IBackendBuffer) = 
             match b with
                 | :? Aardvark.Rendering.GL.Buffer as b -> x.DeleteBuffer b
@@ -511,12 +511,12 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateComputeShader (c : FShade.ComputeShader) = ctx.CompileKernel c :> IComputeShader
         member x.NewInputBinding(c : IComputeShader) = new ComputeShaderInputBinding(unbox c) :> IComputeShaderInputBinding
         member x.DeleteComputeShader (shader : IComputeShader) = ctx.Delete(unbox<GL.ComputeShader> shader)
-        member x.Run (commands : list<ComputeCommand>, queries : IQuery) = ctx.Run(commands, queries)
+        member x.Run (commands : list<ComputeCommand>, sync : TaskSync, queries : IQuery) = ctx.Run(commands, sync, queries)
         member x.Compile (commands : list<ComputeCommand>) =
             let x = x :> IComputeRuntime
             { new ComputeProgram<unit>() with
-                member __.RunUnit(queries) =
-                    x.Run(commands, queries)
+                member __.RunUnit(sync, queries) =
+                    x.Run(commands, sync, queries)
                 member x.Release() =
                     ()
             }
@@ -568,7 +568,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
             GL.Check "could not unbind framebuffer"
 
-        member x.ClearColor(texture : IBackendTexture, color : C4f) = 
+        member x.ClearColor(texture : IBackendTexture, color : C4f, sync : TaskSync) = 
             use __ = ctx.ResourceLock
 
             let fbo = GL.GenFramebuffer()
@@ -589,7 +589,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             GL.DeleteFramebuffer(fbo)
             GL.Check "could not delete framebuffer"
 
-        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<float>, stencil : Option<int>) = 
+        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<float>, stencil : Option<int>, sync : TaskSync) = 
 
             let binding = match (depth, stencil) with
                           | Some x, Some y -> Some FramebufferAttachment.DepthStencilAttachment
@@ -655,6 +655,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 PipelineStatistics.All
             else
                 Set.singleton ClippingInputPrimitives
+
+        member x.CreateSync(maxDeviceWaits : int) =
+            failwith ""
 
     
     member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =

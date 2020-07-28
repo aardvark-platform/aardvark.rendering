@@ -29,7 +29,10 @@
     <Compile Include="Utilities\Timer.fs" />
     <Compile Include="Utilities\Memory.fs" />
     <Compile Include="Resources\FrameStatistics.fs" />
+    <Compile Include="Resources\Sync\Sync.fs" />
+    <Compile Include="Resources\Sync\TaskSync.fs" />
     <Compile Include="Resources\Buffers\Buffers.fs" />
+    <Compile Include="Resources\Buffers\BufferExtensions.fs" />
     <Compile Include="Resources\Buffers\ArrayBuffer.fs" />
     <Compile Include="Resources\Buffers\SingleValueBuffer.fs" />
     <Compile Include="Resources\Buffers\NativeMemoryBuffer.fs" />

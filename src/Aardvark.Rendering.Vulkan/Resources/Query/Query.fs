@@ -31,7 +31,7 @@ type QueryType =
         match x with
         | Occlusion -> VkQueryType.Occlusion
         | Timestamp -> VkQueryType.Timestamp
-        | PipelineStatistics -> VkQueryType.PipelineStatistics
+        | PipelineStatistics (_, _) -> VkQueryType.PipelineStatistics
 
     /// The pipeline statistics flags (if any).
     member x.Flags =

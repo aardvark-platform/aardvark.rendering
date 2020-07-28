@@ -12,6 +12,7 @@ Currently, there is only a low-level API that requires the user to pass queries 
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open FSharp.Data.Adaptive
+open FSharp.Data.Adaptive.Operators
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.Slim
@@ -196,6 +197,14 @@ let sceneSg (win : IRenderWindow) =
     |> Sg.viewTrafo viewTrafo
     |> Sg.projTrafo projTrafo
 
+let finalSg (output : aval<ITexture>) =
+    Sg.fullScreenQuad
+    |> Sg.diffuseTexture output
+    |> Sg.depthTest ~~DepthTestMode.None
+    |> Sg.shader {
+        do! DefaultSurfaces.diffuseTexture
+    }
+
 let overlaySg (win : IRenderWindow) (time : aval<MicroTime>) (samples : aval<uint64>) (stats : aval<Map<PipelineStatistics, uint64>>) =
 
     let str =
@@ -216,7 +225,7 @@ let overlaySg (win : IRenderWindow) (time : aval<MicroTime>) (samples : aval<uin
         )
 
     let trafo =
-        win.Sizes |> AVal.map (fun s -> 
+        win.Sizes |> AVal.map (fun s ->
             let border = V2d(30.0, 20.0) / V2d s
             let pixels = 40.0 / float s.Y
             Trafo3d.Scale(pixels) *
@@ -234,7 +243,7 @@ let main argv =
     Aardvark.Init()
 
     // uncomment/comment to switch between the backends
-    use app = new VulkanApplication()
+    use app = new VulkanApplication(debug = true)
     //use app = new OpenGlApplication()
     let runtime = app.Runtime :> IRuntime
 
@@ -242,10 +251,30 @@ let main argv =
     use win = app.CreateGameWindow(samples = 8)
     win.RenderAsFastAsPossible <- true
 
-    // create render task
+    // create scene render task
     use sceneTask =
         let scene = sceneSg win
-        runtime.CompileRender(win.FramebufferSignature, scene)
+        let clear = runtime.CompileClear(win.FramebufferSignature, ~~C4f.Black, ~~1.0)
+        let render = runtime.CompileRender(win.FramebufferSignature, scene)
+        RenderTask.ofList [clear; render]
+
+    // create final task
+    use renderSync =
+        runtime.CreateSync(maxDeviceWaits = 2)
+
+    let outputFramebuffer =
+        runtime.CreateFramebuffer(win.FramebufferSignature, ~~V2i(256, 256))
+
+    let outputTexture =
+        let clear = runtime.CompileClear(win.FramebufferSignature, ~~C4f.Black, ~~1.0)
+        let task = new SequentialRenderTask([|clear; sceneTask|])
+        let res = task.RenderTo(outputFramebuffer, TaskSync.signal renderSync, Queries.empty, dispose = true)
+        res.GetOutputTexture DefaultSemantic.Colors
+
+    use compositeTask =
+        let clear = runtime.CompileClear(win.FramebufferSignature, ~~C4f.Blue, ~~1.0)
+        let render = runtime.CompileRender(win.FramebufferSignature, finalSg outputTexture)
+        RenderTask.ofList [clear; render]
 
     // create a dummy compute program
     let computeShader = runtime.CreateComputeShader Shader.compute
@@ -276,10 +305,18 @@ let main argv =
     use timeQuery =
         runtime.CreateTimeQuery()
 
+    use compositeSync =
+        runtime.CreateSync()
+
+    use downloadSync =
+        runtime.CreateSync()
+
+    let saveLock = obj()
+
     // queries are used by passing them to Run() of a render task or compute program.
     // here we use RenderTask.custom to run the scene task manually.
     use task =
-        RenderTask.custom (fun (_, rt, o, q) ->
+        RenderTask.custom (fun (t, rt, o, s, q) ->
             // Run() takes a single IQuery as parameter.
             // in order to pass multiple queries we have to build a Queries struct.
             // here we also include the query that is passed from outside the custom render task (e.g. the window
@@ -294,8 +331,12 @@ let main argv =
             // are used. If we are only interested in the statistics of a single render task, these calls can be omitted.
             queries.Begin()
 
-            sceneTask.Run(rt, o, queries)
-            computeProgram.Run(queries)
+            compositeTask.Run(t, rt, o, TaskSync.create [renderSync] compositeSync, queries)
+            computeProgram.Run(TaskSync.none, queries)
+
+            //let output = outputFramebuffer.GetOutputTexture DefaultSemantic.Colors
+            //let t = output.GetValue t
+            //let _ = runtime.Download(t :?> IBackendTexture)
 
             queries.End()
         )
@@ -317,28 +358,65 @@ let main argv =
     // obviously it is also possible to retrieve the results in the same thread (e.g. after Run()).
     let mutable running = true
 
+    let textureDownloader =
+        async {
+            while running do
+                printfn "Starting download..."
+
+                let output = outputFramebuffer.GetOutputTexture DefaultSemantic.Colors
+
+                match output.GetValue() with
+                | :? IBackendTexture as t ->
+                    let pix = runtime.Download(t, TaskSync.create [renderSync] downloadSync)
+                    lock saveLock (fun _ -> pix.SaveAsImage("fbo.png"))
+                | _ -> failwith "Nope"
+
+                printfn "Download finished"
+        }
+
+    let textureDownloader2 =
+        async {
+            printfn "Starting download..."
+
+            let output = outputFramebuffer.GetOutputTexture DefaultSemantic.Colors
+
+            match output.GetValue() with
+            | :? IBackendTexture as t ->
+                let pix = runtime.Download(t, TaskSync.wait [downloadSync])
+                lock saveLock (fun _ -> pix.SaveAsImage("fbo2.png"))
+            | _ -> failwith "Nope"
+
+            printfn "Download finished"
+        }
+
     let statisticUpdater =
         async {
             while running do
-                transact (fun _ ->
-                    // results can be queried in one of two ways: TryGetResult and GetResult.
-                    // the former fails if the results are not ready yet (returning None), while the latter
-                    // blocks until the results are ready. note, that even on the same thread after calling Run() the results are not
-                    // guaranteed to be ready, since the GPU executes work asynchronously.
-                    let value = occlusionQuery.GetResult()
-                    samples.Value <- value
+                if renderSync.Wait(MicroTime.ofMilliseconds 300) then
 
-                    // when getting results from pipeline queries you may get results
-                    // for a subset of the enabled statistics. it returns a map that assigns each
-                    // retrieved PipelineStatistics value its result as a uint64 integer. if the overload
-                    // for a single statistic is used, it returns a single uint64.
-                    // retrieving a statistic that is not supported or not enabled will return 0.
-                    let value = pipelineQuery.GetResult()
-                    //... is equivalent to "pipelineQuery.GetResult(pipelineQuery.Statistics)"
-                    stats.Value <- value
-                )
+                    if Option.isNone <| occlusionQuery.TryGetResult(reset = true) then
+                        printfn "No result! %A" System.DateTime.Now.Second
 
-                do! Async.Sleep 200
+                    renderSync.Reset()
+                //transact (fun _ ->
+                //    // results can be queried in one of two ways: TryGetResult and GetResult.
+                //    // the former fails if the results are not ready yet (returning None), while the latter
+                //    // blocks until the results are ready. note, that even on the same thread after calling Run() the results are not
+                //    // guaranteed to be ready, since the GPU executes work asynchronously.
+                //    let value = occlusionQuery.GetResult()
+                //    samples.Value <- value
+
+                //    // when getting results from pipeline queries you may get results
+                //    // for a subset of the enabled statistics. it returns a map that assigns each
+                //    // retrieved PipelineStatistics value its result as a uint64 integer. if the overload
+                //    // for a single statistic is used, it returns a single uint64.
+                //    // retrieving a statistic that is not supported or not enabled will return 0.
+                //    let value = pipelineQuery.GetResult()
+                //    //... is equivalent to "pipelineQuery.GetResult(pipelineQuery.Statistics)"
+                //    stats.Value <- value
+                //)
+
+                //do! Async.Sleep 200
         }
 
     let timeUpdater =
@@ -361,7 +439,7 @@ let main argv =
         }
 
     let asyncTasks =
-        [| statisticUpdater; timeUpdater |]
+        [| textureDownloader |]
         |> Array.map (fun t -> t |> Async.StartAsTask :> Task)
 
     // run the window

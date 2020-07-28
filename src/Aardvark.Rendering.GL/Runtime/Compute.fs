@@ -405,7 +405,7 @@ type private GLCompute(ctx : Context) =
             | ComputeCommand.ExecuteCmd other ->
                 other.Run(queries)
     
-    member x.Run(i : list<ComputeCommand>, queries : IQuery) =
+    member x.Run(i : list<ComputeCommand>, sync : TaskSync, queries : IQuery) =
         use __ = ctx.ResourceLock
 
         queries.Begin()
@@ -495,6 +495,6 @@ module GLComputeExtensions =
         member x.Delete(k : ComputeShader) =
             k.Dispose()
 
-        member x.Run(i : list<ComputeCommand>, queries : IQuery) =
+        member x.Run(i : list<ComputeCommand>, sync : TaskSync, queries : IQuery) =
             let c = getGLCompute x
-            c.Run(i, queries)
+            c.Run(i, sync, queries)

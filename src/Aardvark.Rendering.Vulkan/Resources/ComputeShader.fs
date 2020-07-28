@@ -498,9 +498,10 @@ module ``Compute Commands`` =
                                 let s = { s with imageLayouts = HashMap.add image newLayout s.imageLayouts }
                                 s, o
                             | None ->
-                                let o = image.Layout
-                                let s = { s with imageLayouts = HashMap.add image newLayout s.imageLayouts; initialLayouts = HashMap.add image o s.initialLayouts }
-                                s, o
+                                image.Layout (fun o ->
+                                    let s = { s with imageLayouts = HashMap.add image newLayout s.imageLayouts; initialLayouts = HashMap.add image o s.initialLayouts }
+                                    s, o
+                                )
                     )
 
             type VKVM.CommandStream with
@@ -803,7 +804,7 @@ module ``Compute Commands`` =
                     for (b,_) in state.downloads do device.Delete b
                     stream.Dispose()
 
-                override x.RunUnit(queries : IQuery) =
+                override x.RunUnit(sync : TaskSync, queries : IQuery) =
                     let isChanged = Interlocked.Exchange(&dirty, 0) = 1
                     let vulkanQueries = queries.ToVulkanQuery()
 
@@ -829,7 +830,7 @@ module ``Compute Commands`` =
 
                     queries.End()
 
-                    device.GraphicsFamily.RunSynchronously cmd
+                    device.GraphicsFamily.RunSynchronously(cmd, sync.CommandSync)
 
                     for d in downloads do d()
 
@@ -1054,21 +1055,22 @@ module ``Compute Commands`` =
 
             new ComputeProgram(stream, state) :> ComputeProgram<unit>
     
-        let run (cmds : list<ComputeCommand>) (queries : IQuery) (device : Device) =
+        let run (cmds : list<ComputeCommand>) (sync : TaskSync) (queries : IQuery) (device : Device) =
             let vulkanQueries = queries.ToVulkanQuery()
 
-            queries.Begin()
+            let cmd =
+                command {
+                    for q in vulkanQueries do
+                        do! Command.Begin q
 
-            device.perform {
-                for q in vulkanQueries do
-                    do! Command.Begin q
+                    for cmd in cmds do
+                        do! toCommand cmd device
 
-                for cmd in cmds do
-                    do! toCommand cmd device
+                    for q in vulkanQueries do
+                        do! Command.End q
+                }
 
-                for q in vulkanQueries do
-                    do! Command.End q
-            }
+            device.GraphicsFamily.RunSynchronously(cmd, sync.CommandSync)
 
             queries.End()
             

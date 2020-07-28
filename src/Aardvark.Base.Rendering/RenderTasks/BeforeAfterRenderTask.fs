@@ -14,12 +14,12 @@ type BeforeAfterRenderTask(before : Option<unit -> unit>, after : Option<unit ->
 
     override x.FramebufferSignature = inner.FramebufferSignature
     override x.PerformUpdate(token, t) = inner.Update(token,t)
-    override x.Perform(token, t, fbo, queries) =
+    override x.Perform(token, t, fbo, sync, queries) =
         match before with
         | Some before -> before()
         | None -> ()
 
-        let res = inner.Run(token, t, fbo, queries)
+        let res = inner.Run(token, t, fbo, sync, queries)
 
         match after with
         | Some after -> after()

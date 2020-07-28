@@ -7,6 +7,11 @@ open System.Runtime.CompilerServices
 [<AbstractClass; Sealed; Extension>]
 type IRuntimeExtensions private() =
 
+    /// Creates a sync object that can be waited on by a single device operation.
+    [<Extension>]
+    static member CreateSync(this : IRuntime) =
+        this.CreateSync(1)
+
     [<Extension>]
     static member CompileClear(this : IRuntime, signature : IFramebufferSignature, colors : aval<seq<Symbol * C4f>>, depth : aval<float>) =
         this.CompileClear(signature, colors |> AVal.map Map.ofSeq, depth |> AVal.map Some)

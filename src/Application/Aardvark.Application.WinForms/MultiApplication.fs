@@ -38,11 +38,13 @@ type MultiRenderTask(runtime : MultiRuntime, signature : IFramebufferSignature, 
         member x.FrameId = tasks |> Seq.map (fun t -> t.FrameId) |> Seq.max
         member x.FramebufferSignature = Some signature
         member x.Runtime = Some (runtime :> IRuntime)
-        member x.Run(t,rt,o,q) =
+        member x.Run(t,rt,o,s,q) =
+            let sync = s |> TaskSync.sequential tasks.Length
+
             x.EvaluateAlways t (fun t ->
                 let current = o.framebuffer.Signature.Runtime
                 let index = runtime.Runtimes.IndexOf (current :?> IRuntime)
-                tasks.[index].Run(t, rt, o, q)
+                tasks.[index].Run(t, rt, o, sync.[index], q)
             )
 
 and MultiFramebufferSignature(runtime : IRuntime, signatures : IFramebufferSignature[]) =
@@ -281,13 +283,13 @@ and MultiRuntime(runtimes : IRuntime[]) =
     interface IRuntime with
         member x.DeviceCount = runtimes |> Seq.map (fun r -> r.DeviceCount) |> Seq.min
 
-        member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) : unit =
+        member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i, sync : TaskSync) : unit =
             failwith "not implemented"
 
-        member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) : unit =
+        member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i, sync : TaskSync) : unit =
             failwith "not implemented"
             
-        member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) : unit =
+        member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i, sync : TaskSync) : unit =
             failwith "not implemented"
 
         member x.OnDispose = disp.Publish
@@ -312,14 +314,14 @@ and MultiRuntime(runtimes : IRuntime[]) =
                 | _ ->
                     ()
 
-        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) : unit = failwith ""
-        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) : unit = failwith ""
-        member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = failwith ""
-        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = failwith ""
-        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = failwith ""
+        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage, sync : TaskSync) : unit = failwith ""
+        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume, sync : TaskSync) : unit = failwith ""
+        member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage, sync : TaskSync) = failwith ""
+        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>, sync : TaskSync) = failwith ""
+        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>, sync : TaskSync) = failwith ""
 
-        member x.ResolveMultisamples(source, target, trafo) = failwith ""
-        member x.GenerateMipMaps(t) = failwith ""
+        member x.ResolveMultisamples(source, target, trafo, sync) = failwith ""
+        member x.GenerateMipMaps(t, sync) = failwith ""
         member x.ContextLock = { new IDisposable with member x.Dispose() = () }
         member x.CompileRender (signature, engine, set) = 
             match signature with
@@ -340,9 +342,9 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.PrepareSurface(signature, s) = failwith ""
         member x.DeleteSurface(s) = failwith ""
         member x.PrepareRenderObject(fboSignature, rj) =failwith ""
-        member x.PrepareTexture(t) = failwith ""
+        member x.PrepareTexture(t, sync) = failwith ""
         member x.DeleteTexture(t) = failwith ""
-        member x.PrepareBuffer(b, u) = failwith ""
+        member x.PrepareBuffer(b, u, sync) = failwith ""
         member x.DeleteBuffer(b) = failwith ""
 
         member x.DeleteRenderbuffer(b) = failwith ""
@@ -354,7 +356,7 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
             failwith ""
 
-        member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = 
+        member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int, sync : TaskSync) = 
             failwith ""
 
 
@@ -376,16 +378,16 @@ and MultiRuntime(runtimes : IRuntime[]) =
         
         member x.CreateBuffer(size : nativeint, usage : BufferUsage) = failwith ""
 
-        member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) : unit =
+        member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint, sync : TaskSync) : unit =
             failwith ""
 
-        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) : unit =
+        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint, sync : TaskSync) : unit =
             failwith ""
 
         member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) : unit -> unit =
             failwith ""
 
-        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) : unit = 
+        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint, sync : TaskSync) : unit = 
             failwith ""
 
 
@@ -393,13 +395,13 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.CreateComputeShader (c : FShade.ComputeShader) = failwith ""
         member x.NewInputBinding(c : IComputeShader) = failwith ""
         member x.DeleteComputeShader (shader : IComputeShader) = failwith ""
-        member x.Run (commands : list<ComputeCommand>, queries : IQuery) = failwith ""
+        member x.Run (commands : list<ComputeCommand>, sync : TaskSync, queries : IQuery) = failwith ""
         member x.Compile (commands : list<ComputeCommand>) = failwith ""
 
         member x.Clear(fbo : IFramebuffer, clearColors : Map<Symbol,C4f>, depth : Option<float>, stencil : Option<int>) = failwith "not implemented"
 
-        member x.ClearColor(texture : IBackendTexture, color : C4f) = failwith "not implemented"
-        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<float>, stencil : Option<int>) = failwith "not implemented"
+        member x.ClearColor(texture : IBackendTexture, color : C4f, sync : TaskSync) = failwith "not implemented"
+        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<float>, stencil : Option<int>, sync : TaskSync) = failwith "not implemented"
 
         member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture = failwith "not implemented"
 
@@ -407,6 +409,8 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.CreateOcclusionQuery(precise) = failwith ""
         member x.CreatePipelineQuery(statistics) = failwith ""
         member x.SupportedPipelineStatistics = Set.empty
+
+        member x.CreateSync(maxDeviceWaits) = failwith ""
 
 type MultiApplication(apps : IApplication[]) =
     

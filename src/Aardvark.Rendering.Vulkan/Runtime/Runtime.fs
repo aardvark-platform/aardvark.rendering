@@ -115,8 +115,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         with get() = instance.DebugVerbosity
         and set v = instance.DebugVerbosity <- v
 
-    member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = failf "not implemented"
-    member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = failf "not implemented"
+    member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>, sync : TaskSync) = failf "not implemented"
+    member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>, sync : TaskSync) = failf "not implemented"
 
     member x.CreateStreamingTexture (mipMaps : bool) = failf "not implemented"
     member x.DeleteStreamingTexture (texture : IStreamingTexture) = failf "not implemented"
@@ -132,15 +132,15 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         ) :> ISparseTexture<_>
 
 
-    member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) =
+    member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage, sync : TaskSync) =
         let image = unbox<Image> t 
-        device.DownloadLevel(image.[ImageAspect.Color, level, slice], target)
+        device.DownloadLevel(image.[ImageAspect.Color, level, slice], target, sync.CommandSync)
         
-    member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) =
+    member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume, sync : TaskSync) =
         let image = unbox<Image> t 
-        device.DownloadLevel(image.[ImageAspect.Color, level, slice], target)
+        device.DownloadLevel(image.[ImageAspect.Color, level, slice], target, sync.CommandSync)
 
-    member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) =
+    member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage, sync : TaskSync) =
         let image = unbox<Image> t 
         device.UploadLevel(image.[ImageAspect.Color, level, slice], source)
 
@@ -211,7 +211,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.DeleteSurface (bs : IBackendSurface) =
         device.Delete(unbox<ShaderProgram> bs)
 
-    member x.PrepareTexture (t : ITexture) =
+    member x.PrepareTexture (t : ITexture, sync : TaskSync) =
         device.CreateImage(t) :> IBackendTexture
 
     member x.DeleteTexture(t : IBackendTexture) =
@@ -220,7 +220,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.DeletRenderbuffer(t : IRenderbuffer) =
         device.Delete(unbox<Image> t)
 
-    member x.PrepareBuffer (t : IBuffer, usage : BufferUsage) =
+    member x.PrepareBuffer (t : IBuffer, usage : BufferUsage, sync : TaskSync) =
         let flags = Buffer.toVkUsage usage
         device.CreateBuffer(flags, t) :> IBackendBuffer
 
@@ -296,7 +296,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                     VkImageUsageFlags.DepthStencilAttachmentBit ||| 
                     VkImageUsageFlags.TransferSrcBit ||| 
                     VkImageUsageFlags.TransferDstBit |||
-                    VkImageUsageFlags.StorageBit |||
                     VkImageUsageFlags.SampledBit
             else 
                 VkImageUsageFlags.ColorAttachmentBit ||| 
@@ -367,12 +366,11 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         }
         img :> IRenderbuffer
 
-    member x.GenerateMipMaps(t : IBackendTexture) =
-        device.GraphicsFamily.run {
-            do! Command.GenerateMipMaps (unbox t)
-        }
+    member x.GenerateMipMaps(t : IBackendTexture, sync : TaskSync) =
+        let cmd = Command.GenerateMipMaps (unbox t)
+        device.GraphicsFamily.RunSynchronously(cmd, sync.CommandSync)
 
-    member x.ResolveMultisamples(source : IFramebufferOutput, target : IBackendTexture, trafo : ImageTrafo) =
+    member x.ResolveMultisamples(source : IFramebufferOutput, target : IBackendTexture, trafo : ImageTrafo, sync : TaskSync) =
         use token = device.Token
 
         let src =
@@ -406,7 +404,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let flags = Buffer.toVkUsage usage
         device.CreateBuffer(flags, int64 size)
 
-    member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+    member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint, sync : TaskSync) =
         let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (int64 size)
         let dst = unbox<Buffer> dst
 
@@ -416,7 +414,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         }
         device.Delete temp
 
-    member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
+    member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint, sync : TaskSync) =
         let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
         let src = unbox<Buffer> src
 
@@ -431,7 +429,13 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
         let src = unbox<Buffer> src
 
-        let task = device.GraphicsFamily.Start(QueueCommand.ExecuteCommand([], [], Command.Copy(src, int64 srcOffset, temp, 0L, int64 size)))
+        let task =
+            device.GraphicsFamily.Start(
+                QueueCommand.ExecuteCommand(
+                    Command.Copy(src, int64 srcOffset, temp, 0L, int64 size),
+                    CommandSync.None
+                )
+            )
 
         (fun () ->
             task.Wait()
@@ -445,7 +449,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
 
-    member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+    member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint, sync : TaskSync) =
         let src = unbox<Buffer> src
         let dst = unbox<Buffer> dst
 
@@ -453,37 +457,38 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             do! Command.Copy(src, int64 srcOffset, dst, int64 dstOffset, int64 size)
         }
 
-    member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = 
+    member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int, sync : TaskSync) = 
         let src = unbox<Image> src
         let dst = unbox<Image> dst
 
-        let srcLayout = src.Layout
-        let dstLayout = dst.Layout
-
-        device.perform {
-            if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, VkImageLayout.TransferSrcOptimal)
-            if dstLayout <> VkImageLayout.TransferDstOptimal then do! Command.TransformLayout(dst, VkImageLayout.TransferDstOptimal)
-            if src.Samples = dst.Samples then
-                do! Command.Copy(
-                        src.[ImageAspect.Color, srcBaseLevel .. srcBaseLevel + levels - 1, srcBaseSlice .. srcBaseSlice + slices - 1],
-                        dst.[ImageAspect.Color, dstBaseLevel .. dstBaseLevel + levels - 1, dstBaseSlice .. dstBaseSlice + slices - 1]
-                    )
-            else
-                for l in 0 .. levels - 1 do
-                    let srcLevel = srcBaseLevel + l
-                    let dstLevel = dstBaseLevel + l
-                    do! Command.ResolveMultisamples(
-                            src.[ImageAspect.Color, srcLevel, srcBaseSlice .. srcBaseSlice + slices - 1],
-                            dst.[ImageAspect.Color, dstLevel, dstBaseSlice .. dstBaseSlice + slices - 1]
-                        )
+        src.Layout (fun srcLayout ->
+            dst.Layout (fun dstLayout ->
+                device.perform {
+                    if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, VkImageLayout.TransferSrcOptimal)
+                    if dstLayout <> VkImageLayout.TransferDstOptimal then do! Command.TransformLayout(dst, VkImageLayout.TransferDstOptimal)
+                    if src.Samples = dst.Samples then
+                        do! Command.Copy(
+                                src.[ImageAspect.Color, srcBaseLevel .. srcBaseLevel + levels - 1, srcBaseSlice .. srcBaseSlice + slices - 1],
+                                dst.[ImageAspect.Color, dstBaseLevel .. dstBaseLevel + levels - 1, dstBaseSlice .. dstBaseSlice + slices - 1]
+                            )
+                    else
+                        for l in 0 .. levels - 1 do
+                            let srcLevel = srcBaseLevel + l
+                            let dstLevel = dstBaseLevel + l
+                            do! Command.ResolveMultisamples(
+                                    src.[ImageAspect.Color, srcLevel, srcBaseSlice .. srcBaseSlice + slices - 1],
+                                    dst.[ImageAspect.Color, dstLevel, dstBaseSlice .. dstBaseSlice + slices - 1]
+                                )
             
-            if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, srcLayout)
-            if dstLayout <> VkImageLayout.TransferDstOptimal then do! Command.TransformLayout(dst, dstLayout)
-        }
+                    if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, srcLayout)
+                    if dstLayout <> VkImageLayout.TransferDstOptimal then do! Command.TransformLayout(dst, dstLayout)
+                }
+            )
+        )
 
 
     // upload
-    member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) =
+    member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i, sync : TaskSync) =
         let srgb = TextureFormat.isSrgb (unbox (int dst.Format))
         let temp = device |> TensorImage.create<'a> size fmt srgb
 
@@ -496,17 +501,18 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let dst = ImageSubresource.ofTextureSubResource dst
         let dstImage = dst.Image
 
-        let oldLayout = dstImage.Layout
-        device.perform {
-            do! Command.TransformLayout(dstImage, VkImageLayout.TransferDstOptimal)
-            do! Command.Copy(temp, dst, dstOffset, size)
-            do! Command.TransformLayout(dstImage, oldLayout)
-        }
+        dstImage.Layout (fun oldLayout ->
+            device.perform {
+                do! Command.TransformLayout(dstImage, VkImageLayout.TransferDstOptimal)
+                do! Command.Copy(temp, dst, dstOffset, size)
+                do! Command.TransformLayout(dstImage, oldLayout)
+            }
+        )
 
         device.Delete temp
         
     // download
-    member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) =
+    member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i, sync : TaskSync) =
         let srgb = TextureFormat.isSrgb (unbox (int src.Format))
         let temp = device |> TensorImage.create<'a> size fmt srgb
 
@@ -514,35 +520,37 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let src = ImageSubresource.ofTextureSubResource src
         let srcImage = src.Image
 
-        let oldLayout = srcImage.Layout
-        device.perform {
-            do! Command.TransformLayout(srcImage, VkImageLayout.TransferSrcOptimal)
-            do! Command.Copy(src, srcOffset, temp, size)
-            do! Command.TransformLayout(srcImage, oldLayout)
-        }
+        srcImage.Layout (fun oldLayout ->
+            device.perform {
+                do! Command.TransformLayout(srcImage, VkImageLayout.TransferSrcOptimal)
+                do! Command.Copy(src, srcOffset, temp, size)
+                do! Command.TransformLayout(srcImage, oldLayout)
+            }
+        )
 
         let dst = dst.SubTensor4(V4l.Zero, V4l(int64 size.X, int64 size.Y, int64 size.Z, dst.SW)).MirrorY()
         temp.Read(fmt, dst)
         device.Delete temp
 
     // copy
-    member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
+    member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i, sync : TaskSync) =
         let src = ImageSubresourceLayers.ofFramebufferOutput src
         let dst = ImageSubresourceLayers.ofFramebufferOutput dst
         
         let srcOffset = V3i(srcOffset.X, src.Size.Y - (srcOffset.Y + size.Y), srcOffset.Z)
         let dstOffset = V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
 
-        let srcLayout = src.Image.Layout
-        let dstLayout = dst.Image.Layout
-
-        device.perform {
-            do! Command.TransformLayout(src.Image, VkImageLayout.TransferSrcOptimal)
-            do! Command.TransformLayout(dst.Image, VkImageLayout.TransferDstOptimal)
-            do! Command.Copy(src, srcOffset, dst, dstOffset, size)
-            do! Command.TransformLayout(src.Image, srcLayout)
-            do! Command.TransformLayout(dst.Image, dstLayout)
-        }
+        src.Image.Layout (fun srcLayout ->
+            dst.Image.Layout (fun dstLayout ->
+                device.perform {
+                    do! Command.TransformLayout(src.Image, VkImageLayout.TransferSrcOptimal)
+                    do! Command.TransformLayout(dst.Image, VkImageLayout.TransferDstOptimal)
+                    do! Command.Copy(src, srcOffset, dst, dstOffset, size)
+                    do! Command.TransformLayout(src.Image, srcLayout)
+                    do! Command.TransformLayout(dst.Image, dstLayout)
+                }
+            )
+        )
 
     // Queries
     member x.CreateTimeQuery() =
@@ -557,6 +565,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.SupportedPipelineStatistics =
         PipelineStatistics.All
 
+    member x.CreateSync(maxDeviceWaits : int) =
+        new Sync(device, maxDeviceWaits) :> ISync
 
     interface IRuntime with
 
@@ -573,20 +583,20 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.DeleteComputeShader (shader : IComputeShader) =
             ComputeShader.delete (unbox shader)
 
-        member x.Run (commands : list<ComputeCommand>, queries : IQuery) =
-            ComputeCommand.run commands queries device
+        member x.Run (commands : list<ComputeCommand>, sync : TaskSync, queries : IQuery) =
+            ComputeCommand.run commands sync queries device
 
         member x.Compile (commands : list<ComputeCommand>) =
             ComputeCommand.compile commands device
 
-        member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) =
-            x.Copy(src, fmt, dst, dstOffset, size)
+        member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i, sync : TaskSync) =
+            x.Copy(src, fmt, dst, dstOffset, size, sync)
 
-        member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) =
-            x.Copy(src, srcOffset, dst, fmt, size)
+        member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i, sync : TaskSync) =
+            x.Copy(src, srcOffset, dst, fmt, size, sync)
             
-        member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
-            x.Copy(src, srcOffset, dst, dstOffset, size)
+        member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i, sync : TaskSync) =
+            x.Copy(src, srcOffset, dst, dstOffset, size, sync)
 
         member x.OnDispose = onDispose.Publish
         member x.AssembleModule (effect : FShade.Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
@@ -601,14 +611,14 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.CreateFramebufferSignature(a,b,c,d) = x.CreateFramebufferSignature(a,b,c,d)
         member x.DeleteFramebufferSignature(s) = x.DeleteFramebufferSignature(s)
 
-        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)
-        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) = x.Download(t, level, slice, target)
-        member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = x.Upload(t, level, slice, source)
-        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = x.DownloadDepth(t, level, slice, target)
-        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = x.DownloadStencil(t, level, slice, target)
+        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage, sync : TaskSync) = x.Download(t, level, slice, target, sync)
+        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume, sync : TaskSync) = x.Download(t, level, slice, target, sync)
+        member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage, sync : TaskSync) = x.Upload(t, level, slice, source, sync)
+        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>, sync : TaskSync) = x.DownloadDepth(t, level, slice, target, sync)
+        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>, sync : TaskSync) = x.DownloadStencil(t, level, slice, target, sync)
 
-        member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
-        member x.GenerateMipMaps(t) = x.GenerateMipMaps(t)
+        member x.ResolveMultisamples(source, target, trafo, sync) = x.ResolveMultisamples(source, target, trafo, sync)
+        member x.GenerateMipMaps(t, sync) = x.GenerateMipMaps(t, sync)
         member x.ContextLock = x.ContextLock
         member x.CompileRender (signature, engine, set) = x.CompileRender(signature, engine, set)
         member x.CompileClear(signature, color, depth) = x.CompileClear(signature, color, depth)
@@ -616,9 +626,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.PrepareSurface(signature, s) = x.PrepareSurface(signature, s)
         member x.DeleteSurface(s) = x.DeleteSurface(s)
         member x.PrepareRenderObject(fboSignature, rj) = x.PrepareRenderObject(fboSignature, rj)
-        member x.PrepareTexture(t) = x.PrepareTexture(t)
+        member x.PrepareTexture(t, sync) = x.PrepareTexture(t, sync)
         member x.DeleteTexture(t) = x.DeleteTexture(t)
-        member x.PrepareBuffer(b, u) = x.PrepareBuffer(b, u)
+        member x.PrepareBuffer(b, u, sync) = x.PrepareBuffer(b, u, sync)
         member x.DeleteBuffer(b) = x.DeleteBuffer(b)
 
         member x.DeleteRenderbuffer(b) = x.DeletRenderbuffer(b)
@@ -629,7 +639,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
             x.CreateSparseTexture<'a>(size, levels, slices, dim, format, brickSize, maxMemory)
-        member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
+        member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int, sync : TaskSync) =
+            x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels, sync)
 
 
         member x.CreateFramebuffer(signature, bindings) = x.CreateFramebuffer(signature, bindings)
@@ -649,14 +660,14 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.CreateBuffer(size : nativeint, usage : BufferUsage) = x.CreateBuffer(size, usage) :> IBackendBuffer
 
-        member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
-            x.Copy(src, dst, dstOffset, size)
+        member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint, sync : TaskSync) =
+            x.Copy(src, dst, dstOffset, size, sync)
 
-        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
-            x.Copy(src, srcOffset, dst, size)
+        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint, sync : TaskSync) =
+            x.Copy(src, srcOffset, dst, size, sync)
 
-        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = 
-            x.Copy(src, srcOffset, dst, dstOffset, size)
+        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint, sync : TaskSync) = 
+            x.Copy(src, srcOffset, dst, dstOffset, size, sync)
 
         member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
             x.CopyAsync(src, srcOffset, dst, size)
@@ -665,10 +676,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.Clear(fbo : IFramebuffer, clearColors : Map<Symbol,C4f>, depth : Option<float>, stencil : Option<int>) =
             failwith "not implemented"
 
-        member x.ClearColor(texture : IBackendTexture, color : C4f) =
+        member x.ClearColor(texture : IBackendTexture, color : C4f, sync : TaskSync) =
             failwith "not implemented"
 
-        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<float>, stencil : Option<int>) =
+        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<float>, stencil : Option<int>, sync : TaskSync) =
             failwith "not implemented"
 
         member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture =
@@ -685,3 +696,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.SupportedPipelineStatistics =
             x.SupportedPipelineStatistics
+
+        member x.CreateSync(maxDeviceWaits) =
+            x.CreateSync(maxDeviceWaits)

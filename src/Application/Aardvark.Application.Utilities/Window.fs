@@ -544,7 +544,7 @@ module Utilities =
                     member x.FramebufferSignature = Some win.FramebufferSignature
                     member x.Runtime = Some win.Runtime
                     member x.PerformUpdate (_,_) = ()
-                    member x.Perform (t,_,_,q) = 
+                    member x.Perform (t,_,_,s,q) = 
                         let fbo = framebuffer.GetValue t
                         let output = OutputDescription.ofFramebuffer fbo
 
@@ -552,8 +552,8 @@ module Utilities =
                         let r = resolved.GetValue t |> unbox<IBackendTexture>
 
                         q.Begin()
-                        clearTask.Run(t, RenderToken.Empty, output, q)
-                        stereoTask.Run(t, RenderToken.Empty, output, q)
+                        clearTask.Run(t, RenderToken.Empty, output, TaskSync s.WaitFor, q)
+                        stereoTask.Run(t, RenderToken.Empty, output, TaskSync s.Signal, q)
                         q.End()
 
                         runtime.Copy(c, 0, 0, r, 0, 0, 2, 1)

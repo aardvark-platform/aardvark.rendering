@@ -19,41 +19,43 @@ open KHRSurface
 module private EnumExtensions =
     type Command with
         static member PresentBarrier(img : Image) =
-            if img.Layout = VkImageLayout.PresentSrcKhr then
-                Command.Nop
-            else
-                { new Command() with
-                    member x.Compatible = QueueFlags.All
-                    member x.Enqueue cmd =
-                        native {
-                            let familyIndex = cmd.QueueFamily.Index
-                            let! pPrePresentBarrier =
-                                VkImageMemoryBarrier( 
-                                    VkAccessFlags.ColorAttachmentWriteBit,
-                                    VkAccessFlags.MemoryReadBit,
-                                    VkImageLayout.ColorAttachmentOptimal,
-                                    VkImageLayout.PresentSrcKhr,
-                                    uint32 familyIndex,
-                                    uint32 familyIndex,
-                                    img.Handle,
-                                    VkImageSubresourceRange(VkImageAspectFlags.ColorBit, 0u, 1u, 0u, 1u)
+            img.Transform (fun getLayout setLayout ->
+                if getLayout() = VkImageLayout.PresentSrcKhr then
+                    Command.Nop
+                else
+                    { new Command() with
+                        member x.Compatible = QueueFlags.All
+                        member x.Enqueue cmd =
+                            native {
+                                let familyIndex = cmd.QueueFamily.Index
+                                let! pPrePresentBarrier =
+                                    VkImageMemoryBarrier( 
+                                        VkAccessFlags.ColorAttachmentWriteBit,
+                                        VkAccessFlags.MemoryReadBit,
+                                        VkImageLayout.ColorAttachmentOptimal,
+                                        VkImageLayout.PresentSrcKhr,
+                                        uint32 familyIndex,
+                                        uint32 familyIndex,
+                                        img.Handle,
+                                        VkImageSubresourceRange(VkImageAspectFlags.ColorBit, 0u, 1u, 0u, 1u)
+                                    )
+
+                                cmd.AppendCommand()
+                                VkRaw.vkCmdPipelineBarrier(
+                                    cmd.Handle,
+                                    VkPipelineStageFlags.AllCommandsBit, 
+                                    VkPipelineStageFlags.BottomOfPipeBit, 
+                                    VkDependencyFlags.None, 
+                                    0u, NativePtr.zero, 
+                                    0u, NativePtr.zero, 
+                                    1u, pPrePresentBarrier
                                 )
 
-                            cmd.AppendCommand()
-                            VkRaw.vkCmdPipelineBarrier(
-                                cmd.Handle,
-                                VkPipelineStageFlags.AllCommandsBit, 
-                                VkPipelineStageFlags.BottomOfPipeBit, 
-                                VkDependencyFlags.None, 
-                                0u, NativePtr.zero, 
-                                0u, NativePtr.zero, 
-                                1u, pPrePresentBarrier
-                            )
-
-                            img.Layout <- VkImageLayout.PresentSrcKhr
-                            return Disposable.Empty
-                        }
-                }
+                                setLayout VkImageLayout.PresentSrcKhr
+                                return Disposable.Empty
+                            }
+                    }
+                )
 
 
 [<AutoOpen>]          
