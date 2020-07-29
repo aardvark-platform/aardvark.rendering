@@ -90,9 +90,10 @@ module Error =
 
     open System.Runtime.InteropServices
 
-    exception OpenGLException of ErrorCode * string
+    exception OpenGLException of ec : ErrorCode * msg : string with
+        override x.Message = sprintf "[%A] %s" x.ec x.msg
+        
 
-    
     
     let private debug (debugSource : DebugSource) (debugType : DebugType) (id : int) (severity : DebugSeverity) (length : int) (message : nativeint) (userParam : nativeint) =
          let message = Marshal.PtrToStringAnsi(message,length)
