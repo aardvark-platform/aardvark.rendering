@@ -38,7 +38,7 @@ module Config =
     /// The number of resource context to be created for a default
     /// rendering context instance.
     /// </summary>
-    let mutable NumberOfResourceContexts = 1
+    let mutable NumberOfResourceContexts = 2
     
     /// <summary>
     /// Use the "new" RenderTask OpenGL RenderTask supporting RuntimeCommands (5.1.0)

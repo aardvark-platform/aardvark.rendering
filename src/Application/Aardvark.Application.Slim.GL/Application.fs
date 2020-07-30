@@ -52,7 +52,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
         h
 
     let resourceContexts =
-        Array.init 2 (fun _ ->
+        Array.init Config.NumberOfResourceContexts (fun _ ->
             createContext()
         )
 
