@@ -245,12 +245,12 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
         ContextHandle.initGlConfig()
 
-        x.KeyDown.Add(fun e ->
-            if e.KeyCode = System.Windows.Forms.Keys.End && e.Control then
-                renderContinuously <- not renderContinuously
-                x.Invalidate()
-                e.Handled <- true
-        )
+        //x.KeyDown.Add(fun e ->
+        //    if e.KeyCode = System.Windows.Forms.Keys.End && e.Control then
+        //        renderContinuously <- not renderContinuously
+        //        x.Invalidate()
+        //        e.Handled <- true
+        //)
 
     member x.Render() =
 
