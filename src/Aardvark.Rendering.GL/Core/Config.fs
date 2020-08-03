@@ -38,7 +38,7 @@ module Config =
     /// The number of resource context to be created for a default
     /// rendering context instance.
     /// </summary>
-    let mutable NumberOfResourceContexts = 1
+    let mutable NumberOfResourceContexts = 2
     
     /// <summary>
     /// Use the "new" RenderTask OpenGL RenderTask supporting RuntimeCommands (5.1.0)
@@ -90,9 +90,10 @@ module Error =
 
     open System.Runtime.InteropServices
 
-    exception OpenGLException of ErrorCode * string
+    exception OpenGLException of ec : ErrorCode * msg : string with
+        override x.Message = sprintf "[%A] %s" x.ec x.msg
+        
 
-    
     
     let private debug (debugSource : DebugSource) (debugType : DebugType) (id : int) (severity : DebugSeverity) (length : int) (message : nativeint) (userParam : nativeint) =
          let message = Marshal.PtrToStringAnsi(message,length)

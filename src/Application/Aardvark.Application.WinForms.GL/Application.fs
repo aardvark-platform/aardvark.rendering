@@ -17,7 +17,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool, shaderCachePath :
 
     let runtime = new Runtime()
     let ctx = 
-        let resourceContexts = Array.init 2 (fun _ -> ContextHandleOpenTK.create enableDebug)
+        let resourceContexts = Array.init Config.NumberOfResourceContexts (fun _ -> ContextHandleOpenTK.create enableDebug)
         new Context(runtime, enableDebug, resourceContexts, fun () -> ContextHandleOpenTK.create enableDebug)
 
     do ctx.ShaderCachePath <- shaderCachePath
