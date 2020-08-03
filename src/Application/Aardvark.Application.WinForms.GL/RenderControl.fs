@@ -241,18 +241,9 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
     override x.OnHandleCreated(e) =
 
-        base.OnHandleCreated(e)
+        base.OnHandleCreated(e) // creates the graphics context of the control and performs MakeCurrent -> NOTE: during this call rendering in other threads can break resource sharing
 
-        let c = OpenTK.Graphics.GraphicsContext.CurrentContext
-        GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
-        GL.Enable(EnableCap.TextureCubeMapSeamless)
-        GL.Disable(EnableCap.PolygonSmooth)
-
-        if c <> null then
-            c.MakeCurrent(null)
-
-        //if ContextHandle.primaryContext <> null then
-        //    ContextHandle.primaryContext.MakeCurrent()
+        ContextHandle.initGlConfig()
 
         x.KeyDown.Add(fun e ->
             if e.KeyCode = System.Windows.Forms.Keys.End && e.Control then
@@ -260,8 +251,6 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                 x.Invalidate()
                 e.Handled <- true
         )
-
-        base.MakeCurrent()
 
     member x.Render() =
 

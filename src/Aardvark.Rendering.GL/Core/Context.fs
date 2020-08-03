@@ -149,7 +149,7 @@ type MemoryUsage() =
 /// multiple threads to submit GL calls concurrently.
 /// </summary>
 [<AllowNullLiteral>]
-type Context(runtime : IRuntime, enableDebug : bool, resourceContexts : ContextHandle[], createContext : unit -> ContextHandle) =
+type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
 
     static let defaultShaderCachePath = 
                         Some (Path.combine [
@@ -160,7 +160,7 @@ type Context(runtime : IRuntime, enableDebug : bool, resourceContexts : ContextH
 
     static let nopDisposable = { new IDisposable with member x.Dispose() = () }
 
-    //let resourceContexts = ContextHandle.createContexts enableDebug resourceContextCount
+    let resourceContexts = Array.init Config.NumberOfResourceContexts (fun _ -> createContext())
     let resourceContextCount = resourceContexts.Length
 
     let memoryUsage = MemoryUsage()

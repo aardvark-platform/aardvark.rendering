@@ -16,9 +16,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool, shaderCachePath :
        with e -> Report.Warn("Could not set UnhandledExceptionMode.")
 
     let runtime = new Runtime()
-    let ctx = 
-        let resourceContexts = Array.init Config.NumberOfResourceContexts (fun _ -> ContextHandleOpenTK.create enableDebug)
-        new Context(runtime, enableDebug, resourceContexts, fun () -> ContextHandleOpenTK.create enableDebug)
+    let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create enableDebug)
 
     do ctx.ShaderCachePath <- shaderCachePath
        runtime.Initialize(ctx, true, true)

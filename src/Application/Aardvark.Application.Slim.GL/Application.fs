@@ -37,10 +37,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool, shaderCachePath :
         let o = ContextHandle.Current
         h.MakeCurrent()
 
-        OpenTK.Graphics.OpenGL4.GL.Hint(OpenTK.Graphics.OpenGL4.HintTarget.PointSmoothHint, OpenTK.Graphics.OpenGL4.HintMode.Fastest)
-        OpenTK.Graphics.OpenGL4.GL.Enable(OpenTK.Graphics.OpenGL4.EnableCap.TextureCubeMapSeamless)
-        OpenTK.Graphics.OpenGL4.GL.Disable(OpenTK.Graphics.OpenGL4.EnableCap.PolygonSmooth)
-        OpenTK.Graphics.OpenGL4.GL.Hint(OpenTK.Graphics.OpenGL4.HintTarget.FragmentShaderDerivativeHint, OpenTK.Graphics.OpenGL4.HintMode.Nicest)
+        ContextHandle.initGlConfig()
 
         h.ReleaseCurrent()
         match o with
@@ -49,12 +46,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool, shaderCachePath :
         glfw.RemoveExistingWindow w
         h
 
-    let resourceContexts =
-        Array.init Config.NumberOfResourceContexts (fun _ ->
-            createContext()
-        )
-
-    let ctx = new Context(runtime, enableDebug, resourceContexts, fun () -> glfw.Invoke createContext)
+    let ctx = new Context(runtime, fun () -> glfw.Invoke createContext)
 
     do ctx.ShaderCachePath <- shaderCachePath
        glfw.Context <- ctx

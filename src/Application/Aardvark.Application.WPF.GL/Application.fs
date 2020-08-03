@@ -17,7 +17,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool, shaderCachePath :
        OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
 
     let runtime = new Runtime()
-    let ctx = new Context(runtime, enableDebug, Array.init Config.NumberOfResourceContexts (fun _ -> ContextHandleOpenTK.create enableDebug), (fun () -> ContextHandleOpenTK.create enableDebug))
+    let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create enableDebug)
 
     do ctx.ShaderCachePath <- shaderCachePath
        runtime.Initialize(ctx, true, true)
