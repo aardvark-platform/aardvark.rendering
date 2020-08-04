@@ -720,3 +720,18 @@ module RenderbufferFormat =
 
     let ofTextureFormat (fmt : TextureFormat) =
         convertEnum<_, RenderbufferFormat> fmt
+
+    let private depthFormats =
+        HashSet.ofList [
+            RenderbufferFormat.DepthStencil
+            RenderbufferFormat.Depth24Stencil8
+            RenderbufferFormat.Depth32fStencil8
+            RenderbufferFormat.DepthComponent
+            RenderbufferFormat.DepthComponent16
+            RenderbufferFormat.DepthComponent24
+            RenderbufferFormat.DepthComponent32
+            RenderbufferFormat.DepthComponent32f
+        ]
+
+    let hasDepth (fmt : RenderbufferFormat) =
+        depthFormats.Contains fmt
