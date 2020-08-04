@@ -163,7 +163,7 @@ module ChangeableResources =
 
 
 [<AutoOpen>]
-module private RefCountedResources = 
+module RefCountedResources = 
 
     type IAdaptiveValue<'a> with
         member x.GetValue(c : AdaptiveToken, t : RenderToken) =
