@@ -50,3 +50,4 @@ src/GLVM/*.dylib
 /src/Aardvark.Base.Rendering/.vs/Aardvark.Base.Rendering/v15/*.suo
 /.vs
 **/Aardvark.log
+src/Aardvark.Rendering.Interactive/bin/
