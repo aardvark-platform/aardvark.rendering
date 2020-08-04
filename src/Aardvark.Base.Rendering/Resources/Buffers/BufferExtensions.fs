@@ -32,6 +32,12 @@ type BufferExtensions private() =
     static member Copy(this : IBufferRuntime, srcBuffer : IBackendBuffer, srcOffset : nativeint, dstBuffer : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         this.Copy(srcBuffer, srcOffset, dstBuffer, dstOffset, size, TaskSync.none)
 
+    /// Prepares a buffer, allocating and uploading the data to GPU memory
+    /// If the buffer is an IBackendBuffer the operation performs NOP
+    [<Extension>]
+    static member PrepareBuffer(this : IBufferRuntime, data : IBuffer, usage : BufferUsage) =
+        this.PrepareBuffer(data, usage, TaskSync.none)
+
     /// <summary>
     /// Prepares a buffer for GPU usage with all BufferUsage flags, but only write permissions.
     /// If the buffer is an IBackendBuffer the operation performs NOP

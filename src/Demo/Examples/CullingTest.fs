@@ -199,7 +199,7 @@ module CullingTest =
 
         let cullTask =
             let mutable wasCull = noCull.GetValue()
-            RenderTask.custom (fun (task, token, output, queries) ->   
+            RenderTask.custom (fun (task, token, output, sync, queries) ->   
                 let noCull = noCull.GetValue ()
                 if not noCull || wasCull <> noCull then
                     wasCull <- noCull

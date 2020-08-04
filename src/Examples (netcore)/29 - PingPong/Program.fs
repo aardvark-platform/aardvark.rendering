@@ -105,14 +105,15 @@ let main argv =
     // this a custom render task which call others and can be chained with outer render tasks
     // we need this to control where to render to
     let renderToTarget =
-        RenderTask.custom (fun (self,token,outputDesc,queries) -> 
+        RenderTask.custom (fun (self,token,outputDesc,sync,queries) -> 
             // choose where to render to
             let target = fbos.[(currentTexture.Value+1)%2]
             // manually clear and render to target
             let output = OutputDescription.ofFramebuffer target
+            let sync = sync |> TaskSync.sequential 2
             queries.Begin()
-            clear.Run(self, token, output, queries)
-            task.Run(self, token, output, queries)
+            clear.Run(self, token, output, sync.[0], queries)
+            task.Run(self, token, output, sync.[1], queries)
             queries.End()
         )
 

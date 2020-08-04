@@ -63,7 +63,7 @@ let main argv =
 
     
     let renderTask =
-        RenderTask.custom (fun (self,token,outputDesc,queries) -> 
+        RenderTask.custom (fun (self,token,outputDesc,sync,queries) -> 
             win.Time.GetValue self |> ignore
 
             transact (fun () -> 
@@ -83,7 +83,7 @@ let main argv =
                     stuff.Add(sg) |> ignore
                 )
             
-            renderTask.Run(token,outputDesc,queries)
+            renderTask.Run(token,outputDesc,sync,queries)
         )
         
     win.RenderTask <- renderTask
