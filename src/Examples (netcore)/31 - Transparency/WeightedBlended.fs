@@ -45,7 +45,7 @@ module WeightedBlended =
             }
 
         let private colorSampler =
-            sampler2dMS {
+            sampler2d {
                 texture uniform?ColorBuffer
                 filter Filter.MinMagPoint
                 addressU WrapMode.Wrap
@@ -53,6 +53,22 @@ module WeightedBlended =
             }
 
         let private alphaSampler =
+            sampler2d {
+                texture uniform?AlphaBuffer
+                filter Filter.MinMagPoint
+                addressU WrapMode.Wrap
+                addressV WrapMode.Wrap
+            }
+
+        let private colorSamplerMS =
+            sampler2dMS {
+                texture uniform?ColorBuffer
+                filter Filter.MinMagPoint
+                addressU WrapMode.Wrap
+                addressV WrapMode.Wrap
+            }
+
+        let private alphaSamplerMS =
             sampler2dMS {
                 texture uniform?AlphaBuffer
                 filter Filter.MinMagPoint
@@ -66,12 +82,16 @@ module WeightedBlended =
                 let mutable color = V4d.Zero
                 let mutable alpha = V4d.Zero
 
-                for i in 0 .. samples - 1 do
-                    color <- color + colorSampler.Read(V2i f.coord.XY, i)
-                    alpha <- alpha + alphaSampler.Read(V2i f.coord.XY, i)
+                if samples > 1 then
+                    for i in 0 .. samples - 1 do
+                        color <- color + colorSamplerMS.Read(V2i f.coord.XY, i)
+                        alpha <- alpha + alphaSamplerMS.Read(V2i f.coord.XY, i)
 
-                color <- color / float samples
-                alpha <- alpha / float samples
+                    color <- color / float samples
+                    alpha <- alpha / float samples
+                else
+                    color <- colorSampler.Read(V2i f.coord.XY, 0)
+                    alpha <- alphaSampler.Read(V2i f.coord.XY, 0)
 
                 let accum = V4d(color.XYZ, alpha.X)
                 let revealage = alpha.W
@@ -87,6 +107,14 @@ module WeightedBlended =
 
         // Blit one multisampled texture to another.
         let private diffuseSampler =
+            sampler2d {
+                texture uniform?DiffuseColorTexture
+                filter Filter.MinMagMipLinear
+                addressU WrapMode.Wrap
+                addressV WrapMode.Wrap
+            }
+
+        let private diffuseSamplerMS =
             sampler2dMS {
                 texture uniform?DiffuseColorTexture
                 filter Filter.MinMagMipLinear
@@ -94,9 +122,12 @@ module WeightedBlended =
                 addressV WrapMode.Wrap
             }
 
-        let blit (f : Fragment) =
+        let blit (samples : int) (f : Fragment) =
             fragment {
-                return diffuseSampler.Read(V2i f.coord.XY, f.sample)
+                if samples > 1 then
+                    return diffuseSamplerMS.Read(V2i f.coord.XY, f.sample)
+                else
+                    return diffuseSampler.Read(V2i f.coord.XY, 0)
             }
 
     [<AutoOpen>]
@@ -224,7 +255,7 @@ module WeightedBlended =
                 Sg.fullScreenQuad
                 |> Sg.diffuseTexture compositeOutput
                 |> Sg.shader {
-                    do! Shaders.blit
+                    do! Shaders.blit samples
                 }
 
             runtime.CompileRender(framebuffer.signature, sg)
@@ -236,6 +267,8 @@ module WeightedBlended =
             transparentTask.Dispose()
             compositeTask.Dispose()
             opaqueTask.Dispose()
+            runtime.DeleteFramebufferSignature offscreenPass
+            runtime.DeleteFramebufferSignature transparentPass
 
         interface ITechnique with
             member x.Name = "Weighted Blended OIT"
