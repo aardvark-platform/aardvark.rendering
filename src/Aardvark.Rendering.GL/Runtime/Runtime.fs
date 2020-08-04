@@ -80,34 +80,61 @@ module private Align =
     let next2 (a : int) (v : V2i) =
         V2i(next a v.X, next a v.Y)
 
-type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
+type Runtime() =
 
     static let versionRx = System.Text.RegularExpressions.Regex @"([0-9]+\.)*[0-9]+"
-
-    let mutable ctx = ctx
-    let mutable manager = if ctx <> null then ResourceManager(ctx, None, shareTextures, shareBuffers) else null
+    
+    let mutable ctx : Context = Unchecked.defaultof<_>
+    let mutable manager : ResourceManager = Unchecked.defaultof<_>
 
     let shaderCache = System.Collections.Concurrent.ConcurrentDictionary<string*list<int*Symbol>,BackendSurface>()
     let onDispose = Event<unit>()    
-    do if not (isNull ctx) then Operators.using ctx.ResourceLock (fun _ -> GLVM.vmInit())
 
     let compute = lazy ( new GLCompute(ctx) )
 
-    new(ctx) = new Runtime(ctx, true, true)
+    member x.Context = ctx
 
-    //member x.SupportsUniformBuffers =
-    //    ExecutionContext.uniformBuffersSupported
+    member x.Initialize(context : Context, shareTextures : bool, shareBuffers : bool) = 
+           if ctx <> null then
+               Log.warn "Runtime already initialized"
 
-    member x.Context
-        with get() = ctx
-        and set c = 
-            ctx <- c
-            manager <- ResourceManager(ctx, None, shareTextures, shareBuffers)
-            Operators.using ctx.ResourceLock (fun _ -> GLVM.vmInit())
+           ctx <- context
+           manager <- ResourceManager(context, None, shareTextures, shareBuffers)
 
-            //compiler <- Compiler.Compiler(x, c)
-            //currentRuntime <- Some (x :> IRuntime)
+           Operators.using context.ResourceLock (fun _ ->
+           
+               try
+                   Log.startTimed "initializing OpenGL runtime"
+                                   
+                   let driver = context.Driver
 
+                   // GL_CONTEXT_CORE_PROFILE_BIT 1
+                   // GL_CONTEXT_COMPATIBILITY_PROFILE_BIT 2
+                   let profileType = if driver.profileMask = 1 then " Core" elif driver.profileMask = 2 then " Compatibility" else ""
+           
+                   Log.line "vendor:   %A" driver.vendor
+                   Log.line "renderer: %A" driver.renderer 
+                   Log.line "version:  OpenGL %A / GLSL %A %s" driver.version driver.glsl profileType
+                                                           
+                   let major = driver.version.Major
+                   let minor = driver.version.Minor
+                   if major < 3 || major = 3 && minor < 3 then
+                       failwith "OpenGL driver version less than 3.3"
+           
+                   GLVM.vmInit()
+           
+                   // perform test OpenGL call
+                   if OpenGl.Pointers.ActiveTexture = 0n then
+                       failwith "Essentinal OpenGL procedure missing"
+                               
+                   OpenGl.Unsafe.ActiveTexture (int OpenTK.Graphics.OpenGL4.TextureUnit.Texture0)
+                   OpenTK.Graphics.OpenGL4.GL.Check "first GL call failed"
+           
+               finally
+                   Log.stop()
+           )
+
+    member x.Initialize(context : Context) = x.Initialize(context, true, true)
 
     member x.Dispose() = 
         if ctx <> null then
@@ -131,7 +158,7 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             //        LodRenderingInfo.renderBounds = renderBounds
             //    }
                             
-            new LodRenderer(x.Context, x.ResourceManager, preparedState, config, data) :> IPreparedRenderObject
+            new LodRenderer(ctx, x.ResourceManager, preparedState, config, data) :> IPreparedRenderObject
 
     interface IRuntime with
     
@@ -1018,5 +1045,3 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 
     member x.CreateGeometryPool(types : Map<Symbol, Type>) =
         new SparseBufferGeometryPool(ctx, types) :> IGeometryPool
-        
-    new() = new Runtime(null)

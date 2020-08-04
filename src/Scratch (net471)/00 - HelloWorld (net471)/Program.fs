@@ -40,6 +40,10 @@ let main argv =
             let n = win.SubSampling / Constant.Sqrt2 |> clamp 0.015625 2.0
             win.SubSampling <- n
             Log.warn "SubSampling: %A" win.SubSampling
+        | Keys.End ->
+            let glControl = win.Control.Implementation :?> OpenGlRenderControl
+            if (System.Windows.Forms.Control.ModifierKeys &&& System.Windows.Forms.Keys.Control) = System.Windows.Forms.Keys.Control then
+                glControl.RenderContinuously <- not glControl.RenderContinuously
         | _ ->
             ()
     )

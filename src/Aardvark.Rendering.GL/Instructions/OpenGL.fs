@@ -432,6 +432,7 @@ module OpenGl =
     let getProcAddress (name : string) =
          let address = getProcAddressProbing [""; "ARB"; "EXT"] name
          if address = 0n then
+              Aardvark.Base.Report.Line(2, "[GL] Could not get \"{0}\" procedure address", name)
               0n
          else
               address

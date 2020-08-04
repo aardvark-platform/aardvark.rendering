@@ -331,8 +331,8 @@ module RenderingTests =
         printfn "%A" len
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
-        runtime.Context <- ctx
+        use ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create false)
+        runtime.Initialize(ctx)
 
         let size = V2i(1024,768)
         
@@ -394,8 +394,8 @@ module RenderingTests =
     let ``[GL] simple render to multiple texture``() =
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
-        runtime.Context <- ctx
+        use ctx = new Context(runtime, (fun () -> ContextHandleOpenTK.create false))
+        runtime.Initialize(ctx)
 
         let size = V2i(1024,768)
         let color = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
@@ -490,8 +490,8 @@ module RenderingTests =
                 |> Sg.projTrafo ~~(frustum |> Frustum.projTrafo)
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
-        runtime.Context <- ctx
+        use ctx = new Context(runtime, (fun () -> ContextHandleOpenTK.create false))
+        runtime.Initialize(ctx)
 
         using ctx.ResourceLock (fun _ -> 
             Log.line "vendor:   %s" runtime.Context.Driver.vendor
@@ -605,8 +605,8 @@ module RenderingTests =
                 |> Sg.projTrafo ~~(frustum |> Frustum.projTrafo)
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
-        runtime.Context <- ctx
+        use ctx = new Context(runtime, (fun () -> ContextHandleOpenTK.create false))
+        runtime.Initialize(ctx)
 
         using ctx.ResourceLock (fun _ -> 
             Log.line "vendor:   %s" runtime.Context.Driver.vendor
@@ -741,8 +741,8 @@ module UseTest =
         Aardvark.Init()
 
         use runtime = new Runtime()
-        use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
-        runtime.Context <- ctx
+        use ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create false)
+        runtime.Initialize(ctx)
 
         let size = V2i(1024,1024)
         

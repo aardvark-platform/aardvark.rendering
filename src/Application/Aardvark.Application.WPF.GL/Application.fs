@@ -12,60 +12,23 @@ open Aardvark.Application
 module Config =
     let mutable useSharingControl = false
 
-type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
+type OpenGlApplication(forceNvidia : bool, enableDebug : bool, shaderCachePath : Option<string>) =
     do if forceNvidia then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
        OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
 
     let runtime = new Runtime()
-    let ctx = new Context(runtime, enableDebug, Array.init 2 (fun _ -> ContextHandleOpenTK.create enableDebug), (fun () -> ContextHandleOpenTK.create enableDebug))
-    do runtime.Context <- ctx
+    let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create enableDebug)
 
-    let defaultCachePath =
-        let dir =
-            Path.combine [
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
-                "Aardvark"
-                "OpenGlShaderCache"
-            ]
-        ctx.ShaderCachePath <- Some dir
-        dir
-
-
-    let init =
-        let initialized = ref false
-        fun (ctx : Context)->
-            if not !initialized then
-                initialized := true
-
-                Operators.using ctx.ResourceLock (fun _ ->
-                    try GLVM.vmInit()
-                    with _ -> Log.line "No glvm found, running without glvm"
-
-                    Log.startTimed "initializing OpenGL runtime"
-
-                    OpenTK.Graphics.OpenGL4.GL.GetError() |> ignore
-                    OpenGl.Unsafe.ActiveTexture (int OpenTK.Graphics.OpenGL4.TextureUnit.Texture0)
-                    OpenTK.Graphics.OpenGL4.GL.Check "first GL call failed"
-                
-               
-                    Log.line "vendor:   %A" ctx.Driver.vendor
-                    Log.line "renderer: %A" ctx.Driver.renderer 
-                    Log.line "version:  OpenGL %A / GLSL %A" ctx.Driver.version ctx.Driver.glsl
-
-                    Log.stop()
-                )
-
-
-    new(enableDebug) = new OpenGlApplication(true, enableDebug)
+    do ctx.ShaderCachePath <- shaderCachePath
+       runtime.Initialize(ctx, true, true)
+              
     new() = new OpenGlApplication(true, false)
+    new(enableDebug) = new OpenGlApplication(true, enableDebug)
+    new(forceNvidia, enableDebug) = new OpenGlApplication(forceNvidia, enableDebug, Context.DefaultShaderCachePath)
 
     member x.Context = ctx
     member x.Runtime = runtime
     
-    member x.ShaderCachePath
-        with get() = ctx.ShaderCachePath
-        and set p = ctx.ShaderCachePath <- p
-
     member x.Dispose() =
         ctx.Dispose()
         runtime.Dispose()
@@ -77,11 +40,9 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool) =
                 if Config.useSharingControl then
                     let impl = new OpenGlSharingRenderControl(runtime, samples)
                     ctrl.Implementation <- impl
-                    init ctx
                 else 
                     let impl = new OpenGlRenderControl(runtime, enableDebug, samples) 
                     ctrl.Implementation <- impl
-                    init ctx 
             | _ ->
                 failwithf "unknown control type: %A" ctrl
                     

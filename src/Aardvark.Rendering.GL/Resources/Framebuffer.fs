@@ -86,6 +86,10 @@ module FramebufferExtensions =
             RenderbufferFormat.DepthStencil
         ]
 
+    let private destroy (handle : int) =
+        GL.DeleteFramebuffer handle
+        GL.Check "could not delete framebuffer"
+
     let private init (bindings : list<int * Symbol * IFramebufferOutput>) (depth : Option<IFramebufferOutput>) (stencil : Option<IFramebufferOutput>) (c : Aardvark.Rendering.GL.ContextHandle) : int =
 
         let mutable oldFbo = 0
@@ -197,18 +201,17 @@ module FramebufferExtensions =
         let status = GL.CheckFramebufferStatus(FramebufferTarget.Framebuffer)
         GL.Check "could not get framebuffer status"
 
-        if status <> FramebufferErrorCode.FramebufferComplete then
-            raise <| OpenGLException(ErrorCode.InvalidFramebufferOperation, sprintf "framebuffer incomplete: %A" status)
-
         // unbind
         GL.BindFramebuffer(FramebufferTarget.Framebuffer, oldFbo)
         GL.Check "could not unbind framebuffer"
 
+        if status <> FramebufferErrorCode.FramebufferComplete then
+            // cleanup and raise exception
+            destroy handle
+            raise <| OpenGLException(ErrorCode.InvalidFramebufferOperation, sprintf "framebuffer incomplete: %A" status)
+
         handle
 
-    let private destroy (handle : int) =
-        GL.DeleteFramebuffer handle
-        GL.Check "could not delete framebuffer"
 
     type Context with
 

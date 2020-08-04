@@ -149,9 +149,18 @@ type MemoryUsage() =
 /// multiple threads to submit GL calls concurrently.
 /// </summary>
 [<AllowNullLiteral>]
-type Context(runtime : IRuntime, enableDebug : bool, resourceContexts : ContextHandle[], createContext : unit -> ContextHandle) =
+type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
+
+    static let defaultShaderCachePath = 
+                        Some (Path.combine [
+                                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
+                                "Aardvark"
+                                "OpenGlShaderCache"
+                             ])
+
     static let nopDisposable = { new IDisposable with member x.Dispose() = () }
-    //let resourceContexts = ContextHandle.createContexts enableDebug resourceContextCount
+
+    let resourceContexts = Array.init Config.NumberOfResourceContexts (fun _ -> createContext())
     let resourceContextCount = resourceContexts.Length
 
     let memoryUsage = MemoryUsage()
@@ -167,8 +176,10 @@ type Context(runtime : IRuntime, enableDebug : bool, resourceContexts : ContextH
     let mutable packAlignment = None
 
     let mutable shaderCachePath : Option<string> = None
-
+    
     member x.CreateContext() = createContext()
+
+    static member DefaultShaderCachePath = defaultShaderCachePath
 
     member x.ShaderCachePath
         with get() = shaderCachePath

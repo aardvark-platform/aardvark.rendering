@@ -55,8 +55,8 @@ module ShaderTests =
     [<Test>]
     let ``[Shader] prepare signature``() =
         use runtime = new Runtime()
-        use ctx = new Context(runtime, false, Array.init 2 (fun _ -> ContextHandleOpenTK.create false), (fun () -> ContextHandleOpenTK.create false))
-        runtime.Context <- ctx
+        use ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create false)
+        runtime.Initialize(ctx)
 
         let signature =
             runtime.CreateFramebufferSignature [
