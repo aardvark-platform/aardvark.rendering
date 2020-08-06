@@ -49,7 +49,7 @@
     <Compile Include="Resources\Framebuffer\Framebuffer.fs" />
     <Compile Include="Resources\Framebuffer\FramebufferExtensions.fs" />
     <Compile Include="Resources\Framebuffer\OutputDescription.fs" />
-    <Compile Include="Resources\Adaptive\OutputMod.fs" />
+    <Compile Include="Resources\Adaptive\AdaptiveResource.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveTextures.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveRenderbuffers.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveFramebuffers.fs" />

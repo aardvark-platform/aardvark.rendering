@@ -231,7 +231,7 @@ and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 
         match old with
             | None ->
                 match m with
-                    | :? IOutputMod<'a> as om -> om.Acquire()
+                    | :? IAdaptiveResource<'a> as om -> om.Acquire()
                     | _ -> ()
 
             | _ ->
@@ -239,7 +239,7 @@ and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 
 
     let releaseOutput  (m : aval<'a>) =
         match m with
-            | :? IOutputMod<'a> as om -> om.Release()
+            | :? IAdaptiveResource<'a> as om -> om.Release()
             | _ -> ()
 
     let acquireLock (v : 'a) =
@@ -255,7 +255,7 @@ and ResourceCache<'h, 'v when 'v : unmanaged>(parent : Option<ResourceCache<'h, 
 
     let eval (m : aval<'a>) (rt : RenderToken) (token : AdaptiveToken) =
         match m with
-            | :? IOutputMod<'a> as om -> om.GetValue(token, rt)
+            | :? IAdaptiveResource<'a> as om -> om.GetValue(token, rt)
             | _ -> m.GetValue(token)
 
     let tryGetParent (key : list<obj>) =

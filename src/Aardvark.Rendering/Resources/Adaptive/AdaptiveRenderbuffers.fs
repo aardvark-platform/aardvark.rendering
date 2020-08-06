@@ -10,7 +10,7 @@ open System.Runtime.CompilerServices
 module private AdaptiveRenderbufferTypes =
 
     type AdaptiveRenderbuffer(runtime : ITextureRuntime, format : aval<RenderbufferFormat>, samples : aval<int>, size : aval<V2i>) =
-        inherit AbstractOutputMod<IRenderbuffer>()
+        inherit AdaptiveResource<IRenderbuffer>()
 
         let mutable handle : Option<IRenderbuffer> = None
 
@@ -46,13 +46,13 @@ module private AdaptiveRenderbufferTypes =
                 tex
 
     [<AbstractClass>]
-    type AbstractAdaptiveFramebufferOutput(resource : IOutputMod) =
-        inherit AbstractOutputMod<IFramebufferOutput>()
+    type AbstractAdaptiveFramebufferOutput(resource : IAdaptiveResource) =
+        inherit AdaptiveResource<IFramebufferOutput>()
 
         override x.Create() = resource.Acquire()
         override x.Destroy() = resource.Release()
 
-    type AdaptiveTextureAttachment<'a when 'a :> ITexture>(texture : IOutputMod<'a>, slice : aval<int>, level : aval<int>) =
+    type AdaptiveTextureAttachment<'a when 'a :> ITexture>(texture : IAdaptiveResource<'a>, slice : aval<int>, level : aval<int>) =
         inherit AbstractAdaptiveFramebufferOutput(texture)
         override x.Compute(token : AdaptiveToken, t : RenderToken) =
             let tex = texture.GetValue(token, t)
@@ -60,7 +60,7 @@ module private AdaptiveRenderbufferTypes =
             let level = level.GetValue token
             { texture = unbox tex; level = level; slice = slice } :> IFramebufferOutput
 
-    type AdaptiveRenderbufferAttachment<'a when 'a :> IRenderbuffer>(renderbuffer : IOutputMod<'a>) =
+    type AdaptiveRenderbufferAttachment<'a when 'a :> IRenderbuffer>(renderbuffer : IAdaptiveResource<'a>) =
         inherit AbstractAdaptiveFramebufferOutput(renderbuffer)
         override x.Compute(token : AdaptiveToken, t : RenderToken) =
             let rb = renderbuffer.GetValue(token, t)
@@ -73,37 +73,37 @@ type ITextureRuntimeAdaptiveRenderbufferExtensions private() =
     // CreateRenderbuffer
     [<Extension>]
     static member CreateRenderbuffer(this : ITextureRuntime, format : aval<RenderbufferFormat>, samples : aval<int>, size : aval<V2i>) =
-        AdaptiveRenderbuffer(this, format, samples, size) :> IOutputMod<_>
+        AdaptiveRenderbuffer(this, format, samples, size) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateRenderbuffer(this : ITextureRuntime, format : RenderbufferFormat, samples : aval<int>, size : aval<V2i>) =
-        AdaptiveRenderbuffer(this, ~~format, samples, size) :> IOutputMod<_>
+        AdaptiveRenderbuffer(this, ~~format, samples, size) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateRenderbuffer(this : ITextureRuntime, format : RenderbufferFormat, samples : int, size : aval<V2i>) =
-        AdaptiveRenderbuffer(this, ~~format, ~~samples, size) :> IOutputMod<_>
+        AdaptiveRenderbuffer(this, ~~format, ~~samples, size) :> IAdaptiveResource<_>
 
     // Attachments
     [<Extension>]
-    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IOutputMod<#ITexture>, slice : aval<int>, level : aval<int>) =
-        AdaptiveTextureAttachment(texture, slice, level) :> IOutputMod<_>
+    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#ITexture>, slice : aval<int>, level : aval<int>) =
+        AdaptiveTextureAttachment(texture, slice, level) :> IAdaptiveResource<_>
 
     [<Extension>]
-    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IOutputMod<#ITexture>, slice : aval<int>) =
-        AdaptiveTextureAttachment(texture, slice, ~~0) :> IOutputMod<_>
+    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#ITexture>, slice : aval<int>) =
+        AdaptiveTextureAttachment(texture, slice, ~~0) :> IAdaptiveResource<_>
 
     [<Extension>]
-    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IOutputMod<#ITexture>, slice : int, level : int) =
-        AdaptiveTextureAttachment(texture, ~~slice, ~~level) :> IOutputMod<_>
+    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#ITexture>, slice : int, level : int) =
+        AdaptiveTextureAttachment(texture, ~~slice, ~~level) :> IAdaptiveResource<_>
 
     [<Extension>]
-    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IOutputMod<#ITexture>, slice : int) =
-        AdaptiveTextureAttachment(texture, ~~slice, ~~0) :> IOutputMod<_>
+    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#ITexture>, slice : int) =
+        AdaptiveTextureAttachment(texture, ~~slice, ~~0) :> IAdaptiveResource<_>
 
     [<Extension>]
-    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IOutputMod<#ITexture>) =
-        AdaptiveTextureAttachment(texture, ~~(-1), ~~0) :> IOutputMod<_>
+    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#ITexture>) =
+        AdaptiveTextureAttachment(texture, ~~(-1), ~~0) :> IAdaptiveResource<_>
 
     [<Extension>]
-    static member CreateRenderbufferAttachment(_ : ITextureRuntime, renderbuffer : IOutputMod<#IRenderbuffer>) =
-        AdaptiveRenderbufferAttachment(renderbuffer) :> IOutputMod<_>
+    static member CreateRenderbufferAttachment(_ : ITextureRuntime, renderbuffer : IAdaptiveResource<#IRenderbuffer>) =
+        AdaptiveRenderbufferAttachment(renderbuffer) :> IAdaptiveResource<_>

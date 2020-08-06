@@ -35,7 +35,7 @@ module private AdaptiveTextureTypes =
 
     [<AbstractClass>]
     type AbstractAdaptiveTexture<'a when 'a : equality>(runtime : ITextureRuntime) =
-        inherit AbstractOutputMod<ITexture>()
+        inherit AdaptiveResource<ITexture>()
 
         let mutable handle : Option<IBackendTexture * 'a> = None
 
@@ -146,83 +146,83 @@ type ITextureRuntimeAdaptiveTextureExtensions private() =
     // CreateTexture
     [<Extension>]
     static member CreateTexture(this : ITextureRuntime, format : aval<TextureFormat>, levels : aval<int>, samples : aval<int>, size : aval<V2i>) =
-        AdaptiveTexture(this, size, format, levels, samples) :> IOutputMod<_>
+        AdaptiveTexture(this, size, format, levels, samples) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateTexture(this : ITextureRuntime, format : TextureFormat, levels : int, samples : int, size : aval<V2i>) =
-        AdaptiveTexture(this, size, ~~format, ~~levels, ~~samples) :> IOutputMod<_>
+        AdaptiveTexture(this, size, ~~format, ~~levels, ~~samples) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateTexture(this : ITextureRuntime, format : aval<TextureFormat>, samples : aval<int>, size : aval<V2i>) =
-        AdaptiveTexture(this, size, format, ~~1, samples) :> IOutputMod<_>
+        AdaptiveTexture(this, size, format, ~~1, samples) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateTexture(this : ITextureRuntime, format : TextureFormat, samples : aval<int>, size : aval<V2i>) =
-        AdaptiveTexture(this, size, ~~format, ~~1, samples) :> IOutputMod<_>
+        AdaptiveTexture(this, size, ~~format, ~~1, samples) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateTexture(this : ITextureRuntime, format : TextureFormat, samples : int, size : aval<V2i>) =
-        AdaptiveTexture(this, size, ~~format, ~~1, ~~samples) :> IOutputMod<_>
+        AdaptiveTexture(this, size, ~~format, ~~1, ~~samples) :> IAdaptiveResource<_>
 
     // CreateTextureArray
     [<Extension>]
     static member CreateTextureArray(this : ITextureRuntime, format : aval<TextureFormat>, levels : aval<int>, samples : aval<int>, size : aval<V2i>, count : aval<int>) =
-        AdaptiveTextureArray(this, size, format, levels, samples, count) :> IOutputMod<_>
+        AdaptiveTextureArray(this, size, format, levels, samples, count) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateTextureArray(this : ITextureRuntime, format : TextureFormat, levels : int, samples : int, size : aval<V2i>, count : aval<int>) =
-        AdaptiveTextureArray(this, size, ~~format, ~~levels, ~~samples, count) :> IOutputMod<_>
+        AdaptiveTextureArray(this, size, ~~format, ~~levels, ~~samples, count) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateTextureArray(this : ITextureRuntime, format : aval<TextureFormat>, samples : aval<int>, size : aval<V2i>, count : aval<int>) =
-        AdaptiveTextureArray(this, size, format, ~~1, samples, count) :> IOutputMod<_>
+        AdaptiveTextureArray(this, size, format, ~~1, samples, count) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateTextureArray(this : ITextureRuntime, format : TextureFormat, samples : aval<int>, size : aval<V2i>, count : aval<int>) =
-        AdaptiveTextureArray(this, size, ~~format, ~~1, samples, count) :> IOutputMod<_>
+        AdaptiveTextureArray(this, size, ~~format, ~~1, samples, count) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateTextureArray(this : ITextureRuntime, format : TextureFormat, samples : int, size : aval<V2i>, count : aval<int>) =
-        AdaptiveTextureArray(this, size, ~~format, ~~1, ~~samples, count) :> IOutputMod<_>
+        AdaptiveTextureArray(this, size, ~~format, ~~1, ~~samples, count) :> IAdaptiveResource<_>
 
     // CreateTextureCube
     [<Extension>]
     static member CreateTextureCube(this : ITextureRuntime, format : aval<TextureFormat>, levels : aval<int>, samples : aval<int>, size : aval<int>) =
-        AdaptiveCubeTexture(this, size, format, levels, samples) :> IOutputMod<_>
+        AdaptiveCubeTexture(this, size, format, levels, samples) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateTextureCube(this : ITextureRuntime, format : TextureFormat, levels : int, samples : int, size : aval<int>) =
-        AdaptiveCubeTexture(this, size, ~~format, ~~levels, ~~samples) :> IOutputMod<_>
+        AdaptiveCubeTexture(this, size, ~~format, ~~levels, ~~samples) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateTextureCube(this : ITextureRuntime, format : aval<TextureFormat>, samples : aval<int>, size : aval<int>) =
-        AdaptiveCubeTexture(this, size, format, ~~1, samples) :> IOutputMod<_>
+        AdaptiveCubeTexture(this, size, format, ~~1, samples) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateTextureCube(this : ITextureRuntime, format : aval<TextureFormat>, samples : int, size : aval<int>) =
-        AdaptiveCubeTexture(this, size, format, ~~1, ~~samples) :> IOutputMod<_>
+        AdaptiveCubeTexture(this, size, format, ~~1, ~~samples) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateTextureCube(this : ITextureRuntime, format : TextureFormat, samples : int, size : aval<int>) =
-        AdaptiveCubeTexture(this, size, ~~format, ~~1, ~~samples) :> IOutputMod<_>
+        AdaptiveCubeTexture(this, size, ~~format, ~~1, ~~samples) :> IAdaptiveResource<_>
 
     // CreateTextureCubeArray
     [<Extension>]
     static member CreateTextureCubeArray(this : ITextureRuntime, format : aval<TextureFormat>, levels : aval<int>, samples : aval<int>, size : aval<int>, count : aval<int>) =
-        AdaptiveCubeTextureArray(this, size, format, levels, samples, count) :> IOutputMod<_>
+        AdaptiveCubeTextureArray(this, size, format, levels, samples, count) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateTextureCubeArray(this : ITextureRuntime, format : TextureFormat, levels : int, samples : int, size : aval<int>, count : aval<int>) =
-        AdaptiveCubeTextureArray(this, size, ~~format, ~~levels, ~~samples, count) :> IOutputMod<_>
+        AdaptiveCubeTextureArray(this, size, ~~format, ~~levels, ~~samples, count) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateTextureCubeArray(this : ITextureRuntime, format : aval<TextureFormat>, samples : aval<int>, size : aval<int>, count : aval<int>) =
-        AdaptiveCubeTextureArray(this, size, format, ~~1, samples, count) :> IOutputMod<_>
+        AdaptiveCubeTextureArray(this, size, format, ~~1, samples, count) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateTextureCubeArray(this : ITextureRuntime, format : aval<TextureFormat>, samples : int, size : aval<int>, count : aval<int>) =
-        AdaptiveCubeTextureArray(this, size, format, ~~1, ~~samples, count) :> IOutputMod<_>
+        AdaptiveCubeTextureArray(this, size, format, ~~1, ~~samples, count) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateTextureCubeArray(this : ITextureRuntime, format : TextureFormat, samples : int, size : aval<int>, count : aval<int>) =
-        AdaptiveCubeTextureArray(this, size, ~~format, ~~1, ~~samples, count) :> IOutputMod<_>
+        AdaptiveCubeTextureArray(this, size, ~~format, ~~1, ~~samples, count) :> IAdaptiveResource<_>

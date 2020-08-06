@@ -3,28 +3,56 @@
 open System.Threading
 open Aardvark.Base
 open FSharp.Data.Adaptive
+open System.Runtime.CompilerServices
 
-type IOutputMod =
+/// Interface for adaptive reference-counted resources.
+type IAdaptiveResource =
     inherit IAdaptiveValue
+
+    /// Increases the reference count and creates the resource if necessary.
     abstract member Acquire : unit -> unit
+
+    /// Decreases the reference count and destroys the resource if it is no longer used.
     abstract member Release : unit -> unit
+
+    /// Resets the reference count and destroys the resource.
+    /// If force is set to true, the resource is destroyed even if it hasn't been acquired before.
+    abstract member ReleaseAll : force : bool -> unit
+
+    /// Gets the resource handle.
     abstract member GetValue : AdaptiveToken * RenderToken -> obj
 
-type IOutputMod<'a> =
+/// Generic interface for adaptive reference-counted resources.
+type IAdaptiveResource<'a> =
     inherit IAdaptiveValue<'a>
-    inherit IOutputMod
+    inherit IAdaptiveResource
+
+    /// Gets the resource handle.
     abstract member GetValue : AdaptiveToken * RenderToken -> 'a
 
+[<AbstractClass; Sealed; Extension>]
+type IAdaptiveResourceExtension() =
+
+    /// Resets the reference count and destroys the resource.
+    [<Extension>]
+    static member inline ReleaseAll(this : IAdaptiveResource) =
+        this.ReleaseAll(force = false)
+
+/// Base class for adaptive reference-counted resources.
 [<AbstractClass>]
-type AbstractOutputMod<'a>() =
+type AdaptiveResource<'a>() =
     inherit AdaptiveObject()
     let mutable cache = Unchecked.defaultof<'a>
     let mutable refCount = 0
 
+    /// Called when the resource is first acquired.
     abstract member Create : unit -> unit
-    abstract member Destroy : unit -> unit
-    abstract member Compute : AdaptiveToken * RenderToken -> 'a
 
+    // Called when the resource is released.
+    abstract member Destroy : unit -> unit
+
+    // Computes and returns the resource handle.
+    abstract member Compute : AdaptiveToken * RenderToken -> 'a
 
     member x.Acquire() =
         if Interlocked.Increment(&refCount) = 1 then
@@ -32,6 +60,10 @@ type AbstractOutputMod<'a>() =
 
     member x.Release() =
         if Interlocked.Decrement(&refCount) = 0 then
+            x.Destroy()
+
+    member x.ReleaseAll(force : bool) =
+        if Interlocked.Exchange(&refCount, 0) > 0 || force then
             x.Destroy()
 
     member x.GetValue(token : AdaptiveToken, rt : RenderToken) =
@@ -52,12 +84,13 @@ type AbstractOutputMod<'a>() =
     interface IAdaptiveValue<'a> with
         member x.GetValue(c) = x.GetValue(c)
 
-    interface IOutputMod with
+    interface IAdaptiveResource with
         member x.Acquire() = x.Acquire()
         member x.Release() = x.Release()
+        member x.ReleaseAll(force) = x.ReleaseAll(force)
         member x.GetValue(c,t) = x.GetValue(c,t) :> obj
 
-    interface IOutputMod<'a> with
+    interface IAdaptiveResource<'a> with
         member x.GetValue(c,t) = x.GetValue(c,t)
 
 
@@ -66,6 +99,7 @@ namespace Aardvark.Base
 open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
 
 [<AbstractClass; Sealed; Extension>]
 type IAdaptiveValueOutputExtension() =
@@ -73,17 +107,23 @@ type IAdaptiveValueOutputExtension() =
     [<Extension>]
     static member inline GetValue(this : aval<'a>, c : AdaptiveToken, t : RenderToken) =
         match this with
-        | :? IOutputMod<'a> as x -> x.GetValue(c, t)
+        | :? IAdaptiveResource<'a> as x -> x.GetValue(c, t)
         | _ -> this.GetValue(c)
 
     [<Extension>]
     static member inline Acquire(this : aval<'a>) =
         match this with
-        | :? IOutputMod<'a> as o -> o.Acquire()
+        | :? IAdaptiveResource<'a> as o -> o.Acquire()
         | _ -> ()
 
     [<Extension>]
     static member inline Release(this : aval<'a>) =
         match this with
-        | :? IOutputMod<'a> as o -> o.Release()
+        | :? IAdaptiveResource<'a> as o -> o.Release()
+        | _ -> ()
+
+    [<Extension>]
+    static member inline ReleaseAll(this : aval<'a>, [<Optional; DefaultParameterValue(false)>] force : bool) =
+        match this with
+        | :? IAdaptiveResource<'a> as o -> o.ReleaseAll(force)
         | _ -> ()

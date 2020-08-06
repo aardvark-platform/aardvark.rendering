@@ -1,4 +1,5 @@
 ﻿namespace Aardvark.Base
+namespace Aardvark.Base
 
 open Aardvark.Base
 open FSharp.Data.Adaptive
@@ -9,7 +10,7 @@ open System.Runtime.CompilerServices
 module private AdaptiveFramebufferTypes =
 
     type AdaptiveFramebuffer(runtime : IFramebufferRuntime, signature : IFramebufferSignature, attachments : Map<Symbol, aval<IFramebufferOutput>>) =
-        inherit AbstractOutputMod<IFramebuffer>()
+        inherit AdaptiveResource<IFramebuffer>()
 
         let mutable handle = None
 
@@ -49,7 +50,7 @@ module private AdaptiveFramebufferTypes =
                 create signature att
 
     type AdaptiveFramebufferCube(runtime : IFramebufferRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<int>) =
-        inherit AbstractOutputMod<IFramebuffer[]>()
+        inherit AdaptiveResource<IFramebuffer[]>()
 
         let store = SymDict.empty
 
@@ -59,15 +60,15 @@ module private AdaptiveFramebufferTypes =
 
                 let tex =
                     store.GetOrCreate(sem, fun sem ->
-                        runtime.CreateTextureCube(TextureFormat.ofRenderbufferFormat att.format, att.samples, size) :> IOutputMod
-                    ) |> unbox<IOutputMod<ITexture>>
+                        runtime.CreateTextureCube(TextureFormat.ofRenderbufferFormat att.format, att.samples, size) :> IAdaptiveResource
+                    ) |> unbox<IAdaptiveResource<ITexture>>
 
                 runtime.CreateTextureAttachment(tex, int face)
             else
                 let rb =
                     store.GetOrCreate(sem, fun sem ->
-                        runtime.CreateRenderbuffer(att.format, att.samples, size |> AVal.map(fun x -> V2i(x))) :> IOutputMod
-                    ) |> unbox<IOutputMod<IRenderbuffer>>
+                        runtime.CreateRenderbuffer(att.format, att.samples, size |> AVal.map(fun x -> V2i(x))) :> IAdaptiveResource
+                    ) |> unbox<IAdaptiveResource<IRenderbuffer>>
 
                 runtime.CreateRenderbufferAttachment(rb)
 
@@ -132,7 +133,7 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
                                     attachments : Map<Symbol, #aval<IFramebufferOutput>>) =
 
         let atts = attachments |> Map.map (fun _ x -> x :> aval<_>)
-        AdaptiveFramebuffer(this, signature, atts) :> IOutputMod<_>
+        AdaptiveFramebuffer(this, signature, atts) :> IAdaptiveResource<_>
 
     [<Extension>]
     static member CreateFramebuffer(this : IFramebufferRuntime,
@@ -182,7 +183,7 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
         this.CreateFramebuffer(signature, SymDict.toMap atts)
 
     [<Extension>]
-    static member CreateFramebuffer (this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<V2i>) : IOutputMod<IFramebuffer> =
+    static member CreateFramebuffer (this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<V2i>) : IAdaptiveResource<IFramebuffer> =
         let sems =
             Set.ofList [
                 yield! signature.ColorAttachments |> Map.toSeq |> Seq.map snd |> Seq.map fst
@@ -194,4 +195,4 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
 
     [<Extension>]
     static member CreateFramebufferCube (this : IFramebufferRuntime, signature : IFramebufferSignature, textures : Set<Symbol>, size : aval<int>) =
-        AdaptiveFramebufferCube(this, signature, textures, size) :> IOutputMod<_>
+        AdaptiveFramebufferCube(this, signature, textures, size) :> IAdaptiveResource<_>

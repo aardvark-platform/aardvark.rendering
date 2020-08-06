@@ -62,10 +62,10 @@ module RenderTask =
         | :? FinalizerRenderTask -> t
         | _ -> new FinalizerRenderTask(t) :> IRenderTask
 
-    let renderTo (target : IOutputMod<IFramebuffer>) (task : IRenderTask) : IOutputMod<IFramebuffer> =
+    let renderTo (target : IAdaptiveResource<IFramebuffer>) (task : IRenderTask) : IAdaptiveResource<IFramebuffer> =
         task.RenderTo target
 
-    let getResult (sem : Symbol) (t : IOutputMod<IFramebuffer>) =
+    let getResult (sem : Symbol) (t : IAdaptiveResource<IFramebuffer>) =
         t.GetOutputTexture sem
 
     let renderSemantics (sem : Set<Symbol>) (size : aval<V2i>) (task : IRenderTask) =
@@ -77,7 +77,8 @@ module RenderTask =
         let clear = runtime.CompileClear(signature, ~~clearColors, ~~1.0)
         let fbo = runtime.CreateFramebuffer(signature, sem, size)
 
-        let res = new SequentialRenderTask([|clear; task|]) |> renderTo fbo
+        let task = new SequentialRenderTask([|clear; task|])
+        let res = task.RenderTo(fbo, dispose = true)
         sem |> Seq.map (fun k -> k, getResult k res) |> Map.ofSeq
 
     let renderToColor (size : aval<V2i>) (task : IRenderTask) =
