@@ -9,8 +9,8 @@ open FShade.GLSL
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
-open Aardvark.Base.Management
+open Aardvark.Rendering
+open Aardvark.Rendering.Management
 open Aardvark.Base.Runtime
 open Aardvark.Rendering.GL
 
@@ -793,7 +793,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
 
 
     member x.Buffer =
-        Aardvark.Base.IndirectBuffer(buffer :> IBuffer, count, sizeof<DrawCallInfo>, false)
+        Aardvark.Rendering.IndirectBuffer(buffer :> IBuffer, count, sizeof<DrawCallInfo>, false)
 
     member x.BoundsBuffer =
         bbuffer

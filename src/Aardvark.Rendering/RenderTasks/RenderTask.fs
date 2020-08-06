@@ -1,6 +1,6 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
-open Aardvark.Base.Rendering
+open Aardvark.Base
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 

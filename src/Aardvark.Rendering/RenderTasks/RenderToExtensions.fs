@@ -1,6 +1,6 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
-open Aardvark.Base.Rendering
+open Aardvark.Base
 open FSharp.Data.Adaptive
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices

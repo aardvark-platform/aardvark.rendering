@@ -1,9 +1,10 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
 open System
 open System.Threading
 open System.Runtime.InteropServices
 open System.Collections.Concurrent
+open Aardvark.Base
 open FSharp.Data.Adaptive
 
 module GeometrySetUtilities =

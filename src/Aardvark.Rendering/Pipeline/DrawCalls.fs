@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Rendering
 
 open Aardvark.Base
 open FSharp.Data.Adaptive

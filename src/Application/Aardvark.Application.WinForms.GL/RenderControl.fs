@@ -8,7 +8,7 @@ open System
 open System.Windows.Forms
 
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
 open Aardvark.Application

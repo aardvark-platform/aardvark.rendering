@@ -1,9 +1,7 @@
 ﻿namespace Aardvark.SceneGraph.Semantics
 
-open System
-
 open Aardvark.Base
-open FSharp.Data.Adaptive
+open Aardvark.Rendering
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
 

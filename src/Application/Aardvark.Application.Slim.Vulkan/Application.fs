@@ -3,8 +3,8 @@ namespace Aardvark.Application.Slim
 #nowarn "9"
 
 open System
-open System.IO
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.Application
 open Aardvark.Rendering.Vulkan

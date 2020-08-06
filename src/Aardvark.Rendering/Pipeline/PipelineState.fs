@@ -1,7 +1,8 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
 open System
 open FSharp.Data.Adaptive
+open Aardvark.Base
 open Aardvark.Base.Rendering
 
 type PipelineState =

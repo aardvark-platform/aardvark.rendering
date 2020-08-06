@@ -1,9 +1,8 @@
-﻿namespace Aardvark.Base.Rendering.Effects
+﻿namespace Aardvark.Rendering.Effects
 
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FShade
-open Microsoft.FSharp.Quotations
 
 type Vertex = {
     [<Position>]        pos     : V4d

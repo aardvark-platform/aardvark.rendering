@@ -10,7 +10,7 @@ Currently, there is only a low-level API that requires the user to pass queries 
 *)
 
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
@@ -21,7 +21,7 @@ open System.Threading.Tasks
 
 module Shader =
     open FShade
-    open Aardvark.Base.Rendering.Effects
+    open Aardvark.Rendering.Effects
 
     let private tipColor =
         C4b.VRVisGreen.ToC4d().ToV4d()

@@ -2,7 +2,7 @@
 
 open Microsoft.FSharp.Quotations
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open System.Collections.Concurrent

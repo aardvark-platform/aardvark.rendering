@@ -10,11 +10,12 @@ open Aardvark.Application
 open Aardvark.Application.WinForms
 open FSharp.Data.Adaptive.Operators
 open Aardvark.Rendering.Vulkan
+open Aardvark.Rendering
 open Aardvark.Base.Rendering
-open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering.ShaderReflection
 open Aardvark.Rendering.Text
 
-open Aardvark.Base.Rendering.Effects
+open Aardvark.Rendering.Effects
 
 module TessellatedSphere =
     

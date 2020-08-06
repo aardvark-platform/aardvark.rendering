@@ -2,9 +2,9 @@
 
 open System
 open Aardvark.Base
+open Aardvark.Rendering
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
-open Aardvark.Rendering.GL
 
 module ExtensionHelpers =
     let private suffixes = [""; "EXT"; "ARB"; "NV"; "AMD"]

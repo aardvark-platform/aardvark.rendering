@@ -1,8 +1,9 @@
-﻿namespace Aardvark.Base.ShaderReflection
+﻿namespace Aardvark.Rendering.ShaderReflection
 
 open System
 open System.Runtime.CompilerServices
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 
 type ShaderParameterType =

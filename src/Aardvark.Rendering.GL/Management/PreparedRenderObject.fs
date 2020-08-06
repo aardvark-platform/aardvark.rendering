@@ -6,8 +6,7 @@ open System
 open FSharp.Data.Adaptive
 open Aardvark.Base
 open Aardvark.Base.Rendering
-open Aardvark.Base.ShaderReflection
-open System.Runtime.CompilerServices
+open Aardvark.Rendering
 open Microsoft.FSharp.NativeInterop
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL

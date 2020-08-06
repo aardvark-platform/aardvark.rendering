@@ -4,9 +4,8 @@ open System
 open System.Threading
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
-open System.Collections.Generic
-open System.Collections.Concurrent
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop

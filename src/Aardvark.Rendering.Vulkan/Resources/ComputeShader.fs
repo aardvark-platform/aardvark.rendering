@@ -4,10 +4,10 @@ open FShade
 open FShade.Imperative
 open System
 open System.Threading
-open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 open System.Collections.Generic

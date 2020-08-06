@@ -9,8 +9,9 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open FSharp.Data.Adaptive.Operators
-open Aardvark.Base.Rendering
-open Aardvark.Base.ShaderReflection
+open Aardvark.GPGPU
+open Aardvark.Rendering
+open Aardvark.Rendering.ShaderReflection
 open Aardvark.Rendering.Text
 open System.Runtime.InteropServices
 open Aardvark.SceneGraph

@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
 type BeforeAfterRenderTask(before : Option<unit -> unit>, after : Option<unit -> unit>, inner : IRenderTask) =
     inherit AbstractRenderTask()

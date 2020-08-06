@@ -1,7 +1,6 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
-open System
-open System.Runtime.InteropServices
+open Aardvark.Base
 
 type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : int) =
     interface INativeBuffer with

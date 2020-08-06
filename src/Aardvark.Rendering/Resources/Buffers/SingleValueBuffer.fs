@@ -1,5 +1,6 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
+open Aardvark.Base
 open FSharp.Data.Adaptive
 
 type SingleValueBuffer(value : aval<V4f>) =

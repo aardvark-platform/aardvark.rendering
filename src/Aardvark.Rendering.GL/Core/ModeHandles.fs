@@ -1,17 +1,8 @@
 ﻿namespace Aardvark.Rendering.GL
 
-open System
-open System.Threading
-open System.Collections.Concurrent
 open System.Runtime.InteropServices
-open Aardvark.Base
-open Aardvark.Base.Rendering
-open Microsoft.FSharp.NativeInterop
-open OpenTK
-open OpenTK.Platform
-open OpenTK.Graphics
+open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
-open Aardvark.Rendering.GL
 
 #nowarn "9"
 

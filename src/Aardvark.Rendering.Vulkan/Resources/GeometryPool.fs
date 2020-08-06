@@ -5,12 +5,12 @@ open System.Threading
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open System.Collections.Generic
-open System.Collections.Concurrent
 open Aardvark.Base
+open Aardvark.Rendering
+open Aardvark.Rendering.Management
 open FSharp.Data.Adaptive
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
-open Management
 
 #nowarn "9"
 // #nowarn "51"
@@ -722,7 +722,7 @@ module GeometryPoolUtilities =
 
         let views =
             buffers |> Map.map (fun _ (_,t,b) ->
-                Aardvark.Base.BufferView(b, t)
+                Aardvark.Rendering.BufferView(b, t)
             )
 
         let vertexSize = types |> Map.toSeq |> Seq.sumBy (fun (_,t) -> Marshal.SizeOf t |> int64)

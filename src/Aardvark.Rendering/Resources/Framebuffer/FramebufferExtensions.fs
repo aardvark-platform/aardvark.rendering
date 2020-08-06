@@ -1,5 +1,6 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
+open Aardvark.Base
 open System.Runtime.CompilerServices
 
 [<AbstractClass; Sealed; Extension>]

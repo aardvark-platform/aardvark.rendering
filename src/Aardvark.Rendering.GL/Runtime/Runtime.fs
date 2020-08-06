@@ -1,11 +1,8 @@
 ﻿namespace Aardvark.Rendering.GL
 
 open System
-open System.Collections.Generic
 open Aardvark.Base
-open Aardvark.Base.Rendering
 open Aardvark.Rendering
-open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open FSharp.Data.Adaptive
 open FShade
@@ -760,8 +757,8 @@ type Runtime() =
         Operators.using ctx.ResourceLock (fun d -> 
             let surface =
                 match s with
-                    | :? FShadeSurface as f -> Aardvark.Base.Surface.FShadeSimple f.Effect
-                    | _ -> Aardvark.Base.Surface.Backend s
+                    | :? FShadeSurface as f -> Aardvark.Rendering.Surface.FShadeSimple f.Effect
+                    | _ -> Aardvark.Rendering.Surface.Backend s
 
             if signature.LayerCount > 1 then
                 Log.warn("[PrepareSurface] Using Triangle topology.")

@@ -1,20 +1,16 @@
 ﻿namespace Aardvark.Application.OpenVR
 
-open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
-open Valve.VR
 open Aardvark.Application
-open Aardvark.Application.Slim
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
-open Valve.VR
 
 module StereoShader =
     open FShade
-    open FShade.Imperative
 
     type Vertex = 
         {

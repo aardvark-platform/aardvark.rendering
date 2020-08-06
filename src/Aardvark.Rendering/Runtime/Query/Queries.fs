@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
 /// Struct for combining multiple queries into a single one.
 [<Struct>]

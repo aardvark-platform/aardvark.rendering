@@ -1,12 +1,11 @@
 ﻿namespace Aardvark.Rendering.GL
 
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.Base.ShaderReflection
-open Aardvark.Base.Rendering
+open Aardvark.Rendering.ShaderReflection
 open Aardvark.Base.Runtime
 open Microsoft.FSharp.NativeInterop
-open OpenTK
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
 open FSharp.Data.Traceable
@@ -1035,11 +1034,10 @@ type CompilerInfo =
     
 [<AutoOpen>]
 module rec ChangeableProgram = 
-    open Microsoft.FSharp.NativeInterop
+
     open System.IO
     open System.Runtime.InteropServices
-    open Aardvark.Base.Management
-    open Aardvark.Base.Runtime
+    open Aardvark.Rendering.Management
 
     module Memory =
         let executable : Memory<nativeint> =

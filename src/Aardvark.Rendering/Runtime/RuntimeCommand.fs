@@ -1,7 +1,7 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
+open Aardvark.Base
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
 
 [<RequireQualifiedAccess>]
 type RuntimeCommand =

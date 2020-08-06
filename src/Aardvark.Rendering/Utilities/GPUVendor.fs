@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
 type GPUVendor =
     | AMD       = 1

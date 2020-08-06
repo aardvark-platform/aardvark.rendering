@@ -3,6 +3,7 @@
 
 open Aardvark.Base
 open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Rendering.GL.OpenGl
         
 

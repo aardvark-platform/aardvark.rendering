@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Rendering
 
 open System.Collections.Generic
 open Aardvark.Base

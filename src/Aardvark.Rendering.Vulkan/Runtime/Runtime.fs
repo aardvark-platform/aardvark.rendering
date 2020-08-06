@@ -1,17 +1,13 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open System.Threading
-open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
-open Microsoft.FSharp.NativeInterop
 open FSharp.Data.Adaptive
 open System.Diagnostics
 open System.Collections.Generic
-open Aardvark.Base.Runtime
 open FShade
 #nowarn "9"
 
@@ -43,11 +39,11 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     static let shaderStages =
         LookupTable.lookupTable [
-            FShade.ShaderStage.Vertex, Aardvark.Base.ShaderStage.Vertex
-            FShade.ShaderStage.TessControl, Aardvark.Base.ShaderStage.TessControl
-            FShade.ShaderStage.TessEval, Aardvark.Base.ShaderStage.TessEval
-            FShade.ShaderStage.Geometry, Aardvark.Base.ShaderStage.Geometry
-            FShade.ShaderStage.Fragment, Aardvark.Base.ShaderStage.Fragment
+            FShade.ShaderStage.Vertex, Aardvark.Rendering.ShaderStage.Vertex
+            FShade.ShaderStage.TessControl, Aardvark.Rendering.ShaderStage.TessControl
+            FShade.ShaderStage.TessEval, Aardvark.Rendering.ShaderStage.TessEval
+            FShade.ShaderStage.Geometry, Aardvark.Rendering.ShaderStage.Geometry
+            FShade.ShaderStage.Fragment, Aardvark.Rendering.ShaderStage.Fragment
         ]
 
     #if false

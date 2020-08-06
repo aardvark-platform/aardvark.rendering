@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Rendering
 
 // TODO: Delete this once Aardvark.Base.AverageWindow is compatible
 type AverageWindow(maxCount : int) =

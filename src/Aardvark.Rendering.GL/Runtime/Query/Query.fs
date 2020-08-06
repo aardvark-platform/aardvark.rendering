@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering.GL
 
 open Aardvark.Base
+open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
 
 type QueryHandle(handle : int) =

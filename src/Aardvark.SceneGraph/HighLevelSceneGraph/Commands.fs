@@ -2,12 +2,9 @@
 
 open System
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.Base.Ag
 open Aardvark.SceneGraph
-
-open Aardvark.SceneGraph.Internal
-open System.Collections.Generic
 
 type RenderGeometryConfig =
     {
@@ -108,9 +105,8 @@ module ``Sg RuntimeCommand Extensions`` =
 namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
-open Aardvark.Base.Geometry
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.Base.Ag
 open Aardvark.SceneGraph
 
 [<AutoOpen>]

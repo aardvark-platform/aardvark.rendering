@@ -2,15 +2,11 @@
 
 open System
 open System.Threading
-open System.Collections.Concurrent
 open System.Runtime.InteropServices
 open Aardvark.Base
-open OpenTK
-open OpenTK.Platform
-open OpenTK.Graphics
+open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.NativeInterop
-open Aardvark.Rendering.GL
 
 #nowarn "9"
 

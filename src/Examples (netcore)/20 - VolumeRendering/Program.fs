@@ -1,4 +1,5 @@
 ﻿open Aardvark.Base
+open Aardvark.Rendering
 open Aardvark.Base.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
@@ -68,8 +69,8 @@ module Shader =
 
 [<ReflectedDefinition>]
 module Scatter =
-    open Aardvark.Base.Rendering
-    open Aardvark.Base.Rendering.Effects
+    open Aardvark.Rendering
+    open Aardvark.Rendering.Effects
     open FShade
     
     let volumeTexture =

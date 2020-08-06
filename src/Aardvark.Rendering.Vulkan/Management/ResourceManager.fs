@@ -1,10 +1,10 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open System.Threading
 open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Microsoft.FSharp.NativeInterop
 
@@ -1299,7 +1299,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
             prog
         )
 
-    member x.CreateShaderProgram(signature : RenderPass, data : Aardvark.Base.Surface, top : IndexedGeometryMode) =
+    member x.CreateShaderProgram(signature : RenderPass, data : Aardvark.Rendering.Surface, top : IndexedGeometryMode) =
         match data with
             | Surface.FShadeSimple effect ->
                 x.CreateShaderProgram(signature, effect, top)

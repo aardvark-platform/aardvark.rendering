@@ -1,13 +1,10 @@
 ﻿namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
-open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
+open Aardvark.Rendering
 open Aardvark.SceneGraph
-
-open Aardvark.SceneGraph.Internal
-open System.Collections.Generic
-
+open FSharp.Data.Adaptive
 
 [<AutoOpen>]
 module BoundingBoxExtensions =

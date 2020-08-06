@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open Aardvark.Base
+open Aardvark.Rendering
 
 type OcclusionQuery(device : Device, precise : bool) =
     inherit Query(device, QueryType.Occlusion, 1)

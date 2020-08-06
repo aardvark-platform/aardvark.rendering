@@ -6,15 +6,12 @@ open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Base.Sorting
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 open FSharp.Data.Traceable
 open FSharp.Data.Adaptive
-open System.Diagnostics
 open System.Collections.Generic
-open Aardvark.Base.Runtime
-open Aardvark.Rendering.Vulkan
 open System.Threading.Tasks
 
 #nowarn "9"
@@ -44,7 +41,7 @@ type PreparedGeometry =
 [<AbstractClass; Sealed; Extension>]
 type ResourceManagerExtensions private() =
     [<Extension>]
-    static member PreparePipelineState (this : ResourceManager, renderPass : RenderPass, surface : Aardvark.Base.Surface, state : PipelineState) =
+    static member PreparePipelineState (this : ResourceManager, renderPass : RenderPass, surface : Aardvark.Rendering.Surface, state : PipelineState) =
         let layout, program = this.CreateShaderProgram(renderPass, surface, state.geometryMode)
 
         let inputs = 
@@ -1066,12 +1063,12 @@ module private RuntimeCommands =
 
 
 
-        let trie = SortedDictionaryExt<Aardvark.Base.Rendering.RenderPass, CommandBucket>(Comparer<Aardvark.Base.Rendering.RenderPass>.Default)
+        let trie = SortedDictionaryExt<Aardvark.Rendering.RenderPass, CommandBucket>(Comparer<Aardvark.Rendering.RenderPass>.Default)
         let mutable firstBucket : Option<CommandBucket> = None
         let mutable lastBucket : Option<CommandBucket> = None
 
 
-        let getBucket(pass : Aardvark.Base.Rendering.RenderPass) =
+        let getBucket(pass : Aardvark.Rendering.RenderPass) =
             trie |> SortedDictionary.setWithNeighbours pass (fun l s r ->
                 match s with
                     | Some s -> s
@@ -1480,7 +1477,7 @@ module private RuntimeCommands =
             stream.IndirectDraw(compiler.stats, alwaysActive, pg.pgCall.Pointer) |> ignore
 
     /// Rendering a set of Geometries using the given Surface
-    and GroupedCommand(compiler : Compiler, surface : Aardvark.Base.Surface, state : PipelineState, geometries : aset<Geometry>) =
+    and GroupedCommand(compiler : Compiler, surface : Aardvark.Rendering.Surface, state : PipelineState, geometries : aset<Geometry>) =
         inherit PreparedCommand()
             
         let mutable reader = geometries.GetReader()
@@ -1573,7 +1570,7 @@ module private RuntimeCommands =
             let ops = reader.GetChanges token
             ops |> HashSetDelta.iter (add token pipeline) (remove)
 
-    and BindPipelineCommand(compiler : Compiler, surface : Aardvark.Base.Surface, state : PipelineState) =
+    and BindPipelineCommand(compiler : Compiler, surface : Aardvark.Rendering.Surface, state : PipelineState) =
         inherit PreparedCommand()
         
         let mutable preparedPipeline : Option<PreparedPipelineState> = None
@@ -1597,7 +1594,7 @@ module private RuntimeCommands =
             stream.IndirectBindPipeline(pipeline.ppPipeline.Pointer) |> ignore
 
 
-    and LodTreeCommand(compiler : Compiler, surface : Aardvark.Base.Surface, state : PipelineState, loader : LodTreeLoader<Geometry>) as this =
+    and LodTreeCommand(compiler : Compiler, surface : Aardvark.Rendering.Surface, state : PipelineState, loader : LodTreeLoader<Geometry>) as this =
         inherit PreparedCommand()
 
         let first = new BindPipelineCommand(compiler, surface, state)
@@ -1766,7 +1763,7 @@ module private RuntimeCommands =
         let effect = Effect.withInstanceUniforms state.perGeometryUniforms effect
 
         let pipeline = 
-            let surface = Aardvark.Base.Surface.FShadeSimple effect
+            let surface = Aardvark.Rendering.Surface.FShadeSimple effect
             compiler.manager.PreparePipelineState(compiler.renderPass, surface, state)
 
         let descritorSet, descritorSetResources =

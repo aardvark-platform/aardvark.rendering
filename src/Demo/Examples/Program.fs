@@ -9,6 +9,7 @@ open System.Diagnostics
 open System.Threading
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
+open Aardvark.Rendering
 open Aardvark.SceneGraph
 open FSharp.Data.Traceable
 open FSharp.Data.Adaptive

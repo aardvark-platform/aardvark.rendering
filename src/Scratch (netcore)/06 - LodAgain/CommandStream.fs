@@ -3,7 +3,7 @@
 open OpenTK
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop
 

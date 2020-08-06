@@ -1,12 +1,9 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
-open System
-open System.Threading
-open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
+open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"

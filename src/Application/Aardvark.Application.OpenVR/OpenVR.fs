@@ -3,7 +3,7 @@
 open System
 open Valve.VR
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop

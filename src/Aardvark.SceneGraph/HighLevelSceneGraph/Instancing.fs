@@ -1,8 +1,8 @@
 ﻿namespace Aardvark.SceneGraph
 
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
-
 
 [<AutoOpen>]
 module Instancing =
@@ -36,8 +36,9 @@ module Instancing =
             
 
 namespace Aardvark.SceneGraph.Semantics
+
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Base.Ag
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph

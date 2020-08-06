@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open Aardvark.Base
+open Aardvark.Rendering
 
 [<AutoOpen>]
 module private PipelineQueryHelpers =

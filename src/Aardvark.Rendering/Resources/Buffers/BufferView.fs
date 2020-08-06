@@ -1,8 +1,9 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
 open System
 open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
+open Aardvark.Base
 
 type BufferView(b : aval<IBuffer>, elementType : Type, offset : int, stride : int) =
     let singleValue =

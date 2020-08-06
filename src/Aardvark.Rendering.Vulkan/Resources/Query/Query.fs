@@ -3,6 +3,7 @@
 open System
 open System.Collections.Generic
 open Aardvark.Base
+open Aardvark.Rendering
 
 type IVulkanQuery =
     inherit IQuery

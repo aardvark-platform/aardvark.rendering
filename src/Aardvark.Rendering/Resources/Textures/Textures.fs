@@ -1,6 +1,7 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
 open System
+open Aardvark.Base
 open FSharp.Data.Adaptive
 
 type TextureAspect =

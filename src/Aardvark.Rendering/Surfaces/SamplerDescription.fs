@@ -1,5 +1,6 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
+open Aardvark.Base
 open Aardvark.Base.Rendering
 
 type SamplerDescription =

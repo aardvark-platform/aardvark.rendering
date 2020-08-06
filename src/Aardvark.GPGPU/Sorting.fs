@@ -1,12 +1,10 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.GPGPU
 
 open System
-open Microsoft.FSharp.Quotations
-open System.Collections.Generic
-open System.Runtime.InteropServices
-open Microsoft.FSharp.NativeInterop
-open Aardvark.Base.Rendering
 open System.Runtime.CompilerServices
+open Microsoft.FSharp.Quotations
+open Aardvark.Base
+open Aardvark.Rendering
 
 #nowarn "9"
 #nowarn "51"

@@ -5,6 +5,7 @@
 module WeightedBlended =
 
     open Aardvark.Base
+    open Aardvark.Rendering
     open Aardvark.Base.Rendering
     open Aardvark.SceneGraph
     open FSharp.Data.Adaptive

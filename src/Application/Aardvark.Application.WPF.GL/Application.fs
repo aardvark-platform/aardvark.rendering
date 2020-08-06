@@ -1,11 +1,6 @@
 ﻿namespace Aardvark.Application.WPF
 
-open System
-open System.IO
-open System.Windows.Forms
-
-open Aardvark.Base
-open FSharp.Data.Adaptive
+open Aardvark.Rendering
 open Aardvark.Rendering.GL
 open Aardvark.Application
 

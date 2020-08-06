@@ -1,9 +1,8 @@
 ﻿namespace Aardvark.SceneGraph.Opc
 
 open System
-open System.IO
 open Aardvark.Base
-open Aardvark.Base.IO
+open Aardvark.Rendering
 open Aardvark.Prinziple
 
 type ViewerModality = XYZ | SvBR

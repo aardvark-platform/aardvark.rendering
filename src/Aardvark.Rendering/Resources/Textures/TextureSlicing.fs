@@ -1,4 +1,6 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
+
+open Aardvark.Base
 
 [<AutoOpen>]
 module ``IBackendTexture Slicing Extensions`` =

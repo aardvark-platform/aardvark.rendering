@@ -1,7 +1,8 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
-open System.Collections.Generic
+open Aardvark.Base
 open FSharp.Data.Adaptive
+open System.Collections.Generic
 
 module TrafoOperators =
 

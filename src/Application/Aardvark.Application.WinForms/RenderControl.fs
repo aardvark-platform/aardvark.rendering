@@ -4,6 +4,7 @@ open System
 open System.Windows.Forms
 open System.Drawing
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.Application
 

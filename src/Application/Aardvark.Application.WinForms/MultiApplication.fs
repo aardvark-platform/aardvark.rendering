@@ -5,8 +5,8 @@ open Aardvark.Application
 open System.Drawing
 open System.Windows.Forms
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
 open System.Threading
 
 type MultiFramebuffer(signature : IFramebufferSignature, framebuffers : IFramebuffer[]) =

@@ -2,6 +2,7 @@
 
 open System
 open Aardvark.Base
+open Aardvark.Rendering
 
 type TimeQuery(device : Device) =
     inherit Query(device, QueryType.Timestamp, 2)

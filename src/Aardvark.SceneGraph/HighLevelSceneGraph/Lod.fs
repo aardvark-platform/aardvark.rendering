@@ -5,10 +5,6 @@ open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
 
-open Aardvark.SceneGraph.Internal
-open System.Collections.Generic
-
-
 module NaiveLod =
 
     type LodScope = { trafo : Trafo3d; cameraPosition : V3d; scope : Scope; bb : aval<Box3d> }
@@ -31,6 +27,7 @@ module NaiveLoDSemantics =
 
     open NaiveLod
     open Aardvark.SceneGraph.Semantics
+    open Aardvark.Rendering
 
     [<Rule>]
     type LodSem() =

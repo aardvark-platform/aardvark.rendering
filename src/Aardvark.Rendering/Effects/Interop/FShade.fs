@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Rendering
 
 open Aardvark.Base
 open Aardvark.Base.Rendering
@@ -83,7 +83,7 @@ module FShadeInterop =
 
     let private backendSurfaceCache = ConcurrentDictionary<string, BackendSurface>()
 
-    type private AStage = Aardvark.Base.ShaderStage
+    type private AStage = Aardvark.Rendering.ShaderStage
 
     let private getOrCreateSurface (code : string) =
         backendSurfaceCache.GetOrAdd(code, fun (code : string) ->

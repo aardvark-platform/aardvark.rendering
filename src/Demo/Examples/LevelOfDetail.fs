@@ -2,20 +2,15 @@
 
 
 open System
-open System.IO
 open Aardvark.Base
 open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open FSharp.Data.Adaptive.Operators
+open Aardvark.Rendering
 open Aardvark.Base.Rendering
-open Aardvark.Base.ShaderReflection
 open Aardvark.Rendering.Text
-open System.Runtime.InteropServices
-open Aardvark.SceneGraph
-open Aardvark.SceneGraph.IO
 open System.Threading
 open System.Threading.Tasks
 
@@ -551,7 +546,7 @@ module LevelOfDetail =
             ]
 
 
-        let surface = Aardvark.Base.Surface.FShadeSimple effect
+        let surface = Aardvark.Rendering.Surface.FShadeSimple effect
 
 
         let state =

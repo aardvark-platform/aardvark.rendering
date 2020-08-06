@@ -3,11 +3,9 @@ namespace Aardvark.Application.Slim
 open System
 
 open Aardvark.Base
-open FSharp.Data.Adaptive
+open Aardvark.Rendering
 open Aardvark.Rendering.GL
 open Aardvark.Application
-open System.Runtime.InteropServices
-
 
 type OpenGlApplication(forceNvidia : bool, enableDebug : bool, shaderCachePath : Option<string>) =
     do if forceNvidia then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore

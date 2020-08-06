@@ -1,4 +1,6 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
+
+open Aardvark.Base
 
 type PixTextureCube(data : PixImageCube,  textureParams : TextureParams) =
 

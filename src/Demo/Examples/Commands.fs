@@ -6,15 +6,12 @@ open Aardvark.Base
 open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
-open Aardvark.SceneGraph.Semantics
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open Aardvark.Rendering.Vulkan
-open FSharp.Data.Adaptive.Operators
+open Aardvark.Rendering
 open Aardvark.Base.Rendering
-open Aardvark.Base.ShaderReflection
 open FShade
-open FShade.Imperative
 
 module CommandTest =
 
@@ -53,7 +50,7 @@ module CommandTest =
                 | null ->
                     None, pos.Length
                 | index -> 
-                    let idx = Aardvark.Base.BufferView(AVal.constant (ArrayBuffer index :> IBuffer), typeof<int>)
+                    let idx = Aardvark.Rendering.BufferView(AVal.constant (ArrayBuffer index :> IBuffer), typeof<int>)
                     Some idx, index.Length
 
         let rand = RandomSystem()

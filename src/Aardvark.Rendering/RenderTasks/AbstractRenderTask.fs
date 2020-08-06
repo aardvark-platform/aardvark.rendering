@@ -1,7 +1,8 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
 open System
 open System.Threading
+open Aardvark.Base
 open FSharp.Data.Adaptive
 
 [<AbstractClass>]

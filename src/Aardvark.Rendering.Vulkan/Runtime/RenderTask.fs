@@ -1,18 +1,15 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open System.Threading
 open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Base.Sorting
 open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 open FSharp.Data.Adaptive
-open System.Diagnostics
 open System.Collections.Generic
-open Aardvark.Base.Runtime
 
 #nowarn "9"
 // #nowarn "51"
@@ -42,7 +39,7 @@ module RenderCommands =
 
     type PipelineState =
         {
-            surface             : Aardvark.Base.Surface
+            surface             : Aardvark.Rendering.Surface
 
             depthTest           : aval<DepthTestMode>
             depthBias           : aval<DepthBiasState>
@@ -64,7 +61,7 @@ module RenderCommands =
     type Geometry =
         {
             vertexAttributes    : Map<Symbol, aval<IBuffer>>
-            indices             : Option<Aardvark.Base.BufferView>
+            indices             : Option<Aardvark.Rendering.BufferView>
             uniforms            : Map<string, IAdaptiveValue>
             call                : aval<list<DrawCallInfo>>
         }
@@ -832,7 +829,7 @@ module RenderTask =
         inherit AbstractRenderTask()
 
         let pool = device.GraphicsFamily.CreateCommandPool()
-        let passes = SortedDictionary<Aardvark.Base.Rendering.RenderPass, AbstractChangeableSetCommandBuffer>()
+        let passes = SortedDictionary<Aardvark.Rendering.RenderPass, AbstractChangeableSetCommandBuffer>()
         let viewports = AVal.init [||]
         let scissors = AVal.init [||]
         

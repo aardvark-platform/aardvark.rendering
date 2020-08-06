@@ -1,6 +1,6 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
-open Aardvark.Base.Rendering
+open Aardvark.Base
 open System
 open System.Threading
 open System.Threading.Tasks

@@ -1,11 +1,10 @@
 ﻿namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
-
-open Aardvark.SceneGraph.Internal
 
 [<AutoOpen>]
 module TrafoExtensions =

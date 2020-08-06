@@ -25,6 +25,7 @@ open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open FSharp.Data.Adaptive.Operators 
+open Aardvark.Rendering
 open Aardvark.Base.Rendering
 
 module Render2TexturePrimitiveFloat = 

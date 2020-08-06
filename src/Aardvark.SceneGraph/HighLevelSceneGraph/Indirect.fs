@@ -2,8 +2,8 @@
 
 open System
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
-
 
 [<AutoOpen>]
 module Indirect =
@@ -30,7 +30,8 @@ namespace Aardvark.SceneGraph.Semantics
 open System
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
+open Aardvark.Rendering.Management
 open Aardvark.Base.Ag
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
@@ -96,7 +97,7 @@ module Indirect =
         inherit AdaptiveObject()
 
         let dirty = HashSet<Writer>()
-        let mutable manager = Aardvark.Base.Management.MemoryManager.createNop()
+        let mutable manager = MemoryManager.createNop()
         let cache = RefDict<Map<string, IAdaptiveValue>, Management.Block<unit> * list<Writer>>()
 
         let mutable capacity = 0n
@@ -190,7 +191,7 @@ module Indirect =
             capacity <- 0n
             cache.Clear()
             manager.Dispose()
-            manager <- Aardvark.Base.Management.MemoryManager.createNop()
+            manager <- MemoryManager.createNop()
             for d in dirty do d.Outputs.Clear()
             dirty.Clear()
             transact x.MarkOutdated

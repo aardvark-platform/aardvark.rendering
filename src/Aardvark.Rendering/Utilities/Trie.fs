@@ -1,5 +1,6 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
+open Aardvark.Base
 open System.Collections.Generic
 
 type ILinked<'a when 'a :> ILinked<'a>> =

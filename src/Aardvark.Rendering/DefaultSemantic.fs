@@ -1,6 +1,6 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
-
+open Aardvark.Base
 
 module DefaultSemantic =
     

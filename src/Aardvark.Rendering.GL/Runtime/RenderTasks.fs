@@ -5,12 +5,10 @@ open FSharp.Data.Traceable
 #nowarn "9"
 
 open System
-open System.Linq
 open System.Diagnostics
-open System.Threading
 open System.Collections.Generic
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Base.Runtime
 open FSharp.Data.Adaptive
 open OpenTK.Graphics.OpenGL4
@@ -31,7 +29,7 @@ module RenderTasks =
         let allBuffers = manager.DrawBufferManager.CreateConfig(fboSignature.ColorAttachments |> Map.toSeq |> Seq.map (snd >> fst) |> Set.ofSeq)
         let structureChanged = AVal.custom ignore
         let runtimeStats = NativePtr.alloc 1
-        let resources = new Aardvark.Base.Rendering.ResourceInputSet()
+        let resources = new Aardvark.Rendering.ResourceInputSet()
 
         let mutable isDisposed = false
         let currentContext = AVal.init Unchecked.defaultof<ContextHandle>

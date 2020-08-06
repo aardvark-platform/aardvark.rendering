@@ -3,6 +3,7 @@
 open System
 open NUnit.Framework
 open FsUnit
+open Aardvark.Rendering
 open Aardvark.Rendering.GL
 open Aardvark.Base
 open FSharp.Data.Adaptive

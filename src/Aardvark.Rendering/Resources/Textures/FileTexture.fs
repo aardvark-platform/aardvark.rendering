@@ -1,6 +1,7 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
 open System.IO
+open Aardvark.Base
 
 type FileTexture(fileName : string, textureParams : TextureParams) =
     do if File.Exists fileName |> not then failwithf "File does not exist: %s" fileName

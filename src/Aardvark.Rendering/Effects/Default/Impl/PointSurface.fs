@@ -1,8 +1,7 @@
-﻿namespace Aardvark.Base.Rendering.Effects
+﻿namespace Aardvark.Rendering.Effects
 
 open Aardvark.Base
-open Aardvark.Base.Rendering
-open FSharp.Data.Adaptive
+open Aardvark.Rendering
 open FShade
  
 module PointSurface =

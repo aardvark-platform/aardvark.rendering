@@ -4,16 +4,13 @@ open System
 open System.Threading
 open System.Collections.Generic
 open System.Threading.Tasks
-open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop
 open FShade
 open FShade.GLSL
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
-open Aardvark.Base.Management
-open Aardvark.Base.Runtime
+open Aardvark.Rendering
 open Aardvark.Rendering.GL
 
 #nowarn "9"

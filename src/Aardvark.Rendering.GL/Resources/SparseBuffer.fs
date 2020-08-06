@@ -3,15 +3,12 @@
 open System
 open System.Threading
 open System.Runtime.InteropServices
-open System.Collections.Generic
-open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
+open Aardvark.Rendering
+open Aardvark.Rendering.Management
 open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
-
-open Aardvark.Base.Management
-
 
 [<AbstractClass>]
 type SparseBuffer(ctx : Context, size : nativeint, handle : int, beforeRender : unit -> unit, afterRender : unit -> unit) =

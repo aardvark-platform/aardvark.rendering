@@ -1,12 +1,9 @@
 ﻿namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
-open FSharp.Data.Adaptive
+open Aardvark.Rendering
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
-open Aardvark.Base.Rendering
-
-open Aardvark.SceneGraph.Internal
 
 [<AutoOpen>]
 module UniformSemantics =

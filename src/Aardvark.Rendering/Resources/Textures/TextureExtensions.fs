@@ -1,7 +1,8 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
 open System
 open System.Runtime.CompilerServices
+open Aardvark.Base
 
 [<AutoOpen>]
 module private PixVisitors =

@@ -6,7 +6,7 @@ open Aardvark.Application.WinForms
 open System.Windows.Forms
 open Aardvark.Base
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Aardvark.Application.WinForms.Vulkan
 

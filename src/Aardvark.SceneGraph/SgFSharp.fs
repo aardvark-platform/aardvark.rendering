@@ -1,14 +1,12 @@
 ﻿namespace Aardvark.SceneGraph
 
-
 open System
 open Aardvark.Base
 open Aardvark.Base.Rendering
 open Aardvark.Base.Ag
+open Aardvark.Rendering
 open System.Collections.Generic
-open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
-
 open FSharp.Data.Adaptive
 
 #nowarn "9"

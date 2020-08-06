@@ -1,7 +1,6 @@
 ﻿module NewRenderObjects
 
-open System
-open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 
 type GeometryInstance =

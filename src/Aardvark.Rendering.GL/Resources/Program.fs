@@ -4,18 +4,13 @@
 
 open System
 open System.Threading
-open System.Collections.Generic
 open System.Collections.Concurrent
-open System.Runtime.InteropServices
 open Aardvark.Base
-open FSharp.Data.Adaptive
+open Aardvark.Rendering
 open Aardvark.Base.Rendering
-open Aardvark.Base.ShaderReflection
-open OpenTK
-open OpenTK.Platform
-open OpenTK.Graphics
+open Aardvark.Rendering.ShaderReflection
+open FSharp.Data.Adaptive
 open OpenTK.Graphics.OpenGL4
-open Microsoft.FSharp.Quotations
 open Aardvark.Rendering.GL
 open System.Runtime.CompilerServices
 
@@ -443,7 +438,7 @@ module ProgramExtensions =
     type Aardvark.Rendering.GL.Context with
 
 
-        member x.TryCompileShader(stage : Aardvark.Base.ShaderStage, code : string, entryPoint : string) =
+        member x.TryCompileShader(stage : Aardvark.Rendering.ShaderStage, code : string, entryPoint : string) =
             x |> ShaderCompiler.tryCompileShader stage code entryPoint
 
 

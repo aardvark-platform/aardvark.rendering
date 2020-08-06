@@ -1,13 +1,10 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open System.Threading
-open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
-open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
 // #nowarn "51"
@@ -326,7 +323,7 @@ module VertexInputState =
 
         ]
 
-    let create (o : Map<Symbol, bool * Aardvark.Base.BufferView>) =
+    let create (o : Map<Symbol, bool * Aardvark.Rendering.BufferView>) =
         o |> Map.map (fun k (perInstance, view) ->
             match view.ElementType with
                 | TypeInfo.Patterns.MatrixOf(s, et) ->

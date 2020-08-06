@@ -1,9 +1,10 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.GPGPU
 
 open Microsoft.FSharp.Quotations
 open System.Collections.Generic
-open FShade.ExprExtensions
 open FShade.ExprHashExtensions
+open Aardvark.Base
+open Aardvark.Rendering
 
 module private Kernels =
     open FShade 

@@ -2,6 +2,7 @@
 
 open System.Diagnostics
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
@@ -9,7 +10,6 @@ open Valve.VR
 open Aardvark.Application
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
-open Valve.VR
 
 
 module StereoShader =

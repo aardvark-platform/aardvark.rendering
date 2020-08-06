@@ -3,11 +3,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
-open Aardvark.Base.Ag
-open System.Collections.Generic
-open System.Runtime.InteropServices
-open System.Runtime.CompilerServices
+open Aardvark.Rendering
 
 open FSharp.Data.Adaptive
 

@@ -16,6 +16,7 @@ open Aardvark.Rendering.Interactive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open FSharp.Data.Adaptive.Operators
+open Aardvark.Rendering
 open Aardvark.Base.Rendering
 
 module IndexedGeometry = 

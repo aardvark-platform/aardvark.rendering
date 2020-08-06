@@ -1,4 +1,5 @@
 ﻿open Aardvark.Base
+open Aardvark.Rendering
 open Aardvark.Base.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
@@ -12,7 +13,7 @@ module Shader =
     open FShade // open FShade namespace
     // this one makes vertex structs available, which are used by the standard
     // shaders (DefaultSurfaces.*)
-    open Aardvark.Base.Rendering.Effects
+    open Aardvark.Rendering.Effects
 
     // Helper functions need to be reflectable for fshade in order to generate code
     // (you can also put ReflectedDefinition on the whole module)

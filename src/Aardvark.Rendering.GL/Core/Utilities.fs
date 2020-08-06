@@ -3,8 +3,8 @@
 open System
 open OpenTK.Graphics.OpenGL4
 open System.Text.RegularExpressions
-open System.Runtime.InteropServices
 open Aardvark.Base
+open Aardvark.Rendering
 
 [<AutoOpen>]
 module TypeSizeExtensions =
@@ -72,10 +72,10 @@ module Driver =
 
         let pat = (vendor + "_" + renderer).ToLower()
         let gpu =
-            if pat.Contains "nvidia" then Aardvark.Base.GPUVendor.nVidia
-            elif pat.Contains "ati" || pat.Contains "amd" then Aardvark.Base.GPUVendor.AMD
-            elif pat.Contains "intel" then Aardvark.Base.GPUVendor.Intel
-            else Aardvark.Base.GPUVendor.Unknown
+            if pat.Contains "nvidia" then GPUVendor.nVidia
+            elif pat.Contains "ati" || pat.Contains "amd" then GPUVendor.AMD
+            elif pat.Contains "intel" then GPUVendor.Intel
+            else GPUVendor.Unknown
 
 
 

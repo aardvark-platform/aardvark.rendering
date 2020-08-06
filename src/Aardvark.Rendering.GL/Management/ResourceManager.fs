@@ -8,10 +8,11 @@ open System.Threading
 open System.Collections.Concurrent
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.Base.Rendering
 open OpenTK.Graphics.OpenGL4
-open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering.ShaderReflection
 open Aardvark.Rendering.GL
 
 
@@ -502,7 +503,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                   storageBuffers = iface.storageBuffers |> MapExt.toSeq |> Seq.sortBy (fun (_, sb) -> sb.ssbBinding) |> Seq.toArray }
             ))
 
-    member x.CreateSurface(signature : IFramebufferSignature, surface : Aardvark.Base.Surface, topology : IndexedGeometryMode) =
+    member x.CreateSurface(signature : IFramebufferSignature, surface : Aardvark.Rendering.Surface, topology : IndexedGeometryMode) =
 
         let (iface, result) = ctx.CreateProgram(signature, surface, topology)
 

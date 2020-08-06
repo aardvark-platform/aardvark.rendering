@@ -5,6 +5,7 @@ open System.Runtime.CompilerServices
 open System.Windows.Forms
 open Aardvark.Application
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 
 type SimpleRenderWindow() as this =

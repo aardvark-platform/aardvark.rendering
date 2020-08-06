@@ -2,12 +2,10 @@
 
 open System
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
-open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
-open System.Reflection
 open Microsoft.FSharp.NativeInterop
 open KHRSwapchain
 open KHRSurface

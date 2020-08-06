@@ -3,7 +3,7 @@
 open Aardvark.Base
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 
 
 [<AutoOpen>]
@@ -74,7 +74,7 @@ module LodTreeRendering =
 namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
-open Aardvark.Base.Ag
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph  
 

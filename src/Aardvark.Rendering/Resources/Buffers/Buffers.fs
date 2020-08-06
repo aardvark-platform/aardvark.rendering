@@ -1,9 +1,10 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
 open System
 open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
+open Aardvark.Base
 
 [<Flags>]
 type BufferUsage = // Buffer usage

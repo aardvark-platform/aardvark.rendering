@@ -1,8 +1,9 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.Rendering
 
 open System
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
+open Aardvark.Base
 
 /// Interface for GPU queries.
 type IQuery =

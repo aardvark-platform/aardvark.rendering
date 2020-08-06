@@ -2,6 +2,7 @@
 
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
+open Aardvark.Rendering
 open System.Threading
 open Silk.NET.GLFW
 open OpenTK.Graphics.OpenGL4

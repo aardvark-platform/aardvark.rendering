@@ -2,10 +2,9 @@
 
 open Aardvark.SceneGraph.Semantics
 
-open System
 open System.Runtime.CompilerServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Base.Ag
 open FSharp.Data.Adaptive
 

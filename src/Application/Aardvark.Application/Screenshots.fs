@@ -1,10 +1,9 @@
 ﻿namespace Aardvark.Application
 
-
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
-open Aardvark.Base.Rendering
 open System.Runtime.CompilerServices
 open System.Threading.Tasks
 

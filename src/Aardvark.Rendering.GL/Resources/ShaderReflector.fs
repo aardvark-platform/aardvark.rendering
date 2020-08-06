@@ -6,7 +6,8 @@ open Microsoft.FSharp.NativeInterop
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
-open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering
+open Aardvark.Rendering.ShaderReflection
 open Aardvark.Rendering.GL
 
 #nowarn "9"

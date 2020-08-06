@@ -1,7 +1,7 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Rendering
 
 open Aardvark.Base
-open Aardvark.Base.Rendering.Effects
+open Aardvark.Rendering.Effects
 
 module DefaultSurfaces =
 

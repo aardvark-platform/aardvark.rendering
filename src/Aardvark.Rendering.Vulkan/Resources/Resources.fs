@@ -1,22 +1,13 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
-open System
-open System.Threading
 open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
-open System.Collections.Generic
-open System.Collections.Concurrent
 open Aardvark.Base
-open Aardvark.Base.Rendering
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
 // #nowarn "51"
 
-
-    
 [<AbstractClass; Sealed; Extension>]
 type IResourceExtensions private() =
 
@@ -27,7 +18,7 @@ type IResourceExtensions private() =
 
 
 type CustomResource<'a, 'v when 'a : equality and 'v : unmanaged>(owned : list<IResource>, create : AdaptiveToken -> RenderToken -> Option<'a> -> 'a, destroy : 'a -> unit, view : 'a -> 'v) =
-    inherit Aardvark.Base.Rendering.Resource<'a, 'v>(ResourceKind.Unknown)
+    inherit Resource<'a, 'v>(ResourceKind.Unknown)
  
     override x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<'a>) =
         let stats = owned |> List.iter (fun o -> o.Update(token, rt))

@@ -2,18 +2,13 @@
 
 open System
 open System.Security
-open System.Collections.Generic
-open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
 open Aardvark.Rendering
-open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open FSharp.Data.Adaptive
 open FShade
-open Microsoft.FSharp.NativeInterop
-open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering.ShaderReflection
 open Aardvark.Rendering.GL
 
 #nowarn "9"

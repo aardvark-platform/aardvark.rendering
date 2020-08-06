@@ -1,9 +1,10 @@
-﻿namespace Aardvark.Base.Rendering
+﻿namespace Aardvark.Rendering
 
 open System.Threading
 open Aardvark.Base
 open FSharp.Data.Adaptive
 open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
 
 /// Interface for adaptive reference-counted resources.
 type IAdaptiveResource =
@@ -29,14 +30,6 @@ type IAdaptiveResource<'a> =
 
     /// Gets the resource handle.
     abstract member GetValue : AdaptiveToken * RenderToken -> 'a
-
-[<AbstractClass; Sealed; Extension>]
-type IAdaptiveResourceExtension() =
-
-    /// Resets the reference count and destroys the resource.
-    [<Extension>]
-    static member inline ReleaseAll(this : IAdaptiveResource) =
-        this.ReleaseAll(force = false)
 
 /// Base class for adaptive reference-counted resources.
 [<AbstractClass>]
@@ -93,16 +86,13 @@ type AdaptiveResource<'a>() =
     interface IAdaptiveResource<'a> with
         member x.GetValue(c,t) = x.GetValue(c,t)
 
-
-namespace Aardvark.Base
-
-open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
-open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
-
 [<AbstractClass; Sealed; Extension>]
-type IAdaptiveValueOutputExtension() =
+type IAdaptiveResourceExtensions() =
+
+    /// Resets the reference count and destroys the resource.
+    [<Extension>]
+    static member inline ReleaseAll(this : IAdaptiveResource) =
+        this.ReleaseAll(force = false)
 
     [<Extension>]
     static member inline GetValue(this : aval<'a>, c : AdaptiveToken, t : RenderToken) =

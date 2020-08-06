@@ -1,9 +1,9 @@
 ﻿namespace Aardvark.Rendering.Text
 
 open System
-open System.Collections.Concurrent
 open Aardvark.Base
 open FSharp.Data.Adaptive
+open Aardvark.Rendering
 open Aardvark.Base.Rendering
 open Aardvark.Rendering.Text
 open Aardvark.SceneGraph
@@ -17,7 +17,6 @@ type Border2d = { left : float; right: float; top: float; bottom : float } with
     static member None = { left = 0.0; right = 0.0; top = 0.0; bottom = 0.0 }
 
 module Sg =
-    open Aardvark.SceneGraph.Semantics
     open Aardvark.Base.Ag
 
     

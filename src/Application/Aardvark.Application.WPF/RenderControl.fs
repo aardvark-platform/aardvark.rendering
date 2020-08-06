@@ -5,6 +5,7 @@ open System.Windows
 open System.Windows.Controls
 open System.Windows.Media
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.Application
 open System.Windows.Forms.Integration
