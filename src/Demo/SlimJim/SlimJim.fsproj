@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -16,7 +16,7 @@
     <Compile Include="Program.fs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj" />
+    <ProjectReference Include="..\..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj" />
     <ProjectReference Include="..\..\Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj" />

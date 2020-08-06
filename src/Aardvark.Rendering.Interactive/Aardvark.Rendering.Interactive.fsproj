@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
   <PropertyGroup>
     <TargetFrameworks>net471;netcoreapp3.1</TargetFrameworks>
@@ -22,7 +22,7 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj" />
+    <ProjectReference Include="..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />
     <ProjectReference Include="..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj" />
     <ProjectReference Include="..\Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj" />
     <ProjectReference Include="..\Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj" />

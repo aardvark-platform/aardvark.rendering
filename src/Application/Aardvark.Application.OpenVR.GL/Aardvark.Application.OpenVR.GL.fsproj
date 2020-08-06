@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
@@ -12,7 +12,7 @@
     <OutputPath>..\..\..\bin\Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj" />
+    <ProjectReference Include="..\..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj" />
     <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj" />
     <ProjectReference Include="..\Aardvark.Application.OpenVR\Aardvark.Application.OpenVR.fsproj" />
