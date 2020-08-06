@@ -53,6 +53,30 @@ type ConcurrentQuery<'Query, 'Result when 'Query :> IMultiQuery<'Result>>() =
             queries.Add q
             q
 
+    /// If there is an active query, increments the ref counter, releases the global lock,
+    /// calls the function on the query, and finally decrements the ref counter.
+    /// Otherwise returns None.
+    member private x.TryUseActiveQuery(reset : bool, f : 'Query -> 'a) =
+        let query =
+            lock x (fun _ ->
+                if isActive() then
+                    let q = activeQuery.Value
+                    q.Acquire()
+
+                    if reset then
+                        activeQuery <- None
+
+                    Some q
+
+                else
+                    None
+            )
+
+        try
+            query |> Option.map f
+        finally
+            lock x (fun _ -> query |> Option.iter (fun q -> q.Release()))
+
     /// Waits until there is an active query, increments the ref counter, releases the global lock,
     /// calls the function on the query, and finally decrements the ref counter.
     member private x.UseActiveQuery(reset : bool, f : 'Query -> 'a) =
@@ -111,9 +135,9 @@ type ConcurrentQuery<'Query, 'Result when 'Query :> IMultiQuery<'Result>>() =
 
     /// Trys to get the result from the queries.
     member x.TryGetResults(reset : bool) =
-        x.UseActiveQuery(reset, fun query ->
+        x.TryUseActiveQuery(reset, fun query ->
             query.TryGetResults()
-        )
+        ) |> Option.bind id
 
     /// Blocks until the result of every query is available.
     member x.GetResults(reset : bool) =
