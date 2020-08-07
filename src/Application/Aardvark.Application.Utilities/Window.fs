@@ -10,8 +10,8 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.Slim
 open FSharp.Data.Adaptive.Operators
-open Aardvark.Rendering
 open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Text
 open Aardvark.Application.OpenVR
@@ -598,16 +598,10 @@ module Utilities =
 
                 let stencilTest =
                     StencilMode(
-                        StencilOperation(
-                            StencilOperationFunction.Keep,
-                            StencilOperationFunction.Keep,
-                            StencilOperationFunction.Keep
-                        ),
-                        StencilFunction(
-                            StencilCompareFunction.Equal,
-                            0,
-                            0xFFFFFFFFu
-                        )
+                        StencilOperation.Keep,
+                        StencilOperation.Keep,
+                        StencilOperation.Keep,
+                        ComparisonFunction.Equal
                     )
 
                 { new SimpleRenderWindow(app, app.Info.viewTrafos, app.Info.projTrafos) with
@@ -639,16 +633,10 @@ module Utilities =
 
                 let stencilTest =
                     StencilMode(
-                        StencilOperation(
-                            StencilOperationFunction.Keep,
-                            StencilOperationFunction.Keep,
-                            StencilOperationFunction.Keep
-                        ),
-                        StencilFunction(
-                            StencilCompareFunction.Equal,
-                            0,
-                            0xFFFFFFFFu
-                        )
+                        StencilOperation.Keep,
+                        StencilOperation.Keep,
+                        StencilOperation.Keep,
+                        ComparisonFunction.Equal
                     )
 
                 { new SimpleRenderWindow(app, app.Info.viewTrafos, app.Info.projTrafos) with

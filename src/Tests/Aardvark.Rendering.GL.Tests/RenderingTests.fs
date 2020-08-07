@@ -13,8 +13,8 @@ open Aardvark.Application
 open System.Diagnostics
 open Aardvark.SceneGraph.Semantics
 open Aardvark.Application.WinForms
-open Aardvark.Rendering
 open Aardvark.Base.Rendering
+open Aardvark.Rendering
 
 
 module ``Rendering Tests`` =
@@ -724,11 +724,11 @@ module RenderingTests =
                 DrawCalls = Direct(AVal.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)])
                 Mode = IndexedGeometryMode.TriangleList
                 Surface = DefaultSurfaces.constantColor C4f.Gray |> toEffect |> Surface.FShadeSimple
-                DepthTest = AVal.constant Aardvark.Base.Rendering.DepthTestMode.LessOrEqual
-                CullMode = AVal.constant Aardvark.Base.Rendering.CullMode.None
-                BlendMode = AVal.constant Aardvark.Rendering.BlendMode.Blend
-                FillMode = AVal.constant Aardvark.Base.Rendering.FillMode.Fill
-                StencilMode = AVal.constant Aardvark.Base.Rendering.StencilMode.Disabled
+                DepthTest = AVal.constant DepthTestMode.LessOrEqual
+                CullMode = AVal.constant CullMode.None
+                BlendMode = AVal.constant BlendMode.Blend
+                FillMode = AVal.constant FillMode.Fill
+                StencilMode = AVal.constant StencilMode.Disabled
                 Indices = BufferView.ofArray [|0;1;2; 0;2;3|] |> Some
                 InstanceAttributes = emptyAttributes
                 VertexAttributes = attributeProvider

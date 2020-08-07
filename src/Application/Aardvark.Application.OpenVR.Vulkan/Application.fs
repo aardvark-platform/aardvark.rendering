@@ -2,9 +2,9 @@
 
 open System.Diagnostics
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Valve.VR
 open Aardvark.Application
@@ -113,16 +113,11 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
     let compileHidden (m : IndexedGeometry) =
         let writeStencil =
             StencilMode(
-                StencilOperation(
-                    StencilOperationFunction.Replace,
-                    StencilOperationFunction.Replace,
-                    StencilOperationFunction.Replace
-                ),
-                StencilFunction(
-                    StencilCompareFunction.Always,
-                    1,
-                    0xFFFFFFFFu
-                )
+                StencilOperation.Replace,
+                StencilOperation.Replace,
+                StencilOperation.Replace,
+                ComparisonFunction.Always,
+                1
             )
 
         let sg =

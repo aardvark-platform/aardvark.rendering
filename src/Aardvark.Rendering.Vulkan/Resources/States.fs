@@ -522,42 +522,42 @@ module DepthState =
 module StencilState =
     let private toVkStencilOp =
         LookupTable.lookupTable [
-            StencilOperationFunction.Increment, VkStencilOp.IncrementAndClamp
-            StencilOperationFunction.IncrementWrap, VkStencilOp.IncrementAndWrap
-            StencilOperationFunction.Decrement, VkStencilOp.DecrementAndClamp
-            StencilOperationFunction.DecrementWrap, VkStencilOp.DecrementAndWrap
-            StencilOperationFunction.Keep, VkStencilOp.Keep
-            StencilOperationFunction.Replace, VkStencilOp.Replace
-            StencilOperationFunction.Zero, VkStencilOp.Zero
-            StencilOperationFunction.Invert, VkStencilOp.Invert
+            StencilOperation.Increment, VkStencilOp.IncrementAndClamp
+            StencilOperation.IncrementWrap, VkStencilOp.IncrementAndWrap
+            StencilOperation.Decrement, VkStencilOp.DecrementAndClamp
+            StencilOperation.DecrementWrap, VkStencilOp.DecrementAndWrap
+            StencilOperation.Keep, VkStencilOp.Keep
+            StencilOperation.Replace, VkStencilOp.Replace
+            StencilOperation.Zero, VkStencilOp.Zero
+            StencilOperation.Invert, VkStencilOp.Invert
         ]
 
     let private toVkStencilCompareOp  =
         LookupTable.lookupTable [
-            StencilCompareFunction.Always, VkCompareOp.Always
-            StencilCompareFunction.Equal, VkCompareOp.Equal
-            StencilCompareFunction.Greater, VkCompareOp.Greater
-            StencilCompareFunction.GreaterOrEqual, VkCompareOp.GreaterOrEqual
-            StencilCompareFunction.Less, VkCompareOp.Less
-            StencilCompareFunction.LessOrEqual, VkCompareOp.LessOrEqual
-            StencilCompareFunction.Never, VkCompareOp.Never
-            StencilCompareFunction.NotEqual, VkCompareOp.NotEqual
+            ComparisonFunction.Always, VkCompareOp.Always
+            ComparisonFunction.Equal, VkCompareOp.Equal
+            ComparisonFunction.Greater, VkCompareOp.Greater
+            ComparisonFunction.GreaterOrEqual, VkCompareOp.GreaterOrEqual
+            ComparisonFunction.Less, VkCompareOp.Less
+            ComparisonFunction.LessOrEqual, VkCompareOp.LessOrEqual
+            ComparisonFunction.Never, VkCompareOp.Never
+            ComparisonFunction.NotEqual, VkCompareOp.NotEqual
         ]
 
-    let private toVkStencilOpState (op : StencilOperation) (cmp : StencilFunction) =
+    let private toVkStencilOpState (state : Aardvark.Rendering.StencilState) =
         VkStencilOpState(
-            toVkStencilOp op.StencilFail, 
-            toVkStencilOp op.DepthPass, 
-            toVkStencilOp op.DepthFail, 
-            toVkStencilCompareOp cmp.Function, 
-            cmp.Mask, 
-            0xFFFFFFFFu, 
-            uint32 cmp.Reference
+            toVkStencilOp state.Fail,
+            toVkStencilOp state.Pass,
+            toVkStencilOp state.DepthFail,
+            toVkStencilCompareOp state.Compare,
+            state.CompareMask,
+            state.WriteMask,
+            uint32 state.Reference
         )
-    
+
     let create (mode : StencilMode) =
         {
-            enabled                 = mode.IsEnabled
-            front                   = toVkStencilOpState mode.OperationFront mode.CompareFront
-            back                    = toVkStencilOpState mode.OperationBack mode.CompareBack
+            enabled                 = mode.Enabled
+            front                   = toVkStencilOpState mode.Front
+            back                    = toVkStencilOpState mode.Back
         }

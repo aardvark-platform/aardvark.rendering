@@ -431,20 +431,20 @@ module Sg =
 
             let writeStencil =
                 StencilMode(
-                    StencilOperationFunction.Replace,
-                    StencilOperationFunction.Zero,
-                    StencilOperationFunction.Keep,
-                    StencilCompareFunction.Always,
+                    StencilOperation.Replace,
+                    StencilOperation.Zero,
+                    StencilOperation.Keep,
+                    ComparisonFunction.Always,
                     1,
                     0xFFFFFFFFu
                 )
 
             let readStencil =
                 StencilMode(
-                    StencilOperationFunction.Keep,
-                    StencilOperationFunction.Keep,
-                    StencilOperationFunction.Keep,
-                    StencilCompareFunction.Equal,
+                    StencilOperation.Keep,
+                    StencilOperation.Keep,
+                    StencilOperation.Keep,
+                    ComparisonFunction.Equal,
                     1,
                     0xFFFFFFFFu
                 )

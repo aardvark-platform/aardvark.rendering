@@ -46,21 +46,21 @@ module PointerContextExtensions =
 
         let inline toGLStencilMode (mode : StencilMode) =
             GLStencilMode(
-                Enabled = (if mode.IsEnabled then 1 else 0),
-                CmpFront = Translations.toGLFunction mode.CompareFront.Function,
-                MaskFront = mode.CompareFront.Mask,
-                ReferenceFront = mode.CompareFront.Reference,
-                CmpBack = Translations.toGLFunction mode.CompareBack.Function,
-                MaskBack = mode.CompareBack.Mask,
-                ReferenceBack = mode.CompareBack.Reference,
+                Enabled = (if mode.Enabled then 1 else 0),
+                CmpFront = Translations.toGLCompareFunction mode.Front.Compare,
+                MaskFront = mode.Front.CompareMask,
+                ReferenceFront = mode.Front.Reference,
+                CmpBack = Translations.toGLCompareFunction mode.Back.Compare,
+                MaskBack = mode.Back.CompareMask,
+                ReferenceBack = mode.Back.Reference,
 
-                OpFrontSF = Translations.toGLStencilOperation mode.OperationFront.StencilFail,
-                OpFrontDF = Translations.toGLStencilOperation mode.OperationFront.DepthFail,
-                OpFrontPass = Translations.toGLStencilOperation mode.OperationFront.DepthPass,
+                OpFrontSF = Translations.toGLStencilOperation mode.Front.Fail,
+                OpFrontDF = Translations.toGLStencilOperation mode.Front.DepthFail,
+                OpFrontPass = Translations.toGLStencilOperation mode.Front.Pass,
 
-                OpBackSF = Translations.toGLStencilOperation mode.OperationBack.StencilFail,
-                OpBackDF = Translations.toGLStencilOperation mode.OperationBack.DepthFail,
-                OpBackPass = Translations.toGLStencilOperation mode.OperationBack.DepthPass
+                OpBackSF = Translations.toGLStencilOperation mode.Back.Fail,
+                OpBackDF = Translations.toGLStencilOperation mode.Back.DepthFail,
+                OpBackPass = Translations.toGLStencilOperation mode.Back.Pass
             )
 
         module Attribute =

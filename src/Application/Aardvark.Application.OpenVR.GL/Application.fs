@@ -1,9 +1,9 @@
 ﻿namespace Aardvark.Application.OpenVR
 
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
 open Aardvark.Application
 open Aardvark.SceneGraph
@@ -113,16 +113,11 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
     let compileHidden (m : IndexedGeometry) =
         let writeStencil =
             StencilMode(
-                StencilOperation(
-                    StencilOperationFunction.Replace,
-                    StencilOperationFunction.Replace,
-                    StencilOperationFunction.Replace
-                ),
-                StencilFunction(
-                    StencilCompareFunction.Always,
-                    1,
-                    0xFFFFFFFFu
-                )
+                StencilOperation.Replace,
+                StencilOperation.Replace,
+                StencilOperation.Replace,
+                ComparisonFunction.Always,
+                1
             )
 
         let sg =

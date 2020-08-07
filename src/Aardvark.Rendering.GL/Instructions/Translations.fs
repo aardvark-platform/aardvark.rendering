@@ -98,28 +98,28 @@ module Translations =
             | Aardvark.Base.Rendering.WindingOrder.CounterClockwise -> WindingOrder.CCW |> int
             | _ -> failwithf "unknown winding order %A" f
 
-    let toGLFunction (f : StencilCompareFunction) =
+    let toGLCompareFunction (f : ComparisonFunction) =
         match f with
-            | StencilCompareFunction.Always -> CompareFunction.Always |> int
-            | StencilCompareFunction.Equal -> CompareFunction.Equal |> int
-            | StencilCompareFunction.Greater -> CompareFunction.Greater |> int
-            | StencilCompareFunction.GreaterOrEqual -> CompareFunction.GreaterEqual |> int
-            | StencilCompareFunction.Less -> CompareFunction.Less |> int
-            | StencilCompareFunction.LessOrEqual -> CompareFunction.LessEqual |> int
-            | StencilCompareFunction.Never -> CompareFunction.Never |> int
-            | StencilCompareFunction.NotEqual -> CompareFunction.NotEqual |> int
+            | ComparisonFunction.Always -> CompareFunction.Always |> int
+            | ComparisonFunction.Equal -> CompareFunction.Equal |> int
+            | ComparisonFunction.Greater -> CompareFunction.Greater |> int
+            | ComparisonFunction.GreaterOrEqual -> CompareFunction.GreaterEqual |> int
+            | ComparisonFunction.Less -> CompareFunction.Less |> int
+            | ComparisonFunction.LessOrEqual -> CompareFunction.LessEqual |> int
+            | ComparisonFunction.Never -> CompareFunction.Never |> int
+            | ComparisonFunction.NotEqual -> CompareFunction.NotEqual |> int
             | _ -> failwithf "unknown comparison %A" f
 
-    let toGLStencilOperation (o : StencilOperationFunction) =
+    let toGLStencilOperation (o : Aardvark.Rendering.StencilOperation) =
         match o with
-            | StencilOperationFunction.Decrement -> StencilOperation.Decrement |> int
-            | StencilOperationFunction.DecrementWrap -> StencilOperation.DecrementWrap  |> int
-            | StencilOperationFunction.Increment -> StencilOperation.Increment  |> int
-            | StencilOperationFunction.IncrementWrap -> StencilOperation.IncrementWrap  |> int
-            | StencilOperationFunction.Invert -> StencilOperation.Invert  |> int
-            | StencilOperationFunction.Keep -> StencilOperation.Keep  |> int
-            | StencilOperationFunction.Replace -> StencilOperation.Replace  |> int
-            | StencilOperationFunction.Zero -> StencilOperation.Zero  |> int
+            | Aardvark.Rendering.StencilOperation.Decrement -> StencilOperation.Decrement |> int
+            | Aardvark.Rendering.StencilOperation.DecrementWrap -> StencilOperation.DecrementWrap  |> int
+            | Aardvark.Rendering.StencilOperation.Increment -> StencilOperation.Increment  |> int
+            | Aardvark.Rendering.StencilOperation.IncrementWrap -> StencilOperation.IncrementWrap  |> int
+            | Aardvark.Rendering.StencilOperation.Invert -> StencilOperation.Invert  |> int
+            | Aardvark.Rendering.StencilOperation.Keep -> StencilOperation.Keep  |> int
+            | Aardvark.Rendering.StencilOperation.Replace -> StencilOperation.Replace  |> int
+            | Aardvark.Rendering.StencilOperation.Zero -> StencilOperation.Zero  |> int
             | _ -> failwithf "unknown stencil operation %A" o
 
     let toGLPolygonMode (f : FillMode) =
