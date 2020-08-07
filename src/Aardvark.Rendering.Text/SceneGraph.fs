@@ -2,9 +2,9 @@
 
 open System
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.Rendering
-open Aardvark.Base.Rendering
 open Aardvark.Rendering.Text
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics

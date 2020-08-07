@@ -3,13 +3,13 @@
 
 open System
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open Aardvark.Rendering
-open Aardvark.Base.Rendering
 open Aardvark.Rendering.Text
 open System.Threading
 open System.Threading.Tasks

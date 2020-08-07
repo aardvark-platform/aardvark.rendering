@@ -8,9 +8,9 @@ open System.Threading
 open System.Collections.Concurrent
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.ShaderReflection
 open Aardvark.Rendering.GL

@@ -3,6 +3,7 @@
 
 open System
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
@@ -11,7 +12,6 @@ open Aardvark.Application.WinForms
 open FSharp.Data.Adaptive.Operators
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering
-open Aardvark.Base.Rendering
 open Aardvark.Rendering.ShaderReflection
 open Aardvark.Rendering.Text
 
@@ -117,7 +117,7 @@ module TessellatedSphere =
                             DefaultSurfaces.vertexColor     |> toEffect
                             DefaultSurfaces.simpleLighting  |> toEffect
                                 ]
-                    |> Sg.blendMode (Rendering.BlendMode.Blend |> AVal.constant )
+                    |> Sg.blendMode (BlendMode.Blend |> AVal.constant )
                     |> Sg.fillMode  (FillMode.Line |> AVal.constant)
                     |> Sg.cullMode  (CullMode.Back |> AVal.constant)
                     |> Sg.trafo     (Trafo3d.Identity |> AVal.constant)

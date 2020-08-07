@@ -69,6 +69,7 @@
     <Compile Include="Surfaces\ShaderStage.fs" />
     <Compile Include="Surfaces\SamplerDescription.fs" />
     <Compile Include="Surfaces\BackendSurface.fs" />
+    <Compile Include="Pipeline\BlendMode.fs" />
     <Compile Include="Pipeline\Camera.fs" />
     <Compile Include="Pipeline\RenderPass.fs" />
     <Compile Include="Pipeline\DrawCalls.fs" />

@@ -357,13 +357,9 @@ module Loader =
         module Conversions =
             let private additiveBlending = 
                 BlendMode(
-                    true, 
-                    SourceFactor = BlendFactor.One, 
-                    DestinationFactor = BlendFactor.One,
-                    Operation = BlendOperation.Add,
-                    SourceAlphaFactor = BlendFactor.One,
-                    DestinationAlphaFactor = BlendFactor.One,
-                    AlphaOperation = BlendOperation.Add
+                    BlendFactor.One,
+                    BlendFactor.One,
+                    BlendOperation.Add
                 )
 
             let toC4f (c : Assimp.Color4D) =

@@ -2,8 +2,8 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Rendering
 open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open System.Runtime.CompilerServices
 open Aardvark.SceneGraph
 open FSharp.Data.Adaptive

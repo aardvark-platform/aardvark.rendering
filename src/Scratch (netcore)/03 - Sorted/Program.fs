@@ -1,6 +1,6 @@
 ﻿open Aardvark.Base
-open Aardvark.Rendering
 open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
@@ -766,14 +766,8 @@ let main argv =
 
     let buffer = BufferView(sorted,typeof<V4f>)
 
-    let mutable blendMode = BlendMode(true)
-    blendMode.AlphaOperation <- BlendOperation.Add
-    blendMode.Operation <- BlendOperation.Add
-    blendMode.SourceFactor <- BlendFactor.InvDestinationAlpha
-    blendMode.SourceAlphaFactor <- BlendFactor.InvDestinationAlpha
-    blendMode.DestinationFactor <- BlendFactor.One
-    blendMode.DestinationAlphaFactor <- BlendFactor.One
-
+    let blendMode =
+        BlendMode(BlendFactor.InvDestinationAlpha, BlendFactor.One)
 
     let clear =
         Sg.fullScreenQuad

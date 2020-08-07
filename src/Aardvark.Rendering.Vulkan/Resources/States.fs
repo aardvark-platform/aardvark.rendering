@@ -442,10 +442,12 @@ module ColorBlendState =
 
             BlendFactor.Zero, VkBlendFactor.Zero
             BlendFactor.One, VkBlendFactor.One
-            BlendFactor.SourceAlphaSat, VkBlendFactor.SrcAlphaSaturate
+            BlendFactor.SourceAlphaSaturate, VkBlendFactor.SrcAlphaSaturate
 
-            BlendFactor.BlendFactor, VkBlendFactor.ConstantColor
-            BlendFactor.InvBlendFactor, VkBlendFactor.OneMinusConstantColor
+            BlendFactor.ConstantColor, VkBlendFactor.ConstantColor
+            BlendFactor.InvConstantColor, VkBlendFactor.OneMinusConstantColor
+            BlendFactor.ConstantAlpha, VkBlendFactor.ConstantAlpha
+            BlendFactor.InvConstantAlpha, VkBlendFactor.OneMinusConstantAlpha
         ]
 
     let private toVkBlendOp =
@@ -463,9 +465,9 @@ module ColorBlendState =
     let private toAttachmentState (writeMask : bool) (blend : BlendMode) =
         {
             enabled                 = blend.Enabled
-            srcFactor               = toVkBlendFactor blend.SourceFactor
-            dstFactor               = toVkBlendFactor blend.DestinationFactor
-            operation               = toVkBlendOp blend.Operation
+            srcFactor               = toVkBlendFactor blend.SourceColorFactor
+            dstFactor               = toVkBlendFactor blend.DestinationColorFactor
+            operation               = toVkBlendOp blend.ColorOperation
             srcFactorAlpha          = toVkBlendFactor blend.SourceAlphaFactor
             dstFactorAlpha          = toVkBlendFactor blend.DestinationAlphaFactor
             operationAlpha          = toVkBlendOp blend.AlphaOperation

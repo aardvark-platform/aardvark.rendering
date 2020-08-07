@@ -371,7 +371,7 @@ module AssimpInterop =
         model 
             |> Sg.normalizeTo ( Box3d(-V3d.III, V3d.III) )
             |> Sg.trafo (AVal.constant Trafo3d.ChangeYZ)
-            |> Sg.blendMode (AVal.constant Rendering.BlendMode.Blend)
+            |> Sg.blendMode (AVal.constant BlendMode.Blend)
             |> Sg.effect [
                     DefaultSurfaces.trafo |> toEffect                  
                     DefaultSurfaces.constantColor C4f.Red |> toEffect  

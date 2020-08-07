@@ -9,9 +9,9 @@ open Aardvark.Rendering.GL.OpenGl
 
 module Translations =
 
-    type private ABlendFactor = Aardvark.Base.Rendering.BlendFactor
+    type private ABlendFactor = Aardvark.Rendering.BlendFactor
     type private GLBlendFactor = Aardvark.Rendering.GL.OpenGl.Enums.BlendFactor
-    type private ABlendOperation = Aardvark.Base.Rendering.BlendOperation
+    type private ABlendOperation = Aardvark.Rendering.BlendOperation
     type private GLBlendOperation = Aardvark.Rendering.GL.OpenGl.Enums.BlendOperation
 
     let toGLMode (m : IndexedGeometryMode) =
@@ -51,9 +51,14 @@ module Translations =
             | ABlendFactor.InvDestinationColor -> GLBlendFactor.InvDstColor |> int
             | ABlendFactor.InvSourceAlpha -> GLBlendFactor.InvSrcAlpha |> int
             | ABlendFactor.InvSourceColor -> GLBlendFactor.InvSrcColor |> int
+            | ABlendFactor.ConstantColor -> GLBlendFactor.ConstantColor |> int
+            | ABlendFactor.InvConstantColor -> GLBlendFactor.InvConstantColor |> int
+            | ABlendFactor.ConstantAlpha -> GLBlendFactor.ConstantAlpha |> int
+            | ABlendFactor.InvConstantAlpha -> GLBlendFactor.InvConstantAlpha |> int
+            | ABlendFactor.SourceAlphaSaturate -> GLBlendFactor.SrcAlphaSat |> int
             | ABlendFactor.SecondarySourceColor -> GLBlendFactor.Src1Color |> int
-            | ABlendFactor.SecondarySourceAlpha -> GLBlendFactor.Src1Alpha |> int
             | ABlendFactor.InvSecondarySourceColor -> GLBlendFactor.InvSrc1Color |> int
+            | ABlendFactor.SecondarySourceAlpha -> GLBlendFactor.Src1Alpha |> int
             | ABlendFactor.InvSecondarySourceAlpha -> GLBlendFactor.InvSrc1Alpha |> int
             | _ -> failwithf "unknown blend factor: %A" f
 

@@ -4,6 +4,7 @@ open System
 open FSharp.Data.Adaptive
 open Aardvark.Base
 open Aardvark.Base.Rendering
+open Aardvark.Rendering
 
 [<AutoOpen>]
 module private RenderObjectHelpers =

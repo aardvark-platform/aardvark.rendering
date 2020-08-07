@@ -5,8 +5,8 @@
 module WeightedBlended =
 
     open Aardvark.Base
-    open Aardvark.Rendering
     open Aardvark.Base.Rendering
+    open Aardvark.Rendering
     open Aardvark.SceneGraph
     open FSharp.Data.Adaptive
     open FSharp.Data.Adaptive.Operators
@@ -135,15 +135,12 @@ module WeightedBlended =
     module private Utility =
 
         let blendModeTransparencyPass =
-            let mutable bm = BlendMode()
-            bm.Enabled <- true
-            bm.SourceFactor <- BlendFactor.One
-            bm.DestinationFactor <- BlendFactor.One
-            bm.SourceAlphaFactor <- BlendFactor.Zero
-            bm.DestinationAlphaFactor <- BlendFactor.InvSourceAlpha
-            bm.Operation <- BlendOperation.Add
-            bm.AlphaOperation <- BlendOperation.Add
-            bm
+            BlendMode(
+                BlendFactor.One,
+                BlendFactor.One,
+                BlendFactor.Zero,
+                BlendFactor.InvSourceAlpha
+            )
 
         let createAttachment (runtime : IRuntime) (format : RenderbufferFormat) (samples : int) (size : aval<V2i>) =
             runtime.CreateTextureAttachment(

@@ -19,6 +19,7 @@ namespace Examples
 
 open System
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open Aardvark.Rendering.Interactive
 
 open FSharp.Data.Adaptive
@@ -26,7 +27,6 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open FSharp.Data.Adaptive.Operators 
 open Aardvark.Rendering
-open Aardvark.Base.Rendering
 
 module Render2TexturePrimitiveFloat = 
 
@@ -58,15 +58,10 @@ module Render2TexturePrimitiveFloat =
             ]
         )
   
-    let blendMode = 
+    let blendMode =
         BlendMode(
-            Enabled = true,
-            AlphaOperation = BlendOperation.Add,
-            DestinationAlphaFactor = BlendFactor.Zero,
-            SourceAlphaFactor = BlendFactor.Zero,
-            DestinationFactor = BlendFactor.One,
-            SourceFactor = BlendFactor.One,
-            Operation = BlendOperation.Add
+            BlendFactor.One, BlendFactor.One,
+            BlendFactor.Zero, BlendFactor.Zero
         ) |> AVal.constant
 
     let cnt = AVal.init 300

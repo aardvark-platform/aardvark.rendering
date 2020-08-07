@@ -20,6 +20,7 @@ namespace Examples
 
 open System
 open Aardvark.Base
+open Aardvark.Base.Rendering
 open FSharp.Data.Adaptive
 
 open Aardvark.Rendering.Interactive
@@ -27,7 +28,6 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open FSharp.Data.Adaptive.Operators
 open Aardvark.Rendering
-open Aardvark.Base.Rendering
 
 module PostProcessing = 
 

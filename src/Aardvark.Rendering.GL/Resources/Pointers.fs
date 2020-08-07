@@ -36,9 +36,9 @@ module PointerContextExtensions =
         let inline toGLBlendMode (mode : BlendMode) =
             GLBlendMode(
                 Enabled = (if mode.Enabled then 1 else 0),
-                SourceFactor = Translations.toGLFactor mode.SourceFactor,
-                DestFactor = Translations.toGLFactor mode.DestinationFactor,
-                Operation = Translations.toGLOperation mode.Operation,
+                SourceFactor = Translations.toGLFactor mode.SourceColorFactor,
+                DestFactor = Translations.toGLFactor mode.DestinationColorFactor,
+                Operation = Translations.toGLOperation mode.ColorOperation,
                 SourceFactorAlpha = Translations.toGLFactor mode.SourceAlphaFactor,
                 DestFactorAlpha = Translations.toGLFactor mode.DestinationAlphaFactor,
                 OperationAlpha = Translations.toGLOperation mode.AlphaOperation
