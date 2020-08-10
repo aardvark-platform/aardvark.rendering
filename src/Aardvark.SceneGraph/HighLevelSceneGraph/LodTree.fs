@@ -68,7 +68,7 @@ module LodTreeRendering =
                 LodTreeNode(stats, None, alphaToCoverage, budget, splitfactor, renderBounds, maxSplits, time, clouds)
 
         let lodTree (cfg : LodTreeRenderConfig) (data : aset<LodTreeInstance>) =
-            LodTreeNode(cfg.stats, cfg.alphaToCoverage, cfg.budget, cfg.splitfactor, cfg.renderBounds, cfg.maxSplits, cfg.time, data) :> ISg
+            LodTreeNode(cfg.stats, cfg.pickTrees, cfg.alphaToCoverage, cfg.budget, cfg.splitfactor, cfg.renderBounds, cfg.maxSplits, cfg.time, data) :> ISg
     
 
 namespace Aardvark.SceneGraph.Semantics
