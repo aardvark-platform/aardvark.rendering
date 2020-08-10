@@ -2,7 +2,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering
 open Aardvark.Rendering.Interactive
 open FSharp.Data.Adaptive

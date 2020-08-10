@@ -10,7 +10,7 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.Slim
 open FSharp.Data.Adaptive.Operators
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Text
@@ -597,18 +597,14 @@ module Utilities =
 
 
                 let stencilTest =
-                    StencilMode(
-                        StencilOperation.Keep,
-                        StencilOperation.Keep,
-                        StencilOperation.Keep,
-                        ComparisonFunction.Equal
-                    )
+                    { StencilState.Default with
+                        Comparison = ComparisonFunction.Equal }
 
                 { new SimpleRenderWindow(app, app.Info.viewTrafos, app.Info.projTrafos) with
 
                     override x.WrapSg(win, sg) =
                         sg
-                        |> Sg.stencilMode (AVal.constant stencilTest)
+                        |> Sg.stencilMode' (AVal.constant stencilTest)
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                         |> Sg.uniform "CameraLocation" hmdLocation
@@ -616,7 +612,7 @@ module Utilities =
 
                     override x.Compile(win, sg) =
                         sg
-                        |> Sg.stencilMode (AVal.constant stencilTest)
+                        |> Sg.stencilMode' (AVal.constant stencilTest)
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                         |> Sg.uniform "CameraLocation" hmdLocation
@@ -632,18 +628,14 @@ module Utilities =
 
 
                 let stencilTest =
-                    StencilMode(
-                        StencilOperation.Keep,
-                        StencilOperation.Keep,
-                        StencilOperation.Keep,
-                        ComparisonFunction.Equal
-                    )
+                    { StencilState.Default with
+                        Comparison = ComparisonFunction.Equal }
 
                 { new SimpleRenderWindow(app, app.Info.viewTrafos, app.Info.projTrafos) with
 
                     override x.WrapSg(win, sg) =
                         sg
-                        |> Sg.stencilMode (AVal.constant stencilTest)
+                        |> Sg.stencilMode' (AVal.constant stencilTest)
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                         |> Sg.uniform "CameraLocation" hmdLocation
@@ -651,7 +643,7 @@ module Utilities =
 
                     override x.Compile(win, sg) =
                         sg
-                        |> Sg.stencilMode (AVal.constant stencilTest)
+                        |> Sg.stencilMode' (AVal.constant stencilTest)
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                         |> Sg.uniform "CameraLocation" hmdLocation

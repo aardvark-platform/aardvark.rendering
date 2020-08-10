@@ -14,7 +14,9 @@
     <OutputPath>..\..\bin\Release</OutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="DefaultSemantic.fs" />
+    <Compile Include="Common\FrameStatistics.fs" />
+    <Compile Include="Common\DefaultSemantic.fs" />
+    <Compile Include="Common\ComparisonFunction.fs" />
     <Compile Include="Utilities\Obsolete\AverageWindow.fs" />
     <Compile Include="Utilities\Obsolete\ReferenceCountingSet.fs" />
     <Compile Include="Utilities\Locks\ColoredLock.fs" />
@@ -28,7 +30,6 @@
     <Compile Include="Utilities\ArrayVisitor.fs" />
     <Compile Include="Utilities\Timer.fs" />
     <Compile Include="Utilities\Memory.fs" />
-    <Compile Include="Resources\FrameStatistics.fs" />
     <Compile Include="Resources\Buffers\Buffers.fs" />
     <Compile Include="Resources\Buffers\ArrayBuffer.fs" />
     <Compile Include="Resources\Buffers\SingleValueBuffer.fs" />
@@ -67,11 +68,16 @@
     <Compile Include="Attributes\AttributeProvider.fs" />
     <Compile Include="Surfaces\Surface.fs" />
     <Compile Include="Surfaces\ShaderStage.fs" />
-    <Compile Include="Surfaces\SamplerDescription.fs" />
-    <Compile Include="Surfaces\BackendSurface.fs" />
-    <Compile Include="Pipeline\ComparisonFunction.fs" />
-    <Compile Include="Pipeline\BlendMode.fs" />
-    <Compile Include="Pipeline\StencilMode.fs" />
+    <Compile Include="Sampler\TextureFilter.fs" />
+    <Compile Include="Sampler\SamplerState.fs" />
+    <Compile Include="Pipeline\Modes\FillMode.fs" />
+    <Compile Include="Pipeline\Modes\CullMode.fs" />
+    <Compile Include="Pipeline\Modes\WindingOrder.fs" />
+    <Compile Include="Pipeline\Modes\BlendMode.fs" />
+    <Compile Include="Pipeline\Modes\StencilMode.fs" />
+    <Compile Include="Pipeline\Modes\DepthTestMode.fs" />
+    <Compile Include="Pipeline\Modes\DepthBias.fs" />
+    <Compile Include="Pipeline\Modes\ColorMask.fs" />
     <Compile Include="Pipeline\Camera.fs" />
     <Compile Include="Pipeline\RenderPass.fs" />
     <Compile Include="Pipeline\DrawCalls.fs" />

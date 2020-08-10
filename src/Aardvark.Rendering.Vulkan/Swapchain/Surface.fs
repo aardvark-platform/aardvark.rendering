@@ -2,7 +2,7 @@ namespace Aardvark.Rendering.Vulkan
 open System
 open Aardvark.Base
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering.Vulkan
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices

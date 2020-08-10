@@ -14,7 +14,6 @@
     <OutputPath>..\..\..\bin\Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="ShaderTests.fs" />
     <Compile Include="MultiStageAgTest.fs" />
     <Compile Include="RenderingTests.fs" />
     <Compile Include="PerformanceTest.fs" />

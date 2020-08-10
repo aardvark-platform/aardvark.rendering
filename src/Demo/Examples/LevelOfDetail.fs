@@ -3,7 +3,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
@@ -552,7 +552,7 @@ module LevelOfDetail =
         let state =
             {
                 depthTest           = AVal.constant DepthTestMode.LessOrEqual
-                depthBias           = AVal.constant (DepthBiasState(0.0, 0.0, 0.0))
+                depthBias           = AVal.constant DepthBias.None
                 cullMode            = AVal.constant CullMode.None
                 frontFace           = AVal.constant WindingOrder.CounterClockwise
                 blendMode           = AVal.constant BlendMode.None

@@ -124,7 +124,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                         let viewSam = 
                                             descriptions |> List.map (fun (textureName, samplerState) -> 
                                                 let textureName = Symbol.Create textureName
-                                                let samplerState = samplerState.SamplerStateDescription
+                                                let samplerState = samplerState.SamplerState
 
                                                 match ro.Uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
                                                 | Some (:? aval<ITexture> as tex) ->
@@ -305,7 +305,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                         let viewSam = 
                                             descriptions |> List.map (fun (textureName, samplerState) -> 
                                                 let textureName = Symbol.Create textureName
-                                                let samplerState = samplerState.SamplerStateDescription
+                                                let samplerState = samplerState.SamplerState
 
                                                 match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
                                                 | Some (:? aval<ITexture> as tex) ->

@@ -4,7 +4,7 @@ open Aardvark.Base
 open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
-open Aardvark.Base.Rendering
+
 
 
 [<AutoOpen>]

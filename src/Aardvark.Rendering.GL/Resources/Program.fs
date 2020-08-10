@@ -7,7 +7,7 @@ open System.Threading
 open System.Collections.Concurrent
 open Aardvark.Base
 open Aardvark.Rendering
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering.ShaderReflection
 open FSharp.Data.Adaptive
 open OpenTK.Graphics.OpenGL4
@@ -23,7 +23,7 @@ module private ShaderProgramCounters =
         Interlocked.Decrement(&ctx.MemoryUsage.ShaderProgramCount) |> ignore
 
 
-type ActiveUniform = { slot : int; index : int; location : int; name : string; semantic : string; samplerState : Option<SamplerStateDescription>; size : int; uniformType : ActiveUniformType; offset : int; arrayStride : int; isRowMajor : bool } with
+type ActiveUniform = { slot : int; index : int; location : int; name : string; semantic : string; samplerState : Option<SamplerState>; size : int; uniformType : ActiveUniformType; offset : int; arrayStride : int; isRowMajor : bool } with
     member x.Interface =
 
         let name =

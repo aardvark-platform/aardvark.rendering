@@ -1,6 +1,5 @@
 ﻿open Aardvark.Base
 open Aardvark.Rendering
-open Aardvark.Base.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
@@ -187,17 +186,6 @@ let main argv =
     let factor = fvc / (256L * 256L * 256L)
 
     let drawCall = DrawCallInfo(FaceVertexCount = (fvc / factor |> int), InstanceCount = 1)
-
-    let blendMode = 
-        BlendMode(
-           Operation = BlendOperation.Add,
-           AlphaOperation = BlendOperation.Add,
-           SourceFactor = BlendFactor.One,
-           DestinationFactor = BlendFactor.One,
-           SourceAlphaFactor =BlendFactor.One,
-           DestinationAlphaFactor = BlendFactor.One,
-           Enabled = true
-        )
 
     let signature =
         win.Runtime.CreateFramebufferSignature [

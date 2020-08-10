@@ -6,7 +6,7 @@
 //open System
 
 //open Aardvark.Base
-//open Aardvark.Base.Rendering
+//
 //open FSharp.Data.Adaptive
 //open Aardvark.Rendering.GL
 //open Aardvark.Application

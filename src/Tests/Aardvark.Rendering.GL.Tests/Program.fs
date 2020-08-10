@@ -2,7 +2,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open FSharp.Data.Adaptive
 open Aardvark.Rendering
 open Aardvark.Rendering.GL
@@ -63,7 +63,7 @@ let testCompile() =
             Surface             = Surface.Backend (surface :> ISurface)
                       
             DepthTest           = AVal.constant DepthTestMode.LessOrEqual
-            DepthBias           = AVal.constant (DepthBiasState(0.0, 0.0, 0.0))
+            DepthBias           = AVal.constant DepthBias.None
             CullMode            = AVal.constant CullMode.None
             FrontFace           = AVal.constant WindingOrder.CounterClockwise
             BlendMode           = AVal.constant BlendMode.None

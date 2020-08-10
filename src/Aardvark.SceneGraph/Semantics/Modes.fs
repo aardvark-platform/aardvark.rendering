@@ -4,7 +4,7 @@ open Aardvark.Base
 open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering
 
 open Aardvark.SceneGraph.Internal
@@ -14,7 +14,7 @@ module ModeSemantics =
 
     type Ag.Scope with
         member x.DepthTestMode : aval<DepthTestMode> = x?DepthTestMode
-        member x.DepthBias     : aval<DepthBiasState> = x?DepthBias
+        member x.DepthBias     : aval<DepthBias>     = x?DepthBias
         member x.CullMode      : aval<CullMode>      = x?CullMode
         member x.FrontFace     : aval<WindingOrder>  = x?FrontFace
         member x.FillMode      : aval<FillMode>      = x?FillMode
@@ -53,7 +53,7 @@ module ModeSemantics =
         let defaultDepthWriteMask = AVal.constant true
         let defaultConservativeRaster = AVal.constant false
         let defaultMultisample = AVal.constant true
-        let defaultDepthBias = AVal.constant (DepthBiasState(0.0, 0.0, 0.0))
+        let defaultDepthBias = AVal.constant DepthBias.None
         let defaultFrontFace = AVal.constant WindingOrder.Clockwise
 
         member x.DepthTestMode(e : Root<ISg>, scope : Ag.Scope) =
@@ -121,20 +121,5 @@ module ModeSemantics =
 
         member x.BlendMode(a : Sg.BlendModeApplicator, scope : Ag.Scope) =
             a.Child?BlendMode <- a.Mode
-
-        member x.DepthTestMode(a : Sg.RasterizerStateApplicator, scope : Ag.Scope) =
-            a.Child?DepthTestMode <- a.DepthTestMode
-
-        member x.CullMode(a : Sg.RasterizerStateApplicator, scope : Ag.Scope) =
-            a.Child?CullMode <- a.CullMode
-
-        member x.FillMode(a : Sg.RasterizerStateApplicator, scope : Ag.Scope) =
-            a.Child?FillMode <- a.FillMode
-
-        member x.StencilMode(a : Sg.RasterizerStateApplicator, scope : Ag.Scope) =
-            a.Child?StencilMode <- a.StencilMode
-
-        member x.BlendMode(a : Sg.RasterizerStateApplicator, scope : Ag.Scope) =
-            a.Child?BlendMode <- a.BlendMode
 
 

@@ -3,7 +3,7 @@
 open Aardvark.Base
 
 module DefaultSemantic =
-    
+
     let Positions = Sym.ofString "Positions"
     let Normals = Sym.ofString "Normals"
     let Colors = Sym.ofString "Colors"
@@ -19,7 +19,7 @@ module DefaultSemantic =
     let EmissiveColorTexture = Sym.ofString "EmissiveColorTexture"
     let SpecularColorTexture = Sym.ofString "SpecularColorTexture"
     let ShininessTexture = Sym.ofString "ShininessTexture"
-    
+
     let LightMapTexture = Sym.ofString "LightMapTexture"
     let NormalMapTexture = Sym.ofString "NormalMapTexture"
 

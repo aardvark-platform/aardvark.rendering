@@ -2,7 +2,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Base.Ag
 open Aardvark.Rendering
 open System.Collections.Generic
@@ -110,11 +110,11 @@ module SgFSharp =
         let runtimeDependentDiffuseTexture(tex : IRuntime -> aval<ITexture>) (sg : ISg) =
             runtimeDependentTexture DefaultSemantic.DiffuseColorTexture tex sg
 
-        let samplerState (sem : Symbol) (state : aval<Option<SamplerStateDescription>>) (sg : ISg) =
+        let samplerState (sem : Symbol) (state : aval<Option<SamplerState>>) (sg : ISg) =
             let modifier =   
                 adaptive {
                     let! user = state
-                    return fun (textureSem : Symbol) (state : SamplerStateDescription) ->
+                    return fun (textureSem : Symbol) (state : SamplerState) ->
                         if sem = textureSem then
                             match user with
                                 | Some state -> state
@@ -124,11 +124,11 @@ module SgFSharp =
                 }
             sg |> uniform (string DefaultSemantic.SamplerStateModifier) modifier
 
-        let modifySamplerState (sem : Symbol) (modifier : aval<SamplerStateDescription -> SamplerStateDescription>) (sg : ISg) =
+        let modifySamplerState (sem : Symbol) (modifier : aval<SamplerState -> SamplerState>) (sg : ISg) =
             let modifier =   
                 adaptive {
                     let! modifier = modifier
-                    return fun (textureSem : Symbol) (state : SamplerStateDescription) ->
+                    return fun (textureSem : Symbol) (state : SamplerState) ->
                         if sem = textureSem then
                             modifier state
                         else
@@ -154,6 +154,9 @@ module SgFSharp =
         let stencilMode (m : aval<StencilMode>) (sg : ISg) =
             Sg.StencilModeApplicator(m,sg) :> ISg
 
+        let stencilMode' (m : aval<StencilState>) (sg : ISg) =
+            Sg.StencilModeApplicator(m,sg) :> ISg
+
         let depthTest (m : aval<DepthTestMode>) (sg : ISg) =
             Sg.DepthTestModeApplicator(m, sg) :> ISg
 
@@ -169,7 +172,7 @@ module SgFSharp =
         let depthMask (depthWriteEnabled : aval<bool>) (sg : ISg) =
             Sg.DepthWriteMaskApplicator(depthWriteEnabled, AVal.constant sg)
 
-        let depthBias (m : aval<DepthBiasState>) (sg: ISg) =
+        let depthBias (m : aval<DepthBias>) (sg: ISg) =
             Sg.DepthBiasApplicator(m, sg) :> ISg
 
         let frontFace (m : aval<WindingOrder>) (sg: ISg) = 

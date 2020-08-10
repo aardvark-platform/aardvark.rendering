@@ -5,7 +5,7 @@
 module WeightedBlended =
 
     open Aardvark.Base
-    open Aardvark.Base.Rendering
+    
     open Aardvark.Rendering
     open Aardvark.SceneGraph
     open FSharp.Data.Adaptive
@@ -110,7 +110,7 @@ module WeightedBlended =
         let private diffuseSampler =
             sampler2d {
                 texture uniform?DiffuseColorTexture
-                filter Filter.MinMagMipLinear
+                filter Filter.MinMagPoint
                 addressU WrapMode.Wrap
                 addressV WrapMode.Wrap
             }
@@ -118,7 +118,7 @@ module WeightedBlended =
         let private diffuseSamplerMS =
             sampler2dMS {
                 texture uniform?DiffuseColorTexture
-                filter Filter.MinMagMipLinear
+                filter Filter.MinMagPoint
                 addressU WrapMode.Wrap
                 addressV WrapMode.Wrap
             }
@@ -135,12 +135,11 @@ module WeightedBlended =
     module private Utility =
 
         let blendModeTransparencyPass =
-            BlendMode(
-                BlendFactor.One,
-                BlendFactor.One,
-                BlendFactor.Zero,
-                BlendFactor.InvSourceAlpha
-            )
+            { BlendMode.Blend with
+                SourceColorFactor       = BlendFactor.One
+                DestinationColorFactor  = BlendFactor.One
+                SourceAlphaFactor       = BlendFactor.Zero
+                DestinationAlphaFactor  = BlendFactor.InvSourceAlpha }
 
         let createAttachment (runtime : IRuntime) (format : RenderbufferFormat) (samples : int) (size : aval<V2i>) =
             runtime.CreateTextureAttachment(

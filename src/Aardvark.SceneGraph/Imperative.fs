@@ -3,7 +3,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Base.Ag
 open Aardvark.Rendering
 open TrafoOperators
@@ -17,7 +17,7 @@ type AirState =
         surface             : Surface
 
         depthTest           : aval<DepthTestMode>
-        depthBias           : aval<DepthBiasState>
+        depthBias           : aval<DepthBias>
         cullMode            : aval<CullMode>
         frontFace           : aval<WindingOrder>
         blendMode           : aval<BlendMode>

@@ -3,13 +3,13 @@
 open System
 open FSharp.Data.Adaptive
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering
 
 type PipelineState =
     {
         depthTest           : aval<DepthTestMode>
-        depthBias           : aval<DepthBiasState>
+        depthBias           : aval<DepthBias>
         cullMode            : aval<CullMode>
         frontFace           : aval<WindingOrder>
         blendMode           : aval<BlendMode>

@@ -2,7 +2,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 
@@ -405,14 +405,14 @@ module RasterizerState =
         ]
 
    
-    let create (usesDiscard : bool) (depth : DepthTestMode) (bias : DepthBiasState) (cull : CullMode) (frontFace : WindingOrder) (fill : FillMode) =
+    let create (usesDiscard : bool) (depth : DepthTestMode) (bias : DepthBias) (cull : CullMode) (frontFace : WindingOrder) (fill : FillMode) =
         {
             depthClampEnable        = depth.Clamp
             rasterizerDiscardEnable = usesDiscard
             polygonMode             = toVkPolygonMode fill
             cullMode                = toVkCullMode cull
             frontFace               = toVkFrontFace frontFace
-            depthBiasEnable         = bias.BiasEnabled
+            depthBiasEnable         = bias.Enabled
             depthBiasConstantFactor = bias.Constant
             depthBiasClamp          = bias.Clamp
             depthBiasSlopeFactor    = bias.SlopeScale
@@ -498,24 +498,24 @@ module MultisampleState =
 module DepthState =
     let private toVkCompareOp =
         LookupTable.lookupTable [
-            DepthTestComparison.None, VkCompareOp.Always
-            DepthTestComparison.Greater, VkCompareOp.Greater
-            DepthTestComparison.GreaterOrEqual, VkCompareOp.GreaterOrEqual
-            DepthTestComparison.Less, VkCompareOp.Less
-            DepthTestComparison.LessOrEqual, VkCompareOp.LessOrEqual
-            DepthTestComparison.Equal, VkCompareOp.Equal
-            DepthTestComparison.NotEqual, VkCompareOp.NotEqual
-            DepthTestComparison.Never, VkCompareOp.Never
-            DepthTestComparison.Always, VkCompareOp.Always
+            ComparisonFunction.Greater, VkCompareOp.Greater
+            ComparisonFunction.GreaterOrEqual, VkCompareOp.GreaterOrEqual
+            ComparisonFunction.Less, VkCompareOp.Less
+            ComparisonFunction.LessOrEqual, VkCompareOp.LessOrEqual
+            ComparisonFunction.Equal, VkCompareOp.Equal
+            ComparisonFunction.NotEqual, VkCompareOp.NotEqual
+            ComparisonFunction.Never, VkCompareOp.Never
+            ComparisonFunction.Always, VkCompareOp.Always
+            ComparisonFunction.None, VkCompareOp.Always
         ]
 
     let create (write : bool) (mode : DepthTestMode) =
         {
-            testEnabled             = mode.IsEnabled
+            testEnabled             = mode.Enabled
             writeEnabled            = write
             boundsTest              = false
             compare                 = toVkCompareOp mode.Comparison
-            depthBounds             = if mode.Clamp then mode.Bounds else Range1d(0.0, 1.0)
+            depthBounds             = Range1d(0.0, 1.0)
         }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -534,6 +534,7 @@ module StencilState =
 
     let private toVkStencilCompareOp  =
         LookupTable.lookupTable [
+            ComparisonFunction.None, VkCompareOp.Always
             ComparisonFunction.Always, VkCompareOp.Always
             ComparisonFunction.Equal, VkCompareOp.Equal
             ComparisonFunction.Greater, VkCompareOp.Greater
@@ -549,7 +550,7 @@ module StencilState =
             toVkStencilOp state.Fail,
             toVkStencilOp state.Pass,
             toVkStencilOp state.DepthFail,
-            toVkStencilCompareOp state.Compare,
+            toVkStencilCompareOp state.Comparison,
             state.CompareMask,
             state.WriteMask,
             uint32 state.Reference

@@ -2,7 +2,6 @@
 
 open System.Diagnostics
 open Aardvark.Base
-open Aardvark.Base.Rendering
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.Rendering.Vulkan
@@ -112,20 +111,19 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
 
     let compileHidden (m : IndexedGeometry) =
         let writeStencil =
-            StencilMode(
-                StencilOperation.Replace,
-                StencilOperation.Replace,
-                StencilOperation.Replace,
-                ComparisonFunction.Always,
-                1
-            )
+            { StencilState.Default with
+                Pass = StencilOperation.Replace
+                Fail = StencilOperation.Replace
+                DepthFail = StencilOperation.Replace
+                Comparison = ComparisonFunction.Always
+                Reference = 1 }
 
         let sg =
             Sg.ofIndexedGeometry m
                 |> Sg.shader {
                     do! StereoShader.hiddenAreaFragment
                 }
-                |> Sg.stencilMode (AVal.constant writeStencil)
+                |> Sg.stencilMode' (AVal.constant writeStencil)
                 |> Sg.writeBuffers' (Set.ofList [DefaultSemantic.Stencil])
 
         hiddenTask <- RuntimeCommand.Render(sg.RenderObjects(Ag.Scope.Root))

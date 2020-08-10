@@ -6,7 +6,7 @@ open System
 open System.Threading
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
@@ -1152,7 +1152,7 @@ module ComputeShader =
                     iface.shaderSamplers |> Seq.collect (fun samName ->
                         let sam = iface.program.samplers.[samName]
                         sam.samplerTextures |> Seq.mapi (fun i (_, state) ->
-                            (samName, i), device.CreateSampler state.SamplerStateDescription
+                            (samName, i), device.CreateSampler state.SamplerState
                         )
                     )
                     |> Map.ofSeq
@@ -1233,7 +1233,7 @@ module ComputeShader =
 
                
                     let samplers =
-                        shader.csSamplerStates |> Map.map (fun _ s -> device.CreateSampler s.SamplerStateDescription)
+                        shader.csSamplerStates |> Map.map (fun _ s -> device.CreateSampler s.SamplerState)
                 
 
                     return ComputeShader(device, sm, layout, !!pHandle, shader.csTextureNames, samplers, shader.csLocalSize, Some glsl.code)
@@ -1361,11 +1361,8 @@ module ComputeShader =
                                     references.[texName] <- reference :: old
                                 | _ ->
                                     let sampler =
-                                        let state = SamplerStateDescription()
-                                        state.AddressU <- WrapMode.Clamp
-                                        state.AddressV <- WrapMode.Clamp
-                                        state.Filter <- TextureFilter.MinMagLinearMipPoint
-                                        device.CreateSampler state
+                                        { SamplerState.Default with Filter = TextureFilter.MinMagLinearMipPoint }
+                                        |> device.CreateSampler
 
 
                                     let reference = SampledImageRef(si, bi, i, img.samplerType, sampler)

@@ -13,7 +13,7 @@ open Aardvark.Application
 open System.Diagnostics
 open Aardvark.SceneGraph.Semantics
 open Aardvark.Application.WinForms
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering
 
 

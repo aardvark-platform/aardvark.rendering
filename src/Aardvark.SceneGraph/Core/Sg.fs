@@ -3,7 +3,7 @@
 open System
 open Aardvark.Base
 open Aardvark.Base.Ag
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 
@@ -173,12 +173,12 @@ module Sg =
 
         new(mode : aval<DepthTestMode>, child : ISg) = DepthTestModeApplicator(mode, AVal.constant child)
 
-     type DepthBiasApplicator(bias : aval<DepthBiasState>, child : aval<ISg>) =
+     type DepthBiasApplicator(bias : aval<DepthBias>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.State = bias
 
-        new(state : aval<DepthBiasState>, child : ISg) = DepthBiasApplicator(state, AVal.constant child)
+        new(state : aval<DepthBias>, child : ISg) = DepthBiasApplicator(state, AVal.constant child)
 
     type CullModeApplicator(mode : aval<CullMode>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
@@ -208,6 +208,7 @@ module Sg =
         member x.Mode = mode
 
         new(value : aval<StencilMode>, child : ISg) = StencilModeApplicator(value, AVal.constant child)
+        new(value : aval<StencilState>, child : ISg) = StencilModeApplicator(value |> AVal.map StencilMode.single, AVal.constant child)
 
     type BlendModeApplicator(mode : aval<BlendMode>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
@@ -215,28 +216,6 @@ module Sg =
         member x.Mode = mode
 
         new(value : aval<BlendMode>, child : ISg) = BlendModeApplicator(value, AVal.constant child)
-
-    type RasterizerStateApplicator(state : aval<RasterizerState>, child : aval<ISg>) =
-        inherit AbstractApplicator(child)
-
-        let depth = state |> AVal.map (fun s -> s.DepthTest)
-        let bias = state |> AVal.map (fun s -> s.DepthBias)
-        let cull = state |> AVal.map (fun s -> s.CullMode)
-        let front = state |> AVal.map (fun s -> s.FrontFace)
-        let fill = state |> AVal.map (fun s -> s.FillMode)
-        let stencil = state |> AVal.map (fun s -> s.StencilMode)
-        let blend = state |> AVal.map (fun s -> s.BlendMode)
-
-        member x.RasterizerState = state
-        member x.DepthTestMode = depth
-        member x.DepthBias = bias
-        member x.CullMode = cull
-        member x.FrontFace = front
-        member x.FillMode = fill
-        member x.StencilMode = stencil
-        member x.BlendMode = blend
-
-        new(value : aval<RasterizerState>, child : ISg) = RasterizerStateApplicator(value, AVal.constant child)
 
     type WriteBuffersApplicator(buffers : Option<Set<Symbol>>, child : aval<ISg>) =
         inherit AbstractApplicator(child)

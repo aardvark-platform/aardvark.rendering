@@ -20,7 +20,7 @@ namespace Examples
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open FSharp.Data.Adaptive
 
 open Aardvark.Rendering.Interactive

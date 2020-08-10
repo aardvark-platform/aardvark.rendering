@@ -2,7 +2,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering
 open System.Runtime.CompilerServices
 open Aardvark.SceneGraph
@@ -101,16 +101,16 @@ type SceneGraphExtensions =
     static member DepthTestMode(sg : ISg, mode : aval<DepthTestMode>) = Sg.DepthTestModeApplicator(mode, sg) :> ISg
 
     [<Extension>]
-    static member DepthBias(sg : ISg, constant : float, slopeScale : float) = Sg.DepthBiasApplicator(AVal.constant (DepthBiasState(constant, slopeScale, 0.0)), sg) :> ISg
+    static member DepthBias(sg : ISg, constant : float, slopeScale : float) = Sg.DepthBiasApplicator(AVal.constant (DepthBias.simple constant slopeScale), sg) :> ISg
 
     [<Extension>]
-    static member DepthBias(sg : ISg, constant : float, slopeScale : float, clamp : float) = Sg.DepthBiasApplicator(AVal.constant (DepthBiasState(constant, slopeScale, clamp)), sg) :> ISg
+    static member DepthBias(sg : ISg, constant : float, slopeScale : float, clamp : float) = Sg.DepthBiasApplicator(AVal.constant (DepthBias.custom constant slopeScale clamp), sg) :> ISg
 
     [<Extension>]
-    static member DepthBias(sg : ISg, state : DepthBiasState) = Sg.DepthBiasApplicator(AVal.constant state, sg) :> ISg
+    static member DepthBias(sg : ISg, state : DepthBias) = Sg.DepthBiasApplicator(AVal.constant state, sg) :> ISg
 
     [<Extension>]
-    static member DepthBias(sg : ISg, state : aval<DepthBiasState>) = Sg.DepthBiasApplicator(state, sg) :> ISg
+    static member DepthBias(sg : ISg, state : aval<DepthBias>) = Sg.DepthBiasApplicator(state, sg) :> ISg
 
     [<Extension>]
     static member WithEffects(sg : ISg, effects : seq<FShadeEffect>) : ISg = Sg.effect effects sg

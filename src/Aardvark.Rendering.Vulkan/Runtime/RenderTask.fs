@@ -4,7 +4,7 @@ open System
 open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Base.Sorting
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
@@ -42,7 +42,7 @@ module RenderCommands =
             surface             : Aardvark.Rendering.Surface
 
             depthTest           : aval<DepthTestMode>
-            depthBias           : aval<DepthBiasState>
+            depthBias           : aval<DepthBias>
             cullMode            : aval<CullMode>
             frontFace           : aval<WindingOrder>
             blendMode           : aval<BlendMode>

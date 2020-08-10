@@ -26,7 +26,6 @@ and IRuntime =
     abstract member OnDispose : IEvent<unit>
     abstract member ResourceManager : IResourceManager
 
-    abstract member AssembleEffect : FShade.Effect * IFramebufferSignature * IndexedGeometryMode -> BackendSurface
     abstract member AssembleModule : FShade.Effect * IFramebufferSignature * IndexedGeometryMode -> FShade.Imperative.Module
 
     abstract member PrepareSurface : IFramebufferSignature * ISurface -> IBackendSurface

@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.Rendering
 
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FShade
 open System.Collections.Concurrent
 open System.Runtime.CompilerServices
@@ -80,77 +80,22 @@ module FShadeInterop =
         member x.HasLightMapTexture : bool = x?PerMaterial?HasLightMapTexture
         member x.HasNormalMapTexture : bool = x?PerMaterial?HasNormalMapTexture
 
+    let private toSamplerState (state : SamplerState) : Aardvark.Rendering.SamplerState =
 
-    let private backendSurfaceCache = ConcurrentDictionary<string, BackendSurface>()
+        let def = SamplerState.Default
 
-    type private AStage = Aardvark.Rendering.ShaderStage
-
-    let private getOrCreateSurface (code : string) =
-        backendSurfaceCache.GetOrAdd(code, fun (code : string) ->
-            let entries = Dictionary()
-
-            if code.Contains "#ifdef Vertex" then entries.Add(AStage.Vertex, "main")
-            if code.Contains "#ifdef Geometry" then entries.Add(AStage.Geometry, "main")
-            if code.Contains "#ifdef Fragment" then entries.Add(AStage.Fragment, "main")
-            if code.Contains "#ifdef TessControl" then entries.Add(AStage.TessControl, "main")
-            if code.Contains "#ifdef TessEval" then entries.Add(AStage.TessEval, "main")
-
-            BackendSurface(code, entries, Map.empty, null)
-        ) 
-
-    let private toWrapMode (mode : WrapMode) =
-        match mode with
-            | WrapMode.Border -> Aardvark.Base.Rendering.WrapMode.Border
-            | WrapMode.Clamp -> Aardvark.Base.Rendering.WrapMode.Clamp
-            | WrapMode.Mirror -> Aardvark.Base.Rendering.WrapMode.Mirror
-            | WrapMode.MirrorOnce -> Aardvark.Base.Rendering.WrapMode.MirrorOnce
-            | WrapMode.Wrap -> Aardvark.Base.Rendering.WrapMode.Wrap
-            | _ -> failwithf "unknown address mode %A" mode
-
-    let private toTextureFilter (mode : Filter) =
-        match mode with
-            | Filter.Anisotropic -> Aardvark.Base.Rendering.TextureFilter.Anisotropic
-            | Filter.MinLinearMagMipPoint -> Aardvark.Base.Rendering.TextureFilter.MinLinearMagMipPoint
-            | Filter.MinLinearMagPointMipLinear -> Aardvark.Base.Rendering.TextureFilter.MinLinearMagPointMipLinear
-            | Filter.MinMagLinearMipPoint -> Aardvark.Base.Rendering.TextureFilter.MinMagLinearMipPoint
-            | Filter.MinMagMipLinear -> Aardvark.Base.Rendering.TextureFilter.MinMagMipLinear
-            | Filter.MinMagMipPoint -> Aardvark.Base.Rendering.TextureFilter.MinMagMipPoint
-            | Filter.MinMagPointMipLinear -> Aardvark.Base.Rendering.TextureFilter.MinMagPointMipLinear
-            | Filter.MinPointMagLinearMipPoint -> Aardvark.Base.Rendering.TextureFilter.MinPointMagLinearMipPoint
-            | Filter.MinPointMagMipLinear -> Aardvark.Base.Rendering.TextureFilter.MinPointMagMipLinear
-            | Filter.MinMagPoint -> Aardvark.Base.Rendering.TextureFilter.MinMagPoint
-            | Filter.MinMagLinear -> Aardvark.Base.Rendering.TextureFilter.MinMagLinear
-            | Filter.MinPointMagLinear -> Aardvark.Base.Rendering.TextureFilter.MinPointMagLinear
-            | Filter.MinLinearMagPoint -> Aardvark.Base.Rendering.TextureFilter.MinLinearMagPoint
-            | _ -> failwithf "unknown filter mode: %A" mode
-
-    let private toCompareFunction (f : ComparisonFunction) =
-        match f with
-            | ComparisonFunction.Never -> SamplerComparisonFunction.Never
-            | ComparisonFunction.Less -> SamplerComparisonFunction.Less
-            | ComparisonFunction.LessOrEqual -> SamplerComparisonFunction.LessOrEqual
-            | ComparisonFunction.Greater -> SamplerComparisonFunction.Greater
-            | ComparisonFunction.GreaterOrEqual -> SamplerComparisonFunction.GreaterOrEqual
-            | ComparisonFunction.NotEqual -> SamplerComparisonFunction.NotEqual
-            | ComparisonFunction.Always -> SamplerComparisonFunction.Always
-            | _ -> failwithf "unknown compare mode: %A" f
-
-    let private toSamplerStateDescription (state : SamplerState) =
-
-        let r = Aardvark.Base.Rendering.SamplerStateDescription()
-        let a = r.AddressU
-        state.AddressU |> Option.iter (fun a -> r.AddressU <- toWrapMode a)
-        state.AddressV |> Option.iter (fun a -> r.AddressV <- toWrapMode a)
-        state.AddressW |> Option.iter (fun a -> r.AddressW <- toWrapMode a)
-        state.Filter |> Option.iter (fun f -> r.Filter <- toTextureFilter f)
-
-        state.BorderColor |> Option.iter (fun b -> r.BorderColor <- b)
-        state.MaxAnisotropy |> Option.iter (fun b -> r.MaxAnisotropy <- b)
-        state.MaxLod |> Option.iter (fun b -> r.MinLod <- float32 b)
-        state.MinLod |> Option.iter (fun b -> r.MaxLod <- float32 b)
-        state.MipLodBias |> Option.iter (fun b -> r.MipLodBias <- float32 b)
-        state.Comparison |> Option.iter (fun b -> r.ComparisonFunction <- toCompareFunction b)
-        r
+        {
+            Filter        = state.Filter                               |> Option.defaultValue def.Filter
+            BorderColor   = state.BorderColor                          |> Option.defaultValue def.BorderColor
+            AddressU      = state.AddressU                             |> Option.defaultValue def.AddressU
+            AddressV      = state.AddressV                             |> Option.defaultValue def.AddressV
+            AddressW      = state.AddressW                             |> Option.defaultValue def.AddressW
+            Comparison    = state.Comparison    |> Option.map unbox<_> |> Option.defaultValue def.Comparison
+            MaxAnisotropy = state.MaxAnisotropy                        |> Option.defaultValue def.MaxAnisotropy
+            MinLod        = state.MinLod        |> Option.map float32  |> Option.defaultValue def.MinLod
+            MaxLod        = state.MaxLod        |> Option.map float32  |> Option.defaultValue def.MaxLod
+            MipLodBias    = state.MipLodBias    |> Option.map float32  |> Option.defaultValue def.MipLodBias
+        }
 
     let private builtInTypes =
         Dictionary.ofList [
@@ -334,7 +279,7 @@ module FShadeInterop =
             { format = typeToFormat t; samples = 1 }
 
     type SamplerState with
-        member x.SamplerStateDescription = toSamplerStateDescription x
+        member x.SamplerState = toSamplerState x
 
     let toInputTopology =
         LookupTable.lookupTable [
@@ -422,7 +367,6 @@ module FShadeInterop =
     type FShadeSurface private(effect : FShadeEffect) =
         static let surfaceCache = System.Collections.Concurrent.ConcurrentDictionary<string, FShadeSurface>()
 
-        let cache = Dict<IFramebufferSignature, BackendSurface>()
         let uniforms = SymDict.empty
         let samplerStates = SymDict.empty
 

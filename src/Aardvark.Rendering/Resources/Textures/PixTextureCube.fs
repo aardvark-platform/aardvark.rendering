@@ -22,3 +22,20 @@ type PixTextureCube(data : PixImageCube,  textureParams : TextureParams) =
 
     interface ITexture with
         member x.WantMipMaps = textureParams.wantMipMaps
+
+
+[<AutoOpen>]
+module PixImageCubeTextureExtensions =
+
+    open System.Runtime.CompilerServices
+
+    [<AbstractClass; Sealed; Extension>]
+    type PixImageCubeExtensions private() =
+
+        [<Extension>]
+        static member ToTexture(this : PixImageCube, mipMaps : bool) =
+            PixTextureCube(this, mipMaps) :> ITexture
+
+    module PixImageCube =
+        let toTexture (mipMaps : bool) (c : PixImageCube) =
+            c.ToTexture mipMaps

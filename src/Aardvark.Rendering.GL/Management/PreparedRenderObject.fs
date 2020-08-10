@@ -5,7 +5,7 @@
 open System
 open FSharp.Data.Adaptive
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering
 open Microsoft.FSharp.NativeInterop
 open OpenTK.Graphics.OpenGL4
@@ -198,7 +198,7 @@ module PreparedPipelineState =
 
             let samplerModifier = 
                 match uniforms.TryGetUniform(scope, DefaultSemantic.SamplerStateModifier) with
-                    | Some(:? aval<Symbol -> SamplerStateDescription -> SamplerStateDescription> as mode) ->
+                    | Some(:? aval<Symbol -> SamplerState -> SamplerState> as mode) ->
                         Some mode
                     | _ ->
                         None

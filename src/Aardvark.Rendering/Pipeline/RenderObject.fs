@@ -3,7 +3,7 @@
 open System
 open FSharp.Data.Adaptive
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering
 
 [<AutoOpen>]
@@ -38,7 +38,7 @@ and [<CustomEquality; CustomComparison>] RenderObject =
         mutable Surface             : Surface
 
         mutable DepthTest           : aval<DepthTestMode>
-        mutable DepthBias           : aval<DepthBiasState>
+        mutable DepthBias           : aval<DepthBias>
         mutable CullMode            : aval<CullMode>
         mutable FrontFace           : aval<WindingOrder>
         mutable BlendMode           : aval<BlendMode>

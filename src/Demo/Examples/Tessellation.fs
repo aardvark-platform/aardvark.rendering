@@ -3,6 +3,7 @@
 
 open System
 open Aardvark.Base
+
 open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
@@ -10,7 +11,6 @@ open Aardvark.Application
 open Aardvark.Application.WinForms
 open FSharp.Data.Adaptive.Operators
 open Aardvark.Rendering
-open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Text
 

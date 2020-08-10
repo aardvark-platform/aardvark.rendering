@@ -3,7 +3,7 @@
 open System
 open System.Runtime.CompilerServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Microsoft.FSharp.NativeInterop
@@ -495,12 +495,12 @@ module Resources =
             }
         )
 
-    type SamplerResource(owner : IResourceCache, key : list<obj>, device : Device, input : aval<SamplerStateDescription>) =
-        inherit ImmutableResourceLocation<SamplerStateDescription, Sampler>(
+    type SamplerResource(owner : IResourceCache, key : list<obj>, device : Device, input : aval<SamplerState>) =
+        inherit ImmutableResourceLocation<SamplerState, Sampler>(
             owner, key, 
             input,
             {
-                icreate = fun (b : SamplerStateDescription) -> device.CreateSampler(b)
+                icreate = fun (b : SamplerState) -> device.CreateSampler(b)
                 idestroy = fun b -> device.Delete b
                 ieagerDestroy = true
             }
@@ -642,7 +642,7 @@ module Resources =
                 float32 depth.depthBounds.Max
             )
             
-    type RasterizerStateResource(owner : IResourceCache, key : list<obj>, depth : aval<DepthTestMode>, bias : aval<DepthBiasState>, cull : aval<CullMode>, frontFace : aval<WindingOrder>, fill : aval<FillMode>) =
+    type RasterizerStateResource(owner : IResourceCache, key : list<obj>, depth : aval<DepthTestMode>, bias : aval<DepthBias>, cull : aval<CullMode>, frontFace : aval<WindingOrder>, fill : aval<FillMode>) =
         inherit AbstractPointerResourceWithEquality<VkPipelineRasterizationStateCreateInfo>(owner, key)
 
         override x.Compute(token) =
@@ -1254,7 +1254,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateImageView(imageType : FShade.GLSL.GLSLImageType, input : IResourceLocation<Image>) =
         imageViewCache.GetOrCreate([imageType :> obj; input :> obj], fun cache key -> new StorageImageViewResource(cache, key, device, imageType, input))
         
-    member x.CreateSampler(data : aval<SamplerStateDescription>) =
+    member x.CreateSampler(data : aval<SamplerState>) =
         samplerCache.GetOrCreate([data :> obj], fun cache key -> new SamplerResource(cache, key, device, data))
         
     member x.CreateShaderProgram(data : ISurface) =
@@ -1403,7 +1403,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateDepthStencilState(depthWrite : bool, depth : aval<DepthTestMode>, stencil : aval<StencilMode>) =
         depthStencilCache.GetOrCreate([depthWrite :> obj; depth :> obj; stencil :> obj], fun cache key -> new DepthStencilStateResource(cache, key, depthWrite, depth, stencil))
         
-    member x.CreateRasterizerState(depth : aval<DepthTestMode>, bias : aval<DepthBiasState>, cull : aval<CullMode>, front : aval<WindingOrder>, fill : aval<FillMode>) =
+    member x.CreateRasterizerState(depth : aval<DepthTestMode>, bias : aval<DepthBias>, cull : aval<CullMode>, front : aval<WindingOrder>, fill : aval<FillMode>) =
         rasterizerStateCache.GetOrCreate([depth :> obj; bias :> obj; cull :> obj; front :> obj, fill :> obj], fun cache key -> new RasterizerStateResource(cache, key, depth, bias, cull, front, fill))
 
     member x.CreateColorBlendState(pass : RenderPass, writeBuffers : Option<Set<Symbol>>, blend : aval<BlendMode>) =

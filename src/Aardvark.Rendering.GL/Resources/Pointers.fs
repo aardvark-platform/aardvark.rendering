@@ -2,7 +2,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering
 open Microsoft.FSharp.NativeInterop
 open OpenTK.Graphics.OpenGL4
@@ -47,10 +47,10 @@ module PointerContextExtensions =
         let inline toGLStencilMode (mode : StencilMode) =
             GLStencilMode(
                 Enabled = (if mode.Enabled then 1 else 0),
-                CmpFront = Translations.toGLCompareFunction mode.Front.Compare,
+                CmpFront = Translations.toGLCompareFunction mode.Front.Comparison,
                 MaskFront = mode.Front.CompareMask,
                 ReferenceFront = mode.Front.Reference,
-                CmpBack = Translations.toGLCompareFunction mode.Back.Compare,
+                CmpBack = Translations.toGLCompareFunction mode.Back.Comparison,
                 MaskBack = mode.Back.CompareMask,
                 ReferenceBack = mode.Back.Reference,
 
@@ -188,17 +188,17 @@ module PointerContextExtensions =
 
 
         member x.ToDepthTest(mode : DepthTestMode) =
-            let value = Translations.toGLComparison mode.Comparison
+            let value = Translations.toGLCompareFunction mode.Comparison
             let clamp = if mode.Clamp then 1 else 0
             DepthTestInfo(value, clamp)
 
-        member x.ToDepthBias(state : DepthBiasState) =
+        member x.ToDepthBias(state : DepthBias) =
             DepthBiasInfo(float32 state.Constant, float32 state.SlopeScale, float32 state.Clamp)
 
         member x.ToCullMode(mode : CullMode) =
             Translations.toGLCullMode mode
 
-        member x.ToFrontFace(frontFace : Aardvark.Base.Rendering.WindingOrder) =
+        member x.ToFrontFace(frontFace : Aardvark.Rendering.WindingOrder) =
             Translations.toGLFrontFace frontFace
 
         member x.ToPolygonMode(mode : FillMode) =

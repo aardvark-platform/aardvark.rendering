@@ -303,8 +303,6 @@ module FSharpPixImageCubeExtensions =
         let toOpenGlConvention (c : PixImageCube) =
             c.Transformed Trafo.ToOpenGlConventionTrafo
             
-        let toTexture (mipMaps : bool) (c : PixImageCube) =
-            PixTextureCube(c, mipMaps) :> ITexture
 
 [<AbstractClass; Sealed; Extension>]
 type PixImageCubeExtensions private() =

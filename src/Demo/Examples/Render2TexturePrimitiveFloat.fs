@@ -19,7 +19,7 @@ namespace Examples
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering.Interactive
 
 open FSharp.Data.Adaptive
@@ -59,10 +59,11 @@ module Render2TexturePrimitiveFloat =
         )
   
     let blendMode =
-        BlendMode(
-            BlendFactor.One, BlendFactor.One,
-            BlendFactor.Zero, BlendFactor.Zero
-        ) |> AVal.constant
+        { BlendMode.Blend with
+            SourceColorFactor       = BlendFactor.One
+            DestinationColorFactor  = BlendFactor.One
+            SourceAlphaFactor       = BlendFactor.Zero
+            DestinationAlphaFactor  = BlendFactor.Zero }
 
     let cnt = AVal.init 300
 
@@ -77,7 +78,7 @@ module Render2TexturePrimitiveFloat =
             |> Sg.viewTrafo ~~(CameraView.lookAt (V3d(3,3,3)) V3d.OOO V3d.OOI                   |> CameraView.viewTrafo )
             |> Sg.projTrafo ~~(Frustum.perspective 60.0 0.01 10.0 (float size.X / float size.Y) |> Frustum.projTrafo    )
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
-            |> Sg.blendMode blendMode
+            |> Sg.blendMode (AVal.constant blendMode)
             |> Sg.depthTest (AVal.constant DepthTestMode.None)
 
     // Create render tasks given the signature and concrete buffers        

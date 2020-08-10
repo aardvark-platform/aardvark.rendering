@@ -84,7 +84,6 @@ type Runtime() =
     let mutable ctx : Context = Unchecked.defaultof<_>
     let mutable manager : ResourceManager = Unchecked.defaultof<_>
 
-    let shaderCache = System.Collections.Concurrent.ConcurrentDictionary<string*list<int*Symbol>,BackendSurface>()
     let onDispose = Event<unit>()    
 
     let compute = lazy ( new GLCompute(ctx) )
@@ -396,43 +395,6 @@ type Runtime() =
 
         member x.AssembleModule (effect : Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
             signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
-
-        member x.AssembleEffect (effect : Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
-            let key = effect.Id, signature.ExtractSemantics()
-            shaderCache.GetOrAdd(key,fun _ -> 
-                let glsl = 
-                    signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
-                        |> ModuleCompiler.compileGLSL ctx.FShadeBackend
-
-                let entries =
-                    effect.Shaders 
-                        |> Map.toSeq
-                        |> Seq.map (fun (stage,_) -> ShaderStage.ofFShade stage, "main") 
-                        |> Dictionary.ofSeq
-
-                let builtIns =
-                    glsl.iface.shaders
-                        |> MapExt.toSeq 
-                        |> Seq.map (fun (k,v) -> ShaderStage.ofFShade k, v.shaderBuiltIns |> MapExt.toSeq |> Seq.map (fun (k,v) -> k, v |> MapExt.toSeq |> Seq.map fst |> Set.ofSeq) |> Map.ofSeq)
-                        |> Map.ofSeq
-
-                    
-                let samplers = Dictionary.empty
-
-                for KeyValue(k,v) in effect.Uniforms do
-                    match v.uniformValue with
-                        | UniformValue.Sampler(texName,sam) ->
-                            samplers.[(k, 0)] <- { textureName = Symbol.Create texName; samplerState = sam.SamplerStateDescription }
-                        | UniformValue.SamplerArray semSams ->
-                            for i in 0 .. semSams.Length - 1 do
-                                let (sem, sam) = semSams.[i]
-                                samplers.[(k, i)] <- { textureName = Symbol.Create sem; samplerState = sam.SamplerStateDescription }
-                        | _ ->
-                            ()
-
-                BackendSurface(glsl.code, entries, builtIns, SymDict.empty, samplers, true, null)
-
-            )
 
         member x.ResourceManager = manager :> IResourceManager
 

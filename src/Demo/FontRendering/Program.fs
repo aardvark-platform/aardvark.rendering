@@ -4,7 +4,7 @@
 open System
 open FShade
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open FSharp.Data.Adaptive
 open Aardvark.Rendering
 open Aardvark.Application

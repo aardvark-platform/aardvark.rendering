@@ -4,10 +4,10 @@ open System
 open System.Security
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
 open FSharp.Data.Adaptive
 open FShade
+open Aardvark.Rendering
 open Aardvark.Rendering.ShaderReflection
 open Aardvark.Rendering.GL
 
@@ -245,7 +245,7 @@ and ComputeShader(prog : Program, localSize : V3i) =
         iface.samplers |> MapExt.toList |> List.map (fun (_,u) ->
             match u.samplerTextures with
                 | [(name, state)] ->
-                    u.samplerBinding, name, ctx.CreateSampler state.SamplerStateDescription
+                    u.samplerBinding, name, ctx.CreateSampler state.SamplerState
                 | _ ->
                     failwith "not implemented"
             //match u.Type with
@@ -450,15 +450,6 @@ module GLComputeExtensions =
                 else failwith "[GL] compute shader has no local size"
 
             printfn "%s" glsl.code
-
-            let samplerDescriptions =
-                shader.csTextureNames |> Map.map (fun (name, index) texName ->
-                    let samplerState =
-                        match Map.tryFind (name, index) shader.csSamplerStates with
-                            | Some sam -> sam
-                            | _ -> SamplerState.empty
-                    { textureName = Symbol.Create texName; samplerState = samplerState.SamplerStateDescription }
-                )
 
             let adjust (s : GLSL.GLSLSampler) =
                 let textures =

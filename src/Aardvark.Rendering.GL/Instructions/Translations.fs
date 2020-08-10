@@ -2,7 +2,7 @@
 
 
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering
 open Aardvark.Rendering.GL.OpenGl
         
@@ -71,19 +71,6 @@ module Translations =
             | ABlendOperation.Maximum -> GLBlendOperation.Maximum |> int
             | _ -> failwithf "unknown blend operation %A" f
 
-    let toGLComparison (f : DepthTestComparison) =
-        match f with
-            | DepthTestComparison.None -> 0
-            | DepthTestComparison.Greater -> CompareFunction.Greater |> int
-            | DepthTestComparison.GreaterOrEqual -> CompareFunction.GreaterEqual |> int
-            | DepthTestComparison.Less -> CompareFunction.Less |> int
-            | DepthTestComparison.LessOrEqual -> CompareFunction.LessEqual |> int
-            | DepthTestComparison.Equal -> CompareFunction.Equal |> int
-            | DepthTestComparison.NotEqual -> CompareFunction.NotEqual |> int
-            | DepthTestComparison.Never -> CompareFunction.Never |> int
-            | DepthTestComparison.Always -> CompareFunction.Always |> int
-            | _ -> failwithf "unknown comparison %A" f
-
     let toGLCullMode (f : CullMode) =
         match f with
             | CullMode.None -> 0// glDisable(GL_CULL_FACE) / glCullFace will not be set and
@@ -92,14 +79,15 @@ module Translations =
             | CullMode.FrontAndBack-> Face.FrontAndBack |> int
             | _ -> failwithf "unknown comparison %A" f
 
-    let toGLFrontFace (f : Aardvark.Base.Rendering.WindingOrder) =
+    let toGLFrontFace (f : Aardvark.Rendering.WindingOrder) =
         match f with
-            | Aardvark.Base.Rendering.WindingOrder.Clockwise -> WindingOrder.CW |> int
-            | Aardvark.Base.Rendering.WindingOrder.CounterClockwise -> WindingOrder.CCW |> int
+            | Aardvark.Rendering.WindingOrder.Clockwise -> WindingOrder.CW |> int
+            | Aardvark.Rendering.WindingOrder.CounterClockwise -> WindingOrder.CCW |> int
             | _ -> failwithf "unknown winding order %A" f
 
     let toGLCompareFunction (f : ComparisonFunction) =
         match f with
+            | ComparisonFunction.None
             | ComparisonFunction.Always -> CompareFunction.Always |> int
             | ComparisonFunction.Equal -> CompareFunction.Equal |> int
             | ComparisonFunction.Greater -> CompareFunction.Greater |> int

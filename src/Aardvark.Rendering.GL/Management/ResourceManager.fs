@@ -8,7 +8,7 @@ open System.Threading
 open System.Collections.Concurrent
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open OpenTK.Graphics.OpenGL4
@@ -303,9 +303,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     let textureArrayCache = UnaryCache<aval<ITexture[]>, ConcurrentDictionary<int, List<IResource<Texture,V2i>>>>(fun ta -> ConcurrentDictionary<int, List<IResource<Texture,V2i>>>())
 
-    let staticSamplerStateCache = ConcurrentDictionary<FShade.SamplerState, aval<SamplerStateDescription>>()
-    let dynamicSamplerStateCache = ConcurrentDictionary<Symbol * SamplerStateDescription, UnaryCache<aval<(Symbol -> SamplerStateDescription -> SamplerStateDescription)>, aval<SamplerStateDescription>>>()
-    let samplerDescriptionCache = ConcurrentDictionary<FShade.SamplerState, SamplerStateDescription>() 
+    let staticSamplerStateCache = ConcurrentDictionary<FShade.SamplerState, aval<SamplerState>>()
+    let dynamicSamplerStateCache = ConcurrentDictionary<Symbol * SamplerState, UnaryCache<aval<(Symbol -> SamplerState -> SamplerState)>, aval<SamplerState>>>()
+    let samplerDescriptionCache = ConcurrentDictionary<FShade.SamplerState, SamplerState>() 
     
     member private x.BufferManager = bufferManager
     member private x.TextureManager = textureManager
@@ -486,15 +486,15 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.GetSamplerStateDescription(samplerState : FShade.SamplerState) =
-        samplerDescriptionCache.GetOrAdd(samplerState, fun sam -> sam.SamplerStateDescription)
+        samplerDescriptionCache.GetOrAdd(samplerState, fun sam -> sam.SamplerState)
 
-    member x.GetDynamicSamplerState(texName : Symbol, samplerState : SamplerStateDescription, modifier : aval<(Symbol -> SamplerStateDescription -> SamplerStateDescription)>) : aval<SamplerStateDescription> =
+    member x.GetDynamicSamplerState(texName : Symbol, samplerState : SamplerState, modifier : aval<(Symbol -> SamplerState -> SamplerState)>) : aval<SamplerState> =
         dynamicSamplerStateCache.GetOrAdd((texName, samplerState), fun (sym, sam) ->
             UnaryCache(fun modi -> modi |> AVal.map (fun f -> f sym sam))
         ).Invoke(modifier)
 
     member x.GetStaticSamplerState(samplerState : FShade.SamplerState) =
-        staticSamplerStateCache.GetOrAdd(samplerState, fun sam -> AVal.constant (sam.SamplerStateDescription))
+        staticSamplerStateCache.GetOrAdd(samplerState, fun sam -> AVal.constant (sam.SamplerState))
 
     member x.GetInterfaceSlots(iface : FShade.GLSL.GLSLProgramInterface) = 
         ifaceSlotCache.GetOrAdd(iface, (fun iface ->
@@ -527,8 +527,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                         x.CreateTexture(texArr |> AVal.map (fun (t : ITexture[]) -> if i < t.Length then t.[i] else NullTexture() :> _)))
             )
 
-    member x.CreateSampler (sam : aval<SamplerStateDescription>) =
-        samplerCache.GetOrCreate<SamplerStateDescription>(sam, fun () -> {
+    member x.CreateSampler (sam : aval<SamplerState>) =
+        samplerCache.GetOrCreate<SamplerState>(sam, fun () -> {
             create = fun b      -> ctx.CreateSampler b
             update = fun h b    -> ctx.Update(h,b); h
             delete = fun h      -> ctx.Delete h
@@ -843,7 +843,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-    member x.CreateDepthBias(value : aval<DepthBiasState>) =
+    member x.CreateDepthBias(value : aval<DepthBias>) =
         depthBiasCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.ToDepthBias b
             update = fun h b    -> ctx.ToDepthBias b

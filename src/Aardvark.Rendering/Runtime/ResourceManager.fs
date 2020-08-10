@@ -2,7 +2,7 @@
 
 open Aardvark.Base
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
+
 
 [<AllowNullLiteral>]
 type IResourceManager =

@@ -2,7 +2,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open FSharp.Data.Adaptive
 open Aardvark.Rendering
 open Aardvark.Rendering.Text
@@ -371,7 +371,7 @@ module Sg =
             shapes.DrawCalls <- indirectAndOffsets |> AVal.map (fun (i,_,_,_) -> i) |> Indirect
             shapes.InstanceAttributes <- instanceAttributes
             shapes.Mode <- IndexedGeometryMode.TriangleList
-            shapes.DepthBias <- AVal.constant (DepthBiasState(0.0, 0.0, 0.0))
+            shapes.DepthBias <- AVal.constant DepthBias.None
             
             //shapes.WriteBuffers <- Some (Set.ofList [DefaultSemantic.Colors])
 
@@ -430,24 +430,10 @@ module Sg =
             boundary.Surface <- Surface.FShadeSimple cache.BoundaryEffect
 
             let writeStencil =
-                StencilMode(
-                    StencilOperation.Replace,
-                    StencilOperation.Zero,
-                    StencilOperation.Keep,
-                    ComparisonFunction.Always,
-                    1,
-                    0xFFFFFFFFu
-                )
+                StencilMode.simple StencilOperation.Replace StencilOperation.Zero StencilOperation.Keep ComparisonFunction.Always 1
 
             let readStencil =
-                StencilMode(
-                    StencilOperation.Keep,
-                    StencilOperation.Keep,
-                    StencilOperation.Keep,
-                    ComparisonFunction.Equal,
-                    1,
-                    0xFFFFFFFFu
-                )
+                StencilMode.simple StencilOperation.Keep StencilOperation.Keep StencilOperation.Keep ComparisonFunction.Equal 1
 
             let writeBuffers =
                 if t.RenderBoundary then None

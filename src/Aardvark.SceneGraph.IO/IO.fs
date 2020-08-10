@@ -2,7 +2,7 @@
 
 open Aardvark.Base
 open Aardvark.Base.Sorting
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 
@@ -355,20 +355,13 @@ module Loader =
 
         [<AutoOpen>]
         module Conversions =
-            let private additiveBlending = 
-                BlendMode(
-                    BlendFactor.One,
-                    BlendFactor.One,
-                    BlendOperation.Add
-                )
-
             let toC4f (c : Assimp.Color4D) =
                 C4f(c.R, c.G, c.B, c.A)
 
             let toBlendMode (m : Assimp.BlendMode) =
                 match m with
                     | Assimp.BlendMode.Default -> BlendMode.None
-                    | Assimp.BlendMode.Additive -> additiveBlending
+                    | Assimp.BlendMode.Additive -> BlendMode.Add
                     | _ -> failwithf "[Assimp] unknown blend-mode: %A" m
 
             let toSemantic (t : Assimp.TextureType) =
