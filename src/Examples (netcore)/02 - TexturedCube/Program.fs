@@ -8,6 +8,7 @@ open System.Runtime.InteropServices
 #nowarn "9"
 
 module ImageSharp =
+    open System
     open SixLabors.ImageSharp
     open SixLabors.ImageSharp.Formats
     open SixLabors.ImageSharp.PixelFormats
@@ -29,8 +30,11 @@ module ImageSharp =
             let res = PixImage<byte>(Col.Format.RGBA, V2i(img.Width, img.Height))
             let gc = GCHandle.Alloc(res.Volume.Data, GCHandleType.Pinned)
             try
-                let ptr : nativeptr<Rgba32> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
-                img.GetPixelSpan().CopyTo(System.Span<Rgba32>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length / 4))
+                let ptr : nativeptr<byte> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
+                let mutable data = Span<Rgba32>()
+                if not (img.TryGetSinglePixelSpan(&data)) then
+                    failwith "Cannot get pixel data"
+                data.CopyTo(System.Span<Rgba32>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length / 4))
                 res :> PixImage
             finally
                 gc.Free()
@@ -38,17 +42,23 @@ module ImageSharp =
             let res = PixImage<byte>(Col.Format.RGB, V2i(img.Width, img.Height))
             let gc = GCHandle.Alloc(res.Volume.Data, GCHandleType.Pinned)
             try
-                let ptr : nativeptr<Rgba32> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
-                img.GetPixelSpan().CopyTo(System.Span<Rgb24>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length / 3))
+                let ptr : nativeptr<byte> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
+                let mutable data = Span<Rgb24>()
+                if not (img.TryGetSinglePixelSpan(&data)) then
+                    failwith "Cannot get pixel data"
+                data.CopyTo(System.Span<Rgb24>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length / 3))
                 res :> PixImage
             finally
                 gc.Free()
-        | :? Image<Alpha8> as img ->
+        | :? Image<A8> as img ->
             let res = PixImage<byte>(Col.Format.Gray, V2i(img.Width, img.Height))
             let gc = GCHandle.Alloc(res.Volume.Data, GCHandleType.Pinned)
             try
-                let ptr : nativeptr<Rgba32> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
-                img.GetPixelSpan().CopyTo(System.Span<Alpha8>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length))
+                let ptr : nativeptr<byte> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
+                let mutable data = Span<A8>()
+                if not (img.TryGetSinglePixelSpan(&data)) then
+                    failwith "Cannot get pixel data"
+                data.CopyTo(System.Span<A8>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length))
                 res :> PixImage
             finally
                 gc.Free()
@@ -56,9 +66,11 @@ module ImageSharp =
             let res = PixImage<byte>(Col.Format.Gray, V2i(img.Width, img.Height))
             let gc = GCHandle.Alloc(res.Volume.Data, GCHandleType.Pinned)
             try
-                let ptr : nativeptr<Rgba32> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
-                let dst = System.Span<Rgba32>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length / 4)
-                let src = img.GetPixelSpan()
+                let ptr : nativeptr<byte> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
+                let dst = Span<Rgba32>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length / 4)
+                let mutable src = Span<Argb32>()
+                if not (img.TryGetSinglePixelSpan(&src)) then
+                     failwith "Cannot get pixel data"
                 for i in 0 .. dst.Length - 1 do
                     dst.[i] <- Rgba32(src.[i].R, src.[i].G, src.[i].B, src.[i].A)
                 res :> PixImage
@@ -68,17 +80,23 @@ module ImageSharp =
             let res = PixImage<uint16>(Col.Format.RGBA, V2i(img.Width, img.Height))
             let gc = GCHandle.Alloc(res.Volume.Data, GCHandleType.Pinned)
             try
-                let ptr : nativeptr<Rgba64> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
-                img.GetPixelSpan().CopyTo(System.Span<Rgba64>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length / 4))
+                let ptr : nativeptr<uint16> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
+                let mutable data = Span<Rgba64>()
+                if not (img.TryGetSinglePixelSpan(&data)) then
+                    failwith "Cannot get pixel data"
+                data.CopyTo(System.Span<Rgba64>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length / 4))
                 res :> PixImage
             finally
                 gc.Free()
-        | :? Image<Gray16> as img ->
+        | :? Image<L16> as img ->
             let res = PixImage<uint16>(Col.Format.Gray, V2i(img.Width, img.Height))
             let gc = GCHandle.Alloc(res.Volume.Data, GCHandleType.Pinned)
             try
-                let ptr : nativeptr<Gray16> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
-                img.GetPixelSpan().CopyTo(System.Span<Gray16>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length))
+                let ptr : nativeptr<uint16> = NativePtr.ofNativeInt (gc.AddrOfPinnedObject())
+                let mutable data = Span<L16>()
+                if not (img.TryGetSinglePixelSpan(&data)) then
+                    failwith "Cannot get pixel data"
+                data.CopyTo(System.Span<L16>(NativePtr.toVoidPtr ptr, res.Volume.Data.Length))
                 res :> PixImage
             finally
                 gc.Free()
