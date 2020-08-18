@@ -17,8 +17,6 @@
     <Compile Include="Common\FrameStatistics.fs" />
     <Compile Include="Common\DefaultSemantic.fs" />
     <Compile Include="Common\ComparisonFunction.fs" />
-    <Compile Include="Utilities\Obsolete\AverageWindow.fs" />
-    <Compile Include="Utilities\Obsolete\ReferenceCountingSet.fs" />
     <Compile Include="Utilities\Locks\ColoredLock.fs" />
     <Compile Include="Utilities\Locks\LockedResource.fs" />
     <Compile Include="Utilities\Locks\RenderTaskLock.fs" />
@@ -56,8 +54,6 @@
     <Compile Include="Resources\Adaptive\AdaptiveFramebuffers.fs" />
     <Compile Include="Resources\NullResources.fs" />
     <Compile Include="Resources\ResourceManagement.fs" />
-    <Compile Include="Base\ImageTrafo.fs" />
-    <Compile Include="Base\PixImageCube.fs" />
     <Compile Include="Geometry\IndexedGeometry.fs" />
     <Compile Include="Geometry\Geometry.fs" />
     <Compile Include="Geometry\GeometryPacker.fs" />
