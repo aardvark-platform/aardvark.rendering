@@ -34,16 +34,12 @@ and [<CustomEquality; CustomComparison>] RenderObject =
         mutable DrawCalls           : DrawCalls
         mutable Mode                : IndexedGeometryMode
 
-
         mutable Surface             : Surface
 
-        mutable DepthTest           : aval<DepthTestMode>
-        mutable DepthBias           : aval<DepthBias>
-        mutable CullMode            : aval<CullMode>
-        mutable FrontFace           : aval<WindingOrder>
-        mutable BlendMode           : aval<BlendMode>
-        mutable FillMode            : aval<FillMode>
-        mutable StencilMode         : aval<StencilMode>
+        mutable DepthState          : DepthState
+        mutable BlendState          : BlendState
+        mutable StencilState        : StencilState
+        mutable RasterizerState     : RasterizerState
 
         mutable Indices             : Option<BufferView>
         mutable InstanceAttributes  : IAttributeProvider
@@ -51,12 +47,7 @@ and [<CustomEquality; CustomComparison>] RenderObject =
 
         mutable Uniforms            : IUniformProvider
 
-        mutable ConservativeRaster  : aval<bool>
-        mutable Multisample         : aval<bool>
-
         mutable Activate            : unit -> IDisposable
-        mutable WriteBuffers        : Option<Set<Symbol>>
-
     }
     interface IRenderObject with
         member x.Id = x.Id
@@ -77,21 +68,15 @@ and [<CustomEquality; CustomComparison>] RenderObject =
 
           Mode = IndexedGeometryMode.TriangleList
           Surface = Surface.None
-          DepthTest = Unchecked.defaultof<_>
-          DepthBias = Unchecked.defaultof<_>
-          CullMode = Unchecked.defaultof<_>
-          FrontFace = Unchecked.defaultof<_>
-          BlendMode = Unchecked.defaultof<_>
-          FillMode = Unchecked.defaultof<_>
-          StencilMode = Unchecked.defaultof<_>
+          DepthState = Unchecked.defaultof<_>
+          BlendState = Unchecked.defaultof<_>
+          StencilState = Unchecked.defaultof<_>
+          RasterizerState = Unchecked.defaultof<_>
           Indices = None
           InstanceAttributes = Unchecked.defaultof<_>
           VertexAttributes = Unchecked.defaultof<_>
           Uniforms = Unchecked.defaultof<_>
-          ConservativeRaster = Unchecked.defaultof<_>
-          Multisample = Unchecked.defaultof<_>
           Activate = nopActivate
-          WriteBuffers = None
         }
 
     static member Clone(org : RenderObject) =
@@ -133,21 +118,15 @@ module RenderObjectExtensions =
           DrawCalls = Unchecked.defaultof<_>
           Mode = IndexedGeometryMode.TriangleList
           Surface = Surface.None
-          DepthTest = Unchecked.defaultof<_>
-          DepthBias = Unchecked.defaultof<_>
-          CullMode = Unchecked.defaultof<_>
-          FrontFace = Unchecked.defaultof<_>
-          BlendMode = Unchecked.defaultof<_>
-          FillMode = Unchecked.defaultof<_>
-          StencilMode = Unchecked.defaultof<_>
+          DepthState = Unchecked.defaultof<_>
+          BlendState = Unchecked.defaultof<_>
+          StencilState = Unchecked.defaultof<_>
+          RasterizerState = Unchecked.defaultof<_>
           Indices = None
-          ConservativeRaster = Unchecked.defaultof<_>
-          Multisample = Unchecked.defaultof<_>
           InstanceAttributes = emptyAttributes
           VertexAttributes = emptyAttributes
           Uniforms = emptyUniforms
           Activate = nopActivate
-          WriteBuffers = None
         }
 
 

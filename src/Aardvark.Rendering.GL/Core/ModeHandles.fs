@@ -37,21 +37,24 @@ type GLBlendMode =
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
+type GLColorMask =
+    struct
+        val mutable public R : int
+        val mutable public G : int
+        val mutable public B : int
+        val mutable public A : int
+    end
+
+[<StructLayout(LayoutKind.Sequential)>]
 type GLStencilMode =
     struct
         val mutable public Enabled : int
-        val mutable public CmpFront : int
-        val mutable public MaskFront : uint32
-        val mutable public ReferenceFront : int
-        val mutable public CmpBack : int
-        val mutable public MaskBack : uint32
-        val mutable public ReferenceBack : int
-        val mutable public OpFrontSF : int
-        val mutable public OpFrontDF : int
-        val mutable public OpFrontPass : int
-        val mutable public OpBackSF : int
-        val mutable public OpBackDF : int
-        val mutable public OpBackPass : int
+        val mutable public Cmp : int
+        val mutable public Mask : uint32
+        val mutable public Reference : int
+        val mutable public OpStencilFail : int
+        val mutable public OpDepthFail : int
+        val mutable public OpPass : int
     end
 
 //[<StructLayout(LayoutKind.Sequential)>]
@@ -69,14 +72,6 @@ type GLStencilMode =
 //    
 //        new(ptr) = { Pointer = ptr }
 //    end
-
-type DepthTestInfo =
-    struct
-        val mutable public Comparison : int
-        val mutable public Clamp : int
-
-        new(comparison, clamp) = { Comparison = comparison; Clamp = clamp }
-    end
 
 type DepthBiasInfo =
     struct

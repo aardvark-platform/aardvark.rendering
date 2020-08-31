@@ -84,13 +84,25 @@ module FShadeInterop =
 
         let def = SamplerState.Default
 
+        let cmp =
+            LookupTable.lookupTable [
+                ComparisonFunction.Greater,        Aardvark.Rendering.ComparisonFunction.Greater
+                ComparisonFunction.GreaterOrEqual, Aardvark.Rendering.ComparisonFunction.GreaterOrEqual
+                ComparisonFunction.Less,           Aardvark.Rendering.ComparisonFunction.Less
+                ComparisonFunction.LessOrEqual,    Aardvark.Rendering.ComparisonFunction.LessOrEqual
+                ComparisonFunction.Equal,          Aardvark.Rendering.ComparisonFunction.Equal
+                ComparisonFunction.NotEqual,       Aardvark.Rendering.ComparisonFunction.NotEqual
+                ComparisonFunction.Never,          Aardvark.Rendering.ComparisonFunction.Never
+                ComparisonFunction.Always,         Aardvark.Rendering.ComparisonFunction.Always
+            ]
+
         {
             Filter        = state.Filter                               |> Option.defaultValue def.Filter
             BorderColor   = state.BorderColor                          |> Option.defaultValue def.BorderColor
             AddressU      = state.AddressU                             |> Option.defaultValue def.AddressU
             AddressV      = state.AddressV                             |> Option.defaultValue def.AddressV
             AddressW      = state.AddressW                             |> Option.defaultValue def.AddressW
-            Comparison    = state.Comparison    |> Option.map unbox<_> |> Option.defaultValue def.Comparison
+            Comparison    = state.Comparison    |> Option.map cmp      |> Option.defaultValue def.Comparison
             MaxAnisotropy = state.MaxAnisotropy                        |> Option.defaultValue def.MaxAnisotropy
             MinLod        = state.MinLod        |> Option.map float32  |> Option.defaultValue def.MinLod
             MaxLod        = state.MaxLod        |> Option.map float32  |> Option.defaultValue def.MaxLod

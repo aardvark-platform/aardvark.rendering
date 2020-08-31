@@ -43,7 +43,6 @@ module ``Sampler Extensions`` =
     module VkCompareOp =
         let ofSamplerComparisonFunction =
             LookupTable.lookupTable [
-                ComparisonFunction.None, VkCompareOp.Always
                 ComparisonFunction.Always, VkCompareOp.Always
                 ComparisonFunction.Equal, VkCompareOp.Equal
                 ComparisonFunction.Greater, VkCompareOp.Greater

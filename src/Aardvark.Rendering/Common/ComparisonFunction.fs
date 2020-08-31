@@ -4,7 +4,7 @@
 // which is problematic when the default constructor of a struct initializes its fields
 // to zero.
 type ComparisonFunction =
-    | None = 0              // Same as Always
+    | Always = 0
     | Never = 1
     | Less = 2
     | Equal = 3
@@ -12,4 +12,3 @@ type ComparisonFunction =
     | Greater = 5
     | GreaterOrEqual = 6
     | NotEqual = 7
-    | Always = 8

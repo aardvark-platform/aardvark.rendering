@@ -99,8 +99,8 @@ type BlendMode =
     /// Multiply colors.
     static member Multiply =
         { BlendMode.Blend with
-            SourceColorFactor = BlendFactor.One
-            SourceAlphaFactor = BlendFactor.One
+            SourceColorFactor = BlendFactor.Zero
+            SourceAlphaFactor = BlendFactor.Zero
             DestinationColorFactor = BlendFactor.SourceColor
             DestinationAlphaFactor = BlendFactor.SourceAlpha
         }

@@ -37,27 +37,6 @@ module RenderCommands =
             stencil : Option<aval<int>>
         }
 
-    type PipelineState =
-        {
-            surface             : Aardvark.Rendering.Surface
-
-            depthTest           : aval<DepthTestMode>
-            depthBias           : aval<DepthBias>
-            cullMode            : aval<CullMode>
-            frontFace           : aval<WindingOrder>
-            blendMode           : aval<BlendMode>
-            fillMode            : aval<FillMode>
-            stencilMode         : aval<StencilMode>
-            multisample         : aval<bool>
-            writeBuffers        : Option<Set<Symbol>>
-            globalUniforms      : IUniformProvider
-
-            geometryMode        : IndexedGeometryMode
-            vertexInputTypes    : Map<Symbol, Type>
-            perGeometryUniforms : Map<string, Type>
-        }
-   
-
     type Geometry =
         {
             vertexAttributes    : Map<Symbol, aval<IBuffer>>
@@ -104,13 +83,13 @@ module RenderCommands =
         }
 
     type ResourceManager with
-        member x.PreparePipelineState (renderPass : RenderPass, state : PipelineState) =
-            let layout, program = x.CreateShaderProgram(renderPass, state.surface, state.geometryMode)
+        member x.PreparePipelineState (renderPass : RenderPass, surface : Aardvark.Rendering.Surface, state : PipelineState) =
+            let layout, program = x.CreateShaderProgram(renderPass, surface, state.Mode)
 
             let inputs = 
                 layout.PipelineInfo.pInputs |> List.map (fun p ->
                     let name = Symbol.Create p.paramSemantic
-                    match Map.tryFind name state.vertexInputTypes with
+                    match Map.tryFind name state.VertexInputTypes with
                         | Some t -> (name, (false, t))
                         | None -> failf "could not get shader input %A" name
                 )
@@ -120,22 +99,32 @@ module RenderCommands =
                 x.CreateVertexInputState(layout.PipelineInfo, AVal.constant (VertexInputState.ofTypes inputs))
 
             let inputAssembly =
-                x.CreateInputAssemblyState(state.geometryMode, program)
+                x.CreateInputAssemblyState(state.Mode, program)
 
             let rasterizerState =
-                x.CreateRasterizerState(state.depthTest, state.depthBias, state.cullMode, state.frontFace, state.fillMode)
+                x.CreateRasterizerState(
+                    state.DepthState.Clamp, state.DepthState.Bias,
+                    state.RasterizerState.CullMode, state.RasterizerState.FrontFace, state.RasterizerState.FillMode
+                )
 
             let colorBlendState =
-                x.CreateColorBlendState(renderPass, state.writeBuffers, state.blendMode)
+                x.CreateColorBlendState(
+                    renderPass,
+                    state.BlendState.ColorWriteMask, state.BlendState.AttachmentWriteMask,
+                    state.BlendState.Mode, state.BlendState.AttachmentMode, state.BlendState.ConstantColor
+                )
 
-            let depthStencil =
-                let depthWrite = 
-                    match state.writeBuffers with
-                        | None -> true
-                        | Some s -> Set.contains DefaultSemantic.Depth s
-                x.CreateDepthStencilState(depthWrite, state.depthTest, state.stencilMode)
+            let depthStencilState =
+                x.CreateDepthStencilState(
+                    state.DepthState.Test, state.DepthState.WriteMask,
+                    state.StencilState.ModeFront, state.StencilState.WriteMaskFront,
+                    state.StencilState.ModeBack, state.StencilState.WriteMaskBack
+                )
 
-            let pipeline = 
+            let multisampleState =
+                x.CreateMultisampleState(renderPass, state.RasterizerState.Multisample)
+
+            let pipeline =
                 x.CreatePipeline(
                     program,
                     renderPass,
@@ -143,8 +132,8 @@ module RenderCommands =
                     inputAssembly,
                     rasterizerState,
                     colorBlendState,
-                    depthStencil,
-                    state.writeBuffers
+                    depthStencilState,
+                    multisampleState
                 )
             {
                 ppPipeline  = pipeline
@@ -203,14 +192,15 @@ module RenderCommands =
                 pgResources     = CSharpList.toList resources
             }
 
-    type TreeCommandStreamResource(owner, key, pipe : PipelineState, things : aval<Tree<Geometry>>, resources : ResourceLocationSet, manager : ResourceManager, renderPass : RenderPass, stats : nativeptr<V2i>) =
+    // TODO: Obsolete??
+    type TreeCommandStreamResource(owner, key, surface : Aardvark.Rendering.Surface, pipe : PipelineState, things : aval<Tree<Geometry>>, resources : ResourceLocationSet, manager : ResourceManager, renderPass : RenderPass, stats : nativeptr<V2i>) =
         inherit AbstractResourceLocation<VKVM.CommandStream>(owner, key)
          
         let id = newId()
 
         let mutable stream = Unchecked.defaultof<VKVM.CommandStream>
         let mutable entry = Unchecked.defaultof<VKVM.CommandStream>
-        let preparedPipeline = manager.PreparePipelineState(renderPass, pipe)
+        let preparedPipeline = manager.PreparePipelineState(renderPass, surface, pipe)
 
         let bounds = lazy (AVal.constant Box3d.Invalid)
         let allResources = ReferenceCountingSet<IResourceLocation>()

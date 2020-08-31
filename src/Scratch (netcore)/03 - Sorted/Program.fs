@@ -774,7 +774,7 @@ let main argv =
             |> Sg.shader {
                 do! DefaultSurfaces.constantColor (C4f(0.0,0.0,0.0,0.0))
             }
-            |> Sg.depthTest (AVal.constant DepthTestMode.None)
+            |> Sg.depthTest (AVal.constant DepthTest.None)
           
     let pa = RenderPass.after "a" RenderPassOrder.Arbitrary RenderPass.main
     let pb = RenderPass.after "b" RenderPassOrder.Arbitrary pa
@@ -795,7 +795,7 @@ let main argv =
             }
             |> Sg.blendMode (AVal.constant blendMode)
             |> Sg.cullMode (AVal.constant CullMode.Back)
-            |> Sg.depthTest (AVal.constant DepthTestMode.None)
+            |> Sg.depthTest (AVal.constant DepthTest.None)
             |> Sg.pass pa
             |> Sg.transform trafo
             |> Sg.uniform "GridSize" (AVal.constant cells)

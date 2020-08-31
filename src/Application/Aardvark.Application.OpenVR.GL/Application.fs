@@ -112,7 +112,7 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
 
     let compileHidden (m : IndexedGeometry) =
         let writeStencil =
-            { StencilState.Default with
+            { StencilMode.Default with
                 Pass = StencilOperation.Replace
                 Fail = StencilOperation.Replace
                 DepthFail = StencilOperation.Replace
@@ -124,7 +124,7 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
                 |> Sg.shader {
                     do! StereoShader.hiddenAreaFragment
                 }
-                |> Sg.stencilMode' (AVal.constant writeStencil)
+                |> Sg.stencilMode' writeStencil
                 |> Sg.writeBuffers' (Set.ofList [DefaultSemantic.Stencil])
 
         hiddenTask <- runtime.CompileRender(framebufferSignature, sg.RenderObjects(Ag.Scope.Root))

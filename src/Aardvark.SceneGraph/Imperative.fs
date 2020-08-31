@@ -16,23 +16,17 @@ type AirState =
         mode                : IndexedGeometryMode
         surface             : Surface
 
-        depthTest           : aval<DepthTestMode>
-        depthBias           : aval<DepthBias>
-        cullMode            : aval<CullMode>
-        frontFace           : aval<WindingOrder>
-        blendMode           : aval<BlendMode>
-        fillMode            : aval<FillMode>
-        stencilMode         : aval<StencilMode>
-        
+        blendState          : BlendState
+        depthState          : DepthState
+        stencilState        : StencilState
+        rasterizerState     : RasterizerState
+
         indices             : Option<BufferView>
         instanceAttributes  : Map<Symbol, BufferView>
         vertexAttributes    : Map<Symbol, BufferView>
-        
+
         uniforms            : Map<Symbol, IAdaptiveValue>
         trafos              : list<aval<Trafo3d>>
-
-        writeBuffers        : Option<Set<Symbol>>
-
 
         scope               : RenderObject
         final               : list<IRenderObject>
@@ -53,7 +47,7 @@ module ``Air Builder`` =
             { new Air<'b>() with
                 member x.Run(state) =
                     let v = m.Run(&state)
-                    (f v).Run(&state)    
+                    (f v).Run(&state)
             }
 
         member x.Return(v : 'a) : Air<'a> =
@@ -111,12 +105,12 @@ module ``Air Builder`` =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module AirState =
     open Aardvark.SceneGraph.Semantics
-    let private reader (f : AirState -> 'a) = 
+    let private reader (f : AirState -> 'a) =
         { new Air<'a>() with
             member x.Run(state) = f state
         }
 
-    let ofScope (scope : Ag.Scope) = 
+    let ofScope (scope : Ag.Scope) =
         let ro = RenderObject.ofScope scope
 
 
@@ -125,46 +119,37 @@ module AirState =
             drawCalls           = ro.DrawCalls
             mode                = ro.Mode
             surface             = ro.Surface
-                              
-            depthTest           = ro.DepthTest
-            depthBias           = ro.DepthBias
-            cullMode            = ro.CullMode
-            frontFace           = ro.FrontFace
-            blendMode           = ro.BlendMode
-            fillMode            = ro.FillMode
-            stencilMode         = ro.StencilMode
-                  
+
+            blendState          = ro.BlendState
+            depthState          = ro.DepthState
+            stencilState        = ro.StencilState
+            rasterizerState     = ro.RasterizerState
+
             indices             = ro.Indices
             instanceAttributes  = Map.empty
             vertexAttributes    = Map.empty
-                              
+
             uniforms            = Map.empty
             trafos              = scope?ModelTrafoStack
-                        
-            writeBuffers        = ro.WriteBuffers
-                             
+
             scope               = ro
             final               = []
         }
 
-    let isActive = reader (fun s -> s.isActive)
-    let mode = reader (fun s -> s.mode)
-    let surface = reader (fun s -> s.surface)
-    let depthTest = reader (fun s -> s.depthTest)
-    let depthBias = reader (fun s -> s.depthBias)
-    let cullMode = reader (fun s -> s.cullMode)
-    let frontFace = reader (fun s-> s.frontFace)
-    let blendMode = reader (fun s -> s.blendMode)
-    let fillMode = reader (fun s -> s.fillMode)
-    let stencilMode = reader (fun s -> s.stencilMode)
-    let indices = reader (fun s -> s.indices)
-    let instanceAttributes = reader (fun s -> s.instanceAttributes)
-    let vertexAttributes = reader (fun s -> s.vertexAttributes)
-    let uniforms = reader (fun s -> s.uniforms)
-    let trafos = reader (fun s -> s.trafos)
-    let writeBuffers = reader (fun s -> s.writeBuffers)
-    let scope = reader (fun s -> s.scope)
-        
+    let isActive            = reader (fun s -> s.isActive)
+    let mode                = reader (fun s -> s.mode)
+    let surface             = reader (fun s -> s.surface)
+    let blendState          = reader (fun s -> s.blendState)
+    let depthState          = reader (fun s -> s.depthState)
+    let stencilState        = reader (fun s -> s.stencilState)
+    let rasterizerState     = reader (fun s -> s.rasterizerState)
+    let indices             = reader (fun s -> s.indices)
+    let instanceAttributes  = reader (fun s -> s.instanceAttributes)
+    let vertexAttributes    = reader (fun s -> s.vertexAttributes)
+    let uniforms            = reader (fun s -> s.uniforms)
+    let trafos              = reader (fun s -> s.trafos)
+    let scope               = reader (fun s -> s.scope)
+
 
 type private AirAttributeProvider(local : Map<Symbol, BufferView>, inh : IAttributeProvider) =
     interface IAttributeProvider with
@@ -184,7 +169,7 @@ type private AirUniformProvider(local : Map<Symbol, IAdaptiveValue>, trafos : li
 
     interface IUniformProvider with
         member x.TryGetUniform(scope, sem) =
-            if sem = mt then 
+            if sem = mt then
                 model.Value :> IAdaptiveValue |> Some
             else
                 match Map.tryFind sem local with
@@ -198,7 +183,7 @@ type Air private() =
     static let modify (f : AirState -> AirState) =
         { new Air<unit>() with
             member x.RunUnit(state) =
-                state <- f state 
+                state <- f state
         }
 
     static let emit =
@@ -210,15 +195,11 @@ type Air private() =
                 ro.DrawCalls <- state.drawCalls
                 ro.Mode <- state.mode
                 ro.Surface <- state.surface
-                ro.DepthTest <- state.depthTest
-                ro.DepthBias <- state.depthBias
-                ro.CullMode <- state.cullMode
-                ro.FrontFace <- state.frontFace
-                ro.BlendMode <- state.blendMode
-                ro.FillMode <- state.fillMode
-                ro.StencilMode <- state.stencilMode
+                ro.BlendState <- state.blendState
+                ro.DepthState <- state.depthState
+                ro.StencilState <- state.stencilState
+                ro.RasterizerState <- state.rasterizerState
                 ro.Indices <- state.indices
-                ro.WriteBuffers <- state.writeBuffers
 
                 ro.VertexAttributes <- new AirAttributeProvider(state.vertexAttributes, state.scope.VertexAttributes)
                 ro.InstanceAttributes <- new AirAttributeProvider(state.instanceAttributes, state.scope.InstanceAttributes)
@@ -227,7 +208,7 @@ type Air private() =
                 state <- { state with final = state.final @ [ro] }
         }
 
-   
+
     // ================================================================================================================
     // Vertex Buffers
     // ================================================================================================================
@@ -396,18 +377,18 @@ type Air private() =
         modify (fun s -> { s with uniforms = Map.add sem (AVal.constant value :> IAdaptiveValue) s.uniforms })
 
     static member BindUniforms(values : list<Symbol * IAdaptiveValue>) =
-        modify (fun s -> 
+        modify (fun s ->
             let mutable uniforms = s.uniforms
 
             for (sem, u) in values do
                 uniforms <- Map.add sem u uniforms
 
-            
+
             { s with uniforms = uniforms }
         )
 
     static member BindUniforms(values : list<Symbol * obj>) =
-        modify (fun s -> 
+        modify (fun s ->
             let mutable uniforms = s.uniforms
 
             for (sem, u) in values do
@@ -420,23 +401,23 @@ type Air private() =
 
                 uniforms <- Map.add sem m uniforms
 
-            
+
             { s with uniforms = uniforms }
         )
 
     static member BindUniforms(values : list<string * IAdaptiveValue>) =
-        modify (fun s -> 
+        modify (fun s ->
             let mutable uniforms = s.uniforms
 
             for (sem, u) in values do
                 uniforms <- Map.add (Symbol.Create sem) u uniforms
 
-            
+
             { s with uniforms = uniforms }
         )
 
     static member BindUniforms(values : list<string * obj>) =
-        modify (fun s -> 
+        modify (fun s ->
             let mutable uniforms = s.uniforms
 
             for (sem, u) in values do
@@ -449,7 +430,7 @@ type Air private() =
 
                 uniforms <- Map.add (Symbol.Create sem) m uniforms
 
-            
+
             { s with uniforms = uniforms }
         )
 
@@ -502,65 +483,175 @@ type Air private() =
 
     static member BindShader = airShader
 
+    // ================================================================================================================
+    // Blending
+    // ================================================================================================================
+    static member BlendMode (mode : aval<BlendMode>) =
+        modify (fun s -> {s with blendState = { s.blendState with Mode = mode }})
+
+    static member BlendModes (modes : aval<Map<Symbol, BlendMode>>) =
+        modify (fun s -> {s with blendState = { s.blendState with AttachmentMode = modes }})
+
+    static member BlendConstant (color : aval<C4f>) =
+        modify (fun s -> {s with blendState = { s.blendState with ConstantColor = color }})
+
+    static member ColorMask (mask : aval<ColorMask>) =
+        modify (fun s -> {s with blendState = { s.blendState with ColorWriteMask = mask }})
+
+    static member ColorMasks (masks : aval<Map<Symbol, ColorMask>>) =
+        modify (fun s -> {s with blendState = { s.blendState with AttachmentWriteMask = masks }})
+
+    static member ColorWrite (enabled : aval<bool>) =
+        modify (fun s -> {s with blendState = { s.blendState with ColorWriteMask = enabled |> AVal.map ColorMask.enable }})
+
+    static member ColorWrites (enabled : aval<Map<Symbol, bool>>) =
+        modify (fun s -> {s with blendState = { s.blendState with AttachmentWriteMask = enabled |> AVal.map (Map.map (fun _ x -> x |> ColorMask.enable)) }})
+
+    static member BlendMode mode       = Air.BlendMode(AVal.constant mode)
+    static member BlendModes modes     = Air.BlendModes(AVal.constant modes)
+    static member BlendConstant color  = Air.BlendConstant(AVal.constant color)
+    static member ColorMask mask       = Air.ColorMask(AVal.constant mask)
+    static member ColorMasks masks     = Air.ColorMasks(AVal.constant masks)
+    static member ColorWrite enabled   = Air.ColorWrite(AVal.constant enabled)
+    static member ColorWrites enabled  = Air.ColorWrites(AVal.constant enabled)
 
     // ================================================================================================================
-    // DepthTest
+    // Depth
     // ================================================================================================================
-    static member DepthTest(mode : aval<DepthTestMode>) =
-        modify (fun s -> { s with depthTest = mode })
+    static member DepthTest(test : aval<DepthTest>) =
+        modify (fun s -> { s with depthState = { s.depthState with Test = test }})
 
-    static member DepthTest(mode : DepthTestMode) =
-        modify (fun s -> { s with depthTest = AVal.constant mode })
+    static member DepthBias(mode : aval<DepthBias>) =
+        modify (fun s -> { s with depthState = { s.depthState with Bias = mode }})
 
+    static member DepthWrite(mode : aval<bool>) =
+        modify (fun s -> { s with depthState = { s.depthState with WriteMask = mode }})
 
-    // ================================================================================================================
-    // CullMode
-    // ================================================================================================================
-    static member CullMode(mode : aval<CullMode>) =
-        modify (fun s -> { s with cullMode = mode })
+    static member DepthClamp(mode : aval<bool>) =
+        modify (fun s -> { s with depthState = { s.depthState with Clamp = mode }})
 
-    static member CullMode(mode : CullMode) =
-        modify (fun s -> { s with cullMode = AVal.constant mode })
-
-    // ================================================================================================================
-    // BlendMode
-    // ================================================================================================================
-    static member BlendMode(mode : aval<BlendMode>) =
-        modify (fun s -> { s with blendMode = mode })
-
-    static member BlendMode(mode : BlendMode) =
-        modify (fun s -> { s with blendMode = AVal.constant mode })
+    static member DepthTest mode = Air.DepthTest(AVal.constant mode)
+    static member DepthBias mode = Air.DepthBias(AVal.constant mode)
+    static member DepthWrite mode = Air.DepthWrite(AVal.constant mode)
+    static member DepthClamp mode = Air.DepthClamp(AVal.constant mode)
 
     // ================================================================================================================
-    // FillMode
+    // Stencil
+    // ================================================================================================================
+    static member StencilModeFront (mode : aval<StencilMode>) =
+        modify (fun s -> { s with stencilState = { s.stencilState with ModeFront = mode }})
+
+    static member StencilWriteMaskFront (mask : aval<StencilMask>) =
+        modify (fun s -> { s with stencilState = { s.stencilState with WriteMaskFront = mask }})
+
+    static member StencilWriteFront (enabled : aval<bool>) =
+        modify (fun s -> { s with stencilState = { s.stencilState with WriteMaskFront = enabled |> AVal.map StencilMask }})
+
+    static member StencilModeBack (mode : aval<StencilMode>) =
+        modify (fun s -> { s with stencilState = { s.stencilState with ModeBack = mode }})
+
+    static member StencilWriteMaskBack (mask : aval<StencilMask>) =
+        modify (fun s -> { s with stencilState = { s.stencilState with WriteMaskBack = mask }})
+
+    static member StencilWriteBack (enabled : aval<bool>) =
+        modify (fun s -> { s with stencilState = { s.stencilState with WriteMaskBack = enabled |> AVal.map StencilMask }})
+
+    static member StencilModes (front : aval<StencilMode>, back : aval<StencilMode>) =
+        air {
+            do! Air.StencilModeFront front
+            do! Air.StencilModeBack back
+        }
+
+    static member StencilWriteMasks (front : aval<StencilMask>, back : aval<StencilMask>) =
+        air {
+            do! Air.StencilWriteMaskFront front
+            do! Air.StencilWriteMaskBack back
+        }
+
+    static member StencilWrites (front : aval<bool>, back : aval<bool>) =
+        air {
+            do! Air.StencilWriteFront front
+            do! Air.StencilWriteBack back
+        }
+
+    static member StencilMode (mode : aval<StencilMode>) =
+        Air.StencilModes(mode, mode)
+
+    static member StencilWriteMask (mask : aval<StencilMask>) =
+        Air.StencilWriteMasks(mask, mask)
+
+    static member StencilWrite (enabled : aval<bool>) =
+        Air.StencilWrites(enabled, enabled)
+
+    static member StencilModeFront mode           = Air.StencilModeFront(AVal.constant mode)
+    static member StencilWriteMaskFront mask      = Air.StencilWriteMaskFront(AVal.constant mask)
+    static member StencilWriteFront enabled       = Air.StencilWriteFront(AVal.constant enabled)
+    static member StencilModeBack mode            = Air.StencilModeBack(AVal.constant mode)
+    static member StencilWriteMaskBack mask       = Air.StencilWriteMaskBack(AVal.constant mask)
+    static member StencilWriteBack enabled        = Air.StencilWriteBack(AVal.constant enabled)
+    static member StencilModes(front, back)       = Air.StencilModes(AVal.constant front, AVal.constant back)
+    static member StencilWriteMasks (front, back) = Air.StencilWriteMasks(AVal.constant front, AVal.constant back)
+    static member StencilWrites (front, back)     = Air.StencilWrites(AVal.constant front, AVal.constant back)
+    static member StencilMode mode                = Air.StencilMode(AVal.constant mode)
+    static member StencilWriteMask mask           = Air.StencilWriteMask(AVal.constant mask)
+    static member StencilWrite enabled            = Air.StencilWrite(AVal.constant enabled)
+
+    // ================================================================================================================
+    // Rasterizer
     // ================================================================================================================
     static member FillMode(mode : aval<FillMode>) =
-        modify (fun s -> { s with fillMode = mode })
+        modify (fun s -> { s with rasterizerState = { s.rasterizerState with FillMode = mode }})
 
-    static member FillMode(mode : FillMode) =
-        modify (fun s -> { s with fillMode = AVal.constant mode })
+    static member FrontFace(order : aval<WindingOrder>) =
+        modify (fun s -> { s with rasterizerState = { s.rasterizerState with FrontFace = order }})
 
-    // ================================================================================================================
-    // StencilMode
-    // ================================================================================================================
-    static member StencilMode(mode : aval<StencilMode>) =
-        modify (fun s -> { s with stencilMode = mode })
+    static member CullMode(mode : aval<CullMode>) =
+        modify (fun s -> { s with rasterizerState = { s.rasterizerState with CullMode = mode }})
 
-    static member StencilMode(mode : StencilMode) =
-        modify (fun s -> { s with stencilMode = AVal.constant mode })
+    static member Multisample(mode : aval<bool>) =
+        modify (fun s -> { s with rasterizerState = { s.rasterizerState with Multisample = mode }})
 
+    static member ConservativeRaster(mode : aval<bool>) =
+        modify (fun s -> { s with rasterizerState = { s.rasterizerState with ConservativeRaster = mode }})
+
+    static member CullMode mode           = Air.CullMode(AVal.constant mode)
+    static member FrontFace mode          = Air.FrontFace(AVal.constant mode)
+    static member FillMode mode           = Air.FillMode(AVal.constant mode)
+    static member Multisample mode        = Air.Multisample(AVal.constant mode)
+    static member ConservativeRaster mode = Air.ConservativeRaster(AVal.constant mode)
 
     // ================================================================================================================
     // WriteBuffers
     // ================================================================================================================
     static member WriteBuffers(buffers : list<Symbol>) =
-        modify (fun s -> { s with writeBuffers = Some (Set.ofList buffers) })
+        let depthEnable =
+            buffers |> List.contains DefaultSemantic.Depth
+
+        let stencilEnable =
+            buffers |> List.contains DefaultSemantic.Stencil
+
+        let colorEnable =
+            buffers
+            |> List.map (fun s -> s, true)
+            |> Map.ofList
+
+        air {
+            do! Air.DepthWrite depthEnable
+            do! Air.StencilWrite stencilEnable
+            do! Air.ColorWrites colorEnable
+            do! Air.ColorWrite false
+        }
 
     static member WriteBuffers(buffers : list<string>) =
         buffers |> List.map Symbol.Create |> Air.WriteBuffers
 
     static member WriteAllBuffers() =
-        modify (fun s -> { s with writeBuffers = None })
+        air {
+            do! Air.DepthWrite true
+            do! Air.StencilWrite true
+            do! Air.ColorWrites Map.empty
+            do! Air.ColorWrite true
+        }
 
 
     // ================================================================================================================
@@ -568,12 +659,12 @@ type Air private() =
     // ================================================================================================================
     static member Toplogy (mode : IndexedGeometryMode) =
         modify (fun s -> { s with mode = mode })
-  
-    
+
+
 
     // ================================================================================================================
     // Draw
-    // ================================================================================================================ 
+    // ================================================================================================================
     static member Draw(infos : aval<list<DrawCallInfo>>) =
         air {
             do! modify (fun s -> { s with drawCalls = Direct infos })
@@ -626,20 +717,20 @@ type Air private() =
 
     static member Draw(offset : int, count : int, baseVertex : int) =
         Air.DrawInstanced(1, offset, count, baseVertex)
-    
+
     static member Draw(offset : int, count : int) =
         Air.Draw(offset, count, 0)
 
     static member Draw(count : int) =
-        Air.Draw(0, count, 0)   
-    
-    
+        Air.Draw(0, count, 0)
+
+
     static member RunInScope (scope : Ag.Scope) (a : Air<unit>) =
         let mutable state = AirState.ofScope scope
         a.RunUnit(&state)
         MultiRenderObject(state.final) :> IRenderObject
 
-   
+
 
 [<AutoOpen>]
 module ``Air Sg Interop`` =
@@ -651,7 +742,7 @@ module ``Air Sg Interop`` =
 
 
 [<AutoOpen>]
-module ``Air Sg F#`` = 
+module ``Air Sg F#`` =
     module ``Air Sg Builder`` =
         type AirSgBuilder() =
             inherit AirBuilder()

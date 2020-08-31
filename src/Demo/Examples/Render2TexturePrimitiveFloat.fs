@@ -79,7 +79,7 @@ module Render2TexturePrimitiveFloat =
             |> Sg.projTrafo ~~(Frustum.perspective 60.0 0.01 10.0 (float size.X / float size.Y) |> Frustum.projTrafo    )
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
             |> Sg.blendMode (AVal.constant blendMode)
-            |> Sg.depthTest (AVal.constant DepthTestMode.None)
+            |> Sg.depthTest (AVal.constant DepthTest.None)
 
     // Create render tasks given the signature and concrete buffers        
     let task = runtime.CompileRender(signature, render2TextureSg)

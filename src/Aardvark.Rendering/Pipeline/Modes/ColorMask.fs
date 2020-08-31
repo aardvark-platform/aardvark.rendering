@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering
 
 open System
+open Aardvark.Base
 
 [<Flags>]
 type ColorMask =
@@ -19,3 +20,9 @@ module ColorMask =
     let a = ColorMask.Alpha
     let rgba = ColorMask.All
     let rgb = r ||| g ||| b
+
+    let enable (enabled : bool) =
+        if enabled then ColorMask.All else ColorMask.None
+
+    let ofWriteSet (enabled : Set<Symbol>) =
+        enabled |> Set.map (fun s -> s, ColorMask.All) |> Map.ofSeq

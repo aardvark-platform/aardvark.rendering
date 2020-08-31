@@ -459,7 +459,7 @@ DllExport(void) vmRun(VkCommandBuffer buffer, CommandFragment* fragment)
 	std::unordered_set<CommandFragment*> set;
 #endif
 
-	CommandState state = { nullptr };
+	CommandState state = { VK_NULL_HANDLE };
 	while (fragment)
 	{
 #ifdef _DEBUG

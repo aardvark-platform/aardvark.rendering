@@ -42,15 +42,15 @@ type PreparedGeometry =
 type ResourceManagerExtensions private() =
     [<Extension>]
     static member PreparePipelineState (this : ResourceManager, renderPass : RenderPass, surface : Aardvark.Rendering.Surface, state : PipelineState) =
-        let layout, program = this.CreateShaderProgram(renderPass, surface, state.geometryMode)
+        let layout, program = this.CreateShaderProgram(renderPass, surface, state.Mode)
 
         let inputs = 
             layout.PipelineInfo.pInputs |> List.map (fun p ->
                 let name = Symbol.Create p.paramSemantic
-                match Map.tryFind name state.vertexInputTypes with
+                match Map.tryFind name state.VertexInputTypes with
                     | Some t -> (name, (false, t))
                     | None -> 
-                        match Map.tryFind p.paramSemantic state.perGeometryUniforms with
+                        match Map.tryFind p.paramSemantic state.PerGeometryUniforms with
                             | Some t -> (name, (true, GLSLType.toType p.paramType))
                             | None -> failf "could not get shader input %A" name
             )
@@ -60,22 +60,32 @@ type ResourceManagerExtensions private() =
             this.CreateVertexInputState(layout.PipelineInfo, AVal.constant (VertexInputState.ofTypes inputs))
 
         let inputAssembly =
-            this.CreateInputAssemblyState(state.geometryMode, program)
+            this.CreateInputAssemblyState(state.Mode, program)
 
         let rasterizerState =
-            this.CreateRasterizerState(state.depthTest, state.depthBias, state.cullMode, state.frontFace, state.fillMode)
+            this.CreateRasterizerState(
+                state.DepthState.Clamp, state.DepthState.Bias,
+                state.RasterizerState.CullMode, state.RasterizerState.FrontFace, state.RasterizerState.FillMode
+            )
 
         let colorBlendState =
-            this.CreateColorBlendState(renderPass, state.writeBuffers, state.blendMode)
+            this.CreateColorBlendState(
+                renderPass,
+                state.BlendState.ColorWriteMask, state.BlendState.AttachmentWriteMask,
+                state.BlendState.Mode, state.BlendState.AttachmentMode, state.BlendState.ConstantColor
+            )
 
-        let depthStencil =
-            let depthWrite = 
-                match state.writeBuffers with
-                    | None -> true
-                    | Some s -> Set.contains DefaultSemantic.Depth s
-            this.CreateDepthStencilState(depthWrite, state.depthTest, state.stencilMode)
+        let depthStencilState =
+            this.CreateDepthStencilState(
+                state.DepthState.Test, state.DepthState.WriteMask,
+                state.StencilState.ModeFront, state.StencilState.WriteMaskFront,
+                state.StencilState.ModeBack, state.StencilState.WriteMaskBack
+            )
 
-        let pipeline = 
+        let multisampleState =
+            this.CreateMultisampleState(renderPass, state.RasterizerState.Multisample)
+
+        let pipeline =
             this.CreatePipeline(
                 program,
                 renderPass,
@@ -83,13 +93,13 @@ type ResourceManagerExtensions private() =
                 inputAssembly,
                 rasterizerState,
                 colorBlendState,
-                depthStencil,
-                state.writeBuffers
+                depthStencilState,
+                multisampleState
             )
         {
             ppPipeline  = pipeline
             ppLayout    = layout
-            ppUniforms  = state.globalUniforms
+            ppUniforms  = state.GlobalUniforms
         }
             
     [<Extension>]
@@ -1495,7 +1505,7 @@ module private RuntimeCommands =
             match preparedPipeline with
                 | None -> 
                     // create and cache the PreparedPipelineState
-                    let pipeline = compiler.manager.PreparePipelineState(compiler.renderPass, surface, { state with globalUniforms = compiler.task.HookProvider state.globalUniforms })
+                    let pipeline = compiler.manager.PreparePipelineState(compiler.renderPass, surface, { state with GlobalUniforms = compiler.task.HookProvider state.GlobalUniforms })
                     compiler.resources.Add pipeline.ppPipeline
                     preparedPipeline <- Some pipeline
 
@@ -1586,7 +1596,7 @@ module private RuntimeCommands =
                     ()
 
         override x.Compile(_, stream : VKVM.CommandStream) =
-            let pipeline = compiler.manager.PreparePipelineState(compiler.renderPass, surface, { state with globalUniforms = compiler.task.HookProvider state.globalUniforms })
+            let pipeline = compiler.manager.PreparePipelineState(compiler.renderPass, surface, { state with GlobalUniforms = compiler.task.HookProvider state.GlobalUniforms })
             compiler.resources.Add pipeline.ppPipeline
             preparedPipeline <- Some pipeline
 
@@ -1760,23 +1770,23 @@ module private RuntimeCommands =
         // caches
         let mutable initialized = false
 
-        let effect = Effect.withInstanceUniforms state.perGeometryUniforms effect
+        let effect = Effect.withInstanceUniforms state.PerGeometryUniforms effect
 
         let pipeline = 
             let surface = Aardvark.Rendering.Surface.FShadeSimple effect
             compiler.manager.PreparePipelineState(compiler.renderPass, surface, state)
 
         let descritorSet, descritorSetResources =
-            let sets, resources = compiler.manager.CreateDescriptorSets(pipeline.ppLayout, compiler.task.HookProvider state.globalUniforms)
+            let sets, resources = compiler.manager.CreateDescriptorSets(pipeline.ppLayout, compiler.task.HookProvider state.GlobalUniforms)
             compiler.manager.CreateDescriptorSetBinding(pipeline.ppLayout, sets), resources
 
         let pipelineInfo = pipeline.ppLayout.PipelineInfo
 
         let instanceInputs =
-            pipelineInfo.pInputs |> List.choose (fun i -> match Map.tryFind i.paramSemantic state.perGeometryUniforms with | Some typ -> Some(i.paramName, (i, typ)) | _ -> None) |> Map.ofList
+            pipelineInfo.pInputs |> List.choose (fun i -> match Map.tryFind i.paramSemantic state.PerGeometryUniforms with | Some typ -> Some(i.paramName, (i, typ)) | _ -> None) |> Map.ofList
             
         let vertexInputs =
-            pipelineInfo.pInputs |> List.choose (fun i -> match Map.tryFind (Symbol.Create i.paramSemantic) state.vertexInputTypes with | Some typ -> Some(Symbol.Create i.paramName, (i, typ)) | _ -> None) |> Map.ofList
+            pipelineInfo.pInputs |> List.choose (fun i -> match Map.tryFind (Symbol.Create i.paramSemantic) state.VertexInputTypes with | Some typ -> Some(Symbol.Create i.paramName, (i, typ)) | _ -> None) |> Map.ofList
 
   
 

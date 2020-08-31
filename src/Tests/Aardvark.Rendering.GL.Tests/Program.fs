@@ -58,17 +58,13 @@ let testCompile() =
             
             DrawCalls           = Direct(AVal.constant [ callInfo ])
             Mode                = IndexedGeometryMode.TriangleList
-        
 
             Surface             = Surface.Backend (surface :> ISurface)
-                      
-            DepthTest           = AVal.constant DepthTestMode.LessOrEqual
-            DepthBias           = AVal.constant DepthBias.None
-            CullMode            = AVal.constant CullMode.None
-            FrontFace           = AVal.constant WindingOrder.CounterClockwise
-            BlendMode           = AVal.constant BlendMode.None
-            FillMode            = AVal.constant FillMode.Fill
-            StencilMode         = AVal.constant StencilMode.Disabled
+
+            DepthState          = DepthState.Default
+            BlendState          = BlendState.Default
+            StencilState        = StencilState.Default
+            RasterizerState     = { RasterizerState.Default with FrontFace = AVal.constant WindingOrder.CounterClockwise }
             
             Indices             = None
             InstanceAttributes  = AttributeProvider.Empty
@@ -76,11 +72,7 @@ let testCompile() =
             
             Uniforms            = uniforms V3d.Zero
 
-            ConservativeRaster  = AVal.constant false
-            Multisample         = AVal.constant true
-
             Activate            = fun () -> { new IDisposable with member x.Dispose() = () }
-            WriteBuffers        = None
         }
 
     let framebuffer = runtime.CreateFramebuffer(signature, AVal.constant(V2i(1024, 1024)))

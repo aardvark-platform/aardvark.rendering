@@ -597,14 +597,14 @@ module Utilities =
 
 
                 let stencilTest =
-                    { StencilState.Default with
+                    { StencilMode.Default with
                         Comparison = ComparisonFunction.Equal }
 
                 { new SimpleRenderWindow(app, app.Info.viewTrafos, app.Info.projTrafos) with
 
                     override x.WrapSg(win, sg) =
                         sg
-                        |> Sg.stencilMode' (AVal.constant stencilTest)
+                        |> Sg.stencilMode' stencilTest
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                         |> Sg.uniform "CameraLocation" hmdLocation
@@ -612,7 +612,7 @@ module Utilities =
 
                     override x.Compile(win, sg) =
                         sg
-                        |> Sg.stencilMode' (AVal.constant stencilTest)
+                        |> Sg.stencilMode' stencilTest
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                         |> Sg.uniform "CameraLocation" hmdLocation
@@ -628,14 +628,14 @@ module Utilities =
 
 
                 let stencilTest =
-                    { StencilState.Default with
+                    { StencilMode.Default with
                         Comparison = ComparisonFunction.Equal }
 
                 { new SimpleRenderWindow(app, app.Info.viewTrafos, app.Info.projTrafos) with
 
                     override x.WrapSg(win, sg) =
                         sg
-                        |> Sg.stencilMode' (AVal.constant stencilTest)
+                        |> Sg.stencilMode' stencilTest
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                         |> Sg.uniform "CameraLocation" hmdLocation
@@ -643,7 +643,7 @@ module Utilities =
 
                     override x.Compile(win, sg) =
                         sg
-                        |> Sg.stencilMode' (AVal.constant stencilTest)
+                        |> Sg.stencilMode' stencilTest
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                         |> Sg.uniform "CameraLocation" hmdLocation

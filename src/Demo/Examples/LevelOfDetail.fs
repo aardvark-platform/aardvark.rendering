@@ -551,16 +551,12 @@ module LevelOfDetail =
 
         let state =
             {
-                depthTest           = AVal.constant DepthTestMode.LessOrEqual
-                depthBias           = AVal.constant DepthBias.None
-                cullMode            = AVal.constant CullMode.None
-                frontFace           = AVal.constant WindingOrder.CounterClockwise
-                blendMode           = AVal.constant BlendMode.None
-                fillMode            = AVal.constant FillMode.Fill
-                stencilMode         = AVal.constant StencilMode.Disabled
-                multisample         = AVal.constant true
-                writeBuffers        = None
-                globalUniforms      = 
+                DepthState      = DepthState.Default
+                BlendState      = BlendState.Default
+                StencilState    = StencilState.Default
+                RasterizerState = { RasterizerState.Default with FrontFace = AVal.constant WindingOrder.CounterClockwise }
+
+                GlobalUniforms      = 
                     UniformProvider.ofList [
                         "DiffuseColorTexture", tex :> IAdaptiveValue
                         "ViewTrafo", view :> IAdaptiveValue
@@ -569,9 +565,9 @@ module LevelOfDetail =
                         "CameraLocation", view |> AVal.map (fun v -> v.Backward.C3.XYZ) :> IAdaptiveValue
                     ]
 
-                geometryMode        = IndexedGeometryMode.TriangleList
-                vertexInputTypes    = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f>; DefaultSemantic.DiffuseColorCoordinates, typeof<V2f> ]
-                perGeometryUniforms = Map.ofList [ "ModelTrafo", typeof<Trafo3d>; "NodeColor", typeof<V4d> ]
+                Mode                = IndexedGeometryMode.TriangleList
+                VertexInputTypes    = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f>; DefaultSemantic.DiffuseColorCoordinates, typeof<V2f> ]
+                PerGeometryUniforms = Map.ofList [ "ModelTrafo", typeof<Trafo3d>; "NodeColor", typeof<V4d> ]
             }
 
         let task = new Temp.CommandTask(device, unbox win.FramebufferSignature, RuntimeCommand.LodTree(surface, state, loader))

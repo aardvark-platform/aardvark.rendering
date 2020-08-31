@@ -677,15 +677,15 @@ let main argv =
         Sg.air { 
             // inside an air-block we're allowed to read current values
             // which will be inherited from the SceneGraph
-            let! parentFill = AirState.fillMode
+            let! parentRast = AirState.rasterizerState
 
             // modes can be modified by simply calling the respective setters.
             // Note that these setters are overloaded with and without aval<Mode>
-            do! Air.DepthTest    DepthTestMode.LessOrEqual
+            do! Air.DepthTest    DepthTest.LessOrEqual
             do! Air.CullMode     CullMode.None
             do! Air.BlendMode    BlendMode.None
             do! Air.FillMode     FillMode.Fill
-            do! Air.StencilMode  StencilMode.Disabled
+            do! Air.StencilMode  StencilMode.Default
 
             // we can also override the shaders in use (and with FSHade)
             // build our own dynamic shaders e.g. depending on the inherited 
@@ -694,7 +694,7 @@ let main argv =
                     do! DefaultSurfaces.trafo               
                     
                     // if the parent fillmode is not filled make the quad red.
-                    let fill = parentFill |> AVal.force
+                    let fill = parentRast.FillMode |> AVal.force
                     match fill with
                         | FillMode.Fill -> do! DefaultSurfaces.diffuseTexture
                         | _ -> do! DefaultSurfaces.constantColor C4f.Red 

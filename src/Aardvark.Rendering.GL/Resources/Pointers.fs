@@ -44,23 +44,23 @@ module PointerContextExtensions =
                 OperationAlpha = Translations.toGLOperation mode.AlphaOperation
             )
 
+        let inline toGLColorMask (mask : ColorMask) =
+            GLColorMask(
+                R = (if mask &&& ColorMask.Red   <> ColorMask.None then 1 else 0),
+                G = (if mask &&& ColorMask.Green <> ColorMask.None then 1 else 0),
+                B = (if mask &&& ColorMask.Blue  <> ColorMask.None then 1 else 0),
+                A = (if mask &&& ColorMask.Alpha <> ColorMask.None then 1 else 0)
+            )
+
         let inline toGLStencilMode (mode : StencilMode) =
             GLStencilMode(
                 Enabled = (if mode.Enabled then 1 else 0),
-                CmpFront = Translations.toGLCompareFunction mode.Front.Comparison,
-                MaskFront = mode.Front.CompareMask,
-                ReferenceFront = mode.Front.Reference,
-                CmpBack = Translations.toGLCompareFunction mode.Back.Comparison,
-                MaskBack = mode.Back.CompareMask,
-                ReferenceBack = mode.Back.Reference,
-
-                OpFrontSF = Translations.toGLStencilOperation mode.Front.Fail,
-                OpFrontDF = Translations.toGLStencilOperation mode.Front.DepthFail,
-                OpFrontPass = Translations.toGLStencilOperation mode.Front.Pass,
-
-                OpBackSF = Translations.toGLStencilOperation mode.Back.Fail,
-                OpBackDF = Translations.toGLStencilOperation mode.Back.DepthFail,
-                OpBackPass = Translations.toGLStencilOperation mode.Back.Pass
+                Cmp = Translations.toGLCompareFunction mode.Comparison,
+                Mask = uint32 mode.CompareMask,
+                Reference = mode.Reference,
+                OpStencilFail = Translations.toGLStencilOperation mode.Fail,
+                OpDepthFail = Translations.toGLStencilOperation mode.DepthFail,
+                OpPass = Translations.toGLStencilOperation mode.Pass
             )
 
         module Attribute =
@@ -147,9 +147,12 @@ module PointerContextExtensions =
                 buffers.ToArray(), values.ToArray()
 
     module NativePtr =
+        let setArray (a : 'a[]) (ptr : nativeptr<'a>) =
+            for i in 0 .. a.Length-1 do NativePtr.set ptr i a.[i]
+
         let allocArray (a :'a[]) =
             let ptr = NativePtr.alloc a.Length
-            for i in 0 .. a.Length-1 do NativePtr.set ptr i a.[i]
+            setArray a ptr
             ptr
 
     type Context with
@@ -187,10 +190,8 @@ module PointerContextExtensions =
             NativePtr.free list.Infos
 
 
-        member x.ToDepthTest(mode : DepthTestMode) =
-            let value = Translations.toGLCompareFunction mode.Comparison
-            let clamp = if mode.Clamp then 1 else 0
-            DepthTestInfo(value, clamp)
+        member x.ToCompareFunction(comparison : ComparisonFunction) =
+             Translations.toGLCompareFunction comparison
 
         member x.ToDepthBias(state : DepthBias) =
             DepthBiasInfo(float32 state.Constant, float32 state.SlopeScale, float32 state.Clamp)
@@ -206,6 +207,9 @@ module PointerContextExtensions =
 
         member x.ToBlendMode(mode : BlendMode) =
             toGLBlendMode mode
+
+        member x.ToColorMask(mask : ColorMask) =
+            toGLColorMask mask
 
         member x.ToStencilMode(mode : StencilMode) =
             toGLStencilMode mode

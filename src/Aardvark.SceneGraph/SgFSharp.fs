@@ -62,13 +62,13 @@ module SgFSharp =
 
 
 
-        let andAlso (sg : ISg) (andSg : ISg) = 
+        let andAlso (sg : ISg) (andSg : ISg) =
             Sg.Set [sg; andSg] :> ISg
 
         let geometrySet mode attributeTypes (geometries : aset<_>) =
             Sg.GeometrySet(geometries,mode,attributeTypes) :> ISg
 
-        let dynamic (s : aval<ISg>) = 
+        let dynamic (s : aval<ISg>) =
             Sg.DynamicNode(s) :> ISg
 
         let onOff (active : aval<bool>) (sg : ISg) =
@@ -77,16 +77,16 @@ module SgFSharp =
         let texture (sem : Symbol) (tex : aval<ITexture>) (sg : ISg) =
             Sg.TextureApplicator(sem, tex, sg) :> ISg
 
-        let diffuseTexture (tex : aval<ITexture>) (sg : ISg) = 
+        let diffuseTexture (tex : aval<ITexture>) (sg : ISg) =
             texture DefaultSemantic.DiffuseColorTexture tex sg
 
-        let diffuseTexture' (tex : ITexture) (sg : ISg) = 
+        let diffuseTexture' (tex : ITexture) (sg : ISg) =
             texture DefaultSemantic.DiffuseColorTexture (AVal.constant tex) sg
 
-        let diffuseFileTexture' (path : string) (wantMipMaps : bool) (sg : ISg) = 
+        let diffuseFileTexture' (path : string) (wantMipMaps : bool) (sg : ISg) =
             texture DefaultSemantic.DiffuseColorTexture (AVal.constant (FileTexture(path, wantMipMaps) :> ITexture)) sg
 
-        let fileTexture (sym : Symbol) (path : string) (wantMipMaps : bool) (sg : ISg) = 
+        let fileTexture (sym : Symbol) (path : string) (wantMipMaps : bool) (sg : ISg) =
             texture sym (AVal.constant (FileTexture(path, wantMipMaps) :> ITexture)) sg
 
         let scopeDependentTexture (sem : Symbol) (tex : Scope -> aval<ITexture>) (sg : ISg) =
@@ -100,7 +100,7 @@ module SgFSharp =
             let tex runtime =
                 match cache.TryGetValue runtime with
                     | (true, v) -> v
-                    | _ -> 
+                    | _ ->
                         let v = tex runtime
                         cache.[runtime] <- v
                         v
@@ -111,7 +111,7 @@ module SgFSharp =
             runtimeDependentTexture DefaultSemantic.DiffuseColorTexture tex sg
 
         let samplerState (sem : Symbol) (state : aval<Option<SamplerState>>) (sg : ISg) =
-            let modifier =   
+            let modifier =
                 adaptive {
                     let! user = state
                     return fun (textureSem : Symbol) (state : SamplerState) ->
@@ -125,7 +125,7 @@ module SgFSharp =
             sg |> uniform (string DefaultSemantic.SamplerStateModifier) modifier
 
         let modifySamplerState (sem : Symbol) (modifier : aval<SamplerState -> SamplerState>) (sg : ISg) =
-            let modifier =   
+            let modifier =
                 adaptive {
                     let! modifier = modifier
                     return fun (textureSem : Symbol) (state : SamplerState) ->
@@ -136,47 +136,254 @@ module SgFSharp =
                 }
             sg |> uniform (string DefaultSemantic.SamplerStateModifier) modifier
 
-        let conservativeRaster (m : aval<bool>) (sg : ISg) =
-            Sg.ConservativeRasterApplicator(m, AVal.constant sg) :> ISg
-            
-        let multisample (m : aval<bool>) (sg : ISg) =
-            Sg.MultisampleApplicator(m, AVal.constant sg) :> ISg
+        // ================================================================================================================
+        // Blending
+        // ================================================================================================================
 
-        let fillMode (m : aval<FillMode>) (sg : ISg) =
-            Sg.FillModeApplicator(m, sg) :> ISg
-        
-        let blendMode (m : aval<BlendMode>) (sg : ISg) =
-            Sg.BlendModeApplicator(m, sg) :> ISg
+        /// Sets the global blend mode for all color attachments.
+        let blendMode (mode : aval<BlendMode>) (sg : ISg) =
+            Sg.BlendModeApplicator(mode, sg) :> ISg
 
-        let cullMode (m : aval<CullMode>) (sg : ISg) =
-            Sg.CullModeApplicator(m, sg) :> ISg
+        /// Sets the global blend mode for all color attachments.
+        let blendMode' mode = blendMode (AVal.init mode)
 
-        let stencilMode (m : aval<StencilMode>) (sg : ISg) =
-            Sg.StencilModeApplicator(m,sg) :> ISg
 
-        let stencilMode' (m : aval<StencilState>) (sg : ISg) =
-            Sg.StencilModeApplicator(m,sg) :> ISg
+        /// Sets the blend modes for the given color attachments (overriding the global blend mode).
+        let blendModes (modes : aval<Map<Symbol, BlendMode>>) (sg : ISg) =
+            Sg.AttachmentBlendModeApplicator(modes, sg) :> ISg
 
-        let depthTest (m : aval<DepthTestMode>) (sg : ISg) =
-            Sg.DepthTestModeApplicator(m, sg) :> ISg
+        /// Sets the blend modes for the given color attachments (overriding the global blend mode).
+        let blendModes' modes = blendModes (AVal.init modes)
 
-        let writeBuffers' (buffers : Set<Symbol>) (sg : ISg) =
-            Sg.WriteBuffersApplicator(Some buffers, AVal.constant sg) :> ISg
 
-        let writeBuffers (buffers : Option<Set<Symbol>>) (sg : ISg) =
-            Sg.WriteBuffersApplicator(buffers, AVal.constant sg) :> ISg
+        /// Sets the blend constant color.
+        let inline blendConstant (color : aval<'a>) (sg : ISg) =
+            if typeof<'a> = typeof<C4f> then
+                Sg.BlendConstantApplicator(color :?> aval<C4f>, sg) :> ISg
+            else
+                Sg.BlendConstantApplicator(color |> AVal.map c4f, sg) :> ISg
 
-        let colorMask (maskRgba : aval<bool * bool * bool * bool>) (sg : ISg) =
-            Sg.ColorWriteMaskApplicator(maskRgba, AVal.constant sg)
+        /// Sets the blend constant color.
+        let inline blendConstant' color = blendConstant (AVal.init color)
 
-        let depthMask (depthWriteEnabled : aval<bool>) (sg : ISg) =
-            Sg.DepthWriteMaskApplicator(depthWriteEnabled, AVal.constant sg)
 
-        let depthBias (m : aval<DepthBias>) (sg: ISg) =
-            Sg.DepthBiasApplicator(m, sg) :> ISg
+        /// Sets the global color write mask for all color attachments.
+        let colorMask (mask : aval<ColorMask>) (sg : ISg) =
+            Sg.ColorWriteMaskApplicator(mask, sg) :> ISg
 
-        let frontFace (m : aval<WindingOrder>) (sg: ISg) = 
-            Sg.FrontFaceApplicator(m, sg) :> ISg
+        /// Sets the global color write mask for all color attachments.
+        let colorMask' mask = colorMask (AVal.init mask)
+
+
+        /// Sets the color write masks for the given color attachments (overriding the global mask).
+        let colorMasks (masks : aval<Map<Symbol, ColorMask>>) (sg : ISg) =
+            Sg.AttachmentColorWriteMaskApplicator(masks, sg) :> ISg
+
+        /// Sets the color write masks for the given color attachments (overriding the global mask).
+        let colorMasks' masks = colorMasks (AVal.init masks)
+
+
+        /// Sets the color write mask for all color attachments to either ColorMask.None or ColorMask.All.
+        let colorWrite (enabled : aval<bool>) (sg : ISg) =
+            Sg.ColorWriteMaskApplicator(enabled, sg) :> ISg
+
+        /// Sets the color write mask for all color attachments to either ColorMask.None or ColorMask.All.
+        let colorWrite' enabled = colorWrite (AVal.init enabled)
+
+
+        /// Sets the color write masks for the given color attachments to either
+        /// ColorMask.None or ColorMask.All (overriding the global mask).
+        let colorWrites (enabled : aval<Map<Symbol, bool>>) (sg : ISg) =
+            Sg.AttachmentColorWriteMaskApplicator(enabled, sg) :> ISg
+
+        /// Sets the color write masks for the given color attachments to either
+        /// ColorMask.None or ColorMask.All (overriding the global mask).
+        let colorWrites' enabled = colorWrites (AVal.init enabled)
+
+
+        /// Restricts color output to the given attachments.
+        let colorOutput (enabled : aval<Set<Symbol>>) =
+            colorWrite' false
+            >> colorMasks (enabled |> AVal.map ColorMask.ofWriteSet)
+
+        /// Restricts color output to the given attachments.
+        let colorOutput' enabled = colorOutput (AVal.init enabled)
+
+        // ================================================================================================================
+        // Depth
+        // ================================================================================================================
+
+        /// Sets the depth test.
+        let depthTest (test : aval<DepthTest>) (sg : ISg) =
+            Sg.DepthTestApplicator(test, sg) :> ISg
+
+        /// Sets the depth test.
+        let depthTest' test = depthTest (AVal.init test)
+
+
+        /// Enables or disables depth writing.
+        let depthWrite (depthWriteEnabled : aval<bool>) (sg : ISg) =
+            Sg.DepthWriteMaskApplicator(depthWriteEnabled, sg) :> ISg
+
+        /// Enables or disables depth writing.
+        let depthWrite' depthWriteEnabled = depthWrite (AVal.init depthWriteEnabled)
+
+
+        /// Sets the depth bias.
+        let depthBias (bias : aval<DepthBias>) (sg: ISg) =
+            Sg.DepthBiasApplicator(bias, sg) :> ISg
+
+        /// Sets the depth bias.
+        let depthBias' bias = depthBias (AVal.init bias)
+
+
+        /// Enables or disables depth clamping.
+        let depthClamp (clamp : aval<bool>) (sg: ISg) =
+            Sg.DepthClampApplicator(clamp, sg) :> ISg
+
+        /// Enables or disables depth clamping.
+        let depthClamp' clamp = depthClamp (AVal.init clamp)
+
+        // ================================================================================================================
+        // Stencil
+        // ================================================================================================================
+
+        /// Sets the stencil mode for front-facing polygons.
+        let stencilModeFront (mode : aval<StencilMode>) (sg : ISg) =
+            Sg.StencilModeFrontApplicator(mode, sg) :> ISg
+
+        /// Sets the stencil mode for front-facing polygons.
+        let stencilModeFront' mode = stencilModeFront (AVal.init mode)
+
+
+        /// Sets the stencil write mask for front-facing polygons.
+        let stencilWriteMaskFront (mask : aval<StencilMask>) (sg : ISg) =
+            Sg.StencilWriteMaskFrontApplicator(mask, sg) :> ISg
+
+        /// Sets the stencil write mask for front-facing polygons.
+        let stencilWriteMaskFront' mask = stencilWriteMaskFront (AVal.init mask)
+
+
+        /// Enables or disables stencil write for front-facing polygons.
+        let stencilWriteFront (enabled : aval<bool>) (sg : ISg) =
+            Sg.StencilWriteMaskFrontApplicator(enabled, sg) :> ISg
+
+        /// Enables or disables stencil write for front-facing polygons.
+        let stencilWriteFront' enabled = stencilWriteFront (AVal.init enabled)
+
+
+        /// Sets the stencil mode for back-facing polygons.
+        let stencilModeBack (mode : aval<StencilMode>) (sg : ISg) =
+            Sg.StencilModeBackApplicator(mode, sg) :> ISg
+
+        /// Sets the stencil mode for back-facing polygons.
+        let stencilModeBack' mode = stencilModeBack (AVal.init mode)
+
+
+        /// Sets the stencil write mask for back-facing polygons.
+        let stencilWriteMaskBack (mask : aval<StencilMask>) (sg : ISg) =
+            Sg.StencilWriteMaskBackApplicator(mask, sg) :> ISg
+
+        /// Sets the stencil write mask for back-facing polygons.
+        let stencilWriteMaskBack' mask = stencilWriteMaskBack (AVal.init mask)
+
+
+        /// Enables or disables stencil write for back-facing polygons.
+        let stencilWriteBack (enabled : aval<bool>) (sg : ISg) =
+            Sg.StencilWriteMaskBackApplicator(enabled, sg) :> ISg
+
+        /// Enables or disables stencil write for back-facing polygons.
+        let stencilWriteBack' enabled = stencilWriteBack (AVal.init enabled)
+
+
+        /// Sets separate stencil modes for front- and back-facing polygons.
+        let stencilModes (front : aval<StencilMode>) (back : aval<StencilMode>) =
+            stencilModeFront front >> stencilModeBack back
+
+        /// Sets separate stencil modes for front- and back-facing polygons.
+        let stencilModes' front back = stencilModes (AVal.init front) (AVal.init back)
+
+
+        /// Sets separate stencil write masks for front- and back-facing polygons.
+        let stencilWriteMasks (front : aval<StencilMask>) (back : aval<StencilMask>) =
+            stencilWriteMaskFront front >> stencilWriteMaskBack back
+
+        /// Sets separate stencil write masks for front- and back-facing polygons.
+        let stencilWriteMasks' front back = stencilWriteMasks (AVal.init front) (AVal.init back)
+
+
+        /// Enables or disables stencil write for front- and back-facing polygons.
+        let stencilWrites (front : aval<bool>) (back : aval<bool>) =
+            stencilWriteFront front >> stencilWriteBack back
+
+        /// Enables or disables stencil write for front- and back-facing polygons.
+        let stencilWrites' front back = stencilWrites (AVal.init front) (AVal.init back)
+
+
+        /// Sets the stencil mode.
+        let stencilMode (mode : aval<StencilMode>) =
+            stencilModes mode mode
+
+        /// Sets the stencil mode.
+        let stencilMode' mode = stencilMode (AVal.init mode)
+
+
+        /// Sets the stencil write mask.
+        let stencilWriteMask (mask : aval<StencilMask>) =
+            stencilWriteMasks mask mask
+
+        /// Sets the stencil write mask.
+        let stencilWriteMask' mask = stencilWriteMask (AVal.init mask)
+
+
+        /// Enables or disables stencil write.
+        let stencilWrite (enabled : aval<bool>) =
+            stencilWrites enabled enabled
+
+        /// Enables or disables stencil write.
+        let stencilWrite' enabled = stencilWrite (AVal.init enabled)
+
+        // ================================================================================================================
+        // Write buffers
+        // ================================================================================================================
+        let writeBuffers (buffers : aval<Set<Symbol>>) =
+
+            let depthEnable =
+                buffers |> AVal.map (Set.contains DefaultSemantic.Depth)
+
+            let stencilEnable =
+                buffers |> AVal.map (Set.contains DefaultSemantic.Stencil)
+
+            depthWrite depthEnable
+            >> stencilWrite stencilEnable
+            >> colorOutput buffers
+
+        let writeBuffers' (buffers : Set<Symbol>) =
+            writeBuffers (AVal.constant buffers)
+
+        // ================================================================================================================
+        // Rasterizer
+        // ================================================================================================================
+        let cullMode (mode : aval<CullMode>) (sg : ISg) =
+            Sg.CullModeApplicator(mode, sg) :> ISg
+
+        let frontFace (order : aval<WindingOrder>) (sg: ISg) =
+            Sg.FrontFaceApplicator(order, sg) :> ISg
+
+        let fillMode (mode : aval<FillMode>) (sg : ISg) =
+            Sg.FillModeApplicator(mode, sg) :> ISg
+
+        let multisample (mode : aval<bool>) (sg : ISg) =
+            Sg.MultisampleApplicator(mode, sg) :> ISg
+
+        let conservativeRaster (mode : aval<bool>) (sg : ISg) =
+            Sg.ConservativeRasterApplicator(mode, sg) :> ISg
+
+        let cullMode' mode                = cullMode (AVal.init mode)
+        let frontFace' order              = frontFace (AVal.init order)
+        let fillMode' mode                = fillMode (AVal.init mode)
+        let multisample' mode             = multisample (AVal.init mode)
+        let conservativeRaster' mode      = conservativeRaster (AVal.init mode)
 
         let private arrayModCache = ConditionalWeakTable<IAdaptiveValue, aval<Array>>()
         let private bufferModCache = ConditionalWeakTable<IAdaptiveValue, BufferView>()
@@ -184,7 +391,7 @@ module SgFSharp =
         let private modOfArray (m : aval<'a[]>) =
             match arrayModCache.TryGetValue (m :> IAdaptiveValue) with
                 | (true, r) -> r
-                | _ -> 
+                | _ ->
                     let r = m |> AVal.map (fun a -> a :> Array)
                     arrayModCache.Add(m, r)
                     r
@@ -192,7 +399,7 @@ module SgFSharp =
         let private bufferOfArray (m : aval<'a[]>) =
             match bufferModCache.TryGetValue (m :> IAdaptiveValue) with
                 | (true, r) -> r
-                | _ -> 
+                | _ ->
                     let b = m |> AVal.map (fun a -> ArrayBuffer a :> IBuffer)
                     let r = BufferView(b, typeof<'a>)
                     bufferModCache.Add(m, r)
@@ -243,20 +450,20 @@ module SgFSharp =
             ) :> ISg
 
         let render (mode : IndexedGeometryMode) (call : DrawCallInfo) =
-            Sg.RenderNode(call,mode) 
-            
+            Sg.RenderNode(call,mode)
+
         let indirectDraw (mode : IndexedGeometryMode) (buffer : aval<IndirectBuffer>) =
             Sg.IndirectRenderNode(buffer, mode) :> ISg
 
         let ofIndexedGeometry (g : IndexedGeometry) =
-            let attributes = 
-                g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) -> 
+            let attributes =
+                g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) ->
                     let t = v.GetType().GetElementType()
                     let view = BufferView(AVal.constant (ArrayBuffer(v) :> IBuffer), t)
 
                     k, view
                 ) |> Map.ofSeq
-        
+
 
             let index, faceVertexCount =
                 if g.IsIndexed then
@@ -264,7 +471,7 @@ module SgFSharp =
                 else
                     null, g.IndexedAttributes.[DefaultSemantic.Positions].Length
 
-            let call = 
+            let call =
                 DrawCallInfo(
                     FaceVertexCount = faceVertexCount,
                     FirstIndex = 0,
@@ -279,12 +486,12 @@ module SgFSharp =
             else
                 sg
 
-        module private Interleaved = 
+        module private Interleaved =
             open System.Reflection
             open Microsoft.FSharp.NativeInterop
 
             type Converter() =
-                
+
                 static let toFloat32 (i : 'a) : float32 =
                     let mutable i = i
                     NativePtr.read (&&i |> NativePtr.toNativeInt |> NativePtr.ofNativeInt)
@@ -302,12 +509,12 @@ module SgFSharp =
                         typeof<V2d>,     (2, (fun (v : V2d) -> [|float32 v.X; float32 v.Y|]) :> obj)
                         typeof<V3d>,     (3, (fun (v : V3d) -> [|float32 v.X; float32 v.Y; float32 v.Z|]) :> obj)
                         typeof<V4d>,     (4, (fun (v : V4d) -> [|float32 v.X; float32 v.Y; float32 v.Z; float32 v.W|]) :> obj)
-                        
+
                         typeof<float32>, (1, (fun (v : float32) -> [|v|]) :> obj)
                         typeof<V2f>,     (2, (fun (v : V2f) -> [|v.X; v.Y|]) :> obj)
                         typeof<V3f>,     (3, (fun (v : V3f) -> [|v.X; v.Y; v.Z|]) :> obj)
                         typeof<V4f>,     (4, (fun (v : V4f) -> [|v.X; v.Y; v.Z; v.W|]) :> obj)
-                        
+
                         typeof<C3f>,     (3, (fun (c : C3f) -> [|c.R; c.G; c.B|]) :> obj)
                         typeof<C4f>,     (4, (fun (c : C4f) -> [|c.R; c.G; c.B; c.A|]) :> obj)
                         typeof<C3b>,     (3, (fun (v : C3b) -> let c = v.ToC3f() in [|c.R; c.G; c.B|]) :> obj)
@@ -319,7 +526,7 @@ module SgFSharp =
                         | (true, (_,accessor)) ->
                             arr |> Array.collect (unbox accessor)
                         | _ -> failwithf "unsupported attribute type: %A" typeof<'a>.FullName
-                            
+
 
                 static member GetDimension (t : Type) =
                     match accessors.TryGetValue t with
@@ -340,7 +547,7 @@ module SgFSharp =
             let arrays =
                 attributes |> List.choose (fun att ->
                     match g.IndexedAttributes.TryGetValue att with
-                        | (true, v) -> 
+                        | (true, v) ->
                             let (dim, arr) = Interleaved.toFloatArray v
                             Some (att, v.GetType().GetElementType(), dim, arr)
                         | _ -> None
@@ -375,7 +582,7 @@ module SgFSharp =
                 else
                     null, count
 
-            let call = 
+            let call =
                 DrawCallInfo(
                     FaceVertexCount = faceVertexCount,
                     FirstIndex = 0,
@@ -391,8 +598,8 @@ module SgFSharp =
                 sg
 
         let instancedGeometry (trafos : aval<Trafo3d[]>) (g : IndexedGeometry) =
-            let vertexAttributes = 
-                g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) -> 
+            let vertexAttributes =
+                g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) ->
                     let t = v.GetType().GetElementType()
                     let view = BufferView(AVal.constant (ArrayBuffer(v) :> IBuffer), t)
 
@@ -416,7 +623,7 @@ module SgFSharp =
                 )
 
             let sg = Sg.VertexAttributeApplicator(vertexAttributes, Sg.RenderNode(call, g.Mode)) :> ISg
-        
+
             let sg =
                 if index <> null then
                     Sg.VertexIndexApplicator(BufferView.ofArray  index, sg) :> ISg
@@ -476,9 +683,9 @@ module SgFSharp =
 
             Sg.TrafoApplicator(bb.GetValue() |> transformBox |> AVal.constant, this) :> ISg
 
-        let normalizeAdaptive sg = sg |> normalizeToAdaptive ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) ) 
-        
-        let normalize sg = sg |> normalizeTo ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) ) 
+        let normalizeAdaptive sg = sg |> normalizeToAdaptive ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) )
+
+        let normalize sg = sg |> normalizeTo ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) )
 
         let adapter (o : obj) = Sg.AdapterNode(o) :> ISg
 

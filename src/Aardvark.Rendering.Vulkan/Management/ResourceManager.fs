@@ -619,15 +619,23 @@ module Resources =
             )
 
 
-    type DepthStencilStateResource(owner : IResourceCache, key : list<obj>, depthWrite : bool, depth : aval<DepthTestMode>, stencil : aval<StencilMode>) =
+    type DepthStencilStateResource(owner : IResourceCache, key : list<obj>,
+                                   depthTest : aval<DepthTest>, depthWrite : aval<bool>,
+                                   stencilModeF : aval<StencilMode>, stencilMaskF : aval<StencilMask>,
+                                   stencilModeB : aval<StencilMode>, stencilMaskB : aval<StencilMask>) =
         inherit AbstractPointerResourceWithEquality<VkPipelineDepthStencilStateCreateInfo>(owner, key)
 
         override x.Compute(token) =
-            let depth = depth.GetValue token
-            let stencil = stencil.GetValue token
+            let depthTest = depthTest.GetValue token
+            let depthWrite = depthWrite.GetValue token
 
-            let depth = DepthState.create depthWrite depth
-            let stencil = StencilState.create stencil
+            let stencilMaskF = stencilMaskF.GetValue token
+            let stencilModeF = stencilModeF.GetValue token
+            let stencilMaskB = stencilMaskB.GetValue token
+            let stencilModeB = stencilModeB.GetValue token
+
+            let depth = DepthState.create depthWrite depthTest
+            let stencil = StencilState.create stencilMaskF stencilMaskB stencilModeF stencilModeB
 
             VkPipelineDepthStencilStateCreateInfo(
                 VkPipelineDepthStencilStateCreateFlags.MinValue,
@@ -642,21 +650,23 @@ module Resources =
                 float32 depth.depthBounds.Max
             )
             
-    type RasterizerStateResource(owner : IResourceCache, key : list<obj>, depth : aval<DepthTestMode>, bias : aval<DepthBias>, cull : aval<CullMode>, frontFace : aval<WindingOrder>, fill : aval<FillMode>) =
+    type RasterizerStateResource(owner : IResourceCache, key : list<obj>,
+                                 depthClamp : aval<bool>, depthBias : aval<DepthBias>,
+                                 cull : aval<CullMode>, frontFace : aval<WindingOrder>, fill : aval<FillMode>) =
         inherit AbstractPointerResourceWithEquality<VkPipelineRasterizationStateCreateInfo>(owner, key)
 
         override x.Compute(token) =
-            let depth = depth.GetValue token
-            let bias = bias.GetValue token
+            let depthClamp = depthClamp.GetValue token
+            let bias = depthBias.GetValue token
             let cull = cull.GetValue token
             let front = frontFace.GetValue token
             let fill = fill.GetValue token
-            let state = RasterizerState.create false depth bias cull front fill
+            let state = RasterizerState.create false depthClamp bias cull front fill
 
             VkPipelineRasterizationStateCreateInfo(
                 VkPipelineRasterizationStateCreateFlags.MinValue,
                 (if state.depthClampEnable then 1u else 0u),
-                0u,
+                (if state.rasterizerDiscardEnable then 1u else 0u),
                 state.polygonMode,
                 state.cullMode,
                 state.frontFace,
@@ -667,20 +677,24 @@ module Resources =
                 float32 state.lineWidth
             )
     
-    type ColorBlendStateResource(owner : IResourceCache, key : list<obj>, writeMasks : bool[], blend : aval<BlendMode>) =
+    type ColorBlendStateResource(owner : IResourceCache, key : list<obj>,
+                                 writeMasks : aval<ColorMask[]>, blendModes : aval<BlendMode[]>, blendConstant : aval<C4f>) =
         inherit AbstractPointerResourceWithEquality<VkPipelineColorBlendStateCreateInfo>(owner, key)
 
         override x.Free(h : VkPipelineColorBlendStateCreateInfo) =
             NativePtr.free h.pAttachments
-            
+
         override x.Compute(token) =
-            let blend = blend.GetValue token
-            let state = ColorBlendState.create writeMasks writeMasks.Length blend
+            let writeMasks = writeMasks.GetValue token
+            let blendModes = blendModes.GetValue token
+            let blendConstant = blendConstant.GetValue token
+
+            let state = ColorBlendState.create writeMasks blendModes blendConstant
             let pAttStates = NativePtr.alloc writeMasks.Length
 
             for i in 0 .. state.attachmentStates.Length - 1 do
                 let s = state.attachmentStates.[i]
-                let att = 
+                let att =
                     VkPipelineColorBlendAttachmentState(
                         (if s.enabled then 1u else 0u),
                         s.srcFactor,
@@ -700,9 +714,29 @@ module Resources =
                 state.logicOp,
                 uint32 writeMasks.Length,
                 pAttStates,
-                state.constants
+                state.constant
             )
-    
+
+    // TODO: Sample shading
+    type MultisampleStateResource(owner : IResourceCache, key : list<obj>, samples : int, enable : aval<bool>) =
+        inherit AbstractPointerResourceWithEquality<VkPipelineMultisampleStateCreateInfo>(owner, key)
+
+        override x.Compute(token) =
+            let enable = enable.GetValue token
+
+            let samples = if enable then samples else 1
+            let state = MultisampleState.create false samples
+
+            VkPipelineMultisampleStateCreateInfo(
+                VkPipelineMultisampleStateCreateFlags.MinValue,
+                unbox state.samples,
+                (if state.sampleShadingEnable then 1u else 0u),
+                float32 state.minSampleShading,
+                NativePtr.zero,
+                (if state.alphaToCoverageEnable then 1u else 0u),
+                (if state.alphaToOneEnable then 1u else 0u)
+            )
+
     type DirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : aval<list<DrawCallInfo>>) =
         inherit AbstractPointerResourceWithEquality<DrawCall>(owner, key)
         
@@ -826,9 +860,8 @@ module Resources =
                           inputAssembly : INativeResourceLocation<VkPipelineInputAssemblyStateCreateInfo>,
                           rasterizerState : INativeResourceLocation<VkPipelineRasterizationStateCreateInfo>,
                           colorBlendState : INativeResourceLocation<VkPipelineColorBlendStateCreateInfo>,
-                          multisample : MultisampleState,
-                          depthStencil : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>
-                         ) =
+                          depthStencil : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>,
+                          multisample : INativeResourceLocation<VkPipelineMultisampleStateCreateInfo>) =
         inherit AbstractPointerResource<VkPipeline>(owner, key)
 
         static let check str err =
@@ -842,6 +875,7 @@ module Resources =
             rasterizerState.Acquire()
             colorBlendState.Acquire()
             depthStencil.Acquire()
+            multisample.Acquire()
 
         override x.Destroy() =
             base.Destroy()
@@ -851,18 +885,18 @@ module Resources =
             rasterizerState.Release()
             colorBlendState.Release()
             depthStencil.Release()
-            
+            multisample.Release()
 
         override x.Compute(token : AdaptiveToken) =
             let program = program.Update token
-                
+
             let prog = program.handle
             let device = prog.Device
 
             let pipeline = 
                 native {
                     let! pShaderCreateInfos = prog.ShaderCreateInfos
-                    
+
                     let! pViewportState =
                         let vp  =
                             if device.AllCount > 1u then
@@ -871,7 +905,7 @@ module Resources =
                             else 1u
                         VkPipelineViewportStateCreateInfo(
                             VkPipelineViewportStateCreateFlags.MinValue,
-                
+
                             uint32 vp,
                             NativePtr.zero,
 
@@ -879,20 +913,6 @@ module Resources =
                             NativePtr.zero
                         )
 
-                    let! pSampleMasks = multisample.sampleMask
-                    let! pMultisampleState =
-                        let ms = multisample
-                        VkPipelineMultisampleStateCreateInfo(
-                            VkPipelineMultisampleStateCreateFlags.MinValue,
-                
-                            unbox ms.samples,
-                            (if ms.sampleShadingEnable then 1u else 0u),
-                            float32 ms.minSampleShading,
-                            pSampleMasks,
-                            (if ms.alphaToCoverageEnable then 1u else 0u),
-                            (if ms.alphaToOneEnable then 1u else 0u)
-                        )
-            
                     let dynamicStates = [| VkDynamicState.Viewport; VkDynamicState.Scissor |]
                     let! pDynamicStates = Array.map uint32 dynamicStates
         
@@ -921,6 +941,7 @@ module Resources =
                     let rasterizerState = rasterizerState.Update(token) |> ignore; rasterizerState.Pointer
                     let depthStencil = depthStencil.Update(token) |> ignore; depthStencil.Pointer
                     let colorBlendState = colorBlendState.Update(token) |> ignore; colorBlendState.Pointer
+                    let multisample = multisample.Update(token) |> ignore; multisample.Pointer
 
                     let basePipeline, derivativeFlag =
                         if not x.HasHandle then
@@ -939,7 +960,7 @@ module Resources =
                             pTessState,
                             pViewportState,
                             rasterizerState,
-                            pMultisampleState,
+                            multisample,
                             depthStencil,
                             colorBlendState,
                             pDynamicStates, //dynamic
@@ -1182,6 +1203,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
     let depthStencilCache       = NativeResourceLocationCache<VkPipelineDepthStencilStateCreateInfo>(user)
     let rasterizerStateCache    = NativeResourceLocationCache<VkPipelineRasterizationStateCreateInfo>(user)
     let colorBlendStateCache    = NativeResourceLocationCache<VkPipelineColorBlendStateCreateInfo>(user)
+    let multisampleCache        = NativeResourceLocationCache<VkPipelineMultisampleStateCreateInfo>(user)
     let pipelineCache           = NativeResourceLocationCache<VkPipeline>(user)
 
     let drawCallCache           = NativeResourceLocationCache<DrawCall>(user)
@@ -1221,6 +1243,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
         depthStencilCache.Clear()
         rasterizerStateCache.Clear()
         colorBlendStateCache.Clear()
+        multisampleCache.Clear()
         pipelineCache.Clear()
 
         drawCallCache.Clear()
@@ -1400,30 +1423,65 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateInputAssemblyState(mode : IndexedGeometryMode, program : IResourceLocation<ShaderProgram>) =
         inputAssemblyCache.GetOrCreate([mode :> obj; program :> obj], fun cache key -> new InputAssemblyStateResource(cache, key, mode, program))
 
-    member x.CreateDepthStencilState(depthWrite : bool, depth : aval<DepthTestMode>, stencil : aval<StencilMode>) =
-        depthStencilCache.GetOrCreate([depthWrite :> obj; depth :> obj; stencil :> obj], fun cache key -> new DepthStencilStateResource(cache, key, depthWrite, depth, stencil))
+    member x.CreateDepthStencilState(depthTest : aval<DepthTest>, depthWrite : aval<bool>,
+                                     stencilModeF : aval<StencilMode>, stencilMaskF : aval<StencilMask>,
+                                     stencilModeB : aval<StencilMode>, stencilMaskB : aval<StencilMask>) =
+        depthStencilCache.GetOrCreate(
+            [depthTest :> obj; depthWrite :> obj;
+             stencilModeF :> obj; stencilMaskF :> obj;
+             stencilModeB :> obj; stencilMaskB :> obj],
+            fun cache key -> new DepthStencilStateResource(cache, key,
+                                                           depthTest, depthWrite,
+                                                           stencilModeF, stencilMaskF,
+                                                           stencilModeB, stencilMaskB)
+        )
         
-    member x.CreateRasterizerState(depth : aval<DepthTestMode>, bias : aval<DepthBias>, cull : aval<CullMode>, front : aval<WindingOrder>, fill : aval<FillMode>) =
-        rasterizerStateCache.GetOrCreate([depth :> obj; bias :> obj; cull :> obj; front :> obj, fill :> obj], fun cache key -> new RasterizerStateResource(cache, key, depth, bias, cull, front, fill))
+    member x.CreateRasterizerState(depthClamp : aval<bool>, depthBias : aval<DepthBias>,
+                                   cull : aval<CullMode>, front : aval<WindingOrder>, fill : aval<FillMode>) =
+        rasterizerStateCache.GetOrCreate(
+            [depthClamp :> obj; depthBias :> obj; cull :> obj; front :> obj, fill :> obj],
+            fun cache key -> new RasterizerStateResource(cache, key, depthClamp, depthBias, cull, front, fill)
+        )
 
-    member x.CreateColorBlendState(pass : RenderPass, writeBuffers : Option<Set<Symbol>>, blend : aval<BlendMode>) =
+    member x.CreateColorBlendState(pass : RenderPass,
+                                   globalMask : aval<ColorMask>, attachmentMask : aval<Map<Symbol, ColorMask>>,
+                                   globalBlend : aval<BlendMode>, attachmentBlend : aval<Map<Symbol, BlendMode>>,
+                                   blendConstant : aval<C4f>) =
+
+        let getAttachmentStates fallback values =
+            adaptive {
+                let! values = values
+                let! fallback = fallback
+
+                let arr = Array.zeroCreate pass.ColorAttachmentCount
+
+                pass.ColorAttachments
+                |> Seq.iter (fun (KeyValue(i, (s, _))) ->
+                    arr.[i] <- values |> Map.tryFind s |> Option.defaultValue fallback
+                )
+
+                return arr
+            }
+
         colorBlendStateCache.GetOrCreate(
-            [pass :> obj; writeBuffers :> obj; blend :> obj], 
-            fun cache key -> 
-                let writeBuffers =
-                    match writeBuffers with
-                        | Some set -> 
-                            if Set.isSuperset set pass.Semantics then pass.Semantics
-                            else set
-                        | None ->
-                            pass.Semantics
+            [pass :> obj; globalMask :> obj; attachmentMask :> obj; globalBlend :> obj; attachmentBlend :> obj; blendConstant :> obj],
+            fun cache key ->
+                let writeMasks = getAttachmentStates globalMask attachmentMask
+                let blendModes = getAttachmentStates globalBlend attachmentBlend
 
-                let writeMasks = Array.zeroCreate pass.ColorAttachmentCount
-                for (i, (sem,_)) in Map.toSeq pass.ColorAttachments do 
-                    if Set.contains sem writeBuffers then writeMasks.[i] <- true
-                    else writeMasks.[i] <- false
+                new ColorBlendStateResource(cache, key, writeMasks, blendModes, blendConstant)
+        )
 
-                new ColorBlendStateResource(cache, key, writeMasks, blend)
+    member x.CreateMultisampleState(pass : RenderPass, multisample : aval<bool>) =
+        let anyAttachment =
+            match pass.ColorAttachments |> Map.toSeq |> Seq.tryHead with
+            | Some (_,(_,a)) -> a
+            | None -> pass.DepthStencilAttachment |> Option.map snd |> Option.get
+
+        multisampleCache.GetOrCreate(
+            [pass :> obj; multisample :> obj],
+            fun cache key ->
+                new MultisampleStateResource(cache, key, anyAttachment.samples, multisample)
         )
 
     member x.CreatePipeline(program         : IResourceLocation<ShaderProgram>, 
@@ -1433,22 +1491,10 @@ type ResourceManager(user : IResourceUser, device : Device) =
                             rasterizerState : INativeResourceLocation<VkPipelineRasterizationStateCreateInfo>,
                             colorBlendState : INativeResourceLocation<VkPipelineColorBlendStateCreateInfo>,
                             depthStencil    : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>,
-                            writeBuffers    : Option<Set<Symbol>>
-                        ) =
+                            multisample     : INativeResourceLocation<VkPipelineMultisampleStateCreateInfo>) =
 
-        //let programHandle = program.Update(AdaptiveToken.Top).handle
-
-        let anyAttachment = 
-            match pass.ColorAttachments |> Map.toSeq |> Seq.tryHead with
-                | Some (_,(_,a)) -> a
-                | None -> pass.DepthStencilAttachment |> Option.map snd |> Option.get
-
-        //let inputs = VertexInputState.create inputs
-        // TODO: sampleShading
-        let ms = MultisampleState.create false anyAttachment.samples
-        let key = [ program :> obj; inputState :> obj; inputAssembly :> obj; rasterizerState :> obj; colorBlendState :> obj; ms :> obj; depthStencil :> obj ]
         pipelineCache.GetOrCreate(
-            key,
+            [ program :> obj; pass :> obj; inputState :> obj; inputAssembly :> obj; rasterizerState :> obj; colorBlendState :> obj; depthStencil :> obj; multisample :> obj ],
             fun cache key ->
                 new PipelineResource(
                     cache, key,
@@ -1458,8 +1504,8 @@ type ResourceManager(user : IResourceUser, device : Device) =
                     inputAssembly,
                     rasterizerState,
                     colorBlendState,
-                    ms,
-                    depthStencil
+                    depthStencil,
+                    multisample
                 )
 
         )

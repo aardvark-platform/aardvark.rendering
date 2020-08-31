@@ -42,7 +42,7 @@ type SceneGraphExtensions =
     static member Trafo(sg : ISg, modelTrafo : Trafo3d) = Sg.trafo (AVal.constant modelTrafo) sg
 
     [<Extension>]
-    static member Surface(sg : ISg, surface : ISurface) = Sg.SurfaceApplicator(match surface with 
+    static member Surface(sg : ISg, surface : ISurface) = Sg.SurfaceApplicator(match surface with
                                                                                    | :? FShadeSurface as fs -> Surface.FShadeSimple fs.Effect
                                                                                    | :? IBackendSurface as bs -> Surface.Backend bs
                                                                                    | _ -> failwith "unsupported surface"
@@ -58,59 +58,196 @@ type SceneGraphExtensions =
     static member Surface(sg : ISg, [<ParamArray>] effects : FShade.Effect[]) = Sg.SurfaceApplicator(Surface.FShadeSimple (FShade.Effect.compose effects), sg) :> ISg
 
     [<Extension>]
-    static member Surface(sg : ISg, creator : Func<FShade.EffectConfig, FShade.EffectInputLayout*aval<FShade.Imperative.Module>>) = 
+    static member Surface(sg : ISg, creator : Func<FShade.EffectConfig, FShade.EffectInputLayout*aval<FShade.Imperative.Module>>) =
         Sg.SurfaceApplicator(Surface.FShade (fun cfg -> creator.Invoke(cfg)), sg) :> ISg
 
+    // Blending
     [<Extension>]
-    static member FillMode(sg : ISg, mode : FillMode) = Sg.FillModeApplicator(AVal.constant mode, sg) :> ISg
+    static member BlendMode(sg : ISg, mode : aval<BlendMode>) = sg |> Sg.blendMode mode
+    [<Extension>]
+    static member BlendMode(sg : ISg, mode : BlendMode)       = sg |> Sg.blendMode' mode
 
     [<Extension>]
-    static member FillMode(sg : ISg, mode : aval<FillMode>) = Sg.FillModeApplicator(mode, sg) :> ISg
+    static member BlendModes(sg : ISg, modes : aval<Map<Symbol, BlendMode>>) = sg |> Sg.blendModes modes
+    [<Extension>]
+    static member BlendModes(sg : ISg, modes : Map<Symbol, BlendMode>)       = sg |> Sg.blendModes' modes
 
     [<Extension>]
-    static member CullMode(sg : ISg, mode : CullMode) = Sg.CullModeApplicator(AVal.constant mode, sg) :> ISg
+    static member BlendConstant(sg : ISg, color : aval<C3f>) = sg |> Sg.blendConstant color
+    [<Extension>]
+    static member BlendConstant(sg : ISg, color : aval<C4f>) = sg |> Sg.blendConstant color
+    [<Extension>]
+    static member BlendConstant(sg : ISg, color : aval<C3d>) = sg |> Sg.blendConstant color
+    [<Extension>]
+    static member BlendConstant(sg : ISg, color : aval<C4d>) = sg |> Sg.blendConstant color
+    [<Extension>]
+    static member BlendConstant(sg : ISg, color : aval<C3b>) = sg |> Sg.blendConstant color
+    [<Extension>]
+    static member BlendConstant(sg : ISg, color : aval<C4b>) = sg |> Sg.blendConstant color
+    [<Extension>]
+    static member BlendConstant(sg : ISg, color : aval<C3ui>) = sg |> Sg.blendConstant color
+    [<Extension>]
+    static member BlendConstant(sg : ISg, color : aval<C4ui>) = sg |> Sg.blendConstant color
+    [<Extension>]
+    static member BlendConstant(sg : ISg, color : C3f) = sg |> Sg.blendConstant' color
+    [<Extension>]
+    static member BlendConstant(sg : ISg, color : C4f) = sg |> Sg.blendConstant' color
+    [<Extension>]
+    static member BlendConstant(sg : ISg, color : C3d) = sg |> Sg.blendConstant' color
+    [<Extension>]
+    static member BlendConstant(sg : ISg, color : C4d) = sg |> Sg.blendConstant' color
+    [<Extension>]
+    static member BlendConstant(sg : ISg, color : C3b) = sg |> Sg.blendConstant' color
+    [<Extension>]
+    static member BlendConstant(sg : ISg, color : C4b) = sg |> Sg.blendConstant' color
+    [<Extension>]
+    static member BlendConstant(sg : ISg, color : C3ui) = sg |> Sg.blendConstant' color
+    [<Extension>]
+    static member BlendConstant(sg : ISg, color : C4ui) = sg |> Sg.blendConstant' color
 
     [<Extension>]
-    static member CullMode(sg : ISg, mode : aval<CullMode>) = Sg.CullModeApplicator(mode, sg) :> ISg
+    static member ColorMask(sg : ISg, mask : aval<ColorMask>) = sg |> Sg.colorMask mask
+    [<Extension>]
+    static member ColorMask(sg : ISg, mask : ColorMask)       = sg |> Sg.colorMask' mask
 
     [<Extension>]
-    static member FrontFace(sg : ISg, frontFace : WindingOrder) = Sg.FrontFaceApplicator(AVal.constant frontFace, sg) :> ISg
+    static member ColorMasks(sg : ISg, masks : aval<Map<Symbol, ColorMask>>) = sg |> Sg.colorMasks masks
+    [<Extension>]
+    static member ColorMasks(sg : ISg, masks : Map<Symbol, ColorMask>)       = sg |> Sg.colorMasks' masks
 
     [<Extension>]
-    static member FrontFace(sg : ISg, frontFace : aval<WindingOrder>) = Sg.FrontFaceApplicator(frontFace, sg) :> ISg
-
-   
+    static member ColorWrite(sg : ISg, enabled : aval<bool>) = sg |> Sg.colorWrite enabled
     [<Extension>]
-    static member BlendMode(sg : ISg, mode : BlendMode) = Sg.BlendModeApplicator(AVal.constant mode, sg) :> ISg
+    static member ColorWrite(sg : ISg, enabled : bool)       = sg |> Sg.colorWrite' enabled
 
     [<Extension>]
-    static member BlendMode(sg : ISg, mode : aval<BlendMode>) = Sg.BlendModeApplicator(mode, sg) :> ISg
-
-   
+    static member ColorWrites(sg : ISg, enabled : aval<Map<Symbol, bool>>) = sg |> Sg.colorWrites enabled
     [<Extension>]
-    static member StencilMode(sg : ISg, mode : StencilMode) = Sg.StencilModeApplicator(AVal.constant mode, sg) :> ISg
+    static member ColorWrites(sg : ISg, enabled : Map<Symbol, bool>)       = sg |> Sg.colorWrites' enabled
 
     [<Extension>]
-    static member StencilMode(sg : ISg, mode : aval<StencilMode>) = Sg.StencilModeApplicator(mode, sg) :> ISg
-
-    
+    static member ColorOutput(sg : ISg, enabled : aval<Set<Symbol>>) = sg |> Sg.colorOutput enabled
     [<Extension>]
-    static member DepthTestMode(sg : ISg, mode : DepthTestMode) = Sg.DepthTestModeApplicator(AVal.constant mode, sg) :> ISg
+    static member ColorOutput(sg : ISg, enabled : Set<Symbol>)       = sg |> Sg.colorOutput' enabled
 
+    // Depth
     [<Extension>]
-    static member DepthTestMode(sg : ISg, mode : aval<DepthTestMode>) = Sg.DepthTestModeApplicator(mode, sg) :> ISg
-
+    static member DepthTest(sg : ISg, test : aval<DepthTest>) = sg |> Sg.depthTest test
     [<Extension>]
-    static member DepthBias(sg : ISg, constant : float, slopeScale : float) = Sg.DepthBiasApplicator(AVal.constant (DepthBias.simple constant slopeScale), sg) :> ISg
+    static member DepthTest(sg : ISg, test : DepthTest) = sg |> Sg.depthTest' test
 
     [<Extension>]
-    static member DepthBias(sg : ISg, constant : float, slopeScale : float, clamp : float) = Sg.DepthBiasApplicator(AVal.constant (DepthBias.custom constant slopeScale clamp), sg) :> ISg
+    static member DepthWrite(sg : ISg, depthWriteEnabled : aval<bool>) = sg |> Sg.depthWrite depthWriteEnabled
+    [<Extension>]
+    static member DepthWrite(sg : ISg, depthWriteEnabled : bool) = sg |> Sg.depthWrite' depthWriteEnabled
 
     [<Extension>]
-    static member DepthBias(sg : ISg, state : DepthBias) = Sg.DepthBiasApplicator(AVal.constant state, sg) :> ISg
+    static member DepthBias(sg : ISg, bias : aval<DepthBias>) = sg |> Sg.depthBias bias
+    [<Extension>]
+    static member DepthBias(sg : ISg, bias : DepthBias) = sg |> Sg.depthBias' bias
 
     [<Extension>]
-    static member DepthBias(sg : ISg, state : aval<DepthBias>) = Sg.DepthBiasApplicator(state, sg) :> ISg
+    static member DepthClamp(sg : ISg, clamp : aval<bool>) = sg |> Sg.depthClamp clamp
+    [<Extension>]
+    static member DepthClamp(sg : ISg, clamp : bool) = sg |> Sg.depthClamp' clamp
+
+    // Stencil
+    [<Extension>]
+    static member StencilModeFront(sg : ISg, mode : aval<StencilMode>) = sg |> Sg.stencilModeFront mode
+    [<Extension>]
+    static member StencilModeFront(sg : ISg, mode : StencilMode) = sg |> Sg.stencilModeFront' mode
+
+    [<Extension>]
+    static member StencilWriteMaskFront(sg : ISg, mask : aval<StencilMask>) = sg |> Sg.stencilWriteMaskFront mask
+    [<Extension>]
+    static member StencilWriteMaskFront(sg : ISg, mask : StencilMask) = sg |> Sg.stencilWriteMaskFront' mask
+
+    [<Extension>]
+    static member StencilWriteFront(sg : ISg, enabled : aval<bool>) = sg |> Sg.stencilWriteFront enabled
+    [<Extension>]
+    static member StencilWriteFront(sg : ISg, enabled : bool) = sg |> Sg.stencilWriteFront' enabled
+
+    [<Extension>]
+    static member StencilModeBack(sg : ISg, mode : aval<StencilMode>) = sg |> Sg.stencilModeBack mode
+    [<Extension>]
+    static member StencilModeBack(sg : ISg, mode : StencilMode) = sg |> Sg.stencilModeBack' mode
+
+    [<Extension>]
+    static member StencilWriteMaskBack(sg : ISg, mask : aval<StencilMask>) = sg |> Sg.stencilWriteMaskBack mask
+    [<Extension>]
+    static member StencilWriteMaskBack(sg : ISg, mask : StencilMask) = sg |> Sg.stencilWriteMaskBack' mask
+
+    [<Extension>]
+    static member StencilWriteBack(sg : ISg, enabled : aval<bool>) = sg |> Sg.stencilWriteBack enabled
+    [<Extension>]
+    static member StencilWriteBack(sg : ISg, enabled : bool) = sg |> Sg.stencilWriteBack' enabled
+
+    [<Extension>]
+    static member StencilMode(sg : ISg, mode : aval<StencilMode>) = sg |> Sg.stencilMode mode
+    [<Extension>]
+    static member StencilMode(sg : ISg, mode : StencilMode) = sg |> Sg.stencilMode' mode
+
+    [<Extension>]
+    static member StencilMode(sg : ISg, front : aval<StencilMode>, back : aval<StencilMode>) = sg |> Sg.stencilModes front back
+    [<Extension>]
+    static member StencilMode(sg : ISg, front : StencilMode, back : StencilMode) = sg |> Sg.stencilModes' front back
+
+    [<Extension>]
+    static member StencilWriteMask(sg : ISg, mask : aval<StencilMask>) = sg |> Sg.stencilWriteMask mask
+    [<Extension>]
+    static member StencilWriteMask(sg : ISg, mask : StencilMask) = sg |> Sg.stencilWriteMask' mask
+
+    [<Extension>]
+    static member StencilWriteMask(sg : ISg, front : aval<StencilMask>, back : aval<StencilMask>) = sg |> Sg.stencilWriteMasks front back
+    [<Extension>]
+    static member StencilWriteMask(sg : ISg, front : StencilMask, back : StencilMask) = sg |> Sg.stencilWriteMasks' front back
+
+    [<Extension>]
+    static member StencilWrite(sg : ISg, enabled : aval<bool>) = sg |> Sg.stencilWrite enabled
+    [<Extension>]
+    static member StencilWrite(sg : ISg, enabled : bool) = sg |> Sg.stencilWrite' enabled
+
+    [<Extension>]
+    static member StencilWrite(sg : ISg, front : aval<bool>, back : aval<bool>) = sg |> Sg.stencilWrites front back
+    [<Extension>]
+    static member StencilWrite(sg : ISg, front : bool, back : bool) = sg |> Sg.stencilWrites' front back
+
+    // Rasterizer
+    [<Extension>]
+    static member CullMode(sg : ISg, mode : aval<CullMode>) = sg |> Sg.cullMode mode
+    [<Extension>]
+    static member CullMode(sg : ISg, mode : CullMode) = sg |> Sg.cullMode' mode
+
+    [<Extension>]
+    static member FrontFace(sg : ISg, order : aval<WindingOrder>) = sg |> Sg.frontFace order
+    [<Extension>]
+    static member FrontFace(sg : ISg, order : WindingOrder) = sg |> Sg.frontFace' order
+
+    [<Extension>]
+    static member FillMode(sg : ISg, mode : aval<FillMode>) = sg |> Sg.fillMode mode
+    [<Extension>]
+    static member FillMode(sg : ISg, mode : FillMode) = sg |> Sg.fillMode' mode
+
+    [<Extension>]
+    static member Multisample(sg : ISg, mode : aval<bool>) = sg |> Sg.multisample mode
+    [<Extension>]
+    static member Multisample(sg : ISg, mode : bool) = sg |> Sg.multisample' mode
+
+    [<Extension>]
+    static member ConservativeRaster(sg : ISg, mode : aval<bool>) = sg |> Sg.conservativeRaster mode
+    [<Extension>]
+    static member ConservativeRaster(sg : ISg, mode : bool) = sg |> Sg.conservativeRaster' mode
+
+    // Write buffers
+    [<Extension>]
+    static member WriteBuffers(sg : ISg, bufferIdentifiers : aval<Symbol seq>) : ISg = sg |> Sg.writeBuffers (bufferIdentifiers |> AVal.map Set.ofSeq)
+
+    [<Extension>]
+    static member WriteBuffers(sg : ISg, bufferIdentifiers : seq<Symbol>) : ISg = sg |> Sg.writeBuffers' (Set.ofSeq bufferIdentifiers)
+
+    [<Extension>]
+    static member WriteBuffers(sg : ISg, [<ParamArray>] bufferIdentifiers: Symbol[]) : ISg = sg |> Sg.writeBuffers' (Set.ofArray bufferIdentifiers)
+
 
     [<Extension>]
     static member WithEffects(sg : ISg, effects : seq<FShadeEffect>) : ISg = Sg.effect effects sg
@@ -120,7 +257,7 @@ type SceneGraphExtensions =
 
     [<Extension>]
     static member Uniform<'a>(sg : ISg, name : TypedSymbol<'a>, value : aval<'a>) : ISg = Sg.UniformApplicator(name.Symbol, value, sg) :> ISg
-    
+
     [<Extension>]
     static member Uniform(sg : ISg, uniforms : IUniformProvider) : ISg = Sg.UniformApplicator(uniforms, sg) :> ISg
 
@@ -143,12 +280,6 @@ type SceneGraphExtensions =
     static member Pass(sg : ISg, renderPass : RenderPass) : ISg = Sg.PassApplicator(renderPass, sg) :> ISg
 
     [<Extension>]
-    static member WriteBuffers(sg : ISg, bufferIdentifiers : seq<Symbol>) : ISg = Sg.WriteBuffersApplicator(Some (Set.ofSeq bufferIdentifiers), sg) :> ISg
-
-    [<Extension>]
-    static member WriteBuffers(sg : ISg, [<ParamArray>] bufferIdentifiers: Symbol[]) : ISg = Sg.WriteBuffersApplicator(Some (Set.ofArray bufferIdentifiers), sg) :> ISg
-    
-    [<Extension>]
     static member OnOff(sg : ISg, on : aval<bool>) : ISg = Sg.OnOffNode(on, sg) :> ISg
 
 
@@ -161,5 +292,5 @@ type SceneGraphTools =
     static member NormalizeToAdaptive (this : ISg, box : Box3d) = Sg.normalizeToAdaptive box this
 
     [<Extension>]
-    static member NormalizeAdaptive (this : ISg)  = Sg.normalizeAdaptive this 
-     
+    static member NormalizeAdaptive (this : ISg)  = Sg.normalizeAdaptive this
+

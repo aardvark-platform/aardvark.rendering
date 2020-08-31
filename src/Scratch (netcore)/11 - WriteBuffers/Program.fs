@@ -46,7 +46,7 @@ let main argv =
     let someText =
         Sg.text FontSquirrel.Hack.Regular C4b.Black (AVal.constant "Hi There!")
         |> Sg.transform (Trafo3d.RotationX Constant.PiHalf)
-        |> Sg.depthTest (AVal.constant DepthTestMode.None)
+        |> Sg.depthTest (AVal.constant DepthTest.None)
         |> Sg.pass pass2
 
     let scene =
@@ -55,7 +55,7 @@ let main argv =
             do! Shader.texCoordColor
         }
         |> Sg.pass pass0
-        |> Sg.writeBuffers (Some (Set.singleton DefaultSemantic.Colors))
+        |> Sg.writeBuffers' (Set.singleton DefaultSemantic.Colors)
         |> Sg.andAlso someText
         |> Sg.andAlso box
 

@@ -67,29 +67,18 @@ typedef struct {
 
 typedef struct {
 	int Enabled;
-	GLenum CmpFront;
-	int32_t MaskFront;
-	uint32_t ReferenceFront;
-	GLenum CmpBack;
-	int32_t MaskBack;
-	uint32_t ReferenceBack;
-	GLenum OpFrontSF;
-	GLenum OpFrontDF;
-	GLenum OpFrontPass;
-	GLenum OpBackSF;
-	GLenum OpBackDF;
-	GLenum OpBackPass;
+	GLenum Cmp;
+	int32_t Mask;
+	uint32_t Reference;
+	GLenum OpStencilFail;
+	GLenum OpDepthFail;
+	GLenum OpPass;
 } StencilMode;
 
 typedef struct {
 	GLenum Mode;
 	int PatchVertices;
 } BeginMode;
-
-typedef struct {
-	GLenum Comparison;
-	int Clamp;
-} DepthTestMode;
 
 typedef struct {
 	float Constant;
@@ -163,11 +152,11 @@ private:
 	std::unordered_map<int, std::tuple<intptr_t, intptr_t, intptr_t>> currentBuffer;
 	std::unordered_map<intptr_t, bool> modes;
 	
-	DepthTestMode* hDepthTest;
+	int* hDepthTest;
 	GLenum* hCullFace;
 	GLenum* hPolygonMode;
-	BlendMode* hBlendMode;
-	StencilMode* hStencilMode;
+	StencilMode* hStencilModeFront;
+	StencilMode* hStencilModeBack;
 	int* hConservativeRaster;
 	int* hMultisample;
 	VertexInputBinding* currentVertexInput;
@@ -201,11 +190,11 @@ public:
 	bool ShouldSetColorMask(intptr_t index, intptr_t r, intptr_t g, intptr_t b, intptr_t a);
 	bool ShouldSetDrawBuffers(GLuint n, const GLenum* buffers);
 
-	bool HShouldSetDepthTest(DepthTestMode* test);
+	bool HShouldSetDepthTest(int* test);
 	bool HShouldSetCullFace(GLenum* face);
 	bool HShouldSetPolygonMode(GLenum* mode);
-	bool HShouldSetBlendMode(BlendMode* mode);
-	bool HShouldSetStencilMode(StencilMode* mode);
+	bool HShouldSetBlendModes(int count, BlendMode** mode);
+	bool HShouldSetStencilMode(StencilMode* front, StencilMode* back);
 	bool HShouldBindVertexAttributes(VertexInputBinding* binding);
 	bool HShouldSetConservativeRaster(int* enabled);
 	bool HShouldSetMultisample(int* enabled);

@@ -141,7 +141,7 @@ module Pipeline =
                     cb.logicOp,
                     uint32 cb.attachmentStates.Length,
                     pAttachmentBlendStates,
-                    cb.constants
+                    cb.constant
                 )
 
 

@@ -77,16 +77,12 @@ module CommandTest =
 
         let state =
             {
-                depthTest           = AVal.constant DepthTestMode.LessOrEqual
-                depthBias           = AVal.constant DepthBias.None
-                cullMode            = AVal.constant CullMode.None
-                frontFace           = AVal.constant WindingOrder.CounterClockwise
-                blendMode           = AVal.constant BlendMode.None
-                fillMode            = AVal.constant FillMode.Fill
-                stencilMode         = AVal.constant StencilMode.Disabled
-                multisample         = AVal.constant true
-                writeBuffers        = None
-                globalUniforms      = 
+                DepthState      = DepthState.Default
+                BlendState      = BlendState.Default
+                StencilState    = StencilState.Default
+                RasterizerState = { RasterizerState.Default with FrontFace = AVal.constant WindingOrder.CounterClockwise }
+
+                GlobalUniforms      =
                     UniformProvider.ofList [
                         "ModelTrafo", AVal.constant Trafo3d.Identity :> IAdaptiveValue
                         "ViewTrafo", viewTrafo :> IAdaptiveValue
@@ -95,9 +91,9 @@ module CommandTest =
                         "CameraLocation", viewTrafo |> AVal.map (fun v -> v.Backward.C3.XYZ) :> IAdaptiveValue
                     ]
 
-                geometryMode        = IndexedGeometryMode.TriangleList
-                vertexInputTypes    = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f> ]
-                perGeometryUniforms = Map.ofList [ "NodeColor", typeof<V4d> ]
+                Mode                = IndexedGeometryMode.TriangleList
+                VertexInputTypes    = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f> ]
+                PerGeometryUniforms = Map.ofList [ "NodeColor", typeof<V4d> ]
             }
 
 

@@ -72,7 +72,7 @@ module ``Rendering Tests`` =
                 |> Sg.ofIndexedGeometry
                 |> Sg.diffuseTexture checkerBoardTexture
                 |> Sg.effect [ DefaultSurfaces.diffuseTexture |> toEffect ]
-                |> Sg.depthTest ~~DepthTestMode.None
+                |> Sg.depthTest' DepthTest.None
                 |> Sg.compile runtime fbos
 
 
@@ -724,11 +724,10 @@ module RenderingTests =
                 DrawCalls = Direct(AVal.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)])
                 Mode = IndexedGeometryMode.TriangleList
                 Surface = DefaultSurfaces.constantColor C4f.Gray |> toEffect |> Surface.FShadeSimple
-                DepthTest = AVal.constant DepthTestMode.LessOrEqual
-                CullMode = AVal.constant CullMode.None
-                BlendMode = AVal.constant BlendMode.Blend
-                FillMode = AVal.constant FillMode.Fill
-                StencilMode = AVal.constant StencilMode.Disabled
+                DepthState      = DepthState.Default
+                BlendState      = { BlendState.Default with Mode = AVal.constant BlendMode.Blend }
+                StencilState    = StencilState.Default
+                RasterizerState = RasterizerState.Default
                 Indices = BufferView.ofArray [|0;1;2; 0;2;3|] |> Some
                 InstanceAttributes = emptyAttributes
                 VertexAttributes = attributeProvider

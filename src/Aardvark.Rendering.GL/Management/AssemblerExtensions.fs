@@ -13,90 +13,99 @@ open FSharp.Data.Traceable
 #nowarn "9"
 
 type ICommandStream =
-    abstract member GenQueries : count : int * queries : nativeptr<int> -> unit 
-    abstract member DeleteQueries : count : int * queries : nativeptr<int> -> unit 
-    abstract member BeginQuery : target : QueryTarget * query : nativeptr<int> -> unit 
+    abstract member GenQueries : count : int * queries : nativeptr<int> -> unit
+    abstract member DeleteQueries : count : int * queries : nativeptr<int> -> unit
+    abstract member BeginQuery : target : QueryTarget * query : nativeptr<int> -> unit
     abstract member BeginQuery : target : QueryTarget * query : int -> unit
-    abstract member EndQuery : target : QueryTarget -> unit 
-    abstract member GetQueryObject<'a when 'a : unmanaged> : query : nativeptr<int> * param : GetQueryObjectParam * ptr : nativeptr<'a> -> unit 
-    abstract member GetQueryObject<'a when 'a : unmanaged> : query : int * param : GetQueryObjectParam * ptr : nativeptr<'a> -> unit 
-    abstract member QueryCounter : target : QueryCounterTarget * id : int -> unit 
-    abstract member QueryCounter : target : QueryCounterTarget * id : nativeptr<int> -> unit 
-    
-    abstract member Get<'a when 'a : unmanaged> : pname : GetPName * ptr : nativeptr<'a> -> unit 
-    abstract member Get<'a when 'a : unmanaged> : pname : GetIndexedPName * index : int * ptr : nativeptr<'a> -> unit 
+    abstract member EndQuery : target : QueryTarget -> unit
+    abstract member GetQueryObject<'a when 'a : unmanaged> : query : nativeptr<int> * param : GetQueryObjectParam * ptr : nativeptr<'a> -> unit
+    abstract member GetQueryObject<'a when 'a : unmanaged> : query : int * param : GetQueryObjectParam * ptr : nativeptr<'a> -> unit
+    abstract member QueryCounter : target : QueryCounterTarget * id : int -> unit
+    abstract member QueryCounter : target : QueryCounterTarget * id : nativeptr<int> -> unit
 
-    abstract member SetDepthMask : mask : bool -> unit 
-    abstract member SetStencilMask : mask : bool -> unit 
-    abstract member SetDrawBuffers : count : int * ptr : nativeint -> unit 
-    abstract member SetDepthTest : m : nativeptr<DepthTestInfo> -> unit 
-    abstract member SetDepthBias : m : nativeptr<DepthBiasInfo> -> unit 
-    abstract member SetPolygonMode : m : nativeptr<int> -> unit 
-    abstract member SetCullMode : m : nativeptr<int> -> unit 
-    abstract member SetFrontFace : m : nativeptr<int> -> unit 
-    abstract member SetBlendMode : m : nativeptr<GLBlendMode> -> unit 
-    abstract member SetStencilMode : m : nativeptr<GLStencilMode> -> unit 
-    abstract member SetConservativeRaster : r : nativeptr<int> -> unit 
-    abstract member SetMultisample : r : nativeptr<int> -> unit 
+    abstract member Get<'a when 'a : unmanaged> : pname : GetPName * ptr : nativeptr<'a> -> unit
+    abstract member Get<'a when 'a : unmanaged> : pname : GetIndexedPName * index : int * ptr : nativeptr<'a> -> unit
 
-    abstract member UseProgram : p : int -> unit 
-    abstract member UseProgram : m : nativeptr<int> -> unit 
-    abstract member DispatchCompute : gx : int * gy : int * gz : int -> unit 
-    abstract member DispatchCompute : groups : nativeptr<V3i> -> unit 
+    abstract member SetDrawBuffers : count : int * ptr : nativeint -> unit
+
+    abstract member SetBlendColor : m : nativeptr<C4f> -> unit
+    abstract member SetBlendModes : count : int * ptr : nativeint -> unit
+    abstract member SetColorMasks : count : int * ptr : nativeint -> unit
+
+    abstract member SetDepthTest : m : nativeptr<int> -> unit
+    abstract member SetDepthBias : m : nativeptr<DepthBiasInfo> -> unit
+    abstract member SetDepthMask : m : bool -> unit
+    abstract member SetDepthMask : m : nativeptr<int> -> unit
+    abstract member SetDepthClamp : m : nativeptr<int> -> unit
+
+    abstract member SetStencilModes : front : nativeptr<GLStencilMode> * back : nativeptr<GLStencilMode> -> unit
+    abstract member SetStencilMask : f : StencilFace * m : nativeptr<uint32> -> unit
+    abstract member SetStencilMask : m : bool -> unit
+
+    abstract member SetPolygonMode : m : nativeptr<int> -> unit
+    abstract member SetCullMode : m : nativeptr<int> -> unit
+    abstract member SetFrontFace : m : nativeptr<int> -> unit
+    abstract member SetConservativeRaster : r : nativeptr<int> -> unit
+    abstract member SetMultisample : r : nativeptr<int> -> unit
+
+    abstract member UseProgram : p : int -> unit
+    abstract member UseProgram : m : nativeptr<int> -> unit
+    abstract member DispatchCompute : gx : int * gy : int * gz : int -> unit
+    abstract member DispatchCompute : groups : nativeptr<V3i> -> unit
 
     abstract member MemoryBarrier : MemoryBarrierFlags -> unit
 
-    abstract member Enable : v : int -> unit 
-    abstract member Disable : v : int -> unit 
-    abstract member Enable : v : nativeptr<int> -> unit 
-    abstract member Disable : v : nativeptr<int> -> unit 
+    abstract member Enable : v : int -> unit
+    abstract member Disable : v : int -> unit
+    abstract member Enable : v : nativeptr<int> -> unit
+    abstract member Disable : v : nativeptr<int> -> unit
 
-    abstract member BindBuffer : target : int * buffer : int -> unit 
-    abstract member BindBuffer : target : int * buffer : nativeptr<int> -> unit 
-    abstract member BindBufferBase : target : BufferRangeTarget * slot : int * b : int -> unit 
-    abstract member BindBufferBase : target : BufferRangeTarget * slot : int * b : nativeptr<int> -> unit 
-    abstract member BindBufferRange : target : BufferRangeTarget * slot : int * b : int * offset : nativeint * size : nativeint -> unit 
-    abstract member BindBufferRange : target : BufferRangeTarget * slot : int * b : nativeptr<int> * offset : nativeptr<nativeint> * size : nativeptr<nativeint> -> unit 
-    
-    abstract member BindBufferRangeFixed : target : BufferRangeTarget * slot : int * b : nativeptr<int> * offset : nativeint * size : nativeint -> unit 
+    abstract member BindBuffer : target : int * buffer : int -> unit
+    abstract member BindBuffer : target : int * buffer : nativeptr<int> -> unit
+    abstract member BindBufferBase : target : BufferRangeTarget * slot : int * b : int -> unit
+    abstract member BindBufferBase : target : BufferRangeTarget * slot : int * b : nativeptr<int> -> unit
+    abstract member BindBufferRange : target : BufferRangeTarget * slot : int * b : int * offset : nativeint * size : nativeint -> unit
+    abstract member BindBufferRange : target : BufferRangeTarget * slot : int * b : nativeptr<int> * offset : nativeptr<nativeint> * size : nativeptr<nativeint> -> unit
 
-    abstract member NamedBufferData : buffer : int * size : nativeint * data : nativeint * usage : OpenTK.Graphics.OpenGL4.BufferUsageHint -> unit 
-    abstract member NamedBufferSubData : buffer : int * offset : nativeint * size : nativeint * data : nativeint -> unit 
-    
+    abstract member BindBufferRangeFixed : target : BufferRangeTarget * slot : int * b : nativeptr<int> * offset : nativeint * size : nativeint -> unit
 
-    abstract member SetActiveTexture : slot : int -> unit 
-    abstract member BindTexture : target : TextureTarget * t : int -> unit 
-    abstract member BindTexture : target : nativeptr<TextureTarget> * t : nativeptr<int> -> unit 
-    abstract member TexParameteri : target : int * name : TextureParameterName * value : int -> unit 
-    abstract member TexParameterf : target : int * name : TextureParameterName * value : float32 -> unit 
-    abstract member BindSampler  : slot : int * sampler : int -> unit 
-    abstract member BindSampler  : slot : int * sampler : nativeptr<int> -> unit 
-    abstract member BindTexturesAndSamplers  : textureBinding : TextureBinding -> unit 
+    abstract member NamedBufferData : buffer : int * size : nativeint * data : nativeint * usage : OpenTK.Graphics.OpenGL4.BufferUsageHint -> unit
+    abstract member NamedBufferSubData : buffer : int * offset : nativeint * size : nativeint * data : nativeint -> unit
 
-    abstract member BindImageTexture : unit : int * texture : int * level : int * layered : bool * layer : int * access : TextureAccess * format : TextureFormat -> unit 
-    abstract member Uniform1fv : location : int * cnt : int * ptr : nativeint -> unit 
-    abstract member Uniform1iv : location : int * cnt : int * ptr : nativeint -> unit 
-    abstract member Uniform2fv : location : int * cnt : int * ptr : nativeint -> unit 
-    abstract member Uniform2iv : location : int * cnt : int * ptr : nativeint -> unit 
-    abstract member Uniform3fv : location : int * cnt : int * ptr : nativeint -> unit 
-    abstract member Uniform3iv : location : int * cnt : int * ptr : nativeint -> unit 
-    abstract member Uniform4fv : location : int * cnt : int * ptr : nativeint -> unit 
-    abstract member Uniform4iv : location : int * cnt : int * ptr : nativeint -> unit 
-    abstract member UniformMatrix2fv : location : int * cnt : int * transpose : int * ptr : nativeint -> unit 
-    abstract member UniformMatrix3fv : location : int * cnt : int * transpose : int * ptr : nativeint -> unit 
-    abstract member UniformMatrix4fv : location : int * cnt : int * transpose : int * ptr : nativeint -> unit 
 
-    abstract member BindVertexAttributes : ctx : nativeptr<nativeint> * handle : VertexInputBindingHandle -> unit 
+    abstract member SetActiveTexture : slot : int -> unit
+    abstract member BindTexture : target : TextureTarget * t : int -> unit
+    abstract member BindTexture : target : nativeptr<TextureTarget> * t : nativeptr<int> -> unit
+    abstract member TexParameteri : target : int * name : TextureParameterName * value : int -> unit
+    abstract member TexParameterf : target : int * name : TextureParameterName * value : float32 -> unit
+    abstract member BindSampler  : slot : int * sampler : int -> unit
+    abstract member BindSampler  : slot : int * sampler : nativeptr<int> -> unit
+    abstract member BindTexturesAndSamplers  : textureBinding : TextureBinding -> unit
 
-    abstract member DrawArrays : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * calls : nativeptr<DrawCallInfoList> -> unit 
-    abstract member DrawElements : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indexType : int * calls : nativeptr<DrawCallInfoList> -> unit 
-    abstract member DrawArraysIndirect : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indirect : nativeptr<IndirectDrawArgs> -> unit 
-    abstract member DrawElementsIndirect : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indexType : int * indirect : nativeptr<IndirectDrawArgs> -> unit 
-    
-    abstract member ClearColor : c : nativeptr<C4f> -> unit 
-    abstract member ClearDepth : c : nativeptr<float> -> unit 
-    abstract member ClearStencil : c : nativeptr<int> -> unit 
-    abstract member Clear : mask : ClearBufferMask -> unit 
+    abstract member BindImageTexture : unit : int * texture : int * level : int * layered : bool * layer : int * access : TextureAccess * format : TextureFormat -> unit
+    abstract member Uniform1fv : location : int * cnt : int * ptr : nativeint -> unit
+    abstract member Uniform1iv : location : int * cnt : int * ptr : nativeint -> unit
+    abstract member Uniform2fv : location : int * cnt : int * ptr : nativeint -> unit
+    abstract member Uniform2iv : location : int * cnt : int * ptr : nativeint -> unit
+    abstract member Uniform3fv : location : int * cnt : int * ptr : nativeint -> unit
+    abstract member Uniform3iv : location : int * cnt : int * ptr : nativeint -> unit
+    abstract member Uniform4fv : location : int * cnt : int * ptr : nativeint -> unit
+    abstract member Uniform4iv : location : int * cnt : int * ptr : nativeint -> unit
+    abstract member UniformMatrix2fv : location : int * cnt : int * transpose : int * ptr : nativeint -> unit
+    abstract member UniformMatrix3fv : location : int * cnt : int * transpose : int * ptr : nativeint -> unit
+    abstract member UniformMatrix4fv : location : int * cnt : int * transpose : int * ptr : nativeint -> unit
+
+    abstract member BindVertexAttributes : ctx : nativeptr<nativeint> * handle : VertexInputBindingHandle -> unit
+
+    abstract member DrawArrays : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * calls : nativeptr<DrawCallInfoList> -> unit
+    abstract member DrawElements : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indexType : int * calls : nativeptr<DrawCallInfoList> -> unit
+    abstract member DrawArraysIndirect : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indirect : nativeptr<IndirectDrawArgs> -> unit
+    abstract member DrawElementsIndirect : stats : nativeptr<V2i> * isActive : nativeptr<int> * beginMode : nativeptr<GLBeginMode> * indexType : int * indirect : nativeptr<IndirectDrawArgs> -> unit
+
+    abstract member ClearColor : c : nativeptr<C4f> -> unit
+    abstract member ClearDepth : c : nativeptr<float> -> unit
+    abstract member ClearStencil : c : nativeptr<int> -> unit
+    abstract member Clear : mask : ClearBufferMask -> unit
 
     abstract member Call : fptr : nativeint -> unit
     abstract member Call : fptr : nativeint * argument : int -> unit
@@ -146,7 +155,7 @@ module GLAssemblerExtensions =
                     else
                         yield typeof<nativeint>, OpenGl.Pointers.GetIndexedInteger
                         yield typeof<unativeint>, OpenGl.Pointers.GetIndexedInteger
-                        
+
 
                 ]
             )
@@ -154,7 +163,7 @@ module GLAssemblerExtensions =
         static let memcpy =
             lazy (
                 match System.Environment.OSVersion with
-                | Windows -> 
+                | Windows ->
                     let lib = DynamicLinker.loadLibrary "msvcrt.dll"
                     lib.GetFunction "memcpy"
                 | Linux ->
@@ -164,30 +173,52 @@ module GLAssemblerExtensions =
                     failwith "MacOS not supported atm."
             )
 
+        member this.Toggle(cap : int, enabled : nativeptr<int>) =
+            let d = s.NewLabel()
+            let e = s.NewLabel()
+
+            s.Cmp(NativePtr.toNativeInt enabled, 0)
+            s.Jump(JumpCondition.Equal, d)
+
+            // Enable
+            s.BeginCall(1)
+            s.PushArg(cap)
+            s.Call(OpenGl.Pointers.Enable)
+            s.Jump(e)
+
+            s.Mark(d)
+
+            // Disable
+            s.BeginCall(1)
+            s.PushArg(cap)
+            s.Call(OpenGl.Pointers.Disable)
+
+            s.Mark(e)
+
         member this.GenQueries(count : int, queries : nativeptr<int>) =
             s.BeginCall(2)
             s.PushArg (NativePtr.toNativeInt queries)
             s.PushArg count
             s.Call(OpenGl.Pointers.GenQueries)
-            
+
         member this.DeleteQueries(count : int, queries : nativeptr<int>) =
             s.BeginCall(2)
             s.PushArg (NativePtr.toNativeInt queries)
             s.PushArg count
             s.Call(OpenGl.Pointers.DeleteQueries)
-            
+
         member this.BeginQuery(target : QueryTarget, query : nativeptr<int>) =
             s.BeginCall(2)
             s.PushIntArg (NativePtr.toNativeInt query)
             s.PushArg (int target)
             s.Call(OpenGl.Pointers.BeginQuery)
-            
+
         member this.BeginQuery(target : QueryTarget, query : int) =
             s.BeginCall(2)
             s.PushArg query
             s.PushArg (int target)
             s.Call(OpenGl.Pointers.BeginQuery)
-            
+
         member this.EndQuery(target : QueryTarget) =
             s.BeginCall(1)
             s.PushArg (int target)
@@ -200,7 +231,7 @@ module GLAssemblerExtensions =
             s.PushArg (int param)
             s.PushIntArg (NativePtr.toNativeInt query)
             s.Call(fptr)
-            
+
         member this.GetQueryObject<'a when 'a : unmanaged>(query : int, param : GetQueryObjectParam, ptr : nativeptr<'a>) =
             let fptr = queryObjectPointers.Value typeof<'a>
             s.BeginCall(3)
@@ -208,19 +239,19 @@ module GLAssemblerExtensions =
             s.PushArg (int param)
             s.PushArg query
             s.Call(fptr)
-            
+
         member this.QueryCounter(target : QueryCounterTarget, id : int) =
             s.BeginCall(2)
             s.PushArg (int target)
             s.PushArg id
             s.Call(OpenGl.Pointers.QueryCounter)
-            
+
         member this.QueryCounter(target : QueryCounterTarget, id : nativeptr<int>) =
             s.BeginCall(2)
             s.PushArg (int target)
             s.PushIntArg (NativePtr.toNativeInt id)
             s.Call(OpenGl.Pointers.QueryCounter)
-            
+
         member this.QueryCounterIndirect(target : QueryCounterTarget, id : nativeptr<int>) =
             s.BeginCall(2)
             s.PushArg (int target)
@@ -234,7 +265,7 @@ module GLAssemblerExtensions =
             s.PushArg(NativePtr.toNativeInt ptr)
             s.PushArg(int pname)
             s.Call(fptr)
-             
+
         member this.Get<'a when 'a : unmanaged>(pname : GetIndexedPName, index : int, ptr : nativeptr<'a>) =
              let fptr = getIndexedInteger.Value typeof<'a>
              s.BeginCall(3)
@@ -242,88 +273,177 @@ module GLAssemblerExtensions =
              s.PushArg(index)
              s.PushArg(int pname)
              s.Call(fptr)
-             
+
+        member this.SetDrawBuffers(count : int, ptr : nativeint) =
+            s.BeginCall(2)
+            s.PushArg(ptr)
+            s.PushArg(count)
+            s.Call(OpenGl.Pointers.DrawBuffers)
+
+
+        // ================================================================================================================
+        // Blending
+        // ================================================================================================================
+
+        member this.SetBlendColor(c : nativeptr<C4f>) =
+            s.BeginCall(4)
+            s.PushFloatArg(12n + NativePtr.toNativeInt c)
+            s.PushFloatArg(8n + NativePtr.toNativeInt c)
+            s.PushFloatArg(4n + NativePtr.toNativeInt c)
+            s.PushFloatArg(0n + NativePtr.toNativeInt c)
+            s.Call(OpenGl.Pointers.BlendColor)
+
+        member this.SetBlendModes(count : int, ptr : nativeint) =
+             s.BeginCall(2)
+             s.PushArg(ptr)
+             s.PushArg(count)
+             s.Call(OpenGl.Pointers.HSetBlendModes)
+
+        member this.SetColorMasks(count : int, ptr : nativeint) =
+             s.BeginCall(2)
+             s.PushArg(ptr)
+             s.PushArg(count)
+             s.Call(OpenGl.Pointers.HSetColorMasks)
+
+        // ================================================================================================================
+        // Depth
+        // ================================================================================================================
+        member this.SetDepthTest(m : nativeptr<int>) =
+            let d = s.NewLabel()
+            let e = s.NewLabel()
+            let ptr = NativePtr.toNativeInt m
+
+            s.Cmp(ptr, int OpenGl.Enums.CompareFunction.Always)
+            s.Jump(JumpCondition.Equal, d)
+
+            // Enable
+            s.BeginCall(1)
+            s.PushArg(int EnableCap.DepthTest)
+            s.Call(OpenGl.Pointers.Enable)
+
+            s.BeginCall(1)
+            s.PushIntArg(ptr)
+            s.Call(OpenGl.Pointers.DepthFunc)
+
+            s.Jump(e)
+
+            s.Mark(d)
+
+            // Disable
+            s.BeginCall(1)
+            s.PushArg(int EnableCap.DepthTest)
+            s.Call(OpenGl.Pointers.Disable)
+
+            s.Mark(e)
+
+        member this.SetDepthClamp(m : nativeptr<int>) =
+            this.Toggle(int EnableCap.DepthClamp, m)
+
+        member this.SetDepthBias(m : nativeptr<DepthBiasInfo>) =
+             s.BeginCall(1)
+             s.PushArg(NativePtr.toNativeInt m)
+             s.Call(OpenGl.Pointers.HSetDepthBias)
 
         member this.SetDepthMask(mask : bool) =
             s.BeginCall(1)
             s.PushArg(if mask then 1 else 0)
             s.Call(OpenGl.Pointers.DepthMask)
 
+        member this.SetDepthMask(m : nativeptr<int>) =
+            s.BeginCall(1)
+            s.PushIntArg(NativePtr.toNativeInt m)
+            s.Call(OpenGl.Pointers.DepthMask)
+
+        // ================================================================================================================
+        // Stencil
+        // ================================================================================================================
+
         member this.SetStencilMask(mask : bool) =
             s.BeginCall(1)
-            s.PushArg(if mask then 0b11111111111111111111111111111111 else 0)
+            s.PushArg(if mask then 0xFFFFFFFF else 0)
             s.Call(OpenGl.Pointers.StencilMask)
-        
-        member this.SetDrawBuffers(count : int, ptr : nativeint) =
-            s.BeginCall(2)
-            s.PushArg(ptr)
-            s.PushArg(count)
-            s.Call(OpenGl.Pointers.DrawBuffers)
-            
-        member this.SetDepthTest(m : nativeptr<DepthTestInfo>) =
-             s.BeginCall(1)
-             s.PushArg(NativePtr.toNativeInt m)
-             s.Call(OpenGl.Pointers.HSetDepthTest)
 
-        member this.SetDepthBias(m : nativeptr<DepthBiasInfo>) =
-             s.BeginCall(1)
-             s.PushArg(NativePtr.toNativeInt m)
-             s.Call(OpenGl.Pointers.HSetDepthBias)    
-             
+        member this.SetStencilMask(face : StencilFace, m : nativeptr<uint32>) =
+            s.BeginCall(2)
+            s.PushArg(NativePtr.toNativeInt m)
+            s.PushArg(int face)
+            s.Call(OpenGl.Pointers.StencilMaskSeparate)
+
+        member this.SetStencilModes(front : nativeptr<GLStencilMode>, back : nativeptr<GLStencilMode>) =
+            s.BeginCall(2)
+            s.PushArg(NativePtr.toNativeInt back)
+            s.PushArg(NativePtr.toNativeInt front)
+            s.Call(OpenGl.Pointers.HSetStencilMode)
+
+
+        // ================================================================================================================
+        // Rasterizer
+        // ================================================================================================================
+
         member this.SetPolygonMode(m : nativeptr<int>) =
-             s.BeginCall(1)
-             s.PushArg(NativePtr.toNativeInt m)
-             s.Call(OpenGl.Pointers.HSetPolygonMode)
-             
+            s.BeginCall(2)
+            s.PushIntArg(NativePtr.toNativeInt m)
+            s.PushArg(int MaterialFace.FrontAndBack)
+            s.Call(OpenGl.Pointers.PolygonMode)
+
         member this.SetCullMode(m : nativeptr<int>) =
-             s.BeginCall(1)
-             s.PushArg(NativePtr.toNativeInt m)
-             s.Call(OpenGl.Pointers.HSetCullFace)
+            let d = s.NewLabel()
+            let e = s.NewLabel()
+            let ptr = NativePtr.toNativeInt m
+
+            s.Cmp(ptr, 0)
+            s.Jump(JumpCondition.Equal, d)
+
+            // Enable
+            s.BeginCall(1)
+            s.PushArg(int EnableCap.CullFace)
+            s.Call(OpenGl.Pointers.Enable)
+
+            s.BeginCall(1)
+            s.PushIntArg(ptr)
+            s.Call(OpenGl.Pointers.CullFace)
+
+            s.Jump(e)
+
+            s.Mark(d)
+
+            // Disable
+            s.BeginCall(1)
+            s.PushArg(int EnableCap.CullFace)
+            s.Call(OpenGl.Pointers.Disable)
+
+            s.Mark(e)
 
         member this.SetFrontFace(m : nativeptr<int>) =
-             s.BeginCall(1)
-             s.PushIntArg(NativePtr.toNativeInt m)
-             s.Call(OpenGl.Pointers.FrontFace)
-             
-        member this.SetBlendMode(m : nativeptr<GLBlendMode>) =
-             s.BeginCall(1)
-             s.PushArg(NativePtr.toNativeInt m)
-             s.Call(OpenGl.Pointers.HSetBlendMode)
+            s.BeginCall(1)
+            s.PushIntArg(NativePtr.toNativeInt m)
+            s.Call(OpenGl.Pointers.FrontFace)
 
-        member this.SetStencilMode(m : nativeptr<GLStencilMode>) =
-             s.BeginCall(1)
-             s.PushArg(NativePtr.toNativeInt m)
-             s.Call(OpenGl.Pointers.HSetStencilMode)
-             
         member this.SetConservativeRaster(r : nativeptr<int>) =
-            s.BeginCall(1)
-            s.PushArg(NativePtr.toNativeInt r)
-            s.Call(OpenGl.Pointers.HSetConservativeRaster)
+            this.Toggle(int NvConservativeRaster.ConservativeRasterizationNv, r)
 
-        member this.SetMultisample(r : nativeptr<int>) =
-            s.BeginCall(1)
-            s.PushArg(NativePtr.toNativeInt r)
-            s.Call(OpenGl.Pointers.HSetMultisample)
-            
-            
+        member this.SetMultisample(m : nativeptr<int>) =
+            this.Toggle(int EnableCap.Multisample, m)
+
+
 
         member this.UseProgram(p : int) =
              s.BeginCall(1)
              s.PushArg(p)
              s.Call(OpenGl.Pointers.BindProgram)
-             
+
         member this.UseProgram(m : nativeptr<int>) =
              s.BeginCall(1)
              s.PushIntArg(NativePtr.toNativeInt m)
              s.Call(OpenGl.Pointers.BindProgram)
-             
+
         member this.DispatchCompute(gx : int, gy : int, gz : int) =
             s.BeginCall(3)
             s.PushArg gz
             s.PushArg gy
             s.PushArg gx
             s.Call OpenGl.Pointers.DispatchCompute
-            
+
         member this.DispatchCompute(groups : nativeptr<V3i>) =
             s.BeginCall(3)
             s.PushIntArg (NativePtr.toNativeInt groups + 8n)
@@ -341,7 +461,7 @@ module GLAssemblerExtensions =
              s.BeginCall(1)
              s.PushArg(v)
              s.Call(OpenGl.Pointers.Disable)
-             
+
         member this.Enable(v : nativeptr<int>) =
              s.BeginCall(1)
              s.PushIntArg(NativePtr.toNativeInt v)
@@ -353,13 +473,13 @@ module GLAssemblerExtensions =
              s.Call(OpenGl.Pointers.Disable)
 
 
-        
+
         member this.BindBuffer(target : int, buffer : int) =
             s.BeginCall(2)
             s.PushArg(buffer)
             s.PushArg(target)
             s.Call(OpenGl.Pointers.BindBuffer)
-            
+
         member this.BindBuffer(target : int, buffer : nativeptr<int>) =
             s.BeginCall(2)
             s.PushIntArg(NativePtr.toNativeInt buffer)
@@ -372,14 +492,14 @@ module GLAssemblerExtensions =
             s.PushArg(slot)
             s.PushArg(int target)
             s.Call(OpenGl.Pointers.BindBufferBase)
-            
+
         member this.BindBufferBase(target : BufferRangeTarget, slot : int, b : nativeptr<int>) =
             s.BeginCall(3)
             s.PushIntArg(NativePtr.toNativeInt b)
             s.PushArg(slot)
             s.PushArg(int target)
             s.Call(OpenGl.Pointers.BindBufferBase)
-            
+
         member this.BindBufferRange(target : BufferRangeTarget, slot : int, b : int, offset : nativeint, size : nativeint) =
             s.BeginCall(5)
             s.PushArg(size)
@@ -423,18 +543,18 @@ module GLAssemblerExtensions =
             s.PushArg buffer
             s.Call(OpenGl.Pointers.NamedBufferSubData)
 
-            
+
         member this.SetActiveTexture(slot : int) =
             s.BeginCall(1)
             s.PushArg(int OpenGl.Enums.TextureUnit.Texture0 + slot)
             s.Call(OpenGl.Pointers.ActiveTexture)
-            
+
         member this.BindTexture (target : TextureTarget, t : int) =
             s.BeginCall(2)
             s.PushArg(t)
             s.PushArg(int target)
             s.Call(OpenGl.Pointers.BindTexture)
-            
+
         member this.BindTexture (target : nativeptr<TextureTarget>, t : nativeptr<int>) =
             s.BeginCall(2)
             s.PushIntArg(NativePtr.toNativeInt t)
@@ -460,7 +580,7 @@ module GLAssemblerExtensions =
             s.PushArg(sampler)
             s.PushArg(slot)
             s.Call(OpenGl.Pointers.BindSampler)
-        
+
         member this.BindSampler (slot : int, sampler : nativeptr<int>) =
             s.BeginCall(2)
             s.PushIntArg(NativePtr.toNativeInt sampler)
@@ -479,7 +599,7 @@ module GLAssemblerExtensions =
             s.PushArg(handle.samplers |> NativePtr.toNativeInt)
             s.PushArg(handle.count)
             s.PushArg(handle.offset)
-            s.Call(OpenGl.Pointers.HBindSamplers)            
+            s.Call(OpenGl.Pointers.HBindSamplers)
 
         member this.BindImageTexture(unit : int, texture : int, level : int, layered : bool, layer : int, access : TextureAccess, format : TextureFormat) =
             s.BeginCall(7)
@@ -533,7 +653,7 @@ module GLAssemblerExtensions =
             s.PushArg(cnt)
             s.PushArg(location)
             s.Call(OpenGl.Pointers.Uniform3iv)
-            
+
         member this.Uniform4fv(location : int, cnt : int, ptr : nativeint) =
             s.BeginCall(3)
             s.PushArg(ptr)
@@ -571,7 +691,7 @@ module GLAssemblerExtensions =
             s.PushArg(cnt)
             s.PushArg(location)
             s.Call(OpenGl.Pointers.UniformMatrix4fv)
-            
+
         member this.BindVertexAttributes(ctx : nativeptr<nativeint>, handle : VertexInputBindingHandle) =
             s.BeginCall(2)
             s.PushArg(NativePtr.toNativeInt handle.Pointer)
@@ -603,7 +723,7 @@ module GLAssemblerExtensions =
             s.PushArg(NativePtr.toNativeInt isActive)
             s.PushArg(NativePtr.toNativeInt stats)
             s.Call(OpenGl.Pointers.HDrawArraysIndirect)
-            
+
         member this.DrawElementsIndirect(stats : nativeptr<V2i>, isActive : nativeptr<int>, beginMode : nativeptr<GLBeginMode>, indexType : int, indirect : nativeptr<IndirectDrawArgs>) =
             s.BeginCall(5)
             s.PushArg(NativePtr.toNativeInt indirect)
@@ -612,7 +732,7 @@ module GLAssemblerExtensions =
             s.PushArg(NativePtr.toNativeInt isActive)
             s.PushArg(NativePtr.toNativeInt stats)
             s.Call(OpenGl.Pointers.HDrawElementsIndirect)
-            
+
         member this.ClearColor(c : nativeptr<C4f>) =
             s.BeginCall(4)
             s.PushFloatArg(12n + NativePtr.toNativeInt c)
@@ -620,12 +740,12 @@ module GLAssemblerExtensions =
             s.PushFloatArg(4n + NativePtr.toNativeInt c)
             s.PushFloatArg(0n + NativePtr.toNativeInt c)
             s.Call(OpenGl.Pointers.ClearColor)
-            
+
         member this.ClearDepth(c : nativeptr<float>) =
             s.BeginCall(1)
             s.PushDoubleArg(NativePtr.toNativeInt c)
             s.Call(OpenGl.Pointers.ClearDepth)
-            
+
         member this.ClearStencil(c : nativeptr<int>) =
             s.BeginCall(1)
             s.PushIntArg(NativePtr.toNativeInt c)
@@ -676,11 +796,11 @@ module GLAssemblerExtensions =
             let skip = s.NewLabel()
             s.Cmp(NativePtr.toNativeInt cond, 0)
             s.Jump(JumpCondition.Equal, skip)
-            
+
             write this
 
             s.Mark(skip)
-            
+
         member this.Call(ptr : nativeint) =
             s.BeginCall(0)
             s.Call(ptr)
@@ -743,18 +863,23 @@ module GLAssemblerExtensions =
             member this.QueryCounter(target: QueryCounterTarget, id: int) = this.QueryCounter(target, id)
             member this.QueryCounter(target: QueryCounterTarget, id: nativeptr<int>) = this.QueryCounter(target, id)
             member this.SetActiveTexture(slot: int) = this.SetActiveTexture(slot)
-            member this.SetBlendMode(m: nativeptr<GLBlendMode>) = this.SetBlendMode(m)
+            member this.SetBlendColor(c: nativeptr<C4f>) = this.SetBlendColor(c)
+            member this.SetBlendModes(count : int, ptr: nativeint) = this.SetBlendModes(count, ptr)
+            member this.SetColorMasks(count : int, ptr: nativeint) = this.SetColorMasks(count, ptr)
             member this.SetConservativeRaster(r: nativeptr<int>) = this.SetConservativeRaster(r)
             member this.SetCullMode(m: nativeptr<int>) = this.SetCullMode(m)
             member this.SetFrontFace(m: nativeptr<int>) = this.SetFrontFace(m)
-            member this.SetDepthMask(mask: bool) = this.SetDepthMask(mask)
-            member this.SetDepthTest(m: nativeptr<DepthTestInfo>) = this.SetDepthTest(m)
+            member this.SetDepthTest(m: nativeptr<int>) = this.SetDepthTest(m)
             member this.SetDepthBias(m: nativeptr<DepthBiasInfo>) = this.SetDepthBias(m)
+            member this.SetDepthMask(m: bool) = this.SetDepthMask(m)
+            member this.SetDepthMask(m: nativeptr<int>) = this.SetDepthMask(m)
+            member this.SetDepthClamp(m: nativeptr<int>) = this.SetDepthClamp(m)
             member this.SetDrawBuffers(count: int, ptr: nativeint) = this.SetDrawBuffers(count, ptr)
             member this.SetMultisample(r: nativeptr<int>) = this.SetMultisample(r)
             member this.SetPolygonMode(m: nativeptr<int>) = this.SetPolygonMode(m)
-            member this.SetStencilMask(mask: bool) = this.SetStencilMask(mask)
-            member this.SetStencilMode(m: nativeptr<GLStencilMode>) = this.SetStencilMode(m)
+            member this.SetStencilMask(m: bool) = this.SetStencilMask(m)
+            member this.SetStencilMask(f : StencilFace, m: nativeptr<uint32>) = this.SetStencilMask(f, m)
+            member this.SetStencilModes(f: nativeptr<GLStencilMode>, b: nativeptr<GLStencilMode>) = this.SetStencilModes(f, b)
             member this.TexParameterf(target: int, name: TextureParameterName, value: float32) = this.TexParameterf(target, name, value)
             member this.TexParameteri(target: int, name: TextureParameterName, value: int) = this.TexParameteri(target, name, value)
             member this.Uniform1fv(location: int, cnt: int, ptr: nativeint) = this.Uniform1fv(location, cnt, ptr)
@@ -790,7 +915,7 @@ module GLAssemblerExtensions =
                 System.Diagnostics.Debugger.Break()
                 printfn "%A" sofar
 
-        let afterDel = 
+        let afterDel =
             Marshal.PinDelegate(DebugCallbackDelegate(after))
 
 
@@ -798,7 +923,7 @@ module GLAssemblerExtensions =
             let id = commands.Count
             commands.Add(name, args)
             inner.Call(afterDel.Pointer, id)
-            
+
         interface ICommandStream with
             member x.BeginQuery(target: QueryTarget, query: nativeptr<int>) = inner.BeginQuery(target, query); x.Append("BeginQuery", target, query)
             member x.BeginQuery(target: QueryTarget, query: int) = inner.BeginQuery(target, query); x.Append("BeginQuery", target, query)
@@ -842,18 +967,23 @@ module GLAssemblerExtensions =
             member x.QueryCounter(target: QueryCounterTarget, id: int) = inner.QueryCounter(target, id); x.Append("QueryCounter", target, id)
             member x.QueryCounter(target: QueryCounterTarget, id: nativeptr<int>) = inner.QueryCounter(target, id); x.Append("QueryCounter", target, id)
             member x.SetActiveTexture(slot: int) = inner.SetActiveTexture(slot); x.Append("SetActiveTexture", slot)
-            member x.SetBlendMode(m: nativeptr<GLBlendMode>) = inner.SetBlendMode(m); x.Append("SetBlendMode", m)
+            member x.SetBlendColor(c: nativeptr<C4f>) = inner.SetBlendColor(c); x.Append("BlendColor", c)
+            member x.SetBlendModes(count : int, ptr: nativeint) = inner.SetBlendModes(count, ptr); x.Append("SetBlendModes", ptr)
+            member x.SetColorMasks(count : int, ptr: nativeint) = inner.SetColorMasks(count, ptr); x.Append("SetColorMasks", ptr)
             member x.SetConservativeRaster(r: nativeptr<int>) = inner.SetConservativeRaster(r); x.Append("SetConservativeRaster", r)
             member x.SetCullMode(m: nativeptr<int>) = inner.SetCullMode(m); x.Append("SetCullMode", m)
             member x.SetFrontFace(m: nativeptr<int>) = inner.SetFrontFace(m); x.Append("SetFrontFace", m)
-            member x.SetDepthMask(mask: bool) = inner.SetDepthMask(mask); x.Append("SetDepthMask", mask)
-            member x.SetDepthTest(m: nativeptr<DepthTestInfo>) = inner.SetDepthTest(m); x.Append("SetDepthTest", m)
+            member x.SetDepthTest(m: nativeptr<int>) = inner.SetDepthTest(m); x.Append("SetDepthTest", m)
             member x.SetDepthBias(m: nativeptr<DepthBiasInfo>) = inner.SetDepthBias(m); x.Append("SetDepthBias", m)
+            member x.SetDepthMask(m: bool) = inner.SetDepthMask(m); x.Append("SetDepthMask", m)
+            member x.SetDepthMask(m: nativeptr<int>) = inner.SetDepthMask(m); x.Append("SetDepthMask", m)
+            member x.SetDepthClamp(m: nativeptr<int>) = inner.SetDepthTest(m); x.Append("SetDepthClamp", m)
             member x.SetDrawBuffers(count: int, ptr: nativeint) = inner.SetDrawBuffers(count, ptr); x.Append("SetDrawBuffers", count, ptr)
             member x.SetMultisample(r: nativeptr<int>) = inner.SetMultisample(r); x.Append("SetMultisample", r)
             member x.SetPolygonMode(m: nativeptr<int>) = inner.SetPolygonMode(m); x.Append("SetPolygonMode", m)
             member x.SetStencilMask(mask: bool) = inner.SetStencilMask(mask); x.Append("SetStencilMask", mask)
-            member x.SetStencilMode(m: nativeptr<GLStencilMode>) = inner.SetStencilMode(m); x.Append("SetStencilMode", m)
+            member x.SetStencilMask(f: StencilFace, m: nativeptr<uint32>) = inner.SetStencilMask(f, m); x.Append("SetStencilMask", f, m)
+            member x.SetStencilModes(f: nativeptr<GLStencilMode>, b: nativeptr<GLStencilMode>) = inner.SetStencilModes(f, b); x.Append("SetStencilMode", f, b)
             member x.TexParameterf(target: int, name: TextureParameterName, value: float32) = inner.TexParameterf(target, name, value); x.Append("TexParameterf", target, name, value)
             member x.TexParameteri(target: int, name: TextureParameterName, value: int) = inner.TexParameteri(target, name, value); x.Append("TexParameteri", target, name, value)
             member x.Uniform1fv(location: int, cnt: int, ptr: nativeint) = inner.Uniform1fv(location, cnt, ptr); x.Append("Uniform1fv", location, cnt, ptr)
@@ -884,15 +1014,20 @@ module GLAssemblerExtensions =
         member x.DeleteQuery(query : nativeptr<int>) =
             x.DeleteQueries(1, query)
 
-        member inline x.SetDepthTest(m : IResource<'a, DepthTestInfo>) = x.SetDepthTest(m.Pointer)
+        member inline x.SetDepthTest(m : IResource<'a, int>) = x.SetDepthTest(m.Pointer)
         member inline x.SetDepthBias(m : IResource<'a, DepthBiasInfo>) = x.SetDepthBias(m.Pointer)
+        member inline x.SetDepthMask(m : IResource<'a, int>) = x.SetDepthMask(m.Pointer)
+        member inline x.SetDepthClamp(m : IResource<'a, int>) = x.SetDepthClamp(m.Pointer)
         member inline x.SetPolygonMode(m : IResource<'a, int>) = x.SetPolygonMode(m.Pointer)
         member inline x.SetCullMode(m : IResource<'a, int>) = x.SetCullMode(m.Pointer)
         member inline x.SetFrontFace(m : IResource<'a, int>) = x.SetFrontFace(m.Pointer)
-        member inline x.SetBlendMode(m : IResource<'a, GLBlendMode>) = x.SetBlendMode(m.Pointer)
-        member inline x.SetStencilMode(m : IResource<'a, GLStencilMode>) = x.SetStencilMode(m.Pointer)
+        member inline x.SetBlendColor(c : IResource<'a, C4f>) = x.SetBlendColor(c.Pointer)
+        member inline x.SetBlendModes(count : int, m : IResource<'a, nativeint>) = x.SetBlendModes(count, NativePtr.toNativeInt m.Pointer)
+        member inline x.SetColorMasks(count : int, m : IResource<'a, nativeint>) = x.SetColorMasks(count, NativePtr.toNativeInt m.Pointer)
+        member inline x.SetStencilModes(f : IResource<'a, GLStencilMode>, b : IResource<'a, GLStencilMode>) = x.SetStencilModes(f.Pointer, b.Pointer)
+        member inline x.SetStencilMask(f : StencilFace, m : IResource<'a, uint32>) = x.SetStencilMask(f, m.Pointer)
         member inline x.UseProgram(m : IResource<Program, int>) = x.UseProgram(m.Pointer)
-        
+
         member inline x.BindUniformBufferView(slot : int, view : IResource<UniformBufferView, int>) =
             let v = view.Handle.GetValue()
             x.BindBufferRangeFixed(BufferRangeTarget.UniformBuffer, slot, view.Pointer, v.Offset, v.Size)
@@ -900,11 +1035,11 @@ module GLAssemblerExtensions =
         member inline x.BindStorageBuffer(slot : int, view : IResource<Buffer, int>) =
             x.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, slot, view.Pointer)
 
-        member inline x.BindTexture (texture : IResource<Texture, V2i>) = 
+        member inline x.BindTexture (texture : IResource<Texture, V2i>) =
             let texturePtr : nativeptr<int> = NativePtr.ofNativeInt (NativePtr.toNativeInt texture.Pointer)
             let targetPtr : nativeptr<TextureTarget> = NativePtr.ofNativeInt (NativePtr.toNativeInt texture.Pointer + 4n)
             x.BindTexture(targetPtr, texturePtr)
-            
+
         member inline x.BindVertexAttributes(ctx : nativeptr<nativeint>, vao : IResource<VertexInputBindingHandle,_>) =
             let handle = vao.Handle.GetValue() // unchangeable
             x.BindVertexAttributes(ctx, handle)
@@ -936,7 +1071,7 @@ module GLAssemblerExtensions =
                 beginMode.Pointer,
                 indirect.Pointer
             )
-         
+
         member inline x.DrawElementsIndirect(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, indexType : int, indirect : IResource<_, IndirectDrawArgs>) =
             x.DrawElementsIndirect(
                 stats,
@@ -945,7 +1080,7 @@ module GLAssemblerExtensions =
                 indexType,
                 indirect.Pointer
             )
-            
+
         member inline x.ClearColor(c : IResource<C4f, C4f>) = x.ClearColor(c.Pointer)
         member inline x.ClearDepth(c : IResource<float, float>) = x.ClearDepth(c.Pointer)
         member inline x.ClearStencil(c : IResource<int, int>) = x.ClearStencil(c.Pointer)
@@ -953,7 +1088,7 @@ module GLAssemblerExtensions =
         member inline x.BindTexturesAndSamplers (textureBinding : IResource<TextureBinding, TextureBinding>) =
             let handle = textureBinding.Update(AdaptiveToken.Top, RenderToken.Empty); textureBinding.Handle.GetValue()
             if handle.count > 0 then
-                x.BindTexturesAndSamplers(handle)  
+                x.BindTexturesAndSamplers(handle)
 
         member x.BindSampler (slot : int, sampler : IResource<Sampler, int>) =
             if ExecutionContext.samplersSupported then
@@ -961,7 +1096,7 @@ module GLAssemblerExtensions =
             else
                 let s = sampler.Handle.GetValue().Description
                 let target = int OpenGl.Enums.TextureTarget.Texture2D
-                let unit = int OpenGl.Enums.TextureUnit.Texture0 + slot 
+                let unit = int OpenGl.Enums.TextureUnit.Texture0 + slot
                 x.TexParameteri(target, TextureParameterName.TextureWrapS, SamplerStateHelpers.wrapMode s.AddressU)
                 x.TexParameteri(target, TextureParameterName.TextureWrapT, SamplerStateHelpers.wrapMode s.AddressV)
                 x.TexParameteri(target, TextureParameterName.TextureWrapR, SamplerStateHelpers.wrapMode s.AddressW)
@@ -976,7 +1111,7 @@ module GLAssemblerExtensions =
             x.GetQueryObject(temp, GetQueryObjectParam.QueryResult, result)
             x.DeleteQueries(1, temp)
 
-        member x.BindUniformLocation(l : int, loc : IResource<UniformLocation, nativeint>) : unit = 
+        member x.BindUniformLocation(l : int, loc : IResource<UniformLocation, nativeint>) : unit =
             let loc = loc.Handle.GetValue()
 
             match loc.Type with
@@ -993,7 +1128,7 @@ module GLAssemblerExtensions =
                 | Matrix(Float, 4, 4, true)     -> x.UniformMatrix4fv(l, 1, 0, loc.Data)
                 | _                             -> failwithf "no uniform-setter for: %A" loc
 
-        
+
         member this.Copy(src : nativeptr<'a>, dst : nativeptr<'a>) =
             this.Copy(src, dst, 1)
 
@@ -1019,9 +1154,8 @@ type CompilerInfo =
         contextHandle           : nativeptr<nativeint>
         runtimeStats            : nativeptr<V2i>
         currentContext          : aval<ContextHandle>
-        drawBuffers             : nativeint
         drawBufferCount         : int
-        
+
         structuralChange        : aval<unit>
         usedTextureSlots        : RefRef<CountingHashSet<int>>
         usedUniformBufferSlots  : RefRef<CountingHashSet<int>>
@@ -1031,9 +1165,9 @@ type CompilerInfo =
     }
 
 
-    
+
 [<AutoOpen>]
-module rec ChangeableProgram = 
+module rec ChangeableProgram =
 
     open System.IO
     open System.Runtime.InteropServices
@@ -1067,14 +1201,14 @@ module rec ChangeableProgram =
 
 
     type AdaptivePinning () =
-        inherit AdaptiveObject() 
+        inherit AdaptiveObject()
 
         let dirty = Dict<IAdaptiveObject, AdaptiveToken -> unit>()
         let pointers = Dict<IAdaptiveObject, ref<int> * (unit -> unit) * nativeint>()
         let targets = Dict<nativeint, AdaptiveToken -> unit>()
 
         member x.Dispose() =
-            for KeyValue(o, (r, release, ptr)) in pointers do 
+            for KeyValue(o, (r, release, ptr)) in pointers do
                 o.Outputs.Remove x |> ignore
                 release()
                 Marshal.FreeHGlobal ptr
@@ -1119,9 +1253,9 @@ module rec ChangeableProgram =
                     targets.[ptr] <- write
                     x.EvaluateAlways AdaptiveToken.Top (fun t -> write t)
 
-                { new System.IDisposable with 
-                    member __.Dispose() = 
-                        x.Remove value 
+                { new System.IDisposable with
+                    member __.Dispose() =
+                        x.Remove value
                 }, NativePtr.ofNativeInt<'a> ptr
             )
 
@@ -1142,8 +1276,8 @@ module rec ChangeableProgram =
             action ass
             ms.ToArray()
 
-        static let jumpSize = 
-            assemble (fun s -> 
+        static let jumpSize =
+            assemble (fun s ->
                 s.Jump 34325324
             ) |> Array.length
 
@@ -1190,10 +1324,10 @@ module rec ChangeableProgram =
                 | None -> parent.Epilog.Offset
 
             let newSize =
-                nativeint ms.Length + 
+                nativeint ms.Length +
                 nativeint jumpSize
 
-            if newSize <> block.Size then 
+            if newSize <> block.Size then
                 parent.Free block
                 let n = parent.Alloc(newSize)
                 block <- n
@@ -1211,7 +1345,7 @@ module rec ChangeableProgram =
             parent.IsDisposed || block.IsFree
 
         member x.Dispose() =
-            if not x.IsDisposed then 
+            if not x.IsDisposed then
                 for p in pinned do p.Dispose()
                 match prev with
                 | Some p -> p.Next <- next
@@ -1220,31 +1354,31 @@ module rec ChangeableProgram =
                 next <- None
                 parent.Free block
 
-        member x.Offset = 
+        member x.Offset =
             if x.IsDisposed then raise <| System.ObjectDisposedException "CodeFragment"
             block.Offset
 
         member x.Prev
-            with get() = 
+            with get() =
                 if x.IsDisposed then raise <| System.ObjectDisposedException "CodeFragment"
                 prev
-            and private set p = 
+            and private set p =
                 if x.IsDisposed then raise <| System.ObjectDisposedException "CodeFragment"
                 prev <- p
 
         member x.Next
-            with get() = 
+            with get() =
                 if x.IsDisposed then raise <| System.ObjectDisposedException "CodeFragment"
                 next
             and set n =
                 if x.IsDisposed then raise <| System.ObjectDisposedException "CodeFragment"
                 next <- n
-                let jumpTarget = 
+                let jumpTarget =
                     match n with
-                    | Some n -> 
+                    | Some n ->
                         n.Prev <- Some x
                         n.Offset
-                    | None -> 
+                    | None ->
                         parent.Epilog.Offset
 
                 x.WriteJumpTo jumpTarget
@@ -1257,7 +1391,7 @@ module rec ChangeableProgram =
 
         let mutable refCount = 1
 
-        let memory = 
+        let memory =
             new Management.MemoryManager<_>(Memory.executable, 16n)
 
         let pinning = new AdaptivePinning()
@@ -1267,20 +1401,20 @@ module rec ChangeableProgram =
             use ass = AssemblerStream.ofStream ms
             action ass
             ms.ToArray()
-            
-        static let epilog = 
-            assemble (fun s -> 
+
+        static let epilog =
+            assemble (fun s ->
                 s.EndFunction()
                 s.Ret()
             )
-            
-        static let jumpSize = 
-            assemble (fun s -> 
+
+        static let jumpSize =
+            assemble (fun s ->
                 s.Jump 34325324
             ) |> Array.length
 
-        static let prologSize = 
-            assemble (fun s -> 
+        static let prologSize =
+            assemble (fun s ->
                 s.BeginFunction()
                 s.Jump 34325324
             ) |> Array.length
@@ -1298,7 +1432,7 @@ module rec ChangeableProgram =
                 block
             )
 
-            
+
 
         let mutable run : option<unit -> unit> = None
         let prologBlock =
@@ -1316,15 +1450,15 @@ module rec ChangeableProgram =
 
             )
             block
-            
-        let mutable entryPointer = 
+
+        let mutable entryPointer =
             let ptr = NativePtr.alloc 1
             NativePtr.write ptr (memory.UnsafePointer + prologBlock.Offset)
             ptr
 
         let mutable prologFragment = None
 
-        let getProlog() = 
+        let getProlog() =
             match prologFragment with
             | Some f -> f
             | None ->
@@ -1389,16 +1523,16 @@ module rec ChangeableProgram =
                 let r = UnmanagedFunctions.wrap ptr
                 run <- Some r
                 r()
-                
+
         member x.Run(token : AdaptiveToken) =
             x.Update token
             x.Run()
 
         member x.First
-            with get() = 
+            with get() =
                 if x.IsDisposed then raise <| System.ObjectDisposedException("FragmentProgram")
                 getProlog().Next
-            and set f = 
+            and set f =
                 if x.IsDisposed then raise <| System.ObjectDisposedException("FragmentProgram")
                 getProlog().Next <- f
 
@@ -1430,7 +1564,7 @@ module rec ChangeableProgram =
             fixEntry()
             ass.Jump (jumpDistance block.Offset block.Size epilog.Value.Offset)
             let arr = ms.ToArray()
-            
+
             memory.Use(block, fun basePtr offset _size ->
                 Marshal.Copy(arr, 0, basePtr + offset, arr.Length)
             )
@@ -1439,19 +1573,19 @@ module rec ChangeableProgram =
 
         interface System.IDisposable with
             member x.Dispose() = x.Dispose()
-       
+
     type IAssemblerStream with
-        member x.Print (pinning : IAdaptivePinning) fmt = 
+        member x.Print (pinning : IAdaptivePinning) fmt =
             fmt |> Printf.kprintf (fun str ->
                 let ptr = pinning.Pin (fun () -> Log.line "%s" str)
                 x.BeginCall(0)
                 x.Call ptr
             )
-        
+
         member x.Call(program : FragmentProgram, pinning : IAdaptivePinning) =
             let ptr = pinning.Pin(program)
             for r in x.CalleeSavedRegisters do x.Push r
             x.BeginCall 0
             x.CallIndirect ptr
             for r in x.CalleeSavedRegisters do x.Pop r
-     
+

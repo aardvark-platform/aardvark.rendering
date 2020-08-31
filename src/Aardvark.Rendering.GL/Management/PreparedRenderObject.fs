@@ -44,23 +44,26 @@ type PreparedPipelineState =
         pStorageBuffers : (struct (int * IResource<Buffer, int>))[] // sorted list of storage buffers
         pUniforms : (struct (int * IResource<UniformLocation, nativeint>))[] // sorted list of uniforms
         pTextureBindings : (struct (Range1i * TextureBindingSlot))[] // sorted list of texture bindings
-                
-        pDepthTestMode : IResource<DepthTestInfo, DepthTestInfo>
+
+        pBlendColor : IResource<C4f, C4f>
+        pBlendModes : IResource<nativeptr<GLBlendMode>, nativeint>
+        pColorMasks : IResource<nativeptr<GLColorMask>, nativeint>
+
+        pDepthTest : IResource<int, int>
         pDepthBias : IResource<DepthBiasInfo, DepthBiasInfo>
+        pDepthMask : IResource<bool, int>
+        pDepthClamp : IResource<bool, int>
+
+        pStencilModeFront : IResource<GLStencilMode, GLStencilMode>
+        pStencilModeBack : IResource<GLStencilMode, GLStencilMode>
+        pStencilMaskFront : IResource<uint32, uint32>
+        pStencilMaskBack : IResource<uint32, uint32>
+
         pCullMode : IResource<int, int>
         pFrontFace : IResource<int, int>
         pPolygonMode : IResource<int, int>
-        pBlendMode : IResource<GLBlendMode, GLBlendMode>
-        pStencilMode : IResource<GLStencilMode, GLStencilMode>
-        pConservativeRaster : IResource<bool, int>
         pMultisample : IResource<bool, int>
-
-        pColorAttachmentCount : int
-        pDrawBuffers : Option<DrawBufferConfig>
-        pColorBufferMasks : Option<list<V4i>>
-        pDepthBufferMask : bool
-        pStencilBufferMask : bool
-        
+        pConservativeRaster : IResource<bool, int>
     } 
 
     member x.Resources =
@@ -79,42 +82,27 @@ type PreparedPipelineState =
                 match tb with 
                 | ArrayBinding ta -> yield ta :> _
                 | SingleBinding (tex, sam) -> yield tex :> _; yield sam :> _
-            
-            yield x.pConservativeRaster :> _
-            yield x.pMultisample :> _
-            yield x.pDepthTestMode :> _
+
+            yield x.pBlendColor :> _
+            yield x.pBlendModes :> _
+            yield x.pColorMasks :> _
+
+            yield x.pDepthTest :> _
             yield x.pDepthBias :> _
+            yield x.pDepthMask :> _
+            yield x.pDepthClamp :> _
+
+            yield x.pStencilModeFront :> _
+            yield x.pStencilModeBack :> _
+            yield x.pStencilMaskFront :> _
+            yield x.pStencilMaskBack :> _
+
             yield x.pCullMode :> _
             yield x.pFrontFace :> _
             yield x.pPolygonMode :> _
-            yield x.pBlendMode :> _
-            yield x.pStencilMode :> _
+            yield x.pMultisample :> _
+            yield x.pConservativeRaster :> _
         }
-
-    //member x.Update(caller : AdaptiveToken, token : RenderToken) =
-    //    use ctxToken = x.pContext.ResourceLock
-
-    //    x.pProgram.Update(caller, token)
-
-    //    for (_,ub) in x.pUniformBuffers |> Map.toSeq do
-    //        ub.Update(caller, token)
-            
-    //    for (_,ub) in x.pStorageBuffers |> Map.toSeq do
-    //        ub.Update(caller, token)
-
-    //    for (_,ul) in x.pUniforms |> Map.toSeq do
-    //        ul.Update(caller, token)
-
-    //    x.pTextures.Update(caller, token)
-        
-        
-    //    x.pDepthTestMode.Update(caller, token)
-    //    x.pCullMode.Update(caller, token)
-    //    x.pPolygonMode.Update(caller, token)
-    //    x.pBlendMode.Update(caller, token)
-    //    x.pStencilMode.Update(caller, token)
-    //    x.pConservativeRaster.Update(caller, token)
-    //    x.pMultisample.Update(caller, token)
 
     member x.Dispose() =
         lock x (fun () -> 
@@ -130,10 +118,6 @@ type PreparedPipelineState =
 
                     OpenTK.Graphics.OpenGL4.GL.UnbindAllBuffers()
 
-                    match x.pDrawBuffers with
-                        | Some b -> b.RemoveRef()
-                        | _ -> ()
-
                     for struct (_, tb) in x.pTextureBindings do
                         match tb with
                         | SingleBinding (tex, sam) -> tex.Dispose(); sam.Dispose()
@@ -143,14 +127,26 @@ type PreparedPipelineState =
                     x.pUniformBuffers |> Array.iter (fun struct (_, ub) -> ub.Dispose())
                     x.pStorageBuffers |> Array.iter (fun struct (_, sb) -> sb.Dispose())
                     x.pProgram.Dispose()
-                    
-                    x.pDepthTestMode.Dispose()
+
+                    x.pBlendColor.Dispose()
+                    x.pBlendModes.Dispose()
+                    x.pColorMasks.Dispose()
+
+                    x.pDepthTest.Dispose()
+                    x.pDepthBias.Dispose()
+                    x.pDepthMask.Dispose()
+                    x.pDepthClamp.Dispose()
+
+                    x.pStencilModeFront.Dispose()
+                    x.pStencilModeBack.Dispose()
+                    x.pStencilMaskFront.Dispose()
+                    x.pStencilMaskBack.Dispose()
+
                     x.pCullMode.Dispose()
+                    x.pFrontFace.Dispose()
                     x.pPolygonMode.Dispose()
-                    x.pBlendMode.Dispose()
-                    x.pStencilMode.Dispose()
-                    x.pConservativeRaster.Dispose()
                     x.pMultisample.Dispose()
+                    x.pConservativeRaster.Dispose()
         )
 
     interface IDisposable with
@@ -344,30 +340,6 @@ module PreparedPipelineState =
                                 Some struct(slotRange, (ArrayBinding (binding)))
                     )
 
-        member x.CreateColorMasks(fboSignature : IFramebufferSignature, writeBuffers) = 
-            let attachments = fboSignature.ColorAttachments |> Map.toList
-            let attachmentCount = if attachments.Length > 0 then 1 + (attachments |> List.map (fun (i,_) -> i) |> List.max) else 0
-
-            let colorMasks =
-                match writeBuffers with
-                | Some b ->
-                    let isAll = fboSignature.ColorAttachments |> Map.toSeq |> Seq.forall (fun (_,(sem,_)) -> Set.contains sem b)
-                    if isAll then
-                        None
-                    else
-                        let masks = Array.zeroCreate attachmentCount
-                        for (index, (sem, att)) in attachments do
-                            if Set.contains sem b then
-                                masks.[index] <- V4i.IIII
-                            else
-                                masks.[index] <- V4i.OOOO
-
-                        Some (Array.toList masks)
-                | _ ->
-                    None
-
-            (colorMasks, attachmentCount)
-
     let ofRenderObject (fboSignature : IFramebufferSignature) (x : ResourceManager) (rj : RenderObject) =
         // use a context token to avoid making context current/uncurrent repeatedly
         use token = x.Context.ResourceLock
@@ -388,34 +360,26 @@ module PreparedPipelineState =
 
         GL.Check "[Prepare] Textures"
         
-        let (colorMasks, attachmentCount) = x.CreateColorMasks(fboSignature, rj.WriteBuffers)
+        let blendColor = x.CreateColor rj.BlendState.ConstantColor
+        let blendModes = x.CreateBlendModes(fboSignature, rj.BlendState.Mode, rj.BlendState.AttachmentMode)
+        let colorMasks = x.CreateColorMasks(fboSignature, rj.BlendState.ColorWriteMask, rj.BlendState.AttachmentWriteMask)
 
-        let drawBuffers = 
-            match rj.WriteBuffers with
-                | Some set -> 
-                    x.DrawBufferManager.CreateConfig(set) |> Some
-                | _ -> None
+        let depthTest = x.CreateCompareFunction rj.DepthState.Test
+        let depthBias = x.CreateDepthBias rj.DepthState.Bias
+        let depthMask = x.CreateFlag rj.DepthState.WriteMask
+        let depthClamp = x.CreateFlag rj.DepthState.Clamp
 
-        let depthMask =
-            match rj.WriteBuffers with
-                | Some b -> Set.contains DefaultSemantic.Depth b
-                | None -> true
+        let stencilModeFront = x.CreateStencilMode(rj.StencilState.ModeFront)
+        let stencilModeBack = x.CreateStencilMode(rj.StencilState.ModeBack)
+        let stencilMaskFront = x.CreateStencilMask(rj.StencilState.WriteMaskFront)
+        let stencilMaskBack = x.CreateStencilMask(rj.StencilState.WriteMaskBack)
 
-        let stencilMask =
-            match rj.WriteBuffers with
-                | Some b -> Set.contains DefaultSemantic.Stencil b
-                | None -> true
-                
-        let depthTest = x.CreateDepthTest rj.DepthTest
-        let depthBias = x.CreateDepthBias rj.DepthBias
-        let cullMode = x.CreateCullMode rj.CullMode
-        let frontFace = x.CreateFrontFace rj.FrontFace
-        let polygonMode = x.CreatePolygonMode rj.FillMode
-        let blendMode = x.CreateBlendMode rj.BlendMode
-        let stencilMode = x.CreateStencilMode rj.StencilMode
-        let conservativeRaster = x.CreateFlag rj.ConservativeRaster
-        let multisample = x.CreateFlag rj.Multisample
-        
+        let cullMode = x.CreateCullMode rj.RasterizerState.CullMode
+        let frontFace = x.CreateFrontFace rj.RasterizerState.FrontFace
+        let polygonMode = x.CreatePolygonMode rj.RasterizerState.FillMode
+        let multisample = x.CreateFlag rj.RasterizerState.Multisample
+        let conservativeRaster = x.CreateFlag rj.RasterizerState.ConservativeRaster
+
         {
             pUniformProvider = rj.Uniforms
             pContext = x.Context
@@ -426,73 +390,70 @@ module PreparedPipelineState =
             pUniformBuffers = uniformBuffers
             pUniforms = Array.empty
             pTextureBindings = textureBindings
-            pColorAttachmentCount = attachmentCount
-            pDrawBuffers = drawBuffers
-            pColorBufferMasks = colorMasks
-            pDepthBufferMask = depthMask
-            pStencilBufferMask = stencilMask
-            pDepthTestMode = depthTest
+
+            pBlendColor = blendColor
+            pBlendModes = blendModes
+            pColorMasks = colorMasks
+
+            pDepthTest = depthTest
             pDepthBias = depthBias
+            pDepthMask = depthMask
+            pDepthClamp = depthClamp
+
+            pStencilModeFront = stencilModeFront
+            pStencilModeBack = stencilModeBack
+            pStencilMaskFront = stencilMaskFront
+            pStencilMaskBack = stencilMaskBack
+
             pCullMode = cullMode
             pFrontFace = frontFace
             pPolygonMode = polygonMode
-            pBlendMode = blendMode
-            pStencilMode = stencilMode
-            pConservativeRaster = conservativeRaster
             pMultisample = multisample
+            pConservativeRaster = conservativeRaster
         }
 
     let ofPipelineState (fboSignature : IFramebufferSignature) (x : ResourceManager) (surface : Surface) (rj : PipelineState) =
         // use a context token to avoid making context current/uncurrent repeatedly
         use token = x.Context.ResourceLock
         
-        let iface, program = x.CreateSurface(fboSignature, surface, rj.geometryMode)
+        let iface, program = x.CreateSurface(fboSignature, surface, rj.Mode)
         let slots = x.GetInterfaceSlots(iface)
 
         GL.Check "[Prepare] Create Surface"
         
         // create all UniformBuffers requested by the program
-        let uniformBuffers = x.CreateUniformBuffers(slots, rj.globalUniforms, Ag.Scope.Root)
+        let uniformBuffers = x.CreateUniformBuffers(slots, rj.GlobalUniforms, Ag.Scope.Root)
 
         GL.Check "[Prepare] Uniform Buffers"
 
-        let storageBuffers = x.CreateStorageBuffers(slots, rj.globalUniforms, Ag.Scope.Root)
+        let storageBuffers = x.CreateStorageBuffers(slots, rj.GlobalUniforms, Ag.Scope.Root)
 
-        let textureBindings = x.CreateTextureBindings(slots, rj.globalUniforms, Ag.Scope.Root)
+        let textureBindings = x.CreateTextureBindings(slots, rj.GlobalUniforms, Ag.Scope.Root)
 
         GL.Check "[Prepare] Textures"
         
-        let (colorMasks, attachmentCount) = x.CreateColorMasks(fboSignature, rj.writeBuffers)
+        let blendColor = x.CreateColor rj.BlendState.ConstantColor
+        let blendModes = x.CreateBlendModes(fboSignature, rj.BlendState.Mode, rj.BlendState.AttachmentMode)
+        let colorMasks = x.CreateColorMasks(fboSignature, rj.BlendState.ColorWriteMask, rj.BlendState.AttachmentWriteMask)
 
-        let drawBuffers = 
-            match rj.writeBuffers with
-                | Some set -> 
-                    x.DrawBufferManager.CreateConfig(set) |> Some
-                | _ -> None
+        let depthTest= x.CreateCompareFunction rj.DepthState.Test
+        let depthBias = x.CreateDepthBias rj.DepthState.Bias
+        let depthMask = x.CreateFlag rj.DepthState.WriteMask
+        let depthClamp = x.CreateFlag rj.DepthState.Clamp
 
-        let depthMask =
-            match rj.writeBuffers with
-                | Some b -> Set.contains DefaultSemantic.Depth b
-                | None -> true
+        let stencilModeFront = x.CreateStencilMode(rj.StencilState.ModeFront)
+        let stencilModeBack = x.CreateStencilMode(rj.StencilState.ModeBack)
+        let stencilMaskFront = x.CreateStencilMask(rj.StencilState.WriteMaskFront)
+        let stencilMaskBack = x.CreateStencilMask(rj.StencilState.WriteMaskBack)
 
-        let stencilMask =
-            match rj.writeBuffers with
-                | Some b -> Set.contains DefaultSemantic.Stencil b
-                | None -> true
-                
-        let depthTest = x.CreateDepthTest rj.depthTest
-        let depthBias = x.CreateDepthBias rj.depthBias
-        let cullMode = x.CreateCullMode rj.cullMode
-        let frontFace = x.CreateFrontFace rj.frontFace
-        let polygonMode = x.CreatePolygonMode rj.fillMode
-        let blendMode = x.CreateBlendMode rj.blendMode
-        let stencilMode = x.CreateStencilMode rj.stencilMode
-        let conservativeRaster = x.CreateFlag (AVal.constant false)
-        let multisample = x.CreateFlag rj.multisample
-        
-        
+        let cullMode = x.CreateCullMode rj.RasterizerState.CullMode
+        let frontFace = x.CreateFrontFace rj.RasterizerState.FrontFace
+        let polygonMode = x.CreatePolygonMode rj.RasterizerState.FillMode
+        let multisample = x.CreateFlag rj.RasterizerState.Multisample
+        let conservativeRaster = x.CreateFlag rj.RasterizerState.ConservativeRaster
+
         {
-            pUniformProvider = rj.globalUniforms
+            pUniformProvider = rj.GlobalUniforms
             pContext = x.Context
             pFramebufferSignature = fboSignature
             pProgram = program
@@ -500,22 +461,27 @@ module PreparedPipelineState =
             pStorageBuffers = storageBuffers
             pUniformBuffers = uniformBuffers
             pUniforms = Array.empty
-            //pTextureSlots = textureSlots
             pTextureBindings = textureBindings
-            pColorAttachmentCount = attachmentCount
-            pDrawBuffers = drawBuffers
-            pColorBufferMasks = colorMasks
-            pDepthBufferMask = depthMask
-            pStencilBufferMask = stencilMask
-            pDepthTestMode = depthTest
+
+            pBlendColor = blendColor
+            pBlendModes = blendModes
+            pColorMasks = colorMasks
+
+            pDepthTest = depthTest
             pDepthBias = depthBias
+            pDepthMask = depthMask
+            pDepthClamp = depthClamp
+
+            pStencilModeFront = stencilModeFront
+            pStencilModeBack = stencilModeBack
+            pStencilMaskFront = stencilMaskFront
+            pStencilMaskBack = stencilMaskBack
+
             pCullMode = cullMode
             pFrontFace = frontFace
             pPolygonMode = polygonMode
-            pBlendMode = blendMode
-            pStencilMode = stencilMode
-            pConservativeRaster = conservativeRaster
             pMultisample = multisample
+            pConservativeRaster = conservativeRaster
         }
   
 
@@ -554,22 +520,26 @@ module PreparedPipelineStateAssembler =
 
             let mutable icnt = 0 // counting dynamic instructions
 
-            x.SetDepthMask(me.pDepthBufferMask)
-            x.SetStencilMask(me.pStencilBufferMask)
-            match me.pDrawBuffers with
-                | None ->
-                    x.SetDrawBuffers(s.drawBufferCount, s.drawBuffers)
-                | Some b ->
-                    x.SetDrawBuffers(b.Count, NativePtr.toNativeInt b.Buffers)
-                                       
-            x.SetDepthTest(me.pDepthTestMode)  
+            //x.SetDrawBuffers(s.drawBufferCount, s.drawBuffers)
+
+            x.SetBlendColor(me.pBlendColor)
+            x.SetBlendModes(s.drawBufferCount, me.pBlendModes)
+            x.SetColorMasks(s.drawBufferCount, me.pColorMasks)
+
+            x.SetDepthTest(me.pDepthTest)
             x.SetDepthBias(me.pDepthBias)
+            x.SetDepthMask(me.pDepthMask)
+            x.SetDepthClamp(me.pDepthClamp)
+
+            x.SetStencilModes(me.pStencilModeFront, me.pStencilModeBack)
+            x.SetStencilMask(StencilFace.Front, me.pStencilMaskFront)
+            x.SetStencilMask(StencilFace.Back, me.pStencilMaskBack)
+
             x.SetPolygonMode(me.pPolygonMode)
             x.SetCullMode(me.pCullMode)
             x.SetFrontFace(me.pFrontFace)
-            x.SetBlendMode(me.pBlendMode)
-            x.SetStencilMode(me.pStencilMode)
             x.SetMultisample(me.pMultisample)
+            x.SetConservativeRaster(me.pConservativeRaster)
             
             let myProg = me.pProgram.Handle.GetValue()
             x.UseProgram(me.pProgram)
@@ -610,61 +580,81 @@ module PreparedPipelineStateAssembler =
                 x.BindUniformLocation(id, u)
                 icnt <- icnt + 1
 
-            NativeStats(InstructionCount = icnt + 14) // 14 fixed instruction 
+            NativeStats(InstructionCount = icnt + 17) // 17 fixed instruction 
             
 
         member x.SetPipelineState(s : CompilerInfo, me : PreparedPipelineState, prev : PreparedPipelineState) : NativeStats =
             
             let mutable icnt = 0
 
-            if prev.pDepthBufferMask <> me.pDepthBufferMask then
-                x.SetDepthMask(me.pDepthBufferMask)
+            //x.SetDrawBuffers(s.drawBufferCount, s.drawBuffers)
+
+            // Blending
+            if prev.pBlendColor <> me.pBlendColor then
+                x.SetBlendColor(me.pBlendColor)
                 icnt <- icnt + 1
 
-            if prev.pStencilBufferMask <> me.pStencilBufferMask then
-                x.SetStencilMask(me.pStencilBufferMask)
+            if prev.pBlendModes <> me.pBlendModes then
+                x.SetBlendModes(s.drawBufferCount, me.pBlendModes)
                 icnt <- icnt + 1
 
-            if prev.pDrawBuffers <> me.pDrawBuffers then
-                match me.pDrawBuffers with
-                    | None ->
-                        x.SetDrawBuffers(s.drawBufferCount, s.drawBuffers)
-                    | Some b ->
-                        x.SetDrawBuffers(b.Count, NativePtr.toNativeInt b.Buffers)
+            if prev.pColorMasks <> me.pColorMasks then
+                x.SetColorMasks(s.drawBufferCount, me.pColorMasks)
                 icnt <- icnt + 1
-                   
-            if prev.pDepthTestMode <> me.pDepthTestMode then
-                x.SetDepthTest(me.pDepthTestMode)  
+
+
+            // Depth state
+            if prev.pDepthTest <> me.pDepthTest then
+                x.SetDepthTest(me.pDepthTest)
                 icnt <- icnt + 1
 
             if prev.pDepthBias <> me.pDepthBias then
-                x.SetDepthBias(me.pDepthBias)  
+                x.SetDepthBias(me.pDepthBias)
                 icnt <- icnt + 1
-                
+
+            if prev.pDepthMask <> me.pDepthMask then
+                x.SetDepthMask(me.pDepthMask)
+                icnt <- icnt + 1
+
+            if prev.pDepthClamp <> me.pDepthClamp then
+                x.SetDepthClamp(me.pDepthClamp)
+                icnt <- icnt + 1
+
+            // Stencil state
+            if prev.pStencilModeFront <> me.pStencilModeFront || prev.pStencilModeBack <> me.pStencilModeBack then
+                x.SetStencilModes(me.pStencilModeFront, me.pStencilModeBack)
+                icnt <- icnt + 1
+
+            if prev.pStencilMaskFront <> me.pStencilMaskFront then
+                x.SetStencilMask(StencilFace.Front, me.pStencilMaskFront)
+                icnt <- icnt + 1
+
+            if prev.pStencilMaskBack <> me.pStencilMaskBack then
+                x.SetStencilMask(StencilFace.Back, me.pStencilMaskBack)
+                icnt <- icnt + 1
+
+            // Rasterizer state
             if prev.pPolygonMode <> me.pPolygonMode then
                 x.SetPolygonMode(me.pPolygonMode)
                 icnt <- icnt + 1
-                
+
             if prev.pCullMode <> me.pCullMode then
                 x.SetCullMode(me.pCullMode)
                 icnt <- icnt + 1
-            
+
             if prev.pFrontFace <> me.pFrontFace then
                 x.SetFrontFace(me.pFrontFace)
-                icnt <- icnt + 1
-
-            if prev.pBlendMode <> me.pBlendMode then
-                x.SetBlendMode(me.pBlendMode)
-                icnt <- icnt + 1
-
-            if prev.pStencilMode <> me.pStencilMode then
-                x.SetStencilMode(me.pStencilMode)
                 icnt <- icnt + 1
 
             if prev.pMultisample <> me.pMultisample then
                 x.SetMultisample(me.pMultisample)
                 icnt <- icnt + 1
 
+            if prev.pConservativeRaster <> me.pConservativeRaster then
+                x.SetConservativeRaster(me.pConservativeRaster)
+                icnt <- icnt + 1
+
+            // Program
             if prev.pProgram <> me.pProgram then
                 let myProg = me.pProgram.Handle.GetValue()
                 x.UseProgram(me.pProgram)
@@ -1127,7 +1117,7 @@ type EpilogCommand(ctx : Context) =
     override x.Compile(s, stream, prev) = 
         stream.SetDepthMask(true)
         stream.SetStencilMask(true)
-        stream.SetDrawBuffers(s.drawBufferCount, s.drawBuffers)
+        //stream.SetDrawBuffers(s.drawBufferCount, s.drawBuffers)
         stream.UseProgram(0)
         stream.BindBuffer(int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
         for i in 0 .. 7 do
@@ -1454,7 +1444,7 @@ module rec Command =
                 let stream = AssemblerCommandStream s
                 stream.SetDepthMask(true)
                 stream.SetStencilMask(true)
-                stream.SetDrawBuffers(info.drawBufferCount, info.drawBuffers)
+                //stream.SetDrawBuffers(info.drawBufferCount, info.drawBuffers)
                 stream.UseProgram(0)
                 stream.BindBuffer(int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
                 for i in 0 .. 7 do
@@ -1666,9 +1656,9 @@ module rec Command =
 
 
             for (i, c) in colors do
-                s.BeginCall(1)
-                s.PushIntArg (info.drawBuffers + nativeint sizeof<int> * nativeint i)
-                s.Call(OpenGl.Pointers.DrawBuffer)
+                //s.BeginCall(1)
+                //s.PushIntArg (info.drawBuffers + nativeint sizeof<int> * nativeint i)
+                //s.Call(OpenGl.Pointers.DrawBuffer)
                 
                 let pColor = p.Pin c
 

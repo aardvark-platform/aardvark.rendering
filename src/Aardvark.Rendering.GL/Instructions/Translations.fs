@@ -87,7 +87,6 @@ module Translations =
 
     let toGLCompareFunction (f : ComparisonFunction) =
         match f with
-            | ComparisonFunction.None
             | ComparisonFunction.Always -> CompareFunction.Always |> int
             | ComparisonFunction.Equal -> CompareFunction.Equal |> int
             | ComparisonFunction.Greater -> CompareFunction.Greater |> int

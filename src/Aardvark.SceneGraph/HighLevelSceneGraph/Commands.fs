@@ -15,7 +15,7 @@ type RenderGeometryConfig =
 
 
 type RenderCommand =
-    internal 
+    internal
         | REmpty
         | RUnorderedScenes of aset<ISg>
         | RClear of colors : Map<Symbol, aval<C4f>> * depth : Option<aval<float>> * stencil : Option<aval<uint32>>
@@ -57,7 +57,7 @@ type RenderCommand =
     static member Unordered(l : list<ISg>) = RUnorderedScenes(ASet.ofList l)
     static member Unordered(l : aset<ISg>) = RUnorderedScenes(l)
     static member Render (s : ISg) = RUnorderedScenes(ASet.single s)
-    
+
     static member Ordered(l : seq<ISg>) = ROrderedConstant(l |> Seq.map RenderCommand.Render |> Seq.toList)
     static member Ordered(l : list<ISg>) = ROrderedConstant(l |> List.map RenderCommand.Render)
     static member Ordered(l : alist<ISg>) = RenderCommand.Ordered(l |> AList.map RenderCommand.Render)
@@ -73,7 +73,7 @@ type RenderCommand =
     static member Geometries(config : RenderGeometryConfig,  geometries : list<IndexedGeometry>) = RGeometries(config, ASet.ofList geometries)
 
 
-    static member Ordered(cmds : list<RenderCommand>) = 
+    static member Ordered(cmds : list<RenderCommand>) =
         match cmds with
             | [] -> REmpty
             | _ -> ROrderedConstant cmds
@@ -81,17 +81,17 @@ type RenderCommand =
     static member Ordered(cmds : seq<RenderCommand>) =
         RenderCommand.Ordered(Seq.toList cmds)
 
-    static member Ordered(cmds : alist<RenderCommand>) = 
-        if cmds.IsConstant then     
+    static member Ordered(cmds : alist<RenderCommand>) =
+        if cmds.IsConstant then
             let list = cmds.Content |> AVal.force |> IndexList.toList
             RenderCommand.Ordered list
-        else 
+        else
             ROrdered cmds
 
 
 [<AutoOpen>]
 module ``Sg RuntimeCommand Extensions`` =
-    
+
     module Sg =
         type RuntimeCommandNode(command : RenderCommand) =
             interface ISg
@@ -115,7 +115,7 @@ module RuntimeCommandSemantics =
     module private RuntimeCommand =
         let rec ofRenderCommand (scope : Ag.Scope) (parent : ISg) (cmd : RenderCommand) =
             match cmd with
-                | RenderCommand.REmpty -> 
+                | RenderCommand.REmpty ->
                     RuntimeCommand.Empty
 
                 | RenderCommand.RUnorderedScenes scenes ->
@@ -132,24 +132,13 @@ module RuntimeCommandSemantics =
                             | s -> failwithf "[Sg] cannot create GeometryCommand with shader: %A" s
 
                     let state =
-                        {
-                            depthTest           = scope.DepthTestMode
-                            depthBias           = scope.DepthBias
-                            cullMode            = scope.CullMode
-                            frontFace           = scope.FrontFace
-                            blendMode           = scope.BlendMode
-                            fillMode            = scope.FillMode
-                            stencilMode         = scope.StencilMode
-                            multisample         = scope.Multisample
-                            writeBuffers        = scope.WriteBuffers
-                            globalUniforms      = new Providers.UniformProvider(scope, scope.Uniforms, [])
-                            geometryMode        = config.mode
-                            vertexInputTypes    = config.vertexInputTypes
-                            perGeometryUniforms = config.perGeometryUniforms
-                        }
+                        { PipelineState.ofScope scope with
+                            Mode                = config.mode
+                            VertexInputTypes    = config.vertexInputTypes
+                            PerGeometryUniforms = config.perGeometryUniforms }
 
                     RuntimeCommand.Geometries(effect, state, geometries)
-            
+
                 | RenderCommand.ROrdered(list) ->
                     let commands = list |> AList.map (ofRenderCommand scope parent)
                     RuntimeCommand.Ordered(commands)
@@ -163,21 +152,10 @@ module RuntimeCommandSemantics =
 
                 | RenderCommand.RLodTree(config,g) ->
                     let state =
-                        {
-                            depthTest           = scope.DepthTestMode
-                            depthBias           = scope.DepthBias
-                            cullMode            = scope.CullMode
-                            frontFace           = scope.FrontFace
-                            blendMode           = scope.BlendMode
-                            fillMode            = scope.FillMode
-                            stencilMode         = scope.StencilMode
-                            multisample         = scope.Multisample
-                            writeBuffers        = scope.WriteBuffers
-                            globalUniforms      = new Providers.UniformProvider(scope, scope.Uniforms, [])
-                            geometryMode        = config.mode
-                            vertexInputTypes    = config.vertexInputTypes
-                            perGeometryUniforms = config.perGeometryUniforms
-                        }
+                        { PipelineState.ofScope scope with
+                            Mode                = config.mode
+                            VertexInputTypes    = config.vertexInputTypes
+                            PerGeometryUniforms = config.perGeometryUniforms }
 
                     RuntimeCommand.LodTree(scope.Surface, state, g)
 

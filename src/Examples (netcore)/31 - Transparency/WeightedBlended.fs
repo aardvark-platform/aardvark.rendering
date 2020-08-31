@@ -12,10 +12,10 @@ module WeightedBlended =
     open FSharp.Data.Adaptive.Operators
 
     module private DefaultSemantic =
-        let Color0 = Symbol.Create "Color0"
-        let Color1 = Symbol.Create "Color1"
-        let ColorBuffer = Symbol.Create "ColorBuffer"
-        let AlphaBuffer = Symbol.Create "AlphaBuffer"
+        let Accum = Symbol.Create "Accum"
+        let Revealage = Symbol.Create "Revealage"
+        let AccumBuffer = Symbol.Create "AccumBuffer"
+        let RevealageBuffer = Symbol.Create "RevealageBuffer"
 
     module private Shaders =
         open FShade
@@ -27,10 +27,9 @@ module WeightedBlended =
         }
 
         // Computes the sum of colors as well as the revealage.
-        // Since aardvark currently does not support different blend modes per attachment, we waste a bit of memory here.
-        // Color0: (R * A * w, G * A * w, B * A * w, -)
-        // Color1: (A * w, -, -, A)
-        // RGB channels are summed, Alpha channel is a product for computing the revealage.
+        // Accum: (R * A * w, G * A * w, B * A * w, A * w)
+        // Revealage: (A)
+        // Channels of the accum buffer are summed, alpha values are multiplied to compute revealage.
         // http://casual-effects.blogspot.com/2015/03/implemented-weighted-blended-order.html
         let weightedBlend (f : Fragment) =
             fragment {
@@ -41,37 +40,37 @@ module WeightedBlended =
                 let alpha = f.color.W
                 let color = V4d(f.color.XYZ * alpha, alpha) * w
 
-                return {| Color0 = V4d(color.XYZ, 0.0)
-                          Color1 = V4d(color.W, 0.0, 0.0, alpha) |}
+                return {| Accum = color
+                          Revealage = alpha |}
             }
 
-        let private colorSampler =
+        let private accumSampler =
             sampler2d {
-                texture uniform?ColorBuffer
+                texture uniform?AccumBuffer
                 filter Filter.MinMagPoint
                 addressU WrapMode.Wrap
                 addressV WrapMode.Wrap
             }
 
-        let private alphaSampler =
+        let private revealageSampler =
             sampler2d {
-                texture uniform?AlphaBuffer
+                texture uniform?RevealageBuffer
                 filter Filter.MinMagPoint
                 addressU WrapMode.Wrap
                 addressV WrapMode.Wrap
             }
 
-        let private colorSamplerMS =
+        let private accumSamplerMS =
             sampler2dMS {
-                texture uniform?ColorBuffer
+                texture uniform?AccumBuffer
                 filter Filter.MinMagPoint
                 addressU WrapMode.Wrap
                 addressV WrapMode.Wrap
             }
 
-        let private alphaSamplerMS =
+        let private revealageSamplerMS =
             sampler2dMS {
-                texture uniform?AlphaBuffer
+                texture uniform?RevealageBuffer
                 filter Filter.MinMagPoint
                 addressU WrapMode.Wrap
                 addressV WrapMode.Wrap
@@ -80,22 +79,19 @@ module WeightedBlended =
         // Composites the results using the two buffers from the earlier pass.
         let composite (samples : int) (f : Fragment) =
             fragment {
-                let mutable color = V4d.Zero
-                let mutable alpha = V4d.Zero
+                let mutable accum = V4d.Zero
+                let mutable revealage = V4d.Zero
 
                 if samples > 1 then
                     for i in 0 .. samples - 1 do
-                        color <- color + colorSamplerMS.Read(V2i f.coord.XY, i)
-                        alpha <- alpha + alphaSamplerMS.Read(V2i f.coord.XY, i)
+                        accum <- accum + accumSamplerMS.Read(V2i f.coord.XY, i)
+                        revealage <- revealage + revealageSamplerMS.Read(V2i f.coord.XY, i)
 
-                    color <- color / float samples
-                    alpha <- alpha / float samples
+                    accum <- accum / float samples
+                    revealage <- revealage / float samples
                 else
-                    color <- colorSampler.Read(V2i f.coord.XY, 0)
-                    alpha <- alphaSampler.Read(V2i f.coord.XY, 0)
-
-                let accum = V4d(color.XYZ, alpha.X)
-                let revealage = alpha.W
+                    accum <- accumSampler.Read(V2i f.coord.XY, 0)
+                    revealage <- revealageSampler.Read(V2i f.coord.XY, 0)
 
                 let accum =
                     if isInfinity accum then
@@ -103,7 +99,7 @@ module WeightedBlended =
                     else
                         accum
 
-                return V4d(accum.XYZ / max accum.W 1e-5, 1.0 - revealage)
+                return V4d(accum.XYZ / max accum.W 1e-5, 1.0 - revealage.X)
             }
 
         // Blit one multisampled texture to another.
@@ -133,14 +129,6 @@ module WeightedBlended =
 
     [<AutoOpen>]
     module private Utility =
-
-        let blendModeTransparencyPass =
-            { BlendMode.Blend with
-                SourceColorFactor       = BlendFactor.One
-                DestinationColorFactor  = BlendFactor.One
-                SourceAlphaFactor       = BlendFactor.Zero
-                DestinationAlphaFactor  = BlendFactor.InvSourceAlpha }
-
         let createAttachment (runtime : IRuntime) (format : RenderbufferFormat) (samples : int) (size : aval<V2i>) =
             runtime.CreateTextureAttachment(
                 runtime.CreateTexture(TextureFormat.ofRenderbufferFormat format, samples, size), 0
@@ -163,8 +151,8 @@ module WeightedBlended =
         // the opaque geometry pass.
         let transparentPass =
             runtime.CreateFramebufferSignature(samples, [
-                DefaultSemantic.Color0, RenderbufferFormat.Rgba16f
-                DefaultSemantic.Color1, RenderbufferFormat.Rgba32f
+                DefaultSemantic.Accum, RenderbufferFormat.Rgba16f
+                DefaultSemantic.Revealage, RenderbufferFormat.R32f
                 DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
             ])
 
@@ -179,8 +167,8 @@ module WeightedBlended =
 
         let transparentFbo =
             runtime.CreateFramebuffer(transparentPass, Map.ofList [
-                DefaultSemantic.Color0, createAttachment runtime RenderbufferFormat.Rgba16f samples size
-                DefaultSemantic.Color1, createAttachment runtime RenderbufferFormat.Rgba32f samples size
+                DefaultSemantic.Accum, createAttachment runtime RenderbufferFormat.Rgba16f samples size
+                DefaultSemantic.Revealage, createAttachment runtime RenderbufferFormat.R32f samples size
                 DefaultSemantic.Depth, depthBuffer
             ])
 
@@ -204,8 +192,11 @@ module WeightedBlended =
         let transparentTask, colorOutput, alphaOutput =
             let sg =
                 scene.transparent
-                |> Sg.writeBuffers' (Set.ofList [DefaultSemantic.Color0; DefaultSemantic.Color1])
-                |> Sg.blendMode ~~blendModeTransparencyPass
+                |> Sg.depthWrite' false
+                |> Sg.blendModes' (Map.ofList [
+                    DefaultSemantic.Accum, BlendMode.Add
+                    DefaultSemantic.Revealage, BlendMode.Multiply
+                ])
                 |> Sg.viewTrafo scene.viewTrafo
                 |> Sg.projTrafo scene.projTrafo
                 |> Sg.shader {
@@ -216,8 +207,8 @@ module WeightedBlended =
 
             let clearColors =
                 Map.ofList [
-                    DefaultSemantic.Color0, C4f.Zero
-                    DefaultSemantic.Color1, C4f(0.0, 0.0, 0.0, 1.0)
+                    DefaultSemantic.Accum, C4f.Zero
+                    DefaultSemantic.Revealage, C4f.White
                 ]
 
             let clear = runtime.CompileClear(transparentPass, ~~clearColors, ~~None)
@@ -225,16 +216,16 @@ module WeightedBlended =
             let task = RenderTask.ofList [clear; render]
 
             let output = task |> RenderTask.renderTo transparentFbo
-            task, output.GetOutputTexture DefaultSemantic.Color0, output.GetOutputTexture DefaultSemantic.Color1
+            task, output.GetOutputTexture DefaultSemantic.Accum, output.GetOutputTexture DefaultSemantic.Revealage
 
         // Run both passes blending the result in the offscreen framebuffer.
         let compositeTask, compositeOutput =
             let sg =
                 Sg.fullScreenQuad
-                |> Sg.depthTest ~~DepthTestMode.None
-                |> Sg.blendMode ~~BlendMode.Blend
-                |> Sg.texture DefaultSemantic.ColorBuffer colorOutput
-                |> Sg.texture DefaultSemantic.AlphaBuffer alphaOutput
+                |> Sg.depthTest' DepthTest.None
+                |> Sg.blendMode' BlendMode.Blend
+                |> Sg.texture DefaultSemantic.AccumBuffer colorOutput
+                |> Sg.texture DefaultSemantic.RevealageBuffer alphaOutput
                 |> Sg.shader {
                     do! Shaders.composite samples
                 }

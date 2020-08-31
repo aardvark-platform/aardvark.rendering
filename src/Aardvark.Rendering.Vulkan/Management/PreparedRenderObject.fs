@@ -198,18 +198,30 @@ type DevicePreparedRenderObjectExtensions private() =
         let bufferFormats = 
             bufferViews |> List.map (fun (name,location, perInstance, view) -> name, (perInstance, view)) |> Map.ofSeq
 
-        let writeDepth =
-            match ro.WriteBuffers with
-                | Some set -> Set.contains DefaultSemantic.Depth set
-                | None -> true
-
-
-
         let inputAssembly = this.CreateInputAssemblyState(ro.Mode, program)
         let inputState = this.CreateVertexInputState(programLayout.PipelineInfo, AVal.constant (VertexInputState.create bufferFormats))
-        let rasterizerState = this.CreateRasterizerState(ro.DepthTest, ro.DepthBias, ro.CullMode, ro.FrontFace, ro.FillMode)
-        let colorBlendState = this.CreateColorBlendState(renderPass, ro.WriteBuffers, ro.BlendMode)
-        let depthStencilState = this.CreateDepthStencilState(writeDepth, ro.DepthTest, ro.StencilMode)
+
+        let rasterizerState =
+            this.CreateRasterizerState(
+                ro.DepthState.Clamp, ro.DepthState.Bias,
+                ro.RasterizerState.CullMode, ro.RasterizerState.FrontFace, ro.RasterizerState.FillMode
+            )
+
+        let colorBlendState =
+            this.CreateColorBlendState(
+                renderPass, ro.BlendState.ColorWriteMask, ro.BlendState.AttachmentWriteMask,
+                ro.BlendState.Mode, ro.BlendState.AttachmentMode, ro.BlendState.ConstantColor
+            )
+
+        let depthStencilState =
+            this.CreateDepthStencilState(
+                ro.DepthState.Test, ro.DepthState.WriteMask,
+                ro.StencilState.ModeFront, ro.StencilState.WriteMaskFront,
+                ro.StencilState.ModeBack, ro.StencilState.WriteMaskBack
+            )
+
+        let multisampleState =
+            this.CreateMultisampleState(renderPass, ro.RasterizerState.Multisample)
 
         let pipeline =
             this.CreatePipeline(
@@ -220,7 +232,7 @@ type DevicePreparedRenderObjectExtensions private() =
                 rasterizerState,
                 colorBlendState,
                 depthStencilState,
-                ro.WriteBuffers
+                multisampleState
             )
 
         resources.Add pipeline

@@ -103,11 +103,10 @@ module RenderTask =
                 DrawCalls = Direct (AVal.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)])
                 Mode = IndexedGeometryMode.TriangleList
                 Surface = Shaders.fs |> toEffect |> Surface.FShadeSimple
-                DepthTest = AVal.constant DepthTestMode.LessOrEqual
-                CullMode = AVal.constant CullMode.None
-                BlendMode = AVal.constant BlendMode.Blend
-                FillMode = AVal.constant FillMode.Fill
-                StencilMode = AVal.constant StencilMode.Disabled
+                DepthState = DepthState.Default
+                BlendState = BlendState.Default
+                StencilState = StencilState.Default
+                RasterizerState = RasterizerState.Default
                 Indices = BufferView(AVal.constant (ArrayBuffer [|0;1;2; 0;2;3|] :> IBuffer), typeof<int>) |> Some
                 InstanceAttributes = emptyAttributes
                 VertexAttributes = attributeProvider

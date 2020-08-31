@@ -26,7 +26,7 @@ module RenderTasks =
         let ctx = manager.Context
         let renderTaskLock = RenderTaskLock()
         let manager = ResourceManager(manager, Some (fboSignature, renderTaskLock), shareTextures, shareBuffers)
-        let allBuffers = manager.DrawBufferManager.CreateConfig(fboSignature.ColorAttachments |> Map.toSeq |> Seq.map (snd >> fst) |> Set.ofSeq)
+        //let allBuffers = manager.DrawBufferManager.CreateConfig(fboSignature.ColorAttachments |> Map.toSeq |> Seq.map (snd >> fst) |> Set.ofSeq)
         let structureChanged = AVal.custom ignore
         let runtimeStats = NativePtr.alloc 1
         let resources = new Aardvark.Rendering.ResourceInputSet()
@@ -43,8 +43,8 @@ module RenderTasks =
                 runtimeStats = runtimeStats
                 currentContext = currentContext
                 contextHandle = contextHandle
-                drawBuffers = NativePtr.toNativeInt allBuffers.Buffers
-                drawBufferCount = allBuffers.Count 
+                //drawBuffers = NativePtr.toNativeInt allBuffers.Buffers
+                drawBufferCount = fboSignature.ColorAttachments.Count
                 usedTextureSlots = RefRef CountingHashSet.empty
                 usedUniformBufferSlots = RefRef CountingHashSet.empty
                 structuralChange = structureChanged
@@ -98,6 +98,10 @@ module RenderTasks =
                             GL.BindTexture(TextureTarget.Texture2D, 0)
                     )
 
+                let drawBuffers = Array.init desc.framebuffer.Signature.ColorAttachments.Count (fun index -> DrawBuffersEnum.ColorAttachment0 + unbox index)
+                GL.DrawBuffers(drawBuffers.Length, drawBuffers);
+                GL.Check "could not set draw buffers"
+
             elif handle <> 0 then
                 failwithf "cannot render to texture on this OpenGL driver"
 
@@ -105,19 +109,19 @@ module RenderTasks =
             GL.Check "could not set viewport"
             
 
-        member private x.popFbo (desc : OutputDescription) =
-            if ExecutionContext.framebuffersSupported then
-                // execution of RenderObjects might change Color/Depth/StencilMask or DrawBuffers
-                // Color/Depth/StencilMask are reset by epilog RenderObject
-                // Reset of DrawBuffers is not possible as this is dependent on the FBO?
-                // -> Reset DrawBuffers in popFbo
+        //member private x.popFbo (desc : OutputDescription) =
+        //    if ExecutionContext.framebuffersSupported then
+        //        // execution of RenderObjects might change Color/Depth/StencilMask or DrawBuffers
+        //        // Color/Depth/StencilMask are reset by epilog RenderObject
+        //        // Reset of DrawBuffers is not possible as this is dependent on the FBO?
+        //        // -> Reset DrawBuffers in popFbo
               
-                let fbo = desc.framebuffer |> unbox<Framebuffer>
-                if fbo.Handle = 0 then
-                    GL.DrawBuffer(DrawBufferMode.BackLeft);
-                else
-                    let drawBuffers = Array.init desc.framebuffer.Signature.ColorAttachments.Count (fun index -> DrawBuffersEnum.ColorAttachment0 + unbox index)
-                    GL.DrawBuffers(drawBuffers.Length, drawBuffers);
+        //        let fbo = desc.framebuffer |> unbox<Framebuffer>
+        //        if fbo.Handle = 0 then
+        //            GL.DrawBuffer(DrawBufferMode.BackLeft);
+        //        else
+        //            let drawBuffers = Array.init desc.framebuffer.Signature.ColorAttachments.Count (fun index -> DrawBuffersEnum.ColorAttachment0 + unbox index)
+        //            GL.DrawBuffers(drawBuffers.Length, drawBuffers);
 
 
         abstract member ProcessDeltas : AdaptiveToken * RenderToken -> unit
@@ -192,7 +196,7 @@ module RenderTasks =
                 t.AddDrawCalls(rt.X, rt.Y)
             )
 
-            x.popFbo desc
+            //x.popFbo desc
             x.popDebugOutput(token, debugState)
                             
             GL.BindVertexArray 0
@@ -419,7 +423,7 @@ module RenderTasks =
             mainCommand.Free(x.Scope)
 
         override x.Perform(token : AdaptiveToken, rt : RenderToken, fbo : Framebuffer, output : OutputDescription) =
-            x.ResourceManager.DrawBufferManager.Write(fbo)
+            //x.ResourceManager.DrawBufferManager.Write(fbo)
 
             if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then
                 primitivesGenerated.Restart()
@@ -525,7 +529,7 @@ module RenderTasks =
             updateResources token x t
 
         override x.Perform(token : AdaptiveToken, rt : RenderToken, fbo : Framebuffer, output : OutputDescription) =
-            x.ResourceManager.DrawBufferManager.Write(fbo)
+            //x.ResourceManager.DrawBufferManager.Write(fbo)
 
             if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then
                 primitivesGenerated.Restart()

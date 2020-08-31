@@ -64,7 +64,6 @@ module SamplerExtensions =
 
     let private compareFuncs =
         Dict.ofList [
-            ComparisonFunction.None, All.Always
             ComparisonFunction.Always, All.Always
             ComparisonFunction.Equal, All.Equal
             ComparisonFunction.Greater, All.Greater
