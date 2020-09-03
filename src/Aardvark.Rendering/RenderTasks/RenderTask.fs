@@ -74,7 +74,7 @@ module RenderTask =
 
         let clearColors =
             sem |> Set.toList |> List.filter (fun s -> s <> DefaultSemantic.Depth) |> List.map (fun s -> s,C4f.Black)
-        let clear = runtime.CompileClear(signature, ~~clearColors, ~~1.0)
+        let clear = runtime.CompileClear(signature, ~~clearColors, ~~1.0, ~~0)
         let fbo = runtime.CreateFramebuffer(signature, sem, size)
 
         let task = new SequentialRenderTask([|clear; task|])
