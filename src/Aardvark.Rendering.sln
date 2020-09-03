@@ -2,6 +2,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.29609.76
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "13 - PipelineStates", "Scratch (netcore)\13 - PipelineStates\13 - PipelineStates.fsproj", "{4403CA33-A423-447C-B0AA-85F7B6E991F0}"
+EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "32 - Queries", "Examples (netcore)\32 - Queries\32 - Queries.fsproj", "{C112EBF2-158E-4A18-AFC8-9BDB298D74DD}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "31 - Transparency", "Examples (netcore)\31 - Transparency\31 - Transparency.fsproj", "{6F45503F-F75B-4B1E-ADE6-FBBE40ED8736}"
@@ -187,6 +189,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{4403CA33-A423-447C-B0AA-85F7B6E991F0}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{4403CA33-A423-447C-B0AA-85F7B6E991F0}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{4403CA33-A423-447C-B0AA-85F7B6E991F0}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{4403CA33-A423-447C-B0AA-85F7B6E991F0}.Release|Any CPU.Build.0 = Release|Any CPU
 		{C112EBF2-158E-4A18-AFC8-9BDB298D74DD}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{C112EBF2-158E-4A18-AFC8-9BDB298D74DD}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C112EBF2-158E-4A18-AFC8-9BDB298D74DD}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -484,6 +490,7 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{4403CA33-A423-447C-B0AA-85F7B6E991F0} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{C112EBF2-158E-4A18-AFC8-9BDB298D74DD} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{6F45503F-F75B-4B1E-ADE6-FBBE40ED8736} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{B62067AC-B64E-4386-8C5C-E1A148FB477D} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
