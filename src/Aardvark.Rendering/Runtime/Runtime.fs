@@ -33,7 +33,8 @@ and IRuntime =
 
     abstract member PrepareRenderObject : IFramebufferSignature * IRenderObject -> IPreparedRenderObject
 
-    abstract member CompileClear : fboSignature : IFramebufferSignature * clearColors : aval<Map<Symbol, C4f>> * clearDepth : aval<Option<double>> -> IRenderTask
+    /// Clears the given color attachments, and (optionally) the depth and stencil attachments to the specified values.
+    abstract member CompileClear : fboSignature : IFramebufferSignature * clearColors : aval<Map<Symbol, C4f>> * clearDepth : aval<float option> * clearStencil : aval<int option> -> IRenderTask
     abstract member CompileRender : fboSignature : IFramebufferSignature * BackendConfiguration * aset<IRenderObject> -> IRenderTask
 
     abstract member CreateGeometryPool : Map<Symbol, Type> -> IGeometryPool

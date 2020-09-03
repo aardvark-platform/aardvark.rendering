@@ -326,10 +326,10 @@ and MultiRuntime(runtimes : IRuntime[]) =
                 | _ ->
                     failwith ""
 
-        member x.CompileClear(signature, color, depth) = 
+        member x.CompileClear(signature, color, depth, stencil) = 
             match signature with
                 | :? MultiFramebufferSignature as signature ->
-                    let tasks = Array.map2 (fun (r : IRuntime) (s : IFramebufferSignature) -> r.CompileClear(s, color, depth)) runtimes signature.Signatures
+                    let tasks = Array.map2 (fun (r : IRuntime) (s : IFramebufferSignature) -> r.CompileClear(s, color, depth, stencil)) runtimes signature.Signatures
                     new MultiRenderTask(x, signature, tasks) :> IRenderTask
                 | _ ->
                     failwith ""

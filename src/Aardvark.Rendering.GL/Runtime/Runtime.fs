@@ -418,7 +418,7 @@ type Runtime() =
         member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
         member x.ContextLock = ctx.ResourceLock
         member x.CompileRender (signature, engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(signature, engine,set)
-        member x.CompileClear(signature, color, depth) = x.CompileClear(signature, color, depth)
+        member x.CompileClear(signature, color, depth, stencil) = x.CompileClear(signature, color, depth, stencil)
       
         ///NOTE: OpenGL does not care about 
         member x.CreateBuffer(size : nativeint, usage : BufferUsage) = x.CreateBuffer(size) :> IBackendBuffer
@@ -789,15 +789,16 @@ type Runtime() =
     member x.CompileRender(fboSignature : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) : IRenderTask =
         x.CompileRenderInternal(fboSignature, AVal.constant engine, set)
 
-    member x.CompileClear(fboSignature : IFramebufferSignature, color : aval<Map<Symbol, C4f>>, depth : aval<Option<float>>) : IRenderTask =
+    member x.CompileClear(signature : IFramebufferSignature, color : aval<Map<Symbol, C4f>>, depth : aval<float option>, stencil : aval<int option>) : IRenderTask =
         let clearValues =
-            color |> AVal.map (fun clearColors ->
-                fboSignature.ColorAttachments
-                    |> Map.toList
-                    |> List.map (fun (_,(s,_)) -> Map.tryFind s clearColors)
+            color |> AVal.map (fun colors ->
+                signature.ColorAttachments |> Map.choose (fun _ (sem, _) ->
+                    colors |> Map.tryFind sem
+                )
+                |> Map.toList
             )
-        
-        new RenderTasks.ClearTask(x, fboSignature, clearValues, depth, ctx) :> IRenderTask
+
+        new RenderTasks.ClearTask(x, signature, clearValues, depth, stencil, ctx) :> IRenderTask
 
     member x.ResolveMultisamples(ms : IFramebufferOutput, srcOffset : V2i, ss : IBackendTexture, dstOffset : V2i, dstLayer : int, size : V2i, trafo : ImageTrafo) =
         Operators.using ctx.ResourceLock (fun _ ->

@@ -573,7 +573,7 @@ module RenderTasks =
                 )
             )
 
-    type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : aval<list<Option<C4f>>>, depth : aval<Option<float>>, ctx : Context) =
+    type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : aval<list<int * C4f>>(*color : aval<list<C4f option>>*), depth : aval<float option>, stencil : aval<int option>, ctx : Context) =
         inherit AbstractRenderTask()
 
         override x.PerformUpdate(token, t) = ()
@@ -599,50 +599,63 @@ module RenderTasks =
                 GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
                 GL.Check "could not bind framebuffer"
 
-                
-
                 let depthValue = depth.GetValue token
+                let stencilValue = stencil.GetValue token
                 let colorValues = color.GetValue token
-                    
-                colorValues |> List.iteri (fun i _ ->
+
+                // Set masks
+                colorValues |> List.iter (fun (i, _) ->
                     GL.ColorMask(i, true, true, true, true)
                 )
                 GL.DepthMask(true)
                 GL.StencilMask(0xFFFFFFFFu)
 
-                match colorValues, depthValue with
-                    | [Some c], Some depth ->
+                // Sets clear colors and returns mask
+                let clearDepthStencil() =
+                    match depthValue, stencilValue with
+                    | Some d, Some s ->
+                        GL.ClearDepth(d)
+                        GL.ClearStencil(s)
+                        ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit
+
+                    | Some d, None ->
+                        GL.ClearDepth(d)
+                        ClearBufferMask.DepthBufferBit
+
+                    | None, Some s ->
+                        GL.ClearStencil(s)
+                        ClearBufferMask.StencilBufferBit
+
+                    | _ ->
+                        ClearBufferMask.None
+
+                // Minimizing the number of clears is a bit tricky
+                let rec clear (colors : list<int * C4f>) =
+                    match colors with
+                    | [(0, c)] ->
+                        let mask = clearDepthStencil()
                         GL.ClearColor(c.R, c.G, c.B, c.A)
-                        GL.ClearDepth(depth)
-                        GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-                        
-                    | [Some c], None ->
+                        GL.Clear(mask ||| ClearBufferMask.ColorBufferBit)
+
+                    | [(i, c)] ->
+                        let mask = clearDepthStencil()
+                        GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 + i |> unbox)
+                        GL.ClearColor(c.R, c.G, c.B, c.A)
+                        GL.Clear(mask ||| ClearBufferMask.ColorBufferBit)
+
+                    | (i, c)::xs ->
+                        GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 + i |> unbox)
                         GL.ClearColor(c.R, c.G, c.B, c.A)
                         GL.Clear(ClearBufferMask.ColorBufferBit)
+                        clear xs
 
-                    | l, Some depth when List.forall Option.isNone l ->
-                        GL.ClearDepth(depth)
-                        GL.Clear(ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-                    | l, d ->
-                            
-                        let mutable i = 0
-                        for c in l do
-                            match c with
-                                | Some c ->
-                                    GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 + i |> unbox)
-                                    GL.ClearColor(c.R, c.G, c.B, c.A)
-                                    GL.Clear(ClearBufferMask.ColorBufferBit)
-                                | None ->
-                                    ()
-                            i <- i + 1
+                    | [] when depthValue.IsSome || stencilValue.IsSome ->
+                        let mask = clearDepthStencil()
+                        GL.Clear(mask)
 
-                        match d with
-                            | Some depth -> 
-                                GL.ClearDepth(depth)
-                                GL.Clear(ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-                            | None ->
-                                ()
+                    | [] -> ()
 
+                clear colorValues
 
                 if ExecutionContext.framebuffersSupported then
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)

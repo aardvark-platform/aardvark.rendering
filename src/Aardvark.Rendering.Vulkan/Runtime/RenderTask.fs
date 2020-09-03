@@ -1019,7 +1019,7 @@ module RenderTask =
             reader <- Unchecked.defaultof<_>
             base.Release()
 
-    type ClearTask(device : Device, renderPass : RenderPass, clearColors : Map<Symbol, aval<C4f>>, clearDepth : aval<Option<float>>, clearStencil : Option<aval<uint32>>) =
+    type ClearTask(device : Device, renderPass : RenderPass, clearColors : aval<Map<int, C4f>>, clearDepth : aval<float option>, clearStencil : aval<uint32 option>) =
         inherit AdaptiveObject()
         static let depthStencilFormats =
             HashSet.ofList [
@@ -1031,14 +1031,6 @@ module RenderTask =
         let id = newId()
         let pool = device.GraphicsFamily.CreateCommandPool()
         let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
-
-        let clearColors =
-            renderPass.ColorAttachments |> Map.toSeq |> Seq.choose (fun (i, (s,_)) -> 
-                match Map.tryFind s clearColors with
-                    | Some c -> Some (i,c)
-                    | None -> None
-            )
-            |> Seq.toArray
 
         let renderPassDepthAspect =
             match renderPass.DepthStencilAttachment with
@@ -1055,9 +1047,9 @@ module RenderTask =
                 let fbo = unbox<Framebuffer> outputs.framebuffer
                 use token = device.Token
 
-                let colors = clearColors |> Array.map (fun (i,c) -> i, c.GetValue caller)
+                let colors = clearColors.GetValue caller
                 let depth = clearDepth.GetValue caller
-                let stencil = match clearStencil with | Some c -> c.GetValue(caller) |> Some | _ -> None
+                let stencil = clearStencil.GetValue caller
 
                 let vulkanQueries = queries.ToVulkanQuery()
 
@@ -1068,7 +1060,7 @@ module RenderTask =
                         do! Command.Begin q
 
                     let views = fbo.ImageViews
-                    for (index, color) in colors do
+                    for (index, color) in colors |> Map.toSeq do
                         let image = views.[index].Image
                         do! Command.ClearColor(image.[ImageAspect.Color], color)
 

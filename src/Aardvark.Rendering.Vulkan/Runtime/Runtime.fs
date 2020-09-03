@@ -150,22 +150,15 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         //new RenderTask.DependentRenderTask(device, unbox renderPass, set, true, true) :> IRenderTask
         //new RenderTasks.RenderTask(device, unbox renderPass, set, AVal.constant engine, shareTextures, shareBuffers) :> IRenderTask
 
-    member x.CompileClear(signature : IFramebufferSignature, color : aval<Map<Symbol, C4f>>, depth : aval<Option<float>>) : IRenderTask =
-        let pass = unbox<RenderPass> signature
-        let colors = 
-            pass.ColorAttachments 
-            |> Map.toSeq 
-            |> Seq.map (fun (_,(sem,att)) -> 
-                sem, color |> AVal.map (fun c -> 
-                            match Map.tryFind sem c with 
-                            | None -> 
-                                Log.warn "no clear color defined for sem: %A. Using black." sem
-                                C4f.Black 
-                            | Some c -> c
-                     )
-               ) 
-            |> Map.ofSeq
-        new RenderTask.ClearTask(device, unbox signature, colors, depth, Some (AVal.constant 0u)) :> IRenderTask
+    member x.CompileClear(signature : IFramebufferSignature, color : aval<Map<Symbol, C4f>>, depth : aval<float option>, stencil : aval<int option>) : IRenderTask =
+        let colors =
+            color |> AVal.map (fun colors ->
+                signature.ColorAttachments |> Map.choose (fun _ (sem, _) ->
+                    colors |> Map.tryFind sem
+                )
+            )
+
+        new RenderTask.ClearTask(device, unbox signature, colors, depth, stencil |> AVal.map (Option.map uint32)) :> IRenderTask
 
 
 
@@ -529,7 +522,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.GenerateMipMaps(t) = x.GenerateMipMaps(t)
         member x.ContextLock = x.ContextLock
         member x.CompileRender (signature, engine, set) = x.CompileRender(signature, engine, set)
-        member x.CompileClear(signature, color, depth) = x.CompileClear(signature, color, depth)
+        member x.CompileClear(signature, color, depth, stencil) = x.CompileClear(signature, color, depth, stencil)
 
         member x.PrepareSurface(signature, s) = x.PrepareSurface(signature, s)
         member x.DeleteSurface(s) = x.DeleteSurface(s)

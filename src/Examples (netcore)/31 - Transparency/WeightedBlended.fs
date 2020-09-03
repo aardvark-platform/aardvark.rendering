@@ -211,7 +211,7 @@ module WeightedBlended =
                     DefaultSemantic.Revealage, C4f.White
                 ]
 
-            let clear = runtime.CompileClear(transparentPass, ~~clearColors, ~~None)
+            let clear = runtime.CompileClear(transparentPass, ~~clearColors)
             let render = runtime.CompileRender(transparentPass, sg)
             let task = RenderTask.ofList [clear; render]
 
