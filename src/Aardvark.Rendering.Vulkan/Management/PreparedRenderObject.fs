@@ -204,7 +204,8 @@ type DevicePreparedRenderObjectExtensions private() =
         let rasterizerState =
             this.CreateRasterizerState(
                 ro.DepthState.Clamp, ro.DepthState.Bias,
-                ro.RasterizerState.CullMode, ro.RasterizerState.FrontFace, ro.RasterizerState.FillMode
+                ro.RasterizerState.CullMode, ro.RasterizerState.FrontFace, ro.RasterizerState.FillMode,
+                ro.RasterizerState.ConservativeRaster
             )
 
         let colorBlendState =

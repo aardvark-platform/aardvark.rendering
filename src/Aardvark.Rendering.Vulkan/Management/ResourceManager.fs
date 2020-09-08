@@ -2,11 +2,14 @@
 
 open System
 open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
 open Aardvark.Base
 
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Microsoft.FSharp.NativeInterop
+
+open EXTConservativeRasterization
 
 #nowarn "9"
 // #nowarn "51"
@@ -652,8 +655,12 @@ module Resources =
             
     type RasterizerStateResource(owner : IResourceCache, key : list<obj>,
                                  depthClamp : aval<bool>, depthBias : aval<DepthBias>,
-                                 cull : aval<CullMode>, frontFace : aval<WindingOrder>, fill : aval<FillMode>) =
+                                 cull : aval<CullMode>, frontFace : aval<WindingOrder>, fill : aval<FillMode>,
+                                 conservativeRaster : aval<bool>) =
         inherit AbstractPointerResourceWithEquality<VkPipelineRasterizationStateCreateInfo>(owner, key)
+
+        override x.Free(info : VkPipelineRasterizationStateCreateInfo) =
+            Marshal.FreeHGlobal info.pNext
 
         override x.Compute(token) =
             let depthClamp = depthClamp.GetValue token
@@ -661,9 +668,21 @@ module Resources =
             let cull = cull.GetValue token
             let front = frontFace.GetValue token
             let fill = fill.GetValue token
-            let state = RasterizerState.create false depthClamp bias cull front fill
+            let conservativeRaster = conservativeRaster.GetValue token
+            let state = RasterizerState.create conservativeRaster depthClamp bias cull front fill
+
+            let conservativeRaster =
+                VkPipelineRasterizationConservativeStateCreateInfoEXT(
+                    VkPipelineRasterizationConservativeStateCreateFlagsEXT.MinValue,
+                    (if conservativeRaster then VkConservativeRasterizationModeEXT.Overestimate else VkConservativeRasterizationModeEXT.Disabled),
+                    0.0f
+                )
+
+            let pConservativeRaster = NativePtr.alloc<VkPipelineRasterizationConservativeStateCreateInfoEXT> 1
+            conservativeRaster |> NativePtr.write pConservativeRaster
 
             VkPipelineRasterizationStateCreateInfo(
+                NativePtr.toNativeInt pConservativeRaster,
                 VkPipelineRasterizationStateCreateFlags.MinValue,
                 (if state.depthClampEnable then 1u else 0u),
                 (if state.rasterizerDiscardEnable then 1u else 0u),
@@ -722,9 +741,10 @@ module Resources =
         inherit AbstractPointerResourceWithEquality<VkPipelineMultisampleStateCreateInfo>(owner, key)
 
         override x.Compute(token) =
-            let enable = enable.GetValue token
+            //let enable = enable.GetValue token
 
-            let samples = if enable then samples else 1
+            // TODO: Cannot disable MSAA here...
+            //let samples = if enable then samples else 1
             let state = MultisampleState.create false samples
 
             VkPipelineMultisampleStateCreateInfo(
@@ -1437,10 +1457,11 @@ type ResourceManager(user : IResourceUser, device : Device) =
         )
         
     member x.CreateRasterizerState(depthClamp : aval<bool>, depthBias : aval<DepthBias>,
-                                   cull : aval<CullMode>, front : aval<WindingOrder>, fill : aval<FillMode>) =
+                                   cull : aval<CullMode>, front : aval<WindingOrder>, fill : aval<FillMode>,
+                                   conservativeRaster : aval<bool>) =
         rasterizerStateCache.GetOrCreate(
             [depthClamp :> obj; depthBias :> obj; cull :> obj; front :> obj, fill :> obj],
-            fun cache key -> new RasterizerStateResource(cache, key, depthClamp, depthBias, cull, front, fill)
+            fun cache key -> new RasterizerStateResource(cache, key, depthClamp, depthBias, cull, front, fill, conservativeRaster)
         )
 
     member x.CreateColorBlendState(pass : RenderPass,

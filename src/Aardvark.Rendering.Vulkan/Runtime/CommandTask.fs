@@ -65,7 +65,8 @@ type ResourceManagerExtensions private() =
         let rasterizerState =
             this.CreateRasterizerState(
                 state.DepthState.Clamp, state.DepthState.Bias,
-                state.RasterizerState.CullMode, state.RasterizerState.FrontFace, state.RasterizerState.FillMode
+                state.RasterizerState.CullMode, state.RasterizerState.FrontFace, state.RasterizerState.FillMode,
+                state.RasterizerState.ConservativeRaster
             )
 
         let colorBlendState =

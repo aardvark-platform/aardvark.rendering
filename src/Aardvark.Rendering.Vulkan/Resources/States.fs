@@ -27,6 +27,7 @@ type RasterizerState =
         depthBiasClamp          : float
         depthBiasSlopeFactor    : float
         lineWidth               : float
+        conservativeRaster      : bool
     }
 
 type ColorBlendAttachmentState =
@@ -405,10 +406,11 @@ module RasterizerState =
         ]
 
    
-    let create (usesDiscard : bool) (depthClamp : bool) (bias : DepthBias) (cull : CullMode) (frontFace : WindingOrder) (fill : FillMode) =
+    let create (conservativeRaster : bool) (depthClamp : bool)
+               (bias : DepthBias) (cull : CullMode) (frontFace : WindingOrder) (fill : FillMode) =
         {
             depthClampEnable        = depthClamp
-            rasterizerDiscardEnable = usesDiscard
+            rasterizerDiscardEnable = false
             polygonMode             = toVkPolygonMode fill
             cullMode                = toVkCullMode cull
             frontFace               = toVkFrontFace frontFace
@@ -417,6 +419,7 @@ module RasterizerState =
             depthBiasClamp          = bias.Clamp
             depthBiasSlopeFactor    = bias.SlopeScale
             lineWidth               = 1.0
+            conservativeRaster      = conservativeRaster
         }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
