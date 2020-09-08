@@ -46,6 +46,7 @@ type StencilMode =
     }
 
     member x.Enabled =
+        x.Comparison <> ComparisonFunction.Always ||
         x.Pass <> StencilOperation.Keep ||
         x.Fail <> StencilOperation.Keep ||
         x.DepthFail <> StencilOperation.Keep

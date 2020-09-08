@@ -39,14 +39,6 @@ module Shaders =
         }
 
     let private color0Sampler =
-        sampler2d {
-            texture uniform?Color0Texture
-            filter Filter.MinMagPoint
-            addressU WrapMode.Wrap
-            addressV WrapMode.Wrap
-        }
-
-    let private color0SamplerMS =
         sampler2dMS {
             texture uniform?Color0Texture
             filter Filter.MinMagPoint
@@ -54,12 +46,45 @@ module Shaders =
             addressV WrapMode.Wrap
         }
 
-    let blit (samples : int) (f : Fragment) =
+    let private color1Sampler =
+        sampler2dMS {
+            texture uniform?Color1Texture
+            filter Filter.MinMagPoint
+            addressU WrapMode.Wrap
+            addressV WrapMode.Wrap
+        }
+
+    let private color2Sampler =
+        sampler2dMS {
+            texture uniform?Color2Texture
+            filter Filter.MinMagPoint
+            addressU WrapMode.Wrap
+            addressV WrapMode.Wrap
+        }
+
+    let private color3Sampler =
+        sampler2dMS {
+            texture uniform?Color3Texture
+            filter Filter.MinMagPoint
+            addressU WrapMode.Wrap
+            addressV WrapMode.Wrap
+        }
+
+    let blit (f : Fragment) =
         fragment {
-            if samples > 1 then
-                return color0SamplerMS.Read(V2i f.coord.XY / 2, f.sample)
+            let coord = V2i f.coord.XY
+            let center = uniform.ViewportSize / 2
+
+            if coord.X < center.X then
+                if coord.Y < center.Y then
+                    return color0Sampler.Read(coord, f.sample)
+                else
+                    return color2Sampler.Read(V2i(coord.X, coord.Y - center.Y), f.sample)
             else
-                return color0Sampler.Read(V2i f.coord.XY / 2, 0)
+                if coord.Y < center.Y then
+                    return color1Sampler.Read(V2i(coord.X - center.X, coord.Y), f.sample)
+                else
+                    return color3Sampler.Read(V2i(coord.X - center.X, coord.Y - center.Y), f.sample)
         }
 
 [<EntryPoint>]
@@ -71,22 +96,129 @@ let main argv =
     //use app = new VulkanApplication(debug = true)
     use app = new OpenGlApplication()
     let runtime = app.Runtime :> IRuntime
-    let samples = 8
 
     // create a game window (better for measuring fps)
-    use win = app.CreateGameWindow(samples = samples)
+    use win = app.CreateGameWindow(samples = 8)
 
-    let triangleSg =
-        [| Triangle3d(V3d(-0.75, -0.75, 0.0), V3d(0.0, 0.75, 0.0), V3d(0.75, -0.75, 0.0)) |]
-        |> Sg.triangles' C4b.White
-        |> Sg.depthTest' DepthTest.None
-        |> Sg.shader {
-            do! DefaultSurfaces.vertexColor
-            do! Shaders.quadrupleOutput
-        }
+    let colorMasks = [|
+        ColorMask.All
+        ColorMask.None
+        ColorMask.Red
+        ColorMask.Green
+        ColorMask.Blue
+        ColorMask.Red ||| ColorMask.Green
+        ColorMask.Red ||| ColorMask.Blue
+        ColorMask.Blue ||| ColorMask.Green
+    |]
+
+    let colorMaskIndices =
+        AVal.init <| Map.ofList [
+            Semantic.Color0, 0
+            Semantic.Color1, 2
+            Semantic.Color2, 3
+            Semantic.Color3, 4
+        ]
+
+    let multisample =
+        AVal.init true
+
+    let conservativeRaster =
+        AVal.init false
+
+    win.Keyboard.KeyDown(Keys.V).Values.Add(
+        let rng = RandomSystem()
+
+        fun _ ->
+            transact (fun () ->
+                colorMaskIndices.Value <-
+                    colorMaskIndices.Value
+                    |> Map.map (fun _ _ ->
+                        rng.UniformInt colorMasks.Length
+                    )
+            )
+    )
+
+    win.Keyboard.KeyDown(Keys.B).Values.Add(
+        fun _ -> transact (fun _ ->
+            multisample.Value <- not multisample.Value
+            Log.line "Multisample: %A" multisample.Value
+        )
+    )
+
+    win.Keyboard.KeyDown(Keys.N).Values.Add(
+        fun _ -> transact (fun _ ->
+            conservativeRaster.Value <- not conservativeRaster.Value
+            Log.line "Conservative raster: %A" conservativeRaster.Value
+        )
+    )
+
+    let quadFront, quadBack =
+
+        let drawCall =
+            DrawCallInfo(
+                FaceVertexCount = 4,
+                InstanceCount = 1
+            )
+
+        let posFront = [| V3f(-0.4,-0.4,0.0); V3f(0.4,-0.4,0.0); V3f(-0.4,0.4,0.0); V3f(0.4,0.4,0.0) |]
+        let posBack  = [| V3f(-0.4,-0.4,0.0); V3f(-0.4,0.4,0.0); V3f(0.4,-0.4,0.0); V3f(0.4,0.4,0.0) |]
+
+        drawCall
+        |> Sg.render IndexedGeometryMode.TriangleStrip
+        |> Sg.vertexAttribute DefaultSemantic.Positions (~~posFront),
+
+        drawCall
+        |> Sg.render IndexedGeometryMode.TriangleStrip
+        |> Sg.vertexAttribute DefaultSemantic.Positions (~~posBack)
+
+    let quadsSg =
+        let pass0 = RenderPass.main
+        let pass1 = RenderPass.after "maskPass" RenderPassOrder.Arbitrary pass0
+
+        let trafoFront, trafoBack =
+            let startTime = System.DateTime.Now
+
+            win.Time |> AVal.map (fun t ->
+                let t = (t - startTime).TotalSeconds
+                Trafo3d.RotationZ (0.5 * t)
+            ),
+
+            win.Time |> AVal.map (fun t ->
+                let t = (t - startTime).TotalSeconds
+                Trafo3d.RotationZ (-0.5 * t)
+            )
+
+        let sg =
+            [
+                quadFront |> Sg.trafo trafoFront
+                quadBack  |> Sg.trafo trafoBack
+            ]
+            |> Sg.ofList
+            |> Sg.depthTest' DepthTest.None
+            |> Sg.multisample multisample
+            |> Sg.conservativeRaster conservativeRaster
+            |> Sg.shader {
+                do! DefaultSurfaces.trafo
+                do! DefaultSurfaces.constantColor C4f.White
+                do! Shaders.quadrupleOutput
+            }
+
+        let maskSg =
+            sg
+            |> Sg.pass pass0
+            |> Sg.colorOutput' Set.empty
+            |> Sg.stencilModeFront' { StencilMode.Default with Pass = StencilOperation.IncrementWrap }
+            |> Sg.stencilModeBack' { StencilMode.Default with Pass = StencilOperation.DecrementWrap }
+
+        let mainSg =
+            sg
+            |> Sg.pass pass1
+            |> Sg.stencilMode' { StencilMode.Default with Comparison = ComparisonFunction.Equal }
+
+        [ maskSg; mainSg ] |> Sg.ofList
 
     let signature =
-        runtime.CreateFramebufferSignature(samples, [
+        runtime.CreateFramebufferSignature(8, [
             Semantic.Color0, RenderbufferFormat.Rgba8
             Semantic.Color1, RenderbufferFormat.Rgba8
             Semantic.Color2, RenderbufferFormat.Rgba8
@@ -95,7 +227,8 @@ let main argv =
         ])
 
     let output =
-        triangleSg
+        quadsSg
+        |> Sg.colorMasks (colorMaskIndices |> AVal.map (Map.map (fun _ i -> colorMasks.[i])))
         |> Sg.compile runtime signature
         |> RenderTask.renderSemantics Semantic.All (win.Sizes |> AVal.map (fun s -> s / 2))
 
@@ -108,7 +241,7 @@ let main argv =
             |> Sg.texture Semantic.Color3Texture output.[Semantic.Color3]
             |> Sg.depthTest' DepthTest.None
             |> Sg.shader {
-                do! Shaders.blit samples
+                do! Shaders.blit
             }
 
         RenderTask.ofList [

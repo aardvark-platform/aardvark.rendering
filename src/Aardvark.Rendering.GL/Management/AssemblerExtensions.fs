@@ -365,7 +365,7 @@ module GLAssemblerExtensions =
 
         member this.SetStencilMask(face : StencilFace, m : nativeptr<uint32>) =
             s.BeginCall(2)
-            s.PushArg(NativePtr.toNativeInt m)
+            s.PushIntArg(NativePtr.toNativeInt m)
             s.PushArg(int face)
             s.Call(OpenGl.Pointers.StencilMaskSeparate)
 
