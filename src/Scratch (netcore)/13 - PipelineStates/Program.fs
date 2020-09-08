@@ -112,7 +112,7 @@ let main argv =
             }
 
         RenderTask.ofList [
-            runtime.CompileClear(win.FramebufferSignature, ~~C4f.DarkSlateGray)
+            runtime.CompileClear(win.FramebufferSignature, C4f.DarkSlateGray)
             runtime.CompileRender(win.FramebufferSignature, sg)
         ]
 

@@ -11,13 +11,6 @@ open FSharp.Data.Adaptive
 [<AbstractClass; Sealed; Extension>]
 type SceneGraphRuntimeExtensions private() =
 
-
-
-
-    [<Extension>]
-    static member CompileRender(x : IRuntime, signature : IFramebufferSignature, rjs : aset<IRenderObject>) =
-        x.CompileRender(signature, BackendConfiguration.Default, rjs)
-
     [<Extension>]
     static member CompileRender (x : IRuntime, signature : IFramebufferSignature, engine : BackendConfiguration, s : ISg) =
         let app = Sg.DynamicNode(AVal.constant s)
@@ -34,7 +27,7 @@ type SceneGraphRuntimeExtensions private() =
 [<AutoOpen>]
 module RuntimeSgExtensions =
     module Sg =
-    
+
         let compile (runtime : IRuntime) (signature : IFramebufferSignature) (sg : ISg) =
             runtime.CompileRender(signature, sg)
 
