@@ -10,7 +10,6 @@ type IFramebufferSignature =
     abstract member ColorAttachments : Map<int, Symbol * AttachmentSignature>
     abstract member DepthAttachment : Option<AttachmentSignature>
     abstract member StencilAttachment : Option<AttachmentSignature>
-    abstract member Images : Map<int, Symbol>
 
     abstract member LayerCount : int
     abstract member PerLayerUniforms : Set<string>
@@ -31,7 +30,7 @@ and IFramebufferRuntime =
 
     abstract member DeviceCount : int
 
-    abstract member CreateFramebufferSignature : attachments : SymbolDict<AttachmentSignature> * textures : Set<Symbol> * layers : int * perLayerUniforms : Set<string> -> IFramebufferSignature
+    abstract member CreateFramebufferSignature : attachments : SymbolDict<AttachmentSignature> * layers : int * perLayerUniforms : Set<string> -> IFramebufferSignature
     abstract member DeleteFramebufferSignature : IFramebufferSignature -> unit
 
     abstract member CreateFramebuffer : signature : IFramebufferSignature * attachments : Map<Symbol, IFramebufferOutput> -> IFramebuffer

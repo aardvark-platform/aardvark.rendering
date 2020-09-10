@@ -78,7 +78,6 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
                 DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples }
                 DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
             ],
-            Set.empty,
             2,
             Set.ofList [
                 "ViewTrafo"; "ProjTrafo"; 

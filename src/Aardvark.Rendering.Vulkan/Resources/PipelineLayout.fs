@@ -87,7 +87,6 @@ type PipelineLayout =
                     |> List.map (fun p -> p.paramLocation, (Symbol.Create p.paramSemantic, { samples = 1; format = RenderbufferFormat.ofGLSLType p.paramType })) 
                     |> Map.ofList
             member x.IsAssignableFrom _ = false
-            member x.Images = Map.empty
             member x.Runtime = Unchecked.defaultof<_>
             member x.StencilAttachment = None
             member x.DepthAttachment = None

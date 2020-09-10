@@ -27,7 +27,7 @@ type AbstractRenderTask() =
     let mutable disposed = 0
 
     let runtimeValueCache = Dict.empty
-    let currentOutput = AVal.init { framebuffer = Unchecked.defaultof<_>; images = Map.empty; overrides = Map.empty; viewport = Box2i(V2i.OO, V2i.II) }
+    let currentOutput = AVal.init { framebuffer = Unchecked.defaultof<_>; viewport = Box2i(V2i.OO, V2i.II) }
     let tryGetRuntimeValue (name : string) =
         runtimeValueCache.GetOrCreate(name, fun name ->
             // TODO: different runtime-types

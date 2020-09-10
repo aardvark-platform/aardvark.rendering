@@ -31,11 +31,6 @@ type RenderPass =
             member x.ColorAttachments = x.ColorAttachments
             member x.DepthAttachment = x.DepthStencilAttachment |> Option.map snd
             member x.StencilAttachment = x.DepthStencilAttachment |> Option.map snd
-            member x.Images = 
-                let res = x.ColorAttachments |> Map.map (fun k (v,_) -> v)
-                match x.DepthStencilAttachment with
-                    | Some d -> res |> Map.add x.ColorAttachmentCount DefaultSemantic.Depth
-                    | _ -> res
 
             member x.IsAssignableFrom (other : IFramebufferSignature) =
                 match other with

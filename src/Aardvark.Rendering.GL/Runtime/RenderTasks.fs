@@ -83,18 +83,6 @@ module RenderTasks =
             if ExecutionContext.framebuffersSupported then
                 GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
                 GL.Check "could not bind framebuffer"
-        
-                // DepthMask, ColorMask, StencilMask are by default writing everything when creating an FBO
-                
-                fbo.Signature.Images |> Map.iter (fun index sem ->
-                    match Map.tryFind sem desc.images with
-                        | Some img ->
-                            let tex = img.texture |> unbox<Texture>
-                            GL.BindImageTexture(index, tex.Handle, img.level, false, img.slice, TextureAccess.ReadWrite, unbox (int tex.Format))
-                        | None -> 
-                            GL.ActiveTexture(int TextureUnit.Texture0 + index |> unbox)
-                            GL.BindTexture(TextureTarget.Texture2D, 0)
-                    )
 
                 if handle = 0 then
                     GL.DrawBuffer(DrawBufferMode.BackLeft)

@@ -52,7 +52,6 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         FramebufferSignature(
             runtime,
             Map.ofList [0, (DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples })],
-            Map.empty,
             depthStencilSignature,
             None,
             1,

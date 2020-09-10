@@ -427,7 +427,6 @@ module Utilities =
                     DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples }
                     DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
                 ],
-                Set.empty,
                 1, 
                 Set.empty
             )  
@@ -438,7 +437,6 @@ module Utilities =
                     DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples }
                     DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
                 ],
-                Set.empty,
                 2, 
                 Set.ofList [
                     "ProjTrafo"; 

@@ -862,7 +862,6 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
         Aardvark.Rendering.GL.FramebufferSignature(
             app.Runtime,
             Map.ofList [0, (DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples })],
-            Map.empty,
             Some { format = RenderbufferFormat.Depth24Stencil8; samples = samples },
             None,
             1,

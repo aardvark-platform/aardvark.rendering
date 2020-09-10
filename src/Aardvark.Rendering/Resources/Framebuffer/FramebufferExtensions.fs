@@ -8,25 +8,24 @@ type IFramebufferRuntimeExtensions private() =
 
     [<Extension>]
     static member CreateFramebufferSignature(this : IFramebufferRuntime, l : SymbolDict<AttachmentSignature>) =
-        this.CreateFramebufferSignature(l, Set.empty, 1, Set.empty)
+        this.CreateFramebufferSignature(l, 1, Set.empty)
 
     [<Extension>]
     static member CreateFramebufferSignature(this : IFramebufferRuntime, l : seq<Symbol * AttachmentSignature>) =
-        this.CreateFramebufferSignature(SymDict.ofSeq l, Set.empty, 1, Set.empty)
+        this.CreateFramebufferSignature(SymDict.ofSeq l, 1, Set.empty)
 
     [<Extension>]
     static member CreateFramebufferSignature(this : IFramebufferRuntime, l : list<Symbol * AttachmentSignature>) =
-        this.CreateFramebufferSignature(SymDict.ofList l, Set.empty, 1, Set.empty)
+        this.CreateFramebufferSignature(SymDict.ofList l, 1, Set.empty)
 
     [<Extension>]
     static member CreateFramebufferSignature(this : IFramebufferRuntime, l : Map<Symbol, AttachmentSignature>) =
-        this.CreateFramebufferSignature(SymDict.ofMap l, Set.empty, 1, Set.empty)
+        this.CreateFramebufferSignature(SymDict.ofMap l, 1, Set.empty)
 
     [<Extension>]
     static member CreateFramebufferSignature(this : IFramebufferRuntime, samples : int, l : seq<Symbol * RenderbufferFormat>) =
         this.CreateFramebufferSignature(
             l |> Seq.map (fun (s,f) -> s, { format = f; samples = samples }) |> SymDict.ofSeq,
-            Set.empty,
             1, Set.empty
         )
 
@@ -34,7 +33,6 @@ type IFramebufferRuntimeExtensions private() =
     static member CreateFramebufferSignature(this : IFramebufferRuntime, l : seq<Symbol * RenderbufferFormat>) =
         this.CreateFramebufferSignature(
             l |> Seq.map (fun (s,f) -> s, { format = f; samples = 1 }) |> SymDict.ofSeq,
-            Set.empty,
             1, Set.empty
         )
 

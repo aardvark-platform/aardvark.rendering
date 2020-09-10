@@ -52,7 +52,6 @@ and MultiFramebufferSignature(runtime : IRuntime, signatures : IFramebufferSigna
         member x.ColorAttachments = signatures.[0].ColorAttachments
         member x.DepthAttachment = signatures.[0].DepthAttachment
         member x.StencilAttachment = signatures.[0].StencilAttachment
-        member x.Images = signatures.[0].Images
         member x.LayerCount = signatures.[0].LayerCount
         member x.PerLayerUniforms = signatures.[0].PerLayerUniforms
         member x.Runtime = runtime :> IFramebufferRuntime
@@ -297,8 +296,8 @@ and MultiRuntime(runtimes : IRuntime[]) =
 
         member x.ResourceManager = failwith "not implemented"
 
-        member x.CreateFramebufferSignature(a,b,c,d) = 
-            let res = runtimes |> Array.map (fun r -> r.CreateFramebufferSignature(a,b,c,d))
+        member x.CreateFramebufferSignature(a,b,c) = 
+            let res = runtimes |> Array.map (fun r -> r.CreateFramebufferSignature(a,b,c))
             MultiFramebufferSignature(x, res) :> IFramebufferSignature
 
         member x.DeleteFramebufferSignature(s) =
