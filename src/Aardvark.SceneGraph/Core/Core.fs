@@ -18,7 +18,7 @@ type IGroup =
     inherit ISg
     abstract member Children : aset<ISg>
 
-module private Providers =
+module Providers =
 
     type SimpleUniformHolder(values : Map<Symbol, IAdaptiveValue>) =
         interface IUniformProvider with

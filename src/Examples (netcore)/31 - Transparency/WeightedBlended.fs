@@ -14,8 +14,8 @@ module WeightedBlended =
     module private DefaultSemantic =
         let Accum = Symbol.Create "Accum"
         let Revealage = Symbol.Create "Revealage"
-        let AccumBuffer = Symbol.Create "AccumBuffer"
-        let RevealageBuffer = Symbol.Create "RevealageBuffer"
+        let AccumBuffer = TypedSymbol<ITexture>("AccumBuffer")
+        let RevealageBuffer = TypedSymbol<ITexture>("RevealageBuffer")
 
     module private Shaders =
         open FShade

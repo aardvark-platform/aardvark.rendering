@@ -320,10 +320,6 @@ module Sg =
 
         new(items : seq<ISg>) = Set(items |> ASet.ofSeq)
 
-    type OverlayNode(task : IRenderTask) =
-        interface ISg
-        member x.RenderTask = task
-
     type GeometrySet(geometries : aset<IndexedGeometry>, mode : IndexedGeometryMode, attributeTypes : Map<Symbol,Type>) =
         interface ISg
         member x.Geometries = geometries

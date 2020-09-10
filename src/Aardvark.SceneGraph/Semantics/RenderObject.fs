@@ -120,11 +120,9 @@ module RenderObjectSemantics =
 
     type ISg with
         member x.RenderObjects(scope : Ag.Scope) : aset<IRenderObject> = x?RenderObjects(scope)
-        member x.OverlayTasks(scope : Ag.Scope) : aset<RenderPass * IRenderTask> = x?OverlayTasks(scope)
 
     module Semantic =
         let renderObjects (scope : Ag.Scope) (s : ISg) : aset<IRenderObject> = s?RenderObjects(scope)
-        let overlayTasks (scope : Ag.Scope) (s : ISg) : aset<RenderPass * IRenderTask> = s?OverlayTasks(scope)
 
 
     [<Rule>]
@@ -247,27 +245,3 @@ module RenderObjectSemantics =
             rj.Activate <- activate
 
             ASet.single (rj :> IRenderObject)
-
-        member x.RenderObjects(r : Sg.OverlayNode, scope : Ag.Scope) : aset<IRenderObject> =
-            ASet.empty
-
-    [<Rule>]
-    type SubTaskSem() =
-        member x.OverlayTasks(r : ISg, scope : Ag.Scope) : aset<RenderPass * IRenderTask> =
-            ASet.empty
-
-        member x.OverlayTasks(app : IApplicator, scope : Ag.Scope) =
-            aset {
-                let! c = app.Child
-                yield! c.OverlayTasks(scope)
-            }
-
-
-        member x.OverlayTasks(g : IGroup, scope : Ag.Scope) =
-            aset {
-                for c in g.Children do
-                    yield! c.OverlayTasks(scope)
-            }
-
-        member x.OverlayTasks(r : Sg.OverlayNode, scope : Ag.Scope) =
-            ASet.single (scope.RenderPass, r.RenderTask)

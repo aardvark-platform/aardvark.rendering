@@ -8,6 +8,7 @@ open Aardvark.Rendering
 open System.Collections.Generic
 open System.Runtime.CompilerServices
 open FSharp.Data.Adaptive
+open FSharp.Data.Adaptive.Operators
 
 #nowarn "9"
 #nowarn "51"
@@ -15,87 +16,206 @@ open FSharp.Data.Adaptive
 [<AutoOpen>]
 module SgFSharp =
 
+    module SgFSharpHelpers =
+
+        // These utilities make it possible to pass
+        // a string, Symbol or TypedSymbol as identifier.
+        type NameConverter =
+            static member inline GetSymbol(name : string)            = Sym.ofString name
+            static member inline GetSymbol(symbol : Symbol)          = symbol
+
+        type TypedNameConverter<'a> =
+            inherit NameConverter
+            static member inline GetSymbol(symbol : TypedSymbol<'a>) = symbol.Symbol
+
+        [<AutoOpen>]
+        module internal Aux =
+            let inline untypedSym< ^a> = Unchecked.defaultof<NameConverter>
+            let inline typedSym< ^a>   = Unchecked.defaultof<TypedNameConverter< ^a>>
+
+            let inline symbol (_ : ^z) (name : ^Name) =
+                ((^z or ^Name) : (static member GetSymbol : ^Name -> Symbol) (name))
+
+
+        // Utilities to create cached buffer views
+        module BufferCaching =
+
+            // Note: we need this cache because of the AVal.map below
+            let bufferCache = ConditionalWeakTable<IAdaptiveValue, BufferView>()
+
+            let bufferOfArray (m : aval<'a[]>) =
+                match bufferCache.TryGetValue (m :> IAdaptiveValue) with
+                | (true, r) -> r
+                | _ ->
+                    let b = m |> AVal.map (fun a -> ArrayBuffer a :> IBuffer)
+                    let r = BufferView(b, typeof<'a>)
+                    bufferCache.Add(m, r)
+                    r
+
+            let bufferOfValue (f : 'a -> V4f) (m : aval<'a>) =
+                match bufferCache.TryGetValue (m :> IAdaptiveValue) with
+                | (true, r) -> r
+                | _ ->
+                    let b = m |> AVal.map f |> SingleValueBuffer
+                    let r = BufferView(b, typeof<V4f>)
+                    bufferCache.Add(m, r)
+                    r
+
+
+        // Utilities for interleaved vertex attributes
+        module internal Interleaved =
+            open System.Reflection
+            open Microsoft.FSharp.NativeInterop
+
+            type Converter() =
+
+                static let toFloat32 (i : 'a) : float32 =
+                    let mutable i = i
+                    NativePtr.read (&&i |> NativePtr.toNativeInt |> NativePtr.ofNativeInt)
+
+                static let accessors =
+                    Dict.ofList [
+                        typeof<int8>,    (1, (fun (v : int8)    -> [|toFloat32 (int32 v)|]) :> obj)
+                        typeof<uint8>,   (1, (fun (v : uint8)   -> [|toFloat32 (uint32 v)|]) :> obj)
+                        typeof<int16>,   (1, (fun (v : int16)   -> [|toFloat32 (int32 v)|]) :> obj)
+                        typeof<uint16>,  (1, (fun (v : uint16)  -> [|toFloat32 (uint32 v)|]) :> obj)
+                        typeof<int32>,   (1, (fun (v : int32)   -> [|toFloat32 v|]) :> obj)
+                        typeof<uint32>,  (1, (fun (v : uint32)  -> [|toFloat32 v|]) :> obj)
+
+                        typeof<float>,   (1, (fun (v : float) -> [|float32 v|]) :> obj)
+                        typeof<V2d>,     (2, (fun (v : V2d) -> [|float32 v.X; float32 v.Y|]) :> obj)
+                        typeof<V3d>,     (3, (fun (v : V3d) -> [|float32 v.X; float32 v.Y; float32 v.Z|]) :> obj)
+                        typeof<V4d>,     (4, (fun (v : V4d) -> [|float32 v.X; float32 v.Y; float32 v.Z; float32 v.W|]) :> obj)
+
+                        typeof<float32>, (1, (fun (v : float32) -> [|v|]) :> obj)
+                        typeof<V2f>,     (2, (fun (v : V2f) -> [|v.X; v.Y|]) :> obj)
+                        typeof<V3f>,     (3, (fun (v : V3f) -> [|v.X; v.Y; v.Z|]) :> obj)
+                        typeof<V4f>,     (4, (fun (v : V4f) -> [|v.X; v.Y; v.Z; v.W|]) :> obj)
+
+                        typeof<C3f>,     (3, (fun (c : C3f) -> [|c.R; c.G; c.B|]) :> obj)
+                        typeof<C4f>,     (4, (fun (c : C4f) -> [|c.R; c.G; c.B; c.A|]) :> obj)
+                        typeof<C3b>,     (3, (fun (v : C3b) -> let c = v.ToC3f() in [|c.R; c.G; c.B|]) :> obj)
+                        typeof<C4b>,     (4, (fun (v : C4b) -> let c = v.ToC4f() in [|c.R; c.G; c.B; c.A|]) :> obj)
+                    ]
+
+                static member GetDimension (t : Type) =
+                    match accessors.TryGetValue t with
+                        | (true, (d, arr)) -> d
+                        | _ -> failwithf "unsupported attribute type: %A" t.FullName
+
+            let toFloatArrayMeth = typeof<Converter>.GetMethod("ToFloatArray", BindingFlags.Static ||| BindingFlags.Public ||| BindingFlags.NonPublic)
+
+            let toFloatArray (arr : Array) =
+                let t = arr.GetType().GetElementType()
+                let mi = toFloatArrayMeth.MakeGenericMethod [|t|]
+                let arr = mi.Invoke(null, [|arr|]) |> unbox<float32[]>
+
+                Converter.GetDimension(t), arr
+
     module Sg =
+        open SgFSharpHelpers
 
-        let uniform (name : string) (value : aval<'a>) (sg : ISg) =
-            Sg.UniformApplicator(name, value :> IAdaptiveValue, sg) :> ISg
+        // ================================================================================================================
+        // Utilities
+        // ================================================================================================================
 
-        let trafo (m : aval<Trafo3d>) (sg : ISg) =
-            Sg.TrafoApplicator(m, sg) :> ISg
-
-        let viewTrafo (m : aval<Trafo3d>) (sg : ISg) =
-            Sg.ViewTrafoApplicator(m, sg) :> ISg
-
-        let projTrafo (m : aval<Trafo3d>) (sg : ISg) =
-            Sg.ProjectionTrafoApplicator(m, sg) :> ISg
-
-        let scale (s : float) (sg : ISg) =
-            sg |> trafo (s |> Trafo3d.Scale |> AVal.constant)
-
-        let translate (x : float) (y : float) (z : float) (sg : ISg) =
-            sg |> trafo (Trafo3d.Translation(x,y,z) |> AVal.constant)
-
-        let transform (t : Trafo3d) (sg : ISg) =
-            sg |> trafo (t |> AVal.constant)
-
-
-
-        let camera (cam : aval<Camera>) (sg : ISg) =
-            sg |> viewTrafo (cam |> AVal.map Camera.viewTrafo) |> projTrafo (cam |> AVal.map Camera.projTrafo)
-
-        let surface (m : ISurface) (sg : ISg) =
-            Sg.SurfaceApplicator(Surface.Backend m, sg) :> ISg
-
+        /// Combines the scene graphs in the given adaptive set.
         let set (set : aset<ISg>) =
             Sg.Set(set) :> ISg
 
+        /// Combines the scene graphs in the given sequence.
         let ofSeq (s : seq<#ISg>) =
             s |> Seq.cast<ISg> |> ASet.ofSeq |> Sg.Set :> ISg
 
+        /// Combines the scene graphs in the given list.
         let ofList (l : list<#ISg>) =
             l |> ofSeq
 
-        let empty = ofSeq Seq.empty
-
+        /// Combines the scene graphs in the given array.
         let ofArray (arr : array<#ISg>) =
             arr |> ofSeq
 
-
-
+        /// Combines two scene graphs.
         let andAlso (sg : ISg) (andSg : ISg) =
             Sg.Set [sg; andSg] :> ISg
 
-        let geometrySet mode attributeTypes (geometries : aset<_>) =
-            Sg.GeometrySet(geometries,mode,attributeTypes) :> ISg
+        /// Empty scene graph.
+        let empty = ofSeq Seq.empty
 
+        /// Unwraps an adaptive scene graph.
         let dynamic (s : aval<ISg>) =
             Sg.DynamicNode(s) :> ISg
 
+        /// Toggles visibility of the scene.
         let onOff (active : aval<bool>) (sg : ISg) =
             Sg.OnOffNode(active, sg) :> ISg
 
-        let texture (sem : Symbol) (tex : aval<ITexture>) (sg : ISg) =
-            Sg.TextureApplicator(sem, tex, sg) :> ISg
+        /// Inserts an arbitrary object as node in the scene graph.
+        let adapter (o : obj) =
+            Sg.AdapterNode(o) :> ISg
 
+        // ================================================================================================================
+        // Uniforms & Textures
+        // ================================================================================================================
+
+        /// Sets the uniform with the given name to the given value.
+        /// The name can be a string, Symbol, or TypedSymbol.
+        let inline uniform (name : ^Name) (value : aval< ^a>) (sg : ISg) =
+            let sym = name |> symbol typedSym< ^Name>
+            Sg.UniformApplicator(sym, value :> IAdaptiveValue, sg) :> ISg
+
+        /// Sets the uniform with the given name to the given value.
+        /// The name can be a string, Symbol, or TypedSymbol.
+        let inline uniform' (name : ^Name) (value : ^a) =
+            uniform name ~~value
+
+
+        /// Sets the given texture to the slot with the given name.
+        /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
+        let inline texture (name : ^Name) (tex : aval<ITexture>) (sg : ISg) =
+            let sym = name |> symbol typedSym<ITexture>
+            Sg.TextureApplicator(sym, tex, sg) :> ISg
+
+        /// Sets the given texture to the slot with the given name.
+        /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
+        let inline texture' (name : ^Name) (tex : ITexture) (sg : ISg) =
+            sg |> texture name ~~tex
+
+
+        /// Sets the given diffuse texture.
         let diffuseTexture (tex : aval<ITexture>) (sg : ISg) =
             texture DefaultSemantic.DiffuseColorTexture tex sg
 
+        /// Sets the given diffuse texture.
         let diffuseTexture' (tex : ITexture) (sg : ISg) =
-            texture DefaultSemantic.DiffuseColorTexture (AVal.constant tex) sg
+            sg |> diffuseTexture ~~tex
 
-        let diffuseFileTexture' (path : string) (wantMipMaps : bool) (sg : ISg) =
-            texture DefaultSemantic.DiffuseColorTexture (AVal.constant (FileTexture(path, wantMipMaps) :> ITexture)) sg
 
-        let fileTexture (sym : Symbol) (path : string) (wantMipMaps : bool) (sg : ISg) =
-            texture sym (AVal.constant (FileTexture(path, wantMipMaps) :> ITexture)) sg
+        /// Loads and sets the given texture file to the slot with the given name.
+        /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
+        let inline fileTexture (name : ^Name) (path : string) (wantMipMaps : bool) (sg : ISg) =
+            let sym = name |> symbol typedSym<ITexture>
+            sg |> texture sym ~~(FileTexture(path, wantMipMaps) :> ITexture)
 
-        let scopeDependentTexture (sem : Symbol) (tex : Scope -> aval<ITexture>) (sg : ISg) =
-            Sg.UniformApplicator(new Providers.ScopeDependentUniformHolder([sem, fun s -> tex s :> IAdaptiveValue]), sg) :> ISg
+        /// Loads and sets the given diffuse texture file.
+        let diffuseFileTexture (path : string) (wantMipMaps : bool) (sg : ISg) =
+            sg |> fileTexture DefaultSemantic.DiffuseColorTexture path wantMipMaps
 
+
+        /// Sets the given scope-dependent texture to the slot with the given name.
+        /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
+        let inline scopeDependentTexture (name : ^Name) (tex : Scope -> aval<ITexture>) (sg : ISg) =
+            let sym = name |> symbol typedSym<ITexture>
+            Sg.UniformApplicator(new Providers.ScopeDependentUniformHolder([sym, fun s -> tex s :> IAdaptiveValue]), sg) :> ISg
+
+        /// Sets the given scope-dependent diffuse texture.
         let scopeDependentDiffuseTexture (tex : Scope -> aval<ITexture>) (sg : ISg) =
             scopeDependentTexture DefaultSemantic.DiffuseColorTexture tex sg
 
-        let runtimeDependentTexture (sem : Symbol) (tex : IRuntime -> aval<ITexture>) (sg : ISg) =
+
+        /// Sets the given runtime-dependent texture to the slot with the given name.
+        /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
+        let inline runtimeDependentTexture (name : ^Name) (tex : IRuntime -> aval<ITexture>) (sg : ISg) =
             let cache = Dictionary<IRuntime, aval<ITexture>>()
             let tex runtime =
                 match cache.TryGetValue runtime with
@@ -105,36 +225,129 @@ module SgFSharp =
                         cache.[runtime] <- v
                         v
 
-            scopeDependentTexture sem (fun s -> s?Runtime |> tex) sg
+            scopeDependentTexture name (fun s -> s.Runtime |> tex) sg
 
+        /// Sets the given runtime-dependent diffuse texture.
         let runtimeDependentDiffuseTexture(tex : IRuntime -> aval<ITexture>) (sg : ISg) =
             runtimeDependentTexture DefaultSemantic.DiffuseColorTexture tex sg
 
-        let samplerState (sem : Symbol) (state : aval<Option<SamplerState>>) (sg : ISg) =
+
+        /// Sets the sampler state for the texture slot with the given name.
+        /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
+        let inline samplerState (name : ^Name) (state : aval<SamplerState option>) (sg : ISg) =
+            let sym = name |> symbol typedSym<ITexture>
             let modifier =
                 adaptive {
                     let! user = state
                     return fun (textureSem : Symbol) (state : SamplerState) ->
-                        if sem = textureSem then
+                        if sym = textureSem then
                             match user with
-                                | Some state -> state
-                                | _ -> state
+                            | Some state -> state
+                            | _ -> state
                         else
                             state
                 }
-            sg |> uniform (string DefaultSemantic.SamplerStateModifier) modifier
+            sg |> uniform DefaultSemantic.SamplerStateModifier modifier
 
-        let modifySamplerState (sem : Symbol) (modifier : aval<SamplerState -> SamplerState>) (sg : ISg) =
+        /// Sets the sampler state for the texture slot with the given name.
+        /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
+        let inline samplerState' (name : ^Name) (state : Option<SamplerState>) (sg : ISg) =
+            sg |> samplerState name ~~state
+
+
+        /// Modifies the sampler state for the texture slot with the given name.
+        /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
+        let inline modifySamplerState (name : ^Name) (modifier : aval<SamplerState -> SamplerState>) (sg : ISg) =
+            let sym = name |> symbol typedSym<ITexture>
             let modifier =
                 adaptive {
                     let! modifier = modifier
                     return fun (textureSem : Symbol) (state : SamplerState) ->
-                        if sem = textureSem then
+                        if sym = textureSem then
                             modifier state
                         else
                             state
                 }
-            sg |> uniform (string DefaultSemantic.SamplerStateModifier) modifier
+            sg |> uniform DefaultSemantic.SamplerStateModifier modifier
+
+        /// Modifies the sampler state for the texture slot with the given name.
+        /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
+        let inline modifySamplerState' (name : ^Name) (modifier : SamplerState -> SamplerState) (sg : ISg) =
+            sg |> modifySamplerState name ~~modifier
+
+        // ================================================================================================================
+        // Trafos
+        // ================================================================================================================
+
+        /// Sets the model transformation.
+        let trafo (m : aval<Trafo3d>) (sg : ISg) =
+            Sg.TrafoApplicator(m, sg) :> ISg
+
+        /// Sets the model transformation.
+        let trafo' (m : Trafo3d) (sg : ISg) =
+            sg |> trafo ~~m
+
+        /// Sets the model transformation.
+        let transform (m : Trafo3d) (sg : ISg) =
+            sg |> trafo' m
+
+
+        /// Sets the view transformation.
+        let viewTrafo (m : aval<Trafo3d>) (sg : ISg) =
+            Sg.ViewTrafoApplicator(m, sg) :> ISg
+
+        /// Sets the view transformation.
+        let viewTrafo' (m : Trafo3d) (sg : ISg) =
+            sg |> viewTrafo ~~m
+
+
+        /// Sets the projection transformation.
+        let projTrafo (m : aval<Trafo3d>) (sg : ISg) =
+            Sg.ProjectionTrafoApplicator(m, sg) :> ISg
+
+        /// Sets the projection transformation.
+        let projTrafo' (m : Trafo3d) (sg : ISg) =
+            sg |> projTrafo ~~m
+
+
+        /// Sets the view and projection transformations according to the given camera.
+        let camera (cam : aval<Camera>) (sg : ISg) =
+            sg |> viewTrafo (cam |> AVal.map Camera.viewTrafo) |> projTrafo (cam |> AVal.map Camera.projTrafo)
+
+        /// Sets the view and projection transformations according to the given camera.
+        let camera' (cam : Camera) (sg : ISg) =
+            sg |> viewTrafo' (cam |> Camera.viewTrafo) |> projTrafo' (cam |> Camera.projTrafo)
+
+
+        /// Scales the scene by the given scaling factors.
+        let scaling (s : aval<V3d>) (sg : ISg) =
+            sg |> trafo (s |> AVal.map Trafo3d.Scale)
+
+        /// Scales the scene by the given scaling factors.
+        let scaling' (s : V3d) (sg : ISg) =
+            sg |> scaling ~~s
+
+        /// Scales the scene by a uniform factor.
+        let scale (s : float) (sg : ISg) =
+            sg |> transform (Trafo3d.Scale s)
+
+
+        /// Translates the scene by the given vector.
+        let translation (v : aval<V3d>) (sg : ISg) =
+            sg |> trafo (v |> AVal.map Trafo3d.Translation)
+
+        /// Translates the scene by the given vector.
+        let translation' (v : V3d) (sg : ISg) =
+            sg |> translation ~~v
+
+        /// Translates the scene by the given vector.
+        let translate (x : float) (y : float) (z : float) (sg : ISg) =
+            sg |> transform (Trafo3d.Translation(x, y, z))
+
+
+        /// Rotates the scene by the given Euler angles.
+        let rotate (rollInRadians : float) (pitchInRadians : float) (yawInRadians : float) (sg : ISg) =
+            sg |> transform (Trafo3d.RotationEuler(rollInRadians, pitchInRadians, yawInRadians))
 
         // ================================================================================================================
         // Blending
@@ -157,13 +370,15 @@ module SgFSharp =
 
 
         /// Sets the blend constant color.
-        let inline blendConstant (color : aval<'a>) (sg : ISg) =
-            if typeof<'a> = typeof<C4f> then
+        /// The color must be compatible with C4f.
+        let inline blendConstant (color : aval< ^a>) (sg : ISg) =
+            if typeof< ^a> = typeof<C4f> then
                 Sg.BlendConstantApplicator(color :?> aval<C4f>, sg) :> ISg
             else
                 Sg.BlendConstantApplicator(color |> AVal.map c4f, sg) :> ISg
 
         /// Sets the blend constant color.
+        /// The color must be compatible with C4f.
         let inline blendConstant' color = blendConstant (AVal.init color)
 
 
@@ -346,6 +561,8 @@ module SgFSharp =
         // ================================================================================================================
         // Write buffers
         // ================================================================================================================
+
+        /// Toggles color, depth and stencil writes according to the given set of symbols.
         let writeBuffers (buffers : aval<Set<Symbol>>) =
 
             let depthEnable =
@@ -358,85 +575,185 @@ module SgFSharp =
             >> stencilWrite stencilEnable
             >> colorOutput buffers
 
+        /// Toggles color, depth and stencil writes according to the given set of symbols.
         let writeBuffers' (buffers : Set<Symbol>) =
-            writeBuffers (AVal.constant buffers)
+            writeBuffers (~~buffers)
 
         // ================================================================================================================
         // Rasterizer
         // ================================================================================================================
+
+        /// Sets the cull mode.
         let cullMode (mode : aval<CullMode>) (sg : ISg) =
             Sg.CullModeApplicator(mode, sg) :> ISg
 
+        /// Sets the cull mode.
+        let cullMode' mode = cullMode (AVal.init mode)
+
+
+        /// Sets the winding order of front faces.
         let frontFace (order : aval<WindingOrder>) (sg: ISg) =
             Sg.FrontFaceApplicator(order, sg) :> ISg
 
+        /// Sets the winding order of front faces.
+        let frontFace' order = frontFace (AVal.init order)
+
+
+        /// Sets the fill mode.
         let fillMode (mode : aval<FillMode>) (sg : ISg) =
             Sg.FillModeApplicator(mode, sg) :> ISg
 
+        /// Sets the fill mode.
+        let fillMode' mode = fillMode (AVal.init mode)
+
+
+        /// Toggles multisampling for the scene.
         let multisample (mode : aval<bool>) (sg : ISg) =
             Sg.MultisampleApplicator(mode, sg) :> ISg
 
+        /// Toggles multisampling for the scene.
+        let multisample' mode = multisample (AVal.init mode)
+
+
+        /// Toggles conservative rasterization for the scene.
         let conservativeRaster (mode : aval<bool>) (sg : ISg) =
             Sg.ConservativeRasterApplicator(mode, sg) :> ISg
 
-        let cullMode' mode                = cullMode (AVal.init mode)
-        let frontFace' order              = frontFace (AVal.init order)
-        let fillMode' mode                = fillMode (AVal.init mode)
-        let multisample' mode             = multisample (AVal.init mode)
-        let conservativeRaster' mode      = conservativeRaster (AVal.init mode)
+        /// Toggles conservative rasterization for the scene.
+        let conservativeRaster' mode = conservativeRaster (AVal.init mode)
 
-        let private arrayModCache = ConditionalWeakTable<IAdaptiveValue, aval<Array>>()
-        let private bufferModCache = ConditionalWeakTable<IAdaptiveValue, BufferView>()
+        // ================================================================================================================
+        // Attributes & Indices
+        // ================================================================================================================
 
-        let private modOfArray (m : aval<'a[]>) =
-            match arrayModCache.TryGetValue (m :> IAdaptiveValue) with
-                | (true, r) -> r
-                | _ ->
-                    let r = m |> AVal.map (fun a -> a :> Array)
-                    arrayModCache.Add(m, r)
-                    r
+        let inline private attributeAux< ^Name, ^Conv, ^a when ^a : struct and (^Name or ^Conv) : (static member GetSymbol : ^Name -> Symbol)>
+                                       (name : ^Name) (value : aval< ^a[]>) =
+            let sym = ((^Name or ^Conv) : (static member GetSymbol : ^Name -> Symbol) (name))
+            sym, BufferCaching.bufferOfArray value
 
-        let private bufferOfArray (m : aval<'a[]>) =
-            match bufferModCache.TryGetValue (m :> IAdaptiveValue) with
-                | (true, r) -> r
-                | _ ->
-                    let b = m |> AVal.map (fun a -> ArrayBuffer a :> IBuffer)
-                    let r = BufferView(b, typeof<'a>)
-                    bufferModCache.Add(m, r)
-                    r
+        let inline private attributeAux'< ^Name, ^Conv, ^a when ^a : struct and (^Name or ^Conv) : (static member GetSymbol : ^Name -> Symbol)>
+                                        (name : ^Name) (value : ^a[]) =
+            let sym = ((^Name or ^Conv) : (static member GetSymbol : ^Name -> Symbol) (name))
+            sym, BufferView.ofArray value
 
-        let vertexAttribute<'a when 'a : struct> (s : Symbol) (value : aval<'a[]>) (sg : ISg) =
-            let view = BufferView(value |> AVal.map (fun data -> ArrayBuffer(data) :> IBuffer), typeof<'a>)
-            Sg.VertexAttributeApplicator(Map.ofList [s, view], AVal.constant sg) :> ISg
+        /// Provides a vertex attribute with the given name by supplying an array of values.
+        /// The name can be a string, Symbol, or TypedSymbol.
+        let inline vertexAttribute (name : ^Name) (value : aval< ^a[]>) (sg : ISg) =
+            let name, view = attributeAux< ^Name, TypedNameConverter< ^a>, ^a> name value
+            Sg.VertexAttributeApplicator(Map.ofList [name, view], ~~sg) :> ISg
 
+        /// Provides a vertex attribute with the given name by supplying an array of values.
+        /// The name can be a string, Symbol, or TypedSymbol.
+        let inline vertexAttribute' (name : ^Name) (value : ^a[]) (sg : ISg) =
+            let name, view = attributeAux'< ^Name, TypedNameConverter< ^a>, ^a> name value
+            Sg.VertexAttributeApplicator(Map.ofList [name, view], ~~sg) :> ISg
+
+        /// Provides a vertex attribute with the given name by supplying a BufferView.
+        /// The name can be a string or Symbol.
+        let inline vertexBuffer (name : ^Name) (view : BufferView) (sg : ISg) =
+            let sym = name |> symbol untypedSym
+            Sg.VertexAttributeApplicator(sym, view, sg) :> ISg
+
+        /// Provides a vertex attribute with the given name by supplying an untyped array.
+        /// The name can be a string or Symbol.
+        let inline vertexArray (name : ^Name) (value : System.Array) (sg : ISg) =
+            let sym = name |> symbol untypedSym
+            let view = BufferView(~~(ArrayBuffer value :> IBuffer), value.GetType().GetElementType())
+            Sg.VertexAttributeApplicator(Map.ofList [sym, view], ~~sg) :> ISg
+
+        /// Provides a vertex attribute with the given name by supplying a single value.
+        /// The name can be a string, Symbol, or TypedSymbol.
+        /// The value has to be compatible with V4f.
+        let inline vertexBufferValue (name : ^Name) (value : aval< ^a>) (sg : ISg) =
+            let sym = name |> symbol typedSym< ^a>
+            let view = value |> BufferCaching.bufferOfValue v4f
+            Sg.VertexAttributeApplicator(Map.ofList [sym, view], ~~sg) :> ISg
+
+        /// Provides a vertex attribute with the given name by supplying a single value.
+        /// The name can be a string, Symbol, or TypedSymbol.
+        /// The value has to be compatible with V4f.
+        let inline vertexBufferValue' (name : ^Name) (value : ^a) (sg : ISg) =
+            let sym = name |> symbol typedSym< ^a>
+            let view = BufferView(SingleValueBuffer(~~(v4f value)), typeof<V4f>)
+            Sg.VertexAttributeApplicator(sym, view, sg) :> ISg
+
+
+        /// Provides an instance attribute with the given name by supplying an array of values.
+        /// The name can be a string, Symbol, or TypedSymbol.
+        let inline instanceAttribute (name : ^Name) (value : aval< ^a[]>) (sg : ISg) =
+            let name, view = attributeAux< ^Name, TypedNameConverter< ^a>, ^a> name value
+            Sg.InstanceAttributeApplicator(Map.ofList [name, view], ~~sg) :> ISg
+
+        /// Provides an instance attribute with the given name by supplying an array of values.
+        /// The name can be a string, Symbol, or TypedSymbol.
+        let inline instanceAttribute' (name : ^Name) (value : ^a[]) (sg : ISg) =
+            let name, view = attributeAux'< ^Name, TypedNameConverter< ^a>, ^a> name value
+            Sg.InstanceAttributeApplicator(Map.ofList [name, view], ~~sg) :> ISg
+
+        /// Provides an index attribute with the given name by supplying a BufferView.
+        /// The name can be a string or Symbol.
+        let inline instanceBuffer (name : ^Name) (view : BufferView) (sg : ISg) =
+            let sym = name |> symbol untypedSym
+            Sg.InstanceAttributeApplicator(sym, view, sg) :> ISg
+
+        /// Provides an index attribute with the given name by supplying an untyped array.
+        /// The name can be a string or Symbol.
+        let inline instanceArray (name : ^Name) (value : System.Array) (sg : ISg) =
+            let sym = name |> symbol untypedSym
+            let view = BufferView(~~(ArrayBuffer value :> IBuffer), value.GetType().GetElementType())
+            Sg.InstanceAttributeApplicator(sym, view, sg) :> ISg
+
+        /// Provides a instance attribute with the given name by supplying a single value.
+        /// The name can be a string, Symbol, or TypedSymbol.
+        /// The value has to be compatible with V4f.
+        let inline instanceBufferValue (name : ^Name) (value : aval< ^a>) (sg : ISg) =
+            let sym = name |> symbol typedSym< ^a>
+            let view = value |> BufferCaching.bufferOfValue v4f
+            Sg.InstanceAttributeApplicator(Map.ofList [sym, view], ~~sg) :> ISg
+
+        /// Provides a instance attribute with the given name by supplying a single value.
+        /// The name can be a string, Symbol, or TypedSymbol.
+        /// The value has to be compatible with V4f.
+        let inline instanceBufferValue' (name : ^Name) (value : ^a) (sg : ISg) =
+            let sym = name |> symbol typedSym< ^a>
+            let view = BufferView(SingleValueBuffer(~~(v4f value)), typeof<V4f>)
+            Sg.InstanceAttributeApplicator(sym, view, sg) :> ISg
+
+
+        /// Provides the given vertex indices.
         let index<'a when 'a : struct> (value : aval<'a[]>) (sg : ISg) =
-            Sg.VertexIndexApplicator(bufferOfArray value, sg) :> ISg
+            Sg.VertexIndexApplicator(BufferCaching.bufferOfArray value, sg) :> ISg
 
-        let vertexAttribute'<'a when 'a : struct> (s : Symbol) (value : 'a[]) (sg : ISg) =
-            let view = BufferView(AVal.constant (ArrayBuffer(value :> Array) :> IBuffer), typeof<'a>)
-            Sg.VertexAttributeApplicator(Map.ofList [s, view], AVal.constant sg) :> ISg
-
+        /// Provides the given vertex indices.
         let index'<'a when 'a : struct> (value : 'a[]) (sg : ISg) =
             Sg.VertexIndexApplicator(BufferView.ofArray value, sg) :> ISg
 
-        let vertexBuffer (s : Symbol) (view : BufferView) (sg : ISg) =
-            Sg.VertexAttributeApplicator(s, view, sg) :> ISg
+        /// Provides vertex indices by supplying a BufferView.
+        let indexBuffer (view : BufferView) (sg : ISg) =
+            Sg.VertexIndexApplicator(view, sg) :> ISg
 
-        let vertexArray (s : Symbol) (value : System.Array) (sg : ISg) =
-            let view = BufferView(AVal.constant (ArrayBuffer value :> IBuffer), value.GetType().GetElementType())
-            Sg.VertexAttributeApplicator(Map.ofList [s, view], AVal.constant sg) :> ISg
+         /// Provides vertex indices by supplying an untyped array.
+        let indexArray (value : System.Array) (sg : ISg) =
+            let view = BufferView(~~(ArrayBuffer value :> IBuffer), value.GetType().GetElementType())
+            Sg.VertexIndexApplicator(view, sg) :> ISg
 
-        let instanceBuffer (s : Symbol) (view : BufferView) (sg : ISg) =
-            Sg.InstanceAttributeApplicator(s, view, sg) :> ISg
+        // ================================================================================================================
+        // Drawing
+        // ================================================================================================================
 
-        let instanceArray (s : Symbol) (value : System.Array) (sg : ISg) =
-            let view = BufferView(AVal.constant (ArrayBuffer value :> IBuffer), value.GetType().GetElementType())
-            Sg.InstanceAttributeApplicator(s, view, sg) :> ISg
+        /// Applies the given surface to the scene.
+        let surface (m : ISurface) (sg : ISg) =
+            Sg.SurfaceApplicator(Surface.Backend m, sg) :> ISg
 
-        let vertexBufferValue (s : Symbol) (value : aval<V4f>) (sg : ISg) =
-            let view = BufferView(SingleValueBuffer(value), typeof<V4f>)
-            Sg.VertexAttributeApplicator(s, view, sg) :> ISg
+        /// Applies the given render pass.
+        let pass (pass : RenderPass) (sg : ISg) =
+            Sg.PassApplicator(pass, sg) :> ISg
 
+        /// Draws an adaptive set of indexed geometries.
+        let geometrySet (mode : IndexedGeometryMode) (attributeTypes : Map<Symbol, Type>) (geometries : aset<IndexedGeometry>) =
+            Sg.GeometrySet(geometries,mode,attributeTypes) :> ISg
+
+        /// Creates a single draw call for the given geometry mode.
         let draw (mode : IndexedGeometryMode) =
             Sg.RenderNode(
                 DrawCallInfo(
@@ -449,17 +766,20 @@ module SgFSharp =
                 mode
             ) :> ISg
 
+        /// Supplies the given draw call with the given geometry mode.
         let render (mode : IndexedGeometryMode) (call : DrawCallInfo) =
             Sg.RenderNode(call,mode)
 
+        /// Supplies the draw calls in the given indirect buffer with the given geometry mode.
         let indirectDraw (mode : IndexedGeometryMode) (buffer : aval<IndirectBuffer>) =
             Sg.IndirectRenderNode(buffer, mode) :> ISg
 
+        /// Creates a draw call from the given indexed geometry.
         let ofIndexedGeometry (g : IndexedGeometry) =
             let attributes =
                 g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) ->
                     let t = v.GetType().GetElementType()
-                    let view = BufferView(AVal.constant (ArrayBuffer(v) :> IBuffer), t)
+                    let view = BufferView(~~(ArrayBuffer(v) :> IBuffer), t)
 
                     k, view
                 ) |> Map.ofSeq
@@ -486,63 +806,8 @@ module SgFSharp =
             else
                 sg
 
-        module private Interleaved =
-            open System.Reflection
-            open Microsoft.FSharp.NativeInterop
-
-            type Converter() =
-
-                static let toFloat32 (i : 'a) : float32 =
-                    let mutable i = i
-                    NativePtr.read (&&i |> NativePtr.toNativeInt |> NativePtr.ofNativeInt)
-
-                static let accessors =
-                    Dict.ofList [
-                        typeof<int8>,    (1, (fun (v : int8)    -> [|toFloat32 (int32 v)|]) :> obj)
-                        typeof<uint8>,   (1, (fun (v : uint8)   -> [|toFloat32 (uint32 v)|]) :> obj)
-                        typeof<int16>,   (1, (fun (v : int16)   -> [|toFloat32 (int32 v)|]) :> obj)
-                        typeof<uint16>,  (1, (fun (v : uint16)  -> [|toFloat32 (uint32 v)|]) :> obj)
-                        typeof<int32>,   (1, (fun (v : int32)   -> [|toFloat32 v|]) :> obj)
-                        typeof<uint32>,  (1, (fun (v : uint32)  -> [|toFloat32 v|]) :> obj)
-
-                        typeof<float>,   (1, (fun (v : float) -> [|float32 v|]) :> obj)
-                        typeof<V2d>,     (2, (fun (v : V2d) -> [|float32 v.X; float32 v.Y|]) :> obj)
-                        typeof<V3d>,     (3, (fun (v : V3d) -> [|float32 v.X; float32 v.Y; float32 v.Z|]) :> obj)
-                        typeof<V4d>,     (4, (fun (v : V4d) -> [|float32 v.X; float32 v.Y; float32 v.Z; float32 v.W|]) :> obj)
-
-                        typeof<float32>, (1, (fun (v : float32) -> [|v|]) :> obj)
-                        typeof<V2f>,     (2, (fun (v : V2f) -> [|v.X; v.Y|]) :> obj)
-                        typeof<V3f>,     (3, (fun (v : V3f) -> [|v.X; v.Y; v.Z|]) :> obj)
-                        typeof<V4f>,     (4, (fun (v : V4f) -> [|v.X; v.Y; v.Z; v.W|]) :> obj)
-
-                        typeof<C3f>,     (3, (fun (c : C3f) -> [|c.R; c.G; c.B|]) :> obj)
-                        typeof<C4f>,     (4, (fun (c : C4f) -> [|c.R; c.G; c.B; c.A|]) :> obj)
-                        typeof<C3b>,     (3, (fun (v : C3b) -> let c = v.ToC3f() in [|c.R; c.G; c.B|]) :> obj)
-                        typeof<C4b>,     (4, (fun (v : C4b) -> let c = v.ToC4f() in [|c.R; c.G; c.B; c.A|]) :> obj)
-                    ]
-
-                static member ToFloatArray (arr : 'a[]) : float32[] =
-                    match accessors.TryGetValue typeof<'a> with
-                        | (true, (_,accessor)) ->
-                            arr |> Array.collect (unbox accessor)
-                        | _ -> failwithf "unsupported attribute type: %A" typeof<'a>.FullName
-
-
-                static member GetDimension (t : Type) =
-                    match accessors.TryGetValue t with
-                        | (true, (d, arr)) -> d
-                        | _ -> failwithf "unsupported attribute type: %A" t.FullName
-
-            let toFloatArrayMeth = typeof<Converter>.GetMethod("ToFloatArray", BindingFlags.Static ||| BindingFlags.Public ||| BindingFlags.NonPublic)
-
-            let toFloatArray (arr : Array) =
-                let t = arr.GetType().GetElementType()
-                let mi = toFloatArrayMeth.MakeGenericMethod [|t|]
-                let arr = mi.Invoke(null, [|arr|]) |> unbox<float32[]>
-
-                Converter.GetDimension(t), arr
-
-
+        /// Creates a draw call from the given indexed geometry, using an interleaved buffer
+        /// for the vertex attributes.
         let ofIndexedGeometryInterleaved (attributes : list<Symbol>) (g : IndexedGeometry) =
             let arrays =
                 attributes |> List.choose (fun att ->
@@ -558,7 +823,7 @@ module SgFSharp =
 
             let views = SymbolDict()
             let target = Array.zeroCreate (count * vertexSize)
-            let buffer = AVal.constant (ArrayBuffer target :> IBuffer)
+            let buffer = ~~(ArrayBuffer target :> IBuffer)
             let mutable current = 0
             for vi in 0..count-1 do
                 for (sem, t, size, a) in arrays do
@@ -597,11 +862,13 @@ module SgFSharp =
             else
                 sg
 
+        /// Creates a draw call, supplying the given transformations as per-instance attributes with
+        /// name DefaultSemantic.InstanceTrafo.
         let instancedGeometry (trafos : aval<Trafo3d[]>) (g : IndexedGeometry) =
             let vertexAttributes =
                 g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) ->
                     let t = v.GetType().GetElementType()
-                    let view = BufferView(AVal.constant (ArrayBuffer(v) :> IBuffer), t)
+                    let view = BufferView(~~(ArrayBuffer(v) :> IBuffer), t)
 
                     k, view
                 ) |> Map.ofSeq
@@ -635,64 +902,59 @@ module SgFSharp =
 
             Sg.InstanceAttributeApplicator([DefaultSemantic.InstanceTrafo, m44View] |> Map.ofList, sg) :> ISg
 
-        let pass (pass : RenderPass) (sg : ISg) = Sg.PassApplicator(pass, sg) :> ISg
+        // ================================================================================================================
+        // Bounding boxes
+        // ================================================================================================================
 
+        let private transformBox (dst : Box3d) (src : Box3d) =
+
+            let scale =
+                let fromSize = src.Size
+                let toSize = dst.Size
+                let factor = toSize / fromSize
+
+                factor.X |> min factor.Y |> min factor.Z
+
+            Trafo3d.Translation(-src.Center) * Trafo3d.Scale(scale) * Trafo3d.Translation(dst.Center)
+
+        /// Adaptively transforms the scene so its bounding box aligns with the given box.
         let normalizeToAdaptive (box : Box3d) (this : ISg) =
-
-            let getBoxScale (fromBox : Box3d) (toBox : Box3d) : float =
-                let fromSize = fromBox.Size
-                let toSize = toBox.Size
-                let factor = toSize / fromSize
-
-                let mutable smallest = factor.X
-
-                if factor.Y < smallest then
-                    smallest <- factor.Y
-                if factor.Z < smallest then
-                    smallest <- factor.Z
-
-                smallest
-
             let bb = this?GlobalBoundingBox(Ag.Scope.Root) : aval<Box3d>
+            Sg.TrafoApplicator(bb |> AVal.map (transformBox box), this) :> ISg
 
-            printfn "normalizing from: %A" ( bb.GetValue() )
-
-            let transformBox (sbox : Box3d) = Trafo3d.Translation(-sbox.Center) * Trafo3d.Scale(getBoxScale sbox box) * Trafo3d.Translation(box.Center)
-
-            Sg.TrafoApplicator(AVal.map transformBox bb, this) :> ISg
-
+        /// Transforms the scene so its bounding box aligns with the given box.
         let normalizeTo (box : Box3d) (this : ISg) =
-
-            let getBoxScale (fromBox : Box3d) (toBox : Box3d) : float =
-                let fromSize = fromBox.Size
-                let toSize = toBox.Size
-                let factor = toSize / fromSize
-
-                let mutable smallest = factor.X
-
-                if factor.Y < smallest then
-                    smallest <- factor.Y
-                if factor.Z < smallest then
-                    smallest <- factor.Z
-
-                smallest
-
             let bb = this?GlobalBoundingBox(Ag.Scope.Root) : aval<Box3d>
+            Sg.TrafoApplicator(bb.GetValue() |> transformBox box |> AVal.constant, this) :> ISg
 
-            let transformBox (sbox : Box3d) = Trafo3d.Translation(-sbox.Center) * Trafo3d.Scale(getBoxScale sbox box) * Trafo3d.Translation(box.Center)
+        /// Adaptively transforms the scene so its bounding box spans from -1 to 1 in all dimensions.
+        let normalizeAdaptive sg =
+            sg |> normalizeToAdaptive ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) )
 
-            Sg.TrafoApplicator(bb.GetValue() |> transformBox |> AVal.constant, this) :> ISg
-
-        let normalizeAdaptive sg = sg |> normalizeToAdaptive ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) )
-
-        let normalize sg = sg |> normalizeTo ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) )
-
-        let adapter (o : obj) = Sg.AdapterNode(o) :> ISg
-
-        let overlay (task : IRenderTask) =
-            Sg.OverlayNode(task) :> ISg
+        /// Transforms the scene so its bounding box spans from -1 to 1 in all dimensions.
+        let normalize sg =
+            sg |> normalizeTo ( Box3d( V3d(-1,-1,-1), V3d(1,1,1) ) )
 
 
     type IndexedGeometry with
         member x.Sg =
             Sg.ofIndexedGeometry x
+
+
+    module private ``F# Sg Generic Identifiers Tests`` =
+        let texture = ~~(NullTexture() :> ITexture)
+        let someFloat = 1.0
+        let MyTexture = Sym.ofString "MyTexture"
+        let MyTextureT = TypedSymbol<ITexture>("MyTexture")
+
+        let MyNormals = TypedSymbol<V3f>("MyNormals")
+        let someNormals = ~~[| V3f.Zero |]
+
+        let sg : ISg =
+            Sg.empty
+            //|> Sg.uniform 2323 texture
+            |> Sg.uniform' "MyTexture" texture
+            |> Sg.uniform' MyTexture texture
+            |> Sg.texture MyTextureT texture
+            |> Sg.vertexAttribute MyNormals someNormals
+            |> Sg.vertexBufferValue' MyNormals V3f.Zero

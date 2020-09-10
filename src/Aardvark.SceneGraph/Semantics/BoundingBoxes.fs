@@ -147,12 +147,6 @@ module BoundingBoxes =
         member x.LocalBoundingBox(r : Sg.IndirectRenderNode, scope : Ag.Scope) : aval<Box3d> =
             AVal.constant Box3d.Infinite
 
-        member x.LocalBoundingBox(p : Sg.OverlayNode, scope : Ag.Scope) : aval<Box3d> =
-            AVal.constant Box3d.Invalid
-
-        member x.GlobalBoundingBox(p : Sg.OverlayNode, scope : Ag.Scope) : aval<Box3d> =
-            AVal.constant Box3d.Invalid
-
         member x.GlobalBoundingBox(node : Sg.RenderNode, scope : Ag.Scope) : aval<Box3d> =
             let va = scope.VertexAttributes
             let positions : BufferView = 
