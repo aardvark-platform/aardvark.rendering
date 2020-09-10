@@ -678,7 +678,7 @@ module OpenGl =
         /// <summary>
         /// https://www.opengl.org/sdk/docs/man/html/glColorMask.xhtml
         /// </summary>
-        let ColorMask = getProcAddress "glColorMaski"
+        let ColorMask = getProcAddress "glColorMask"
 
         /// <summary>
         /// https://www.opengl.org/sdk/docs/man/html/glDrawBuffers.xhtml

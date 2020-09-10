@@ -520,8 +520,6 @@ module PreparedPipelineStateAssembler =
 
             let mutable icnt = 0 // counting dynamic instructions
 
-            //x.SetDrawBuffers(s.drawBufferCount, s.drawBuffers)
-
             x.SetBlendColor(me.pBlendColor)
             x.SetBlendModes(s.drawBufferCount, me.pBlendModes)
             x.SetColorMasks(s.drawBufferCount, me.pColorMasks)
@@ -586,8 +584,6 @@ module PreparedPipelineStateAssembler =
         member x.SetPipelineState(s : CompilerInfo, me : PreparedPipelineState, prev : PreparedPipelineState) : NativeStats =
             
             let mutable icnt = 0
-
-            //x.SetDrawBuffers(s.drawBufferCount, s.drawBuffers)
 
             // Blending
             if prev.pBlendColor <> me.pBlendColor then
@@ -1117,7 +1113,7 @@ type EpilogCommand(ctx : Context) =
     override x.Compile(s, stream, prev) = 
         stream.SetDepthMask(true)
         stream.SetStencilMask(true)
-        //stream.SetDrawBuffers(s.drawBufferCount, s.drawBuffers)
+        stream.SetColorMask(true, true, true, true)
         stream.UseProgram(0)
         stream.BindBuffer(int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
         for i in 0 .. 7 do
@@ -1444,7 +1440,7 @@ module rec Command =
                 let stream = AssemblerCommandStream s
                 stream.SetDepthMask(true)
                 stream.SetStencilMask(true)
-                //stream.SetDrawBuffers(info.drawBufferCount, info.drawBuffers)
+                stream.SetColorMask(true, true, true, true)
                 stream.UseProgram(0)
                 stream.BindBuffer(int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
                 for i in 0 .. 7 do
@@ -1656,10 +1652,6 @@ module rec Command =
 
 
             for (i, c) in colors do
-                //s.BeginCall(1)
-                //s.PushIntArg (info.drawBuffers + nativeint sizeof<int> * nativeint i)
-                //s.Call(OpenGl.Pointers.DrawBuffer)
-                
                 let pColor = p.Pin c
 
                 flags <- flags ||| ClearBufferMask.ColorBufferBit

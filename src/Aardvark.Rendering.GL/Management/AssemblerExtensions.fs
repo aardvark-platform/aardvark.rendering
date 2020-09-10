@@ -31,6 +31,7 @@ type ICommandStream =
     abstract member SetBlendColor : m : nativeptr<C4f> -> unit
     abstract member SetBlendModes : count : int * ptr : nativeint -> unit
     abstract member SetColorMasks : count : int * ptr : nativeint -> unit
+    abstract member SetColorMask : bool * bool * bool * bool -> unit
 
     abstract member SetDepthTest : m : nativeptr<int> -> unit
     abstract member SetDepthBias : m : nativeptr<DepthBiasInfo> -> unit
@@ -294,16 +295,24 @@ module GLAssemblerExtensions =
             s.Call(OpenGl.Pointers.BlendColor)
 
         member this.SetBlendModes(count : int, ptr : nativeint) =
-             s.BeginCall(2)
-             s.PushArg(ptr)
-             s.PushArg(count)
-             s.Call(OpenGl.Pointers.HSetBlendModes)
+            s.BeginCall(2)
+            s.PushArg(ptr)
+            s.PushArg(count)
+            s.Call(OpenGl.Pointers.HSetBlendModes)
 
         member this.SetColorMasks(count : int, ptr : nativeint) =
-             s.BeginCall(2)
-             s.PushArg(ptr)
-             s.PushArg(count)
-             s.Call(OpenGl.Pointers.HSetColorMasks)
+            s.BeginCall(2)
+            s.PushArg(ptr)
+            s.PushArg(count)
+            s.Call(OpenGl.Pointers.HSetColorMasks)
+
+        member this.SetColorMask(r : bool, g : bool, b : bool, a : bool) =
+            s.BeginCall(4)
+            s.PushArg(if a then 1 else 0)
+            s.PushArg(if b then 1 else 0)
+            s.PushArg(if g then 1 else 0)
+            s.PushArg(if r then 1 else 0)
+            s.Call(OpenGl.Pointers.ColorMask)
 
         // ================================================================================================================
         // Depth
@@ -866,6 +875,7 @@ module GLAssemblerExtensions =
             member this.SetBlendColor(c: nativeptr<C4f>) = this.SetBlendColor(c)
             member this.SetBlendModes(count : int, ptr: nativeint) = this.SetBlendModes(count, ptr)
             member this.SetColorMasks(count : int, ptr: nativeint) = this.SetColorMasks(count, ptr)
+            member this.SetColorMask(r : bool, g : bool, b : bool, a : bool) = this.SetColorMask(r, g, b, a)
             member this.SetConservativeRaster(r: nativeptr<int>) = this.SetConservativeRaster(r)
             member this.SetCullMode(m: nativeptr<int>) = this.SetCullMode(m)
             member this.SetFrontFace(m: nativeptr<int>) = this.SetFrontFace(m)
@@ -970,6 +980,7 @@ module GLAssemblerExtensions =
             member x.SetBlendColor(c: nativeptr<C4f>) = inner.SetBlendColor(c); x.Append("BlendColor", c)
             member x.SetBlendModes(count : int, ptr: nativeint) = inner.SetBlendModes(count, ptr); x.Append("SetBlendModes", ptr)
             member x.SetColorMasks(count : int, ptr: nativeint) = inner.SetColorMasks(count, ptr); x.Append("SetColorMasks", ptr)
+            member x.SetColorMask(r : bool, g : bool, b : bool, a : bool) = inner.SetColorMask(r, g, b, a); x.Append("SetColorMask", r, g, b, a)
             member x.SetConservativeRaster(r: nativeptr<int>) = inner.SetConservativeRaster(r); x.Append("SetConservativeRaster", r)
             member x.SetCullMode(m: nativeptr<int>) = inner.SetCullMode(m); x.Append("SetCullMode", m)
             member x.SetFrontFace(m: nativeptr<int>) = inner.SetFrontFace(m); x.Append("SetFrontFace", m)

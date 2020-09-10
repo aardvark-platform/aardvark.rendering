@@ -135,68 +135,6 @@ type UniformBufferManager(ctx : Context) =
     member x.Dispose() =
         manager.Dispose()
 
-// CLEANUP: Obsolete since pipeline state rework. Draw buffers are always set to the framebuffer signature,
-// color output per render object is controlled via the color masks. Leaving this in for now, if we go back for whatever reason.
-//type DrawBufferConfig =
-//    class
-//        val mutable public Key : list<bool>
-//        val mutable public Parent : DrawBufferManager
-//        val mutable public Signature : IFramebufferSignature
-//        val mutable public Count : int
-//        val mutable public Buffers : nativeptr<int>
-//        val mutable public RefCount : int
-
-//        member x.Write(fbo : Framebuffer) =
-//            x.Signature.ColorAttachments |> Map.iter (fun i (s,_) ->
-//                if x.Key.[i] then
-//                    if fbo.Handle = 0 && i = 0 && s = DefaultSemantic.Colors then
-//                        NativePtr.set x.Buffers i (int OpenTK.Graphics.OpenGL4.FramebufferAttachment.BackLeft)
-//                    else
-//                        NativePtr.set x.Buffers i (int OpenTK.Graphics.OpenGL4.FramebufferAttachment.ColorAttachment0 + i)
-//                else
-//                    NativePtr.set x.Buffers i 0
-//            )
-
-//        member x.AddRef() = 
-//            if Interlocked.Increment &x.RefCount = 1 then
-//                x.Buffers <- NativePtr.alloc x.Count
-
-//        member x.RemoveRef() = 
-//            if Interlocked.Decrement &x.RefCount = 0 then
-//                NativePtr.free x.Buffers
-//                x.Buffers <- NativePtr.zero
-//                x.Parent.DeleteConfig(x)
-
-//        new(p, key, s, c) = { Parent = p; Key = key; Signature = s; Count = c; Buffers = NativePtr.zero; RefCount = 0 }
-
-//    end
-
-//and DrawBufferManager (signature : IFramebufferSignature) =
-//    let count = signature.ColorAttachments.Count
-//    let ptrs = ConcurrentDictionary<list<bool>, DrawBufferConfig>()
-
-//    member x.Write(fbo : Framebuffer) =
-//        for (KeyValue(_,dbc)) in ptrs do
-//            if dbc.RefCount > 0 then
-//                dbc.Write(fbo)
-
-//    member x.CreateConfig(set : Set<Symbol>) =
-//        let set = signature.ColorAttachments |> Map.toSeq |> Seq.map (fun (i,(s,_)) -> Set.contains s set) |> Seq.toList
-//        let config = 
-//            ptrs.GetOrAdd(set, fun set ->
-//                DrawBufferConfig(x, set, signature, count)
-//            )
-
-//        config.AddRef()
-//        config
-
-//    member internal x.DeleteConfig(c : DrawBufferConfig) =
-//        ptrs.TryRemove c.Key |> ignore
-
-
-
-
-
 
 type CastResource<'a, 'b when 'a : equality and 'b : equality>(inner : IResource<'a>) =
     inherit AdaptiveObject()
@@ -258,11 +196,6 @@ type InterfaceSlots =
 
 [<AllowNullLiteral>]
 type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskInfo : Option<IFramebufferSignature * RenderTaskLock>, shareTextures : bool, shareBuffers : bool) =
-    
-    //let drawBufferManager = // ISSUE: leak? nobody frees those DrawBufferConfigs
-    //    match renderTaskInfo with
-    //        | Some (signature, _) -> DrawBufferManager(signature) |> Some
-    //        | _ -> None
 
     let derivedCache (f : ResourceManager -> ResourceCache<'a, 'b>) =
         ResourceCache<'a, 'b>(Option.map f parent, Option.map snd renderTaskInfo)
@@ -372,7 +305,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
 
 
-    //member x.DrawBufferManager = drawBufferManager.Value
     member x.Context = ctx
         
     member x.CreateBuffer(data : aval<IBuffer>) =
