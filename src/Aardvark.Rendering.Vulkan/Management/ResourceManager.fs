@@ -1460,7 +1460,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
                                    cull : aval<CullMode>, front : aval<WindingOrder>, fill : aval<FillMode>,
                                    conservativeRaster : aval<bool>) =
         rasterizerStateCache.GetOrCreate(
-            [depthClamp :> obj; depthBias :> obj; cull :> obj; front :> obj, fill :> obj],
+            [depthClamp :> obj; depthBias :> obj; cull :> obj; front :> obj, fill :> obj; conservativeRaster :> obj],
             fun cache key -> new RasterizerStateResource(cache, key, depthClamp, depthBias, cull, front, fill, conservativeRaster)
         )
 
