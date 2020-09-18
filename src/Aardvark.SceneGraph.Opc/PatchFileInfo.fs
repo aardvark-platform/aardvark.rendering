@@ -134,7 +134,8 @@ module PatchFileInfo =
 
         let mkTexture tupel = 
             let t,w = tupel
-            { fileName = inner t; weights = inner w }
+            let name = (inner t).Replace('\\',System.IO.Path.DirectorySeparatorChar)
+            { fileName = name; weights = inner w }
 
         let patch =            
           doc.SelectSingleNode "/Aardvark"
