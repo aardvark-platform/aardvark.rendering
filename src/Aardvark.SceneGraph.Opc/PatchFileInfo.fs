@@ -132,20 +132,18 @@ module PatchFileInfo =
         let trafo (m : M44d) =
             Trafo3d(m, m.Inverse)
 
-        let mkTexture tupel = 
-            let t,w = tupel
+        let mkTexture t =
             let name = (inner t).Replace('\\',System.IO.Path.DirectorySeparatorChar)
-            { fileName = name; weights = inner w }
+            { fileName = name; weights = "" }
 
         let patch =            
-          doc.SelectSingleNode "/Aardvark"
+            doc.SelectSingleNode "/Aardvark"
             |> Seq.cast<XmlNode>             
             |> Seq.head
     
         let textures = 
             patch 
-              |> childNodes "Textures" 
-              |> Seq.chunkBySize 2 |> Seq.map(fun x -> x.[0], x.[1])
+              |> childNodes "Textures"
               |> Seq.map mkTexture
               |> Seq.toList
 
