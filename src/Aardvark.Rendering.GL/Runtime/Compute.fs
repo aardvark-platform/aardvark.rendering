@@ -443,7 +443,15 @@ module GLComputeExtensions =
 
         member x.TryCompileKernel (shader : FShade.ComputeShader) =
             let gl = getGLCompute x
-            let glsl = shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSL410
+            let glsl = 
+                if x.Driver.glsl >= Version(4,3,0) then
+                    shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSL430
+                elif x.Driver.extensions |> Set.contains "GL_ARB_compute_shader" && x.Driver.glsl >= Version(4,1,0) then 
+                    let be = FShade.GLSL.Backend.Create { glsl410.Config with enabledExtensions = Set.add "GL_ARB_compute_shader" glsl410.Config.enabledExtensions }
+                    shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSL be
+                else 
+                    failwithf "[GL] Compute shader not supported: GLSL version = %A" x.Driver.glsl
+
             let localSize = 
                 if shader.csLocalSize.AllGreater 0 then shader.csLocalSize
                 else failwith "[GL] compute shader has no local size"
