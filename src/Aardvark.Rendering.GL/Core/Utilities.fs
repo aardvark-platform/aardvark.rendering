@@ -35,16 +35,33 @@ module Driver =
     let private versionRx = Regex @"([0-9]+\.)*[0-9]+"
 
     let rec clean (v : int) =
-        if v = 0 then 0
-        elif v % 10 = 0 then clean (v / 10)
-        else v
+        if v > 9 then 
+            clean (v/10) @ [v%10]
+        else 
+            [v]
+    let rec pad (l : int) (v : 'a) (s : list<'a>) =
+        match s with 
+        | [] -> 
+            if l > 0 then 
+                List.replicate l v 
+            else 
+                []
+        | h::t -> 
+            h::pad (l-1) v t
 
     let parseVersion (str : string) =
         let m = versionRx.Match str
         if m.Success then
             let str = m.Value
 
-            let v = str.Split('.') |> Array.map Int32.Parse |> Array.map clean |> Array.map string |> String.concat "."
+            let v = 
+                str.Split('.') 
+                |> Array.map Int32.Parse 
+                |> Array.toList
+                |> List.collect clean 
+                |> pad 3 0
+                |> Seq.map (sprintf "%d") 
+                |> String.concat "."
 
             Version.Parse v
         else
