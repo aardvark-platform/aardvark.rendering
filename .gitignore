@@ -51,3 +51,4 @@ src/GLVM/*.dylib
 /.vs
 **/Aardvark.log
 src/Aardvark.Rendering.Interactive/bin/
+.DS_Store
