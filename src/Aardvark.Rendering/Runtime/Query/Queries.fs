@@ -57,12 +57,12 @@ module Queries =
     let create (queries : #IQuery seq) =
         Queries(queries |> Seq.map unbox<IQuery>)
 
-    let single (query : #IQuery) =
+    let single (query : IQuery) =
         create <| Seq.singleton query
 
     /// Adds a query.
-    let add (x : #IQuery) (queries : Queries) =
-        queries.Add(x :> IQuery)
+    let add (x : IQuery) (queries : Queries) =
+        queries.Add x
 
     /// Resets all queries manually.
     let reset (queries : Queries) =
