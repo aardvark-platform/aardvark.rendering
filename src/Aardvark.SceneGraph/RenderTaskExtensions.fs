@@ -56,7 +56,7 @@ module RenderTask =
                 member x.Dispose() = ()
             }
 
-        let private uniformProvider (color : aval<ITexture>) (depth : aval<ITexture>) =
+        let private uniformProvider (color : aval<#ITexture>) (depth : aval<#ITexture>) =
             { new IUniformProvider with
                 member x.TryGetUniform(scope : Ag.Scope, semantic : Symbol) =
                     if semantic = DefaultSemantic.ColorTexture then Some (color :> IAdaptiveValue)
@@ -113,7 +113,7 @@ module RenderTask =
                 Uniforms = emptyUniforms
             }
 
-        let create (color : aval<ITexture>) (depth : aval<ITexture>) =
+        let create (color : aval<#ITexture>) (depth : aval<#ITexture>) =
             { RenderObject.Clone(baseObject) with
                 Uniforms = uniformProvider color depth
             }

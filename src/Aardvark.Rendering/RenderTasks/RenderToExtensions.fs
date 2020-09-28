@@ -33,14 +33,14 @@ module private AdaptiveRenderToTypes =
                 task.Dispose()
 
     type AdaptiveOutputTexture(semantic : Symbol, res : IAdaptiveResource<IFramebuffer>) =
-        inherit AdaptiveResource<ITexture>()
+        inherit AdaptiveResource<IBackendTexture>()
 
         override x.Compute(token : AdaptiveToken, t : RenderToken) =
             let res = res.GetValue(token, t)
 
             match Map.tryFind semantic res.Attachments with
                 | Some (:? IBackendTextureOutputView as t) ->
-                    t.texture :> ITexture
+                    t.texture
                 | _ ->
                     failwithf "could not get result for semantic %A as texture" semantic
 
