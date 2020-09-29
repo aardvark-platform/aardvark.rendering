@@ -162,8 +162,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
 
-    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, layers : int, perLayer : Set<string>) =
-        let attachments = attachments |> SymDict.toMap
+    member x.CreateFramebufferSignature(attachments : Map<Symbol, AttachmentSignature>, layers : int, perLayer : Set<string>) =
         device.CreateRenderPass(attachments, layers, perLayer) :> IFramebufferSignature
 
     member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =

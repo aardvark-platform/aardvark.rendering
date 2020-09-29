@@ -68,29 +68,44 @@ module RenderTask =
     let getResult (sem : Symbol) (t : IAdaptiveResource<IFramebuffer>) =
         t.GetOutputTexture sem
 
-    let renderSemantics (sem : Set<Symbol>) (size : aval<V2i>) (task : IRenderTask) =
+    /// Runs a render task for the given adaptive size and returns a map containing the textures specified as output.
+    let renderSemantics (output : Set<Symbol>) (size : aval<V2i>) (task : IRenderTask) =
         let runtime = task.Runtime.Value
         let signature = task.FramebufferSignature.Value
 
-        let clearColors =
-            sem |> Set.toList |> List.filter (fun s -> s <> DefaultSemantic.Depth) |> List.map (fun s -> s,C4f.Black)
-        let clear = runtime.CompileClear(signature, ~~clearColors, ~~1.0, ~~0)
-        let fbo = runtime.CreateFramebuffer(signature, sem, size)
+        // Gather all attachments to determine which ones are not requested as output
+        let attachments =
+            let color =
+                signature.ColorAttachments |> Map.toList |> List.map (snd >> fst)
+
+            let depth, stencil =
+                signature.DepthAttachment |> (function None -> [] | _ -> [DefaultSemantic.Depth]),
+                signature.StencilAttachment |> (function None -> [] | _ -> [DefaultSemantic.Stencil])
+
+            [color; depth; stencil]
+            |> List.concat |> Set.ofList
+
+        let clear = runtime.CompileClear(signature, C4f.Black, 1.0, 0)
+        let fbo = runtime.CreateFramebuffer(signature, size, Set.difference attachments output)
 
         let task = new SequentialRenderTask([|clear; task|])
         let res = task.RenderTo(fbo, dispose = true)
-        sem |> Seq.map (fun k -> k, getResult k res) |> Map.ofSeq
+        output |> Seq.map (fun k -> k, getResult k res) |> Map.ofSeq
 
+    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Colors as texture.
     let renderToColor (size : aval<V2i>) (task : IRenderTask) =
         task |> renderSemantics (Set.singleton DefaultSemantic.Colors) size |> Map.find DefaultSemantic.Colors
 
+    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Depth as texture.
     let renderToDepth (size : aval<V2i>) (task : IRenderTask) =
         task |> renderSemantics (Set.singleton DefaultSemantic.Depth) size |> Map.find DefaultSemantic.Depth
 
+    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Depth and DefaultSemantic.Stencil as textures.
     let renderToDepthAndStencil (size : aval<V2i>) (task : IRenderTask) =
         let map = task |> renderSemantics (Set.singleton DefaultSemantic.Depth) size
         (Map.find DefaultSemantic.Depth map, Map.find DefaultSemantic.Stencil map)
 
+    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Colors and DefaultSemantic.Depth as textures.
     let renderToColorAndDepth (size : aval<V2i>) (task : IRenderTask) =
         let map = task |> renderSemantics (Set.ofList [DefaultSemantic.Depth; DefaultSemantic.Colors]) size
         (Map.find DefaultSemantic.Colors map, Map.find DefaultSemantic.Depth map)

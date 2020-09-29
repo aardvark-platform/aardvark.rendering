@@ -396,7 +396,7 @@ type Runtime() =
 
         member x.ResourceManager = manager :> IResourceManager
 
-        member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, layers : int, perLayer : Set<string>) =
+        member x.CreateFramebufferSignature(attachments : Map<Symbol, AttachmentSignature>, layers : int, perLayer : Set<string>) =
             x.CreateFramebufferSignature(attachments, layers, perLayer) :> IFramebufferSignature
 
             
@@ -681,9 +681,7 @@ type Runtime() =
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
 
-    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, layers : int, perLayer : Set<string>) =
-        let attachments = Map.ofSeq (SymDict.toSeq attachments)
-
+    member x.CreateFramebufferSignature(attachments : Map<Symbol, AttachmentSignature>, layers : int, perLayer : Set<string>) =
         let depth =
             Map.tryFind DefaultSemantic.Depth attachments
 
@@ -705,9 +703,6 @@ type Runtime() =
                 |> Map.ofList
 
         FramebufferSignature(x, indexedColors, depth, stencil, layers, perLayer)
-        
-    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>) =
-        x.CreateFramebufferSignature(attachments, 1, Set.empty)
 
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)

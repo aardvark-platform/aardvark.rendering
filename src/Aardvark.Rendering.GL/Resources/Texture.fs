@@ -202,7 +202,7 @@ module TextureCreationExtensions =
                         
                     | TextureDimension.Texture2D, false, true ->
                         bind TextureTarget.Texture2DMultisample (fun () ->
-                            GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, unbox (int format), size.X, size.Y, false)
+                            GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, unbox (int format), size.X, size.Y, true)
                         )
 
                     | TextureDimension.Texture2D, true, false ->
@@ -212,7 +212,7 @@ module TextureCreationExtensions =
 
                     | TextureDimension.Texture2D, true, true ->
                         bind TextureTarget.Texture2DMultisampleArray (fun () ->
-                            GL.TexStorage3DMultisample(TextureTargetMultisample3d.Texture2DMultisampleArray, samples, unbox (int format), size.X, size.Y, slices, false)
+                            GL.TexStorage3DMultisample(TextureTargetMultisample3d.Texture2DMultisampleArray, samples, unbox (int format), size.X, size.Y, slices, true)
                         )
 
                     | TextureDimension.TextureCube, false, false ->
@@ -397,7 +397,7 @@ module TextureCreationExtensions =
                     GL.TexStorage2D(TextureTarget2d.Texture2D, mipMapLevels, unbox (int t), size.X, size.Y)
                 else
                     if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
-                    GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, unbox (int t), size.X, size.Y, false)
+                    GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, unbox (int t), size.X, size.Y, true)
 
                 GL.Check "could not allocate texture"
                 GL.BindTexture(target, 0)

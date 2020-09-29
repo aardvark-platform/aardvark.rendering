@@ -30,10 +30,17 @@ and IFramebufferRuntime =
 
     abstract member DeviceCount : int
 
-    abstract member CreateFramebufferSignature : attachments : SymbolDict<AttachmentSignature> * layers : int * perLayerUniforms : Set<string> -> IFramebufferSignature
+    /// Creates a framebuffer signature with the given attachment signatures.
+    abstract member CreateFramebufferSignature : attachments : Map<Symbol, AttachmentSignature> * layers : int * perLayerUniforms : Set<string> -> IFramebufferSignature
+
+    /// Deletes the given framebuffer signature.
     abstract member DeleteFramebufferSignature : IFramebufferSignature -> unit
 
+    /// Creates a framebuffer of the given signature and with the given attachments.
     abstract member CreateFramebuffer : signature : IFramebufferSignature * attachments : Map<Symbol, IFramebufferOutput> -> IFramebuffer
+
+    /// Deletes the given framebuffer.
     abstract member DeleteFramebuffer : IFramebuffer -> unit
 
+    /// Clears the given color attachments, and (optionally) the depth and stencil attachments to the specified values.
     abstract member Clear : fbo : IFramebuffer * clearColors : Map<Symbol, C4f> * depth : Option<float> * stencil : Option<int> -> unit

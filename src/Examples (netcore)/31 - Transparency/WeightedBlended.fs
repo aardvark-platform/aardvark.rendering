@@ -5,7 +5,7 @@
 module WeightedBlended =
 
     open Aardvark.Base
-    
+
     open Aardvark.Rendering
     open Aardvark.SceneGraph
     open FSharp.Data.Adaptive
@@ -157,7 +157,9 @@ module WeightedBlended =
             ])
 
         let depthBuffer =
-            createAttachment runtime RenderbufferFormat.Depth24Stencil8 samples size
+            runtime.CreateRenderbufferAttachment(
+                runtime.CreateRenderbuffer(RenderbufferFormat.Depth24Stencil8, samples, size)
+            )
 
         let offscreenFbo =
             runtime.CreateFramebuffer(offscreenPass, Map.ofList [
@@ -183,7 +185,7 @@ module WeightedBlended =
                 |> Sg.viewTrafo scene.viewTrafo
                 |> Sg.projTrafo scene.projTrafo
 
-            let clear = runtime.CompileClear(offscreenPass, ~~C4f.Black, ~~1.0)
+            let clear = runtime.CompileClear(offscreenPass, C4f.Black, 1.0)
             let render = runtime.CompileRender(offscreenPass, sg)
             RenderTask.ofList [clear; render]
 
@@ -211,7 +213,7 @@ module WeightedBlended =
                     DefaultSemantic.Revealage, C4f.White
                 ]
 
-            let clear = runtime.CompileClear(transparentPass, ~~clearColors)
+            let clear = runtime.CompileClear(transparentPass, clearColors)
             let render = runtime.CompileRender(transparentPass, sg)
             let task = RenderTask.ofList [clear; render]
 
