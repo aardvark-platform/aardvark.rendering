@@ -32,43 +32,48 @@ type Driver = { device : GPUVendor; vendor : string; renderer : string; glsl : V
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Driver =
 
-    let private versionRx = Regex @"([0-9]+\.)*[0-9]+"
+    let private versionRx = Regex @"^[ \t\r\n]*((?:[0-9]+\.)*[0-9]+)"
 
-    let rec clean (v : int) =
-        if v > 9 then 
-            clean (v/10) @ [v%10]
-        else 
-            [v]
-    let rec pad (l : int) (v : 'a) (s : list<'a>) =
-        match s with 
-        | [] -> 
-            if l > 0 then 
-                List.replicate l v 
-            else 
-                []
-        | h::t -> 
-            h::pad (l-1) v t
-
-    let parseVersion (str : string) =
+  
+    let parseGLVersion (str : string) =
         let m = versionRx.Match str
         if m.Success then
-            let str = m.Value
+            let str = m.Groups.[1].Value
 
             let v = 
                 str.Split('.') 
                 |> Array.map Int32.Parse 
                 |> Array.toList
-                |> List.collect clean 
-                |> pad 3 0
+                //|> List.collect clean 
 
             match v with
-            | [] -> Version(0, 0, 0)
+            | [] -> failwithf "could not read version from: %A" str
             | [a] -> Version(a, 0, 0)
             | [a;b] -> Version(a, b, 0)
             | a::b::c::_ -> Version(a, b, c)
         else
             failwithf "could not read version from: %A" str
 
+    let parseGLSLVersion (str : string) =
+        let m = versionRx.Match str
+        if m.Success then
+            let str = m.Groups.[1].Value
+
+            let v = 
+                str.Split('.') 
+                |> Array.map Int32.Parse 
+                |> Array.toList
+
+            match v with
+            | [] -> failwithf "could not read version from: %A" str
+            | [a] -> Version(a, 0, 0)
+            | a::b::_ -> 
+                if b > 9 then
+                    Version(a, b/10, b%10)
+                else 
+                    Version(a, b, 0)
+        else
+            failwithf "could not read version from: %A" str
 
 
     let readInfo() =
@@ -79,12 +84,12 @@ module Driver =
         let versionStr = GL.GetString(StringName.Version)
         Report.Line(4, "[GL] version: {0}", versionStr)
         let version = 
-            parseVersion versionStr
+            parseGLVersion versionStr
 
         let glslVersion = 
             let str = GL.GetString(StringName.ShadingLanguageVersion)
             Report.Line(4, "[GL] glsl: {0}", str)
-            parseVersion str
+            parseGLSLVersion str
         let profileMask =  GL.GetInteger(unbox<_> OpenTK.Graphics.OpenGL4.All.ContextProfileMask)
         Report.Line(4, "[GL] profileMask: {0}", profileMask)
         let contextFlags = GL.GetInteger(GetPName.ContextFlags)
