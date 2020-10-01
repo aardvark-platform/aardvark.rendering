@@ -60,10 +60,12 @@ module Driver =
                 |> Array.toList
                 |> List.collect clean 
                 |> pad 3 0
-                |> Seq.map (sprintf "%d") 
-                |> String.concat "."
 
-            Version.Parse v
+            match v with
+            | [] -> Version(0, 0, 0)
+            | [a] -> Version(a, 0, 0)
+            | [a;b] -> Version(a, b, 0)
+            | a::b::c::_ -> Version(a, b, c)
         else
             failwithf "could not read version from: %A" str
 
@@ -71,19 +73,31 @@ module Driver =
 
     let readInfo() =
         let vendor = GL.GetString(StringName.Vendor)  
+        Report.Line(4, "[GL] vendor: {0}", vendor)
         let renderer = GL.GetString(StringName.Renderer)  
+        Report.Line(4, "[GL] renderer: {0}", renderer)
         let versionStr = GL.GetString(StringName.Version)
-        let version = versionStr |> parseVersion
-        let glslVersion = GL.GetString(StringName.ShadingLanguageVersion) |> parseVersion
+        Report.Line(4, "[GL] version: {0}", versionStr)
+        let version = 
+            parseVersion versionStr
+
+        let glslVersion = 
+            let str = GL.GetString(StringName.ShadingLanguageVersion)
+            Report.Line(4, "[GL] glsl: {0}", str)
+            parseVersion str
         let profileMask =  GL.GetInteger(unbox<_> OpenTK.Graphics.OpenGL4.All.ContextProfileMask)
+        Report.Line(4, "[GL] profileMask: {0}", profileMask)
         let contextFlags = GL.GetInteger(GetPName.ContextFlags)
+        Report.Line(4, "[GL] contextFlags: {0}", contextFlags)
 
         let mutable extensions = Set.empty
         let extensionCount = GL.GetInteger(0x821d |> unbox<GetPName>) // GL_NUM_EXTENSIONS
+        Report.Begin(4, "[GL] extensions")
         for i in 0..extensionCount-1 do
             let name = GL.GetString(StringNameIndexed.Extensions, i)
+            Report.Line(4, "{0}", name)
             extensions <- Set.add name extensions
-
+        Report.End(4) |> ignore
 
         let pat = (vendor + "_" + renderer).ToLower()
         let gpu = 
