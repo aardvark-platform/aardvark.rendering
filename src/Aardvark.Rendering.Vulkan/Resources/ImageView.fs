@@ -8,58 +8,6 @@ open Microsoft.FSharp.NativeInterop
 #nowarn "9"
 // #nowarn "51"
 
-
-[<AutoOpen>]
-module ImageViewCommandExtensions =
-    
-    type Command with
-
-        static member SetDeviceMask(mask : uint32) =
-            { new Command() with
-                member x.Compatible = QueueFlags.All
-                member x.Enqueue(cmd) =
-                    cmd.AppendCommand()
-                    VkRaw.vkCmdSetDeviceMask(cmd.Handle, mask)
-                    Disposable.Empty        
-            }
-
-        static member SyncPeersDefault(img : Image, dstLayout : VkImageLayout) =
-            if img.PeerHandles.Length > 0 then
-                let device = img.Device
-                let arrayRange = Range1i(0, img.Count - 1)
-                let ranges =
-                    let range = 
-                        { 
-                            frMin = V2i.Zero; 
-                            frMax = img.Size.XY - V2i.II
-                            frLayers = arrayRange
-                        }
-                    range.Split(int device.AllCount)
-
-                command {
-                    do! Command.TransformLayout(img, VkImageLayout.TransferSrcOptimal)
-                    let layers = arrayRange
-                    let layerCount = 1 + layers.Max - layers.Min
-                        
-                    let aspect =
-                        match VkFormat.toImageKind img.Format with
-                            | ImageKind.Depth -> ImageAspect.Depth
-                            | ImageKind.DepthStencil  -> ImageAspect.DepthStencil
-                            | _ -> ImageAspect.Color 
-
-                    let subResource = img.[aspect, 0]
-                    let ranges =
-                        ranges |> Array.map (fun { frMin = min; frMax = max; frLayers = layers} ->
-                            layers, Box3i(V3i(min,0), V3i(max, 0))
-                        )
-
-                    do! Command.SyncPeers(subResource, ranges)
-                    do! Command.TransformLayout(img, dstLayout)
-                }
-            else
-                Command.nop
-
-
 type ImageView =
     class
         inherit Resource<VkImageView>
@@ -101,6 +49,25 @@ type ImageView =
         new(device : Device, handle : VkImageView, img, viewType, levelRange, arrayRange, resolved) = { inherit Resource<_>(device, handle); Image = img; ImageViewType = viewType; MipLevelRange = levelRange; ArrayRange = arrayRange; IsResolved = resolved }
     end
 
+
+[<AutoOpen>]
+module ImageViewCommandExtensions =
+
+    type Command with
+
+        static member TransformLayout(view : ImageView, target : VkImageLayout) =
+            Command.TransformLayout(view.Image, view.MipLevelRange, view.ArrayRange, target)
+
+        static member ClearColor(view : ImageView, aspect : ImageAspect, color : C4f) =
+            let levels = view.MipLevelRange
+            let slices = view.ArrayRange
+            Command.ClearColor(view.Image.[aspect, levels.Min .. levels.Max, slices.Min .. slices.Max], color)
+
+        static member ClearDepthStencil(view : ImageView, aspect : ImageAspect, depth : float, stencil : uint32) =
+            let levels = view.MipLevelRange
+            let slices = view.ArrayRange
+            Command.ClearDepthStencil(view.Image.[aspect, levels.Min .. levels.Max, slices.Min .. slices.Max], depth, stencil)
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ImageView =
 
@@ -126,7 +93,9 @@ module ImageView =
             | _ ->
                 failf "invalid view type: %A" (count, isArray, dim)
 
-    let private viewTypeTex (count : int) (isArray : bool) (dim : TextureDimension) =
+    let private viewTypeTex (count : int) (dim : TextureDimension) =
+        let isArray = count > 1
+
         match dim with
             | TextureDimension.Texture1D ->
                 if isArray then VkImageViewType.D1dArray
@@ -141,9 +110,12 @@ module ImageView =
                 else VkImageViewType.D3d
 
             | TextureDimension.TextureCube ->
-                if count % 6 <> 0 then failf "ill-aligned cube-count %A" count
-                if isArray then VkImageViewType.CubeArray
-                else VkImageViewType.Cube
+                if isArray then
+                    if count % 6 <> 0 then failf "ill-aligned cube-count %A" count
+                    if count / 6 > 1 then VkImageViewType.CubeArray
+                    else VkImageViewType.Cube
+                else
+                    VkImageViewType.D2d
 
             | _ ->
                 failf "invalid view type: %A" (count, isArray, dim)
@@ -273,7 +245,7 @@ module ImageView =
 
         let aspect = VkFormat.toShaderAspect img.Format
 
-        let viewType = viewTypeTex slices (slices > 1) img.Dimension
+        let viewType = viewTypeTex slices img.Dimension
         native {
             let! pInfo = 
                 VkImageViewCreateInfo(

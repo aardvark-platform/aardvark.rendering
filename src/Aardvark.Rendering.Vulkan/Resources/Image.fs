@@ -2187,7 +2187,7 @@ module ``Image Command Extensions`` =
                         Disposable.Empty
                 }
 
-        static member TransformLayout(img : Image, target : VkImageLayout) =
+        static member TransformLayout(img : Image, levels : Range1i, slices : Range1i, target : VkImageLayout) =
             if img.IsNull || target = VkImageLayout.Undefined || target = VkImageLayout.Preinitialized then
                 Command.Nop
             else
@@ -2200,9 +2200,14 @@ module ``Image Command Extensions`` =
                             let source = img.Layout
                             img.Layout <- target
                             let aspect = VkFormat.toAspect img.Format
-                            Command.TransformLayout(img.[unbox (int aspect)], source, target).Enqueue(cmd)
+                            Command.TransformLayout(img.[unbox (int aspect), levels.Min .. levels.Max, slices.Min .. slices.Max], source, target).Enqueue(cmd)
                 }
 
+        static member TransformLayout(img : Image, level : int, slice : int, target : VkImageLayout) =
+            Command.TransformLayout(img, Range1i(level), Range1i(slice), target)
+
+        static member TransformLayout(img : Image, target : VkImageLayout) =
+            Command.TransformLayout(img, Range1i(0, img.MipMapLevels - 1), Range1i(0, img.Count - 1), target)
 
         static member SyncPeers (img : ImageSubresourceLayers, ranges : array<Range1i * Box3i>) =
             { new Command() with
@@ -2274,6 +2279,41 @@ module ``Image Command Extensions`` =
                     Disposable.Empty
             }
 
+        static member SyncPeersDefault(img : Image, dstLayout : VkImageLayout) =
+            if img.PeerHandles.Length > 0 then
+                let device = img.Device
+                let arrayRange = Range1i(0, img.Count - 1)
+                let ranges =
+                    let range = 
+                        { 
+                            frMin = V2i.Zero; 
+                            frMax = img.Size.XY - V2i.II
+                            frLayers = arrayRange
+                        }
+                    range.Split(int device.AllCount)
+
+                command {
+                    do! Command.TransformLayout(img, VkImageLayout.TransferSrcOptimal)
+                    let layers = arrayRange
+                    let layerCount = 1 + layers.Max - layers.Min
+                        
+                    let aspect =
+                        match VkFormat.toImageKind img.Format with
+                            | ImageKind.Depth -> ImageAspect.Depth
+                            | ImageKind.DepthStencil  -> ImageAspect.DepthStencil
+                            | _ -> ImageAspect.Color 
+
+                    let subResource = img.[aspect, 0]
+                    let ranges =
+                        ranges |> Array.map (fun { frMin = min; frMax = max; frLayers = layers} ->
+                            layers, Box3i(V3i(min,0), V3i(max, 0))
+                        )
+
+                    do! Command.SyncPeers(subResource, ranges)
+                    do! Command.TransformLayout(img, dstLayout)
+                }
+            else
+                Command.nop
 
 
 

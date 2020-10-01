@@ -48,79 +48,62 @@ module private AdaptiveFramebufferTypes =
                 create signature att
 
 
-    type AdaptiveFramebufferCube(runtime : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<int>, writeOnly : Set<Symbol>) =
-        inherit AdaptiveResource<IFramebuffer[]>()
+    type AdaptiveFramebufferCube(runtime : IFramebufferRuntime, signature : IFramebufferSignature, attachments : CubeMap<Map<Symbol, aval<IFramebufferOutput>>>) =
+        inherit AdaptiveResource<CubeMap<IFramebuffer>>()
 
-        let store = SymDict.empty
+        let mutable handles : CubeMap<IFramebuffer * Map<Symbol, IFramebufferOutput>> = CubeMap.empty
 
-        let createAttachment (sem : Symbol) (face : CubeSide) (att : AttachmentSignature) =
-            if writeOnly |> Set.contains sem then
-                let rb =
-                    store.GetOrCreate(sem, fun _ ->
-                        runtime.CreateRenderbuffer(att.format, att.samples, size |> AVal.map V2i) :> IAdaptiveResource
-                    ) |> unbox<IAdaptiveResource<IRenderbuffer>>
+        let inputs =
+            attachments
+            |> CubeMap.data
+            |> Array.collect (Map.toArray >> Array.map snd)
 
-                runtime.CreateRenderbufferAttachment(rb) :> aval<_>
-            else
-                let tex =
-                    store.GetOrCreate(sem, fun _ ->
-                        runtime.CreateTextureCube(TextureFormat.ofRenderbufferFormat att.format, att.samples, size) :> IAdaptiveResource
-                    ) |> unbox<IAdaptiveResource<ITexture>>
+        let compare x y =
+            let x = x |> Map.toList |> List.map snd
+            let y = y |> Map.toList |> List.map snd
+            List.forall2 (=) x y
 
-                runtime.CreateTextureAttachment(tex, int face) :> aval<_>
-
-        let mutable handle : Option<IFramebuffer>[] = Array.zeroCreate 6
-
-        let attachments =
-            Array.init 6 (fun face ->
-                let face = unbox<CubeSide> face
-
-                let atts = SymDict.empty
-
-                signature.DepthAttachment |> Option.iter (fun d ->
-                    atts.[DefaultSemantic.Depth] <- createAttachment DefaultSemantic.Depth face d
-                )
-
-                signature.StencilAttachment |> Option.iter (fun s ->
-                    atts.[DefaultSemantic.Stencil] <- createAttachment DefaultSemantic.Stencil face s
-                )
-
-                for (_, (sem, att)) in Map.toSeq signature.ColorAttachments do
-                    atts.[sem] <- createAttachment sem face att
-
-                atts |> SymDict.toMap
-            )
+        let create face level signature att =
+            let fbo = runtime.CreateFramebuffer(signature, att)
+            handles.[face, level] <- (fbo, att)
+            fbo
 
         override x.Create() =
-            for face in 0 .. 5 do
-                for (KeyValue(_, att)) in attachments.[face] do att.Acquire()
+            for att in inputs do att.Acquire()
 
         override x.Destroy() =
-            for face in 0 .. 5 do
-                for (KeyValue(_, att)) in attachments.[face] do att.Release()
-                match handle.[face] with
-                | Some h ->
-                    runtime.DeleteFramebuffer(h)
-                    handle.[face] <- None
-                | None -> ()
+            for att in inputs do att.Release()
 
-        override x.Compute(token : AdaptiveToken, t : RenderToken) =
-            attachments |> Array.mapi (fun i attachments ->
+            for (fbo, _) in handles do
+                runtime.DeleteFramebuffer(fbo)
+
+            handles <- CubeMap.empty
+
+        override x.Compute(t : AdaptiveToken, rt : RenderToken) =
+
+            let empty =
+                if handles.IsEmpty then
+                    handles <- CubeMap(attachments.Levels)
+                    true
+                else
+                    false
+
+            attachments |> CubeMap.mapi (fun face level attachments ->
                 let att =
-                    attachments |> Map.map (fun _ att -> att.GetValue(token, t))
+                    attachments |> Map.map (fun _ att -> att.GetValue(t, rt))
 
-                match handle.[i] with
-                | Some h ->
-                    runtime.DeleteFramebuffer(h)
-                    t.ReplacedResource(ResourceKind.Framebuffer)
-                | None ->
-                    t.CreatedResource(ResourceKind.Framebuffer)
-
-                let fbo = runtime.CreateFramebuffer(signature, att)
-                handle.[i] <- Some fbo
-                fbo
+                if empty then
+                    rt.CreatedResource(ResourceKind.Framebuffer)
+                    create face level signature att
+                else
+                    let (h, att') = handles.[face, level]
+                    if compare att att' then
+                        h
+                    else
+                        rt.ReplacedResource(ResourceKind.Framebuffer)
+                        runtime.DeleteFramebuffer(h)
+                        create face level signature att
             )
-
 
 [<AbstractClass; Sealed; Extension>]
 type IFramebufferRuntimeAdaptiveExtensions private() =
@@ -204,14 +187,76 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
     // FramebufferCube
     // ================================================================================================================
 
+    /// Creates a framebuffer with the given adaptive attachments.
+    [<Extension>]
+    static member CreateFramebufferCube(this : IFramebufferRuntime, signature : IFramebufferSignature, attachments : CubeMap<Map<Symbol, #aval<IFramebufferOutput>>>) =
+        let atts = attachments |> CubeMap.map (Map.map (fun _ x -> x :> aval<_>))
+        AdaptiveFramebufferCube(this, signature, atts) :> IAdaptiveResource<_>
+
+    /// Creates a framebuffer with the given sequence of adaptive attachments.
+    /// Each consecutive six elements represent a mip level, face indices within a level are determined by
+    /// the CubeSide enumeration.
+    [<Extension>]
+    static member CreateFramebufferCube(this : IFramebufferRuntime, signature : IFramebufferSignature, attachments : Map<Symbol, #aval<IFramebufferOutput>> seq) =
+        let atts = CubeMap(attachments)
+        this.CreateFramebufferCube(signature, atts)
+
+    /// Creates a cube framebuffer of the given signature for the given adaptive size and number of levels.
+    /// writeOnly indicates which attachments can be represented as render buffers instead of textures.
+    [<Extension>]
+    static member CreateFramebufferCube(this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<int>, levels : int, writeOnly : Set<Symbol>) =
+        let store = SymDict.empty
+
+        let createAttachment (sem : Symbol) (face : CubeSide) (level : int) (att : AttachmentSignature) =
+            if writeOnly |> Set.contains sem then
+                let rb =
+                    store.GetOrCreate(sem, fun _ ->
+                        this.CreateRenderbuffer(att.format, att.samples, size |> AVal.map V2i) :> IAdaptiveResource
+                    ) |> unbox<IAdaptiveResource<IRenderbuffer>>
+
+                this.CreateRenderbufferAttachment(rb) :> aval<_>
+            else
+                let tex =
+                    store.GetOrCreate(sem, fun _ ->
+                        this.CreateTextureCube(TextureFormat.ofRenderbufferFormat att.format, levels, att.samples, size) :> IAdaptiveResource
+                    ) |> unbox<IAdaptiveResource<ITexture>>
+
+                this.CreateTextureAttachment(tex, int face, level) :> aval<_>
+
+        let attachments =
+            CubeMap.init levels (fun face level ->
+                let atts = SymDict.empty
+
+                signature.DepthAttachment |> Option.iter (fun d ->
+                    atts.[DefaultSemantic.Depth] <- createAttachment DefaultSemantic.Depth face level d
+                )
+
+                signature.StencilAttachment |> Option.iter (fun s ->
+                    atts.[DefaultSemantic.Stencil] <- createAttachment DefaultSemantic.Stencil face level s
+                )
+
+                for (_, (sem, att)) in Map.toSeq signature.ColorAttachments do
+                    atts.[sem] <- createAttachment sem face level att
+
+                atts |> SymDict.toMap
+            )
+
+        this.CreateFramebufferCube(signature, attachments)
+
+    /// Creates a cube framebuffer of the given signature for the given adaptive size and number of levels.
+    /// Textures are used for all attachments except depth and stencil.
+    [<Extension>]
+    static member CreateFramebufferCube(this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<int>, levels : int) =
+        this.CreateFramebufferCube(signature, size, levels, Set.ofList [DefaultSemantic.Depth; DefaultSemantic.Stencil])
+
     /// Creates a cube framebuffer of the given signature for the given adaptive size.
     /// writeOnly indicates which attachments can be represented as render buffers instead of textures.
     [<Extension>]
     static member CreateFramebufferCube(this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<int>, writeOnly : Set<Symbol>) =
-        AdaptiveFramebufferCube(this, signature, size, writeOnly) :> IAdaptiveResource<_>
+        this.CreateFramebufferCube(signature, size, 1, writeOnly)
 
     /// Creates a cube framebuffer of the given signature for the given adaptive size.
     /// Textures are used for all attachments except depth and stencil.
     [<Extension>]
     static member CreateFramebufferCube(this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<int>) =
-        this.CreateFramebufferCube(signature, size, Set.ofList [DefaultSemantic.Depth; DefaultSemantic.Stencil])
+        this.CreateFramebufferCube(signature, size, 1)

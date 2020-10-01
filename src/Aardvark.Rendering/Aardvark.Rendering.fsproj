@@ -28,6 +28,8 @@
     <Compile Include="Utilities\ArrayVisitor.fs" />
     <Compile Include="Utilities\Timer.fs" />
     <Compile Include="Utilities\Memory.fs" />
+    <Compile Include="Utilities\Trie.fs" />
+    <Compile Include="Utilities\CubeMap.fs" />
     <Compile Include="Resources\Buffers\Buffers.fs" />
     <Compile Include="Resources\Buffers\ArrayBuffer.fs" />
     <Compile Include="Resources\Buffers\SingleValueBuffer.fs" />
@@ -128,7 +130,6 @@
     <Compile Include="Effects\Default\Impl\InstanceTrafo.fs" />
     <Compile Include="Effects\Default\DefaultSurfaces.fs" />
     <Compile Include="Effects\Effect.fs" />
-    <Compile Include="Utilities\Trie.fs" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

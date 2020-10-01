@@ -53,7 +53,7 @@ module Framebuffer =
                 |> Array.map (fun (idx, sem) ->
                     match Map.tryFind sem views with
                         | Some view -> 
-                            let s = view.Image.Size.XY
+                            let s = view.Image.Size.XY / (1 <<< view.MipLevelRange.Max)
                             minSize <- V2i(min minSize.X s.X, min minSize.Y s.Y)
                             minLayers <- min minLayers (1 + view.ArrayRange.Max - view.ArrayRange.Min)
                             view

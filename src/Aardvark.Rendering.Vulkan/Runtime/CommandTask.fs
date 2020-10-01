@@ -2276,12 +2276,12 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
         cmd.enqueue {
             let oldLayouts = Array.zeroCreate fbo.ImageViews.Length
             for i in 0 .. fbo.ImageViews.Length - 1 do
-                let img = fbo.ImageViews.[i].Image
-                oldLayouts.[i] <- img.Layout
-                if VkFormat.hasDepth img.Format then
-                    do! Command.TransformLayout(img, VkImageLayout.DepthStencilAttachmentOptimal)
+                let view = fbo.ImageViews.[i]
+                oldLayouts.[i] <- view.Image.Layout
+                if VkFormat.hasDepth view.Image.Format then
+                    do! Command.TransformLayout(view, VkImageLayout.DepthStencilAttachmentOptimal)
                 else
-                    do! Command.TransformLayout(img, VkImageLayout.ColorAttachmentOptimal)
+                    do! Command.TransformLayout(view, VkImageLayout.ColorAttachmentOptimal)
 
             do! Command.BeginPass(renderPass, fbo, false)
             do! Command.Execute [inner]
@@ -2297,8 +2297,8 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
                     )
 
             for i in 0 .. fbo.ImageViews.Length - 1 do
-                let img = fbo.ImageViews.[i].Image
-                do! Command.TransformLayout(img, oldLayouts.[i])
+                let view = fbo.ImageViews.[i]
+                do! Command.TransformLayout(view, oldLayouts.[i])
         }
 
         for q in vulkanQueries do

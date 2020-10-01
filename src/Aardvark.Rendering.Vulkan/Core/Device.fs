@@ -1391,6 +1391,7 @@ and CommandPool internal(device : Device, familyIndex : int, queueFamily : Devic
     member x.Destroy() =
         if handle.IsValid && device.Handle <> 0n then
             VkRaw.vkDestroyCommandPool(device.Handle, handle, NativePtr.zero)
+            handle <- VkCommandPool.Null
 
     abstract member Dispose : unit -> unit
     default x.Dispose() = x.Destroy()

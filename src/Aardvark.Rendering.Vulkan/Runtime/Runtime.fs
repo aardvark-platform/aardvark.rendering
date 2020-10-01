@@ -244,16 +244,19 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         x.CreateTexture(V3i(size, 1), TextureDimension.Texture2D, format, count, levels, samples)
 
     member x.CreateTextureCube(size : int, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
-        let isDepth =
-            TextureFormat.hasDepth format
-
         let layout =
-            if isDepth then VkImageLayout.DepthStencilAttachmentOptimal
-            else VkImageLayout.ColorAttachmentOptimal
+            VkImageLayout.ShaderReadOnlyOptimal
 
         let usage =
-            if isDepth then VkImageUsageFlags.DepthStencilAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
-            else VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.SampledBit
+            let def =
+                VkImageUsageFlags.TransferSrcBit |||
+                VkImageUsageFlags.TransferDstBit |||
+                VkImageUsageFlags.SampledBit
+
+            if TextureFormat.hasDepth format then
+                def ||| VkImageUsageFlags.DepthStencilAttachmentBit
+            else
+                def ||| VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.StorageBit
 
         let img = device.CreateImage(V3i(size, size, 1), levels, 6, samples, TextureDimension.TextureCube, format, usage) 
         device.GraphicsFamily.run {

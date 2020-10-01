@@ -1062,16 +1062,15 @@ module RenderTask =
 
                     let views = fbo.ImageViews
                     for (index, color) in colors |> Map.toSeq do
-                        let image = views.[index].Image
-                        do! Command.ClearColor(image.[ImageAspect.Color], color)
+                        do! Command.ClearColor(views.[index], ImageAspect.Color, color)
 
                     if renderPassDepthAspect <> ImageAspect.None then
-                        let image = views.[views.Length-1].Image
+                        let view = views.[views.Length - 1]
                         match depth, stencil with
-                            | Some d, Some s    -> do! Command.ClearDepthStencil(image.[renderPassDepthAspect], d, s)
-                            | Some d, None      -> do! Command.ClearDepthStencil(image.[ImageAspect.Depth], d, 0u)
-                            | None, Some s      -> do! Command.ClearDepthStencil(image.[ImageAspect.Stencil], 0.0, s)
-                            | None, None        -> ()
+                        | Some d, Some s -> do! Command.ClearDepthStencil(view, renderPassDepthAspect, d, s)
+                        | Some d, None   -> do! Command.ClearDepthStencil(view, ImageAspect.Depth, d, 0u)
+                        | None, Some s   -> do! Command.ClearDepthStencil(view, ImageAspect.Stencil, 0.0, s)
+                        | None, None     -> ()
 
                     for q in vulkanQueries do
                         do! Command.End q
