@@ -7,8 +7,8 @@ type HeadlessVulkanApplication(debug : bool, instanceExtensions : list<string>, 
         [
             yield! instanceExtensions
 
-            yield "VK_EXT_shader_subgroup_ballot"
-            yield "VK_EXT_shader_subgroup_vote"
+            yield Instance.Extensions.ShaderSubgroupVote
+            yield Instance.Extensions.ShaderSubgroupBallot
             yield Instance.Extensions.GetPhysicalDeviceProperties2
             if debug then
                 yield Instance.Extensions.DebugReport
@@ -19,7 +19,7 @@ type HeadlessVulkanApplication(debug : bool, instanceExtensions : list<string>, 
         [
             if debug then
                 yield Instance.Layers.StandardValidation
-                yield "VK_LAYER_LUNARG_assistant_layer"
+                yield Instance.Layers.AssistantLayer
         ]
 
     let instance = 

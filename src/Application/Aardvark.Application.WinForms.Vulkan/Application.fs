@@ -96,8 +96,8 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
             yield Instance.Extensions.XcbSurface
             yield Instance.Extensions.XlibSurface
 
-            yield "VK_EXT_shader_subgroup_ballot"
-            yield "VK_EXT_shader_subgroup_vote"
+            yield Instance.Extensions.ShaderSubgroupVote
+            yield Instance.Extensions.ShaderSubgroupBallot
             yield Instance.Extensions.GetPhysicalDeviceProperties2
 
             if debug then
@@ -109,7 +109,7 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
         [
             if debug then
                 yield Instance.Layers.StandardValidation
-                yield "VK_LAYER_LUNARG_assistant_layer"
+                yield Instance.Layers.AssistantLayer
         ]
 
     let instance = 

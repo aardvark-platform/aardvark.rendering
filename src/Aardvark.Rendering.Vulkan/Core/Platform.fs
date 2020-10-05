@@ -516,20 +516,23 @@ and PhysicalDeviceGroup internal(instance : Instance, devices : PhysicalDevice[]
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Instance =
     module Extensions =
-        let DebugReport         = "VK_EXT_debug_report"
-        let DebugUtils          = "VK_EXT_debug_utils"
-        let Surface             = "VK_KHR_surface"
-        let SwapChain           = "VK_KHR_swapchain"
-        let Display             = "VK_KHR_display"
-        let DisplaySwapChain    = "VK_KHR_display_swapchain"
+        let DebugReport                     = EXTDebugReport.Name
+        let DebugUtils                      = EXTDebugUtils.Name
+        let Surface                         = KHRSurface.Name
+        let SwapChain                       = KHRSwapchain.Name
+        let Display                         = KHRDisplay.Name
+        let DisplaySwapChain                = KHRDisplaySwapchain.Name
 
-        let AndroidSurface      = "VK_KHR_android_surface"
-        let MirSurface          = "VK_KHR_mir_surface"
-        let WaylandSurface      = "VK_KHR_wayland_surface"
-        let Win32Surface        = "VK_KHR_win32_surface"
-        let XcbSurface          = "VK_KHR_xcb_surface"
-        let XlibSurface         = "VK_KHR_xlib_surface"
-        let GetPhysicalDeviceProperties2 = "VK_KHR_get_physical_device_properties2"
+        let AndroidSurface                  = KHRAndroidSurface.Name
+        let MirSurface                      = KHRMirSurface.Name
+        let WaylandSurface                  = KHRWaylandSurface.Name
+        let Win32Surface                    = KHRWin32Surface.Name
+        let XcbSurface                      = KHRXcbSurface.Name
+        let XlibSurface                     = KHRXlibSurface.Name
+        let GetPhysicalDeviceProperties2    = KHRGetPhysicalDeviceProperties2.Name
+
+        let ShaderSubgroupVote              = EXTShaderSubgroupVote.Name
+        let ShaderSubgroupBallot            = EXTShaderSubgroupBallot.Name
 
     module Layers =
         let ApiDump             = "VK_LAYER_LUNARG_api_dump"
@@ -549,13 +552,7 @@ module Instance =
         let CoreValidation      = "VK_LAYER_LUNARG_core_validation"
         let AssistantLayer      = "VK_LAYER_LUNARG_assistant_layer"
         let Validation          = "VK_LAYER_KHRONOS_validation"
-
-
         let Nsight              = "VK_LAYER_NV_nsight"
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module PhysicalDevice =
-    module Extensions =
-        let SwapChain = "VK_KHR_swapchain"
 
 
 
