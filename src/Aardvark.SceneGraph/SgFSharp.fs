@@ -37,6 +37,30 @@ module SgFSharp =
                 ((^z or ^Name) : (static member GetSymbol : ^Name -> Symbol) (name))
 
 
+        module private AdaptiveResource =
+
+            // Using a normal AVal.map breaks the extension methods
+            // for acquiring and releasing resources.
+            type MapResource<'a, 'b>(mapping : 'a -> 'b, input : aval<'a>) =
+                inherit AdaptiveResource<'b>()
+
+                let output = input |> AVal.map mapping
+
+                override x.Create() =
+                    input.Acquire()
+
+                override x.Destroy() =
+                    input.Release()
+
+                override x.Compute(t, rt) =
+                    output.GetValue(t, rt)
+
+            /// Maps an adaptive value according to the given function, while
+            /// maintaining resource semantics.
+            let map (mapping : 'a -> 'b) (value : aval<'a>) =
+                MapResource(mapping, value) :> aval<'b>
+
+
         // Utilities to create cached buffer views
         module Caching =
 
@@ -80,7 +104,7 @@ module SgFSharp =
                 match textureCache.TryGetValue t with
                 | (true, r) -> r
                 | _ ->
-                    let r = t |> AVal.map (fun x -> x :> ITexture)
+                    let r = t |> AdaptiveResource.map (fun x -> x :> ITexture)
                     textureCache.Add(t, r)
                     r
 

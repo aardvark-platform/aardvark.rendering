@@ -103,17 +103,17 @@ type IAdaptiveResourceExtensions() =
     [<Extension>]
     static member inline Acquire(this : aval<'a>) =
         match this with
-        | :? IAdaptiveResource<'a> as o -> o.Acquire()
+        | :? IAdaptiveResource as o -> o.Acquire()
         | _ -> ()
 
     [<Extension>]
     static member inline Release(this : aval<'a>) =
         match this with
-        | :? IAdaptiveResource<'a> as o -> o.Release()
+        | :? IAdaptiveResource as o -> o.Release()
         | _ -> ()
 
     [<Extension>]
     static member inline ReleaseAll(this : aval<'a>, [<Optional; DefaultParameterValue(false)>] force : bool) =
         match this with
-        | :? IAdaptiveResource<'a> as o -> o.ReleaseAll(force)
+        | :? IAdaptiveResource as o -> o.ReleaseAll(force)
         | _ -> ()

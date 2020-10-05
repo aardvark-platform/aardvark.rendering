@@ -87,4 +87,6 @@ let main argv =
     win.Scene <- sg
     win.Run(preventDisposal = true)
 
+    runtime.DeleteFramebufferSignature(signature)
+
     0
