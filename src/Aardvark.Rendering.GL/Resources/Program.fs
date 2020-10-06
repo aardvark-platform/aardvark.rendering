@@ -85,38 +85,21 @@ module ProgramExtensions =
 
         let get (ctx : Context) =   
             backendCache.GetOrAdd(ctx, fun ctx ->
-                let mutable enabledGLSLExts = Set.empty
 
                 let bindingMode = 
                     if ctx.Driver.glsl >= Version(4,3) then BindingMode.PerKind
                     else BindingMode.None
 
-                let conservativeDepth =
-                    if ctx.Driver.glsl >= Version(4,2) then true
-                    elif Set.contains "GL_ARB_conservative_depth" ctx.Driver.extensions then 
-                        enabledGLSLExts <- Set.add "GL_ARB_conservative_depth" enabledGLSLExts
-                        true
-                    else
-                        false
-                    
                 let uniformBuffers =
-                    if ctx.Driver.version >= Version(3,1) then true
-                    elif Set.contains "GL_ARB_uniform_buffer_object" ctx.Driver.extensions then 
-                        enabledGLSLExts <- Set.add "GL_ARB_uniform_buffer_object" enabledGLSLExts
-                        true
-                    else
-                        false
+                    ctx.Driver.version >= Version(3,1) || Set.contains "GL_ARB_Uniform_Buffer_Object" ctx.Driver.extensions
 
                 let locations =
                     ctx.Driver.glsl >= Version(3,3) 
-                    
-                let inout =
-                    ctx.Driver.glsl >= Version(1,3) 
 
                 let cfg = 
                     { 
-                        version = GLSLVersion(ctx.Driver.glsl.Major, ctx.Driver.glsl.Minor, 0)
-                        enabledExtensions = enabledGLSLExts
+                        version = ctx.Driver.glsl
+                        enabledExtensions = Set.empty
                         createUniformBuffers = uniformBuffers
                         bindingMode = bindingMode
                         createDescriptorSets = false
@@ -124,10 +107,6 @@ module ProgramExtensions =
                         createInputLocations = locations
                         createPerStageUniforms = false
                         reverseMatrixLogic = true
-                        createOutputLocations = locations
-                        createPassingLocations = locations
-                        depthWriteMode = conservativeDepth
-                        useInOut = inout
                     }
                 Backend.Create cfg
             )

@@ -31,7 +31,7 @@ module PipelineInfo =
 
     let fshadeBackend =
         FShade.GLSL.Backend.Create {
-            version                 = FShade.GLSL.GLSLVersion(4,5,0)
+            version                 = Version(4,5)
             enabledExtensions       = Set.ofList [ "GL_ARB_tessellation_shader"; "GL_ARB_separate_shader_objects"; "GL_ARB_shading_language_420pack" ]
             createUniformBuffers    = true
             bindingMode             = GLSL.BindingMode.Global
@@ -40,10 +40,6 @@ module PipelineInfo =
             createInputLocations    = true
             createPerStageUniforms  = false
             reverseMatrixLogic      = true
-            createOutputLocations   = true
-            createPassingLocations  = true
-            depthWriteMode          = true
-            useInOut                = true
         }
 
     let fshadeConfig =
