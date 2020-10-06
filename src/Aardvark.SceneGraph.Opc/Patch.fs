@@ -65,7 +65,8 @@ module Patch =
 
     let extractTexturePath (opcPaths : OpcPaths) (patchInfo : PatchFileInfo) (texNumber : int) =
         let t = patchInfo.Textures |> List.item texNumber
-        let sourcePath = opcPaths.Images_DirAbsPath +/ t.fileName
+        let fn = t.fileName.Replace('\\',System.IO.Path.DirectorySeparatorChar)
+        let sourcePath = opcPaths.Images_DirAbsPath +/ fn
         let extensions = [ ".dds"; ".tif"; ".tiff"]
 
         let rec tryFindTex exts path =

@@ -31,44 +31,77 @@ type Driver = { device : GPUVendor; vendor : string; renderer : string; glsl : V
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Driver =
 
-    let private versionRx = Regex @"([0-9]+\.)*[0-9]+"
+    let private versionRx = Regex @"^[ \t\r\n]*((?:[0-9]+\.)*[0-9]+)"
 
-    let rec clean (v : int) =
-        if v = 0 then 0
-        elif v % 10 = 0 then clean (v / 10)
-        else v
+  
+    let parseGLVersion (str : string) =
+        let m = versionRx.Match str
+        if m.Success then
+            let str = m.Groups.[1].Value
 
-    let parseVersion (str : string) =
-        if str.IsEmptyOrNull() then
-            Version()
+            let v = 
+                str.Split('.') 
+                |> Array.map Int32.Parse 
+                |> Array.toList
+                //|> List.collect clean 
+
+            match v with
+            | [] -> failwithf "could not read version from: %A" str
+            | [a] -> Version(a, 0, 0)
+            | [a;b] -> Version(a, b, 0)
+            | a::b::c::_ -> Version(a, b, c)
         else
-            let m = versionRx.Match str
-            if m.Success then
-                let str = m.Value
+            failwithf "could not read version from: %A" str
 
-                let v = str.Split('.') |> Array.map Int32.Parse |> Array.map clean |> Array.map string |> String.concat "."
+    let parseGLSLVersion (str : string) =
+        let m = versionRx.Match str
+        if m.Success then
+            let str = m.Groups.[1].Value
 
-                Version.Parse v
-            else
-                Log.warn "could not read version from: %A" str
-                Version()
+            let v = 
+                str.Split('.') 
+                |> Array.map Int32.Parse 
+                |> Array.toList
+
+            match v with
+            | [] -> failwithf "could not read version from: %A" str
+            | [a] -> Version(a, 0, 0)
+            | a::b::_ -> 
+                if b > 9 then
+                    Version(a, b/10, b%10)
+                else 
+                    Version(a, b, 0)
+        else
+            failwithf "could not read version from: %A" str
 
 
     let readInfo() =
-        let vendor = GL.GetString(StringName.Vendor)
-        let renderer = GL.GetString(StringName.Renderer)
+        let vendor = GL.GetString(StringName.Vendor)  
+        Report.Line(4, "[GL] vendor: {0}", vendor)
+        let renderer = GL.GetString(StringName.Renderer)  
+        Report.Line(4, "[GL] renderer: {0}", renderer)
         let versionStr = GL.GetString(StringName.Version)
-        let version = versionStr |> parseVersion
-        let glslVersion = GL.GetString(StringName.ShadingLanguageVersion) |> parseVersion
+        Report.Line(4, "[GL] version: {0}", versionStr)
+        let version = 
+            parseGLVersion versionStr
+
+        let glslVersion = 
+            let str = GL.GetString(StringName.ShadingLanguageVersion)
+            Report.Line(4, "[GL] glsl: {0}", str)
+            parseGLSLVersion str
         let profileMask =  GL.GetInteger(unbox<_> OpenTK.Graphics.OpenGL4.All.ContextProfileMask)
+        Report.Line(4, "[GL] profileMask: {0}", profileMask)
         let contextFlags = GL.GetInteger(GetPName.ContextFlags)
+        Report.Line(4, "[GL] contextFlags: {0}", contextFlags)
 
         let mutable extensions = Set.empty
         let extensionCount = GL.GetInteger(0x821d |> unbox<GetPName>) // GL_NUM_EXTENSIONS
+        Report.Begin(4, "[GL] extensions")
         for i in 0..extensionCount-1 do
             let name = GL.GetString(StringNameIndexed.Extensions, i)
+            Report.Line(4, "{0}", name)
             extensions <- Set.add name extensions
-
+        Report.End(4) |> ignore
 
         let pat = (vendor + "_" + renderer).ToLower()
         let gpu =
