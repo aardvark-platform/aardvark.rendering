@@ -85,11 +85,25 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                     | _ ->
                         Report.Line("[Vulkan] DEBUG: {0}", str)
 
+    let debugSummary() =
+        if device.DebugReportActive then
+            let messages = instance.DebugSummary.messageCounts
+
+            if not messages.IsEmpty then
+                let summary =
+                    messages
+                    |> Seq.map (fun (KeyValue(s, n)) -> sprintf "%A: %d" s n)
+                    |> Seq.reduce (fun a b -> a + ", " + b)
+
+                Report.Begin("[Vulkan] Message summary")
+                Report.Line(2, summary)
+                Report.End() |> ignore
+
     // install debug output to file (and errors/warnings to console)
     let debugSubscription = 
         if debug then 
-            let res = instance.DebugMessages.Subscribe debugMessage
-            instance.RaiseDebugMessage(MessageSeverity.Warning, "enabled debug report")
+            let res = instance.DebugMessages.Subscribe(debugMessage, debugSummary)
+            instance.RaiseDebugMessage(MessageSeverity.Information, "Enabled debug report")
             res
         else 
             { new IDisposable with member x.Dispose() = () }

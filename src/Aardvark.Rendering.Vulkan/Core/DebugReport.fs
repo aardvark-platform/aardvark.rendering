@@ -30,6 +30,11 @@ type DebugMessage =
         message         : string
     }
 
+type DebugSummary =
+    {
+        messageCounts   : Map<MessageSeverity, int>
+    }
+
 [<AutoOpen>]
 module private DebugReportHelpers =
     open System.Security.Cryptography
@@ -87,10 +92,12 @@ module private DebugReportHelpers =
 
 
         let mutable verbosity = MessageSeverity.Information
+        let mutable tracingEnabled = false
         let mutable refCount = 0
         let mutable currentId = 0
         let observers = ConcurrentDictionary<int, IObserver<DebugMessage>>()
         let objectTraces = ConcurrentDictionary<uint64, string[]>()
+        let messageCounts = ConcurrentDictionary<MessageSeverity, int>()
 
         let shutdown () =
             for (KeyValue(_,obs)) in observers do
@@ -105,6 +112,8 @@ module private DebugReportHelpers =
         let callback (severity : VkDebugUtilsMessageSeverityFlagsEXT) (messageType : VkDebugUtilsMessageTypeFlagsEXT) (data : nativeptr<VkDebugUtilsMessengerCallbackDataEXT>) (userData : nativeint) =
             let severity = VkDebugUtilsMessageSeverityFlagsEXT.toMessageSeverity severity
             if severity <= verbosity then
+                messageCounts.AddOrUpdate(severity, 1, fun _ -> (+) 1) |> ignore
+
                 let data = NativePtr.read data
 
                 let messageIdName =
@@ -128,7 +137,7 @@ module private DebugReportHelpers =
 
                         let trace =
                             match objectTraces.TryGetValue(o.objectHandle) with
-                            | (true, t) when t.Length > 0 ->
+                            | (true, t) ->
                                 t |> Array.toList |> List.map (fun str -> indent 4 + str)
                             | _ ->
                                 []
@@ -216,6 +225,7 @@ module private DebugReportHelpers =
         let remove (id : int) =
             match observers.TryRemove id with
                 | (true, obs) ->
+                    obs.OnCompleted()
                     let n = Interlocked.Decrement(&refCount)
                     if n = 0 then
                         gc.Free()
@@ -227,9 +237,17 @@ module private DebugReportHelpers =
 
         let layer = CStr.malloc "DebugReport"
 
+        member x.DebugSummary =
+            let counts = messageCounts |> Seq.map (fun (KeyValue(s, n)) -> s, n) |> Map.ofSeq
+            { messageCounts = counts }
+
         member x.Verbosity
             with get() = verbosity
             and set v = verbosity <- v
+
+        member x.TracingEnabled
+            with get() = tracingEnabled
+            and set v = tracingEnabled <- v
 
         interface IObservable<DebugMessage> with
             member x.Subscribe (observer : IObserver<DebugMessage>) =
@@ -271,20 +289,22 @@ module private DebugReportHelpers =
             }
 
         member x.TraceObject(handle : uint64) =
-            let stack =
-                let trace = StackTrace(true)
-                let frames = trace.GetFrames()
+            let formatFrame (f : StackFrame) =
+                let method = f.GetMethod()
+                let fname = Path.GetFileName <| f.GetFileName()
+                let line = f.GetFileLineNumber()
+                sprintf "%A.%s() in %s:%d" method.DeclaringType method.Name fname line
 
-                frames
-                |> Array.map (fun f ->
-                    let method = f.GetMethod()
-                    let fname = Path.GetFileName <| f.GetFileName()
-                    let line = f.GetFileLineNumber()
-                    sprintf "%A.%s() in %s:%d" method.DeclaringType method.Name fname line
-                )
-                |> Array.skip (min 3 frames.Length)
+            if tracingEnabled then
+                let stack =
+                    let trace = StackTrace(true)
+                    let frames = trace.GetFrames()
 
-            objectTraces.AddOrUpdate(handle, stack, fun _ _ -> stack) |> ignore
+                    frames
+                    |> Array.map formatFrame
+                    |> Array.skip (min 3 frames.Length)
+
+                objectTraces.AddOrUpdate(handle, stack, fun _ _ -> stack) |> ignore
 
 [<AbstractClass; Sealed; Extension>]
 type InstanceExtensions private() =
@@ -335,6 +355,12 @@ type InstanceExtensions private() =
         | _ -> ()
 
     [<Extension>]
+    static member GetDebugSummary(this : Instance) =
+        match getAdapter this with
+        | Some a -> a.DebugSummary
+        | _ -> { messageCounts = Map.empty }
+
+    [<Extension>]
     static member GetDebugVerbosity(this : Instance) =
         match getAdapter this with
         | Some a -> a.Verbosity
@@ -344,6 +370,20 @@ type InstanceExtensions private() =
     static member SetDebugVerbosity(this : Instance, v : MessageSeverity) =
         match getAdapter this with
         | Some a -> a.Verbosity <- v
+        | _ -> ()
+
+    /// Returns whether object tracing is enabled.
+    [<Extension>]
+    static member GetDebugTracingEnabled(this : Instance) =
+        match getAdapter this with
+        | Some a -> a.TracingEnabled
+        | _ -> false
+
+    /// Enables or disables object tracing.
+    [<Extension>]
+    static member SetDebugTracingEnabled(this : Instance, enabled : bool) =
+        match getAdapter this with
+        | Some a -> a.TracingEnabled <- enabled
         | _ -> ()
 
     /// Adds the object with the given handle for tracing its origin, which is displayed
@@ -376,7 +416,13 @@ module ``FSharp Style Debug Extensions`` =
     type Instance with
         member x.DebugMessages = x.GetDebugMessageObservable()
 
+        member x.DebugSummary = x.GetDebugSummary()
+
         member x.DebugVerbosity
             with get() = x.GetDebugVerbosity()
             and set v = x.SetDebugVerbosity(v)
+
+        member x.DebugTracingEnabled
+            with get() = x.GetDebugTracingEnabled()
+            and set v = x.SetDebugTracingEnabled(v)
 
