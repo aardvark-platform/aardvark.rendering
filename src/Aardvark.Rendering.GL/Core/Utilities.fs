@@ -53,6 +53,9 @@ module Driver =
         else
             failwithf "could not read version from: %A" str
 
+    let tryParseGLVersion (str : string) =
+        try Some (parseGLVersion str) with _ -> None
+
     let parseGLSLVersion (str : string) =
         let m = versionRx.Match str
         if m.Success then
@@ -74,6 +77,9 @@ module Driver =
         else
             failwithf "could not read version from: %A" str
 
+    let tryParseGLSLVersion (str : string) =
+        try Some (parseGLSLVersion str) with _ -> None
+
 
     let readInfo() =
         let vendor = GL.GetString(StringName.Vendor)  
@@ -83,12 +89,12 @@ module Driver =
         let versionStr = GL.GetString(StringName.Version)
         Report.Line(4, "[GL] version: {0}", versionStr)
         let version = 
-            parseGLVersion versionStr
+            versionStr |> tryParseGLVersion |> Option.defaultValue (Version())
 
         let glslVersion = 
             let str = GL.GetString(StringName.ShadingLanguageVersion)
             Report.Line(4, "[GL] glsl: {0}", str)
-            parseGLSLVersion str
+            str |> tryParseGLSLVersion |> Option.defaultValue (Version())
         let profileMask =  GL.GetInteger(unbox<_> OpenTK.Graphics.OpenGL4.All.ContextProfileMask)
         Report.Line(4, "[GL] profileMask: {0}", profileMask)
         let contextFlags = GL.GetInteger(GetPName.ContextFlags)
