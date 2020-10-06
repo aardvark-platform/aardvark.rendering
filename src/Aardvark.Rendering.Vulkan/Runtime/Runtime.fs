@@ -312,9 +312,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     member x.Dispose() = 
         onDispose.Trigger()
-        debugSubscription.Dispose()
         manager.Dispose()
         device.Dispose()
+        debugSubscription.Dispose()
         
     interface IDisposable with
         member x.Dispose() = x.Dispose() 

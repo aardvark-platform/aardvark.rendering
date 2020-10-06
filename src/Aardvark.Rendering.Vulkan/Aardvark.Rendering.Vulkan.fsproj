@@ -33,6 +33,7 @@
     <Compile Include="Core\Limits.fs" />
     <Compile Include="Core\Features.fs" />
     <Compile Include="Core\Platform.fs" />
+    <Compile Include="Core\DebugReport.fs" />
     <Compile Include="Core\Device.fs" />
     <Compile Include="Core\Commands.fs" />
     <Compile Include="Core\ShaderInterface.fs" />
@@ -69,7 +70,6 @@
     <Compile Include="Swapchain\Swapchain.fs" />
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
-    <Compile Include="Runtime\DebugReport.fs" />
     <Compile Include="Runtime\GraphicsCommands.fs" />
     <Compile Include="Runtime\CommandTask.fs" />
     <Compile Include="Runtime\Compiler.fs" />

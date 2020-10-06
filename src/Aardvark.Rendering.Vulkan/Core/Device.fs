@@ -930,7 +930,10 @@ and [<AbstractClass>] Resource<'a when 'a : unmanaged and 'a : equality> =
         override x.IsValid =
             not x.Device.IsDisposed && x.Handle <> Unchecked.defaultof<_>
 
-        new(device : Device, handle : 'a) = 
+        new(device : Device, handle : 'a) =
+            #if DEBUG
+            handle |> pin device.Instance.RegisterDebugTrace
+            #endif
             { inherit Resource(device); Handle = handle }
     end
 
@@ -941,7 +944,6 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
             VkRaw.vkGetDeviceQueue(deviceHandle, uint32 familyInfo.index, uint32 index, pQueue)
             NativePtr.read pQueue
         )
-
 
     let transfer = QueueFlags.transfer familyInfo.flags
     let compute = QueueFlags.compute familyInfo.flags
@@ -1377,6 +1379,10 @@ and CommandPool internal(device : Device, familyIndex : int, queueFamily : Devic
             )
         )
 
+    #if DEBUG
+    do device.Instance.RegisterDebugTrace(handle.Handle)
+    #endif
+
     internal new(device : Device, familyIndex : int, queueFamily : DeviceQueueFamily) =
         new CommandPool(device, familyIndex, queueFamily, CommandPoolFlags.None)
 
@@ -1417,6 +1423,10 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
 
             return !!pHandle
         }
+
+    #if DEBUG
+    do device.Instance.RegisterDebugTrace(handle)
+    #endif
 
     let mutable commands = 0
     let mutable recording = false
@@ -1593,6 +1603,10 @@ and Fence internal(device : Device, signaled : bool) =
                 |> check "could not create fence"
         }
 
+    #if DEBUG
+    do device.Instance.RegisterDebugTrace(pFence)
+    #endif
+
     member x.Device = device
     member x.Handle = NativePtr.read pFence
 
@@ -1684,6 +1698,10 @@ and Semaphore internal(device : Device) =
             )
         )
 
+    #if DEBUG
+    do device.Instance.RegisterDebugTrace(handle.Handle)
+    #endif
+
     member x.Device = device
     member x.Handle = handle
 
@@ -1713,6 +1731,10 @@ and Event internal(device : Device) =
                 NativePtr.read pHandle
             )
         )
+
+    #if DEBUG
+    do device.Instance.RegisterDebugTrace(handle.Handle)
+    #endif
 
     member x.Device = device
     member x.Handle = handle
@@ -2111,6 +2133,10 @@ and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int
 
     let mutable handle = handle
     let mutable size = size
+
+    #if DEBUG
+    do if handle <> VkDeviceMemory.Null then heap.Device.Instance.RegisterDebugTrace(handle.Handle)
+    #endif
 
     static member Null = nullptr
 
