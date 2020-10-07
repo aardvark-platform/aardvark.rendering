@@ -282,7 +282,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
         let isDepth =
-            RenderbufferFormat.hasDepth format
+            RenderbufferFormat.hasDepth format || RenderbufferFormat.hasStencil format
 
         let layout =
             if isDepth then VkImageLayout.DepthStencilAttachmentOptimal
@@ -292,7 +292,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             if isDepth then VkImageUsageFlags.DepthStencilAttachmentBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit
             else VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit
 
-        let img = device.CreateImage(V3i(size.X, size.Y, 1), 1, 1, samples, TextureDimension.Texture2D, RenderbufferFormat.toTextureFormat format, usage) 
+        let img = device.CreateImage(V3i(size.X, size.Y, 1), 1, 1, samples, TextureDimension.Texture2D, format, usage) 
         device.GraphicsFamily.run {
             do! Command.TransformLayout(img, layout)
         }

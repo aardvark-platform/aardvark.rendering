@@ -2522,9 +2522,8 @@ module Image =
                 img.Memory.Dispose()
                 img.Handle <- VkImage.Null
 
-    let create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : TextureFormat) (usage : VkImageUsageFlags) (device : Device) =
-        let vkfmt = VkFormat.ofTextureFormat fmt
-        alloc size mipMapLevels count samples dim vkfmt usage device
+    let create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
+        alloc size mipMapLevels count samples dim fmt usage device
 
     let ofPixImageMipMap (pi : PixImageMipMap) (info : TextureParams) (device : Device) =
         if pi.LevelCount <= 0 then failf "empty PixImageMipMap"
@@ -2533,7 +2532,6 @@ module Image =
         let size = pi.ImageArray.[0].Size
 
         let format = device.GetSupportedFormat(VkImageTiling.Optimal, format, info)
-        let textureFormat = VkFormat.toTextureFormat format
         let expectedFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
 
         let uploadLevels =
@@ -2556,7 +2554,7 @@ module Image =
                 (V3i(size.X, size.Y, 1)) 
                 mipMapLevels 1 1 
                 TextureDimension.Texture2D 
-                textureFormat 
+                format
                 (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.StorageBit)
                 device
 
@@ -2619,7 +2617,6 @@ module Image =
         let size = pi.Size
 
         let format = device.GetSupportedFormat(VkImageTiling.Optimal, format, info)
-        let textureFormat = VkFormat.toTextureFormat format
         let expectedFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
 
         
@@ -2635,7 +2632,7 @@ module Image =
                 size
                 mipMapLevels 1 1 
                 TextureDimension.Texture3D 
-                textureFormat 
+                format
                 (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.StorageBit)
                 device
 
@@ -2697,8 +2694,6 @@ module Image =
         let size = face0.ImageArray.[0].Size
 
         let format = device.GetSupportedFormat(VkImageTiling.Optimal, format, info)
-        let textureFormat = VkFormat.toTextureFormat format
-
         let expectedFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
 
         let uploadLevels =
@@ -2721,7 +2716,7 @@ module Image =
                 (V3i(size.X, size.Y, 1)) 
                 mipMapLevels 6 1 
                 TextureDimension.TextureCube 
-                textureFormat 
+                format
                 (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.StorageBit)
                 device
 
@@ -3018,7 +3013,6 @@ module Image =
 
         let temp = device |> TensorImage.ofFile file info.wantSrgb
         let size = temp.Size
-        let textureFormat = VkFormat.toTextureFormat temp.ImageFormat
 
         let mipMapLevels =
             if info.wantMipMaps then
@@ -3031,7 +3025,7 @@ module Image =
                 size
                 mipMapLevels 1 1 
                 TextureDimension.Texture2D 
-                textureFormat 
+                temp.ImageFormat
                 (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.StorageBit)
                 device
         
@@ -3179,8 +3173,18 @@ type ContextImageExtensions private() =
         this |> Image.delete img
 
     [<Extension>]
-    static member inline CreateImage(this : Device, size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : TextureFormat, usage : VkImageUsageFlags) =
+    static member inline CreateImage(this : Device, size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : VkFormat, usage : VkImageUsageFlags) =
         this |> Image.create size mipMapLevels count samples dim fmt usage
+
+    [<Extension>]
+    static member inline CreateImage(this : Device, size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : TextureFormat, usage : VkImageUsageFlags) =
+        let fmt = VkFormat.ofTextureFormat fmt
+        this.CreateImage(size, mipMapLevels, count, samples, dim, fmt, usage)
+
+    [<Extension>]
+    static member inline CreateImage(this : Device, size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : RenderbufferFormat, usage : VkImageUsageFlags) =
+        let fmt = VkFormat.ofRenderbufferFormat fmt
+        this.CreateImage(size, mipMapLevels, count, samples, dim, fmt, usage)
 
     [<Extension>]
     static member inline UploadLevel(this : Device, dst : ImageSubresource, src : PixImage) =

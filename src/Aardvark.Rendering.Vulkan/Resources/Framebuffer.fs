@@ -38,12 +38,16 @@ module Framebuffer =
 
 
         let attachmentSems =
-            let colors = pass.ColorAttachments |> Map.map (fun k (sem,_) -> sem)
-            match pass.DepthStencilAttachment with
-                | Some att ->
-                    colors |> Map.add pass.ColorAttachmentCount DefaultSemantic.Depth
-                | None ->
-                    colors
+            let add sym att map =
+                if Option.isSome att then
+                    let idx = Map.count map
+                    map |> Map.add idx sym
+                else
+                    map
+
+            pass.ColorAttachments |> Map.map (fun _ (sem, _) -> sem)
+            |> add DefaultSemantic.Depth pass.DepthAttachment
+            |> add DefaultSemantic.Stencil pass.StencilAttachment
 
         let mutable minSize = V2i(Int32.MaxValue, Int32.MaxValue)
         let mutable minLayers = Int32.MaxValue

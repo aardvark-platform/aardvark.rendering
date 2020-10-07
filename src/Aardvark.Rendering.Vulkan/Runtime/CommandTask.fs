@@ -2278,7 +2278,7 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
             for i in 0 .. fbo.ImageViews.Length - 1 do
                 let view = fbo.ImageViews.[i]
                 oldLayouts.[i] <- view.Image.Layout
-                if VkFormat.hasDepth view.Image.Format then
+                if VkFormat.hasDepth view.Image.Format || VkFormat.hasStencil view.Image.Format then
                     do! Command.TransformLayout(view, VkImageLayout.DepthStencilAttachmentOptimal)
                 else
                     do! Command.TransformLayout(view, VkImageLayout.ColorAttachmentOptimal)

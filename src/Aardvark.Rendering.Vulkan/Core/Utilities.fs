@@ -644,7 +644,16 @@ module VkFormat =
         ]
 
     let ofRenderbufferFormat (fmt : RenderbufferFormat) =
-        fmt |> int |> unbox<TextureFormat> |> ofTextureFormat
+        let stencilFormats =
+            LookupTable.lookupTable' [
+                RenderbufferFormat.StencilIndex1, VkFormat.S8Uint
+                RenderbufferFormat.StencilIndex4, VkFormat.S8Uint
+                RenderbufferFormat.StencilIndex8, VkFormat.S8Uint
+            ]
+
+        fmt |> stencilFormats |> Option.defaultWith (fun _ ->
+            fmt |> RenderbufferFormat.toTextureFormat |> ofTextureFormat
+        )
 
     let toTextureFormat =
         let unknown = unbox<TextureFormat> 0
@@ -1030,19 +1039,25 @@ module VkFormat =
 
 
     let private depthFormats = HashSet.ofList [ VkFormat.D16Unorm; VkFormat.D32Sfloat; VkFormat.X8D24UnormPack32 ]
+    let private stencilFormats = HashSet.ofList [ VkFormat.S8Uint ]
     let private depthStencilFormats = HashSet.ofList [VkFormat.D16UnormS8Uint; VkFormat.D24UnormS8Uint; VkFormat.D32SfloatS8Uint ]
 
     let hasDepth (fmt : VkFormat) =
         depthFormats.Contains fmt || depthStencilFormats.Contains fmt
 
+    let hasStencil (fmt : VkFormat) =
+        stencilFormats.Contains fmt || depthStencilFormats.Contains fmt
+
     let toAspect (fmt : VkFormat) =
         if depthStencilFormats.Contains fmt then VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit
         elif depthFormats.Contains fmt then VkImageAspectFlags.DepthBit
+        elif stencilFormats.Contains fmt then VkImageAspectFlags.StencilBit
         else VkImageAspectFlags.ColorBit
 
     let toShaderAspect (fmt : VkFormat) =
         if depthStencilFormats.Contains fmt then VkImageAspectFlags.DepthBit 
         elif depthFormats.Contains fmt then VkImageAspectFlags.DepthBit
+        elif stencilFormats.Contains fmt then VkImageAspectFlags.StencilBit
         else VkImageAspectFlags.ColorBit
 
     let toColFormat =

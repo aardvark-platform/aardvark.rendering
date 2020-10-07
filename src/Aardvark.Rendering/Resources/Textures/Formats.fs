@@ -302,9 +302,6 @@ module TextureFormat =
 
     let private depthFormats =
         HashSet.ofList [
-            TextureFormat.DepthStencil
-            TextureFormat.Depth24Stencil8
-            TextureFormat.Depth32fStencil8
             TextureFormat.DepthComponent
             TextureFormat.DepthComponent16
             TextureFormat.DepthComponent16Sgix
@@ -315,8 +312,25 @@ module TextureFormat =
             TextureFormat.DepthComponent32f
         ]
 
-    let hasDepth (fmt : TextureFormat) =
+    let private depthStencilFormats =
+        HashSet.ofList [
+            TextureFormat.DepthStencil
+            TextureFormat.Depth24Stencil8
+            TextureFormat.Depth32fStencil8
+        ]
+
+    /// Returns whether the given format is a depth format.
+    let isDepth (fmt : TextureFormat) =
         depthFormats.Contains fmt
+
+    /// Returns whether the given format is a combined depth-stencil format.
+    let isDepthStencil (fmt : TextureFormat) =
+        depthStencilFormats.Contains fmt
+
+    /// Returns whether the given format has a depth component (i.e. it is
+    /// either a depth for a combined depth-stencil format).
+    let hasDepth (fmt : TextureFormat) =
+        isDepth fmt || isDepthStencil fmt
 
     let ofPixFormat =
 
@@ -724,9 +738,6 @@ module RenderbufferFormat =
 
     let private depthFormats =
         HashSet.ofList [
-            RenderbufferFormat.DepthStencil
-            RenderbufferFormat.Depth24Stencil8
-            RenderbufferFormat.Depth32fStencil8
             RenderbufferFormat.DepthComponent
             RenderbufferFormat.DepthComponent16
             RenderbufferFormat.DepthComponent24
@@ -734,5 +745,54 @@ module RenderbufferFormat =
             RenderbufferFormat.DepthComponent32f
         ]
 
-    let hasDepth (fmt : RenderbufferFormat) =
+    let private stencilFormats =
+        HashSet.ofList [
+            RenderbufferFormat.StencilIndex1Ext
+            RenderbufferFormat.StencilIndex1
+            RenderbufferFormat.StencilIndex4Ext
+            RenderbufferFormat.StencilIndex4
+            RenderbufferFormat.StencilIndex8
+            RenderbufferFormat.StencilIndex8Ext
+            RenderbufferFormat.StencilIndex16Ext
+            RenderbufferFormat.StencilIndex16
+        ]
+
+    let private depthStencilFormats =
+        HashSet.ofList [
+            RenderbufferFormat.DepthStencil
+            RenderbufferFormat.Depth24Stencil8
+            RenderbufferFormat.Depth32fStencil8
+        ]
+
+    /// Returns whether the given format is a depth format.
+    let isDepth (fmt : RenderbufferFormat) =
         depthFormats.Contains fmt
+
+    /// Returns whether the given format is a stencil format.
+    let isStencil (fmt : RenderbufferFormat) =
+        stencilFormats.Contains fmt
+
+    /// Returns whether the given format is a combined depth-stencil format.
+    let isDepthStencil (fmt : RenderbufferFormat) =
+        depthStencilFormats.Contains fmt
+
+    /// Returns whether the given format has a depth component (i.e. it is
+    /// either a depth for a combined depth-stencil format).
+    let hasDepth (fmt : RenderbufferFormat) =
+        isDepth fmt || isDepthStencil fmt
+
+    /// Returns whether the given format has a stencil component (i.e. it is
+    /// either a stencil for a combined depth-stencil format).
+    let hasStencil (fmt : RenderbufferFormat) =
+        isStencil fmt || isDepthStencil fmt
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module AttachmentSignature =
+
+    /// Returns the format of the given attachment signature.
+    let format (signature : AttachmentSignature) =
+        signature.format
+
+    /// Returns the sample count of the given attachment signature.
+    let samples (signature : AttachmentSignature) =
+        signature.samples

@@ -14,7 +14,7 @@ module Semantic =
     let Color1 = Sym.ofString "Color1"
     let Color2 = Sym.ofString "Color2"
     let Color3 = Sym.ofString "Color3"
-    let All = Set.ofList [Color0; Color1; Color2; Color3; DefaultSemantic.Depth]
+    let All = Set.ofList [Color0; Color1; Color2; Color3 ]
 
     let Color0Texture = Sym.ofString "Color0Texture"
     let Color1Texture = Sym.ofString "Color1Texture"
@@ -93,8 +93,8 @@ let main argv =
     Aardvark.Init()
 
     // uncomment/comment to switch between the backends
-    //use app = new VulkanApplication(debug = true)
-    use app = new OpenGlApplication()
+    use app = new VulkanApplication(debug = true)
+    //use app = new OpenGlApplication()
     let runtime = app.Runtime :> IRuntime
 
     // create a game window (better for measuring fps)
@@ -223,7 +223,7 @@ let main argv =
             Semantic.Color1, RenderbufferFormat.Rgba8
             Semantic.Color2, RenderbufferFormat.Rgba8
             Semantic.Color3, RenderbufferFormat.Rgba8
-            DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+            DefaultSemantic.Stencil, RenderbufferFormat.StencilIndex8
         ])
 
     let output =

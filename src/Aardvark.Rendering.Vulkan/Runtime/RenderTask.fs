@@ -1022,24 +1022,23 @@ module RenderTask =
 
     type ClearTask(device : Device, renderPass : RenderPass, clearColors : aval<Map<int, C4f>>, clearDepth : aval<float option>, clearStencil : aval<uint32 option>) =
         inherit AdaptiveObject()
-        static let depthStencilFormats =
-            HashSet.ofList [
-                RenderbufferFormat.Depth24Stencil8
-                RenderbufferFormat.Depth32fStencil8
-                RenderbufferFormat.DepthStencil
-            ]
-        
+
         let id = newId()
         let pool = device.GraphicsFamily.CreateCommandPool()
         let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
 
         let renderPassDepthAspect =
             match renderPass.DepthStencilAttachment with
-                | Some (_,signature) ->
-                    if depthStencilFormats.Contains signature.format then
-                        ImageAspect.DepthStencil
-                    else
-                        ImageAspect.Depth
+                | Some (_, signature) ->
+                    let depth, stencil =
+                        RenderbufferFormat.hasDepth signature.format,
+                        RenderbufferFormat.hasStencil signature.format
+
+                    match depth, stencil with
+                    | true,  true  -> ImageAspect.DepthStencil
+                    | true,  false -> ImageAspect.Depth
+                    | false, true  -> ImageAspect.Stencil
+                    | false, false -> ImageAspect.None
                 | _ ->
                     ImageAspect.None
 

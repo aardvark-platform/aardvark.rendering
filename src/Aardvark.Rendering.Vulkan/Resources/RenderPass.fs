@@ -14,60 +14,85 @@ type RenderPass =
     class
         inherit Resource<VkRenderPass>
 
-        val mutable public Semantics : Set<Symbol>
-        val mutable public ColorAttachmentCount : int
         val mutable public ColorAttachments : Map<int, Symbol * AttachmentSignature>
         val mutable public DepthStencilAttachment : Option<int * AttachmentSignature>
         val mutable public LayerCount : int
         val mutable public PerLayerUniforms : Set<string>
 
+        // Use depth slot if either depth or combined depth-stencil attachment
+        member x.DepthAttachment =
+            x.DepthStencilAttachment
+            |> Option.map snd
+            |> Option.filter (AttachmentSignature.format >> RenderbufferFormat.hasDepth)
+
+        // Use stencil slot only if pure stencil attachment
+        member x.StencilAttachment =
+            x.DepthStencilAttachment
+            |> Option.map snd
+            |> Option.filter (AttachmentSignature.format >> RenderbufferFormat.isStencil)
+
+        member x.ColorAttachmentCount =
+            Map.count x.ColorAttachments
+
         member x.AttachmentCount =
             match x.DepthStencilAttachment with
-                | Some _ -> x.ColorAttachmentCount + 1
-                | _ -> 0
+            | Some _ -> x.ColorAttachmentCount + 1
+            | _ -> 0
+
+        member x.Semantics =
+            let add sym att set =
+                if Option.isSome att then set |> Set.add sym else set
+
+            x.ColorAttachments |> Map.toSeq |> Seq.map (snd >> fst) |> Set.ofSeq
+            |> add DefaultSemantic.Depth x.DepthAttachment
+            |> add DefaultSemantic.Stencil x.StencilAttachment
 
         interface IFramebufferSignature with
             member x.Runtime = x.Device.Runtime :> IFramebufferRuntime
             member x.ColorAttachments = x.ColorAttachments
-            member x.DepthAttachment = x.DepthStencilAttachment |> Option.map snd
-            member x.StencilAttachment = x.DepthStencilAttachment |> Option.map snd
+            member x.DepthAttachment = x.DepthAttachment
+            member x.StencilAttachment = x.StencilAttachment
 
             member x.IsAssignableFrom (other : IFramebufferSignature) =
                 match other with
-                    | :? RenderPass as other ->
-                        x.Handle = other.Handle
-                    | _ ->
-                        false
+                | :? RenderPass as other ->
+                    x.Handle = other.Handle
+                | _ ->
+                    false
 
             member x.LayerCount = x.LayerCount
             member x.PerLayerUniforms = x.PerLayerUniforms
 
-        new(device : Device, handle : VkRenderPass, colorCount : int, colors : Map<int, Symbol * AttachmentSignature>, depth : Option<int * AttachmentSignature>, layers : int, perLayer : Set<string>) = 
-            let semantics = colors |> Map.toSeq |> Seq.map (fun (_,(sem,_)) -> sem) |> Set.ofSeq
-            let semantics = 
-                match depth with
-                    | Some _ -> Set.add DefaultSemantic.Depth semantics
-                    | _ -> semantics
-            { inherit Resource<_>(device, handle); Semantics = semantics; ColorAttachmentCount = colorCount; ColorAttachments = colors; DepthStencilAttachment = depth; LayerCount = layers; PerLayerUniforms = perLayer }
+        new(device : Device, handle : VkRenderPass, colors : Map<int, Symbol * AttachmentSignature>, depthStencil : Option<int * AttachmentSignature>, layers : int, perLayer : Set<string>) =
+            { inherit Resource<_>(device, handle); ColorAttachments = colors; DepthStencilAttachment = depthStencil; LayerCount = layers; PerLayerUniforms = perLayer }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RenderPass =
-    
+
     let create (attachments : Map<Symbol, AttachmentSignature>) (layers : int) (perLayer : Set<string>) (device : Device) =
+        let depth = attachments |> Map.tryFind DefaultSemantic.Depth
+        let stencil = attachments |> Map.tryFind DefaultSemantic.Stencil
+
+        let depthStencil =
+            match depth.IsSome, stencil.IsSome with
+            | false, false -> None
+            | true,  false -> depth
+            | false, true  -> stencil
+            | true,  true  -> failwith "Vulkan backend does not support separate depth and stencil attachments."
+
         native {
-            let depthAtt        = attachments |> Map.tryFind DefaultSemantic.Depth
-            let attachments     = attachments |> Map.remove DefaultSemantic.Depth
+            let attachments     = attachments |> Map.remove DefaultSemantic.Depth |> Map.remove DefaultSemantic.Stencil
             let colorAtt        = attachments |> Map.toSeq |> Seq.mapi (fun i (s,a) -> i,s,a) |> Seq.toArray
-            let depthAtt        = depthAtt |> Option.map (fun s -> colorAtt.Length, s)
-            
-            let colorReferences = 
+            let depthAtt        = depthStencil |> Option.map (fun s -> colorAtt.Length, s)
+
+            let colorReferences =
                 colorAtt |> Array.map (fun (i,s,a) -> VkAttachmentReference(uint32 i, VkImageLayout.ColorAttachmentOptimal))
 
             let! pDepthReference =
                 match depthAtt with
-                    | Some (i,d) -> VkAttachmentReference(uint32 i, VkImageLayout.DepthStencilAttachmentOptimal)
-                    | _ -> VkAttachmentReference(~~~0u, VkImageLayout.DepthStencilAttachmentOptimal)
+                | Some (i, _) -> VkAttachmentReference(uint32 i, VkImageLayout.DepthStencilAttachmentOptimal)
+                | _ -> VkAttachmentReference(~~~0u, VkImageLayout.DepthStencilAttachmentOptimal)
 
             let! pColorReferences = colorReferences
             let! pSubpassDescription =
@@ -85,20 +110,19 @@ module RenderPass =
                     NativePtr.zero,
 
                     //depth
-                    pDepthReference, 
+                    pDepthReference,
 
                     //preserve
                     0u, NativePtr.zero
                 )
 
             let colorAttachmentDescriptions =
-                colorAtt |> Array.map (fun (i, sem,a) ->
-                    
+                colorAtt |> Array.map (fun (_, _, a) ->
                     let loadOp = VkAttachmentLoadOp.Load
 
                     VkAttachmentDescription(
                         VkAttachmentDescriptionFlags.None,
-                        VkFormat.ofTextureFormat (unbox (int a.format)),
+                        VkFormat.ofRenderbufferFormat a.format,
                         unbox<VkSampleCountFlags> a.samples,
 
                         loadOp,
@@ -109,69 +133,58 @@ module RenderPass =
                         VkImageLayout.ColorAttachmentOptimal,
                         VkImageLayout.ColorAttachmentOptimal
                     )
-                ) 
+                )
 
             let rec tryFindFormat (fmt : VkFormat) =
                 match device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt) with
-                    | VkFormatFeatureFlags.None ->
-                        match fmt.NextBetter with
-                            | Some better -> tryFindFormat better
-                            | None -> None
-                    | _ ->
-                        Some fmt
+                | VkFormatFeatureFlags.None ->
+                    match fmt.NextBetter with
+                    | Some better -> tryFindFormat better
+                    | None -> None
+                | _ ->
+                    Some fmt
 
             let depthAttachmentDescription =
                 match depthAtt with
-                    | Some (i,a) ->
-                        let format = VkFormat.ofTextureFormat (unbox (int a.format))
+                | Some (_, a) ->
+                    let format = VkFormat.ofRenderbufferFormat a.format
 
-                        let format =
-                            match tryFindFormat format with
-                                | Some fmt -> fmt
-                                | None -> failf "could not get supported format for %A" format
+                    let format =
+                        match tryFindFormat format with
+                        | Some fmt -> fmt
+                        | None -> failf "could not get supported format for %A" format
 
+                    let stencilLoadOp, stencilStoreOp =
+                        if VkFormat.hasStencil format then
+                            VkAttachmentLoadOp.Load, VkAttachmentStoreOp.Store
+                        else
+                            VkAttachmentLoadOp.DontCare, VkAttachmentStoreOp.DontCare
 
-                        let hasStencil =
-                            match format with
-                                | VkFormat.D16UnormS8Uint -> true
-                                | VkFormat.D24UnormS8Uint -> true
-                                | VkFormat.D32SfloatS8Uint -> true
-                                | _ -> false
+                    let desc =
+                        VkAttachmentDescription(
+                            VkAttachmentDescriptionFlags.None,
+                            format,
+                            unbox<VkSampleCountFlags> a.samples,
 
-                        let loadOp = VkAttachmentLoadOp.Load
+                            VkAttachmentLoadOp.Load,
+                            VkAttachmentStoreOp.Store,
+                            stencilLoadOp,
+                            stencilStoreOp,
 
-                        let stencilLoadOp =
-                            if hasStencil then VkAttachmentLoadOp.Load
-                            else VkAttachmentLoadOp.DontCare
+                            VkImageLayout.DepthStencilAttachmentOptimal,
+                            VkImageLayout.DepthStencilAttachmentOptimal
+                        )
 
-                        let stencilStoreOp =
-                            if hasStencil then VkAttachmentStoreOp.Store
-                            else VkAttachmentStoreOp.DontCare
+                    Some desc
 
-                        let desc = 
-                            VkAttachmentDescription(
-                                VkAttachmentDescriptionFlags.None,
-                                format,
-                                unbox<VkSampleCountFlags> a.samples,
-
-                                loadOp,
-                                VkAttachmentStoreOp.Store,
-                                stencilLoadOp,
-                                stencilStoreOp,
-
-                                VkImageLayout.DepthStencilAttachmentOptimal,
-                                VkImageLayout.DepthStencilAttachmentOptimal
-                            )
-
-                        Some desc
-
-                    | _ -> 
-                        None
+                | _ ->
+                    None
 
             let attachmentDescriptions =
                 match depthAttachmentDescription with
-                    | Some d -> Array.append colorAttachmentDescriptions [|d|]
-                    | None -> colorAttachmentDescriptions
+                | Some d -> Array.append colorAttachmentDescriptions [|d|]
+                | None -> colorAttachmentDescriptions
+
             let! pAttachmentDescriptions = attachmentDescriptions
             let! pInfo =
                 VkRenderPassCreateInfo(
@@ -184,25 +197,21 @@ module RenderPass =
             let! pHandle = VkRenderPass.Null
             VkRaw.vkCreateRenderPass(device.Handle, pInfo, NativePtr.zero, pHandle) |> check "vkCreateRenderPass"
 
-
             let colorMap = colorAtt |> Array.map (fun (i,s,v) -> i,(s,v)) |> Map.ofArray
-
-            return RenderPass(device, !!pHandle, colorAtt.Length, colorMap, depthAtt, layers, perLayer)
-  
+            return RenderPass(device, !!pHandle, colorMap, depthAtt, layers, perLayer)
         }
-
 
     let delete (pass : RenderPass) (device : Device) =
         if pass.Handle.IsValid then
             VkRaw.vkDestroyRenderPass(device.Handle, pass.Handle, NativePtr.zero)
-            pass.Handle <- VkRenderPass.Null         
+            pass.Handle <- VkRenderPass.Null
 
 [<AbstractClass; Sealed; Extension>]
 type ContextRenderPassExtensions private() =
     [<Extension>]
     static member inline CreateRenderPass(this : Device, attachments : Map<Symbol, AttachmentSignature>, layers : int, perLayer : Set<string>) =
         this |> RenderPass.create attachments layers perLayer
-        
+
     [<Extension>]
     static member inline Delete(this : Device, pass : RenderPass) =
         this |> RenderPass.delete pass
