@@ -154,14 +154,14 @@ module RenderTasks =
         override x.FramebufferSignature = Some fboSignature
         override x.Runtime = Some ctx.Runtime
         override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription) =
-            
-            GL.Check "[RenderTask.Run] Entry"
 
             let fbo = desc.framebuffer // TODO: fix outputdesc
             if not <| fboSignature.IsAssignableFrom fbo.Signature then
                 failwithf "incompatible FramebufferSignature\nexpected: %A but got: %A" fboSignature fbo.Signature
 
-            use __ = ctx.ResourceLock 
+            use __ = ctx.ResourceLock
+            GL.Check "[RenderTask.Run] Entry"
+
             if currentContext.Value <> ctx.CurrentContextHandle.Value then
                 let intCtx = ctx.CurrentContextHandle.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
                 NativePtr.write contextHandle intCtx.Context.Handle
