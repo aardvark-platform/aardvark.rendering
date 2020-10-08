@@ -134,7 +134,7 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
     member x.Version = version :> aval<_>
     member x.Texture = tex
     
-    member x.FramebufferSignature = framebufferSignature :> IFramebufferSignature
+    member x.FramebufferSignature = framebufferSignature
     member x.Runtime = app.Runtime
     member x.Sizes = AVal.constant x.DesiredSize
     member x.Samples = samples
