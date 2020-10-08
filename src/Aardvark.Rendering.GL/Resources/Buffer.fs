@@ -82,7 +82,8 @@ module BufferExtensions =
             
             let handle = 
                 using x.ResourceLock (fun _ ->
-                    let handle = GL.GenBuffer()
+                    let handle = GL.CreateBuffer()
+                    GL.Check "failed to create buffer"
                     
                     GL.NamedBufferData(handle, (nativeint size), 0n, glUsageHint usageHint)
                     GL.Check "failed to upload buffer"
@@ -117,9 +118,10 @@ module BufferExtensions =
             
             let handle = 
                 using x.ResourceLock (fun _ ->
-                    let handle = GL.GenBuffer()
+                    let handle = GL.CreateBuffer()
+                    GL.Check "failed to create buffer"
 
-                    EXT_direct_state_access.GL.NamedBufferData(handle, (nativeint sizeInBytes), data, glUsageHint usage)
+                    GL.NamedBufferData(handle, (nativeint sizeInBytes), data, glUsageHint usage)
                     GL.Check "failed to upload buffer"
 
                     handle

@@ -25,7 +25,8 @@ type UniformBufferManager(ctx : Context) =
                 new Buffer(ctx, 0n, 0)
             else
                 use __ = ctx.ResourceLock
-                let handle = GL.GenBuffer()
+                let handle = GL.CreateBuffer()
+                GL.Check "failed to create uniform buffer"
 
                 BufferMemoryUsage.addUniformBuffer ctx (int64 size)
 

@@ -186,7 +186,7 @@ module private SparseBufferImplementation =
                     let copySize = min c x.SizeInBytes
 
                     if copySize > 0n then
-                        let temp = GL.GenBuffer()
+                        let temp = GL.CreateBuffer()
                         GL.Check "could not create temp buffer"
 
                         GL.NamedBufferData(temp, copySize, 0n, BufferUsageHint.StaticDraw)
@@ -256,7 +256,7 @@ module SparseBufferExtensions =
 
     module private SparseHelpers =
         let rec tryAlloc (cap : byref<nativeint>) =
-            let b = GL.GenBuffer()
+            let b = GL.CreateBuffer()
             GL.Check "could not create buffer"
 
             GL.NamedBufferStorage(b, cap, 0n, BufferStorageFlags.SparseStorageBit ||| BufferStorageFlags.DynamicStorageBit)
@@ -303,7 +303,7 @@ module SparseBufferExtensions =
                 let handle = SparseHelpers.tryAlloc(&virtualSize)
                 new RealSparseBuffer(x, handle, virtualSize, pageSize, beforeRender, afterRender) :> SparseBuffer
             else
-                let handle = GL.GenBuffer()
+                let handle = GL.CreateBuffer()
                 GL.Check "could not create buffer"
         
                 new FakeSparseBuffer(x, handle, beforeRender, afterRender) :> SparseBuffer
