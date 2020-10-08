@@ -186,8 +186,8 @@ type Runtime() =
 
             // copy to temp buffer
             let temp = GL.GenBuffer()
-            GL.NamedBufferStorage(temp, sizeInBytes, 0n, BufferStorageFlags.MapWriteBit)
-            GL.BindBuffer(BufferTarget.PixelUnpackBuffer,temp)
+            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, temp)
+            GL.BufferStorage(BufferTarget.PixelUnpackBuffer, sizeInBytes, 0n, BufferStorageFlags.MapWriteBit)
             let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, sizeInBytes, BufferAccessMask.MapWriteBit)
 
             let dstTensor =
@@ -296,8 +296,8 @@ type Runtime() =
             let sizeInBytes = nativeint alignedRowSize * nativeint srcSize.Y * nativeint srcSize.Z
 
             let temp = GL.GenBuffer()
-            GL.NamedBufferStorage(temp, sizeInBytes, 0n, BufferStorageFlags.MapReadBit)
-            GL.BindBuffer(BufferTarget.PixelPackBuffer,temp)
+            GL.BindBuffer(BufferTarget.PixelPackBuffer, temp)
+            GL.BufferStorage(BufferTarget.PixelPackBuffer, sizeInBytes, 0n, BufferStorageFlags.MapReadBit)
 
             let inline bind (t : TextureTarget) (h : int) (f : unit -> unit) =
                 GL.BindTexture(t, h)

@@ -99,7 +99,7 @@ module UniformBufferExtensions =
         member x.CreateUniformBuffer(dataSize : nativeint) =
             Operators.using x.ResourceLock (fun _ ->
                 
-                let handle = GL.GenBuffer()
+                let handle = GL.CreateBuffer()
                 GL.Check "could not create uniform buffer"
 
                 GL.NamedBufferData(handle, dataSize, 0n, BufferUsageHint.DynamicDraw)
@@ -113,7 +113,7 @@ module UniformBufferExtensions =
         member x.CreateUniformBuffer(block : ShaderBlock) =
             Operators.using x.ResourceLock (fun _ ->
                 
-                let handle = GL.GenBuffer()
+                let handle = GL.CreateBuffer()
                 GL.Check "could not create uniform buffer"
 
                 GL.NamedBufferData(handle, nativeint block.DataSize, 0n, BufferUsageHint.DynamicDraw)

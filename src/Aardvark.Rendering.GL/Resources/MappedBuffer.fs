@@ -184,7 +184,7 @@ module ManagedBufferImplementation =
     [<AutoOpen>]
     module private Allocator = 
         let rec alloc (cap : byref<int64>) =
-            let b = GL.GenBuffer()
+            let b = GL.CreateBuffer()
             GL.Check "could not create buffer"
 
             GL.NamedBufferStorage(b, nativeint cap, 0n, BufferStorageFlags.SparseStorageBit ||| BufferStorageFlags.DynamicStorageBit)
@@ -438,7 +438,7 @@ module ManagedBufferImplementation =
 
             types |> Map.map (fun sem t ->
                 let s = nativeint t.GLSize
-                let b = GL.GenBuffer()
+                let b = GL.CreateBuffer()
                 GL.Check "could not generate buffer"
                 new ResizeGeometryPoolBuffer(this, ctx, b, rw, 0n), s, t
             )
@@ -567,7 +567,7 @@ module ManagedBufferImplementation =
 
                 if copySize > 0n then
                     // allocate a temp buffer
-                    let temp = GL.GenBuffer()
+                    let temp = GL.CreateBuffer()
                     GL.Check "could not create temp-buffer"
                     GL.NamedBufferData(temp, copySize, 0n, BufferUsageHint.StaticDraw)
                     GL.Check "could not allocate temp-buffer"
