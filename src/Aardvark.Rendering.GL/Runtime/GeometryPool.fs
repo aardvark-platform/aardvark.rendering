@@ -331,7 +331,7 @@ type InstanceBuffer(ctx : Context, semantics : MapExt<string, GLSLType * Type>, 
             let srcOff = nativeint srcOffset * nativeint elemSize
             let dstOff = nativeint dstOffset * nativeint elemSize
             let s = nativeint elemSize * nativeint count
-            GL.NamedCopyBufferSubData(srcBuffer.Handle, dstBuffer.Handle, srcOff, dstOff, s)
+            GL.CopyNamedBufferSubData(srcBuffer.Handle, dstBuffer.Handle, srcOff, dstOff, s)
         )
 
     member x.Dispose() =
@@ -392,7 +392,7 @@ type VertexBuffer(ctx : Context, semantics : MapExt<string, Type>, count : int) 
             let srcOff = nativeint srcOffset * nativeint elemSize
             let dstOff = nativeint dstOffset * nativeint elemSize
             let s = nativeint elemSize * nativeint count
-            GL.NamedCopyBufferSubData(srcBuffer.Handle, dstBuffer.Handle, srcOff, dstOff, s)
+            GL.CopyNamedBufferSubData(srcBuffer.Handle, dstBuffer.Handle, srcOff, dstOff, s)
         )
 
     member x.Dispose() =

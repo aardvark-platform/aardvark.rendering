@@ -676,7 +676,7 @@ type Runtime() =
 
     member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         use __ = ctx.ResourceLock
-        GL.CopyNamedBufferSubData(unbox<int> src.Handle, srcOffset, unbox<int> dst.Handle, dstOffset, size)
+        GL.CopyNamedBufferSubData(unbox<int> src.Handle, unbox<int> dst.Handle, srcOffset, dstOffset, size)
         GL.Check "could not copy buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()

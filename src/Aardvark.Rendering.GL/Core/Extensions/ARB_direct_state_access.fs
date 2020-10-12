@@ -4,7 +4,6 @@
 
 open System
 open OpenTK.Graphics
-open OpenTK.Graphics.OpenGL
 open OpenTK.Graphics.OpenGL4
 
 open ExtensionHelpers
@@ -71,7 +70,7 @@ module ARB_direct_state_access =
                     GL.BufferSubData(t, offset, size, data)
                 )
 
-        static member NamedClearBufferSubData(buffer : int, ifmt : PixelInternalFormat, offset : nativeint, size : nativeint, fmt : PixelFormat, pixelType : PixelType, data : nativeint) =
+        static member ClearNamedBufferSubData(buffer : int, ifmt : PixelInternalFormat, offset : nativeint, size : nativeint, fmt : PixelFormat, pixelType : PixelType, data : nativeint) =
             if supported then
                 GL.Arb.ClearNamedBufferSubData(buffer, ifmt, offset, size, fmt, pixelType, data)
             else
@@ -87,14 +86,13 @@ module ARB_direct_state_access =
                     GL.GetBufferSubData(t, offset, size, data)
                 )
 
-        static member CopyNamedBufferSubData(src : int, srcOffset : nativeint, dst : int, dstOffset : nativeint, size : nativeint) =
+        static member CopyNamedBufferSubData(src : int, dst : int, srcOffset : nativeint, dstOffset : nativeint, size : nativeint) =
             if supported then
                 GL.Arb.CopyNamedBufferSubData(src, dst, srcOffset, dstOffset, size)
             else
                 bindBuffers src dst (fun tSrc tDst ->
                     GL.CopyBufferSubData(tSrc, tDst, srcOffset, dstOffset, size)
                 )
-
 
         static member NamedBufferStorage(buffer: int, size : nativeint, data : nativeint, flags: BufferStorageFlags) =
             if supported then
@@ -149,6 +147,7 @@ module ARB_direct_state_access =
                 bindBuffer buffer (fun t ->
                     GL.GetBufferParameter(t, pname, arr)
                 )
+
         static member GetNamedBufferParameter(buffer : int, pname : BufferParameterName, res : byref<int>) =
             if supported then
                 GL.Arb.GetNamedBufferParameter(buffer, pname, &res)
@@ -158,6 +157,7 @@ module ARB_direct_state_access =
                     GL.GetBufferParameter(t, pname, &r)
                 )
                 res <- r
+
         static member GetNamedBufferParameter(buffer : int, pname : BufferParameterName, res : byref<int64>) =
             if supported then
                 GL.Arb.GetNamedBufferParameter(buffer, pname, &&res)
@@ -167,11 +167,3 @@ module ARB_direct_state_access =
                     GL.GetBufferParameter(t, pname, &r)
                 )
                 res <- r
-
-        static member NamedCopyBufferSubData(readBuffer : int, writeBuffer : int, readOffset : nativeint, writeOffset : nativeint, size : nativeint) =
-            if supported then
-                GL.Arb.CopyNamedBufferSubData(readBuffer, writeBuffer, readOffset, writeOffset, size)
-            else
-                bindBuffers readBuffer writeBuffer (fun t0 t1 ->
-                    GL.CopyBufferSubData(t0, t1, readOffset, writeOffset, size)
-                )

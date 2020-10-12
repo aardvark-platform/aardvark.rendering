@@ -584,7 +584,7 @@ module IndirectBufferExtensions =
             if targetOffset + size > target.SizeInBytes || sourceOffset + size > source.SizeInBytes then
                 failwith "[GL] insufficient buffer size"
                 
-            GL.NamedCopyBufferSubData(source.Handle, target.Handle, sourceOffset, targetOffset, size)
+            GL.CopyNamedBufferSubData(source.Handle, target.Handle, sourceOffset, targetOffset, size)
             GL.Check "could not copy buffer"
 
         member x.Clone(b : Buffer, offset : nativeint, size : nativeint) =

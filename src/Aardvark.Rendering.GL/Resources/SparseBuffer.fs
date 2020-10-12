@@ -189,7 +189,7 @@ module private SparseBufferImplementation =
                         GL.NamedBufferData(temp, copySize, 0n, BufferUsageHint.StaticDraw)
                         GL.Check "could not allocate temp buffer"
 
-                        GL.NamedCopyBufferSubData(handle, temp, 0n, 0n, copySize)
+                        GL.CopyNamedBufferSubData(handle, temp, 0n, 0n, copySize)
                         GL.Check "could not copy to temp buffer"
 
                         //GL.InvalidateBufferData(handle) // bad on intel and not necessary.
@@ -198,7 +198,7 @@ module private SparseBufferImplementation =
                         GL.NamedBufferData(handle, c, 0n, BufferUsageHint.StaticDraw)
                         GL.Check "could not resize buffer"
                     
-                        GL.NamedCopyBufferSubData(temp, handle, 0n, 0n, copySize)
+                        GL.CopyNamedBufferSubData(temp, handle, 0n, 0n, copySize)
                         GL.Check "could not copy from temp buffer"
 
                         GL.DeleteBuffer(temp)

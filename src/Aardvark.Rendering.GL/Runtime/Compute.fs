@@ -379,7 +379,7 @@ type private GLCompute(ctx : Context) =
             | ComputeCommand.SetBufferCmd(dst, value) ->
                 let dstBuffer = unbox<GL.Buffer> dst.Buffer
                 let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
-                GL.NamedClearBufferSubData(dstBuffer.Handle, PixelInternalFormat.R32ui, dst.Offset, dst.Size, PixelFormat.Red, PixelType.UnsignedInt, gc.AddrOfPinnedObject())
+                GL.ClearNamedBufferSubData(dstBuffer.Handle, PixelInternalFormat.R32ui, dst.Offset, dst.Size, PixelFormat.Red, PixelType.UnsignedInt, gc.AddrOfPinnedObject())
                 gc.Free()
                 GL.Sync()
                 GL.Check()

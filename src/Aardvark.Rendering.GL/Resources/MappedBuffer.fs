@@ -573,7 +573,7 @@ module ManagedBufferImplementation =
                     GL.Check "could not allocate temp-buffer"
 
                     // copy data to temp
-                    GL.NamedCopyBufferSubData(handle, temp, 0n, 0n, copySize)
+                    GL.CopyNamedBufferSubData(handle, temp, 0n, 0n, copySize)
                     GL.Check (sprintf "could not copy buffer (size: %A)" copySize)
                     
                     // resize the original buffer
@@ -581,7 +581,7 @@ module ManagedBufferImplementation =
                     GL.Check "could not reallocate buffer"
                     
                     // copy data back
-                    GL.NamedCopyBufferSubData(temp, handle, 0n, 0n, copySize)
+                    GL.CopyNamedBufferSubData(temp, handle, 0n, 0n, copySize)
                     GL.Check "could not copy buffer"
 
                     // delete the temp buffer
