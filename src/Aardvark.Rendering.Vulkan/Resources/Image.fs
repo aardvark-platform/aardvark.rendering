@@ -3103,38 +3103,62 @@ module Image =
             | _ ->
                 failf "unsupported texture-type: %A" t
 
-    let downloadLevel (src : ImageSubresource) (dst : PixImage) (device : Device) =
+    let private downloadLevel (src : ImageSubresource) (writeToDst : TensorImage -> unit) (dstSize : V3i) (device : Device) =
         let format = src.Image.Format
         let sourcePixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
 
-        let temp = device.CreateTensorImage(V3i(dst.Size.X, dst.Size.Y, 1), sourcePixFormat, false)
+        let temp = device.CreateTensorImage(dstSize, sourcePixFormat, false)
+
+        let resolve() =
+            let srcImg = src.Image
+
+            let usage = VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit
+            let img = create srcImg.Size srcImg.MipMapLevels srcImg.Count 1 srcImg.Dimension format usage device
+
+            let cmd =
+                let layout = srcImg.Layout
+
+                command {
+                    do! Command.TransformLayout(srcImg, VkImageLayout.TransferSrcOptimal)
+                    do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
+                    do! Command.ResolveMultisamples(src.Image.[ImageAspect.Color, src.Level], img.[ImageAspect.Color, src.Level])
+                    do! Command.TransformLayout(srcImg, layout)
+                }
+
+            img.[src.Aspect, src.Level, src.Slice], cmd
+
+        let srcResolved, cmdResolve =
+            if src.Image.Samples > 1 then
+                resolve()
+            else
+                src, Command.Nop
+
         try
-            device.GraphicsFamily.run {
-                let layout = src.Image.Layout
-                do! Command.TransformLayout(src.Image, VkImageLayout.TransferSrcOptimal)
-                do! Command.Copy(src, temp)
-                do! Command.TransformLayout(src.Image, layout)
-            }
-            temp.Read(dst, ImageTrafo.MirrorY)
+            let cmd =
+                let layout = srcResolved.Image.Layout
+
+                command {
+                    do! cmdResolve
+                    do! Command.TransformLayout(srcResolved.Image, VkImageLayout.TransferSrcOptimal)
+                    do! Command.Copy(srcResolved, temp)
+                    do! Command.TransformLayout(srcResolved.Image, layout)
+                }
+
+            device.GraphicsFamily.RunSynchronously(cmd)
+            writeToDst temp
         finally
             device.Delete temp
+            if srcResolved <> src then
+                delete srcResolved.Image device
+
+    let downloadLevel2d (src : ImageSubresource) (dst : PixImage) (device : Device) =
+        let write (buffer : TensorImage) = buffer.Read(dst, ImageTrafo.MirrorY)
+        let size = V3i(dst.Size, 1)
+        downloadLevel src write size device
 
     let downloadLevel3d (src : ImageSubresource) (dst : PixVolume) (device : Device) =
-        let format = src.Image.Format
-        let sourcePixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
-
-        let temp = device.CreateTensorImage(V3i(dst.Size.X, dst.Size.Y, dst.Size.Z), sourcePixFormat, false)
-        try
-            device.GraphicsFamily.run {
-                let layout = src.Image.Layout
-                do! Command.TransformLayout(src.Image, VkImageLayout.TransferSrcOptimal)
-                do! Command.Copy(src, temp)
-                do! Command.TransformLayout(src.Image, layout)
-            }
-            temp.Read(dst)
-        finally
-            device.Delete temp
-
+        let write (buffer : TensorImage) = buffer.Read(dst)
+        downloadLevel src write dst.Size device
 
     let uploadLevel (src : PixImage) (dst : ImageSubresource) (device : Device) =
         let format = dst.Image.Format
@@ -3192,8 +3216,8 @@ type ContextImageExtensions private() =
 
     [<Extension>]
     static member inline DownloadLevel(this : Device, src : ImageSubresource, dst : PixImage) =
-        this |> Image.downloadLevel src dst
-        
+        this |> Image.downloadLevel2d src dst
+
     [<Extension>]
     static member inline DownloadLevel(this : Device, src : ImageSubresource, dst : PixVolume) =
         this |> Image.downloadLevel3d src dst

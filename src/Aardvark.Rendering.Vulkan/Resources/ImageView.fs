@@ -137,16 +137,19 @@ module ImageView =
                     false, img
             else
                 if img.Samples > 1 then
-                    Log.line "resolve"
-                    let temp = device.CreateImage(img.Size, levels, slices, 1, img.Dimension, VkFormat.toTextureFormat img.Format, VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit)
+                    let resolved = device.CreateImage(img.Size, levels, slices, 1, img.Dimension, VkFormat.toTextureFormat img.Format, VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit)
+
+                    let srcLayout = img.Layout
 
                     device.eventually {
-                        do! Command.TransformLayout(temp, VkImageLayout.TransferDstOptimal)
-                        do! Command.ResolveMultisamples(img.[ImageAspect.Color, 0], temp.[ImageAspect.Color, 0])
-                        do! Command.TransformLayout(temp, VkImageLayout.ShaderReadOnlyOptimal)
+                        do! Command.TransformLayout(img, VkImageLayout.TransferSrcOptimal)
+                        do! Command.TransformLayout(resolved, VkImageLayout.TransferDstOptimal)
+                        do! Command.ResolveMultisamples(img.[ImageAspect.Color, 0], resolved.[ImageAspect.Color, 0])
+                        do! Command.TransformLayout(resolved, VkImageLayout.ShaderReadOnlyOptimal)
+                        do! Command.TransformLayout(img, srcLayout)
                     }
 
-                    true, temp
+                    true, resolved
                 else
                     false, img
 
