@@ -221,21 +221,3 @@ module GLExtensions =
             GL.BindBuffer(OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
             for i in 0 .. 7 do
                 GL.BindBufferBase(OpenTK.Graphics.OpenGL4.BufferRangeTarget.UniformBuffer, i, 0)
-
-        /// Creates a single buffer using GL.CreateBuffers()
-        static member CreateBuffer() =
-            let mutable i = 0
-            GL.CreateBuffers(1, &i)
-            i
-
-        /// Creates a single frame buffer using GL.CreateFramebuffers()
-        static member CreateFramebuffer() =
-            let mutable i = 0
-            GL.CreateFramebuffers(1, &i)
-            i
-
-        /// Creates a single texture for the given target using GL.CreateTextures()
-        static member CreateTexture(target : TextureTarget) =
-            let mutable i = 0
-            GL.CreateTextures(target, 1, &i)
-            i

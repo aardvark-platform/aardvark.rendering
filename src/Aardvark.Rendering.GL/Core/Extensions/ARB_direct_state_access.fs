@@ -1,30 +1,63 @@
 ﻿namespace Aardvark.Rendering.GL
 
-#nowarn "9"
 #nowarn "51"
 
 open System
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL
 open OpenTK.Graphics.OpenGL4
-open Microsoft.FSharp.NativeInterop
-open Aardvark.Base
 
 open ExtensionHelpers
-open Aardvark.Rendering.GL
 
 [<AutoOpen>]
-module EXT_direct_state_access =
+module ARB_direct_state_access =
+
+    // Arb functions are in GL type, need alias to prevent recursive calls
+    [<AutoOpen>]
+    module private ArbFunctions =
+        module GL =
+            type Arb = OpenGL4.GL
+
     type GL private() =
 
-        static let supported = ExtensionHelpers.isSupported (Version(4,5)) "GL_EXT_direct_state_access"
+        static let supported = ExtensionHelpers.isSupported (Version(4,5)) "GL_ARB_direct_state_access"
         static let bufferStorage = ExtensionHelpers.isSupported (Version(4,4)) "GL_ARB_buffer_storage"
 
-        static member EXT_direct_state_access = supported
+        static member ARB_direct_state_access = supported
 
-        static member NamedBufferData(buffer : int, size : nativeint, data : nativeint, usage : OpenTK.Graphics.OpenGL4.BufferUsageHint) =
+        static member CreateBuffer() =
             if supported then
-                GL.Ext.NamedBufferData(buffer, size, data, usage)
+                let mutable b = 0
+                GL.CreateBuffers(1, &b)
+                b
+            else
+                let b = GL.GenBuffer()
+                bindBuffer b ignore
+                b
+
+        static member CreateFramebuffer() =
+            if supported then
+                let mutable b = 0
+                GL.CreateFramebuffers(1, &b)
+                b
+            else
+                let b = GL.GenFramebuffer()
+                bindFramebuffer b ignore
+                b
+
+        static member CreateTexture(target : TextureTarget) =
+            if supported then
+                let mutable t = 0
+                GL.CreateTextures(target, 1, &t)
+                t
+            else
+                let t = GL.GenTexture()
+                bindTexture target t ignore
+                t
+
+        static member NamedBufferData(buffer : int, size : nativeint, data : nativeint, usage : BufferUsageHint) =
+            if supported then
+                GL.Arb.NamedBufferData(buffer, size, data, usage)
             else
                 bindBuffer buffer (fun t ->
                     GL.BufferData(t, size, data, usage)
@@ -32,24 +65,23 @@ module EXT_direct_state_access =
 
         static member NamedBufferSubData(buffer : int, offset : nativeint, size : nativeint, data : nativeint) =
             if supported then
-                GL.Ext.NamedBufferSubData(buffer, offset, size, data)
+                GL.Arb.NamedBufferSubData(buffer, offset, size, data)
             else
                 bindBuffer buffer (fun t ->
                     GL.BufferSubData(t, offset, size, data)
                 )
 
         static member NamedClearBufferSubData(buffer : int, ifmt : PixelInternalFormat, offset : nativeint, size : nativeint, fmt : PixelFormat, pixelType : PixelType, data : nativeint) =
-//            if supported then
-//                let ifmt = unbox<ExtDirectStateAccess> (int ifmt)
-//                GL.Ext.ClearNamedBufferSubData(buffer, ifmt, fmt, pixelType, offset, size, data)
-//            else
+            if supported then
+                GL.Arb.ClearNamedBufferSubData(buffer, ifmt, offset, size, fmt, pixelType, data)
+            else
                 bindBuffer buffer (fun t ->
-                    GL.ClearBufferSubData(t, ifmt, offset, int size, fmt, unbox<PixelType> (int pixelType), data)
+                    GL.ClearBufferSubData(t, ifmt, offset, int size, fmt, pixelType, data)
                 )
 
         static member GetNamedBufferSubData(buffer : int, offset : nativeint, size : nativeint, data : nativeint) =
             if supported then
-                GL.Ext.GetNamedBufferSubData(buffer, offset, size, data)
+                GL.Arb.GetNamedBufferSubData(buffer, offset, size, data)
             else
                 bindBuffer buffer (fun t ->
                     GL.GetBufferSubData(t, offset, size, data)
@@ -57,7 +89,7 @@ module EXT_direct_state_access =
 
         static member CopyNamedBufferSubData(src : int, srcOffset : nativeint, dst : int, dstOffset : nativeint, size : nativeint) =
             if supported then
-                GL.Ext.NamedCopyBufferSubData(src, dst, srcOffset, dstOffset, size)
+                GL.Arb.CopyNamedBufferSubData(src, dst, srcOffset, dstOffset, size)
             else
                 bindBuffers src dst (fun tSrc tDst ->
                     GL.CopyBufferSubData(tSrc, tDst, srcOffset, dstOffset, size)
@@ -67,9 +99,9 @@ module EXT_direct_state_access =
         static member NamedBufferStorage(buffer: int, size : nativeint, data : nativeint, flags: BufferStorageFlags) =
             if supported then
                 if bufferStorage then
-                    GL.Ext.NamedBufferStorage(buffer, size, data, flags)
+                    GL.Arb.NamedBufferStorage(buffer, size, data, flags)
                 else
-                    GL.Ext.NamedBufferData(buffer, size, data, BufferUsageHint.DynamicDraw)
+                    GL.Arb.NamedBufferData(buffer, size, data, BufferUsageHint.DynamicDraw)
             else
                 bindBuffer buffer (fun t ->
                     if bufferStorage then
@@ -78,9 +110,9 @@ module EXT_direct_state_access =
                         GL.BufferData(t, size, data, BufferUsageHint.DynamicDraw)
                 )
 
-        static member MapNamedBuffer(buffer: int, access : OpenTK.Graphics.OpenGL4.BufferAccess) =
+        static member MapNamedBuffer(buffer: int, access : BufferAccess) =
             if supported then
-                GL.Ext.MapNamedBuffer(buffer, unbox<BufferAccess> (int access))
+                GL.Arb.MapNamedBuffer(buffer, access)
             else
                 bindBuffer buffer (fun t ->
                     GL.MapBuffer(t, access)
@@ -88,23 +120,23 @@ module EXT_direct_state_access =
 
         static member UnmapNamedBuffer(buffer: int) =
             if supported then
-                GL.Ext.UnmapNamedBuffer(buffer)
+                GL.Arb.UnmapNamedBuffer(buffer)
             else
                 bindBuffer buffer (fun t ->
                     GL.UnmapBuffer(t)
                 )
-                
+
         static member MapNamedBufferRange(buffer: int, offset : nativeint, size : nativeint, access : BufferAccessMask) =
             if supported then
-                GL.Ext.MapNamedBufferRange(buffer, offset, size, unbox (int access))
+                GL.Arb.MapNamedBufferRange(buffer, offset, size, access)
             else
                 bindBuffer buffer (fun t ->
                     GL.MapBufferRange(t, offset, size, access)
                 )
-                
+
         static member FlushMappedNamedBufferRange(buffer: int, offset : nativeint, size : nativeint) =
             if supported then
-                GL.Ext.FlushMappedNamedBufferRange(buffer, offset, size)
+                GL.Arb.FlushMappedNamedBufferRange(buffer, offset, size)
             else
                 bindBuffer buffer (fun t ->
                     GL.FlushMappedBufferRange(t, offset, size)
@@ -112,14 +144,14 @@ module EXT_direct_state_access =
 
         static member GetNamedBufferParameter(buffer : int, pname : BufferParameterName, arr : int[]) =
             if supported then
-                GL.Ext.GetNamedBufferParameter(buffer, unbox<BufferParameterName> (int pname), arr)
+                GL.Arb.GetNamedBufferParameter(buffer, pname, arr)
             else
                 bindBuffer buffer (fun t ->
                     GL.GetBufferParameter(t, pname, arr)
                 )
         static member GetNamedBufferParameter(buffer : int, pname : BufferParameterName, res : byref<int>) =
             if supported then
-                GL.Ext.GetNamedBufferParameter(buffer, unbox<BufferParameterName> (int pname), &res)
+                GL.Arb.GetNamedBufferParameter(buffer, pname, &res)
             else
                 let mutable r = res
                 bindBuffer buffer (fun t ->
@@ -128,7 +160,7 @@ module EXT_direct_state_access =
                 res <- r
         static member GetNamedBufferParameter(buffer : int, pname : BufferParameterName, res : byref<int64>) =
             if supported then
-                GL.Ext.GetNamedBufferParameter(buffer, unbox<BufferParameterName> (int pname), NativePtr.cast &&res)
+                GL.Arb.GetNamedBufferParameter(buffer, pname, &&res)
             else
                 let mutable r = res
                 bindBuffer buffer (fun t ->
@@ -138,7 +170,7 @@ module EXT_direct_state_access =
 
         static member NamedCopyBufferSubData(readBuffer : int, writeBuffer : int, readOffset : nativeint, writeOffset : nativeint, size : nativeint) =
             if supported then
-                GL.Ext.NamedCopyBufferSubData(readBuffer, writeBuffer, readOffset, writeOffset, size)
+                GL.Arb.CopyNamedBufferSubData(readBuffer, writeBuffer, readOffset, writeOffset, size)
             else
                 bindBuffers readBuffer writeBuffer (fun t0 t1 ->
                     GL.CopyBufferSubData(t0, t1, readOffset, writeOffset, size)
