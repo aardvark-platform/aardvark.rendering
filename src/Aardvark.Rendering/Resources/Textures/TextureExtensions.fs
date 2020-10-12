@@ -246,6 +246,7 @@ type ITextureRuntimeExtensions private() =
     static member CopyTo(src : IFramebufferOutput, dst : IFramebufferOutput) =
         ITextureRuntimeExtensions.Copy(src.Runtime, src, dst)
 
+    // Download
     [<Extension>]
     static member Download(this : ITextureRuntime, texture : IBackendTexture, level : int, slice : int, format : PixFormat) =
         let size = texture.Size.XY |> levelSize level
@@ -282,6 +283,39 @@ type ITextureRuntimeExtensions private() =
         let pixFormat = TextureFormat.toDownloadFormat texture.Format
         this.Download(texture, 0, 0, pixFormat)
 
+    // DownloadDepth
+    [<Extension>]
+    static member DownloadDepth(this : ITextureRuntime, texture : IBackendTexture, level : int, slice : int) =
+        let size = texture.Size.XY |> levelSize level
+        let matrix = Matrix<float32>(size)
+        this.DownloadDepth(texture, 0, 0, matrix)
+        matrix
+
+    [<Extension>]
+    static member DownloadDepth(this : ITextureRuntime, texture : IBackendTexture, level : int) =
+        this.DownloadDepth(texture, level, 0)
+
+    [<Extension>]
+    static member DownloadDepth(this : ITextureRuntime, texture : IBackendTexture) =
+        this.DownloadDepth(texture, 0, 0)
+
+    // DownloadStencil
+    [<Extension>]
+    static member DownloadStencil(this : ITextureRuntime, texture : IBackendTexture, level : int, slice : int) =
+        let size = texture.Size.XY |> levelSize level
+        let matrix = Matrix<int>(size)
+        this.DownloadStencil(texture, 0, 0, matrix)
+        matrix
+
+    [<Extension>]
+    static member DownloadStencil(this : ITextureRuntime, texture : IBackendTexture, level : int) =
+        this.DownloadStencil(texture, level, 0)
+
+    [<Extension>]
+    static member DownloadStencil(this : ITextureRuntime, texture : IBackendTexture) =
+        this.DownloadStencil(texture, 0, 0)
+
+    // Upload
     [<Extension>]
     static member Upload(this : ITextureRuntime, texture : IBackendTexture, level : int, source : PixImage) =
         this.Upload(texture, level, 0, source)
