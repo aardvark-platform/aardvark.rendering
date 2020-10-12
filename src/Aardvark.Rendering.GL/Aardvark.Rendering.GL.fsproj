@@ -37,7 +37,7 @@
     <Compile Include="Core\ModeHandles.fs" />
     <Compile Include="Core\MemoryInfo.fs" />
     <Compile Include="Core\Extensions.fs" />
-    <Compile Include="Core\Extensions\EXT_direct_state_access.fs" />
+    <Compile Include="Core\Extensions\ARB_direct_state_access.fs" />
     <Compile Include="Core\Extensions\ARB_sparse_buffer.fs" />
     <Compile Include="Core\Extensions\ARB_pipeline_statistics_query.fs" />
     <Compile Include="Instructions\OpenGL.fs" />

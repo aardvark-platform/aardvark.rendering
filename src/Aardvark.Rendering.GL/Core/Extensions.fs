@@ -66,4 +66,19 @@ module ExtensionHelpers =
         finally
             GL.BindBuffer(BufferTarget.CopyReadBuffer, oRead)
             GL.BindBuffer(BufferTarget.CopyWriteBuffer, oWrite)
- 
+
+    let inline bindFramebuffer (b : int) (action : FramebufferTarget -> 'a) =
+        let old = GL.GetInteger(GetPName.FramebufferBinding)
+        try
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, b)
+            action FramebufferTarget.Framebuffer
+        finally
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, old)
+
+    let inline bindTexture (target : TextureTarget) (t : int) (action : unit -> 'a) =
+        let old = GL.GetInteger(unbox target)
+        try
+            GL.BindTexture(target, t)
+            action()
+        finally
+            GL.BindTexture(target, old)
