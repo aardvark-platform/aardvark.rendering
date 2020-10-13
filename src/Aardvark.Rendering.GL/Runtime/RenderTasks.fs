@@ -345,7 +345,7 @@ module RenderTasks =
                 hasProgram <- false
                 program.Dispose()
 
-                (objects :> aset<_>).Content.Outputs.Clear()
+                (objects :> aset<_>).History.Value.Outputs.Clear()
 
                 objects.Clear()
         
