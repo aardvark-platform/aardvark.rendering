@@ -3113,19 +3113,19 @@ module Image =
             let srcImg = src.Image
 
             let usage = VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit
-            let img = create srcImg.Size srcImg.MipMapLevels srcImg.Count 1 srcImg.Dimension format usage device
+            let resolved = create srcImg.Size srcImg.MipMapLevels srcImg.Count 1 srcImg.Dimension format usage device
 
             let cmd =
                 let layout = srcImg.Layout
 
                 command {
                     do! Command.TransformLayout(srcImg, VkImageLayout.TransferSrcOptimal)
-                    do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
-                    do! Command.ResolveMultisamples(src.Image.[ImageAspect.Color, src.Level], img.[ImageAspect.Color, src.Level])
+                    do! Command.TransformLayout(resolved, VkImageLayout.TransferDstOptimal)
+                    do! Command.ResolveMultisamples(src, resolved.[src.Aspect, src.Level, src.Slice])
                     do! Command.TransformLayout(srcImg, layout)
                 }
 
-            img.[src.Aspect, src.Level, src.Slice], cmd
+            resolved.[src.Aspect, src.Level, src.Slice], cmd
 
         let srcResolved, cmdResolve =
             if src.Image.Samples > 1 then

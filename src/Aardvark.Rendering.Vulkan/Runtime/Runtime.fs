@@ -125,9 +125,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         with get() = instance.DebugVerbosity
         and set v = instance.DebugVerbosity <- v
 
-    member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = failf "not implemented"
-    member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = failf "not implemented"
-
     member x.CreateStreamingTexture (mipMaps : bool) = failf "not implemented"
     member x.DeleteStreamingTexture (texture : IStreamingTexture) = failf "not implemented"
 
@@ -143,12 +140,30 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
     member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) =
-        let image = unbox<Image> t 
+        let image = unbox<Image> t
         device.DownloadLevel(image.[ImageAspect.Color, level, slice], target)
-        
+
     member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) =
-        let image = unbox<Image> t 
+        let image = unbox<Image> t
         device.DownloadLevel(image.[ImageAspect.Color, level, slice], target)
+
+    member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) =
+        let image = unbox<Image> t
+        let pix =
+            let img = PixImage<int>()
+            img.Volume <- target.AsVolume()
+            img
+
+        device.DownloadLevel(image.[ImageAspect.Stencil, level, slice], pix)
+
+    member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) =
+        let image = unbox<Image> t
+        let pix =
+            let img = PixImage<float32>()
+            img.Volume <- target.AsVolume()
+            img
+
+        device.DownloadLevel(image.[ImageAspect.Depth, level, slice], pix)
 
     member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) =
         let image = unbox<Image> t 
