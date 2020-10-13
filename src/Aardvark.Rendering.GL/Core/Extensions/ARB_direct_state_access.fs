@@ -6,6 +6,7 @@ open System
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL
 open OpenTK.Graphics.OpenGL4
+open Aardvark.Rendering.GL
 
 open ExtensionHelpers
 
@@ -21,7 +22,6 @@ module ARB_direct_state_access =
     type GL private() =
 
         static let supported = ExtensionHelpers.isSupported (Version(4,5)) "GL_ARB_direct_state_access"
-        static let bufferStorage = ExtensionHelpers.isSupported (Version(4,4)) "GL_ARB_buffer_storage"
 
         static member ARB_direct_state_access = supported
 
@@ -98,16 +98,13 @@ module ARB_direct_state_access =
 
         static member NamedBufferStorage(buffer: int, size : nativeint, data : nativeint, flags: BufferStorageFlags) =
             if supported then
-                if bufferStorage then
+                if GL.ARB_buffer_storage then
                     GL.Arb.NamedBufferStorage(buffer, size, data, flags)
                 else
                     GL.Arb.NamedBufferData(buffer, size, data, BufferUsageHint.DynamicDraw)
             else
                 bindBuffer buffer (fun t ->
-                    if bufferStorage then
-                        GL.BufferStorage(t, size, data, flags)
-                    else
-                        GL.BufferData(t, size, data, BufferUsageHint.DynamicDraw)
+                    GL.BufferStorage(t, size, data, flags)
                 )
 
         static member MapNamedBuffer(buffer: int, access : BufferAccess) =
