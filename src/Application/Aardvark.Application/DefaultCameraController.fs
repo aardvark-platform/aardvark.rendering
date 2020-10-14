@@ -384,10 +384,16 @@ module DefaultCameraController =
     let controlExt (initialSpeed : float ) (mouse : IMouse) (keyboard : IKeyboard) (time : aval<DateTime>) (cam : CameraView) : aval<CameraView> =
         let speed = AVal.init initialSpeed
 
+        let ctrl = keyboard.IsDown Keys.LeftCtrl
+
         keyboard.DownWithRepeats.Values.Add ( fun k -> 
             match k with
             | Keys.PageUp -> transact ( fun _ -> speed.Value <- speed.Value * 1.3 )
             | Keys.PageDown -> transact ( fun _ -> speed.Value <- speed.Value / 1.3 )
+
+            | Keys.Up when AVal.force ctrl -> transact ( fun _ -> speed.Value <- speed.Value * 1.3 )
+            | Keys.Down when AVal.force ctrl -> transact ( fun _ -> speed.Value <- speed.Value / 1.3 )
+
             | _ -> ()
         )
 
