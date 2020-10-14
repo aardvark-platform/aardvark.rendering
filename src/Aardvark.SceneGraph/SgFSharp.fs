@@ -18,6 +18,13 @@ module SgFSharp =
 
     module SgFSharpHelpers =
 
+        type SgEffectBuilder() =
+            inherit EffectBuilder()
+
+            member x.Run(f : unit -> list<FShadeEffect>) =
+                let surface = f() |> FShade.Effect.compose |> Surface.FShadeSimple
+                fun (sg : ISg) -> Sg.SurfaceApplicator(surface, sg) :> ISg
+
         // These utilities make it possible to pass
         // a string, Symbol or TypedSymbol as identifier.
         type NameConverter =
@@ -803,6 +810,14 @@ module SgFSharp =
         // Drawing
         // ================================================================================================================
 
+        /// Applies the given effects to the scene.
+        let shader = SgEffectBuilder()
+
+        /// Applies the given effects to the scene.
+        let effect (s : seq<FShadeEffect>) (sg : ISg) =
+            let s = FShade.Effect.compose s |> Surface.FShadeSimple
+            Sg.SurfaceApplicator(s, sg) :> ISg
+
         /// Applies the given surface to the scene.
         let surface (m : ISurface) (sg : ISg) =
             Sg.SurfaceApplicator(Surface.Backend m, sg) :> ISg
@@ -978,14 +993,14 @@ module SgFSharp =
             Trafo3d.Translation(-src.Center) * Trafo3d.Scale(scale) * Trafo3d.Translation(dst.Center)
 
         /// Adaptively transforms the scene so its bounding box aligns with the given box.
-        let normalizeToAdaptive (box : Box3d) (this : ISg) =
-            let bb = this?GlobalBoundingBox(Ag.Scope.Root) : aval<Box3d>
-            Sg.TrafoApplicator(bb |> AVal.map (transformBox box), this) :> ISg
+        let normalizeToAdaptive (box : Box3d) (sg : ISg) =
+            let bb = sg?GlobalBoundingBox(Ag.Scope.Root) : aval<Box3d>
+            Sg.TrafoApplicator(bb |> AVal.map (transformBox box), sg) :> ISg
 
         /// Transforms the scene so its bounding box aligns with the given box.
-        let normalizeTo (box : Box3d) (this : ISg) =
-            let bb = this?GlobalBoundingBox(Ag.Scope.Root) : aval<Box3d>
-            Sg.TrafoApplicator(bb.GetValue() |> transformBox box |> AVal.constant, this) :> ISg
+        let normalizeTo (box : Box3d) (sg : ISg) =
+            let bb = sg?GlobalBoundingBox(Ag.Scope.Root) : aval<Box3d>
+            Sg.TrafoApplicator(bb.GetValue() |> transformBox box |> AVal.constant, sg) :> ISg
 
         /// Adaptively transforms the scene so its bounding box spans from -1 to 1 in all dimensions.
         let normalizeAdaptive sg =
