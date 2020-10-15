@@ -18,10 +18,12 @@
     <Compile Include="MultiStageAgTest.fs" />
     <Compile Include="RenderingTests.fs" />
     <Compile Include="PerformanceTest.fs" />
+    <Compile Include="RadixSort.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\..\Aardvark.GPGPU\Aardvark.GPGPU.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering.Interactive\Aardvark.Rendering.Interactive.fsproj" />
     <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj" />
     <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj" />

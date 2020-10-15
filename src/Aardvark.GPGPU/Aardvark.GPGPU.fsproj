@@ -19,6 +19,7 @@
     <Compile Include="Primitives.fs" />
     <Compile Include="Jpeg.fs" />
     <Compile Include="Sorting.fs" />
+    <Compile Include="RadixSort.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj" />
