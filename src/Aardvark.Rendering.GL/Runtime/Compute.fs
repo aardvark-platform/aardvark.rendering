@@ -136,6 +136,8 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
 
                         | StorageBuffer(slot, _) ->
                             match value with
+                                | null ->
+                                    inputBuffers.[slot] <- (new Aardvark.Rendering.GL.Buffer(ctx, 0n, 0), 0n, 0n)
                                 | :? IBufferRange as range ->
                                     let buffer = unbox<GL.Buffer> range.Buffer
                                     inputBuffers.[slot] <- (buffer, range.Offset, range.Size)

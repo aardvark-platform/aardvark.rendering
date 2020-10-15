@@ -191,7 +191,10 @@ let main args =
     Aardvark.Init()
     //testCompile()
 
-    testTextureCubeArray()
+    RadixSortTest.run()
+
+
+    //testTextureCubeArray()
 
     //RenderingTests.``[GL] concurrent group change``()
     //RenderingTests.``[GL] memory leak test``()
