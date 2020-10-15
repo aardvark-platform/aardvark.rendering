@@ -207,13 +207,13 @@ let main argv =
             sg
             |> Sg.pass pass0
             |> Sg.colorOutput' Set.empty
-            |> Sg.stencilModeFront' { StencilMode.Default with Pass = StencilOperation.IncrementWrap }
-            |> Sg.stencilModeBack' { StencilMode.Default with Pass = StencilOperation.DecrementWrap }
+            |> Sg.stencilModeFront' { StencilMode.None with Pass = StencilOperation.IncrementWrap }
+            |> Sg.stencilModeBack' { StencilMode.None with Pass = StencilOperation.DecrementWrap }
 
         let mainSg =
             sg
             |> Sg.pass pass1
-            |> Sg.stencilMode' { StencilMode.Default with Comparison = ComparisonFunction.Equal }
+            |> Sg.stencilMode' { StencilMode.None with Comparison = ComparisonFunction.Equal }
 
         [ maskSg; mainSg ] |> Sg.ofList
 

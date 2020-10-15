@@ -111,7 +111,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
 
     let compileHidden (m : IndexedGeometry) =
         let writeStencil =
-            { StencilMode.Default with
+            { StencilMode.None with
                 Pass = StencilOperation.Replace
                 Fail = StencilOperation.Replace
                 DepthFail = StencilOperation.Replace

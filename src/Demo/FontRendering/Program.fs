@@ -685,7 +685,7 @@ let main argv =
             do! Air.CullMode     CullMode.None
             do! Air.BlendMode    BlendMode.None
             do! Air.FillMode     FillMode.Fill
-            do! Air.StencilMode  StencilMode.Default
+            do! Air.StencilMode  StencilMode.None
 
             // we can also override the shaders in use (and with FSHade)
             // build our own dynamic shaders e.g. depending on the inherited 

@@ -594,7 +594,7 @@ module Utilities =
 
 
                 let stencilTest =
-                    { StencilMode.Default with
+                    { StencilMode.None with
                         Comparison = ComparisonFunction.Equal }
 
                 { new SimpleRenderWindow(app, app.Info.viewTrafos, app.Info.projTrafos) with
@@ -625,7 +625,7 @@ module Utilities =
 
 
                 let stencilTest =
-                    { StencilMode.Default with
+                    { StencilMode.None with
                         Comparison = ComparisonFunction.Equal }
 
                 { new SimpleRenderWindow(app, app.Info.viewTrafos, app.Info.projTrafos) with

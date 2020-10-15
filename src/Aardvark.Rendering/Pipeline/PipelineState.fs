@@ -53,9 +53,9 @@ type StencilState =
 
     static member Default =
         {
-            ModeFront      = AVal.constant StencilMode.Default
+            ModeFront      = AVal.constant StencilMode.None
             WriteMaskFront = AVal.constant StencilMask.All
-            ModeBack       = AVal.constant StencilMode.Default
+            ModeBack       = AVal.constant StencilMode.None
             WriteMaskBack  = AVal.constant StencilMask.All
         }
 

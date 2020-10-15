@@ -51,8 +51,9 @@ type StencilMode =
         x.Fail <> StencilOperation.Keep ||
         x.DepthFail <> StencilOperation.Keep
 
-    /// Default state that does not modify stencil values.
-    static member Default =
+    /// Default state that does not modify stencil values and always
+    /// passes the stencil test.
+    static member None =
         { Pass          = StencilOperation.Keep
           Fail          = StencilOperation.Keep
           DepthFail     = StencilOperation.Keep
@@ -66,7 +67,7 @@ module StencilMode =
     /// Creates a stencil mode without compare mask.
     let simple (pass : StencilOperation) (fail : StencilOperation) (depthFail : StencilOperation)
                (compare : ComparisonFunction) (reference : int) =
-        { StencilMode.Default with
+        { StencilMode.None with
             Pass        = pass
             Fail        = fail
             DepthFail   = depthFail
