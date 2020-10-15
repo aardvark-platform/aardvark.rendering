@@ -178,6 +178,17 @@ type IRuntimeExtensions private() =
         this.CompileClear(signature, ~~color, ~~depth, ~~stencil)
 
 
+    /// Clears the depth and stencil attachments to the specified values.
+    [<Extension>]
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, depth : aval<float>, stencil : aval<int>) =
+        this.CompileClear(signature, ~~Map.empty, depth |> AVal.map Some, stencil |> AVal.map Some)
+
+    /// Clears the depth attachment to the specified value.
+    [<Extension>]
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, depth : float, stencil : int) =
+        this.CompileClear(signature, ~~depth, ~~stencil)
+
+
     /// Clears the depth attachment to the specified value.
     [<Extension>]
     static member CompileClear(this : IRuntime, signature : IFramebufferSignature, depth : aval<float>) =
@@ -266,3 +277,71 @@ type IRuntimeExtensions private() =
                                signature : IFramebufferSignature,
                                color : C4f, depth : float) =
         this.CompileClear(signature, ~~color, ~~depth)
+
+
+    // ================================================================================================================
+    // CompileClear (color, stencil)
+    // ================================================================================================================
+
+    /// Clears the given color attachments, and (optionally) the stencil attachment to the specified values.
+    [<Extension>]
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature,
+                               colors : aval<Map<Symbol, C4f>>, stencil : aval<int option>) =
+        this.CompileClear(signature, colors, ~~None, stencil)
+
+
+    /// Clears the given color attachments, and the stencil attachment to the specified values.
+    [<Extension>]
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature,
+                               colors : aval<seq<Symbol * C4f>>,
+                               stencil : aval<int>) =
+        this.CompileClear(
+            signature,
+            colors |> AVal.map Map.ofSeq,
+            ~~None,
+            stencil |> AVal.map Some
+        )
+
+    /// Clears the given color attachments, and the stencil attachment to the specified values.
+    [<Extension>]
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature,
+                               colors : seq<Symbol * C4f>, stencil : int) =
+        this.CompileClear(signature, ~~colors, ~~stencil)
+
+
+    /// Clears the given color attachments, and the stencil attachment to the specified values.
+    [<Extension>]
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature,
+                               colors : aval<list<Symbol * C4f>>,
+                               stencil : aval<int>) =
+        this.CompileClear(
+            signature,
+            colors |> AVal.map Map.ofList,
+            ~~None,
+            stencil |> AVal.map Some
+        )
+
+
+    /// Clears all color attachments and the stencil attachment to the specified values.
+    [<Extension>]
+    static member CompileClear(this : IRuntime,
+                               signature : IFramebufferSignature,
+                               color : aval<C4f>,
+                               stencil : aval<int>) =
+
+        let attachments =
+            signature.ColorAttachments |> Map.toList |> List.map (snd >> fst)
+
+        this.CompileClear(
+            signature,
+            color |> AVal.map (fun c -> attachments |> List.map (fun sem -> sem, c) |> Map.ofList),
+            ~~None,
+            stencil |> AVal.map Some
+        )
+
+    /// Clears all color attachments and the stencil attachment to the specified values.
+    [<Extension>]
+    static member CompileClear(this : IRuntime,
+                               signature : IFramebufferSignature,
+                               color : C4f, stencil : int) =
+        this.CompileClear(signature, ~~color, ~~stencil)
