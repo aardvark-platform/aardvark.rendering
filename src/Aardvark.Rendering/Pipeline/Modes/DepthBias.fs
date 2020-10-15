@@ -31,6 +31,10 @@ type DepthBias =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DepthBias =
 
+    /// Creates a constant depth bias.
+    let constant (value : float) =
+        { DepthBias.None with Constant = value }
+
     /// Creates a depth bias without clamping.
     let simple (constant : float) (slopeScale : float) =
         { Constant   = constant
