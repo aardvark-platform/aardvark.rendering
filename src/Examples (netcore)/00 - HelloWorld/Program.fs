@@ -13,6 +13,156 @@ open Aardvark.Application.Slim
 // In your application you most likely want to use this API instead of the more abstract
 // show/window computation expression builders (which reduces code duplication
 // in this case) to setup applications.
+module RadixSort4Shader =
+    open FShade
+
+    [<LocalSize(X = 64)>]
+    let classify (cnt : int) (shift : int) (data : uint32[]) (dst : V4i[]) =
+        compute {
+            let id = getGlobalId().X
+            if id < cnt then
+                let v = (data.[id] >>> shift) &&& 3u
+
+                match v with
+                | 0u -> dst.[id] <- V4i.OOOI
+                | 1u -> dst.[id] <- V4i.OOII
+                | 2u -> dst.[id] <- V4i.OIII
+                | _  -> dst.[id] <- V4i.IIII
+
+        }
+        
+    [<LocalSize(X = 64)>]
+    let shuffle (cnt : int) (shift : int) (src : uint32[]) (dst : uint32[]) (index : V4i[]) =
+        compute {
+            let id = getGlobalId().X
+            if id < cnt then
+                let k = src.[id]
+                let v = (k >>> shift) &&& 3u
+                let idx = if id > 0 then index.[id-1] else V4i.OOOO
+
+                match v with
+                | 0u -> dst.[idx.X] <- k
+                | 1u -> dst.[idx.Y] <- k
+                | 2u -> dst.[idx.Z] <- k
+                | _  -> dst.[idx.W] <- k
+                
+        }
+        
+    [<GLSLIntrinsic("atomicAdd({0}, {1})")>]
+    let atomicAdd (r : ref<uint32>) (v : uint32) : unit = onlyInShaderCode "atomicAdd"
+
+    [<LocalSize(X = 256)>]
+    let computeHistogram8Local (cnt : int) (shift : int) (src : uint32[]) (dst : uint32[]) =
+        compute {
+            let l = allocateShared<uint32> 256
+            let lid = getLocalId().X
+            l.[lid] <- 0u
+            barrier()
+
+            let id = getGlobalId().X
+            if id < cnt then
+                let bin = (src.[id] >>> shift) &&& 255u |> int
+                atomicAdd &&l.[bin] 1u
+
+            barrier()
+
+            atomicAdd &&dst.[lid] l.[lid]
+        }
+        
+    [<LocalSize(X = 64)>]
+    let computeHistogram8 (cnt : int) (shift : int) (src : uint32[]) (dst : uint32[]) =
+        compute {
+            let id = getGlobalId().X
+            if id < cnt then
+                let bin = (src.[id] >>> shift) &&& 255u |> int
+                atomicAdd &&dst.[bin] 1u
+
+        }
+
+        
+    [<LocalSize(X = 64)>]
+    let computeHistogram16 (cnt : int) (shift : int) (src : uint32[]) (dst : uint32[]) =
+        compute {
+            let id = getGlobalId().X
+            if id < cnt then
+                let bin = (src.[id] >>> shift) &&& 65535u |> int
+                atomicAdd &&dst.[bin] 1u
+
+        }
+
+
+type RadixSort4(runtime : IRuntime, cnt : int) =
+    
+    let prim = ParallelPrimitives runtime
+    let temp = runtime.CreateBuffer<uint32>(cnt)
+    let buffer = runtime.CreateBuffer<V4i>(cnt)
+
+    let scan = prim.CompileScan(<@ fun (a : V4i) (b : V4i) -> a + b @>, buffer, buffer)
+    let classify = runtime.CreateComputeShader RadixSort4Shader.classify
+    let shuffle = runtime.CreateComputeShader RadixSort4Shader.shuffle
+
+    member x.Compile (src : IBuffer<uint32>, dst : IBuffer<uint32>) =
+        
+        let classifyInputs =
+            Array.init 16 (fun i ->
+                let data =
+                    if i % 2 = 0 then src
+                    else temp
+
+                let classifyInput0 = runtime.NewInputBinding classify
+                classifyInput0.["cnt"] <- cnt
+                classifyInput0.["shift"] <- (i <<< 1)
+                classifyInput0.["data"] <- data.Buffer
+                classifyInput0.["dst"] <- buffer.Buffer
+                classifyInput0.Flush()
+
+                classifyInput0
+            )
+
+            
+        let shuffleInputs =
+            Array.init 16 (fun i ->
+                let src =
+                    if i % 2 = 0 then src
+                    else temp
+                let dst =
+                    if i = 15 then dst
+                    elif i % 2 = 0 then temp
+                    else src
+
+                let shuffleInput0 = runtime.NewInputBinding shuffle
+                shuffleInput0.["cnt"] <- cnt
+                shuffleInput0.["shift"] <- 0
+                shuffleInput0.["src"] <- src.Buffer
+                shuffleInput0.["dst"] <- dst.Buffer
+                shuffleInput0.["index"] <- buffer.Buffer
+                shuffleInput0.Flush()
+                shuffleInput0
+            )
+        
+
+
+        runtime.Compile [
+            for i in 0 .. classifyInputs.Length - 1 do
+                ComputeCommand.Bind classify
+                ComputeCommand.SetInput classifyInputs.[i]
+                ComputeCommand.Dispatch(ceilDiv cnt 64)
+                
+                ComputeCommand.Sync buffer.Buffer
+
+                ComputeCommand.Execute scan
+                
+                ComputeCommand.Sync buffer.Buffer
+
+                ComputeCommand.Bind shuffle
+                ComputeCommand.SetInput shuffleInputs.[i]
+                ComputeCommand.Dispatch(ceilDiv cnt 64)
+
+
+        ]
+
+
+
 
 
 [<EntryPoint>]
@@ -24,82 +174,114 @@ let main argv =
 
     // create an OpenGL/Vulkan application. Use the use keyword (using in C#) in order to
     // properly dipose resources on shutdown...
-    use app = new OpenGlApplication()
-    // SimpleRenderWindow is a System.Windows.Forms.Form which contains a render control
-    // of course you can a custum form and add a control to it.
-    // Note that there is also a WPF binding for OpenGL. For more complex GUIs however,
-    // we recommend using aardvark-media anyways..
-    let win = app.CreateGameWindow(samples = 8)
-    //win.Title <- "Hello Aardvark"
+    use app = new VulkanApplication()
+    let runtime = app.Runtime :> IRuntime
 
-    //win.Decorated <- false
-    //win.Floating <- true
-    //win.WindowState <- Glfw.WindowState.Maximized
-
-    //win.Keyboard.Down.Values.Add (fun k ->
-    //    match k with
-    //    | Keys.Enter -> 
-    //        match win.WindowState with
-    //        | Glfw.WindowState.Maximized -> win.WindowState <- Glfw.WindowState.Normal
-    //        | _ -> win.WindowState <- Glfw.WindowState.Maximized
-    //    | Keys.Space ->
-    //        win.Decorated <- not win.Decorated
-    //    | _ ->
-    //        ()
-    //)
-
-    // Given eye, target and sky vector we compute our initial camera pose
-    let initialView = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
-    // the class Frustum describes camera frusta, which can be used to compute a projection matrix.
-    let frustum = 
-        // the frustum needs to depend on the window size (in oder to get proper aspect ratio)
-        win.Sizes 
-            // construct a standard perspective frustum (60 degrees horizontal field of view,
-            // near plane 0.1, far plane 50.0 and aspect ratio x/y.
-            |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 50.0 (float s.X / float s.Y))
-
-    // create a controlled camera using the window mouse and keyboard input devices
-    // the window also provides a so called time mod, which serves as tick signal to create
-    // animations - seealso: https://github.com/aardvark-platform/aardvark.docs/wiki/animation
-    let cameraView = DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
-
-    // create a quad using low level primitives (IndexedGeometry is our base type for specifying
-    // geometries using vertices etc)
-    let quadSg =
-        let quad =
-            IndexedGeometry(
-                Mode = IndexedGeometryMode.TriangleList,
-                IndexArray = ([|0;1;2; 0;2;3|] :> System.Array),
-                IndexedAttributes =
-                    SymDict.ofList [
-                        DefaultSemantic.Positions,                  [| V3f(-1,-1,0); V3f(1,-1,0); V3f(1,1,0); V3f(-1,1,0) |] :> Array
-                        DefaultSemantic.Normals,                    [| V3f.OOI; V3f.OOI; V3f.OOI; V3f.OOI |] :> Array
-                        DefaultSemantic.DiffuseColorCoordinates,    [| V2f.OO; V2f.IO; V2f.II; V2f.OI |] :> Array
-                    ]
-            )
-                
-        // create a scenegraph, given a IndexedGeometry instance...
-        quad |> Sg.ofIndexedGeometry
-
-    let sg =
-        Sg.box' C4b.White Box3d.Unit 
-            // here we use fshade to construct a shader: https://github.com/aardvark-platform/aardvark.docs/wiki/FShadeOverview
-            |> Sg.effect [
-                    DefaultSurfaces.trafo                 |> toEffect
-                    DefaultSurfaces.constantColor C4f.Red |> toEffect
-                    DefaultSurfaces.simpleLighting        |> toEffect
-                ]
-            // extract our viewTrafo from the dynamic cameraView and attach it to the scene graphs viewTrafo 
-            |> Sg.viewTrafo (cameraView  |> AVal.map CameraView.viewTrafo )
-            // compute a projection trafo, given the frustum contained in frustum
-            |> Sg.projTrafo (frustum |> AVal.map Frustum.projTrafo    )
+    let cnt = 1 <<< 20
+    
+    let rand = RandomSystem()
+    let data = Array.init cnt (fun i -> uint32 i)//rand.UniformUInt())
+    let a = runtime.CreateBuffer(data)
+    let b = runtime.CreateBuffer<uint32>(data.Length)
 
 
-    let renderTask = 
-        // compile the scene graph into a render task
-        app.Runtime.CompileRender(win.FramebufferSignature, sg)
+    let h = runtime.CreateBuffer<uint32>(65536)
 
-    // assign the render task to our window...
-    win.RenderTask <- renderTask
-    win.Run()
+    let computeHisto = runtime.CreateComputeShader RadixSort4Shader.computeHistogram16
+    let input = runtime.NewInputBinding computeHisto
+
+
+    input.["cnt"] <- cnt
+    input.["shift"] <- 0
+    input.["src"] <- a.Buffer
+    input.["dst"] <- h.Buffer
+    input.Flush()
+
+    let prog = 
+        runtime.Compile [
+            ComputeCommand.Set(h, 0u)
+            ComputeCommand.Bind computeHisto
+            ComputeCommand.SetInput input
+            ComputeCommand.Dispatch (ceilDiv cnt computeHisto.LocalSize.X)
+        ]
+
+    prog.Run()
+    let histo = h.Download()
+
+    let test =
+        let arr = Array.zeroCreate 65536
+        for v in data do
+            let bin = (v &&& 65535u) |> int
+            arr.[bin] <- arr.[bin] + 1u
+        arr
+
+
+    if histo <> test then
+        Log.warn "bad"
+
+    //Log.start "histo"
+    //for i in 0 .. 65535 do
+    //    if test.[i] <> 0u then
+    //        Log.line "0x%02X: %d" i test.[i]
+    //Log.stop()
+
+    let iter = 1000
+    let mutable sum = 0.0
+    let mutable sumSq = 0.0
+    for i in 1 .. iter do
+        let iter = 100
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        for i in 1 .. iter do
+            prog.Run()
+        sw.Stop()
+
+        let t = sw.MicroTime / iter
+        sum <- sum + t.TotalSeconds
+        sumSq <- sum + sqr t.TotalSeconds
+
+        Log.line "%d: %A" i t
+
+
+    Log.line "avg: %A" (MicroTime.FromSeconds sum / iter)
+
+    exit 0
+
+
+
+
+    let s = RadixSort4(runtime, cnt)
+    let p = s.Compile(a, b)
+    
+    for i in 1 .. 2 do
+        p.Run()
+
+    let sw = System.Diagnostics.Stopwatch()
+    let mutable iter = 0
+    while sw.Elapsed.TotalSeconds < 5.0 do
+        sw.Start()
+        p.Run()
+        sw.Stop()
+        iter <- iter + 1
+
+    Log.line "%A" (sw.MicroTime / iter)
+
+    let s2 = RadixSort runtime
+
+    for i in 1 .. 2 do
+        s2.Sort(a, b)
+
+    let sw = System.Diagnostics.Stopwatch()
+    let mutable iter = 0
+    while sw.Elapsed.TotalSeconds < 5.0 do
+        sw.Start()
+        s2.Sort(a, b)
+        sw.Stop()
+        iter <- iter + 1
+
+    Log.line "%A" (sw.MicroTime / iter)
+
+    
+
+
+    exit 0
     0
