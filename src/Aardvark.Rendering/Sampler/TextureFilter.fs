@@ -2,7 +2,20 @@
 
 open Aardvark.Base
 
-type TextureFilter = FShade.Filter
+type TextureFilter =
+    | Anisotropic = 0
+    | MinLinearMagMipPoint = 1
+    | MinLinearMagPointMipLinear = 2
+    | MinMagLinearMipPoint = 3
+    | MinMagMipLinear = 4
+    | MinMagMipPoint = 5
+    | MinMagPointMipLinear = 6
+    | MinPointMagLinearMipPoint = 7
+    | MinPointMagMipLinear = 8
+    | MinMagPoint = 9
+    | MinMagLinear = 10
+    | MinPointMagLinear = 11
+    | MinLinearMagPoint = 12
 
 type FilterMode =
     | Point = 0

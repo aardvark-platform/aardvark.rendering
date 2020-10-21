@@ -797,6 +797,16 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
+    member x.CreateCompareFunction(value : aval<DepthTest>) =
+        compareFuncCache.GetOrCreate(value, fun () -> {
+            create = fun b      -> ctx.ToCompareFunction (DepthTest.toComparisonFunction b)
+            update = fun h b    -> ctx.ToCompareFunction (DepthTest.toComparisonFunction b)
+            delete = fun h      -> ()
+            info =   fun h      -> ResourceInfo.Zero
+            view = id
+            kind = ResourceKind.Unknown
+        })
+
     member x.CreateDepthBias(value : aval<DepthBias>) =
         depthBiasCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.ToDepthBias b

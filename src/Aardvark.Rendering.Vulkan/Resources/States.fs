@@ -507,14 +507,14 @@ module MultisampleState =
 module DepthState =
     let private toVkCompareOp =
         LookupTable.lookupTable [
-            ComparisonFunction.Greater, VkCompareOp.Greater
-            ComparisonFunction.GreaterOrEqual, VkCompareOp.GreaterOrEqual
-            ComparisonFunction.Less, VkCompareOp.Less
-            ComparisonFunction.LessOrEqual, VkCompareOp.LessOrEqual
-            ComparisonFunction.Equal, VkCompareOp.Equal
-            ComparisonFunction.NotEqual, VkCompareOp.NotEqual
-            ComparisonFunction.Never, VkCompareOp.Never
-            ComparisonFunction.Always, VkCompareOp.Always
+            DepthTest.Greater, VkCompareOp.Greater
+            DepthTest.GreaterOrEqual, VkCompareOp.GreaterOrEqual
+            DepthTest.Less, VkCompareOp.Less
+            DepthTest.LessOrEqual, VkCompareOp.LessOrEqual
+            DepthTest.Equal, VkCompareOp.Equal
+            DepthTest.NotEqual, VkCompareOp.NotEqual
+            DepthTest.Never, VkCompareOp.Never
+            DepthTest.Always, VkCompareOp.Always
         ]
 
     let create (write : bool) (test : DepthTest) =

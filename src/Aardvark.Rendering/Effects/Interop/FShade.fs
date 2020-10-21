@@ -84,6 +84,32 @@ module FShadeInterop =
 
         let def = SamplerState.Default
 
+        let filter =
+            LookupTable.lookupTable [
+                Filter.Anisotropic,                  Aardvark.Rendering.TextureFilter.Anisotropic
+                Filter.MinLinearMagMipPoint,         Aardvark.Rendering.TextureFilter.MinLinearMagMipPoint
+                Filter.MinLinearMagPointMipLinear,   Aardvark.Rendering.TextureFilter.MinLinearMagPointMipLinear
+                Filter.MinMagLinearMipPoint,         Aardvark.Rendering.TextureFilter.MinMagLinearMipPoint
+                Filter.MinMagMipLinear,              Aardvark.Rendering.TextureFilter.MinMagMipLinear
+                Filter.MinMagMipPoint,               Aardvark.Rendering.TextureFilter.MinMagMipPoint
+                Filter.MinMagPointMipLinear,         Aardvark.Rendering.TextureFilter.MinMagPointMipLinear
+                Filter.MinPointMagLinearMipPoint,    Aardvark.Rendering.TextureFilter.MinPointMagLinearMipPoint
+                Filter.MinPointMagMipLinear,         Aardvark.Rendering.TextureFilter.MinPointMagMipLinear
+                Filter.MinMagPoint,                  Aardvark.Rendering.TextureFilter.MinMagPoint
+                Filter.MinMagLinear,                 Aardvark.Rendering.TextureFilter.MinMagLinear
+                Filter.MinPointMagLinear,            Aardvark.Rendering.TextureFilter.MinPointMagLinear
+                Filter.MinLinearMagPoint,            Aardvark.Rendering.TextureFilter.MinLinearMagPoint
+            ]
+
+        let wrap =
+            LookupTable.lookupTable [
+                WrapMode.Wrap,         Aardvark.Rendering.WrapMode.Wrap
+                WrapMode.Mirror,       Aardvark.Rendering.WrapMode.Mirror
+                WrapMode.Clamp,        Aardvark.Rendering.WrapMode.Clamp
+                WrapMode.Border,       Aardvark.Rendering.WrapMode.Border
+                WrapMode.MirrorOnce,   Aardvark.Rendering.WrapMode.MirrorOnce
+            ]
+
         let cmp =
             LookupTable.lookupTable [
                 ComparisonFunction.Greater,        Aardvark.Rendering.ComparisonFunction.Greater
@@ -97,11 +123,11 @@ module FShadeInterop =
             ]
 
         {
-            Filter        = state.Filter                               |> Option.defaultValue def.Filter
+            Filter        = state.Filter        |> Option.map filter   |> Option.defaultValue def.Filter
             BorderColor   = state.BorderColor                          |> Option.defaultValue def.BorderColor
-            AddressU      = state.AddressU                             |> Option.defaultValue def.AddressU
-            AddressV      = state.AddressV                             |> Option.defaultValue def.AddressV
-            AddressW      = state.AddressW                             |> Option.defaultValue def.AddressW
+            AddressU      = state.AddressU      |> Option.map wrap     |> Option.defaultValue def.AddressU
+            AddressV      = state.AddressV      |> Option.map wrap     |> Option.defaultValue def.AddressV
+            AddressW      = state.AddressW      |> Option.map wrap     |> Option.defaultValue def.AddressW
             Comparison    = state.Comparison    |> Option.map cmp      |> Option.defaultValue def.Comparison
             MaxAnisotropy = state.MaxAnisotropy                        |> Option.defaultValue def.MaxAnisotropy
             MinLod        = state.MinLod        |> Option.map float32  |> Option.defaultValue def.MinLod

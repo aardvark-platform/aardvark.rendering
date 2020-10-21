@@ -3,7 +3,12 @@
 open System
 open Aardvark.Base
 
-type WrapMode = FShade.WrapMode
+type WrapMode =
+    | Wrap = 0
+    | Mirror = 1
+    | Clamp = 2
+    | Border = 3
+    | MirrorOnce = 4
 
 [<Struct>]
 type SamplerState =
