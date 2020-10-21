@@ -1,6 +1,7 @@
 Aardvark.Base.Incremental
 Aardvark.Base.Runtime
 Aardvark.Base.Essentials
+Aardvark.Geometry
 FShade
 FSharp.Core
 Unofficial.OpenTK

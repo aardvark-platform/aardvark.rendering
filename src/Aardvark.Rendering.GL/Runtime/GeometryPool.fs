@@ -17,7 +17,6 @@ open Aardvark.Rendering.GL
 #nowarn "9"
 
 
-
 [<ReflectedDefinition>]
 module CullingShader =
     open FShade
@@ -164,19 +163,28 @@ type GeometryPoolSignature =
         indexType       : Option<Type>
         uniformTypes    : InstanceSignature
         attributeTypes  : VertexSignature
+        textureTypes    : MapExt<int, string * TextureFormat * SamplerStateDescription>
     }
 
+
 module GeometryPoolSignature =
-    let ofGeometry (iface : GLSLProgramInterface) (uniforms : MapExt<string, Array>) (g : IndexedGeometry) =
+    let ofGeometry (iface : GLSLProgramInterface) (uniforms : MapExt<string, Array>) (g : IndexedGeometry) (images : MapExt<string, INativeTexture>) =
         let mutable uniformTypes = MapExt.empty
         let mutable attributeTypes = MapExt.empty
 
         for i in iface.inputs do
             let sym = Symbol.Create i.paramSemantic
-            match MapExt.tryFind i.paramSemantic uniforms with
+            let sem = 
+                if i.paramSemantic.EndsWith "Trafo" then [i.paramSemantic; i.paramSemantic.Substring(0, i.paramSemantic.Length - 5)]
+                else [i.paramSemantic]
+
+            match sem |> List.tryPick (fun sem -> MapExt.tryFind sem uniforms) with
                 | Some arr when not (isNull arr) ->
                     let t = arr.GetType().GetElementType()
-                    uniformTypes <- MapExt.add i.paramSemantic (i.paramType, t) uniformTypes
+                    if i.paramSemantic.EndsWith "Trafo" && typeof<INativeTexture>.IsAssignableFrom t then
+                        uniformTypes <- MapExt.add i.paramSemantic (i.paramType, typeof<V4d>) uniformTypes
+                    else
+                        uniformTypes <- MapExt.add i.paramSemantic (i.paramType, t) uniformTypes
                 | _ ->
                     let t = if isNull g.SingleAttributes then (false, Unchecked.defaultof<_>) else g.SingleAttributes.TryGetValue sym
                     match t with
@@ -200,11 +208,30 @@ module GeometryPoolSignature =
                 let t = g.IndexArray.GetType().GetElementType()
                 Some t
 
+        let textures = 
+            iface.samplers |> MapExt.toSeq |> Seq.map (fun (_, sam) ->
+                if sam.samplerCount > 1 then failwith "no array textures"
+                let (name, state) = sam.samplerTextures |> List.head
+
+                let fmt = 
+                    match MapExt.tryFind name images with
+                    | Some tex -> tex.Format
+                    | None -> TextureFormat.Rgba8 // TODO: other formats????
+
+                sam.samplerBinding,
+                (
+                    name,
+                    fmt,
+                    state.SamplerStateDescription
+                )
+            )
+
         {
             mode = g.Mode
             indexType = indexType
             uniformTypes = uniformTypes
             attributeTypes = attributeTypes
+            textureTypes = MapExt.ofSeq textures
         }
 
 
@@ -540,6 +567,343 @@ type IndexManager(ctx : Context, chunkSize : int, usedMemory : ref<int64>, total
 
     interface IDisposable with 
         member x.Dispose() = x.Dispose()
+
+open Aardvark.Geometry
+module AtlasTextureUpload = 
+    open OpenTK.Graphics.OpenGL4
+    let compressedFormats =
+        Aardvark.Base.HashSet.ofList [
+            TextureFormat.CompressedRed
+            TextureFormat.CompressedRg
+            TextureFormat.CompressedRgbS3tcDxt1Ext
+            TextureFormat.CompressedRgbaS3tcDxt1Ext
+            TextureFormat.CompressedRgbaS3tcDxt3Ext
+            TextureFormat.CompressedRgbaS3tcDxt5Ext
+            TextureFormat.CompressedAlpha
+            TextureFormat.CompressedLuminance
+            TextureFormat.CompressedLuminanceAlpha
+            TextureFormat.CompressedIntensity
+            TextureFormat.CompressedRgb
+            TextureFormat.CompressedRgba
+            TextureFormat.CompressedSrgb
+            TextureFormat.CompressedSrgbAlpha
+            TextureFormat.CompressedSluminance
+            TextureFormat.CompressedSluminanceAlpha
+            TextureFormat.CompressedSrgbS3tcDxt1Ext
+            TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext
+            TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext
+            TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext
+            TextureFormat.CompressedRedRgtc1
+            TextureFormat.CompressedSignedRedRgtc1
+            TextureFormat.CompressedRgRgtc2
+            TextureFormat.CompressedSignedRgRgtc2
+            TextureFormat.CompressedRgbaBptcUnorm
+            TextureFormat.CompressedRgbBptcSignedFloat
+            TextureFormat.CompressedRgbBptcUnsignedFloat
+        ]
+
+    type ITextureFormatVisitor<'r> =
+        abstract member Accept<'a when 'a : unmanaged> : Col.Format * int -> 'r
+
+    type TextureFormat with
+        member x.Visit(v : ITextureFormatVisitor<'r>) =
+            match x with
+            | TextureFormat.Rgb8 -> v.Accept<byte>(Col.Format.RGB, 3)
+            | TextureFormat.Rgb16 -> v.Accept<uint16>(Col.Format.RGB, 3)
+            | TextureFormat.Rgb32f -> v.Accept<float32>(Col.Format.RGB, 3)
+            | TextureFormat.Rgba8 -> v.Accept<byte>(Col.Format.RGBA, 4)
+            | TextureFormat.Rgba16 -> v.Accept<uint16>(Col.Format.RGBA, 4)
+            | TextureFormat.Rgba32f -> v.Accept<float32>(Col.Format.RGBA, 4)
+            | _ -> failwith "not implemented"
+
+
+    type NativeVolume<'a when 'a : unmanaged> with
+        member this.SetSliceX(x : int, value : NativeMatrix<'a>) =
+            ()
+
+
+    let upload (texture : Texture) (bounds : Box2i) (image : INativeTexture) (rotated : bool) =
+        let isCompressed = compressedFormats.Contains image.Format
+
+        if isCompressed then
+            failwith ""
+        else
+            let ctx = texture.Context
+            let levels = min image.MipMapLevels texture.MipMapLevels
+            let mutable offset = bounds.Min
+            let mutable size = V2i.II + bounds.Max - bounds.Min
+            let mutable lastOffset = offset
+            let mutable lastSize = size
+            
+
+            let fmt, typ = TextureFormat.toFormatAndType image.Format
+
+            let sizeInBytes = size.X * size.Y * TextureFormat.pixelSizeInBytes image.Format
+            let buffer = ctx.CreateBuffer sizeInBytes
+
+            
+            
+            for level in 0 .. levels - 1 do
+                let data = image.[0, level]
+
+                data.Use (fun srcPtr ->
+                    image.Format.Visit {
+                        new ITextureFormatVisitor<int> with
+                            member x.Accept<'a when 'a : unmanaged>(col : Col.Format, channels : int) =
+                                let sizeInBytes = int64 size.X * int64 size.Y * int64 (TextureFormat.pixelSizeInBytes image.Format)
+
+                                let dstPtr = GL.MapNamedBufferRange(buffer.Handle, 0n, nativeint sizeInBytes, BufferAccessMask.MapInvalidateRangeBit ||| BufferAccessMask.MapWriteBit)
+
+                                let src = 
+                                    NativeVolume<'a>(
+                                        NativePtr.ofNativeInt srcPtr, 
+                                        VolumeInfo(
+                                            0L, 
+                                            V3l(data.Size.XY, channels), 
+                                            V3l(int64 channels, int64 data.Size.X * int64 channels, 1L)
+                                        )
+                                    )
+
+                                let dst = 
+                                    NativeVolume<'a>(
+                                        NativePtr.ofNativeInt dstPtr, 
+                                        VolumeInfo(
+                                            0L, 
+                                            V3l(size.X, size.Y, channels), 
+                                            V3l(int64 channels, int64 channels * int64 size.X, 1L)
+                                        )
+                                    )
+
+                                let dst =
+                                    if rotated then 
+                                        let info = dst.Info
+                                        dst.SubVolume(info.SX - 1L, 0L, 0L, info.SY, info.SX, info.SZ, info.DY, -info.DX, info.DZ)
+                                    else 
+                                        dst
+
+                                let padding = dst.Size.XY - src.Size.XY
+                                let l = padding / 2L
+                                let h = padding - l
+
+                                
+
+                                NativeVolume.copy src (dst.SubVolume(V3l(l.X, l.Y, 0L), src.Size))
+
+                                let s = l 
+                                let e = dst.Size.XY - h - V2l.II
+                                    
+                                // fix borders (if any)
+                                if l.X > 0L then
+                                    let p = dst.[s.X.., s.Y .. e.Y, *]
+                                    let fst = NativeVolume<'a>(p.Pointer, VolumeInfo(p.Origin, V3l(s.X, 1L + e.Y - s.Y, p.SZ), V3l(0L, p.DY, p.DZ)))
+                                    NativeVolume.copy fst dst.[.. s.X-1L, s.Y .. e.Y, *]
+
+                                if h.X > 0L then
+                                    let p = dst.[e.X.., s.Y .. e.Y, *]
+                                    let lst = NativeVolume<'a>(p.Pointer, VolumeInfo(p.Origin, V3l(h.X, 1L + e.Y - s.Y, p.SZ), V3l(0L, p.DY, p.DZ)))
+                                    NativeVolume.copy lst dst.[e.X+1L .., s.Y .. e.Y, *]
+
+                                if l.Y > 0L then    
+                                    let p = dst.[*, s.Y.., *]
+                                    let lst = NativeVolume<'a>(p.Pointer, VolumeInfo(p.Origin, V3l(p.SX, s.Y, p.SZ), V3l(p.DX, 0L, p.DZ)))
+                                    NativeVolume.copy lst dst.[*, ..s.Y-1L,*]
+
+                                if h.Y > 0L then    
+                                    let p = dst.[*, e.Y.., *]
+                                    let lst = NativeVolume<'a>(p.Pointer, VolumeInfo(p.Origin, V3l(p.SX, h.Y, p.SZ), V3l(p.DX, 0L, p.DZ)))
+                                    NativeVolume.copy lst dst.[*, e.Y+1L..,*]
+
+                                GL.UnmapNamedBuffer buffer.Handle |> ignore
+
+
+                                0
+                        }
+                ) |> ignore
+                
+                GL.BindBuffer(BufferTarget.PixelUnpackBuffer, buffer.Handle)
+                GL.TextureSubImage2D(texture.Handle, level, offset.X, offset.Y, size.X, size.Y, fmt, typ, 0n)
+                GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+
+                lastOffset <- offset
+                lastSize <- size
+                offset <- offset / 2
+                size <- size / 2
+
+                
+            for l in levels .. texture.MipMapLevels-1 do
+
+                ctx.Blit(texture, l-1, 0, Box2i.FromMinAndSize(lastOffset, lastSize), texture, l, 0, Box2i.FromMinAndSize(offset, size), true)
+                
+                lastOffset <- offset
+                lastSize <- size
+                offset <- offset / 2
+                size <- size / 2
+
+                
+
+
+
+            
+            ctx.Delete buffer
+
+            //if rotated then
+            //    for level in 0 .. levels - 1 do
+            //        let data = image.[0, level]
+
+            //        data.Use (fun ptr ->
+            //            let src = NativeMatrix<C4b>(NativePtr.ofNativeInt ptr, MatrixInfo(0L, V2l(data.Size.XY), V2l(1, data.Size.X)))
+            //            let dst = Matrix<C4b>(data.Size.YX)
+                        
+            //            NativeMatrix.using (dst.Transformed ImageTrafo.Rot90) (fun dst ->
+            //                NativeMatrix.copy src dst
+            //                GL.TextureSubImage2D(texture.Handle, level, offset.X, offset.Y, size.X, size.Y, fmt, typ, NativePtr.toNativeInt dst.Pointer)
+            //            )
+            //        )
+
+            //        offset <- offset / 2
+            //        size <- size / 2
+            //else
+            //    for level in 0 .. levels - 1 do
+            //        let data = image.[0, level]
+            //        data.Use (fun ptr ->
+            //            GL.TextureSubImage2D(texture.Handle, level, offset.X, offset.Y, size.X, size.Y, fmt, typ, ptr)
+            //        )
+
+            //        offset <- offset / 2
+            //        size <- size / 2
+
+type TextureManager(ctx : Context, semantic : string, format : TextureFormat, samplerState : SamplerStateDescription) as this =
+    static let tileSize = V2i(8192, 8192)
+
+    static let levels = 3
+    static let padding = V2i.II * (1 <<< (levels - 1))
+
+    static let pad (size : V2i) =
+        let size = size + 2 * padding
+
+        V2i(
+            (if size.X % padding.X = 0 then size.X else (size.X / padding.X + 1) * padding.X),
+            (if size.Y % padding.Y = 0 then size.Y else (size.Y / padding.Y + 1) * padding.Y)
+        )
+
+
+    let sam = ctx.CreateSampler samplerState
+    let textures = 
+        System.Collections.Generic.Dictionary<Texture, ref<TexturePacking<Guid>>>()
+
+    let thread = 
+        startThread (fun () ->
+            while true do
+                let l = Console.ReadLine()
+                this.SaveAtlas()
+        
+        )
+    member x.SaveAtlas () =    
+        Log.startTimed "download atlas"
+        use __ = ctx.ResourceLock
+        let path = System.IO.Path.Combine(Environment.GetFolderPath Environment.SpecialFolder.Desktop, "atlas")
+        if not (System.IO.Directory.Exists path) then System.IO.Directory.CreateDirectory path |> ignore
+
+        for i, (KeyValue(t,_)) in Seq.indexed textures do
+            let name = sprintf "tile%03d.png" i
+            ctx.Download(t).SaveAsImage(System.IO.Path.Combine(path, name), PixFileFormat.Png)
+            ()
+        Log.stop()
+        
+
+
+    member x.Context : Context = ctx
+    member x.Format = format
+    member x.Sampler = sam
+    member x.Semantic = semantic
+
+    member x.Alloc(size : V2i) : TextureSlot =
+        let slotSize = pad size
+        lock x (fun () ->
+            //Log.line "alloc %A" slotSize
+         
+            let id = Guid.NewGuid()
+            let result = 
+                textures |> Seq.tryPick (fun (KeyValue(t, p)) ->
+                    match p.Value.TryAdd(id, slotSize) with
+                    | Some res ->
+                        p := res
+                        Some (t, id, res.Used.[id])
+                    | None ->
+                        None
+                )
+            match result with
+            | Some (t, id, box) ->
+                let s = V2i.II + box.Max - box.Min
+                new TextureSlot(x, t, id, sam, semantic, box, size, s <> slotSize)
+            | None ->
+                let tex = ctx.CreateTexture2D(tileSize, levels, format, 1)
+
+                GL.ClearTexImage(tex.Handle, 0, PixelFormat.Rgba, PixelType.UnsignedByte, [| 255uy; 255uy;255uy;255uy;|])
+
+                textures.Add(tex, ref (TexturePacking.Empty tex.Size.XY))
+                Log.warn "using %d textures" textures.Count
+                x.Alloc slotSize
+        )
+    member x.Free(slot : TextureSlot) : unit =
+        match textures.TryGetValue slot.Texture with
+        | (true, p) ->
+            //Log.line "free %A" slot.Size
+            let n = p.Value.Remove slot.Id
+            if n.Used.IsEmpty then
+                textures.Remove slot.Texture |> ignore
+                ctx.Delete slot.Texture
+            else
+                p := n
+        | _ ->
+            ()
+
+and TextureSlot(parent : TextureManager, texture : Texture, id : Guid, sampler : Sampler, semantic : string, bounds : Box2i, realSize : V2i, rotated : bool) =
+
+    let realSize =
+        if rotated then realSize.YX
+        else realSize
+
+    let trafo =
+        let s = V2i.II + bounds.Max - bounds.Min
+        let ts = texture.Size.XY
+        let padding = s - realSize
+        let l = padding / 2
+        let trafo = 
+            M33d.Scale(1.0 / V2d ts) *
+            M33d.Translation(V2d bounds.Min + V2d l) *
+            M33d.Scale(V2d realSize)
+                    
+
+        if rotated then
+            V4d(trafo.M02, trafo.M12, -trafo.M00, trafo.M11)
+        else
+            V4d(trafo.M02, trafo.M12, trafo.M00, trafo.M11)
+
+    member x.Size = 
+        let s = V2i.II + bounds.Max - bounds.Min
+        if rotated then s.YX
+        else s
+
+    member x.Texture : Texture = texture
+    member x.Sampler = sampler
+    member x.Bounds = bounds
+    member x.Semantic = semantic
+    member x.Id = id
+
+    member x.TextureTrafo = trafo
+
+    member x.Upload(image : INativeTexture) : unit =
+        AtlasTextureUpload.upload texture bounds image rotated
+       
+    member x.Dispose() =
+        parent.Free x
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
+
+
 
 type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : nativeptr<int>, signature : IFramebufferSignature, bounds : bool, active : nativeptr<int>, modelViewProjs : nativeptr<int>, indexed : bool, initialCapacity : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
     static let es = sizeof<DrawCallInfo>
@@ -883,7 +1247,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<InstanceBuffer>, vb : Block<VertexBuffer>, ib : Option<Block<Buffer>>) = 
+type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<InstanceBuffer>, vb : Block<VertexBuffer>, ib : Option<Block<Buffer>>, textures : MapExt<int, TextureSlot>) = 
     let fvc =
         match signature.indexType, ib with
             | Some it, Some ib -> int ib.Size / Marshal.SizeOf it
@@ -913,10 +1277,20 @@ type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<Inst
     member x.VertexBuffer = vb
     member x.InstanceBuffer = ub
     member x.IndexBuffer = ib
+    member x.Textures = textures
 
     member x.IsDisposed = vb.IsFree
 
-    member x.Upload(g : IndexedGeometry, uniforms : MapExt<string, Array>) =
+    member x.Upload(g : IndexedGeometry, uniforms : MapExt<string, Array>, images : MapExt<string, INativeTexture>) =
+        let mutable uniforms = uniforms
+        for KeyValue(_, tex) in textures do
+            let name = sprintf "%sTrafo" tex.Semantic
+            let arr = Array.create (int ub.Size) tex.TextureTrafo
+            uniforms <- MapExt.add name (arr :> Array) uniforms
+            match MapExt.tryFind tex.Semantic images with
+            | Some img -> tex.Upload(img)
+            | None -> ()
+
         let instanceValues =
             signature.uniformTypes |> MapExt.choose (fun name (glslType, typ) ->
                 match MapExt.tryFind name uniforms with
@@ -952,7 +1326,7 @@ type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<Inst
         ub.Memory.Value.Upload(int ub.Offset, int ub.Size, instanceValues)
         vb.Memory.Value.Write(int vb.Offset, vertexArrays)
 
-    member x.Upload(g : IndexedGeometry) = x.Upload(g, MapExt.empty)
+    member x.Upload(g : IndexedGeometry) = x.Upload(g, MapExt.empty, MapExt.empty)
 
     member x.Mode = signature.mode
 
@@ -985,9 +1359,13 @@ type GeometryPool private(ctx : Context) =
     let totalMemory = ref 0L
     let instanceManagers = System.Collections.Concurrent.ConcurrentDictionary<InstanceSignature, InstanceManager>()
     let vertexManagers = System.Collections.Concurrent.ConcurrentDictionary<VertexSignature, VertexManager>()
+    let textureManagers = System.Collections.Concurrent.ConcurrentDictionary<string * TextureFormat * SamplerStateDescription, TextureManager>()
 
     let getVertexManager (signature : VertexSignature) = vertexManagers.GetOrAdd(signature, fun signature -> new VertexManager(ctx, signature, vertexChunkSize, usedMemory, totalMemory))
     let getInstanceManager (signature : InstanceSignature) = instanceManagers.GetOrAdd(signature, fun signature -> new InstanceManager(ctx, signature, instanceChunkSize, usedMemory, totalMemory))
+    let getTextureManager (semantic : string) (fmt : TextureFormat) (sam : SamplerStateDescription) = textureManagers.GetOrAdd((semantic, fmt, sam), fun (semantic, fmt, sam) -> new TextureManager(ctx, semantic, fmt, sam))
+
+    
     let indexManager = new IndexManager(ctx, vertexChunkSize, usedMemory, totalMemory)
 
     static member Get(ctx : Context) =
@@ -998,10 +1376,10 @@ type GeometryPool private(ctx : Context) =
     member x.UsedMemory = Mem !usedMemory
     member x.TotalMemory = Mem !totalMemory
 
-    member x.Alloc(signature : GeometryPoolSignature, instanceCount : int, indexCount : int, vertexCount : int) =
+    member x.Alloc(signature : GeometryPoolSignature, instanceCount : int, indexCount : int, vertexCount : int, textureSizes : MapExt<string, V2i>) =
         let vm = getVertexManager signature.attributeTypes
         let im = getInstanceManager signature.uniformTypes
-
+        let tm = signature.textureTypes |> MapExt.map (fun _ (sem, fmt, sam) -> getTextureManager sem fmt sam)
         let ub = im.Alloc(instanceCount)
         let vb = vm.Alloc(vertexCount)
 
@@ -1010,11 +1388,18 @@ type GeometryPool private(ctx : Context) =
                 | Some t -> indexManager.Alloc(t, indexCount) |> Some
                 | None -> None
 
-        let slot = PoolSlot(ctx, signature, ub, vb, ib)
+        let textures = 
+            tm |> MapExt.choose (fun _ d -> 
+                match MapExt.tryFind d.Semantic textureSizes with
+                | Some s -> d.Alloc s |> Some
+                | None -> None
+            )
+
+        let slot = PoolSlot(ctx, signature, ub, vb, ib, textures)
         slot
 
-    member x.Alloc(signature : GLSLProgramInterface, geometry : IndexedGeometry, uniforms : MapExt<string, Array>) =
-        let signature = GeometryPoolSignature.ofGeometry signature uniforms geometry
+    member x.Alloc(signature : GLSLProgramInterface, geometry : IndexedGeometry, uniforms : MapExt<string, Array>, images : MapExt<string, INativeTexture>) =
+        let signature = GeometryPoolSignature.ofGeometry signature uniforms geometry images
 
         let instanceCount =
             if MapExt.isEmpty uniforms then
@@ -1030,12 +1415,14 @@ type GeometryPool private(ctx : Context) =
                 let fvc = geometry.IndexArray.Length
                 vc, fvc
 
-        let slot = x.Alloc(signature, instanceCount, indexCount, vertexCount)
-        slot.Upload(geometry, uniforms)
+        let imageSizes = images |> MapExt.map (fun _ i -> i.[0,0].Size.XY)
+
+        let slot = x.Alloc(signature, instanceCount, indexCount, vertexCount, imageSizes)
+        slot.Upload(geometry, uniforms, images)
         slot
             
     member x.Alloc(signature : GLSLProgramInterface, geometry : IndexedGeometry) =
-        x.Alloc(signature, geometry, MapExt.empty)
+        x.Alloc(signature, geometry, MapExt.empty, MapExt.empty)
            
 
     member x.Free(slot : PoolSlot) =
@@ -1045,6 +1432,9 @@ type GeometryPool private(ctx : Context) =
         let im = getInstanceManager signature.uniformTypes
         im.Free slot.InstanceBuffer
         vm.Free slot.VertexBuffer
+
+        slot.Textures |> MapExt.iter (fun _ t -> t.Dispose())
+
         match slot.IndexBuffer with
             | Some ib -> indexManager.Free ib
             | None -> ()
@@ -1055,9 +1445,11 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     static let initialIndirectSize = 256
 
     static let getKey (slot : PoolSlot) =
+        let textures = slot.Textures |> MapExt.map (fun _ t -> t.Texture, t.Sampler)
         slot.Mode,
         slot.InstanceBuffer.Memory.Value, 
         slot.VertexBuffer.Memory.Value,
+        textures,
         slot.IndexBuffer |> Option.map (fun b -> slot.IndexType.Value, b.Memory.Value)
 
     static let beginMode =
@@ -1113,15 +1505,21 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     let totalMemory = ref 0L
     let avgRenderTime = RunningMean(10)
 
-    let compile (indexType : Option<DrawElementsType>, mode : nativeptr<GLBeginMode>, a : VertexInputBindingHandle, ib : IndirectBuffer) (s : ICommandStream) : NativeStats =
+    let compile (indexType : Option<DrawElementsType>, mode : nativeptr<GLBeginMode>, a : VertexInputBindingHandle, textures : array<int * int * int>, ib : IndirectBuffer) (s : ICommandStream) : NativeStats =
         let stats = NativeStats(InstructionCount = 1)
         s.BindVertexAttributes(contextHandle, a)
+        for (slot, t, sam) in textures do
+            s.SetActiveTexture slot
+            s.BindSampler(slot, sam)
+            s.BindTexture(TextureTarget.Texture2D, t) // TODO: non 2d textures
+
+
         stats + ib.CompileRender(s, this.BeforeRender, mvpResource.Pointer, indexType, runtimeStats, isActive, mode)
 
     let indirects = Dict<_, IndirectBuffer>()
     let isOutdated = NativePtr.allocArray [| 1 |]
     let updateFun = Marshal.PinDelegate(new System.Action(this.Update))
-    let mutable oldCalls : list<Option<DrawElementsType> * nativeptr<GLBeginMode> * VertexInputBindingHandle * IndirectBuffer> = []
+    let mutable oldCalls : list<Option<DrawElementsType> * nativeptr<GLBeginMode> * VertexInputBindingHandle * array<int*int*int> * IndirectBuffer> = []
     let program = new ChangeableNativeProgram<_, _>((fun a s -> compile a (AssemblerCommandStream s)), NativeStats.Zero, (+), (-))
     let puller = 
         { new AdaptiveObject() with
@@ -1216,7 +1614,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
 
 
             let calls = 
-                Dict.toList indirects |> List.map (fun ((mode, ib, vb, typeAndIndex), db) ->
+                Dict.toList indirects |> List.map (fun ((mode, ib, vb, textures, typeAndIndex), db) ->
                     let indexType = typeAndIndex |> Option.map fst
                     let index = typeAndIndex |> Option.map snd
                     db.Flush()
@@ -1264,14 +1662,17 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                         let bm = beginMode mode
                         NativePtr.allocArray [| GLBeginMode(int bm, 1) |]
                             
+                    let textureHandles =
+                        textures |> MapExt.toArray |> Array.map (fun (slot, (tex, sam)) -> slot, tex.Handle, sam.Handle)
 
-                    indexType, beginMode, bufferBinding, db
+
+                    indexType, beginMode, bufferBinding, textureHandles, db
                 )
 
             program.Clear()
             for a in calls do program.Add a |> ignore
             
-            oldCalls |> List.iter (fun (_,beginMode,bufferBinding,indirect) -> 
+            oldCalls |> List.iter (fun (_,beginMode,bufferBinding,_,indirect) -> 
                 NativePtr.free beginMode; ctx.Delete bufferBinding
             )
             oldCalls <- calls
@@ -1346,6 +1747,8 @@ type GeometryPoolInstance =
         vertexCount     : int
         geometry        : IndexedGeometry
         uniforms        : MapExt<string, Array>
+        imageSizes      : MapExt<string, V2i>
+        images          : MapExt<string, INativeTexture>
     }
 
     override x.ToString() =
@@ -1371,7 +1774,7 @@ module GeometryPoolInstance =
     let inline geometry (g : GeometryPoolInstance) = g.geometry
     let inline uniforms (g : GeometryPoolInstance) = g.uniforms
 
-    let ofGeometry (iface : GLSLProgramInterface) (g : IndexedGeometry) (u : MapExt<string, Array>) =
+    let ofGeometry (iface : GLSLProgramInterface) (g : IndexedGeometry) (u : MapExt<string, Array>) (images : MapExt<string, INativeTexture>) =
         let instanceCount =
             if MapExt.isEmpty u then 1
             else u |> MapExt.toSeq |> Seq.map (fun (_,a) -> a.Length) |> Seq.min
@@ -1387,16 +1790,18 @@ module GeometryPoolInstance =
                 0, g.FaceVertexCount
 
         {
-            signature = GeometryPoolSignature.ofGeometry iface u g
+            signature = GeometryPoolSignature.ofGeometry iface u g images
             instanceCount = instanceCount
             indexCount = indexCount
             vertexCount = vertexCount
             geometry = g
             uniforms = u
+            imageSizes = images |> MapExt.map (fun _ i -> i.[0,0].Size.XY)
+            images = images
         }
 
-    let load (iface : GLSLProgramInterface) (load : Set<string> -> IndexedGeometry *  MapExt<string, Array>) =
+    let load (iface : GLSLProgramInterface) (load : Set<string> -> IndexedGeometry *  MapExt<string, Array> * MapExt<string, INativeTexture>) =
         let wanted = iface.inputs |> List.map (fun p -> p.paramSemantic) |> Set.ofList
-        let (g,u) = load wanted
+        let (g,u,i) = load wanted
 
-        ofGeometry iface g u
+        ofGeometry iface g u i

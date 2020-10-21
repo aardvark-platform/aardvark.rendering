@@ -641,7 +641,7 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
                     Array.sortInPlace arr
                     (arr :> seq<int>).GetEnumerator()
                 else
-                    emptySlots.GetEnumerator()
+                    emptySlots.GetEnumerator() :> IEnumerator<_>
 
             // try filling empty slots with added draw calls
             for call in additions do

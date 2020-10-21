@@ -1574,8 +1574,8 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
             "%A already existing" node 
 
         cache.GetOrCreate(node, fun node ->
-            let slot = pool.Alloc(g.signature, g.instanceCount, g.indexCount, g.vertexCount)
-            slot.Upload(g.geometry, g.uniforms)
+            let slot = pool.Alloc(g.signature, g.instanceCount, g.indexCount, g.vertexCount, g.imageSizes)
+            slot.Upload(g.geometry, g.uniforms, g.images)
 
             state.uploadSize <- state.uploadSize + slot.Memory
             state.nodeSize <- state.nodeSize + node.DataSize
@@ -1988,6 +1988,16 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                         let startTime = time()
                         let (g,u) = node.GetData(ct, wantedInputs)
 
+                        let images =
+                            u |> MapExt.choose (fun _ v ->
+                                if v.Length = 1 then
+                                    match v.GetValue(0) with
+                                    | :? INativeTexture as img -> Some img
+                                    | _ -> None
+                                else
+                                    None
+                            )
+
                         if g.FaceVertexCount <= 0 then
                             None
                         else
@@ -1998,7 +2008,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                                 | _ -> 1
 
                             let u = MapExt.add "TreeId" (Array.create cnt rootId :> System.Array) u
-                            let loaded = GeometryPoolInstance.ofGeometry signature g u
+                            let loaded = GeometryPoolInstance.ofGeometry signature g u images
                                 
                             let endTime = time()
                             addLoadTime node.DataSource node.DataSize (endTime - startTime)

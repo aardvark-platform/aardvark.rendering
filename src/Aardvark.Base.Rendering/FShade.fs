@@ -138,6 +138,8 @@ module FShadeInterop =
     let private toSamplerStateDescription (state : SamplerState) =
 
         let r = Aardvark.Base.Rendering.SamplerStateDescription()
+        r.MaxAnisotropy <- match state.Filter with Some Filter.Anisotropic -> 16 | _ -> 1
+
         let a = r.AddressU
         state.AddressU |> Option.iter (fun a -> r.AddressU <- toWrapMode a)
         state.AddressV |> Option.iter (fun a -> r.AddressV <- toWrapMode a)

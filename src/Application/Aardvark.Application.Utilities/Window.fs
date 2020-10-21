@@ -46,6 +46,7 @@ type RenderConfig =
     {
         app             : Option<IApplication>
         backend         : Backend
+        showHelp        : bool
         debug           : DebugVerbosity
         samples         : int
         display         : Display
@@ -176,6 +177,7 @@ module Utilities =
 
         abstract member View : aval<Trafo3d[]>
         abstract member Proj : aval<Trafo3d[]>
+        abstract member DropFiles : IEvent<Handler<string[]>, string[]>
 
         abstract member Scene : ISg with get, set
         abstract member Run : ?preventDisposal:bool -> unit
@@ -240,6 +242,17 @@ module Utilities =
             member x.IsVR = isVr
             member x.Controllers = controllers
             member x.Mouse = x.Mouse
+            member x.DropFiles =
+                match win with
+                | :? Glfw.Window as w -> w.DropFiles
+                | _ ->
+                    { new IEvent<_,_> with
+                        member x.AddHandler(_) = ()
+                        member x.RemoveHandler(_) = ()
+                        member x.Subscribe(_) =
+                            { new IDisposable with member x.Dispose() = () }
+                    }
+
             member x.Run(?preventDisposal) = x.Run(preventDisposal)
             
             member x.View = view
@@ -252,7 +265,7 @@ module Utilities =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-    let private hookSg (win : IRenderControl) (sg : ISg) =
+    let private hookSg (showHelp : bool) (win : IRenderControl) (sg : ISg) =
         let fillMode = AVal.init FillMode.Fill
         let cullMode = AVal.init CullMode.None
 
@@ -286,78 +299,84 @@ module Utilities =
             ()
         )
 
-        let teaser = 
-            "press 'H' for help"
 
-        let helpText = 
-            String.concat "\r\n" [
-                "Key Bindings:"
-                "  H                   toggle this Help"
-                "  Alt+X               toggle FillMode"
-                "  Alt+Y               toggle CullMode"
-                "  WSAD                move camera"
-                "  Ctrl+Shift+Return   toggle Fullscreen"
-                ""
-                "Navigation:"
-                "  Left Mouse    look around"
-                "  Right Mouse   zoom"
-                "  Middle Mouse  pan"
-                "  Scroll        zoom"
-                ""
-            ]
+        let overlay = 
+            if showHelp then
+                let teaser = 
+                    "press 'H' for help"
 
-        let status =
-            adaptive {
-                let! cull = cullMode
-                let! fill = fillMode
-
-                return 
+                let helpText = 
                     String.concat "\r\n" [
-                        "Status:"
-                        sprintf "  CullMode: %A" cull
-                        sprintf "  FillMode: %A" fill
+                        "Key Bindings:"
+                        "  H                   toggle this Help"
+                        "  Alt+X               toggle FillMode"
+                        "  Alt+Y               toggle CullMode"
+                        "  WSAD                move camera"
+                        "  Ctrl+Shift+Return   toggle Fullscreen"
+                        ""
+                        "Navigation:"
+                        "  Left Mouse    look around"
+                        "  Right Mouse   zoom"
+                        "  Middle Mouse  pan"
+                        "  Scroll        zoom"
+                        ""
                     ]
-            }
+
+                let status =
+                    adaptive {
+                        let! cull = cullMode
+                        let! fill = fillMode
+
+                        return 
+                            String.concat "\r\n" [
+                                "Status:"
+                                sprintf "  CullMode: %A" cull
+                                sprintf "  FillMode: %A" fill
+                            ]
+                    }
 
 
-        let overlay =
-            let help = status |> AVal.map (fun s -> helpText + "\r\n" + s)
+                let overlay =
+                    let help = status |> AVal.map (fun s -> helpText + "\r\n" + s)
 
-            let showHelp = AVal.init false
+                    let showHelp = AVal.init false
 
-            win.Keyboard.KeyDown(Aardvark.Application.Keys.H).Values.Add (fun () ->
-                transact (fun () -> showHelp.Value <- not showHelp.Value)
-            )
+                    win.Keyboard.KeyDown(Aardvark.Application.Keys.H).Values.Add (fun () ->
+                        transact (fun () -> showHelp.Value <- not showHelp.Value)
+                    )
 
-            let text = showHelp |> AVal.bind (function true -> help | false -> AVal.constant teaser)
+                    let text = showHelp |> AVal.bind (function true -> help | false -> AVal.constant teaser)
 
 
         
 
-            let trafo = 
-                win.Sizes |> AVal.map (fun s -> 
-                    let border = V2d(20.0, 10.0) / V2d s
-                    let pixels = 30.0 / float s.Y
-                    Trafo3d.Scale(pixels) *
-                    Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
-                    Trafo3d.Translation(-1.0 + border.X, 1.0 - border.Y - pixels, -1.0)
-                )
+                    let trafo = 
+                        win.Sizes |> AVal.map (fun s -> 
+                            let border = V2d(20.0, 10.0) / V2d s
+                            let pixels = 30.0 / float s.Y
+                            Trafo3d.Scale(pixels) *
+                            Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
+                            Trafo3d.Translation(-1.0 + border.X, 1.0 - border.Y - pixels, -1.0)
+                        )
 
-            let chars =
-                seq {
-                    for c in 0 .. 255 do yield char c
-                }
+                    let chars =
+                        seq {
+                            for c in 0 .. 255 do yield char c
+                        }
 
-            let font = FontSquirrel.Hack.Regular
-            use __ = win.Runtime.ContextLock
-            win.Runtime.PrepareGlyphs(font, chars)
-            Sg.text font C4b.White text
-                |> Sg.trafo trafo
-                |> Sg.uniform "ViewTrafo" (AVal.constant Trafo3d.Identity)
-                |> Sg.uniform "ProjTrafo" (AVal.constant Trafo3d.Identity)
-                |> Sg.viewTrafo (AVal.constant Trafo3d.Identity)
-                |> Sg.projTrafo (AVal.constant Trafo3d.Identity)
+                    let font = FontSquirrel.Hack.Regular
+                    use __ = win.Runtime.ContextLock
+                    win.Runtime.PrepareGlyphs(font, chars)
+                    Sg.text font C4b.White text
+                        |> Sg.trafo trafo
+                        |> Sg.uniform "ViewTrafo" (AVal.constant Trafo3d.Identity)
+                        |> Sg.uniform "ProjTrafo" (AVal.constant Trafo3d.Identity)
+                        |> Sg.viewTrafo (AVal.constant Trafo3d.Identity)
+                        |> Sg.projTrafo (AVal.constant Trafo3d.Identity)
    
+                overlay
+            else
+                Sg.empty
 
         let sg = sg |> Sg.fillMode fillMode |> Sg.cullMode cullMode
         sg, overlay
@@ -376,7 +395,7 @@ module Utilities =
                     |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
                     |> AVal.map Frustum.projTrafo
 
-            let (sg, overlay) = hookSg win sg
+            let (sg, overlay) = hookSg true win sg
             let sg = sg |> Sg.viewTrafo view |> Sg.projTrafo proj
             Sg.ofList [sg; overlay]
 
@@ -459,7 +478,7 @@ module Utilities =
 
         { new SimpleRenderWindow(win, view |> AVal.map Array.singleton, proj |> AVal.map Array.singleton) with
             override x.Compile(win, sg) =
-                let sg, overlay = sg |> hookSg win
+                let sg, overlay = sg |> hookSg cfg.showHelp win
                 sg
                 |> Sg.viewTrafo view
                 |> Sg.projTrafo proj
@@ -591,7 +610,7 @@ module Utilities =
             framebuffer.Acquire()
             resolved.Acquire()
 
-            let sg, overlay = sg |> hookSg win
+            let sg, overlay = sg |> hookSg config.showHelp win
 
             let stereoTask =
                 sg
@@ -767,6 +786,7 @@ module Utilities =
             deviceKind = DeviceKind.Dedicated
             initialCamera = None
             initialSpeed  = None
+            showHelp = true
         }
 
 [<AutoOpen>]
@@ -852,11 +872,16 @@ module ``Render Utilities`` =
                 deviceKind = DeviceKind.Dedicated
                 initialCamera = None
                 initialSpeed = None
+                showHelp = true
             }
             
         [<CustomOperation("app")>]
         member x.Application(s : RenderConfig, a : IApplication) =
             { s with app = Some a }
+            
+        [<CustomOperation("showHelp")>]
+        member x.ShowHelp(s : RenderConfig, showHelp : bool) =
+            { s with showHelp = showHelp }
 
         [<CustomOperation("backend")>]
         member x.Backend(s : RenderConfig, b : Backend) =
@@ -910,11 +935,16 @@ module ``Render Utilities`` =
                 scene = Sg.empty
                 initialCamera = None
                 initialSpeed = None
+                showHelp = true
             }
             
         [<CustomOperation("app")>]
         member x.Application(s : RenderConfig, a : IApplication) =
             { s with app = Some a }
+            
+        [<CustomOperation("showHelp")>]
+        member x.ShowHelp(s : RenderConfig, showHelp : bool) =
+            { s with showHelp = showHelp }
 
         [<CustomOperation("backend")>]
         member x.Backend(s : RenderConfig, b : Backend) =
