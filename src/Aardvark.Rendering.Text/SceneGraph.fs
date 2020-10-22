@@ -476,8 +476,8 @@ module Sg =
                 | RenderStyle.Normal -> 
                     shapes.Surface <- Surface.FShadeSimple cache.Effect
                     shapes.DepthTest <- depthTest
-                    shapes.StencilMode <-stencil
-                    MultiRenderObject [boundary; shapes] :> IRenderObject  |> HashSet.single
+                    shapes.StencilMode <- stencil
+                    MultiRenderObject [boundary; shapes] :> IRenderObject |> HashSet.single
                 | RenderStyle.NoBoundary ->
                     shapes.Surface <- Surface.FShadeSimple cache.Effect
                     shapes.DepthTest <- depthTest
