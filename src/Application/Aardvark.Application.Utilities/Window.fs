@@ -368,7 +368,7 @@ module Utilities =
                     use __ = win.Runtime.ContextLock
                     win.Runtime.PrepareGlyphs(font, chars)
                     // Use NoBoundary to resolve issue with render passes, such the Cube not being visible when behind the text in the WriteBuffers example
-                    let textCfg = { font = font; color = C4b.White; align = TextAlignment.Left; flipViewDependent = false; renderStyle = RenderStyle.NoBoundary } 
+                    let textCfg = TextConfig.create font C4b.White TextAlignment.Left false RenderStyle.NoBoundary
                     Sg.textWithConfig textCfg text
                         |> Sg.trafo trafo
                         |> Sg.uniform "ViewTrafo" (AVal.constant Trafo3d.Identity)

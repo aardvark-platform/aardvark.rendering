@@ -647,6 +647,10 @@ type TextConfig =
             renderStyle = RenderStyle.Normal
         }
 
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module TextConfig = 
+    let create (font : Font) (color : C4b) (align : TextAlignment) (flipViewDependent : bool) (renderStyle : RenderStyle) = 
+        { font = font; color = color; align = align; flipViewDependent = flipViewDependent; renderStyle = renderStyle }
 
 [<AbstractClass; Sealed; Extension>]
 type Text private() =
