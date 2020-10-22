@@ -82,7 +82,9 @@ module FShadeInterop =
 
     let private toSamplerState (state : SamplerState) : Aardvark.Rendering.SamplerState =
 
-        let def = SamplerState.Default
+        let def =
+            { SamplerState.Default with
+                MaxAnisotropy = match state.Filter with Some Filter.Anisotropic -> 16 | _ -> 1 }
 
         let filter =
             LookupTable.lookupTable [

@@ -424,6 +424,19 @@ type ShapeList =
 
 module ShapeList =
 
+    /// The empty ShapeList.
+    let empty =
+        {
+            bounds = Box2d.Invalid
+            textBounds = Box2d.Invalid
+            concreteShapes = []
+            zRange = Range1i.Invalid
+            renderTrafo = Trafo3d.Identity
+            flipViewDependent = true
+            renderStyle = RenderStyle.Normal
+        }
+
+    /// Creates a new ShapeList holding the given Shapes
     let ofList (shapes : list<ConcreteShape>) =
 
         let bounds = shapes |> Seq.map (fun s -> s.bounds) |> Box2d
@@ -451,12 +464,14 @@ module ShapeList =
             renderStyle = RenderStyle.Normal
         }
 
+    /// Creates a new ShapeList holding the given Shapes and the given RenderStyle
     let ofListWithRenderStyle (renderStyle:RenderStyle) (shapes : list<ConcreteShape>) = 
 
         let res = ofList shapes
 
         { res with renderStyle = renderStyle }    
 
+    /// Prepends a Shape to the ShapeList.
     let prepend (shape : ConcreteShape) (r : ShapeList) =
 
         let shape = { shape with z = r.zRange.Min - 1 }
@@ -479,6 +494,7 @@ module ShapeList =
             renderStyle = r.renderStyle
         }
         
+    /// Appends a Shape to the ShapeList.
     let add (shape : ConcreteShape) (r : ShapeList) =
         
         let shape = { shape with z = r.zRange.Max + 1 }
@@ -501,7 +517,113 @@ module ShapeList =
             zRange = Range1i(r.zRange.Min, r.zRange.Max + 1)
             renderStyle = r.renderStyle
         }
+   
+    /// Translates all elements in the ShapeList.
+    let translate (shift : V2d) (l : ShapeList) =
+        let renderTrafo = l.renderTrafo * Trafo3d.Translation(V3d(shift, 0.0))
         
+        { 
+            bounds = l.bounds.Translated shift
+            textBounds = l.textBounds.Translated shift
+            renderTrafo = renderTrafo
+            concreteShapes = l.concreteShapes
+            zRange = l.zRange
+            flipViewDependent = l.flipViewDependent
+            renderStyle = RenderStyle.Normal
+        }
+        
+    /// Scales the ShapeList (around its zero position)
+    let scale (scale : V2d) (l : ShapeList) =
+        let bounds = Box2d(l.bounds.Min * scale, l.bounds.Max * scale)
+        let textBounds = Box2d(l.textBounds.Min * scale, l.textBounds.Max * scale)
+        let renderTrafo = l.renderTrafo * Trafo3d.Scale(V3d(scale, 1.0))
+        
+        { 
+            bounds = bounds
+            textBounds = textBounds
+            renderTrafo = renderTrafo
+            concreteShapes = l.concreteShapes
+            zRange = l.zRange
+            flipViewDependent = l.flipViewDependent
+            renderStyle = RenderStyle.Normal
+        }
+
+    /// Appends two ShapeLists.
+    let append (l : ShapeList) (r : ShapeList) =
+        let bounds = Box.Union(l.bounds, r.bounds)
+        let renderTrafo = Trafo3d.Translation(V3d(bounds.Center.X, 0.0, 0.0))
+        
+        let lShapes =
+            let l2g = l.renderTrafo * renderTrafo.Inverse
+
+            let m = l2g.Forward
+            let mat = M33d.FromRows(m.R0.XYW,m.R1.XYW,m.R3.XYW)
+
+            l.concreteShapes |> List.map (fun (s : ConcreteShape) ->
+                { trafo = mat * s.trafo; color = s.color; shape = s.shape; z = s.z }
+            )
+
+        let rShapes =
+            let r2g = r.renderTrafo * renderTrafo.Inverse
+            let m = r2g.Forward
+            let mat = M33d.FromRows(m.R0.XYW,m.R1.XYW,m.R3.XYW)
+            r.concreteShapes |> List.map (fun (s : ConcreteShape) ->
+                { trafo = mat * s.trafo; color = s.color; shape = s.shape; z = s.z }
+            )
+        
+        { 
+            bounds = bounds
+            textBounds = bounds
+            renderTrafo = renderTrafo
+            concreteShapes = lShapes @ rShapes
+            zRange = Range.Union(l.zRange, r.zRange)
+            flipViewDependent = l.flipViewDependent && r.flipViewDependent
+            renderStyle = RenderStyle.Normal
+        }
+        
+    /// Appends many ShapeLists.
+    let concat (many : seq<ShapeList>) =
+        use e = many.GetEnumerator()
+        if e.MoveNext() then
+            let mutable result = e.Current
+            while e.MoveNext() do
+                result <- append result e.Current
+            result
+        else
+            empty
+
+    /// Replaces all occurances of a string using the given replacement-function.
+    let replaceString (str : string) (rep : Box2d -> list<ConcreteShape>) (s : ShapeList) =
+                        
+        let rec tryReplaceFront (str : string) (i : int) (current : Box2d) (s : list<ConcreteShape>) =
+            if i >= str.Length then
+                Some (current, s)
+            else
+                match s with
+                | [] -> None
+                | h :: rest ->
+                    match h.shape with
+                    | :? Glyph as g when g.CodePoint.String.[0] = str.[i] ->
+                        tryReplaceFront str (i + 1) (Box.Union(current, h.bounds)) rest
+                    | _ ->
+                        None
+                     
+        let rec replace (str : string) (rep : Box2d -> list<ConcreteShape>) (s : list<ConcreteShape>) =
+            match tryReplaceFront str 0 Box2d.Invalid s with
+            | Some (box, rest) ->
+                rep box @ replace str rep rest
+            | None ->
+                match s with
+                | [] -> []
+                | h :: rest -> h :: replace str rep rest
+
+        { s with concreteShapes = replace str rep s.concreteShapes }
+        
+    let appendHorizontal (spacing : float) (l : ShapeList) (r : ShapeList) =
+        let shift = l.bounds.Max.XO - r.bounds.Min.XO + V2d(spacing, 0.0)
+        append l (translate shift r)
+        
+
 
 type TextAlignment =
     | Left = 0
@@ -525,6 +647,10 @@ type TextConfig =
             renderStyle = RenderStyle.Normal
         }
 
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module TextConfig = 
+    let create (font : Font) (color : C4b) (align : TextAlignment) (flipViewDependent : bool) (renderStyle : RenderStyle) = 
+        { font = font; color = color; align = align; flipViewDependent = flipViewDependent; renderStyle = renderStyle }
 
 [<AbstractClass; Sealed; Extension>]
 type Text private() =

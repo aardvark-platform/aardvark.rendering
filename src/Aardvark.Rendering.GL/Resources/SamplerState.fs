@@ -117,12 +117,12 @@ module SamplerExtensions =
         GL.SamplerParameter(handle, SamplerParameterName.TextureMaxLod, d.MaxLod)
         GL.Check "could not set MinLod for sampler"
 
-        if d.IsAnisotropic then
-            GL.SamplerParameter(handle, SamplerParameterName.TextureMaxAnisotropyExt, d.MaxAnisotropy)
-            GL.Check "could not set MaxAnisotropy for sampler"
-        else
-            GL.SamplerParameter(handle, SamplerParameterName.TextureMaxAnisotropyExt, 1)
-            GL.Check "could not set MaxAnisotropy for sampler"
+        //if d.IsAnisotropic then
+        GL.SamplerParameter(handle, SamplerParameterName.TextureMaxAnisotropyExt, d.MaxAnisotropy)
+        GL.Check "could not set MaxAnisotropy for sampler"
+        //else
+        //    GL.SamplerParameter(handle, SamplerParameterName.TextureMaxAnisotropyExt, 1)
+        //    GL.Check "could not set MaxAnisotropy for sampler"
 
         GL.SamplerParameter(handle, SamplerParameterName.TextureMinFilter, minFilter d.Filter)
         GL.Check "could not set MinFilter for sampler"

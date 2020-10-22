@@ -89,9 +89,9 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                 | _ ->
                     ()
 
-                let c = ctx.CreateTexture(V3i(realSize, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 1, 1, samples)
-                let d = ctx.CreateTexture(V3i(realSize, 1), TextureDimension.Texture2D, TextureFormat.Depth24Stencil8, 1, 1, samples)
-                let f =
+                let c = ctx.CreateTexture2D(realSize, 1, TextureFormat.Rgba8, samples)
+                let d = ctx.CreateTexture2D(realSize, 1, TextureFormat.Depth24Stencil8, samples)
+                let f = 
                     ctx.CreateFramebuffer(
                         fboSignature,
                         [ 0, DefaultSemantic.Colors, { texture = c; slice = 0; level = 0 } :> IFramebufferOutput ],
@@ -101,7 +101,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
                 let f0 =
                     if samples > 1 then
-                        let c0 = ctx.CreateTexture(V3i(realSize, 1), TextureDimension.Texture2D, TextureFormat.Rgba8, 1, 1, 1)
+                        let c0 = ctx.CreateTexture2D(realSize, 1, TextureFormat.Rgba8, 1)
                         let f0 =
                             ctx.CreateFramebuffer(
                                 fboSignature,

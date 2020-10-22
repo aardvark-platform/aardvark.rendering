@@ -2648,6 +2648,19 @@ module TextureExtensions =
                         failwithf "cannot download textures of kind: %A" t.Dimension
             )
 
+        member x.Download(t : Texture, level : int, slice : int) : PixImage =
+            let fmt = TextureFormat.toDownloadFormat t.Format
+            let levelSize = t.GetSize level
+            let img = PixImage.Create(fmt, int64 levelSize.X, int64 levelSize.Y)
+            x.Download(t, level, slice, img)
+            img
+
+        member x.Download(t : Texture, level : int) : PixImage =
+            x.Download(t, level, 0)
+
+        member x.Download(t : Texture) : PixImage =
+            x.Download(t, 0, 0)
+
         member x.DownloadStencil(t : Texture, level : int, slice : int, target : Matrix<int>) =
 
             // wrap matrix into piximage
