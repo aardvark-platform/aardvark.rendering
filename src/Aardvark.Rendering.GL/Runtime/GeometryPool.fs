@@ -791,23 +791,23 @@ type TextureManager(ctx : Context, semantic : string, format : TextureFormat, sa
     let textures = 
         System.Collections.Generic.Dictionary<Texture, ref<TexturePacking<Guid>>>()
 
-    let thread = 
-        startThread (fun () ->
-            while true do
-                let l = Console.ReadLine()
-                this.SaveAtlas()
+    //let thread = 
+    //    startThread (fun () ->
+    //        while true do
+    //            let l = Console.ReadLine()
+    //            this.SaveAtlas()
         
-        )
-    let thread2 = 
-        startThread (fun () ->
-            while true do
-                Thread.Sleep 1000
-                Log.start "atlas"
-                for KeyValue(_, r) in textures do
-                    Log.line "%.2f%%" (100.0 * r.Value.Occupancy)
-                Log.stop()
+    //    )
+    //let thread2 = 
+    //    startThread (fun () ->
+    //        while true do
+    //            Thread.Sleep 1000
+    //            Log.start "atlas"
+    //            for KeyValue(_, r) in textures do
+    //                Log.line "%.2f%%" (100.0 * r.Value.Occupancy)
+    //            Log.stop()
         
-        )
+    //    )
     member x.SaveAtlas () =    
         Log.startTimed "download atlas"
         use __ = ctx.ResourceLock
