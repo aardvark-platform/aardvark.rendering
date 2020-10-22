@@ -7,98 +7,6 @@ open Aardvark.Rendering.Text
 open Aardvark.Application
 open Aardvark.Base.Rendering
 open Aardvark.Application.Utilities
-        
-
-module ShapeList =
-
-    let empty =
-        {
-            bounds = Box2d.Invalid
-            textBounds = Box2d.Invalid
-            concreteShapes = []
-            zRange = Range1i.Invalid
-            renderTrafo = Trafo3d.Identity
-            flipViewDependent = true
-            renderStyle = RenderStyle.Normal
-        }
-
-    let translated (shift : V2d) (l : ShapeList) =
-        let bounds = l.bounds.Translated shift
-        let renderTrafo = l.renderTrafo * Trafo3d.Translation(V3d(shift, 0.0))
-        
-        { 
-            bounds = bounds
-            textBounds = l.textBounds.Translated shift
-            renderTrafo = renderTrafo
-            concreteShapes = l.concreteShapes
-            zRange = l.zRange
-            flipViewDependent = l.flipViewDependent
-            renderStyle = RenderStyle.Normal
-        }
-        
-    let union (l : ShapeList) (r : ShapeList) =
-        let bounds = Box.Union(l.bounds, r.bounds)
-        let renderTrafo = Trafo3d.Translation(V3d(bounds.Center.X, 0.0, 0.0))
-        
-        let lShapes =
-            let l2g = l.renderTrafo * renderTrafo.Inverse
-
-            let m = l2g.Forward
-            let mat = M33d.FromRows(m.R0.XYW,m.R1.XYW,m.R3.XYW)
-
-            l.concreteShapes |> List.map (fun (s : ConcreteShape) ->
-                { trafo = mat * s.trafo; color = s.color; shape = s.shape; z = s.z }
-            )
-
-        let rShapes =
-            let r2g = r.renderTrafo * renderTrafo.Inverse
-            let m = r2g.Forward
-            let mat = M33d.FromRows(m.R0.XYW,m.R1.XYW,m.R3.XYW)
-            r.concreteShapes |> List.map (fun (s : ConcreteShape) ->
-                { trafo = mat * s.trafo; color = s.color; shape = s.shape; z = s.z }
-            )
-        
-        { 
-            bounds = bounds
-            textBounds = bounds
-            renderTrafo = renderTrafo
-            concreteShapes = lShapes @ rShapes
-            zRange = Range.Union(l.zRange, r.zRange)
-            flipViewDependent = l.flipViewDependent && r.flipViewDependent
-            renderStyle = RenderStyle.Normal
-        }
-
-    let appendHorizontal (spacing : float) (l : ShapeList) (r : ShapeList) =
-        let shift = l.bounds.Max.XO - r.bounds.Min.XO + V2d(spacing, 0.0)
-        union l (translated shift r)
-        
-
-
-    let replace (str : string) (rep : Box2d -> list<ConcreteShape>) (s : ShapeList) =
-                        
-        let rec tryReplaceFront (str : string) (i : int) (current : Box2d) (s : list<ConcreteShape>) =
-            if i >= str.Length then
-                Some (current, s)
-            else
-                match s with
-                | [] -> None
-                | h :: rest ->
-                    match h.shape with
-                    | :? Glyph as g when g.CodePoint.String.[0] = str.[i] ->
-                        tryReplaceFront str (i + 1) (Box.Union(current, h.bounds)) rest
-                    | _ ->
-                        None
-                     
-        let rec replace (str : string) (rep : Box2d -> list<ConcreteShape>) (s : list<ConcreteShape>) =
-            match tryReplaceFront str 0 Box2d.Invalid s with
-            | Some (box, rest) ->
-                rep box @ replace str rep rest
-            | None ->
-                match s with
-                | [] -> []
-                | h :: rest -> h :: replace str rep rest
-
-        { s with concreteShapes = replace str rep s.concreteShapes }
 
 type OverlayPosition =
     | None      = 0x00
@@ -359,8 +267,8 @@ module Table =
                     for (span, e) in row do
                         let l = colLengths.[c]
 
-                        let e = ShapeList.translated (V2d(offset, 0.0)) e
-                        res <- ShapeList.union res e
+                        let e = ShapeList.translate (V2d(offset, 0.0)) e
+                        res <- ShapeList.append res e
 
                         offset <- offset + l
                         c <- c + span
@@ -373,7 +281,7 @@ module Table =
                             let width = 0.02
                             let vLine = ConcreteShape.fillRectangle C4b.White (Box2d(-width/2.0, res.bounds.Min.Y + negativeV, width / 2.0, res.bounds.Max.Y))
                             let vLine = [{ vLine with z = 100 }] |> ShapeList.ofList
-                            res <- ShapeList.union res (ShapeList.translated (V2d(offset - 1.0, 0.0)) vLine)
+                            res <- ShapeList.append res (ShapeList.translate (V2d(offset - 1.0, 0.0)) vLine)
                         offset <- offset + colLengths.[c]
                         c <- c + span
                         
@@ -385,7 +293,7 @@ module Table =
             let mutable offset = 0.0
             let mutable res = ShapeList.empty
             for r in rows do
-                res <- ShapeList.union res (ShapeList.translated (V2d(0.0, offset)) r)
+                res <- ShapeList.append res (ShapeList.translate (V2d(0.0, offset)) r)
                 offset <- offset - r.bounds.SizeY + negativeV
 
             
@@ -491,7 +399,7 @@ module Table =
             let mutable shapes = cfg.Layout content
 
             for (splice, value) in Map.toSeq progress do
-                shapes <- ShapeList.replace splice (progressBar value) shapes
+                shapes <- ShapeList.replaceString splice (progressBar value) shapes
 
             shapes
         )
@@ -773,9 +681,9 @@ module LodRendererStats =
                     return 
                         text
                         |> layoutWithBackground 1.0
-                        |> ShapeList.replace pi (progress stats.quality stats.maxQuality)
-                        |> ShapeList.replace pm (progress' stats.usedMemory stats.allocatedMemory)
-                        |> ShapeList.replace pt (progress' (float stats.totalPrimitives) (float -1))
+                        |> ShapeList.replaceString pi (progress stats.quality stats.maxQuality)
+                        |> ShapeList.replaceString pm (progress' stats.usedMemory stats.allocatedMemory)
+                        |> ShapeList.replaceString pt (progress' (float stats.totalPrimitives) (float -1))
                 else
                     return layoutWithBackground 0.5 "press 'H' for help"
             }

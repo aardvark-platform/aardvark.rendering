@@ -798,15 +798,35 @@ type TextureManager(ctx : Context, semantic : string, format : TextureFormat, sa
                 this.SaveAtlas()
         
         )
+    let thread2 = 
+        startThread (fun () ->
+            while true do
+                Thread.Sleep 1000
+                Log.start "atlas"
+                for KeyValue(_, r) in textures do
+                    Log.line "%.2f%%" (100.0 * r.Value.Occupancy)
+                Log.stop()
+        
+        )
     member x.SaveAtlas () =    
         Log.startTimed "download atlas"
         use __ = ctx.ResourceLock
         let path = System.IO.Path.Combine(Environment.GetFolderPath Environment.SpecialFolder.Desktop, "atlas")
         if not (System.IO.Directory.Exists path) then System.IO.Directory.CreateDirectory path |> ignore
 
-        for i, (KeyValue(t,_)) in Seq.indexed textures do
+        for i, (KeyValue(t,p)) in Seq.indexed textures do
             let name = sprintf "tile%03d.png" i
-            ctx.Download(t).SaveAsImage(System.IO.Path.Combine(path, name), PixFileFormat.Png)
+            let tex = ctx.Download(t) |> unbox<PixImage<byte>>
+            let dst = PixImage<byte>(Col.Format.RGBA, tex.Size)
+            dst.GetMatrix<C4b>().Set C4b.Red |> ignore
+
+            for (_, (b : Box2i)) in p.Value.Used do
+                let b = Box2i(V2i(b.Min.X, dst.Size.Y - 1 - b.Max.Y), V2i(b.Max.X, dst.Size.Y - 1 - b.Min.Y))
+                let src = tex.SubImage(b.Min, V2i.II + b.Max - b.Min)
+                let dst = dst.SubImage(b.Min, V2i.II + b.Max - b.Min)
+                dst.Volume.Set(src.Volume) |> ignore
+            
+            dst.SaveAsImage(System.IO.Path.Combine(path, name), PixFileFormat.Png)
             ()
         Log.stop()
         
