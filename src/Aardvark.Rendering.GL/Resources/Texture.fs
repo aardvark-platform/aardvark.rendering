@@ -2342,15 +2342,17 @@ module TextureExtensions =
     //    let pixelCount = (int64 size.X) * (int64 size.Y) * (int64 size.Z) * (int64 samples)
     //    pixelCount * (int64 (InternalFormat.getSizeInBits (unbox (int t)))) / 8L
 
-    type Context with
+    [<Extension; AbstractClass; Sealed>]
+    type ContextTextureExtensions =
 
-        member x.CreateTexture(data : ITexture) =
-            using x.ResourceLock (fun _ ->
+        [<Extension>]
+        static member CreateTexture(this : Context, data : ITexture) =
+            using this.ResourceLock (fun _ ->
                 let newTexture () = // not all cases need new textures
                     let h = GL.GenTexture()
                     GL.Check "could not create texture"
-                    addTexture x 0L
-                    Texture(x, h, TextureDimension.Texture2D, 1, 1, V3i(-1,-1,-1), None, TextureFormat.Rgba8, 0L, false)
+                    addTexture this 0L
+                    Texture(this, h, TextureDimension.Texture2D, 1, 1, V3i(-1,-1,-1), None, TextureFormat.Rgba8, 0L, false)
 
                 match data with
 
@@ -2383,7 +2385,7 @@ module TextureExtensions =
                         t
 
                     | :? NullTexture ->
-                        Texture(x, 0, TextureDimension.Texture2D, 1, 1, V3i(-1,-1,-1), None, TextureFormat.Rgba8, 0L, false)
+                        Texture(this, 0, TextureDimension.Texture2D, 1, 1, V3i(-1,-1,-1), None, TextureFormat.Rgba8, 0L, false)
 
                     | :? Texture as o ->
                         o
@@ -2398,8 +2400,9 @@ module TextureExtensions =
 
             )
 
-        member x.Upload(t : Texture, data : ITexture) =
-            using x.ResourceLock (fun _ ->
+        [<Extension>]
+        static member Upload(this : Context, t : Texture, data : ITexture) =
+            using this.ResourceLock (fun _ ->
                 match data with
                     | PixTexture2D(wantMipMaps, data) -> 
                         uploadTexture2D t wantMipMaps data |> ignore
@@ -2426,8 +2429,9 @@ module TextureExtensions =
                         failwith "unsupported texture data"
             )
 
-        member x.Blit(src : Texture, srcLevel : int, srcSlice : int, srcRegion : Box2i, dst : Texture, dstLevel : int, dstSlice : int, dstRegion : Box2i, linear : bool) =
-            using x.ResourceLock (fun _ ->
+        [<Extension>]
+        static member Blit(this : Context, src : Texture, srcLevel : int, srcSlice : int, srcRegion : Box2i, dst : Texture, dstLevel : int, dstSlice : int, dstRegion : Box2i, linear : bool) =
+            using this.ResourceLock (fun _ ->
                 let fSrc = GL.GenFramebuffer()
                 GL.Check "could not create framebuffer"
                 let fDst = GL.GenFramebuffer()
@@ -2489,8 +2493,9 @@ module TextureExtensions =
 
             )
 
-        member x.Copy(src : Texture, srcLevel : int, srcSlice : int, srcOffset : V2i, dst : Texture, dstLevel : int, dstSlice : int, dstOffset : V2i, size : V2i) =
-            using x.ResourceLock (fun _ ->
+        [<Extension>]
+        static member Copy(this : Context, src : Texture, srcLevel : int, srcSlice : int, srcOffset : V2i, dst : Texture, dstLevel : int, dstSlice : int, dstOffset : V2i, size : V2i) =
+            using this.ResourceLock (fun _ ->
                 let fSrc = GL.GenFramebuffer()
                 GL.Check "could not create framebuffer"
 
@@ -2552,21 +2557,22 @@ module TextureExtensions =
 
             )
 
-
-        member x.Upload(t : Texture, level : int, slice : int, offset : V2i, source : PixImage) =
-            using x.ResourceLock (fun _ ->
+        [<Extension>]
+        static member Upload(this : Context, t : Texture, level : int, slice : int, offset : V2i, source : PixImage) =
+            using this.ResourceLock (fun _ ->
                 let levelSize = t.GetSize level
                 if offset = V2i.Zero && source.Size = levelSize.XY then
-                    x.Upload(t, level, slice, source)
+                    this.Upload(t, level, slice, source)
                 else
-                    let temp = x.CreateTexture2D(source.Size, 1, t.Format, 1)
-                    x.Upload(temp, 0, 0, source)
-                    x.Copy(temp, 0, 0, V2i.Zero, t, level, slice, offset, source.Size)
-                    x.Delete(temp)
+                    let temp = this.CreateTexture2D(source.Size, 1, t.Format, 1)
+                    this.Upload(temp, 0, 0, source)
+                    this.Copy(temp, 0, 0, V2i.Zero, t, level, slice, offset, source.Size)
+                    this.Delete(temp)
             )
 
-        member x.Upload(t : Texture, level : int, slice : int, source : PixImage) =
-            using x.ResourceLock (fun _ ->
+        [<Extension>]
+        static member Upload(this : Context, t : Texture, level : int, slice : int, source : PixImage) =
+            using this.ResourceLock (fun _ ->
                 match t.Dimension with
                     | TextureDimension.Texture2D -> 
                         let target = getTextureTarget t
@@ -2601,41 +2607,42 @@ module TextureExtensions =
                         failwithf "cannot upload textures of kind: %A" t.Dimension
             )
 
-        member x.Upload(t : Texture, level : int, source : PixImage) =
-            x.Upload(t, level, 0, source)
+        [<Extension>]
+        static member Upload(this : Context, t : Texture, level : int, source : PixImage) =
+            this.Upload(t, level, 0, source)
 
-
-
-        member x.Download(t : Texture, level : int, slice : int, offset : V2i, target : PixImage) =
-            using x.ResourceLock (fun _ ->
+        [<Extension>]
+        static member Download(this : Context, t : Texture, level : int, slice : int, offset : V2i, target : PixImage) =
+            using this.ResourceLock (fun _ ->
                 let levelSize = t.GetSize level
                 let offset = V2i(offset.X, levelSize.Y - offset.Y - target.Size.Y) // flip y-offset
                 if offset = V2i.Zero && target.Size = levelSize.XY then
-                    x.Download(t, level, slice, target)
+                    this.Download(t, level, slice, target)
                 else
-                    let temp = x.CreateTexture2D(target.Size, 1, t.Format, 1)
+                    let temp = this.CreateTexture2D(target.Size, 1, t.Format, 1)
 
                     try
                         if t.IsMultisampled then // resolve multisamples
-                            x.Blit(t, level, slice, Box2i.FromMinAndSize(offset, levelSize.XY), temp, 0, 0, Box2i(V2i.Zero, target.Size), true)
+                            this.Blit(t, level, slice, Box2i.FromMinAndSize(offset, levelSize.XY), temp, 0, 0, Box2i(V2i.Zero, target.Size), true)
                         else
-                            x.Copy(t, level, slice, offset, temp, 0, 0, V2i.Zero, target.Size)
+                            this.Copy(t, level, slice, offset, temp, 0, 0, V2i.Zero, target.Size)
 
-                        x.Download(temp, 0, 0, target)
+                        this.Download(temp, 0, 0, target)
                     finally
-                        x.Delete(temp)
+                        this.Delete(temp)
             )
 
-        member x.Download(t : Texture, level : int, slice : int, target : PixImage) =
-            using x.ResourceLock (fun _ ->
+        [<Extension>]
+        static member Download(this : Context, t : Texture, level : int, slice : int, target : PixImage) =
+            using this.ResourceLock (fun _ ->
                 if t.IsMultisampled then
-                    let resolved = x.CreateTexture2D(target.Size, 1, t.Format, 1)
+                    let resolved = this.CreateTexture2D(target.Size, 1, t.Format, 1)
                     try
                         let region = Box2i(V2i.Zero, target.Size)
-                        x.Blit(t, level, slice, region, resolved, 0, 0, region, false)
+                        this.Blit(t, level, slice, region, resolved, 0, 0, region, false)
                         downloadTexture2D resolved 0 0 target
                     finally
-                        x.Delete resolved
+                        this.Delete resolved
                 else
                     match t.Dimension with
                     | TextureDimension.Texture2D ->
@@ -2648,20 +2655,24 @@ module TextureExtensions =
                         failwithf "cannot download textures of kind: %A" t.Dimension
             )
 
-        member x.Download(t : Texture, level : int, slice : int) : PixImage =
+        [<Extension>]
+        static member Download(this : Context, t : Texture, level : int, slice : int) : PixImage =
             let fmt = TextureFormat.toDownloadFormat t.Format
             let levelSize = t.GetSize level
             let img = PixImage.Create(fmt, int64 levelSize.X, int64 levelSize.Y)
-            x.Download(t, level, slice, img)
+            this.Download(t, level, slice, img)
             img
 
-        member x.Download(t : Texture, level : int) : PixImage =
-            x.Download(t, level, 0)
+        [<Extension>]
+        static member Download(this : Context, t : Texture, level : int) : PixImage =
+            this.Download(t, level, 0)
 
-        member x.Download(t : Texture) : PixImage =
-            x.Download(t, 0, 0)
+        [<Extension>]
+        static member Download(this : Context, t : Texture) : PixImage =
+            this.Download(t, 0, 0)
 
-        member x.DownloadStencil(t : Texture, level : int, slice : int, target : Matrix<int>) =
+        [<Extension>]
+        static member DownloadStencil(this : Context, t : Texture, level : int, slice : int, target : Matrix<int>) =
 
             // wrap matrix into piximage
             let pix =
@@ -2670,15 +2681,15 @@ module TextureExtensions =
                 img.Format <- Col.Format.Stencil
                 img
 
-            using x.ResourceLock (fun _ ->
+            using this.ResourceLock (fun _ ->
                 if t.IsMultisampled then
-                    let resolved = x.CreateTexture2D(V2i target.Size, 1, t.Format, 1)
+                    let resolved = this.CreateTexture2D(V2i target.Size, 1, t.Format, 1)
                     try
                         let region = Box2i(V2i.Zero, V2i target.Size)
-                        x.Blit(t, level, slice, region, resolved, 0, 0, region, false)
+                        this.Blit(t, level, slice, region, resolved, 0, 0, region, false)
                         downloadTexture2D resolved level 0 pix
                     finally
-                        x.Delete resolved
+                        this.Delete resolved
                 else
                     match t.Dimension with
                     | TextureDimension.Texture2D ->
@@ -2691,7 +2702,8 @@ module TextureExtensions =
                         failwithf "cannot download stencil-texture of kind: %A" t.Dimension
             )
 
-        member x.DownloadDepth(t : Texture, level : int, slice : int, target : Matrix<float32>) =
+        [<Extension>]
+        static member DownloadDepth(this : Context, t : Texture, level : int, slice : int, target : Matrix<float32>) =
 
             // wrap matrix into piximage
             let pix =
@@ -2700,15 +2712,15 @@ module TextureExtensions =
                 img.Format <- Col.Format.Depth
                 img
 
-            using x.ResourceLock (fun _ ->
+            using this.ResourceLock (fun _ ->
                 if t.IsMultisampled then
-                    let resolved = x.CreateTexture2D(V2i target.Size, 1, t.Format, 1)
+                    let resolved = this.CreateTexture2D(V2i target.Size, 1, t.Format, 1)
                     try
                         let region = Box2i(V2i.Zero, V2i target.Size)
-                        x.Blit(t, level, slice, region, resolved, 0, 0, region, false)
+                        this.Blit(t, level, slice, region, resolved, 0, 0, region, false)
                         downloadTexture2D resolved level 0 pix
                     finally
-                        x.Delete resolved
+                        this.Delete resolved
                 else
                     match t.Dimension with
                     | TextureDimension.Texture2D ->
