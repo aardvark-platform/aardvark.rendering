@@ -83,32 +83,17 @@ module Driver =
 
     let readInfo() =
         let vendor = GL.GetString(StringName.Vendor)  
-        Report.Line(4, "[GL] vendor: {0}", vendor)
         let renderer = GL.GetString(StringName.Renderer)  
-        Report.Line(4, "[GL] renderer: {0}", renderer)
         let versionStr = GL.GetString(StringName.Version)
-        Report.Line(4, "[GL] version: {0}", versionStr)
         let version = 
             versionStr |> tryParseGLVersion |> Option.defaultValue (Version())
 
         let glslVersion = 
             let str = GL.GetString(StringName.ShadingLanguageVersion)
-            Report.Line(4, "[GL] glsl: {0}", str)
             str |> tryParseGLSLVersion |> Option.defaultValue (Version())
         let profileMask =  GL.GetInteger(unbox<_> OpenTK.Graphics.OpenGL4.All.ContextProfileMask)
-        Report.Line(4, "[GL] profileMask: {0}", profileMask)
         let contextFlags = GL.GetInteger(GetPName.ContextFlags)
-        Report.Line(4, "[GL] contextFlags: {0}", contextFlags)
-
-        let mutable extensions = Set.empty
-        let extensionCount = GL.GetInteger(0x821d |> unbox<GetPName>) // GL_NUM_EXTENSIONS
-        Report.Begin(4, "[GL] extensions")
-        for i in 0..extensionCount-1 do
-            let name = GL.GetString(StringNameIndexed.Extensions, i)
-            Report.Line(4, "{0}", name)
-            extensions <- Set.add name extensions
-        Report.End(4) |> ignore
-
+        
         let pat = (vendor + "_" + renderer).ToLower()
         let gpu =
             if pat.Contains "nvidia" then GPUVendor.nVidia
@@ -116,7 +101,11 @@ module Driver =
             elif pat.Contains "intel" then GPUVendor.Intel
             else GPUVendor.Unknown
 
-
+        let mutable extensions = Set.empty
+        let extensionCount = GL.GetInteger(0x821d |> unbox<GetPName>) // GL_NUM_EXTENSIONS
+        for i in 0..extensionCount-1 do
+            let name = GL.GetString(StringNameIndexed.Extensions, i)
+            extensions <- Set.add name extensions
 
         {
             device = gpu
@@ -129,6 +118,20 @@ module Driver =
             contextFlags = contextFlags
             extensions = extensions
         }
+
+    let printDriverInfo(verbosity : int) = 
+        Report.Line(verbosity, "[GL] vendor: {0}", GL.GetString(StringName.Vendor))
+        Report.Line(verbosity, "[GL] renderer: {0}",  GL.GetString(StringName.Renderer))
+        Report.Line(verbosity, "[GL] version: {0}", GL.GetString(StringName.Version))
+        Report.Line(verbosity, "[GL] profileMask: {0}", GL.GetInteger(unbox<_> OpenTK.Graphics.OpenGL4.All.ContextProfileMask))
+        Report.Line(verbosity, "[GL] contextFlags: {0}", GL.GetInteger(GetPName.ContextFlags))
+
+        let extensionCount = GL.GetInteger(0x821d |> unbox<GetPName>) // GL_NUM_EXTENSIONS
+        Report.Begin(verbosity, "[GL] extensions")
+        for i in 0..extensionCount-1 do
+            Report.Line(verbosity, "{0}", GL.GetString(StringNameIndexed.Extensions, i))
+        Report.End(verbosity) |> ignore
+
 
 
 module MemoryManagementUtilities =
