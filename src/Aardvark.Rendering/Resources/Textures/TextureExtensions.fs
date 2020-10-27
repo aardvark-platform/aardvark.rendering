@@ -288,7 +288,7 @@ type ITextureRuntimeExtensions private() =
     static member DownloadDepth(this : ITextureRuntime, texture : IBackendTexture, level : int, slice : int) =
         let size = texture.Size.XY |> levelSize level
         let matrix = Matrix<float32>(size)
-        this.DownloadDepth(texture, 0, 0, matrix)
+        this.DownloadDepth(texture, level, slice, matrix)
         matrix
 
     [<Extension>]
@@ -304,7 +304,7 @@ type ITextureRuntimeExtensions private() =
     static member DownloadStencil(this : ITextureRuntime, texture : IBackendTexture, level : int, slice : int) =
         let size = texture.Size.XY |> levelSize level
         let matrix = Matrix<int>(size)
-        this.DownloadStencil(texture, 0, 0, matrix)
+        this.DownloadStencil(texture, level, slice, matrix)
         matrix
 
     [<Extension>]
