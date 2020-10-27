@@ -213,16 +213,13 @@ module ContextHandleOpenTK =
     
     let private windows = System.Collections.Concurrent.ConcurrentDictionary<ContextHandle, NativeWindow>()
 
-    let mutable primaryContext : ContextHandle = null
-
     /// <summary>
     /// creates a new context using the default configuration
     /// </summary>
     let create (enableDebug : bool) =
         let window, context =
-            if not (isNull primaryContext) then 
-                primaryContext.MakeCurrent()
-            
+            let prev = ContextHandle.Current
+
             let mode = Graphics.GraphicsMode(ColorFormat(Config.BitsPerPixel), Config.DepthBits, Config.StencilBits, 1, ColorFormat.Empty, Config.Buffers, false)
             let window = new NativeWindow(16, 16, "background", GameWindowFlags.Default, mode, DisplayDevice.Default)
             let context = new GraphicsContext(GraphicsMode.Default, window.WindowInfo, Config.MajorVersion, Config.MinorVersion, Config.ContextFlags);
@@ -232,7 +229,11 @@ module ContextHandleOpenTK =
 
             ContextHandle.initGlConfig()
 
-            context.MakeCurrent(null)
+            // unbind created context and optionally restore previous
+            match prev with 
+            | Some old -> old.Handle.MakeCurrent(old.WindowInfo)
+            | None -> context.MakeCurrent(null)
+
             window, context
     
         
@@ -240,9 +241,6 @@ module ContextHandleOpenTK =
 
         if enableDebug then
             handle.AttachDebugOutputIfNeeded(true)
-
-        if isNull primaryContext then
-            primaryContext <- handle
 
         // add the window to the windows-table to save it from being
         // garbage collected.
