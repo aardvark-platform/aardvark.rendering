@@ -34,7 +34,7 @@ module private AdaptiveTextureTypes =
 
     [<AbstractClass>]
     type AbstractAdaptiveTexture<'a when 'a : equality>(runtime : ITextureRuntime) =
-        inherit AdaptiveResource<ITexture>()
+        inherit AdaptiveResource<IBackendTexture>()
 
         let mutable handle : Option<IBackendTexture * 'a> = None
 
@@ -44,7 +44,7 @@ module private AdaptiveTextureTypes =
         member private x.CreateHandle(runtime : ITextureRuntime, textureParams : 'a) =
             let tex = x.CreateTexture(runtime, textureParams)
             handle <- Some (tex, textureParams)
-            tex :> ITexture
+            tex
 
         override x.Create() = ()
         override x.Destroy() =
@@ -61,7 +61,7 @@ module private AdaptiveTextureTypes =
 
             match handle with
             | Some (h, p) when textureParams = p ->
-                h :> ITexture
+                h
 
             | Some (h, _) ->
                 t.ReplacedResource(ResourceKind.Texture)
