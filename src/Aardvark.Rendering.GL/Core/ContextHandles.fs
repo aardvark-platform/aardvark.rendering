@@ -206,6 +206,8 @@ module ContextHandle =
         GL.Enable(EnableCap.TextureCubeMapSeamless)
         GL.Disable(EnableCap.PolygonSmooth)
         GL.Hint(HintTarget.FragmentShaderDerivativeHint, HintMode.Nicest)
+        if Config.DepthRange = DepthRange.ZeroToOne then
+            GL.ClipControl(ClipOrigin.LowerLeft, ClipDepthMode.ZeroToOne)
 
 
 
