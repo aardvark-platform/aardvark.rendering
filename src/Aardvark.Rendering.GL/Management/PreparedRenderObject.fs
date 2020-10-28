@@ -1475,7 +1475,8 @@ module rec Command =
                     let ref = 
                         trie.AddOrUpdate(key, fun o ->
                             let cmd = new SingleObjectCommand(dirty, signature, manager, v)
-                            dirty.Add cmd |> ignore
+                            // new command needs to be compiled immediately, otherwise fragment pointers cannot be updated
+                            cmd.Compile(info, program)
                             cache.[key] <- cmd
                             cmd
                         )
