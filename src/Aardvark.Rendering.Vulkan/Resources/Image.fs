@@ -3103,7 +3103,7 @@ module Image =
             | _ ->
                 failf "unsupported texture-type: %A" t
 
-    let private downloadLevel (src : ImageSubresource) (writeToDst : TensorImage -> unit) (dstSize : V3i) (device : Device) =
+    let private downloadLevel (src : ImageSubresource) (writeToDst : TensorImage -> unit) (dstSize : V3i) (srcOffset : V3i) (device : Device) =
         let format = src.Image.Format
         let sourcePixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
 
@@ -3140,7 +3140,7 @@ module Image =
                 command {
                     do! cmdResolve
                     do! Command.TransformLayout(srcResolved.Image, VkImageLayout.TransferSrcOptimal)
-                    do! Command.Copy(srcResolved, temp)
+                    do! Command.Copy(srcResolved, srcOffset, temp, dstSize)
                     do! Command.TransformLayout(srcResolved.Image, layout)
                 }
 
@@ -3151,26 +3151,29 @@ module Image =
             if srcResolved <> src then
                 delete srcResolved.Image device
 
-    let downloadLevel2d (src : ImageSubresource) (dst : PixImage) (device : Device) =
+    let downloadLevel2d (offset : V2i) (src : ImageSubresource) (dst : PixImage) (device : Device) =
         let write (buffer : TensorImage) = buffer.Read(dst, ImageTrafo.MirrorY)
         let size = V3i(dst.Size, 1)
-        downloadLevel src write size device
+        let offset = V3i(offset.X, src.Size.Y - offset.Y - dst.Size.Y, 0) // flip y-offset
+        downloadLevel src write size offset device
 
-    let downloadLevel3d (src : ImageSubresource) (dst : PixVolume) (device : Device) =
+    let downloadLevel3d (offset : V3i) (src : ImageSubresource) (dst : PixVolume) (device : Device) =
         let write (buffer : TensorImage) = buffer.Read(dst)
-        downloadLevel src write dst.Size device
+        downloadLevel src write dst.Size offset device
 
-    let uploadLevel (src : PixImage) (dst : ImageSubresource) (device : Device) =
+    let uploadLevel (offset : V2i) (src : PixImage) (dst : ImageSubresource) (device : Device) =
         let format = dst.Image.Format
         let dstPixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
-        
-        let temp = device.CreateTensorImage(V3i(dst.Size.X, dst.Size.Y, 1), dstPixFormat, false)
+
+        let offset = V3i(offset.X, dst.Size.Y - offset.Y - src.Size.Y, 0) // flip y-offset
+
+        let temp = device.CreateTensorImage(V3i(src.Size, 1), dstPixFormat, false)
         temp.Write(src, ImageTrafo.MirrorY)
         let layout = dst.Image.Layout
         device.eventually {
             try
                 do! Command.TransformLayout(dst.Image, VkImageLayout.TransferDstOptimal)
-                do! Command.Copy(temp, dst)
+                do! Command.Copy(temp, dst, offset, temp.Size)
                 do! Command.TransformLayout(dst.Image, layout)
             finally 
                 device.Delete temp
@@ -3211,16 +3214,16 @@ type ContextImageExtensions private() =
         this.CreateImage(size, mipMapLevels, count, samples, dim, fmt, usage)
 
     [<Extension>]
-    static member inline UploadLevel(this : Device, dst : ImageSubresource, src : PixImage) =
-        this |> Image.uploadLevel src dst
+    static member inline UploadLevel(this : Device, dst : ImageSubresource, src : PixImage, offset : V2i) =
+        this |> Image.uploadLevel offset src dst
 
     [<Extension>]
-    static member inline DownloadLevel(this : Device, src : ImageSubresource, dst : PixImage) =
-        this |> Image.downloadLevel2d src dst
+    static member inline DownloadLevel(this : Device, src : ImageSubresource, dst : PixImage, offset : V2i) = 
+        this |> Image.downloadLevel2d offset src dst
 
     [<Extension>]
-    static member inline DownloadLevel(this : Device, src : ImageSubresource, dst : PixVolume) =
-        this |> Image.downloadLevel3d src dst
+    static member inline DownloadLevel(this : Device, src : ImageSubresource, dst : PixVolume, offset : V3i) =
+        this |> Image.downloadLevel3d offset src dst
 
 [<AutoOpen>]
 module private ImageRanges =

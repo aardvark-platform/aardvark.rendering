@@ -141,11 +141,11 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     member x.Download(t : IBackendTexture, level : int, slice : int, offset : V2i, target : PixImage) =
         let image = unbox<Image> t
-        device.DownloadLevel(image.[ImageAspect.Color, level, slice], target)
+        device.DownloadLevel(image.[ImageAspect.Color, level, slice], target, offset)
 
     member x.Download(t : IBackendTexture, level : int, slice : int, offset : V3i, target : PixVolume) =
         let image = unbox<Image> t
-        device.DownloadLevel(image.[ImageAspect.Color, level, slice], target)
+        device.DownloadLevel(image.[ImageAspect.Color, level, slice], target, offset)
 
     member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<int>) =
         let image = unbox<Image> t
@@ -154,7 +154,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             img.Volume <- target.AsVolume()
             img
 
-        device.DownloadLevel(image.[ImageAspect.Stencil, level, slice], pix)
+        device.DownloadLevel(image.[ImageAspect.Stencil, level, slice], pix, offset)
 
     member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
         let image = unbox<Image> t
@@ -163,11 +163,11 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             img.Volume <- target.AsVolume()
             img
 
-        device.DownloadLevel(image.[ImageAspect.Depth, level, slice], pix)
+        device.DownloadLevel(image.[ImageAspect.Depth, level, slice], pix, offset)
 
     member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) =
         let image = unbox<Image> t 
-        device.UploadLevel(image.[ImageAspect.Color, level, slice], source)
+        device.UploadLevel(image.[ImageAspect.Color, level, slice], source, offset)
 
     member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) =
         manager.PrepareRenderObject(unbox fboSignature, rj) :> IPreparedRenderObject
