@@ -10,6 +10,8 @@ open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 open Aardvark.Rendering.GL
 
+type DepthRange = MinusOneToOne=0 | ZeroToOne=1
+
 /// <summary>
 /// A module containing default GL configuration properties
 /// </summary>
@@ -64,6 +66,15 @@ module Config =
     /// The number of buffers used by default contexts
     /// </summary>
     let Buffers = 2
+
+    /// <summary>
+    /// Specifies the depth range convention: The default is MinusOneToOne [-1, 1]. 
+    /// Setting the DepthRange to ZeroToOne [0, 1] allows implementing a "reversed depth" zbuffer with increased precission.
+    /// NOTE: Internally it will use glClipControl to set the convention and requires OpenGL 4.5 to work.
+    ///       FShade is not aware of this configuration, it still expects shader to follow the [-1, 1] convention and allows automatic conversion to [0, 1] as used by Vulkan.
+    ///       This means for OpenGL use the depth values are untouched and it up for the application to use suitable projection transformations when setting the DepthRange to [0, 1].
+    /// </summary>
+    let mutable DepthRange = DepthRange.MinusOneToOne
 
     let mutable CheckErrors = false
 
