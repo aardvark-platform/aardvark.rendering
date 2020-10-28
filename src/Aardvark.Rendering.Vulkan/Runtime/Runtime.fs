@@ -139,15 +139,15 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         ) :> ISparseTexture<_>
 
 
-    member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) =
+    member x.Download(t : IBackendTexture, level : int, slice : int, offset : V2i, target : PixImage) =
         let image = unbox<Image> t
         device.DownloadLevel(image.[ImageAspect.Color, level, slice], target)
 
-    member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) =
+    member x.Download(t : IBackendTexture, level : int, slice : int, offset : V3i, target : PixVolume) =
         let image = unbox<Image> t
         device.DownloadLevel(image.[ImageAspect.Color, level, slice], target)
 
-    member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) =
+    member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<int>) =
         let image = unbox<Image> t
         let pix =
             let img = PixImage<int>()
@@ -156,7 +156,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         device.DownloadLevel(image.[ImageAspect.Stencil, level, slice], pix)
 
-    member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) =
+    member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
         let image = unbox<Image> t
         let pix =
             let img = PixImage<float32>()
@@ -165,7 +165,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         device.DownloadLevel(image.[ImageAspect.Depth, level, slice], pix)
 
-    member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) =
+    member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) =
         let image = unbox<Image> t 
         device.UploadLevel(image.[ImageAspect.Color, level, slice], source)
 
@@ -543,11 +543,20 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.CreateFramebufferSignature(a,b,c) = x.CreateFramebufferSignature(a,b,c)
         member x.DeleteFramebufferSignature(s) = x.DeleteFramebufferSignature(s)
 
-        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)
-        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) = x.Download(t, level, slice, target)
-        member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = x.Upload(t, level, slice, source)
-        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = x.DownloadDepth(t, level, slice, target)
-        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = x.DownloadStencil(t, level, slice, target)
+        member x.Download(t : IBackendTexture, level : int, slice : int, offset : V2i, target : PixImage) =
+            x.Download(t, level, slice, offset, target)
+
+        member x.Download(t : IBackendTexture, level : int, slice : int, offset : V3i, target : PixVolume) =
+            x.Download(t, level, slice, offset, target)
+
+        member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) =
+            x.Upload(t, level, slice, offset, source)
+
+        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
+            x.DownloadDepth(t, level, slice, offset, target)
+
+        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<int>) =
+            x.DownloadStencil(t, level, slice, offset, target)
 
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t) = x.GenerateMipMaps(t)

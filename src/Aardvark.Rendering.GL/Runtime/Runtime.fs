@@ -408,11 +408,20 @@ type Runtime() =
         member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
             ()
 
-        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)
-        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) = x.Download(t, level, slice, target)
-        member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = x.Upload(t, level, slice, source)
-        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = x.DownloadStencil(t, level, slice, target)
-        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = x.DownloadDepth(t, level, slice, target)
+        member x.Download(t : IBackendTexture, level : int, slice : int, offset : V2i, target : PixImage) =
+            x.Download(t, level, slice, offset, target)
+
+        member x.Download(t : IBackendTexture, level : int, slice : int, offset : V3i, target : PixVolume) =
+            x.Download(t, level, slice, offset, target)
+
+        member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) =
+            x.Upload(t, level, slice, offset, source)
+
+        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<int>) =
+            x.DownloadStencil(t, level, slice, offset, target)
+
+        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
+            x.DownloadDepth(t, level, slice, offset, target)
 
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
@@ -922,20 +931,20 @@ type Runtime() =
             | _ ->
                 failwithf "[GL] unsupported texture: %A" t
 
-    member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) =
-        ctx.Download(unbox<Texture> t, level, slice, target)
+    member x.Download(t : IBackendTexture, level : int, slice : int, offset : V2i, target : PixImage) =
+        ctx.Download(unbox<Texture> t, level, slice, offset, target)
         
-    member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) : unit =
+    member x.Download(t : IBackendTexture, level : int, slice : int, offset : V3i, target : PixVolume) : unit =
        failwith "[GL] Volume download not implemented"
 
-    member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) =
-        ctx.DownloadStencil(unbox<Texture> t, level, slice, target)
+    member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<int>) =
+        ctx.DownloadStencil(unbox<Texture> t, level, slice, offset, target)
 
-    member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) =
-        ctx.DownloadDepth(unbox<Texture> t, level, slice, target)
+    member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
+        ctx.DownloadDepth(unbox<Texture> t, level, slice, offset, target)
 
-    member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) =
-        ctx.Upload(unbox<Texture> t, level, slice, source)
+    member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) =
+        ctx.Upload(unbox<Texture> t, level, slice, offset, source)
 
     member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : Framebuffer =
 

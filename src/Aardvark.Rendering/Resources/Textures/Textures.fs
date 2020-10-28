@@ -122,12 +122,50 @@ and ITextureRuntime =
 
     abstract member GenerateMipMaps : IBackendTexture -> unit
     abstract member ResolveMultisamples : src : IFramebufferOutput * target : IBackendTexture * imgTrafo : ImageTrafo -> unit
-    abstract member Upload : texture : IBackendTexture * level : int * slice : int * source : PixImage -> unit
-    abstract member Download : texture : IBackendTexture * level : int * slice : int * target : PixImage -> unit
-    abstract member Download : texture : IBackendTexture * level : int * slice : int * target : PixVolume -> unit
-    abstract member DownloadStencil : texture : IBackendTexture * level : int * slice : int * target : Matrix<int> -> unit
-    abstract member DownloadDepth : texture : IBackendTexture * level : int * slice : int * target : Matrix<float32> -> unit
-    abstract member Copy : src : IBackendTexture * srcBaseSlice : int * srcBaseLevel : int * dst : IBackendTexture * dstBaseSlice : int * dstBaseLevel : int * slices : int * levels : int -> unit
+
+    ///<summary>Uploads data from a PixImage to the given texture.</summary>
+    ///<param name="texture">The texture to update.</param>
+    ///<param name="level">The texture level to update.</param>
+    ///<param name="slice">The texture slice to update.</param>
+    ///<param name="offset">The minimum coordinate to update.</param>
+    ///<param name="source">The PixImage containing the data to upload.</param>
+    abstract member Upload : texture : IBackendTexture * level : int * slice : int * offset : V2i * source : PixImage -> unit
+
+    ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="texture">The texture to download.</param>
+    ///<param name="level">The texture level to download.</param>
+    ///<param name="slice">The texture slice to download.</param>
+    ///<param name="offset">The minimum coordinate to update.</param>
+    ///<param name="target">The PixImage to copy the data to.</param>
+    abstract member Download : texture : IBackendTexture * level : int * slice : int * offset : V2i * target : PixImage -> unit
+
+    ///<summary>Downloads color data from the given texture to a PixVolume.</summary>
+    ///<param name="texture">The texture to download.</param>
+    ///<param name="level">The texture level to download.</param>
+    ///<param name="slice">The texture slice to download.</param>
+    ///<param name="offset">The minimum coordinate to update.</param>
+    ///<param name="target">The PixVolume to copy the data to.</param>
+    abstract member Download : texture : IBackendTexture * level : int * slice : int * offset : V3i * target : PixVolume -> unit
+
+    ///<summary>Downloads stencil data from the given texture to an integer matrix.</summary>
+    ///<param name="texture">The texture to download.</param>
+    ///<param name="level">The texture level to download.</param>
+    ///<param name="slice">The texture slice to download.</param>
+    ///<param name="offset">The minimum coordinate to update.</param>
+    ///<param name="target">The matrix to copy the data to.</param>
+    abstract member DownloadStencil : texture : IBackendTexture * level : int * slice : int * offset : V2i * target : Matrix<int> -> unit
+
+    ///<summary>Downloads depth data from the given texture to a float matrix.</summary>
+    ///<param name="texture">The texture to download.</param>
+    ///<param name="level">The texture level to download.</param>
+    ///<param name="slice">The texture slice to download.</param>
+    ///<param name="offset">The minimum coordinate to update.</param>
+    ///<param name="target">The matrix to copy the data to.</param>
+    abstract member DownloadDepth : texture : IBackendTexture * level : int * slice : int * offset : V2i * target : Matrix<float32> -> unit
+
+    abstract member Copy : src : IBackendTexture * srcBaseSlice : int * srcBaseLevel : int *
+                           dst : IBackendTexture * dstBaseSlice : int * dstBaseLevel : int *
+                           slices : int * levels : int -> unit
 
     abstract member CreateTexture : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
     abstract member CreateTextureArray : size : V2i * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture

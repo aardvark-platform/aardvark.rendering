@@ -2430,6 +2430,15 @@ type ContextTextureExtensions =
         )
 
     [<Extension>]
+    static member Blit(this : Context,
+                       src : Texture, srcLevel : int, srcSlice : int, srcOffset : V2i, srcSize : V2i,
+                       dst : Texture, dstLevel : int, dstSlice : int, dstOffset : V2i, dstSize : V2i,
+                       linear : bool) =
+        this.Blit(src, srcLevel, srcSlice, Box2i.FromMinAndSize(srcOffset, srcSize),
+                  dst, dstLevel, dstSlice, Box2i.FromMinAndSize(dstOffset, dstSize),
+                  linear)
+
+    [<Extension>]
     static member Blit(this : Context, src : Texture, srcLevel : int, srcSlice : int, srcRegion : Box2i, dst : Texture, dstLevel : int, dstSlice : int, dstRegion : Box2i, linear : bool) =
         using this.ResourceLock (fun _ ->
             let fSrc = GL.GenFramebuffer()
@@ -2561,13 +2570,21 @@ type ContextTextureExtensions =
     static member Upload(this : Context, t : Texture, level : int, slice : int, offset : V2i, source : PixImage) =
         using this.ResourceLock (fun _ ->
             let levelSize = t.GetSize level
+            let offset = V2i(offset.X, levelSize.Y - offset.Y - source.Size.Y) // flip y-offset
             if offset = V2i.Zero && source.Size = levelSize.XY then
                 this.Upload(t, level, slice, source)
             else
                 let temp = this.CreateTexture2D(source.Size, 1, t.Format, 1)
-                this.Upload(temp, 0, 0, source)
-                this.Copy(temp, 0, 0, V2i.Zero, t, level, slice, offset, source.Size)
-                this.Delete(temp)
+
+                try
+                    this.Upload(temp, 0, 0, source)
+
+                    if t.IsMultisampled then // resolve multisamples
+                        this.Blit(temp, 0, 0, V2i.Zero, source.Size, t, level, slice, offset, source.Size, true)
+                    else
+                        this.Copy(temp, 0, 0, V2i.Zero, t, level, slice, offset, source.Size)
+                finally
+                    this.Delete(temp)
         )
 
     [<Extension>]
@@ -2623,7 +2640,7 @@ type ContextTextureExtensions =
 
                 try
                     if t.IsMultisampled then // resolve multisamples
-                        this.Blit(t, level, slice, Box2i.FromMinAndSize(offset, levelSize.XY), temp, 0, 0, Box2i(V2i.Zero, target.Size), true)
+                        this.Blit(t, level, slice, Box2i.FromMinAndSize(offset, target.Size), temp, 0, 0, Box2i(V2i.Zero, target.Size), true)
                     else
                         this.Copy(t, level, slice, offset, temp, 0, 0, V2i.Zero, target.Size)
 
@@ -2672,6 +2689,28 @@ type ContextTextureExtensions =
         this.Download(t, 0, 0)
 
     [<Extension>]
+    static member DownloadStencil(this : Context, t : Texture, level : int, slice : int, offset : V2i, target : Matrix<int>) =
+        using this.ResourceLock (fun _ ->
+            let targetSize = V2i target.Size
+            let levelSize = t.GetSize level
+            let offset = V2i(offset.X, levelSize.Y - offset.Y - targetSize.Y) // flip y-offset
+            if offset = V2i.Zero && targetSize = levelSize.XY then
+                this.DownloadStencil(t, level, slice, target)
+            else
+                let temp = this.CreateTexture2D(targetSize, 1, t.Format, 1)
+
+                try
+                    if t.IsMultisampled then // resolve multisamples
+                        this.Blit(t, level, slice, Box2i.FromMinAndSize(offset, targetSize), temp, 0, 0, Box2i(V2i.Zero, targetSize), true)
+                    else
+                        this.Copy(t, level, slice, offset, temp, 0, 0, V2i.Zero, targetSize)
+
+                    this.DownloadStencil(temp, 0, 0, target)
+                finally
+                    this.Delete(temp)
+        )
+
+    [<Extension>]
     static member DownloadStencil(this : Context, t : Texture, level : int, slice : int, target : Matrix<int>) =
 
         // wrap matrix into piximage
@@ -2700,6 +2739,28 @@ type ContextTextureExtensions =
 
                 | _ ->
                     failwithf "cannot download stencil-texture of kind: %A" t.Dimension
+        )
+
+    [<Extension>]
+    static member DownloadDepth(this : Context, t : Texture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
+        using this.ResourceLock (fun _ ->
+            let targetSize = V2i target.Size
+            let levelSize = t.GetSize level
+            let offset = V2i(offset.X, levelSize.Y - offset.Y - targetSize.Y) // flip y-offset
+            if offset = V2i.Zero && targetSize = levelSize.XY then
+                this.DownloadDepth(t, level, slice, target)
+            else
+                let temp = this.CreateTexture2D(targetSize, 1, t.Format, 1)
+
+                try
+                    if t.IsMultisampled then // resolve multisamples
+                        this.Blit(t, level, slice, Box2i.FromMinAndSize(offset, targetSize), temp, 0, 0, Box2i(V2i.Zero, targetSize), true)
+                    else
+                        this.Copy(t, level, slice, offset, temp, 0, 0, V2i.Zero, targetSize)
+
+                    this.DownloadDepth(temp, 0, 0, target)
+                finally
+                    this.Delete(temp)
         )
 
     [<Extension>]

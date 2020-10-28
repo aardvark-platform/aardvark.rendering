@@ -308,11 +308,11 @@ and MultiRuntime(runtimes : IRuntime[]) =
                 | _ ->
                     ()
 
-        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) : unit = failwith ""
-        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) : unit = failwith ""
-        member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = failwith ""
-        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = failwith ""
-        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = failwith ""
+        member x.Download(t : IBackendTexture, level : int, slice : int, offset : V2i, target : PixImage) : unit = failwith ""
+        member x.Download(t : IBackendTexture, level : int, slice : int, offset : V3i, target : PixVolume) : unit = failwith ""
+        member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) = failwith ""
+        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) = failwith ""
+        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<int>) = failwith ""
 
         member x.ResolveMultisamples(source, target, trafo) = failwith ""
         member x.GenerateMipMaps(t) = failwith ""
