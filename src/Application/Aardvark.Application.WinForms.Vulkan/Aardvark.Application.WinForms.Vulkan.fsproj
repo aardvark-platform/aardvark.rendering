@@ -5,6 +5,7 @@
     <AssemblyName>Aardvark.Application.WinForms.Vulkan</AssemblyName>
     <OutputType>Library</OutputType>	
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <UseWindowsForms>true</UseWindowsForms>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">

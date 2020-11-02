@@ -5,6 +5,7 @@
     <AssemblyName>Aardvark.Application.WPF</AssemblyName>
     <OutputType>Library</OutputType>	
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <UseWindowsForms>true</UseWindowsForms>
     <UseWPF>true</UseWPF>
   </PropertyGroup>
