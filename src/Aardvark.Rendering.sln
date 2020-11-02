@@ -187,6 +187,8 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "09 - MappedBufferPerformanc
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "33 - Opc", "Examples (netcore)\33 - Opc\33 - Opc.fsproj", "{9867A2D4-E656-4971-BF58-73C53A1546DA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CSharpInteropTest", "Tests\CSharpInteropTest\CSharpInteropTest.csproj", "{CD4017F0-1BFA-45B1-A117-22536073D5A7}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -497,6 +499,10 @@ Global
 		{9867A2D4-E656-4971-BF58-73C53A1546DA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9867A2D4-E656-4971-BF58-73C53A1546DA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{9867A2D4-E656-4971-BF58-73C53A1546DA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{CD4017F0-1BFA-45B1-A117-22536073D5A7}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{CD4017F0-1BFA-45B1-A117-22536073D5A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{CD4017F0-1BFA-45B1-A117-22536073D5A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{CD4017F0-1BFA-45B1-A117-22536073D5A7}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -569,6 +575,7 @@ Global
 		{A21CA003-4F6F-4701-9EB8-899B250FE7CC} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{FEB14F7F-7746-444B-A0F1-E5DE9992F7ED} = {ACAD9454-10F3-4673-BC50-BD1B50A04D3B}
 		{9867A2D4-E656-4971-BF58-73C53A1546DA} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
+		{CD4017F0-1BFA-45B1-A117-22536073D5A7} = {80F74456-D82F-4D38-83FE-362EFD0C2FCB}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}

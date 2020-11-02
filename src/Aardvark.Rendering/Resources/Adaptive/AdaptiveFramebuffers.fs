@@ -112,7 +112,10 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
     // Framebuffer
     // ================================================================================================================
 
+    /// <summary>
     /// Creates a framebuffer with the given adaptive attachments.
+    /// The attachments must be a subtype of <see cref="aval&lt;IFramebufferOutput&gt;"/>.
+    /// </summary>
     [<Extension>]
     static member CreateFramebuffer(this : IFramebufferRuntime,
                                     signature : IFramebufferSignature,
@@ -121,7 +124,10 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
         let atts = attachments |> Map.map (fun _ x -> x :> aval<_>)
         AdaptiveFramebuffer(this, signature, atts) :> IAdaptiveResource<_>
 
+    /// <summary>
     /// Creates a framebuffer with the given adaptive attachments.
+    /// The attachments must be a subtype of <see cref="aval&lt;IFramebufferOutput&gt;"/>.
+    /// </summary>
     [<Extension>]
     static member CreateFramebuffer(this : IFramebufferRuntime,
                                     signature : IFramebufferSignature,
@@ -129,7 +135,10 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
 
         this.CreateFramebuffer(signature, attachments |> Map.ofSeq)
 
+    /// <summary>
     /// Creates a framebuffer with the given adaptive attachments.
+    /// The attachments must be subtypes of <see cref="aval&lt;IFramebufferOutput&gt;"/>.
+    /// </summary>
     [<Extension>]
     static member CreateFramebuffer(this : IFramebufferRuntime,
                                     signature : IFramebufferSignature,
@@ -187,15 +196,20 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
     // FramebufferCube
     // ================================================================================================================
 
+    /// <summary>
     /// Creates a framebuffer with the given adaptive attachments.
+    /// The attachments must be a subtype of <see cref="aval&lt;IFramebufferOutput&gt;"/>.
+    /// </summary>
     [<Extension>]
     static member CreateFramebufferCube(this : IFramebufferRuntime, signature : IFramebufferSignature, attachments : CubeMap<Map<Symbol, #aval<IFramebufferOutput>>>) =
         let atts = attachments |> CubeMap.map (Map.map (fun _ x -> x :> aval<_>))
         AdaptiveFramebufferCube(this, signature, atts) :> IAdaptiveResource<_>
 
+    /// <summary>
     /// Creates a framebuffer with the given sequence of adaptive attachments.
     /// Each consecutive six elements represent a mip level, face indices within a level are determined by
-    /// the CubeSide enumeration.
+    /// the CubeSide enumeration. The attachments must be a subtype of <see cref="aval&lt;IFramebufferOutput&gt;"/>.
+    /// </summary>
     [<Extension>]
     static member CreateFramebufferCube(this : IFramebufferRuntime, signature : IFramebufferSignature, attachments : Map<Symbol, #aval<IFramebufferOutput>> seq) =
         let atts = CubeMap(attachments)
