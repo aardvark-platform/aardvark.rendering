@@ -3,6 +3,7 @@
 
 open System
 open System.Threading
+open System.Windows.Threading
 
 
 /// WindowsBase dispatcher uses synchronizationContext to intercept contention to pump messages. 
@@ -20,41 +21,40 @@ module ContentionInterception =
     ///    IntPtr[] waitHandles, bool WaitAll, int millisecondsTimeout,
     ///    int ret, Exception ex, object state);
 
-    type BlockingNotifySynchronizationContext(captured : Option<SynchronizationContext>, pre : (IntPtr[] * bool * int) -> Object, post : (IntPtr[] * bool * int * int * Exception * Object) -> unit) =
+    type BlockingNotifySynchronizationContext(captured : SynchronizationContext, pre : (IntPtr[] * bool * int) -> Object, post : (IntPtr[] * bool * int * int * Exception * Object) -> unit) =
         inherit SynchronizationContext()
 
+        do base.SetWaitNotificationRequired()
+
         override x.CreateCopy() =
-            BlockingNotifySynchronizationContext(captured |> Option.map (fun c -> c.CreateCopy()), pre, post) :> SynchronizationContext
+            BlockingNotifySynchronizationContext((if isNull captured then null else captured.CreateCopy()), pre, post) :> SynchronizationContext
 
         override x.Post(cp : SendOrPostCallback, s : Object) =
-            match captured with
-            | None -> base.Post(cp,s)
-            | Some c -> c.Post(cp,s)
+            if isNull captured then base.Post(cp,s)
+            else captured.Post(cp,s)
 
         override x.Send(cp : SendOrPostCallback, s : Object) = 
-            match captured with
-            | None -> base.Send(cp,s)
-            | Some c -> c.Post(cp,s)
+            if isNull captured then base.Send(cp,s)
+            else captured.Post(cp,s)
 
         override x.Wait(waitHandles : IntPtr[], waitAll : bool, millisecondsTimeout : int) =
-            let s = pre(waitHandles,waitAll,millisecondsTimeout)
+            let state = pre(waitHandles,waitAll,millisecondsTimeout)
             let mutable ret = 0
             let mutable e = null
             try
                 try
-                    match captured with
-                    | None -> 
+                    if isNull captured then 
                         ret <- base.Wait(waitHandles, waitAll, millisecondsTimeout)
-                        ()
-                    | Some s -> 
-                        ret <- s.Wait(waitHandles, waitAll, millisecondsTimeout)
-                        ()
+                    else 
+                        ret <- captured.Wait(waitHandles, waitAll, millisecondsTimeout)
                 with ex -> 
                     e <- ex
                     raise e
             finally 
-                post(waitHandles, waitAll, millisecondsTimeout, ret, e, s)
+                post(waitHandles, waitAll, millisecondsTimeout, ret, e, state)
             ret
             
 
-        new(pre, post) = BlockingNotifySynchronizationContext(Some SynchronizationContext.Current, pre, post)
+        new(pre, post) = BlockingNotifySynchronizationContext(SynchronizationContext.Current, pre, post)
+
+
