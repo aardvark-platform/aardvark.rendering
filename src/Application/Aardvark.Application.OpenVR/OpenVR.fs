@@ -166,10 +166,8 @@ type MotionState() =
             let t = VrTrafo.ofHmdMatrix34 newPose.mDeviceToAbsoluteTracking
             isValid.Value <- true
 
-//            let m = M44d.Identity
-//            let m = M44d.FromBasis(V3d.IOO, -V3d.OOI, V3d.OIO, V3d.Zero) * m * M44d.FromBasis(V3d.IOO, V3d.OOI, -V3d.OIO, V3d.Zero)
-
             pose.Value <- Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, V3d.OIO, V3d.Zero) * t * Trafo3d.FromBasis(V3d.IOO, V3d.OOI, -V3d.OIO, V3d.Zero)
+
             angularVelocity.Value <- VrTrafo.angularVelocity newPose.vAngularVelocity
             velocity.Value <- VrTrafo.velocity newPose.vVelocity
         else
@@ -906,8 +904,6 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
     let depthRange = Range1d(0.15, 1000.0) |> AVal.init
 
     let projections =
-        //let headToEye = system.GetEyeToHeadTransform(EVREye.Eye_Right) |> Trafo.ofHmdMatrix34 |> Trafo.inverse
-        //let headToEye = Trafo3d.Scale(1.0, 1.0, -1.0) * headToEye
         depthRange |> AVal.map (fun range ->
             let proj = system.System.GetProjectionMatrix(EVREye.Eye_Left, float32 range.Min, float32 range.Max)
             let lProj = VrTrafo.ofHmdMatrix44 proj
@@ -934,14 +930,15 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
 
 
     let view (t : Trafo3d) =
+        let vk = Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, V3d.OIO, V3d.Zero)
+        let gl = Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, -V3d.OIO, V3d.Zero)
+        let centerView = t.Inverse * vk
         let lHeadToEye = system.System.GetEyeToHeadTransform(EVREye.Eye_Left) |> VrTrafo.ofHmdMatrix34 |> VrTrafo.inverse
         let rHeadToEye = system.System.GetEyeToHeadTransform(EVREye.Eye_Right) |> VrTrafo.ofHmdMatrix34 |> VrTrafo.inverse
 
-        let view = t.Inverse * Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, V3d.OIO, V3d.Zero)
-
         [|
-            view * lHeadToEye
-            view * rHeadToEye
+            centerView * lHeadToEye
+            centerView * rHeadToEye
         |]
 
     let mutable infos : VrRenderInfo[] = null
@@ -952,7 +949,7 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
                 hmds() |> Seq.toArray |> Array.map (fun hmd ->
                     {
                         framebufferSize = getDesiredSize()
-                        viewTrafos = hmd.MotionState.Pose |> AVal.map view  //CameraView.lookAt (V3d(3,4,5)) V3d.Zero V3d.OOI |> CameraView.viewTrafo |> AVal.constant //hmd.MotionState.Pose |> AVal.map Trafo.inverse |> Unhate.register "viewTrafo"
+                        viewTrafos = hmd.MotionState.Pose |> AVal.map view  
                         projTrafos = projections
                     }
                 )
