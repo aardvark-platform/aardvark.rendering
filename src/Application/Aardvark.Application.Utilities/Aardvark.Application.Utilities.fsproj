@@ -27,6 +27,7 @@
     <ProjectReference Include="..\Aardvark.Application\Aardvark.Application.fsproj" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="SynchronizationContextHelper.fs" />
     <None Include="FsiHelper.fsx" />
     <Compile Include="Window.fs" />
   </ItemGroup>
