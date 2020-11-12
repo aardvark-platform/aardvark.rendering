@@ -1,9 +1,9 @@
-﻿namespace System.Threading
+﻿#nowarn "7331" // internal use
+namespace System.Threading
 
 
 open System
 open System.Threading
-open System.Windows.Threading
 
 
 /// WindowsBase dispatcher uses synchronizationContext to intercept contention to pump messages. 
@@ -12,6 +12,7 @@ open System.Windows.Threading
 /// state whenever threadlocals are used.
 /// an awesome blogpost about the topic can be found here: http://joeduffyblog.com/2008/02/27/hooking-clr-blocking-calls-with-synchronizationcontext/
 /// which was inspiration for this code as well.
+[<CompilerMessage("for internal use", 7331)>]
 module ContentionInterception = 
 
     /// delegate object PreWaitNotification(
@@ -58,3 +59,32 @@ module ContentionInterception =
         new(pre, post) = BlockingNotifySynchronizationContext(SynchronizationContext.Current, pre, post)
 
 
+
+[<CompilerMessage("for internal use", 7331)>]
+module SafeAdaptiveStack =
+    open FSharp.Data.Adaptive
+
+
+    type SafedAdaptiveStack = 
+        {
+            transaction : Option<Transaction>
+            callbacks : list<unit -> unit>
+        }
+
+    let fixStackStealingForAdaptive () = 
+        let pre (waitHandles : IntPtr[], waitAll : bool, millisecondsTimeout : int) = 
+            { transaction = Transaction.Running; callbacks = AfterEvaluateCallbacks.Callbacks } :> obj
+        let post (waitHandles : IntPtr[], waitAll : bool, millisecondsTimeout : int, ret : int , e : exn, s : obj) = 
+            match s with
+            | :? SafedAdaptiveStack as savedStack -> 
+                AfterEvaluateCallbacks.Callbacks <- savedStack.callbacks
+                Transaction.Running <- savedStack.transaction
+            | _ -> 
+                Aardvark.Base.Log.warn "could not restore adaptives tack: %A" s
+                ()
+
+        System.Threading.SynchronizationContext.SetSynchronizationContext(
+            new ContentionInterception.BlockingNotifySynchronizationContext(
+                    SynchronizationContext.Current, pre, post
+                )
+            )
