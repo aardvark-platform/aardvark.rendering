@@ -1,3 +1,6 @@
+5.0.17:
+ - [GL] OpenVR support for GL
+ 
 5.0.15:
  - [GL] replaced EXT_direct_state_access with ARB_direct_state_access
  - [GL] fixed crashes when using core profile

@@ -101,7 +101,7 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
     let afterRender = Event<unit>()
     let mutable loaded = false
     
-    let renderCtx = ContextHandleOpenTK.create debug
+    //let renderCtx = ContextHandleOpenTK.create debug
 
 
     let clearColor = AVal.init C4f.Black
@@ -144,69 +144,81 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
     member x.RenderTask
         with set (t : IRenderTask) = 
             userTask <- t
+        and get () = userTask
+
+    override x.Use(f : unit -> 'a) =
+        Operators.using ctx.ResourceLock (fun _ -> f())
+
+    override x.Handedness with get() = Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, -V3d.OIO, V3d.Zero)
 
     override x.OnLoad(i : VrRenderInfo) =
-        renderCtx.MakeCurrent()
-        ctx.CurrentContextHandle <- Some renderCtx
+        //renderCtx.MakeCurrent()
+        //ctx.CurrentContextHandle <- Some renderCtx
+        Operators.using ctx.ResourceLock (fun _ ->
 
-        info <- i
+            info <- i
 
-        if loaded then
-            ctx.Delete (unbox<Framebuffer> fbo)
-            ctx.Delete fTex
-            ctx.Delete dTex
-            ctx.Delete cTex
-        else
-            compileHidden x.HiddenAreaMesh
-            compileClear()
+            if loaded then
+                ctx.Delete (unbox<Framebuffer> fbo)
+                ctx.Delete fTex
+                ctx.Delete dTex
+                ctx.Delete cTex
+            else
+                compileHidden x.HiddenAreaMesh
+                compileClear()
 
 
-        let nTex = ctx.CreateTexture2DArray(info.framebufferSize, 2, 1, TextureFormat.Rgba8, samples)
-        let nDepth = ctx.CreateTexture2DArray(info.framebufferSize, 2, 1, TextureFormat.Depth24Stencil8, samples)
-        let nfTex = ctx.CreateTexture2D(info.framebufferSize * V2i(2,1), 1, TextureFormat.Rgba8, 1)
+            let nTex = ctx.CreateTexture2DArray(info.framebufferSize, 2, 1, TextureFormat.Rgba8, samples)
+            let nDepth = ctx.CreateTexture2DArray(info.framebufferSize, 2, 1, TextureFormat.Depth24Stencil8, samples)
+            let nfTex = ctx.CreateTexture2D(info.framebufferSize * V2i(2,1), 1, TextureFormat.Rgba8, 1)
 
-        let nFbo =
-            runtime.CreateFramebuffer(
-                framebufferSignature,
-                [
-                    DefaultSemantic.Colors, nTex.[TextureAspect.Color, 0, *] :> IFramebufferOutput
-                    DefaultSemantic.Depth, nDepth.[TextureAspect.Depth, 0, *] :> IFramebufferOutput
-                ]
-            )
+            let nFbo =
+                runtime.CreateFramebuffer(
+                    framebufferSignature,
+                    [
+                        DefaultSemantic.Colors, nTex.[TextureAspect.Color, 0, *] :> IFramebufferOutput
+                        DefaultSemantic.Depth, nDepth.[TextureAspect.Depth, 0, *] :> IFramebufferOutput
+                    ]
+                )
             
 
 
-        dTex <- nDepth
-        cTex <- nTex
-        fTex <- nfTex
-        fbo <- nFbo
+            dTex <- nDepth
+            cTex <- nTex
+            fTex <- nfTex
+            fbo <- nFbo
 
 
-        let lTex = VrTexture.OpenGL(fTex.Handle, Box2d(V2d(0.0, 1.0), V2d(0.5, 0.0)))
-        let rTex = VrTexture.OpenGL(fTex.Handle, Box2d(V2d(0.5, 1.0), V2d(1.0, 0.0)))
-        loaded <- true
+            let lTex = VrTexture.OpenGL(fTex.Handle, Box2d(V2d(0.0, 1.0), V2d(0.5, 0.0)))
+            let rTex = VrTexture.OpenGL(fTex.Handle, Box2d(V2d(0.5, 1.0), V2d(1.0, 0.0)))
+            loaded <- true
         
 
-        lTex,rTex
+            lTex,rTex
+        )
 
     override x.Render() =
         if loaded then
-            let output = OutputDescription.ofFramebuffer fbo
+            Operators.using ctx.ResourceLock (fun _ ->
+  
+                let output = OutputDescription.ofFramebuffer fbo
 
-            caller.EvaluateAlways AdaptiveToken.Top (fun t ->
-                clearTask.Run(t, RenderToken.Empty, output)
-                hiddenTask.Run(t, RenderToken.Empty, output)
-                userTask.Run(t, RenderToken.Empty, output)
+                caller.EvaluateAlways AdaptiveToken.Top (fun t ->
+                    clearTask.Run(t, RenderToken.Empty, output)
+                    hiddenTask.Run(t, RenderToken.Empty, output)
+                    userTask.Run(t, RenderToken.Empty, output) 
+                )
+
+                GL.Sync()
+
+                if samples > 1 then
+                    runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 0], V2i.Zero, fTex, V2i.Zero, 0, cTex.Size.XY, ImageTrafo.Identity)
+                    runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 1], V2i.Zero, fTex, V2i(cTex.Size.X, 0), 0, cTex.Size.XY, ImageTrafo.Identity)
+                else
+                    failwith "not implemented"
+                    //runtime.Copy(cTex.[TextureAspect.Color, 0, *], fTex.[TextureAspect.Color, 0, *])
+
             )
-
-            GL.Sync()
-
-            if samples > 1 then
-                runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 0], V2i.Zero, fTex, V2i.Zero, 0, cTex.Size.XY, ImageTrafo.Identity)
-                runtime.ResolveMultisamples(cTex.[TextureAspect.Color, 0, 1], V2i.Zero, fTex, V2i(cTex.Size.X, 0), 0, cTex.Size.XY, ImageTrafo.Identity)
-            else
-                failwith "not implemented"
-                //runtime.Copy(cTex.[TextureAspect.Color, 0, *], fTex.[TextureAspect.Color, 0, *])
                 
         transact (fun () -> time.MarkOutdated(); version.Value <- version.Value + 1)
 
@@ -246,8 +258,8 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
         member x.Samples = samples
         member x.FramebufferSignature = x.FramebufferSignature
         member x.RenderTask
-            with get() = RenderTask.empty
-            and set t = () //x.RenderTask <- t
+            with get() = x.RenderTask
+            and set t = x.RenderTask <- t
         member x.SubSampling
             with get() = x.SubSampling
             and set v = x.SubSampling <- v
