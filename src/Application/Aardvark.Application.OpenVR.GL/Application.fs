@@ -160,6 +160,8 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
     override x.Use(f : unit -> 'a) =
         Operators.using ctx.ResourceLock (fun _ -> f())
 
+    override x.Handedness with get() = Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, -V3d.OIO, V3d.Zero)
+
     override x.OnLoad(i : VrRenderInfo) =
         //renderCtx.MakeCurrent()
         //ctx.CurrentContextHandle <- Some renderCtx

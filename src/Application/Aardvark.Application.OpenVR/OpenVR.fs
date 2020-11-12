@@ -929,10 +929,10 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
        
 
 
-    let view (t : Trafo3d) =
-        let vk = Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, V3d.OIO, V3d.Zero)
-        let gl = Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, -V3d.OIO, V3d.Zero)
-        let centerView = t.Inverse * vk
+    let view (handedness : Trafo3d) (t : Trafo3d) =
+        //let vk = Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, V3d.OIO, V3d.Zero)
+        //let gl = Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, -V3d.OIO, V3d.Zero)
+        let centerView = t.Inverse * handedness
         let lHeadToEye = system.System.GetEyeToHeadTransform(EVREye.Eye_Left) |> VrTrafo.ofHmdMatrix34 |> VrTrafo.inverse
         let rHeadToEye = system.System.GetEyeToHeadTransform(EVREye.Eye_Right) |> VrTrafo.ofHmdMatrix34 |> VrTrafo.inverse
 
@@ -943,13 +943,13 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
 
     let mutable infos : VrRenderInfo[] = null
 
-    let getInfos() =
+    let getInfos (handedness : Trafo3d) =
         if isNull infos then
             let res =
                 hmds() |> Seq.toArray |> Array.map (fun hmd ->
                     {
                         framebufferSize = getDesiredSize()
-                        viewTrafos = hmd.MotionState.Pose |> AVal.map view  
+                        viewTrafos = hmd.MotionState.Pose |> AVal.map (view handedness)  
                         projTrafos = projections
                     }
                 )
@@ -978,6 +978,11 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
     static member RCoordSym = sRCoord
     static member GCoordSym = sGCoord
     static member BCoordSym = sBCoord
+
+    abstract member Handedness : Trafo3d
+    default x.Handedness = 
+        // for gl use: Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, -V3d.OIO, V3d.Zero)
+        Trafo3d.FromBasis(V3d.IOO, -V3d.OOI, V3d.OIO, V3d.Zero) // vk
     
     member x.Chaperone = getChaperone()
 
@@ -1008,7 +1013,7 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
     member x.Shutdown() =
         running <- false
 
-    member x.Info = getInfos().[0]
+    member x.Info = getInfos(x.Handedness).[0]
 
     member x.HiddenAreaMesh = hiddenAreaMesh
 
@@ -1147,7 +1152,7 @@ type VrRenderer(adjustSize : V2i -> V2i, system : VrSystem) =
                 match textures with
                 | Some t -> t
                 | None ->
-                    let t = x.OnLoad (getInfos().[0])
+                    let t = x.OnLoad ((getInfos x.Handedness).[0])
                     textures <- Some t
                     t
             x.UpdateFrame(lTex, rTex)
