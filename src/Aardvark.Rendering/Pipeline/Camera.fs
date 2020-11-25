@@ -5,7 +5,14 @@ open Aardvark.Base
 open System.Runtime.CompilerServices
 
 type CameraView(sky : V3d, location : V3d, forward : V3d, up : V3d, right : V3d) =
-    let viewTrafo = lazy ( Trafo3d.ViewTrafo(location, right, up, -forward) )
+    let viewTrafo =
+        lazy ( Trafo3d.ViewTrafo(location, right, up, -forward) )
+
+    let orientation =
+        lazy (
+            let frame = M33d.FromCols(right, forward, up) |> Mat.Orthonormalized
+            Rot3d.FromM33d frame
+        )
 
     member x.Sky = sky
     member x.Location = location
@@ -17,6 +24,7 @@ type CameraView(sky : V3d, location : V3d, forward : V3d, up : V3d, right : V3d)
     member x.Left = -right
 
     member x.ViewTrafo = viewTrafo.Value
+    member x.Orientation = orientation.Value
 
     override x.ToString() =
         sprintf "CameraView(sky=%A, location=%A, forward=%A, up=%A, right=%A)" sky location forward up right
@@ -37,6 +45,13 @@ type CameraView(sky : V3d, location : V3d, forward : V3d, up : V3d, right : V3d)
 
     static member Look (location : V3d, forward : V3d) =
         CameraView.Look(location, forward, V3d.OOI)
+
+    static member Orient (location : V3d, orientation : Rot3d, sky : V3d) =
+        let frame = M33d.Rotation orientation
+        CameraView(sky, location, frame.C1, frame.C2, frame.C0)
+
+    static member Orient (location : V3d, orientation : Rot3d) =
+        CameraView.Orient(location, orientation, V3d.OOI)
 
 
     member x.WithLocation(l : V3d) =
@@ -64,15 +79,21 @@ type CameraView(sky : V3d, location : V3d, forward : V3d, up : V3d, right : V3d)
     member x.WithDown(down : V3d) =
         x.WithUp(-down)
 
+    member x.WithOrientation(orientation : Rot3d) =
+        CameraView.Orient(location, orientation, sky)
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module CameraView =
-    
+
     let lookAt (location : V3d) (center : V3d) (sky : V3d) =
         CameraView.LookAt(location, center, sky)
 
     let look (location : V3d) (forward : V3d) (sky : V3d) =
         CameraView.Look(location, forward, sky)
+
+    let orient (location : V3d) (orientation : Rot3d) (sky : V3d) =
+        CameraView.Orient(location, orientation, sky)
 
 
     let withLocation (location : V3d) (c : CameraView) =
@@ -96,10 +117,15 @@ module CameraView =
     let withDown (down : V3d) (c : CameraView) =
         c.WithDown down
 
+    let withOrientation (orientation : Rot3d) (c : CameraView) =
+        c.WithOrientation orientation
 
 
     let viewTrafo (c : CameraView) =
         c.ViewTrafo
+
+    let orientation (c : CameraView) =
+        c.Orientation
 
     let ofTrafo (t : Trafo3d) =
         let bw = t.Backward
@@ -134,14 +160,14 @@ module CameraView =
 
 
 
-type Frustum = 
-    { 
+type Frustum =
+    {
         left   : float
         right  : float
         bottom : float
         top    : float
         near   : float
-        far    : float  
+        far    : float
         isOrtho : bool
     }
 
@@ -152,7 +178,7 @@ module Frustum =
         { left = -d; right = +d; bottom = -d / aspect; top = +d / aspect; near = near; far = far; isOrtho = false }
 
     let ortho (b : Box3d) =
-        { 
+        {
             left = b.Min.X
             right = b.Max.X
             bottom = b.Min.Y
@@ -162,16 +188,16 @@ module Frustum =
             isOrtho = true
         }
 
-    let projTrafo {left = l; right = r; top = t; bottom = b; near = n; far = f; isOrtho = isOrtho } : Trafo3d = 
-        if isOrtho then 
+    let projTrafo {left = l; right = r; top = t; bottom = b; near = n; far = f; isOrtho = isOrtho } : Trafo3d =
+        if isOrtho then
             Trafo3d(
                 M44d(
                     2.0 / (r - l),               0.0,               0.0,      (r + l) / (l - r),
                               0.0,     2.0 / (t - b),               0.0,      (t + b) / (b - t),
                               0.0,               0.0,      2.0 / (n - f),     (f + n) / (n - f),
                               0.0,               0.0,               0.0,      1.0
-                ),                                                     
-                                                                       
+                ),
+
                 M44d(
                     (r - l) / 2.0,               0.0,               0.0,      (r + l) / 2.0,
                               0.0,     (t - b) / 2.0,               0.0,      (t + b) / 2.0,
@@ -180,25 +206,25 @@ module Frustum =
 
                 )
             )
-        else 
+        else
             Trafo3d(
                 M44d(
                     (2.0 * n) / (r - l),                     0.0,         (r + l) / (r - l),                        0.0,
                                     0.0,     (2.0 * n) / (t - b),         (t + b) / (t - b),                        0.0,
                                     0.0,                     0.0,         (f + n) / (n - f),    (2.0 * f * n) / (n - f),
                                     0.0,                     0.0,                      -1.0,                        0.0
-                    ),                                                     
-                                                                       
-                M44d(                                      
+                    ),
+
+                M44d(
                     (r - l) / (2.0 * n),                     0.0,                       0.0,        (r + l) / (2.0 * n),
                                     0.0,     (t - b) / (2.0 * n),                       0.0,        (t + b) / (2.0 * n),
                                     0.0,                     0.0,                       0.0,                       -1.0,
                                     0.0,                     0.0,   (n - f) / (2.0 * f * n),     (f + n) / (2.0 * f * n)
                     )
             )
-            
+
     [<Obsolete("use projTrafo instead (Frustum tracks whether isOrtho now)")>]
-    let orthoTrafo (f : Frustum) : Trafo3d = 
+    let orthoTrafo (f : Frustum) : Trafo3d =
         projTrafo f
 
     let private isTrafoOrtho (t : Trafo3d) =
@@ -244,7 +270,7 @@ module Frustum =
                 far = far
             }
 
-    let withNear (near : float) (f : Frustum) =    
+    let withNear (near : float) (f : Frustum) =
         if f.isOrtho then
             { f with near = near }
         else
@@ -259,13 +285,13 @@ module Frustum =
                 bottom = factor * f.bottom
             }
 
-    let withFar (far : float) (f : Frustum) =    
+    let withFar (far : float) (f : Frustum) =
         { f with far = far }
-        
-    let aspect { left = l; right = r; top = t; bottom = b } = 
+
+    let aspect { left = l; right = r; top = t; bottom = b } =
         (r - l) / (t - b)
 
-    let withAspect (newAspect : float) ( { left = l; right = r; top = t; bottom = b } as f )  = 
+    let withAspect (newAspect : float) ( { left = l; right = r; top = t; bottom = b } as f )  =
         let factor = newAspect / aspect f
         { f with right = factor * r; left  = factor * l }
 
@@ -295,7 +321,7 @@ module Frustum =
     [<Obsolete("use projTrafo instead")>]
     let toTrafo f : Trafo3d = projTrafo f
 
-    let horizontalFieldOfViewInDegrees { left = l; right = r; near = near } = 
+    let horizontalFieldOfViewInDegrees { left = l; right = r; near = near } =
         let l,r = atan2 l near, atan2 r near
         Conversion.DegreesFromRadians(-l + r)
 
@@ -326,7 +352,7 @@ type Camera =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Camera =
-    
+
     let create (view : CameraView) (f : Frustum) =
         { cameraView = view; frustum = f }
 
@@ -369,18 +395,18 @@ module Camera =
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module ViewProjection = 
-    
+module ViewProjection =
+
     [<AutoOpen>]
-    module private Helpers = 
+    module private Helpers =
         let inline toPlane (v : V4d) =
             Plane3d(-v.XYZ, v.W)
 
         let inline maxDir (dir : V3d) (b : Box3d) =
             V4d(
-                (if dir.X > 0.0 then b.Max.X else b.Min.X), 
-                (if dir.Y > 0.0 then b.Max.Y else b.Min.Y), 
-                (if dir.Z > 0.0 then b.Max.Z else b.Min.Z), 
+                (if dir.X > 0.0 then b.Max.X else b.Min.X),
+                (if dir.Y > 0.0 then b.Max.Y else b.Min.Y),
+                (if dir.Z > 0.0 then b.Max.Z else b.Min.Z),
                  1.0
             )
 
@@ -395,7 +421,7 @@ module ViewProjection =
             else
                 failwith "no plane intersection"
 
-        
+
         let inline proj (pt : V3d) = V3d(pt.XY / -pt.Z, -pt.Z)
 
 
@@ -418,7 +444,7 @@ module ViewProjection =
 
 
 
-        let halfAngularSize = angularRange.Size * 0.5 
+        let halfAngularSize = angularRange.Size * 0.5
         let l = -near * Fun.Tan(halfAngularSize.X)
         let r = -l
         let t = near * Fun.Tan(halfAngularSize.Y)
@@ -431,7 +457,7 @@ module ViewProjection =
 
         let view = CameraView.lookAt viewPos (viewPos + forward) sky
         let proj =
-            { 
+            {
                 left = l
                 right = r
                 top = t
@@ -443,7 +469,7 @@ module ViewProjection =
 
         view, proj
 
-    
+
 
     let intersects (b : Box3d) (viewProj : Trafo3d) =
         let fw = viewProj.Forward
@@ -457,7 +483,7 @@ module ViewProjection =
         height (r3 + r1) b >= 0.0 &&
         height (r3 - r1) b >= 0.0 &&
         height (r3 + r2) b >= 0.0 &&
-        height (r3 - r2) b >= 0.0        
+        height (r3 - r2) b >= 0.0
 
     let contains (point : V3d) (viewProj : Trafo3d) =
         let fw = viewProj.Forward
@@ -472,7 +498,7 @@ module ViewProjection =
         Vec.dot (r3 + r1) p >= 0.0 &&
         Vec.dot (r3 - r1) p >= 0.0 &&
         Vec.dot (r3 + r2) p >= 0.0 &&
-        Vec.dot (r3 - r2) p >= 0.0       
+        Vec.dot (r3 - r2) p >= 0.0
 
     let private frustumCorners =
         [|
@@ -489,7 +515,7 @@ module ViewProjection =
     let private cornerIndices =
         [|
             1;2; 2;6; 6;5; 5;1;
-            2;3; 3;7; 7;6; 4;5; 
+            2;3; 3;7; 7;6; 4;5;
             7;4; 3;0; 0;4; 0;1;
         |]
 
@@ -510,12 +536,12 @@ module ViewProjection =
     let leftPlane (viewProj : Trafo3d) =
         let r0 = viewProj.Forward.R0
         let r3 = viewProj.Forward.R3
-        r3 - r0 
+        r3 - r0
 
     let rightPlane (viewProj : Trafo3d) =
         let r0 = viewProj.Forward.R0
         let r3 = viewProj.Forward.R3
-        r3 + r0 
+        r3 + r0
 
     let toHull3d (viewProj : Trafo3d) =
         let r0 = viewProj.Forward.R0
@@ -549,7 +575,7 @@ module ViewProjection =
         height (r3 + r1) b >= 0.0 &&
         height (r3 - r1) b >= 0.0 &&
         height (     r2) b >= 0.0 &&
-        height (r3 - r2) b >= 0.0        
+        height (r3 - r2) b >= 0.0
 
     let containsDX (point : V3d) (viewProj : Trafo3d) =
         let fw = viewProj.Forward
@@ -564,7 +590,7 @@ module ViewProjection =
         Vec.dot (r3 + r1) p >= 0.0 &&
         Vec.dot (r3 - r1) p >= 0.0 &&
         Vec.dot (     r2) p >= 0.0 &&
-        Vec.dot (r3 - r2) p >= 0.0       
+        Vec.dot (r3 - r2) p >= 0.0
 
     let toHull3dDX (viewProj : Trafo3d) =
         let r0 = viewProj.Forward.R0
@@ -595,7 +621,7 @@ module ViewProjection =
         let location = intersect lPlane rPlane Plane3d.YPlane
         let view = Trafo3d.Translation(-location)
 
-        let points = 
+        let points =
             Array.concat [|
                 frustumCorners |> Array.map lProj.Backward.TransformPosProj
                 frustumCorners |> Array.map rProj.Backward.TransformPosProj
