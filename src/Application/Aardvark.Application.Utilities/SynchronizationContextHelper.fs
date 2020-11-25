@@ -67,18 +67,26 @@ module SafeAdaptiveStack =
 
     type SafedAdaptiveStack = 
         {
-            transaction : Option<Transaction>
+            runningTransaction : Option<Transaction>
+            currentTransaction : Option<Transaction>
             callbacks : list<unit -> unit>
+            currentEvaluationDepth : int
         }
 
     let fixStackStealingForAdaptive () = 
         let pre (waitHandles : IntPtr[], waitAll : bool, millisecondsTimeout : int) = 
-            { transaction = Transaction.Running; callbacks = AfterEvaluateCallbacks.Callbacks } :> obj
+            { runningTransaction = Transaction.Running; 
+              currentTransaction = Transaction.Current
+              callbacks = AfterEvaluateCallbacks.Callbacks; 
+              currentEvaluationDepth = AdaptiveObject.UnsafeEvaluationDepth
+            } :> obj
         let post (waitHandles : IntPtr[], waitAll : bool, millisecondsTimeout : int, ret : int , e : exn, s : obj) = 
             match s with
             | :? SafedAdaptiveStack as savedStack -> 
                 AfterEvaluateCallbacks.Callbacks <- savedStack.callbacks
-                Transaction.Running <- savedStack.transaction
+                Transaction.Running <- savedStack.runningTransaction
+                Transaction.Current <- savedStack.currentTransaction
+                AdaptiveObject.UnsafeEvaluationDepth <- savedStack.currentEvaluationDepth
             | _ -> 
                 Aardvark.Base.Log.warn "could not restore adaptives tack: %A" s
                 ()
