@@ -461,6 +461,8 @@ module ProgramExtensions =
             modes       : Option<Set<IndexedGeometryMode>>
         }
 
+        override x.ToString() = x.code // NOTE: x.binary or the complexity if x.iface seems to crash the VS 2019 debugger with the default ToString() implementation
+
     type Aardvark.Rendering.GL.Context with
 
 
