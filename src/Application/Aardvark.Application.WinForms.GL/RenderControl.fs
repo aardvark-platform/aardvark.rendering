@@ -173,6 +173,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
     let mutable renderContinuously = false
     let mutable autoInvalidate = true
+    let mutable onPaintRender = true
     let mutable threadStealing : StopStealing =
         { new StopStealing with member x.StopStealing () = { new IDisposable with member x.Dispose() = () } }
 
@@ -181,7 +182,16 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
     member x.ContextHandle = contextHandle
 
-    member val OnPaintRender = true with get, set
+    member x.OnPaintRender 
+        with get () = onPaintRender
+        and set v = 
+            if v <> onPaintRender then
+                if taskSubscription <> null then 
+                    taskSubscription.Dispose()
+                    taskSubscription <- null
+                elif v && task.IsSome then
+                    taskSubscription <- task.Value.AddMarkingCallback x.ForceRedraw
+                onPaintRender <- v
 
     member x.DisableThreadStealing
         with get () = threadStealing
@@ -208,7 +218,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         and set v =
             renderContinuously <- v
             // if continuous rendering is enabled make sure rendering is initiated
-            if v then
+            if v && onPaintRender then // -> only makes sense with onPaintRender
                 x.Invalidate()
 
 
@@ -222,20 +232,23 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                 | None -> ()
 
             task <- Some t
-            taskSubscription <- t.AddMarkingCallback x.ForceRedraw
+            if onPaintRender then
+                taskSubscription <- t.AddMarkingCallback x.ForceRedraw
 
     member x.Sizes = sizes :> aval<_>
     member x.Samples
         with get() = samples
         and set s =
             samples <- s
-            x.ForceRedraw()
+            if onPaintRender then
+                x.ForceRedraw()
 
     member x.SubSampling
         with get() = subsampling
         and set v =
             subsampling <- v
-            x.ForceRedraw()
+            if onPaintRender then
+                x.ForceRedraw()
 
 
     override x.OnHandleCreated(e) =
@@ -244,12 +257,6 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
         ContextHandle.initGlConfig()
 
-        //x.KeyDown.Add(fun e ->
-        //    if e.KeyCode = System.Windows.Forms.Keys.End && e.Control then
-        //        renderContinuously <- not renderContinuously
-        //        x.Invalidate()
-        //        e.Handled <- true
-        //)
 
     member x.Render() =
 
@@ -319,7 +326,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 //                            let t = System.Threading.Tasks.Task.Delay (int sleepTime)
 //                            t.Wait()
                     needsRedraw <- true
-                    if autoInvalidate then x.Invalidate()
+                    if autoInvalidate && x.OnPaintRender then x.Invalidate() // why not use ForceRedraw
                     ()
                 else
                     needsRedraw <- false
@@ -335,8 +342,8 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
             afterRender.Trigger()
 
             needsRedraw <- renderContinuously
-            if renderContinuously then
-                x.Invalidate()
+            if renderContinuously && onPaintRender then
+                x.Invalidate() // why not use ForceRedraw ?
 
     override x.OnPaint(e) =
         base.OnPaint(e)
