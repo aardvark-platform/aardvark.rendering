@@ -1,5 +1,7 @@
 ﻿namespace Aardvark.Rendering
 
+open System
+
 type BlendOperation =
     | Add               = 0
     | Subtract          = 1
@@ -49,15 +51,15 @@ type BlendMode =
         x.AlphaOperation
     )
 
-    override x.Equals(other : obj) =
-        let cmp (x : BlendMode) (y : BlendMode) =
-            match x.Enabled, y.Enabled with
-            | false, false -> true
-            | true, true -> x.Config = y.Config
-            | _ -> false
+    member x.Equals(other : BlendMode) =
+        match x.Enabled, other.Enabled with
+        | false, false -> true
+        | true, true -> x.Config = other.Config
+        | _ -> false
 
+    override x.Equals(other : obj) =
         match other with
-        | :? BlendMode as y -> cmp x y
+        | :? BlendMode as y -> x.Equals(y)
         | _ -> false
 
     override x.GetHashCode() =
@@ -65,6 +67,9 @@ type BlendMode =
             hash x.Config
         else
             0
+
+    interface IEquatable<BlendMode> with
+        member x.Equals(other : BlendMode) = x.Equals(other)
 
     /// Disabled blending.
     static member None =
