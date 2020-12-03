@@ -20926,13 +20926,13 @@ module KHRRayTracing =
     type VkAccelerationStructureInstanceKHR = 
         struct
             val mutable public transform : VkTransformMatrixKHR
-            val mutable public instanceCustomIndex : uint32
-            val mutable public mask : uint32
-            val mutable public instanceShaderBindingTableRecordOffset : uint32
-            val mutable public flags : VkGeometryInstanceFlagsKHR
+            val mutable public instanceCustomIndex : uint24
+            val mutable public mask : uint8
+            val mutable public instanceShaderBindingTableRecordOffset : uint24
+            val mutable public flags : uint8
             val mutable public accelerationStructureReference : uint64
     
-            new(transform : VkTransformMatrixKHR, instanceCustomIndex : uint32, mask : uint32, instanceShaderBindingTableRecordOffset : uint32, flags : VkGeometryInstanceFlagsKHR, accelerationStructureReference : uint64) =
+            new(transform : VkTransformMatrixKHR, instanceCustomIndex : uint24, mask : uint8, instanceShaderBindingTableRecordOffset : uint24, flags : uint8, accelerationStructureReference : uint64) =
                 {
                     transform = transform
                     instanceCustomIndex = instanceCustomIndex
@@ -20943,7 +20943,7 @@ module KHRRayTracing =
                 }
     
             static member Empty =
-                VkAccelerationStructureInstanceKHR(Unchecked.defaultof<VkTransformMatrixKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkGeometryInstanceFlagsKHR>, Unchecked.defaultof<uint64>)
+                VkAccelerationStructureInstanceKHR(Unchecked.defaultof<VkTransformMatrixKHR>, Unchecked.defaultof<uint24>, Unchecked.defaultof<uint8>, Unchecked.defaultof<uint24>, Unchecked.defaultof<uint8>, Unchecked.defaultof<uint64>)
     
             override x.ToString() =
                 String.concat "; " [

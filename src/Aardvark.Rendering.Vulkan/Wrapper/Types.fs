@@ -6,6 +6,23 @@ open Microsoft.FSharp.NativeInterop
 #nowarn "9"
 #nowarn "51"
 
+[<StructLayout(LayoutKind.Explicit, Size = 3)>]
+type uint24 =
+    struct
+        [<FieldOffset(0)>]
+        val mutable public B0 : uint8
+        [<FieldOffset(1)>]
+        val mutable public B1 : uint8
+        [<FieldOffset(2)>]
+        val mutable public B2 : uint8
+
+        new(v : uint32) = { B0 = byte (v &&& 0xFFu); B1 = byte ((v >>> 8) &&& 0xFFu); B2 = byte ((v >>> 16) &&& 0xFFu) }
+        new(v : int32) = uint24(uint32 v)
+
+        static member op_Explicit(x : uint24) : uint32 = uint32 (x.B0) ||| uint32(x.B1 <<< 8) ||| uint32 (x.B2 <<< 16)
+        static member op_Explicit(x : uint24) : int32 = x |> uint32 |> int32
+    end
+
 [<StructLayout(LayoutKind.Sequential)>]
 type V2ui =
     struct

@@ -120,11 +120,12 @@ type Type =
     | Ptr of Type
     | FixedArray of Type * int
     | FixedArray2d of Type * int * int
+    | BitField of Type * int
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Type =
     let private cleanRx = Regex @"([ \t\r\n]+|const)"
-    let private typeRx = Regex @"(?<name>[a-zA-Z_0-9]+)(\[(?<width>[a-zA-Z_0-9]+)\])?(\[(?<height>[a-zA-Z_0-9]+)\])?(?<ptr>[\*]*)"
+    let private typeRx = Regex @"(?<name>[a-zA-Z_0-9]+)(\[(?<width>[a-zA-Z_0-9]+)\])?(\[(?<height>[a-zA-Z_0-9]+)\])?(?<ptr>[\*]*)(:(?<bits>[0-9]+))?"
 
     let private tryMatch (regex : Regex) (str : string) =
         let ret = regex.Match str
@@ -162,12 +163,23 @@ module Type =
             let width = m.Groups.["width"].Value
             let height = m.Groups.["height"].Value
 
-            match width, height with
-            | "", "" -> t, strangeName
-            | w, "" -> FixedArray(t, arraySize defined w), strangeName
-            | w, h ->
-                let w, h = arraySize2d defined w h
-                FixedArray2d(t, w, h), strangeName
+            t <-
+                match width, height with
+                | "", "" -> t
+                | w, "" -> FixedArray(t, arraySize defined w)
+                | w, h ->
+                    let w, h = arraySize2d defined w h
+                    FixedArray2d(t, w, h)
+
+            // Bit field
+            let bits = m.Groups.["bits"].Value
+
+            if bits <> "" then
+                match System.Int32.TryParse(bits) with
+                | (true, size) -> BitField(t, size), strangeName
+                | _ -> failwith "non integer bit field size"
+            else
+                t, strangeName
 
         | _ ->
             failwithf "failed to parse type %s" cleaned
@@ -177,7 +189,8 @@ module Type =
         | Literal t -> t
         | Ptr t
         | FixedArray (t, _)
-        | FixedArray2d (t, _, _) ->
+        | FixedArray2d (t, _, _)
+        | BitField (t, _) ->
             baseType t
 
     let readXmlTypeAndName (defined : Map<string, string>) (e : XElement) =
@@ -1112,6 +1125,15 @@ module FSharpWriter =
             | FixedArray2d(Literal "float", 2, 3) -> "M23f"
             | FixedArray2d(Literal "float", 3, 4) -> "M34f"
 
+            | BitField(l, s) ->
+                match typeName l, s with
+                | "int32", 8 -> "int8"
+                | "uint32", 8 -> "uint8"
+                | "uint32", 24 -> "uint24"
+                | t, 8 -> System.Console.WriteLine("WARNING: Replacing {0}:8 with uint8", t); "uint8"
+                | t, 24 -> System.Console.WriteLine("WARNING: Replacing {0}:24 with uint24", t); "uint24"
+                | _ -> failwithf "unsupported bit field type %A:%A" l s
+
             | Ptr(Literal "char") -> "cstr"
             | FixedArray(Literal "char", s) -> sprintf "String%d" s
             | Ptr(Literal "void") -> "nativeint"
@@ -1428,6 +1450,15 @@ module FSharpWriter =
             | FixedArray(Literal "float", 3) -> "V3f"
             | FixedArray(Literal "float", 4) -> "V4f"
             | FixedArray(Literal "uint8_t", 16) -> "Guid"
+
+            | BitField(l, s) ->
+                match typeName l, s with
+                | "int32", 8 -> "int8"
+                | "uint32", 8 -> "uint8"
+                | "uint32", 24 -> "uint24"
+                | t, 8 -> System.Console.WriteLine("WARNING: Replacing {0}:8 with uint8", t); "uint8"
+                | t, 24 -> System.Console.WriteLine("WARNING: Replacing {0}:24 with uint24", t); "uint24"
+                | _ -> failwithf "unsupported bit field type %A:%A" l s
 
             | Ptr(Literal "char") -> "string"
             | FixedArray(Literal "char", s) -> sprintf "String%d" s
