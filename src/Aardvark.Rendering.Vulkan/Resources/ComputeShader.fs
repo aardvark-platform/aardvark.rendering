@@ -431,28 +431,9 @@ module ``Compute Commands`` =
                     }
             }
 
-    module TextureLayout = 
-        let toImageLayout =
-            LookupTable.lookupTable [
-                TextureLayout.Sample, VkImageLayout.ShaderReadOnlyOptimal
-                TextureLayout.ShaderRead, VkImageLayout.ShaderReadOnlyOptimal
-                TextureLayout.ShaderReadWrite, VkImageLayout.General
-                TextureLayout.ShaderWrite, VkImageLayout.General
-                TextureLayout.TransferRead, VkImageLayout.TransferSrcOptimal
-                TextureLayout.TransferWrite, VkImageLayout.TransferDstOptimal
-            ]
-
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module ComputeCommand =
         open Aardvark.Base.Monads.State
-
-        let private accessFlags =
-            LookupTable.lookupTable [
-                ResourceAccess.ShaderRead, VkAccessFlags.ShaderReadBit
-                ResourceAccess.ShaderWrite, VkAccessFlags.ShaderWriteBit
-                ResourceAccess.TransferRead, VkAccessFlags.TransferReadBit
-                ResourceAccess.TransferWrite, VkAccessFlags.TransferWriteBit
-            ]
 
         [<AutoOpen>]
         module private Compiler =
@@ -911,23 +892,23 @@ module ``Compute Commands`` =
 
                 | ComputeCommand.TransformLayoutCmd(tex, layout) ->
                     let tex = unbox<Image> tex
-                    let layout = TextureLayout.toImageLayout layout
+                    let layout = VkImageLayout.ofTextureLayout layout
                     Command.TransformLayout(tex, layout)
 
                 | ComputeCommand.TransformSubLayoutCmd(range, srcLayout, dstLayout) ->
                     let tex = unbox<Image> range.Texture
-                    let srcLayout = TextureLayout.toImageLayout srcLayout
-                    let dstLayout = TextureLayout.toImageLayout dstLayout
+                    let srcLayout = VkImageLayout.ofTextureLayout srcLayout
+                    let dstLayout = VkImageLayout.ofTextureLayout dstLayout
                     let res = tex.[ImageAspect.ofTextureAspect range.Aspect, range.Levels.Min .. range.Levels.Max, range.Slices.Min .. range.Slices.Max]
                     Command.TransformLayout(res, srcLayout, dstLayout)
 
 
                 | ComputeCommand.SyncBufferCmd(b, src, dst) ->
-                    Command.Sync(unbox b, accessFlags src, accessFlags dst)
+                    Command.Sync(unbox b, VkAccessFlags.ofResourceAccess [src], VkAccessFlags.ofResourceAccess [dst])
 
                 | ComputeCommand.SyncImageCmd(i, src, dst) ->
                     let i = unbox<Image> i
-                    Command.ImageBarrier(i.[ImageAspect.Color], accessFlags src, accessFlags dst)
+                    Command.ImageBarrier(i.[ImageAspect.Color], VkAccessFlags.ofResourceAccess [src], VkAccessFlags.ofResourceAccess [dst])
 
                 | ComputeCommand.SetBufferCmd(b, pattern) ->
                     Command.SetBuffer(unbox b.Buffer, int64 b.Offset, int64 b.Size, pattern)
@@ -1005,24 +986,24 @@ module ``Compute Commands`` =
 
                     | ComputeCommand.TransformLayoutCmd(tex, layout) ->
                         let tex = unbox<Image> tex
-                        let newLayout = TextureLayout.toImageLayout layout
+                        let newLayout = VkImageLayout.ofTextureLayout layout
                         let! oldLayout = CompilerState.transformLayout tex newLayout
                         if oldLayout <> newLayout then
                             stream.TransformLayout(tex, oldLayout, newLayout) |> ignore
             
                     | ComputeCommand.TransformSubLayoutCmd(range, srcLayout, dstLayout) ->
                         let tex = unbox<Image> range.Texture
-                        let srcLayout = TextureLayout.toImageLayout srcLayout
-                        let dstLayout = TextureLayout.toImageLayout dstLayout
+                        let srcLayout = VkImageLayout.ofTextureLayout srcLayout
+                        let dstLayout = VkImageLayout.ofTextureLayout dstLayout
                         let res = tex.[ImageAspect.ofTextureAspect range.Aspect, range.Levels.Min .. range.Levels.Max, range.Slices.Min .. range.Slices.Max]
                         stream.TransformLayout(res, srcLayout, dstLayout) |> ignore
 
                     | ComputeCommand.SyncBufferCmd(b, src, dst) ->
-                        stream.Sync(unbox b, accessFlags src, accessFlags dst) |> ignore
+                        stream.Sync(unbox b, VkAccessFlags.ofResourceAccess [src], VkAccessFlags.ofResourceAccess [dst]) |> ignore
                         
                     | ComputeCommand.SyncImageCmd(i, src, dst) ->
                         let i = unbox<Image> i
-                        stream.ImageBarrier(i.[ImageAspect.Color], accessFlags src, accessFlags dst) |> ignore
+                        stream.ImageBarrier(i.[ImageAspect.Color], VkAccessFlags.ofResourceAccess [src], VkAccessFlags.ofResourceAccess [dst]) |> ignore
 
                     | ComputeCommand.SetBufferCmd(b, value) ->
                         stream.SetBuffer(unbox b.Buffer, int64 b.Offset, int64 b.Size, value) |> ignore

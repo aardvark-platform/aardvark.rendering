@@ -10,21 +10,6 @@ open System.Runtime.CompilerServices
 #nowarn "9"
 #nowarn "51"
 
-//[<RequireQualifiedAccess>]
-type TextureLayout =
-    | Sample            = 1
-    | TransferRead      = 2
-    | TransferWrite     = 3
-    | ShaderRead        = 4
-    | ShaderWrite       = 5
-    | ShaderReadWrite   = 6
-
-type ResourceAccess =
-    | ShaderRead    = 1
-    | ShaderWrite   = 2
-    | TransferRead  = 3
-    | TransferWrite = 4
-
 type IComputeShader =
     abstract member Runtime : IComputeRuntime
     abstract member LocalSize : V3i
@@ -103,27 +88,27 @@ and [<RequireQualifiedAccess>]
         ComputeCommand.ExecuteCmd other
 
     static member Sync b = ComputeCommand.SyncBufferCmd(b, ResourceAccess.ShaderWrite, ResourceAccess.ShaderRead)
-    
+
     static member Sync(b, s, d) = ComputeCommand.SyncBufferCmd(b, s, d)
-        
+
     static member Sync(i, s, d) = ComputeCommand.SyncImageCmd(i, s, d)
-    
+
     static member Sync(i) = ComputeCommand.SyncImageCmd(i, ResourceAccess.ShaderWrite, ResourceAccess.ShaderRead)
 
     static member Zero(b) = ComputeCommand.SetBufferCmd(b, [| 0uy; 0uy; 0uy; 0uy |])
 
     static member Bind(shader : IComputeShader) =
         ComputeCommand.BindCmd shader
-            
+
     static member SetInput(input : IComputeShaderInputBinding) =
         ComputeCommand.SetInputCmd input
 
     static member TransformLayout(tex : IBackendTexture, layout : TextureLayout) =
         ComputeCommand.TransformLayoutCmd(tex, layout)
-            
+
     static member TransformLayout(tex : ITextureRange, srcLayout : TextureLayout, dstLayout : TextureLayout) =
         ComputeCommand.TransformSubLayoutCmd(tex, srcLayout, dstLayout)
-            
+
     static member Dispatch(groups : V3i) =
         ComputeCommand.DispatchCmd groups
 
@@ -150,7 +135,7 @@ and [<RequireQualifiedAccess>]
 
     static member Copy<'a when 'a : unmanaged>(src : 'a[], srcIndex : int, dst : IBufferRange<'a>) =
         ComputeCommand.UploadBufferCmd(HostMemory.Managed (src :> Array, srcIndex), dst)
-            
+
     static member Copy<'a when 'a : unmanaged>(src : 'a[], dst : IBufferRange<'a>) =
         ComputeCommand.UploadBufferCmd(HostMemory.Managed (src :> Array, 0), dst)
 

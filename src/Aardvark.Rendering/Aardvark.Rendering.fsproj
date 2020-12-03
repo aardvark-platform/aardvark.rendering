@@ -39,6 +39,7 @@
     <Compile Include="Resources\Buffers\ChangeableBuffer.fs" />
     <Compile Include="Resources\Buffers\BufferView.fs" />
     <Compile Include="Resources\Textures\Formats.fs" />
+    <Compile Include="Resources\Textures\Layouts.fs" />
     <Compile Include="Resources\Textures\Textures.fs" />
     <Compile Include="Resources\Textures\TextureSlicing.fs" />
     <Compile Include="Resources\Textures\FileTexture.fs" />
@@ -56,6 +57,7 @@
     <Compile Include="Resources\Adaptive\AdaptiveRenderbuffers.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveFramebuffers.fs" />
     <Compile Include="Resources\NullResources.fs" />
+    <Compile Include="Resources\ResourceAccess.fs" />
     <Compile Include="Resources\ResourceManagement.fs" />
     <Compile Include="Geometry\IndexedGeometry.fs" />
     <Compile Include="Geometry\Geometry.fs" />
