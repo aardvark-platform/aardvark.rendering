@@ -470,26 +470,12 @@ module private FramebufferInfo =
         Report.End(4) |> ignore
 
 
-[<Sealed>]
-type Application(runtime : IRuntime) =
-    [<System.ThreadStatic; DefaultValue>]
-    static val mutable private IsMainThread_ : bool
-
-    let mutable ctx = Unchecked.defaultof<Aardvark.Rendering.GL.Context>
-
-    let glfw = Glfw.GetApi()
-    do if not (glfw.Init()) then  failwith "GLFW init failed"
-
-    let mutable lastWindow = None
-    let queue = System.Collections.Concurrent.ConcurrentQueue<unit -> unit>()
-
-    let existingWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()
-    let visibleWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()
-    do Application.IsMainThread_ <- true
-
-    let aardvarkIcon =
+module internal IconLoader = 
+    
+    type private Self = Self
+    let private getIcon'() = 
         let sizes = Array.sortDescending [| 16; 24; 32; 48; 64; 128; 256 |]
-        let ass = typeof<Application>.Assembly
+        let ass = typeof<Self>.Assembly
         let name = ass.GetManifestResourceNames() |> Array.find (fun n -> n.EndsWith "aardvark.png")
         let img = (ass.GetManifestResourceStream name |> PixImage.Create).ToPixImage<byte>(Col.Format.RGBA)
 
@@ -511,6 +497,32 @@ type Application(runtime : IRuntime) =
             )
 
         PixImageMipMap levels
+
+    let getIcon() =
+        try 
+            getIcon'() |> Some
+        with e -> 
+            Log.warn "could not load icon. %A" e.Message
+            None
+
+[<Sealed>]
+type Application(runtime : IRuntime) =
+    [<System.ThreadStatic; DefaultValue>]
+    static val mutable private IsMainThread_ : bool
+
+    let mutable ctx = Unchecked.defaultof<Aardvark.Rendering.GL.Context>
+
+    let glfw = Glfw.GetApi()
+    do if not (glfw.Init()) then  failwith "GLFW init failed"
+
+    let mutable lastWindow = None
+    let queue = System.Collections.Concurrent.ConcurrentQueue<unit -> unit>()
+
+    let existingWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()
+    let visibleWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()
+    do Application.IsMainThread_ <- true
+
+    let aardvarkIcon = IconLoader.getIcon()
                 
 
 
@@ -711,8 +723,10 @@ type Application(runtime : IRuntime) =
 
 
 
+            match aardvarkIcon with
+            | Some icon -> w.Icon <- Some icon
+            | _ -> ()
 
-            w.Icon <- Some aardvarkIcon
 
             w
         )        
