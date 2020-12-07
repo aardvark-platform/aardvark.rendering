@@ -12,7 +12,7 @@ open System
 module Shader =
     open FShade 
     
-    let samplerArray = 
+    let samplerArray =
         sampler2d {
             textureArray uniform?TextureArray 28
             filter Filter.MinMagMipLinear
@@ -153,14 +153,16 @@ let main argv =
 
     win.Keyboard.DownWithRepeats.Values.Add (fun k ->
         match k with
-            | Keys.Add -> let cnt = count.GetValue()
-                          if cnt < textures.Length - 1 then
-                                transact(fun _ -> count.Value <- cnt + 1)
-                                printfn "TextureCount=%d" (cnt + 1)
-            | Keys.Subtract -> let cnt = count.GetValue()
-                               if cnt > 1 then
-                                 transact(fun _ -> count.Value <- cnt - 1)
-                                 printfn "TextureCount=%d" (cnt - 1)
+            | Keys.OemPlus ->
+                let cnt = count.GetValue()
+                if cnt < textures.Length - 1 then
+                    transact(fun _ -> count.Value <- cnt + 1)
+                    printfn "TextureCount=%d" (cnt + 1)
+            | Keys.OemMinus ->
+                let cnt = count.GetValue()
+                if cnt > 1 then
+                    transact(fun _ -> count.Value <- cnt - 1)
+                    printfn "TextureCount=%d" (cnt - 1)
             | Keys.T -> 
 
                 let cur = case.GetValue();

@@ -103,16 +103,16 @@ type DevicePreparedRenderObjectExtensions private() =
         let descriptorSets = 
             programLayout.DescriptorSetLayouts |> Array.map (fun ds ->
                 let descriptors = 
-                    ds.Bindings |> Array.choosei (fun i b ->
+                    ds.Bindings |> Array.choose (fun b ->
                         match b.Parameter with
                             | UniformBlockParameter block ->
                                 let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, ro.Uniforms, SymDict.empty)
                                 resources.Add buffer
-                                AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
+                                AdaptiveDescriptor.AdaptiveUniformBuffer (b.Binding, buffer) |> Some
 
                             | StorageBufferParameter block ->
                                 let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, ro.Uniforms, SymDict.empty)
-                                AdaptiveDescriptor.AdaptiveStorageBuffer (i, buffer) |> Some
+                                AdaptiveDescriptor.AdaptiveStorageBuffer (b.Binding, buffer) |> Some
 
                             | SamplerParameter sam ->
                                 match sam.samplerTextures with
@@ -140,7 +140,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                                     None
                                             )
 
-                                        AdaptiveDescriptor.AdaptiveCombinedImageSampler(i, List.toArray viewSam) |> Some
+                                        AdaptiveDescriptor.AdaptiveCombinedImageSampler(b.Binding, List.toArray viewSam) |> Some
                                 
 
                             | ImageParameter img ->
@@ -157,7 +157,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                     | _ ->
                                         failf "could not find texture: %A" textureName
 
-                                AdaptiveDescriptor.AdaptiveStorageImage(i, viewSam) |> Some
+                                AdaptiveDescriptor.AdaptiveStorageImage(b.Binding, viewSam) |> Some
                                 
                                 
                     )
@@ -297,16 +297,16 @@ type DevicePreparedRenderObjectExtensions private() =
         let sets = 
             layout.DescriptorSetLayouts |> Array.map (fun ds ->
                 let descriptors = 
-                    ds.Bindings |> Array.choosei (fun i b ->
+                    ds.Bindings |> Array.choose (fun b ->
                         match b.Parameter with
                             | UniformBlockParameter block ->
                                 let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
                                 resources.Add buffer
-                                AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
+                                AdaptiveDescriptor.AdaptiveUniformBuffer (b.Binding, buffer) |> Some
 
                             | StorageBufferParameter block ->
                                 let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
-                                AdaptiveDescriptor.AdaptiveStorageBuffer (i, buffer) |> Some
+                                AdaptiveDescriptor.AdaptiveStorageBuffer (b.Binding, buffer) |> Some
 
                             | SamplerParameter sam ->
                                 match sam.samplerTextures with
@@ -334,7 +334,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                                     None
                                             )
 
-                                        AdaptiveDescriptor.AdaptiveCombinedImageSampler(i, List.toArray viewSam) |> Some
+                                        AdaptiveDescriptor.AdaptiveCombinedImageSampler(b.Binding, List.toArray viewSam) |> Some
                                 
 
                             | ImageParameter img ->
@@ -351,7 +351,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                     | _ ->
                                         failf "could not find texture: %A" textureName
 
-                                AdaptiveDescriptor.AdaptiveStorageImage(i, viewSam) |> Some
+                                AdaptiveDescriptor.AdaptiveStorageImage(b.Binding, viewSam) |> Some
                                 
                     )
 

@@ -60,7 +60,11 @@ module DescriptorSetLayout =
     let empty (d : Device) = DescriptorSetLayout(d, VkDescriptorSetLayout.Null, Array.empty)
 
     let create (bindings : array<DescriptorSetLayoutBinding>) (device : Device) =
-        assert (bindings |> Seq.mapi (fun i b -> b.Binding = i) |> Seq.forall id)
+        assert (
+            let offsets = (0, bindings) ||> Array.scan (fun o b -> o + b.DescriptorCount) |> Array.take bindings.Length
+            (bindings, offsets) ||> Array.map2 (fun b o -> b.Binding = o) |> Array.forall id
+        )
+
         native {
             let! pArr = bindings |> Array.map (fun b -> b.Handle)
             let! pInfo =
