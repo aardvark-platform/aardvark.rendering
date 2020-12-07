@@ -95,71 +95,65 @@ open System.Threading.Tasks
 type DevicePreparedRenderObjectExtensions private() =
 
     static let prepareObject (this : ResourceManager) (renderPass : RenderPass) (ro : RenderObject) =
-        
+
         let resources = System.Collections.Generic.List<IResourceLocation>()
 
         let programLayout, program = this.CreateShaderProgram(renderPass, ro.Surface, ro.Mode)
 
-        let descriptorSets = 
+        let descriptorSets =
             programLayout.DescriptorSetLayouts |> Array.map (fun ds ->
-                let descriptors = 
+                let descriptors =
                     ds.Bindings |> Array.choose (fun b ->
                         match b.Parameter with
-                            | UniformBlockParameter block ->
-                                let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, ro.Uniforms, SymDict.empty)
-                                resources.Add buffer
-                                AdaptiveDescriptor.AdaptiveUniformBuffer (b.Binding, buffer) |> Some
+                        | UniformBlockParameter block ->
+                            let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, ro.Uniforms, SymDict.empty)
+                            resources.Add buffer
+                            AdaptiveDescriptor.AdaptiveUniformBuffer (b.Binding, buffer) |> Some
 
-                            | StorageBufferParameter block ->
-                                let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, ro.Uniforms, SymDict.empty)
-                                AdaptiveDescriptor.AdaptiveStorageBuffer (b.Binding, buffer) |> Some
+                        | StorageBufferParameter block ->
+                            let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, ro.Uniforms, SymDict.empty)
+                            AdaptiveDescriptor.AdaptiveStorageBuffer (b.Binding, buffer) |> Some
 
-                            | SamplerParameter sam ->
-                                match sam.samplerTextures with
-                                    | [] ->
-                                        Log.warn "could not get sampler information for: %A" sam
-                                        None
+                        | SamplerParameter sam ->
+                            match sam.samplerTextures with
+                            | [] ->
+                                Log.warn "could not get sampler information for: %A" sam
+                                None
 
-                                    | descriptions ->
-                                        let viewSam = 
-                                            descriptions |> List.map (fun (textureName, samplerState) -> 
-                                                let textureName = Symbol.Create textureName
-                                                let samplerState = samplerState.SamplerState
+                            | descriptions ->
+                                let list =
+                                    descriptions
+                                    |> List.choosei (fun i (textureName, samplerState) ->
+                                        let textureName = Symbol.Create textureName
+                                        let samplerState = samplerState.SamplerState
 
-                                                match ro.Uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                                                | Some (:? aval<ITexture> as tex) ->
+                                        match ro.Uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                                        | Some (:? aval<ITexture> as tex) ->
+                                            let vs = this.CreateImageSampler(sam.samplerType, tex, AVal.constant samplerState)
+                                            Some(i, vs)
+                                        | _ ->
+                                            Log.warn "[Vulkan] could not find texture: %A" textureName
+                                            None
+                                    )
 
-                                                    let tex = this.CreateImage(tex)
-                                                    let view = this.CreateImageView(sam.samplerType, tex)
-                                                    let sam = this.CreateSampler(AVal.constant samplerState)
+                                let viewSam = this.CreateImageSamplerArray(list)
+                                AdaptiveDescriptor.AdaptiveCombinedImageSampler(b.Binding, viewSam) |> Some
 
-                                                    Some(view, sam)
+                        | ImageParameter img ->
+                            let viewSam =
+                                let textureName = Symbol.Create img.imageName
+                                match ro.Uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                                | Some (:? aval<ITexture> as tex) ->
 
-                                                | _ ->
-                                                    Log.warn "[Vulkan] could not find texture: %A" textureName
-                                                    None
-                                            )
+                                    let tex = this.CreateImage(tex)
+                                    let view = this.CreateImageView(img.imageType, tex)
 
-                                        AdaptiveDescriptor.AdaptiveCombinedImageSampler(b.Binding, List.toArray viewSam) |> Some
-                                
+                                    view
 
-                            | ImageParameter img ->
-                                let viewSam = 
-                                    let textureName = Symbol.Create img.imageName
-                                    match ro.Uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                                    | Some (:? aval<ITexture> as tex) ->
+                                | _ ->
+                                    failf "could not find texture: %A" textureName
 
-                                        let tex = this.CreateImage(tex)
-                                        let view = this.CreateImageView(img.imageType, tex)
-
-                                        view
-
-                                    | _ ->
-                                        failf "could not find texture: %A" textureName
-
-                                AdaptiveDescriptor.AdaptiveStorageImage(b.Binding, viewSam) |> Some
-                                
-                                
+                            AdaptiveDescriptor.AdaptiveStorageImage(b.Binding, viewSam) |> Some
                     )
 
                 let res = this.CreateDescriptorSet(ds, descriptors)
@@ -299,60 +293,55 @@ type DevicePreparedRenderObjectExtensions private() =
                 let descriptors = 
                     ds.Bindings |> Array.choose (fun b ->
                         match b.Parameter with
-                            | UniformBlockParameter block ->
-                                let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
-                                resources.Add buffer
-                                AdaptiveDescriptor.AdaptiveUniformBuffer (b.Binding, buffer) |> Some
+                        | UniformBlockParameter block ->
+                            let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
+                            resources.Add buffer
+                            AdaptiveDescriptor.AdaptiveUniformBuffer (b.Binding, buffer) |> Some
 
-                            | StorageBufferParameter block ->
-                                let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
-                                AdaptiveDescriptor.AdaptiveStorageBuffer (b.Binding, buffer) |> Some
+                        | StorageBufferParameter block ->
+                            let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
+                            AdaptiveDescriptor.AdaptiveStorageBuffer (b.Binding, buffer) |> Some
 
-                            | SamplerParameter sam ->
-                                match sam.samplerTextures with
-                                    | [] ->
-                                        Log.warn "could not get sampler information for: %A" sam
-                                        None
+                        | SamplerParameter sam ->
+                            match sam.samplerTextures with
+                            | [] ->
+                                Log.warn "could not get sampler information for: %A" sam
+                                None
 
-                                    | descriptions ->
-                                        let viewSam = 
-                                            descriptions |> List.map (fun (textureName, samplerState) -> 
-                                                let textureName = Symbol.Create textureName
-                                                let samplerState = samplerState.SamplerState
+                            | descriptions ->
+                                let list =
+                                    descriptions
+                                    |> List.choosei (fun i (textureName, samplerState) ->
+                                        let textureName = Symbol.Create textureName
+                                        let samplerState = samplerState.SamplerState
 
-                                                match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                                                | Some (:? aval<ITexture> as tex) ->
+                                        match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                                        | Some (:? aval<ITexture> as tex) ->
+                                            let vs = this.CreateImageSampler(sam.samplerType, tex, AVal.constant samplerState)
+                                            Some(i, vs)
+                                        | _ ->
+                                            Log.warn "[Vulkan] could not find texture: %A" textureName
+                                            None
+                                    )
 
-                                                    let tex = this.CreateImage(tex)
-                                                    let view = this.CreateImageView(sam.samplerType, tex)
-                                                    let sam = this.CreateSampler(AVal.constant samplerState)
+                                let viewSam = this.CreateImageSamplerArray(list)
+                                AdaptiveDescriptor.AdaptiveCombinedImageSampler(b.Binding, viewSam) |> Some
 
-                                                    Some(view, sam)
+                        | ImageParameter img ->
+                            let viewSam = 
+                                let textureName = Symbol.Create img.imageName
+                                match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                                | Some (:? aval<ITexture> as tex) ->
 
-                                                | _ ->
-                                                    Log.warn "[Vulkan] could not find texture: %A" textureName
-                                                    None
-                                            )
+                                    let tex = this.CreateImage(tex)
+                                    let view = this.CreateImageView(img.imageType, tex)
 
-                                        AdaptiveDescriptor.AdaptiveCombinedImageSampler(b.Binding, List.toArray viewSam) |> Some
-                                
+                                    view
 
-                            | ImageParameter img ->
-                                let viewSam = 
-                                    let textureName = Symbol.Create img.imageName
-                                    match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                                    | Some (:? aval<ITexture> as tex) ->
+                                | _ ->
+                                    failf "could not find texture: %A" textureName
 
-                                        let tex = this.CreateImage(tex)
-                                        let view = this.CreateImageView(img.imageType, tex)
-
-                                        view
-
-                                    | _ ->
-                                        failf "could not find texture: %A" textureName
-
-                                AdaptiveDescriptor.AdaptiveStorageImage(b.Binding, viewSam) |> Some
-                                
+                            AdaptiveDescriptor.AdaptiveStorageImage(b.Binding, viewSam) |> Some
                     )
 
                 let res = this.CreateDescriptorSet(ds, descriptors)

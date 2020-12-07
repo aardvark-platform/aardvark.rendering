@@ -133,82 +133,89 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
     let write (r : BindingReference) (value : obj) =
         lock lockObj (fun () ->
             match r with
-                | UniformRef(buffer, offset, targetType) ->
-                    let w = UniformWriters.getWriter offset targetType (value.GetType())
-                    w.WriteUnsafeValue(value, buffer.Storage.Pointer)
-                    dirtyBuffers <- ref <| HashSet.add buffer !dirtyBuffers
+            | UniformRef(buffer, offset, targetType) ->
+                let w = UniformWriters.getWriter offset targetType (value.GetType())
+                w.WriteUnsafeValue(value, buffer.Storage.Pointer)
+                dirtyBuffers <- ref <| HashSet.add buffer !dirtyBuffers
 
-                | StorageImageRef(set, binding, info) ->
-                    let view, res = 
-                        match value with
-                            | :? Image as img -> 
-                                let view = device.CreateOutputImageView(img, 0, 1, 0, 1)
-                                view, Some { new IDisposable with member x.Dispose() = device.Delete view }
+            | StorageImageRef(set, binding, info) ->
+                let view, res = 
+                    match value with
+                        | :? Image as img -> 
+                            let view = device.CreateOutputImageView(img, 0, 1, 0, 1)
+                            view, Some { new IDisposable with member x.Dispose() = device.Delete view }
 
-                            | :? ImageView as view ->
-                                view, None
+                        | :? ImageView as view ->
+                            view, None
 
-                            | :? ImageSubresourceRange as r ->
-                                let view = device.CreateOutputImageView(r.Image, r.BaseLevel, r.LevelCount, r.BaseSlice, r.SliceCount)
-                                view, Some { new IDisposable with member x.Dispose() = device.Delete view }
+                        | :? ImageSubresourceRange as r ->
+                            let view = device.CreateOutputImageView(r.Image, r.BaseLevel, r.LevelCount, r.BaseSlice, r.SliceCount)
+                            view, Some { new IDisposable with member x.Dispose() = device.Delete view }
 
-                            | :? ITextureRange as r ->
-                                let image = r.Texture |> unbox<Image>
-                                let view = device.CreateOutputImageView(image, r.Levels.Min, 1 + r.Levels.Max - r.Levels.Min, r.Slices.Min, 1 + r.Slices.Max - r.Slices.Min)
-                                view, Some { new IDisposable with member x.Dispose() = device.Delete view }
+                        | :? ITextureRange as r ->
+                            let image = r.Texture |> unbox<Image>
+                            let view = device.CreateOutputImageView(image, r.Levels.Min, 1 + r.Levels.Max - r.Levels.Min, r.Slices.Min, 1 + r.Slices.Max - r.Slices.Min)
+                            view, Some { new IDisposable with member x.Dispose() = device.Delete view }
 
-                            | _ -> 
-                                failf "invalid storage image argument: %A" value
+                        | _ -> 
+                            failf "invalid storage image argument: %A" value
 
-                    let write = Descriptor.StorageImage(binding, view)
-                    update set binding write
-                    setResource set binding 0 res
+                let write = Descriptor.StorageImage(binding, view)
+                update set binding write
+                setResource set binding 0 res
 
-                | SampledImageRef(set, binding, index, info, sampler) ->
-                    let content = imageArrays.[(set, binding)]
-                    let res = 
-                        match value with
-                            | null ->
-                                content.[index] <- None
-                                None
+            | SampledImageRef(set, binding, index, info, sampler) ->
+                let content = imageArrays.[(set, binding)]
+                let res = 
+                    match value with
+                        | null ->
+                            content.[index] <- None
+                            None
 
-                            | :? ITexture as tex ->
-                                let image = device.CreateImage tex
-                                let view = device.CreateInputImageView(image, info, VkComponentMapping.Identity)
-                                content.[index] <- Some (VkImageLayout.General, view, sampler)
-                                Some { new IDisposable with member x.Dispose() = device.Delete image; device.Delete view }
+                        | :? ITexture as tex ->
+                            let image = device.CreateImage tex
+                            let view = device.CreateInputImageView(image, info, VkComponentMapping.Identity)
+                            content.[index] <- Some (VkImageLayout.General, view, sampler)
+                            Some { new IDisposable with member x.Dispose() = device.Delete image; device.Delete view }
 
-                            | :? ITextureRange as r ->
-                                let image = unbox<Image> r.Texture
-                                let view = device.CreateInputImageView(image, info, r.Levels, r.Slices, VkComponentMapping.Identity)
-                                content.[index] <- Some (VkImageLayout.General, view, sampler)
-                                Some { new IDisposable with member x.Dispose() = device.Delete view }
+                        | :? ITextureRange as r ->
+                            let image = unbox<Image> r.Texture
+                            let view = device.CreateInputImageView(image, info, r.Levels, r.Slices, VkComponentMapping.Identity)
+                            content.[index] <- Some (VkImageLayout.General, view, sampler)
+                            Some { new IDisposable with member x.Dispose() = device.Delete view }
 
-                            | _ -> 
-                                failf "invalid storage image argument: %A" value
+                        | _ -> 
+                            failf "invalid storage image argument: %A" value
 
-                    
-                    let write = Descriptor.CombinedImageSampler(binding, content)
-                    update set binding write
-                    setResource set binding index res
+                let content =
+                    content
+                    |> Array.choosei (fun i x ->
+                        x |> Option.map (fun (layout, view, sampler) ->
+                            i, layout, view, sampler
+                        )
+                    )
 
-                | StorageBufferRef(set, binding, elementType) ->
-                    let buffer,offset,size,res =
-                        match value with
-                            | :? IBuffer as b -> 
-                                let buffer = device.CreateBuffer(VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.StorageBufferBit, b)
-                                buffer, 0L, buffer.Size, Some { new IDisposable with member x.Dispose() = device.Delete buffer }
+                let write = Descriptor.CombinedImageSampler(binding, content)
+                update set binding write
+                setResource set binding index res
 
-                            | :? IBufferRange as b ->
-                                let buffer = b.Buffer |> unbox<Buffer>
-                                buffer, int64 b.Offset, int64 b.Size, None
+            | StorageBufferRef(set, binding, elementType) ->
+                let buffer,offset,size,res =
+                    match value with
+                        | :? IBuffer as b -> 
+                            let buffer = device.CreateBuffer(VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.StorageBufferBit, b)
+                            buffer, 0L, buffer.Size, Some { new IDisposable with member x.Dispose() = device.Delete buffer }
 
-                            | _ -> 
-                                failf "unexpected storage buffer %A" value
+                        | :? IBufferRange as b ->
+                            let buffer = b.Buffer |> unbox<Buffer>
+                            buffer, int64 b.Offset, int64 b.Size, None
 
-                    let write = Descriptor.StorageBuffer(binding, buffer, offset, size)
-                    update set binding write
-                    setResource set binding 0 res
+                        | _ -> 
+                            failf "unexpected storage buffer %A" value
+
+                let write = Descriptor.StorageBuffer(binding, buffer, offset, size)
+                update set binding write
+                setResource set binding 0 res
         )
 
     let flush() =
