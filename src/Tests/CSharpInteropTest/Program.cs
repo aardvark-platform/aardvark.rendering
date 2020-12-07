@@ -22,18 +22,20 @@ namespace CSharpInteropTest
 
             Console.WriteLine("Hello World!");
 
+            var geo = IndexedGeometryPrimitives.Box.solidBox(Box3d.Infinite, C4b.Red);
 
             var adaptiveBuffer = (IAdaptiveValue<V3f[]>)AdaptiveValue.Init(new V3f[5]);
-           var adaptiveArray = (IAdaptiveValue<Array>)AdaptiveValue.Init((Array)new V3f[5]);
+            var adaptiveArray = (IAdaptiveValue<Array>)AdaptiveValue.Init((Array)new V3f[5]);
             
             ISg sg = new Sg.RenderNode(0, IndexedGeometryMode.PointList);
 
             var test = 
-                    sg
+                    sg 
                     .VertexAttribute(DefaultSemantic.Positions, adaptiveBuffer)
                     .VertexAttribute(DefaultSemantic.Positions, adaptiveArray)
                     .VertexAttribute(DefaultSemantic.Positions, new V3f[10])
-                    .VertexAttribute(DefaultSemantic.Positions, (Array)new V4f[10]);
+                    .VertexAttribute(DefaultSemantic.Positions, (Array)new V4f[10])
+                    .VertexIndices(geo.IndexArray);
         }
     }
 }

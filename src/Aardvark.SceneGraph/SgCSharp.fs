@@ -268,13 +268,16 @@ type SceneGraphExtensions =
     static member VertexIndices(sg : ISg, indices : BufferView) : ISg = Sg.VertexIndexApplicator(indices, sg) :> ISg
 
     [<Extension>]
+    static member VertexIndices(sg : ISg, indices : Array) : ISg = Sg.VertexIndexApplicator(BufferView.ofArray indices, sg) :> ISg
+
+    [<Extension>]
     static member VertexAttributes(sg : ISg, attributes : SymbolDict<BufferView>) : ISg = Sg.VertexAttributeApplicator(attributes, sg) :> ISg
 
     [<Extension>]
     static member VertexAttribute(sg : ISg, attribute : Symbol, data : BufferView) : ISg = Sg.VertexAttributeApplicator(attribute, data, sg) :> ISg
 
     [<Extension>]
-    static member VertexAttribute(sg : ISg, attribute : Symbol, data : Array) : ISg = Sg.VertexAttributeApplicator(attribute, BufferView(AVal.constant (ArrayBuffer(data) :> IBuffer), data.GetType().GetElementType()), sg) :> ISg
+    static member VertexAttribute(sg : ISg, attribute : Symbol, data : Array) : ISg = Sg.VertexAttributeApplicator(attribute, BufferView.ofArray data, sg) :> ISg
 
     [<Extension>]
     static member VertexAttribute(sg : ISg, attribute : Symbol, data : aval<Array>) : ISg = Sg.VertexAttributeApplicator(attribute, BufferView(AVal.map (fun x -> (ArrayBuffer(x) :> IBuffer)) data, data.GetValue().GetType().GetElementType()), sg) :> ISg
