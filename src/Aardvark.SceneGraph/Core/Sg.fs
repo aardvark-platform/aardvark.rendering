@@ -117,10 +117,10 @@ module Sg =
             uniformHolder.TryGetUniform (scope,name)
 
         new(value : IUniformProvider, child : ISg) = UniformApplicator( value, AVal.constant child)
-        new(name : string, value : IAdaptiveValue, child : ISg) = UniformApplicator( (new Providers.SimpleUniformHolder ([Symbol.Create name,value]) :> IUniformProvider), AVal.constant child)
-        new(name : Symbol, value : IAdaptiveValue, child : ISg) = UniformApplicator( (new Providers.SimpleUniformHolder( [name,value]) :> IUniformProvider), AVal.constant child)
-        new(name : Symbol, value : IAdaptiveValue, child : aval<ISg>) = UniformApplicator( (new Providers.SimpleUniformHolder( [name,value]) :> IUniformProvider), child)
-        new(map : Map<Symbol,IAdaptiveValue>, child : ISg) = UniformApplicator( (new Providers.SimpleUniformHolder( map) :> IUniformProvider), AVal.constant child)
+        new(name : string, value : IAdaptiveValue, child : ISg) = UniformApplicator( (new Providers.SingleUniformHolder(Symbol.Create name, value) :> IUniformProvider), AVal.constant child)
+        new(name : Symbol, value : IAdaptiveValue, child : ISg) = UniformApplicator( (new Providers.SingleUniformHolder(name, value) :> IUniformProvider), AVal.constant child)
+        new(name : Symbol, value : IAdaptiveValue, child : aval<ISg>) = UniformApplicator( (new Providers.SingleUniformHolder(name, value) :> IUniformProvider), child)
+        new(map : Map<Symbol,IAdaptiveValue>, child : ISg) = UniformApplicator( (new Providers.SimpleUniformHolder(map) :> IUniformProvider), AVal.constant child)
 
 
     type SurfaceApplicator(surface : Surface, child : aval<ISg>) =

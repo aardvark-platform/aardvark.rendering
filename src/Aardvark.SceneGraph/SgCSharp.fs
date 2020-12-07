@@ -271,6 +271,9 @@ type SceneGraphExtensions =
     static member VertexAttributes(sg : ISg, attributes : SymbolDict<BufferView>) : ISg = Sg.VertexAttributeApplicator(attributes, sg) :> ISg
 
     [<Extension>]
+    static member VertexAttribute(sg : ISg, attribute : Symbol, data : BufferView) : ISg = Sg.VertexAttributeApplicator(attribute, data, sg) :> ISg
+
+    [<Extension>]
     static member VertexAttribute(sg : ISg, attribute : Symbol, data : Array) : ISg = Sg.VertexAttributeApplicator(attribute, BufferView(AVal.constant (ArrayBuffer(data) :> IBuffer), data.GetType().GetElementType()), sg) :> ISg
 
     [<Extension>]
