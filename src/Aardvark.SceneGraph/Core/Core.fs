@@ -20,6 +20,14 @@ type IGroup =
 
 module Providers =
 
+    type SingleUniformHolder(name : Symbol, value : IAdaptiveValue) =
+        
+        let value = Some value
+
+        interface IUniformProvider with
+            member x.TryGetUniform (s,n) = if n = name then value else None
+            member x.Dispose() = ()
+
     type SimpleUniformHolder(values : Map<Symbol, IAdaptiveValue>) =
         interface IUniformProvider with
             member x.TryGetUniform (scope,name) = Map.tryFind name values
