@@ -712,6 +712,15 @@ module XmlReader =
             )
             |> Map.ofSeq
 
+    let funcpointers (vk : XElement) =
+        vk.Descendants(xname "types")
+            |> Seq.collect (fun tc -> tc.Descendants (xname "type"))
+            |> Seq.filter (fun t -> attrib t "category" = Some "funcpointer")
+            |> Seq.choose (fun e ->
+                e.Elements(xname "name") |> Seq.tryHead |> Option.map (fun n -> n.Value)
+            )
+            |> Seq.toList
+
     let structs (defines : Map<string, string>) (vk : XElement) =
         vk.Descendants(xname "types")
             |> Seq.collect (fun tc -> tc.Descendants (xname "type"))
@@ -840,19 +849,14 @@ module FSharpWriter =
         printfn "#nowarn \"9\""
         printfn "#nowarn \"51\""
 
-        printfn "type PFN_vkAllocationFunction = nativeint"
-        printfn "type PFN_vkReallocationFunction = nativeint"
-        printfn "type PFN_vkInternalAllocationNotification = nativeint"
-        printfn "type PFN_vkInternalFreeNotification = nativeint"
-        printfn "type PFN_vkFreeFunction = nativeint "
-        printfn "type PFN_vkVoidFunction = nativeint"
         printfn ""
 
     let missingExtensionReferences =
         [
             "KHRSamplerYcbcrConversion", ["EXTDebugReport"]
-            "KHRRayTracing", ["EXTDebugReport"]
-            "NVRayTracing", ["KHRRayTracing"]
+            "KHRAccelerationStructure", ["EXTDebugReport"]
+            "NVRayTracing", ["EXTDebugReport"; "KHRAccelerationStructure"; "KHRRayTracingPipeline"]
+            "KHRRayTracingPipeline", ["KHRPipelineLibrary"]
         ]
         |> Map.ofList
 
@@ -898,8 +902,6 @@ module FSharpWriter =
         printfn "type VkWin32SurfaceCreateFlagsKHR = | MinValue = 0"
         printfn "type VkWaylandSurfaceCreateFlagsKHR = | MinValue = 0"
         printfn "type VkMirSurfaceCreateFlagsKHR = | MinValue = 0"
-        printfn "type PFN_vkDebugReportCallbackEXT = nativeint"
-        printfn "type PFN_vkDebugUtilsMessengerCallbackEXT = nativeint"
         printfn "type VkExternalMemoryHandleTypeFlagsNV = | MinValue = 0"
         printfn "type VkExternalMemoryFeatureFlagsNV = | MinValue = 0"
         printfn "type VkIndirectCommandsLayoutUsageFlagsNVX = | MinValue = 0"
@@ -931,6 +933,40 @@ module FSharpWriter =
         printfn "type VkStreamDescriptorSurfaceCreateFlagsGGP = | MinValue = 0"
         printfn "type VkPipelineCoverageReductionStateCreateFlagsNV = | MinValue = 0"
         printfn "type VkPrivateDataSlotCreateFlagsEXT = | MinValue = 0"
+        printfn "type VkDeviceMemoryReportFlagsEXT = | MinValue = 0"
+        printfn "type VkDirectFBSurfaceCreateFlagsEXT = | MinValue = 0"
+        printfn ""
+
+    let inlineArray (indent : string) (baseType : string) (baseTypeSize : int) (size : int) =
+        let printfn fmt =
+            Printf.kprintf (fun str ->
+                printfn "%s%s" indent str
+            ) fmt
+
+        let totalSize = size * baseTypeSize
+        printfn "[<StructLayout(LayoutKind.Explicit, Size = %d)>]" totalSize
+        printfn "type %s_%d =" baseType size
+        printfn "    struct"
+        printfn "        [<FieldOffset(0)>]"
+        printfn "        val mutable public First : %s" baseType
+        printfn "        "
+        printfn "        member x.Item"
+        printfn "            with get (i : int) : %s =" baseType
+        printfn "                if i < 0 || i > %d then raise <| IndexOutOfRangeException()" (size - 1)
+        printfn "                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt"
+        printfn "                NativePtr.get ptr i"
+        printfn "            and set (i : int) (value : %s) =" baseType
+        printfn "                if i < 0 || i > %d then raise <| IndexOutOfRangeException()" (size - 1)
+        printfn "                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt"
+        printfn "                NativePtr.set ptr i value"
+        printfn ""
+        printfn "        member x.Length = %d" size
+        printfn ""
+        printfn "        interface System.Collections.IEnumerable with"
+        printfn "            member x.GetEnumerator() = let x = x in (Seq.init %d (fun i -> x.[i])).GetEnumerator() :> System.Collections.IEnumerator" size
+        printfn "        interface System.Collections.Generic.IEnumerable<%s> with" baseType
+        printfn "            member x.GetEnumerator() = let x = x in (Seq.init %d (fun i -> x.[i])).GetEnumerator()" size
+        printfn "    end"
         printfn ""
 
 //    let extendedEnums() =
@@ -1055,6 +1091,9 @@ module FSharpWriter =
                     printfn  "%s    | %s = %s" indent n (Enum.valueToStr v)
                 printfn "%s" indent
 
+            if name = "VkFragmentShadingRateCombinerOpKHR" then
+                inlineArray indent "VkFragmentShadingRateCombinerOpKHR" 4 2
+
         if enums.Length > 0 then
             printfn ""
 
@@ -1155,33 +1194,6 @@ module FSharpWriter =
             | FixedArray2d(t, w, h) ->
                 let t = typeName t
                 sprintf "%s_%d" t (w * h)
-
-    let inlineArray (baseType : string) (baseTypeSize : int) (size : int) =
-        let totalSize = size * baseTypeSize
-        printfn "[<StructLayout(LayoutKind.Explicit, Size = %d)>]" totalSize
-        printfn "type %s_%d =" baseType size
-        printfn "    struct"
-        printfn "        [<FieldOffset(0)>]"
-        printfn "        val mutable public First : %s" baseType
-        printfn "        "
-        printfn "        member x.Item"
-        printfn "            with get (i : int) : %s =" baseType
-        printfn "                if i < 0 || i > %d then raise <| IndexOutOfRangeException()" (size - 1)
-        printfn "                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt"
-        printfn "                NativePtr.get ptr i"
-        printfn "            and set (i : int) (value : %s) =" baseType
-        printfn "                if i < 0 || i > %d then raise <| IndexOutOfRangeException()" (size - 1)
-        printfn "                let ptr = &&x |> NativePtr.toNativeInt |> NativePtr.ofNativeInt"
-        printfn "                NativePtr.set ptr i value"
-        printfn ""
-        printfn "        member x.Length = %d" size
-        printfn ""
-        printfn "        interface System.Collections.IEnumerable with"
-        printfn "            member x.GetEnumerator() = let x = x in (Seq.init %d (fun i -> x.[i])).GetEnumerator() :> System.Collections.IEnumerator" size
-        printfn "        interface System.Collections.Generic.IEnumerable<%s> with" baseType
-        printfn "            member x.GetEnumerator() = let x = x in (Seq.init %d (fun i -> x.[i])).GetEnumerator()" size
-        printfn "    end"
-        printfn ""
 
     let dependencies (indent : string) (indirectDeps : Map<string, string list>) (required : Set<string>) (name : string) (number : int) =
 
@@ -1399,21 +1411,27 @@ module FSharpWriter =
                     printfn ""
 
                     if s.name = "VkMemoryHeap" then
-                        inlineArray "VkMemoryHeap" 16 16
+                        inlineArray indent "VkMemoryHeap" 16 16
                     elif s.name = "VkMemoryType" then
-                        inlineArray "VkMemoryType" 8 32
+                        inlineArray indent "VkMemoryType" 8 32
                     elif s.name = "VkOffset3D" then
-                        inlineArray "VkOffset3D" 12 2
+                        inlineArray indent "VkOffset3D" 12 2
 
         if structs.Length > 0 then
             printfn ""
 
     let globalStructs (structureTypes : Map<string, string>) (s : list<Struct>) =
-        inlineArray "uint32" 4 32
-        inlineArray "byte" 1 8
-        inlineArray "VkPhysicalDevice" 8 32
-        inlineArray "VkDeviceSize" 8 16
+        inlineArray "" "uint32" 4 32
+        inlineArray "" "byte" 1 8
+        inlineArray "" "VkPhysicalDevice" 8 32
+        inlineArray "" "VkDeviceSize" 8 16
         structs "" structureTypes s
+
+    let funcpointers (l : list<string>) =
+        printfn "// Function pointers"
+        for x in l do
+            printfn "type %s = nativeint" x
+        printfn ""
 
     let typedefs (l : list<Typedef>) =
         printfn "// Typedefs"
@@ -1695,6 +1713,7 @@ let run () =
     let vk = XElement.Load(path)
     let vendorTags = XmlReader.vendorTags vk
     let defines = XmlReader.defines vk
+    let funcpointers = XmlReader.funcpointers vk
     let typedefs = XmlReader.typedefs defines vk
     let aliases = XmlReader.aliases vk
     let structureTypes = XmlReader.structureTypes vk
@@ -1708,6 +1727,7 @@ let run () =
     FSharpWriter.header()
     FSharpWriter.missing()
     FSharpWriter.handles handles
+    FSharpWriter.funcpointers funcpointers
     FSharpWriter.typedefs typedefs
     FSharpWriter.enums "" vendorTags enums
     FSharpWriter.globalStructs structureTypes (Struct.topologicalSort structs)
