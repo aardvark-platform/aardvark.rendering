@@ -1184,6 +1184,7 @@ module FSharpWriter =
                         | Some n -> n
                         | None ->
                             if n.StartsWith "Vk" || n.StartsWith "PFN" then n
+                            elif n.StartsWith "structVk" then n.Substring("struct".Length)
                             elif n.StartsWith "Mir" || n.StartsWith "struct" then "nativeint"
                             else "nativeint" //failwithf "strange type: %A" n
             | Ptr t ->
@@ -1308,7 +1309,10 @@ module FSharpWriter =
 
                     // Set the sType field automatically
                     let fields =
-                        s.fields |> List.filter (fun f -> f.name <> "sType")
+                        match s.name with
+                        | "VkBaseInStructure"
+                        | "VkBaseOutStructure" -> s.fields
+                        | _ -> s.fields |> List.filter (fun f -> f.name <> "sType")
 
                     let hasTypeField =
                         s.fields.Length <> fields.Length
@@ -1327,8 +1331,15 @@ module FSharpWriter =
                         | Some v -> sprintf "%su" v
                         | None -> @"failwith ""Reserved for future use or possibly a bug in the generator"""
 
+                    let isNextPtr (f : StructField) =
+                        f.name = "pNext" && f.typ = Ptr (Literal "void")
+
+                    let nextPtrIndex = fields |> List.tryFindIndex isNextPtr
+
                     // Proper default constructors are not allowed for structs...
                     let defaultConstructor() =
+                        printfn ""
+
                         let values =
                             fields |> List.map(fun f ->
                                 sprintf "Unchecked.defaultof<%s>" (typeName f.typ)
@@ -1337,14 +1348,34 @@ module FSharpWriter =
                         printfn' 2 "static member Empty ="
                         values |> toFunctionCall 3 s.name
 
+                    // Static creators with only pNext parameter
+                    let chainStaticCreators() =
+                        match nextPtrIndex with
+                        | Some index when fields.Length > 1 ->
+                            printfn ""
+
+                            printfn' 2 "/// Creates an empty %s with only pNext set to the given value." s.name
+                            printfn' 2 "static member Chain(pNext : nativeint) ="
+
+                            fields
+                            |> List.mapi (fun i f ->
+                                if i = index then
+                                    fsharpName f.name
+                                else
+                                    sprintf "Unchecked.defaultof<%s>" (typeName f.typ)
+                            )
+                            |> toFunctionCall 3 s.name
+
+                            printfn ""
+                            printfn' 2 "/// Creates an empty %s with only pNext set to the given value." s.name
+                            printfn' 2 "static member Chain(pNext : nativeptr<'a>) ="
+                            printfn' 3 "%s.Chain(NativePtr.toNativeInt pNext)" s.name
+
+                        | _ -> ()
+
                     // Convenience constructor without pNext parameter
                     let constructorWithoutNextPtr () =
-                        let isNextPtr (f : StructField) =
-                            f.name = "pNext"
-
-                        let ptrIndex = fields |> List.tryFindIndex isNextPtr
-
-                        match ptrIndex with
+                        match nextPtrIndex with
                         | Some index when fields.Length > 1 ->
                             printfn ""
 
@@ -1384,8 +1415,10 @@ module FSharpWriter =
                         constructorWithoutNextPtr()
 
                         // Empty default "constructor"
-                        printfn ""
                         defaultConstructor()
+
+                        // Static creators with only pNext
+                        chainStaticCreators()
 
                         if s.name = "VkExtent3D" then
                             printfn ""
