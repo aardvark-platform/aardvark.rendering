@@ -211,23 +211,25 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
 
     member private x.PerformUpdate(token : AdaptiveToken, t : RenderToken) =
         if refCount <= 0 then
-            failwithf "[Resource] cannot update unreferenced resource"
+            // [hs 21.12.2020] was (and should be) exn. https://github.com/vrvis/PRo3D/issues/3
+            // untill no artificial repro is found, we need to go with this.
+            Log.warn "[Resource] cannot update unreferenced resource (refCount = %d, x.IsDisposed = %b, th = %A)" refCount x.IsDisposed th
+        else
+            let h = x.Create(token, t,current)
+            info <- x.GetInfo h
+            setHandle x h
 
-        let h = x.Create(token, t,current)
-        info <- x.GetInfo h
-        setHandle x h
+            match current with
+                | Some old when Unchecked.equals old h -> 
+                    t.InPlaceResourceUpdate(kind)
 
-        match current with
-            | Some old when Unchecked.equals old h -> 
-                t.InPlaceResourceUpdate(kind)
+                | Some old ->  
+                    current <- Some h
+                    t.ReplacedResource(kind)
 
-            | Some old ->  
-                current <- Some h
-                t.ReplacedResource(kind)
-
-            | None -> 
-                current <- Some h
-                t.CreatedResource(kind)
+                | None -> 
+                    current <- Some h
+                    t.CreatedResource(kind)
 
 
     member x.AddRef() =
