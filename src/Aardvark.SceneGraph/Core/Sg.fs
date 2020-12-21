@@ -283,6 +283,10 @@ module Sg =
         member x.Mode = mode
         member x.AttributeTypes = attributeTypes
 
+    type RenderObjectSet(set : aset<IRenderObject>) =
+        interface ISg
+        member x.Set = set
+
 
 module SceneGraphCompletenessCheck =
     open System.Text.RegularExpressions

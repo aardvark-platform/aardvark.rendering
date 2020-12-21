@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "15 - ConcurrencyTest": {
+      "commandName": "Project",
+      "nativeDebugging": true
+    }
+  }
+}

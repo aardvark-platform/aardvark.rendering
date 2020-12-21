@@ -248,3 +248,9 @@ module RenderObjectSemantics =
 
         member x.OverlayTasks(r : Sg.OverlayNode, scope : Ag.Scope) =
             ASet.single (scope.RenderPass, r.RenderTask)
+
+
+    [<Rule>]
+    type RenderObjectSetSem() = 
+        member x.RenderObjects(sg : Sg.RenderObjectSet, scope : Ag.Scope) = 
+            sg.Set
