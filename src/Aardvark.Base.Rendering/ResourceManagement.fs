@@ -171,8 +171,12 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
 
     let mutable info = ResourceInfo.Zero
     let lockObj = obj()
+    let mutable wasDisposed = 0
 
     let destroy(x : Resource<_,_>) =
+        let alreadyDisposed = Interlocked.CompareExchange(&wasDisposed,1,0)
+        if alreadyDisposed = 1 then failwithf "doubleFree"
+
         onDispose.OnNext()
         x.Destroy handle.Value
         current <- None
