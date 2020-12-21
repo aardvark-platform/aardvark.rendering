@@ -192,7 +192,7 @@ type ImmutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, 
                 
 
     override x.MarkObject() =
-        if desc.ieagerDestroy then 
+        if desc.ieagerDestroy && false then 
             match handle with
                 | Some(_,h) -> 
                     desc.idestroy h
