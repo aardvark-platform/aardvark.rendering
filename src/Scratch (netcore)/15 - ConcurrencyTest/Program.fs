@@ -21,13 +21,13 @@ let main argv =
 
     *)
 
-    let prepareIt = true
-    let inlineDispose = true
-    let perObjTexture = true
-    let prepareTexture = true
-    let addRemoveTest = true
-    let textureTest = true
-    let jitterFrames = true
+    let prepareIt = true  // VK: fail; GL: OK
+    let inlineDispose = true // OK
+    let perObjTexture = true // OK
+    let prepareTexture = true // GL: OK, Vk: only works with dubios 4089ebc1 fix
+    let addRemoveTest = true // OK
+    let textureTest = true // OK
+    let jitterFrames = false // OK
     
     Aardvark.Init()
 
