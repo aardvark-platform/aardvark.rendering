@@ -12,6 +12,14 @@ open Aardvark.Application.Slim
 [<EntryPoint>]
 let main argv = 
     
+
+    
+    let prepareIt = true
+    let inlineDispose = false
+    let perObjTexture = true
+    
+    let addRemoveTest = false
+    let textureTest = true
     
     Aardvark.Init()
 
@@ -27,8 +35,8 @@ let main argv =
     //    }
 
 
-    //use app = new VulkanApplication()
-    use app = new OpenGlApplication()
+    use app = new VulkanApplication()
+    //use app = new OpenGlApplication()
     let win = app.CreateGameWindow(1)
 
     let signature =
@@ -59,24 +67,30 @@ let main argv =
 
     let texture = cval (DefaultTextures.blackTex.GetValue())
 
+
+    let createTexture (d : C4b) = 
+        let checkerboardPix = 
+            let pi = PixImage<byte>(Col.Format.RGBA, V2i.II * 256)
+            pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
+                let c = c / 16L
+                if (c.X + c.Y) % 2L = 0L then
+                    d
+                else
+                    C4b.Gray
+            ) |> ignore
+            pi
+
+        let tex = 
+            PixTexture2d(PixImageMipMap [| checkerboardPix :> PixImage |], true) :> ITexture //|> AVal.constant
+
+        tex
+
     let updateTexture () = 
         Thread.Sleep 2000
         let rnd = new System.Random()
         while true do
             let d = if rnd.NextDouble() < 0.5 then C4b.White else C4b.Gray
-            let checkerboardPix = 
-                let pi = PixImage<byte>(Col.Format.RGBA, V2i.II * 256)
-                pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
-                    let c = c / 16L
-                    if (c.X + c.Y) % 2L = 0L then
-                        d
-                    else
-                        C4b.Gray
-                ) |> ignore
-                pi
-
-            let tex = 
-                PixTexture2d(PixImageMipMap [| checkerboardPix :> PixImage |], true) :> ITexture //|> AVal.constant
+            let tex = createTexture d
 
             transact (fun _ -> texture.Value <- tex)
 
@@ -108,21 +122,17 @@ let main argv =
         template.RenderObjects(Ag.Scope.Root).Content |> AVal.force |> HashSet.toList |> List.head |> unbox<RenderObject>
     let cam = viewTrafo |> AVal.map (fun v -> v.Backward.TransformPosProj V3d.Zero)
 
-    let uniforms (t : Trafo3d) =
+    let uniforms (t : Trafo3d) (tex : aval<ITexture>) =
         UniformProvider.ofList [
             "ModelTrafo", AVal.constant t :> IAdaptiveValue
             "ViewTrafo", viewTrafo :> IAdaptiveValue
             "CameraLocation", cam :> IAdaptiveValue
             "LightLocation", cam :> IAdaptiveValue
             "ProjTrafo", projTrafo :> IAdaptiveValue
-            "DiffuseColorTexture", texture :> IAdaptiveValue
+            "DiffuseColorTexture", tex :> IAdaptiveValue
         ]
 
     let things = cset []
-
-    let prepareIt = true
-    let inlineDispose = false
-
 
     let delayedDisposals : ref<list<IRenderObject>> = ref []
 
@@ -143,10 +153,11 @@ let main argv =
             if runs % 10000 = 0 then Log.line "cnt: %A" things.Count
             if rnd.NextDouble() <= 0.5 then
                 let trafo = Trafo3d.Translation(rnd.NextDouble()*10.0,rnd.NextDouble()*10.0,rnd.NextDouble()*10.0)
+
                 let ro = 
                     { template with
                         Id = newId()
-                        Uniforms = uniforms trafo
+                        Uniforms = uniforms trafo (if perObjTexture then AVal.constant (createTexture C4b.Gray) else texture :> aval<_>)
                     } :> IRenderObject
                 
                 transact (fun _ -> 
@@ -169,8 +180,10 @@ let main argv =
             //Thread.Sleep(10)
 
     let cameraThread = startThread cameraMovement
-    let textureThread = startThread updateTexture
-    let addRemoteThread = startThread addThings
+    let textureThread = 
+        if textureTest then startThread updateTexture |> ignore else ()
+    let addRemoteThread = 
+        if addRemoveTest then startThread addThings |> ignore else ()
 
 
     let sg = 

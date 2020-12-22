@@ -192,14 +192,27 @@ type ImmutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, 
                 
 
     override x.MarkObject() =
-        if desc.ieagerDestroy && false then 
-            match handle with
-                | Some(_,h) -> 
-                    desc.idestroy h
-                    handle <- None
-                | None ->
-                    ()
-        true
+        let mutable lockTaken = false
+        try
+            // check if currently rendering, aquire lock. In case of contention, give up, the render task will take care of it 
+            // after rendering. 
+            // there is one issue: i observed finished transactions not resulting in out of date marking of the render task.
+            Monitor.TryEnter(AbstractRenderTask.ResourcesInUse, &lockTaken)
+            if lockTaken then
+                if desc.ieagerDestroy  then 
+                    match handle with
+                        | Some(_,h) -> 
+                            desc.idestroy h
+                            handle <- None
+                        | None ->
+                            ()
+                true
+            else
+                // eager update prevention should kick in against running/updating renderTasks
+                //Log.warn "prevented eager destroy"
+                true
+        finally
+            if lockTaken then Monitor.Exit AbstractRenderTask.ResourcesInUse
 
     override x.Create() =
         input.Acquire()
@@ -1099,6 +1112,7 @@ module Resources =
         override x.GetHandle(token : AdaptiveToken) =
             if x.OutOfDate then
                 let image = image.Update token
+                if image.handle.IsNull then failwith ""
                 let contentVersion = image.handle.Version.GetValue token
 
                 let isIdentical =
