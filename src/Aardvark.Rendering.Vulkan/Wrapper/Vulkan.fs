@@ -8727,7 +8727,6 @@ module Vulkan11 =
                 ] |> sprintf "VkPhysicalDeviceSamplerYcbcrConversionFeatures { %s }"
         end
 
-    type VkPhysicalDeviceShaderDrawParameterFeatures = VkPhysicalDeviceShaderDrawParametersFeatures
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceShaderDrawParametersFeatures =
         struct
@@ -8763,6 +8762,8 @@ module Vulkan11 =
                     sprintf "shaderDrawParameters = %A" x.shaderDrawParameters
                 ] |> sprintf "VkPhysicalDeviceShaderDrawParametersFeatures { %s }"
         end
+
+    type VkPhysicalDeviceShaderDrawParameterFeatures = VkPhysicalDeviceShaderDrawParametersFeatures
 
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceSparseImageFormatInfo2 =
@@ -8857,7 +8858,6 @@ module Vulkan11 =
                 ] |> sprintf "VkPhysicalDeviceSubgroupProperties { %s }"
         end
 
-    type VkPhysicalDeviceVariablePointerFeatures = VkPhysicalDeviceVariablePointersFeatures
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceVariablePointersFeatures =
         struct
@@ -8896,6 +8896,8 @@ module Vulkan11 =
                     sprintf "variablePointers = %A" x.variablePointers
                 ] |> sprintf "VkPhysicalDeviceVariablePointersFeatures { %s }"
         end
+
+    type VkPhysicalDeviceVariablePointerFeatures = VkPhysicalDeviceVariablePointersFeatures
 
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPipelineTessellationDomainOriginStateCreateInfo =
@@ -12283,14 +12285,23 @@ module KHRGetPhysicalDeviceProperties2 =
     open Vulkan12
 
     type VkFormatProperties2KHR = VkFormatProperties2
+
     type VkImageFormatProperties2KHR = VkImageFormatProperties2
+
     type VkPhysicalDeviceFeatures2KHR = VkPhysicalDeviceFeatures2
+
     type VkPhysicalDeviceImageFormatInfo2KHR = VkPhysicalDeviceImageFormatInfo2
+
     type VkPhysicalDeviceMemoryProperties2KHR = VkPhysicalDeviceMemoryProperties2
+
     type VkPhysicalDeviceProperties2KHR = VkPhysicalDeviceProperties2
+
     type VkPhysicalDeviceSparseImageFormatInfo2KHR = VkPhysicalDeviceSparseImageFormatInfo2
+
     type VkQueueFamilyProperties2KHR = VkQueueFamilyProperties2
+
     type VkSparseImageFormatProperties2KHR = VkSparseImageFormatProperties2
+
 
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -13775,11 +13786,17 @@ module KHRExternalMemoryCapabilities =
     type VkExternalMemoryFeatureFlagsKHR = VkExternalMemoryFeatureFlags
 
     type VkExternalBufferPropertiesKHR = VkExternalBufferProperties
+
     type VkExternalImageFormatPropertiesKHR = VkExternalImageFormatProperties
+
     type VkExternalMemoryPropertiesKHR = VkExternalMemoryProperties
+
     type VkPhysicalDeviceExternalBufferInfoKHR = VkPhysicalDeviceExternalBufferInfo
+
     type VkPhysicalDeviceExternalImageFormatInfoKHR = VkPhysicalDeviceExternalImageFormatInfo
+
     type VkPhysicalDeviceIDPropertiesKHR = VkPhysicalDeviceIDProperties
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -13820,8 +13837,11 @@ module KHRExternalMemory =
     open Vulkan12
 
     type VkExportMemoryAllocateInfoKHR = VkExportMemoryAllocateInfo
+
     type VkExternalMemoryBufferCreateInfoKHR = VkExternalMemoryBufferCreateInfo
+
     type VkExternalMemoryImageCreateInfoKHR = VkExternalMemoryImageCreateInfo
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -13849,10 +13869,15 @@ module KHRGetMemoryRequirements2 =
     open Vulkan12
 
     type VkBufferMemoryRequirementsInfo2KHR = VkBufferMemoryRequirementsInfo2
+
     type VkImageMemoryRequirementsInfo2KHR = VkImageMemoryRequirementsInfo2
+
     type VkImageSparseMemoryRequirementsInfo2KHR = VkImageSparseMemoryRequirementsInfo2
+
     type VkMemoryRequirements2KHR = VkMemoryRequirements2
+
     type VkSparseImageMemoryRequirements2KHR = VkSparseImageMemoryRequirements2
+
 
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -13887,7 +13912,9 @@ module KHRDedicatedAllocation =
     open Vulkan12
 
     type VkMemoryDedicatedAllocateInfoKHR = VkMemoryDedicatedAllocateInfo
+
     type VkMemoryDedicatedRequirementsKHR = VkMemoryDedicatedRequirements
+
 
 
 module KHRBindMemory2 =
@@ -13898,7 +13925,9 @@ module KHRBindMemory2 =
     open Vulkan12
 
     type VkBindBufferMemoryInfoKHR = VkBindBufferMemoryInfo
+
     type VkBindImageMemoryInfoKHR = VkBindImageMemoryInfo
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -14119,11 +14148,17 @@ module KHRSamplerYcbcrConversion =
     type VkChromaLocationKHR = VkChromaLocation
 
     type VkBindImagePlaneMemoryInfoKHR = VkBindImagePlaneMemoryInfo
+
     type VkImagePlaneMemoryRequirementsInfoKHR = VkImagePlaneMemoryRequirementsInfo
+
     type VkPhysicalDeviceSamplerYcbcrConversionFeaturesKHR = VkPhysicalDeviceSamplerYcbcrConversionFeatures
+
     type VkSamplerYcbcrConversionCreateInfoKHR = VkSamplerYcbcrConversionCreateInfo
+
     type VkSamplerYcbcrConversionImageFormatPropertiesKHR = VkSamplerYcbcrConversionImageFormatProperties
+
     type VkSamplerYcbcrConversionInfoKHR = VkSamplerYcbcrConversionInfo
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -15269,7 +15304,7 @@ module EXTBufferDeviceAddress =
         end
 
     type VkBufferDeviceAddressInfoEXT = VkBufferDeviceAddressInfo
-    type VkPhysicalDeviceBufferAddressFeaturesEXT = VkPhysicalDeviceBufferDeviceAddressFeaturesEXT
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceBufferDeviceAddressFeaturesEXT =
         struct
@@ -15311,6 +15346,8 @@ module EXTBufferDeviceAddress =
                     sprintf "bufferDeviceAddressMultiDevice = %A" x.bufferDeviceAddressMultiDevice
                 ] |> sprintf "VkPhysicalDeviceBufferDeviceAddressFeaturesEXT { %s }"
         end
+
+    type VkPhysicalDeviceBufferAddressFeaturesEXT = VkPhysicalDeviceBufferDeviceAddressFeaturesEXT
 
 
     [<AutoOpen>]
@@ -16435,7 +16472,9 @@ module KHRMaintenance3 =
     open Vulkan12
 
     type VkDescriptorSetLayoutSupportKHR = VkDescriptorSetLayoutSupport
+
     type VkPhysicalDeviceMaintenance3PropertiesKHR = VkPhysicalDeviceMaintenance3Properties
+
 
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -16463,10 +16502,15 @@ module EXTDescriptorIndexing =
     type VkDescriptorBindingFlagsEXT = VkDescriptorBindingFlags
 
     type VkDescriptorSetLayoutBindingFlagsCreateInfoEXT = VkDescriptorSetLayoutBindingFlagsCreateInfo
+
     type VkDescriptorSetVariableDescriptorCountAllocateInfoEXT = VkDescriptorSetVariableDescriptorCountAllocateInfo
+
     type VkDescriptorSetVariableDescriptorCountLayoutSupportEXT = VkDescriptorSetVariableDescriptorCountLayoutSupport
+
     type VkPhysicalDeviceDescriptorIndexingFeaturesEXT = VkPhysicalDeviceDescriptorIndexingFeatures
+
     type VkPhysicalDeviceDescriptorIndexingPropertiesEXT = VkPhysicalDeviceDescriptorIndexingProperties
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -18024,7 +18068,9 @@ module KHRDeviceGroupCreation =
     open Vulkan12
 
     type VkDeviceGroupDeviceCreateInfoKHR = VkDeviceGroupDeviceCreateInfo
+
     type VkPhysicalDeviceGroupPropertiesKHR = VkPhysicalDeviceGroupProperties
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -18059,10 +18105,15 @@ module KHRDeviceGroup =
     type VkMemoryAllocateFlagsKHR = VkMemoryAllocateFlags
 
     type VkDeviceGroupBindSparseInfoKHR = VkDeviceGroupBindSparseInfo
+
     type VkDeviceGroupCommandBufferBeginInfoKHR = VkDeviceGroupCommandBufferBeginInfo
+
     type VkDeviceGroupRenderPassBeginInfoKHR = VkDeviceGroupRenderPassBeginInfo
+
     type VkDeviceGroupSubmitInfoKHR = VkDeviceGroupSubmitInfo
+
     type VkMemoryAllocateFlagsInfoKHR = VkMemoryAllocateFlagsInfo
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -18103,7 +18154,9 @@ module KHRDeviceGroup =
 
     module KHRBindMemory2 =
         type VkBindBufferMemoryDeviceGroupInfoKHR = VkBindBufferMemoryDeviceGroupInfo
+
         type VkBindImageMemoryDeviceGroupInfoKHR = VkBindImageMemoryDeviceGroupInfo
+
 
         [<AutoOpen>]
         module EnumExtensions =
@@ -18116,6 +18169,7 @@ module KHRDeviceGroup =
 
         type VkDeviceGroupPresentCapabilitiesKHR = KHRSwapchain.Vulkan11.VkDeviceGroupPresentCapabilitiesKHR
 
+
         module VkRaw =
             let vkGetDeviceGroupPresentCapabilitiesKHR = KHRSwapchain.Vulkan11.VkRaw.vkGetDeviceGroupPresentCapabilitiesKHR
             let vkGetDeviceGroupSurfacePresentModesKHR = KHRSwapchain.Vulkan11.VkRaw.vkGetDeviceGroupSurfacePresentModesKHR
@@ -18123,10 +18177,15 @@ module KHRDeviceGroup =
 
     module KHRSwapchain =
         type VkAcquireNextImageInfoKHR = KHRSwapchain.Vulkan11.VkAcquireNextImageInfoKHR
+
         type VkBindImageMemorySwapchainInfoKHR = KHRSwapchain.Vulkan11.VkBindImageMemorySwapchainInfoKHR
+
         type VkDeviceGroupPresentInfoKHR = KHRSwapchain.Vulkan11.VkDeviceGroupPresentInfoKHR
+
         type VkDeviceGroupSwapchainCreateInfoKHR = KHRSwapchain.Vulkan11.VkDeviceGroupSwapchainCreateInfoKHR
+
         type VkImageSwapchainCreateInfoKHR = KHRSwapchain.Vulkan11.VkImageSwapchainCreateInfoKHR
+
 
         [<AutoOpen>]
         module EnumExtensions =
@@ -18545,6 +18604,7 @@ module EXTHostQueryReset =
 
     type VkPhysicalDeviceHostQueryResetFeaturesEXT = VkPhysicalDeviceHostQueryResetFeatures
 
+
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
         type VkResetQueryPoolEXTDel = delegate of VkDevice * VkQueryPool * uint32 * uint32 -> unit
@@ -18565,6 +18625,7 @@ module KHRImageFormatList =
     open Vulkan12
 
     type VkImageFormatListCreateInfoKHR = VkImageFormatListCreateInfo
+
 
 
 module EXTImageDrmFormatModifier =
@@ -20260,7 +20321,9 @@ module EXTSamplerFilterMinmax =
     type VkSamplerReductionModeEXT = VkSamplerReductionMode
 
     type VkPhysicalDeviceSamplerFilterMinmaxPropertiesEXT = VkPhysicalDeviceSamplerFilterMinmaxProperties
+
     type VkSamplerReductionModeCreateInfoEXT = VkSamplerReductionModeCreateInfo
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -20285,6 +20348,7 @@ module EXTScalarBlockLayout =
     type VkPhysicalDeviceScalarBlockLayoutFeaturesEXT = VkPhysicalDeviceScalarBlockLayoutFeatures
 
 
+
 module EXTSeparateStencilUsage =
     let Name = "VK_EXT_separate_stencil_usage"
     let Number = 247
@@ -20293,6 +20357,7 @@ module EXTSeparateStencilUsage =
     open Vulkan12
 
     type VkImageStencilUsageCreateInfoEXT = VkImageStencilUsageCreateInfo
+
 
 
 module EXTShaderAtomicFloat =
@@ -22232,7 +22297,6 @@ module INTELPerformanceQuery =
                 ] |> sprintf "VkPerformanceValueINTEL { %s }"
         end
 
-    type VkQueryPoolCreateInfoINTEL = VkQueryPoolPerformanceQueryCreateInfoINTEL
     [<StructLayout(LayoutKind.Sequential)>]
     type VkQueryPoolPerformanceQueryCreateInfoINTEL =
         struct
@@ -22268,6 +22332,8 @@ module INTELPerformanceQuery =
                     sprintf "performanceCountersSampling = %A" x.performanceCountersSampling
                 ] |> sprintf "VkQueryPoolPerformanceQueryCreateInfoINTEL { %s }"
         end
+
+    type VkQueryPoolCreateInfoINTEL = VkQueryPoolPerformanceQueryCreateInfoINTEL
 
 
     [<AutoOpen>]
@@ -22398,6 +22464,7 @@ module KHR16bitStorage =
     type VkPhysicalDevice16BitStorageFeaturesKHR = VkPhysicalDevice16BitStorageFeatures
 
 
+
 module KHR8bitStorage =
     let Name = "VK_KHR_8bit_storage"
     let Number = 178
@@ -22412,6 +22479,7 @@ module KHR8bitStorage =
     type VkPhysicalDevice8BitStorageFeaturesKHR = VkPhysicalDevice8BitStorageFeatures
 
 
+
 module KHRBufferDeviceAddress =
     let Name = "VK_KHR_buffer_device_address"
     let Number = 258
@@ -22423,10 +22491,15 @@ module KHRBufferDeviceAddress =
     open Vulkan12
 
     type VkBufferDeviceAddressInfoKHR = VkBufferDeviceAddressInfo
+
     type VkBufferOpaqueCaptureAddressCreateInfoKHR = VkBufferOpaqueCaptureAddressCreateInfo
+
     type VkDeviceMemoryOpaqueCaptureAddressInfoKHR = VkDeviceMemoryOpaqueCaptureAddressInfo
+
     type VkMemoryOpaqueCaptureAddressAllocateInfoKHR = VkMemoryOpaqueCaptureAddressAllocateInfo
+
     type VkPhysicalDeviceBufferDeviceAddressFeaturesKHR = VkPhysicalDeviceBufferDeviceAddressFeatures
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -24203,10 +24276,15 @@ module KHRMaintenance2 =
     type VkTessellationDomainOriginKHR = VkTessellationDomainOrigin
 
     type VkImageViewUsageCreateInfoKHR = VkImageViewUsageCreateInfo
+
     type VkInputAttachmentAspectReferenceKHR = VkInputAttachmentAspectReference
+
     type VkPhysicalDevicePointClippingPropertiesKHR = VkPhysicalDevicePointClippingProperties
+
     type VkPipelineTessellationDomainOriginStateCreateInfoKHR = VkPipelineTessellationDomainOriginStateCreateInfo
+
     type VkRenderPassInputAttachmentAspectCreateInfoKHR = VkRenderPassInputAttachmentAspectCreateInfo
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -24235,8 +24313,11 @@ module KHRMultiview =
     open Vulkan12
 
     type VkPhysicalDeviceMultiviewFeaturesKHR = VkPhysicalDeviceMultiviewFeatures
+
     type VkPhysicalDeviceMultiviewPropertiesKHR = VkPhysicalDeviceMultiviewProperties
+
     type VkRenderPassMultiviewCreateInfoKHR = VkRenderPassMultiviewCreateInfo
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -24257,12 +24338,19 @@ module KHRCreateRenderpass2 =
     open Vulkan12
 
     type VkAttachmentDescription2KHR = VkAttachmentDescription2
+
     type VkAttachmentReference2KHR = VkAttachmentReference2
+
     type VkRenderPassCreateInfo2KHR = VkRenderPassCreateInfo2
+
     type VkSubpassBeginInfoKHR = VkSubpassBeginInfo
+
     type VkSubpassDependency2KHR = VkSubpassDependency2
+
     type VkSubpassDescription2KHR = VkSubpassDescription2
+
     type VkSubpassEndInfoKHR = VkSubpassEndInfo
+
 
     module VkRaw =
         [<SuppressUnmanagedCodeSecurity>]
@@ -24307,7 +24395,9 @@ module KHRDepthStencilResolve =
     type VkResolveModeFlagsKHR = VkResolveModeFlags
 
     type VkPhysicalDeviceDepthStencilResolvePropertiesKHR = VkPhysicalDeviceDepthStencilResolveProperties
+
     type VkSubpassDescriptionDepthStencilResolveKHR = VkSubpassDescriptionDepthStencilResolve
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -24426,7 +24516,9 @@ module KHRDescriptorUpdateTemplate =
     type VkDescriptorUpdateTemplateTypeKHR = VkDescriptorUpdateTemplateType
 
     type VkDescriptorUpdateTemplateCreateInfoKHR = VkDescriptorUpdateTemplateCreateInfo
+
     type VkDescriptorUpdateTemplateEntryKHR = VkDescriptorUpdateTemplateEntry
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -24583,7 +24675,9 @@ module KHRDriverProperties =
     type VkDriverIdKHR = VkDriverId
 
     type VkConformanceVersionKHR = VkConformanceVersion
+
     type VkPhysicalDeviceDriverPropertiesKHR = VkPhysicalDeviceDriverProperties
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -24616,8 +24710,11 @@ module KHRExternalFenceCapabilities =
     type VkExternalFenceFeatureFlagsKHR = VkExternalFenceFeatureFlags
 
     type VkExternalFencePropertiesKHR = VkExternalFenceProperties
+
     type VkPhysicalDeviceExternalFenceInfoKHR = VkPhysicalDeviceExternalFenceInfo
+
     type VkPhysicalDeviceIDPropertiesKHR = KHRExternalMemoryCapabilities.VkPhysicalDeviceIDPropertiesKHR
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -24656,6 +24753,7 @@ module KHRExternalFence =
     type VkFenceImportFlagsKHR = VkFenceImportFlags
 
     type VkExportFenceCreateInfoKHR = VkExportFenceCreateInfo
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -25139,8 +25237,11 @@ module KHRExternalSemaphoreCapabilities =
     type VkExternalSemaphoreFeatureFlagsKHR = VkExternalSemaphoreFeatureFlags
 
     type VkExternalSemaphorePropertiesKHR = VkExternalSemaphoreProperties
+
     type VkPhysicalDeviceExternalSemaphoreInfoKHR = VkPhysicalDeviceExternalSemaphoreInfo
+
     type VkPhysicalDeviceIDPropertiesKHR = KHRExternalMemoryCapabilities.VkPhysicalDeviceIDPropertiesKHR
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -25180,6 +25281,7 @@ module KHRExternalSemaphore =
     type VkSemaphoreImportFlagsKHR = VkSemaphoreImportFlags
 
     type VkExportSemaphoreCreateInfoKHR = VkExportSemaphoreCreateInfo
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -26059,9 +26161,13 @@ module KHRImagelessFramebuffer =
     open Vulkan12
 
     type VkFramebufferAttachmentImageInfoKHR = VkFramebufferAttachmentImageInfo
+
     type VkFramebufferAttachmentsCreateInfoKHR = VkFramebufferAttachmentsCreateInfo
+
     type VkPhysicalDeviceImagelessFramebufferFeaturesKHR = VkPhysicalDeviceImagelessFramebufferFeatures
+
     type VkRenderPassAttachmentBeginInfoKHR = VkRenderPassAttachmentBeginInfo
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -27072,6 +27178,7 @@ module KHRShaderFloatControls =
 
     type VkPhysicalDeviceFloatControlsPropertiesKHR = VkPhysicalDeviceFloatControlsProperties
 
+
     [<AutoOpen>]
     module EnumExtensions =
          type VkShaderFloatControlsIndependence with
@@ -27598,8 +27705,11 @@ module KHRSeparateDepthStencilLayouts =
     open Vulkan12
 
     type VkAttachmentDescriptionStencilLayoutKHR = VkAttachmentDescriptionStencilLayout
+
     type VkAttachmentReferenceStencilLayoutKHR = VkAttachmentReferenceStencilLayout
+
     type VkPhysicalDeviceSeparateDepthStencilLayoutsFeaturesKHR = VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -27621,6 +27731,7 @@ module KHRShaderAtomicInt64 =
     open Vulkan12
 
     type VkPhysicalDeviceShaderAtomicInt64FeaturesKHR = VkPhysicalDeviceShaderAtomicInt64Features
+
 
 
 module KHRShaderClock =
@@ -27692,7 +27803,9 @@ module KHRShaderFloat16Int8 =
     open Vulkan12
 
     type VkPhysicalDeviceFloat16Int8FeaturesKHR = VkPhysicalDeviceShaderFloat16Int8Features
+
     type VkPhysicalDeviceShaderFloat16Int8FeaturesKHR = VkPhysicalDeviceShaderFloat16Int8Features
+
 
 
 module KHRShaderNonSemanticInfo =
@@ -27710,6 +27823,7 @@ module KHRShaderSubgroupExtendedTypes =
     open Vulkan12
 
     type VkPhysicalDeviceShaderSubgroupExtendedTypesFeaturesKHR = VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures
+
 
 
 module KHRShaderTerminateInvocation =
@@ -27912,11 +28026,17 @@ module KHRTimelineSemaphore =
     type VkSemaphoreWaitFlagsKHR = VkSemaphoreWaitFlags
 
     type VkPhysicalDeviceTimelineSemaphoreFeaturesKHR = VkPhysicalDeviceTimelineSemaphoreFeatures
+
     type VkPhysicalDeviceTimelineSemaphorePropertiesKHR = VkPhysicalDeviceTimelineSemaphoreProperties
+
     type VkSemaphoreSignalInfoKHR = VkSemaphoreSignalInfo
+
     type VkSemaphoreTypeCreateInfoKHR = VkSemaphoreTypeCreateInfo
+
     type VkSemaphoreWaitInfoKHR = VkSemaphoreWaitInfo
+
     type VkTimelineSemaphoreSubmitInfoKHR = VkTimelineSemaphoreSubmitInfo
+
 
     [<AutoOpen>]
     module EnumExtensions =
@@ -27961,6 +28081,7 @@ module KHRUniformBufferStandardLayout =
     type VkPhysicalDeviceUniformBufferStandardLayoutFeaturesKHR = VkPhysicalDeviceUniformBufferStandardLayoutFeatures
 
 
+
 module KHRVariablePointers =
     let Name = "VK_KHR_variable_pointers"
     let Number = 121
@@ -27973,7 +28094,9 @@ module KHRVariablePointers =
     open Vulkan12
 
     type VkPhysicalDeviceVariablePointerFeaturesKHR = VkPhysicalDeviceVariablePointersFeatures
+
     type VkPhysicalDeviceVariablePointersFeaturesKHR = VkPhysicalDeviceVariablePointersFeatures
+
 
 
 module KHRVulkanMemoryModel =
@@ -27984,6 +28107,7 @@ module KHRVulkanMemoryModel =
     open Vulkan12
 
     type VkPhysicalDeviceVulkanMemoryModelFeaturesKHR = VkPhysicalDeviceVulkanMemoryModelFeatures
+
 
 
 module KHRWaylandSurface =
@@ -30988,6 +31112,7 @@ module NVRayTracing =
 
 
     type VkAabbPositionsNV = VkAabbPositionsKHR
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkGeometryTrianglesNV =
         struct
@@ -31251,6 +31376,7 @@ module NVRayTracing =
         end
 
     type VkAccelerationStructureInstanceNV = VkAccelerationStructureInstanceKHR
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkAccelerationStructureMemoryRequirementsInfoNV =
         struct
@@ -31339,6 +31465,7 @@ module NVRayTracing =
         end
 
     type VkMemoryRequirements2KHR = KHRGetMemoryRequirements2.VkMemoryRequirements2KHR
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPhysicalDeviceRayTracingPropertiesNV =
         struct
@@ -31505,6 +31632,7 @@ module NVRayTracing =
         end
 
     type VkTransformMatrixNV = VkTransformMatrixKHR
+
     [<StructLayout(LayoutKind.Sequential)>]
     type VkWriteDescriptorSetAccelerationStructureNV =
         struct

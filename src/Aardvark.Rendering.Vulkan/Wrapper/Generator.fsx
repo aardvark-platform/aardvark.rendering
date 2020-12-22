@@ -354,10 +354,18 @@ module Struct =
         let graph =
             s |> List.map (fun s ->
                     let usedTypes =
-                        s.fields
-                          |> List.map (fun f -> f.typ)
-                          |> List.map Type.baseType
-                          |> List.choose (fun m -> Map.tryFind m typeMap)
+                        let fields =
+                            s.fields
+                            |> List.map (fun f -> f.typ)
+                            |> List.map Type.baseType
+                            |> List.choose (fun m -> Map.tryFind m typeMap)
+
+                        let alias =
+                            s.alias
+                            |> Option.bind (fun a -> Map.tryFind a typeMap)
+                            |> Option.toList
+
+                        fields @ alias
 
                     s, usedTypes
 
@@ -1480,8 +1488,10 @@ module FSharpWriter =
             match s.alias, tryGetTypeAlias location s.name with
             | _, Some alias ->
                 printfn "type %s = %s" s.name alias
+                printfn ""
             | Some alias, _ ->
                 printfn "type %s = %s" s.name alias
+                printfn ""
             | None, None ->
 
                 if s.isUnion then printfn "[<StructLayout(LayoutKind.Explicit)>]"
