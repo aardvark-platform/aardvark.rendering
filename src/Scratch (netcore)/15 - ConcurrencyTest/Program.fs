@@ -6,6 +6,7 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.SceneGraph.Semantics
 open Aardvark.Application.Slim
+open System
 
 // This example illustrates how to render a simple triangle using aardvark.
 
@@ -13,12 +14,22 @@ open Aardvark.Application.Slim
 let main argv = 
     
 
-    
-    let prepareIt = true
+    (* failure cases: https://github.com/aardvark-platform/aardvark.rendering/issues/69
+
+        Gl/Vk:
+            prepareIt, inlineDispoe
+
+        Vk: 
+            prepareTexture -> race condition with copy engine. can be avoided by using sync upload mode
+        or locking using ResourceInUse lock. while rendering hand-over to copy engine which needs to deal with many uploads and crashes in driver
+
+    *)
+
+    let prepareIt = false
     let inlineDispose = false
     let perObjTexture = true
-    
-    let addRemoveTest = false
+    let prepareTexture = true
+    let addRemoveTest = true
     let textureTest = true
     
     Aardvark.Init()
@@ -35,8 +46,8 @@ let main argv =
     //    }
 
 
-    use app = new VulkanApplication()
-    //use app = new OpenGlApplication()
+    //use app = new VulkanApplication()
+    use app = new OpenGlApplication()
     let win = app.CreateGameWindow(1)
 
     let signature =
@@ -154,10 +165,31 @@ let main argv =
             if rnd.NextDouble() <= 0.5 then
                 let trafo = Trafo3d.Translation(rnd.NextDouble()*10.0,rnd.NextDouble()*10.0,rnd.NextDouble()*10.0)
 
+                let texture,activate = 
+                    if perObjTexture then
+                         let tex = createTexture C4b.Gray
+                         if prepareTexture then 
+                            let pTex = 
+                                let lockObj = match app.Runtime :> obj with :? Aardvark.Rendering.Vulkan.Runtime -> AbstractRenderTask.ResourcesInUse | _ -> obj()
+                                lock AbstractRenderTask.ResourcesInUse (fun _ -> 
+                                    win.Runtime.PrepareTexture(tex) 
+                                )
+                            let activate = 
+                                { new IDisposable with
+                                    member x.Dispose() = 
+                                        win.Runtime.DeleteTexture pTex
+                                }
+                            AVal.constant (pTex :> ITexture), fun () -> activate
+                         else 
+                            AVal.constant tex, template.Activate
+                    else texture :> aval<_>, template.Activate
+
+
                 let ro = 
                     { template with
                         Id = newId()
-                        Uniforms = uniforms trafo (if perObjTexture then AVal.constant (createTexture C4b.Gray) else texture :> aval<_>)
+                        Uniforms = uniforms trafo texture
+                        Activate = activate
                     } :> IRenderObject
                 
                 transact (fun _ -> 
