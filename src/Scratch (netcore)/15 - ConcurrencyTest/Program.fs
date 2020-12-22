@@ -16,8 +16,8 @@ let main argv =
 
     (* failure cases: https://github.com/aardvark-platform/aardvark.rendering/issues/69
 
-        Gl/Vk:
-            prepareIt, inlineDispoe
+        Vk:
+            prepareIt,inlineDispose
 
         Vk: 
             prepareTexture -> race condition with copy engine. can be avoided by using sync upload mode
@@ -29,8 +29,9 @@ let main argv =
     let inlineDispose = false
     let perObjTexture = true
     let prepareTexture = true
-    let addRemoveTest = true
+    let addRemoveTest = false
     let textureTest = true
+    let jitterFrames = true
     
     Aardvark.Init()
 
@@ -46,8 +47,8 @@ let main argv =
     //    }
 
 
-    //use app = new VulkanApplication()
-    use app = new OpenGlApplication()
+    use app = new VulkanApplication()
+    //use app = new OpenGlApplication()
     let win = app.CreateGameWindow(1)
 
     let signature =
@@ -171,7 +172,8 @@ let main argv =
                          if prepareTexture then 
                             let pTex = 
                                 let lockObj = match app.Runtime :> obj with :? Aardvark.Rendering.Vulkan.Runtime -> AbstractRenderTask.ResourcesInUse | _ -> obj()
-                                lock AbstractRenderTask.ResourcesInUse (fun _ -> 
+                                let lockObj = obj()
+                                lock lockObj (fun _ -> 
                                     win.Runtime.PrepareTexture(tex) 
                                 )
                             let activate = 
@@ -192,8 +194,9 @@ let main argv =
                         Activate = activate
                     } :> IRenderObject
                 
+                let prep = if prepareIt then win.Runtime.PrepareRenderObject(signature,ro) :> IRenderObject else ro
+
                 transact (fun _ -> 
-                    let prep = if prepareIt then win.Runtime.PrepareRenderObject(signature,ro) :> IRenderObject else ro
                     things.Add prep |> ignore
                 )
             elif things.Count > 0 then
@@ -201,13 +204,14 @@ let main argv =
                 if rndIndx < things.Count - 1 then
                     let nth = Seq.item rndIndx things
                     
+
                     transact (fun _ -> 
-                        if inlineDispose then
-                            match nth with | :? IPreparedRenderObject as p -> p.Dispose() | _ -> ()
-                        else
-                            delayedDisposals := nth :: !delayedDisposals
                         things.Remove nth |> ignore
+                        if not inlineDispose && prepareIt then delayedDisposals := nth :: !delayedDisposals
                     )
+
+                    if inlineDispose && prepareIt then
+                        match nth with | :? IPreparedRenderObject as p -> p.Dispose() | _ -> ()
             runs <- runs + 1
             //Thread.Sleep(10)
 
@@ -226,13 +230,17 @@ let main argv =
                 do! DefaultSurfaces.diffuseTexture
                 do! DefaultSurfaces.simpleLighting
             }
-        |> Sg.andAlso (Sg.renderObjectSet (things :> aset<_>))
+        //|> Sg.andAlso (Sg.renderObjectSet (things :> aset<_>))
         |> Sg.diffuseTexture texture
         |> Sg.viewTrafo viewTrafo
         |> Sg.projTrafo projTrafo
-    
-    // show the window
-    win.RenderTask <- win.Runtime.CompileRender(signature,sg)
+
+    win.RenderTask <- 
+        let rnd = System.Random()
+        RenderTask.ofList [
+            if jitterFrames then RenderTask.custom (fun (a,rt,ot) -> Thread.Sleep(rnd.Next(0,100))) else RenderTask.empty
+            win.Runtime.CompileRender(signature,sg)
+        ]
     //win.Scene <- sg
     win.Run()
 

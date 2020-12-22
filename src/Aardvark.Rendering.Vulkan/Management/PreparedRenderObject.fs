@@ -35,7 +35,9 @@ type PreparedRenderObject =
     member x.AttributeScope = x.original.AttributeScope
 
     member x.Dispose() =
-        for r in x.resources do r.Release()
+        lock AbstractRenderTask.ResourcesInUse (fun _ -> 
+            for r in x.resources do r.Release()
+        )
 
     member x.Update(caller : AdaptiveToken, token : RenderToken) =
         for r in x.resources do r.Update(caller) |> ignore
@@ -67,7 +69,9 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
     member x.Children = children
 
     member x.Dispose() =
-        children |> List.iter (fun c -> c.Dispose())
+        lock AbstractRenderTask.ResourcesInUse (fun _ -> 
+            children |> List.iter (fun c -> c.Dispose())
+        )
 
     member x.Update(caller : AdaptiveToken, token : RenderToken) =
         children |> List.iter (fun c -> c.Update(caller, token))

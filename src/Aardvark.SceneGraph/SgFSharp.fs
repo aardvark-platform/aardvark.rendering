@@ -485,7 +485,7 @@ module SgFSharp =
             Sg.OverlayNode(task) :> ISg
 
         let renderObjectSet (s : #aset<IRenderObject>) = 
-            Sg.RenderObjectSet(s) :> ISg
+            Sg.RenderObjectNode(s) :> ISg
 
 
     type IndexedGeometry with
