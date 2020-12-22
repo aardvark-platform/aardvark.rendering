@@ -49,7 +49,7 @@ module DescriptorSet =
                     let! pHandle = VkDescriptorSet.Null
                     let res = VkRaw.vkAllocateDescriptorSets(pool.Device.Handle, pInfo, pHandle)
 
-                    if res = VkResult.VkErrorFragmentedPool then
+                    if res = VkResult.ErrorFragmentedPool then
                         return None
                     else
                         res |> check "could not allocate DescriptorSet"

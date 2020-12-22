@@ -133,7 +133,7 @@ module StopwatchPool =
             let stampCount = 2 * count
             let! pInfo =
                 VkQueryPoolCreateInfo(
-                    VkQueryPoolCreateFlags.MinValue,
+                    VkQueryPoolCreateFlags.None,
                     VkQueryType.Timestamp,
                     uint32 stampCount,
                     VkQueryPipelineStatisticFlags.None

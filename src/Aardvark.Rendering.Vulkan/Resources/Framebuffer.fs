@@ -68,7 +68,7 @@ module Framebuffer =
             let! pAttachments = attachments |> Array.map (fun a -> a.Handle)
             let! pInfo =
                 VkFramebufferCreateInfo(
-                    VkFramebufferCreateFlags.MinValue,
+                    VkFramebufferCreateFlags.None,
                     pass.Handle,
                     uint32 attachments.Length, pAttachments,
                     uint32 minSize.X,

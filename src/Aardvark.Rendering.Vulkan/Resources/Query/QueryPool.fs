@@ -22,7 +22,7 @@ module QueryPool =
         native {
             let! pInfo =
                 VkQueryPoolCreateInfo(
-                    VkQueryPoolCreateFlags.MinValue,
+                    VkQueryPoolCreateFlags.None,
                     typ, uint32 cnt, flags
                 )
 
@@ -36,8 +36,9 @@ module QueryPool =
     let delete (pool : QueryPool) =
         VkRaw.vkDestroyQueryPool(pool.Device.Handle, pool.Handle, NativePtr.zero)
 
-    let reset (pool : QueryPool) =
-        VkRaw.vkResetQueryPool(pool.Device.Handle, pool.Handle, 0u, uint32 pool.Count)
+    // Needs Vulkan 1.2 or EXTHostQueryReset
+    //let reset (pool : QueryPool) =
+    //    VkRaw.vkResetQueryPool(pool.Device.Handle, pool.Handle, 0u, uint32 pool.Count)
 
     let private getResults (valuesPerQuery : int) (flags : VkQueryResultFlags) (pool : QueryPool) =
         let bufferLength = pool.Count * valuesPerQuery
@@ -57,8 +58,8 @@ module QueryPool =
                 )
 
             match result with
-            | VkResult.VkSuccess -> Some data
-            | VkResult.VkNotReady -> None
+            | VkResult.Success -> Some data
+            | VkResult.NotReady -> None
             | _ -> result |> check "failed to get query results" |> unbox
 
         finally

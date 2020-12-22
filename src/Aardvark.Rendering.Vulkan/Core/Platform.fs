@@ -10,6 +10,7 @@ open Aardvark.Base
 open System.Reflection
 open KHRGetPhysicalDeviceProperties2
 open KHRExternalMemoryCapabilities
+open Vulkan11
 
 #nowarn "9"
 // #nowarn "51"
@@ -104,7 +105,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                     
                 let! pInfo =
                     VkInstanceCreateInfo(
-                        VkInstanceCreateFlags.MinValue,
+                        VkInstanceCreateFlags.None,
                         pApplicationInfo,
                         uint32 layers.Length, pLayers,
                         uint32 extensions.Length, pExtensions
@@ -113,7 +114,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                 
                 let res = VkRaw.vkCreateInstance(pInfo, NativePtr.zero, pInstance)
                 let instance = NativePtr.read pInstance
-                if res = VkResult.VkSuccess then 
+                if res = VkResult.Success then 
                     return Some (instance, apiVersion)
                 elif apiVersion.Minor > 0 then
                     return tryCreate (Version(apiVersion.Major, apiVersion.Minor - 1, apiVersion.Build))
@@ -524,7 +525,6 @@ module Instance =
         let DisplaySwapChain                = KHRDisplaySwapchain.Name
 
         let AndroidSurface                  = KHRAndroidSurface.Name
-        let MirSurface                      = KHRMirSurface.Name
         let WaylandSurface                  = KHRWaylandSurface.Name
         let Win32Surface                    = KHRWin32Surface.Name
         let XcbSurface                      = KHRXcbSurface.Name

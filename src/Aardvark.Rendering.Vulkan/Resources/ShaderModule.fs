@@ -70,7 +70,7 @@ module ShaderModule =
             let! pBinary = binary
             let! pInfo =
                 VkShaderModuleCreateInfo(
-                    VkShaderModuleCreateFlags.MinValue,
+                    VkShaderModuleCreateFlags.None,
                     uint64 binary.LongLength,
                     NativePtr.cast pBinary
                 )

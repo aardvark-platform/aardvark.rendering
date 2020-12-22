@@ -90,7 +90,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
 
                 let! pInfo =
                     VkSwapchainCreateInfoKHR(
-                        VkSwapchainCreateFlagsKHR.MinValue,
+                        VkSwapchainCreateFlagsKHR.None,
 
                         surface.Handle,
                         uint32 description.buffers,

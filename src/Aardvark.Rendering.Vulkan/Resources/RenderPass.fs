@@ -97,7 +97,7 @@ module RenderPass =
             let! pColorReferences = colorReferences
             let! pSubpassDescription =
                 VkSubpassDescription(
-                    VkSubpassDescriptionFlags.MinValue,
+                    VkSubpassDescriptionFlags.None,
                     VkPipelineBindPoint.Graphics,
 
                     //inputs
@@ -188,7 +188,7 @@ module RenderPass =
             let! pAttachmentDescriptions = attachmentDescriptions
             let! pInfo =
                 VkRenderPassCreateInfo(
-                    VkRenderPassCreateFlags.MinValue,
+                    VkRenderPassCreateFlags.None,
                     uint32 attachmentDescriptions.Length, pAttachmentDescriptions,
                     1u, pSubpassDescription,
                     0u, NativePtr.zero

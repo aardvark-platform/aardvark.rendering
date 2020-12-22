@@ -10,6 +10,7 @@ open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 open Aardvark.Rendering
 open KHRSwapchain
+open Vulkan11
 
 #nowarn "9"
 //// #nowarn "51"
@@ -195,7 +196,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
                 |> Dictionary.toArray 
                 |> Array.map (fun (familyIndex, count) ->
                     VkDeviceQueueCreateInfo(
-                        VkDeviceQueueCreateFlags.MinValue,
+                        VkDeviceQueueCreateFlags.None,
                         uint32 familyIndex,
                         uint32 count,
                         queuePriorities
@@ -227,7 +228,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
             let! pInfo =
                 VkDeviceCreateInfo(
                     next,
-                    VkDeviceCreateFlags.MinValue,
+                    VkDeviceCreateFlags.None,
                     uint32 queueInfos.Length, ptr,
                     0u, NativePtr.zero,
                     uint32 extensions.Length, pExtensions,
@@ -1633,14 +1634,14 @@ and Fence internal(device : Device, signaled : bool) =
     member x.Signaled =
         let handle = NativePtr.read pFence
         if handle.IsValid then
-            VkRaw.vkGetFenceStatus(device.Handle, handle) = VkResult.VkSuccess
+            VkRaw.vkGetFenceStatus(device.Handle, handle) = VkResult.Success
         else
             true
 
     member x.Completed =
         let handle = NativePtr.read pFence
         if handle.IsValid then
-            VkRaw.vkGetFenceStatus(device.Handle, handle) <> VkResult.VkNotReady
+            VkRaw.vkGetFenceStatus(device.Handle, handle) <> VkResult.NotReady
         else
             true
 
@@ -1656,9 +1657,9 @@ and Fence internal(device : Device, signaled : bool) =
     member x.TryWait(timeoutInNanoseconds : int64) =
         let waitResult = VkRaw.vkWaitForFences(device.Handle, 1u, pFence, 1u, uint64 timeoutInNanoseconds)
         match waitResult with
-            | VkResult.VkTimeout -> 
+            | VkResult.Timeout -> 
                 false
-            | VkResult.VkSuccess -> 
+            | VkResult.Success -> 
                 true
             | err -> 
                 failf "could not wait for fences: %A" err
@@ -1742,8 +1743,8 @@ and Event internal(device : Device) =
     member x.IsSet =
         if handle.IsValid then
             let res = VkRaw.vkGetEventStatus(device.Handle, handle)
-            if res = VkResult.VkEventSet then true
-            elif res = VkResult.VkEventReset then false
+            if res = VkResult.EventSet then true
+            elif res = VkResult.EventReset then false
             else failf "could not get event status"
         else
             failf "could not get event status"
@@ -1792,7 +1793,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
         let hostPtr = 
             if hostVisible then
                 temporary<nativeint, nativeint> (fun pPtr ->
-                    VkRaw.vkMapMemory(device.Handle, mem, 0UL, 16UL, VkMemoryMapFlags.MinValue, pPtr)
+                    VkRaw.vkMapMemory(device.Handle, mem, 0UL, 16UL, VkMemoryMapFlags.None, pPtr)
                         |> check "could not map memory"
                     NativePtr.read pPtr
                 )
@@ -1855,7 +1856,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                 let hostPtr = 
                     if hostVisible then
                         temporary<nativeint, nativeint> (fun pPtr ->
-                            VkRaw.vkMapMemory(device.Handle, mem, 0UL, uint64 size, VkMemoryMapFlags.MinValue, pPtr)
+                            VkRaw.vkMapMemory(device.Handle, mem, 0UL, uint64 size, VkMemoryMapFlags.None, pPtr)
                                 |> check "could not map memory"
                             NativePtr.read pPtr
                         )
@@ -2575,7 +2576,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                 buffer := arr.[0]
                 return res
             }
-        if res <> VkResult.VkSuccess then
+        if res <> VkResult.Success then
             System.Diagnostics.Debugger.Launch() |> ignore
             acquireNextImage queue swapchain buffer fence
             //|> check "could not acquire Swapchain Image"
@@ -2585,7 +2586,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
             let arr = [| !buffer |]
             let! pHandle = [| swapchain |]
             let! pArr = arr
-            let! pResult = [| VkResult.VkSuccess |]
+            let! pResult = [| VkResult.Success |]
 
             let! pInfo =
                 [|

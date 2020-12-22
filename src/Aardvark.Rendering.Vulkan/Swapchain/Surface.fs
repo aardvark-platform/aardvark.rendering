@@ -12,7 +12,6 @@ open Microsoft.FSharp.NativeInterop
 open KHRSurface
 open KHRWin32Surface
 open KHRXlibSurface
-open KHRMirSurface
 open KHRAndroidSurface
 open KHRXcbSurface
 open KHRWaylandSurface
@@ -214,7 +213,7 @@ module Surface =
                 | XLib info ->
                     let! pInfo = 
                         VkXlibSurfaceCreateInfoKHR(
-                            VkXlibSurfaceCreateFlagsKHR.MinValue,
+                            VkXlibSurfaceCreateFlagsKHR.None,
                             info.dpy,
                             info.window
                         )
@@ -225,7 +224,7 @@ module Surface =
                 | Xcb info ->
                     let! pInfo =
                         VkXcbSurfaceCreateInfoKHR(
-                            VkXcbSurfaceCreateFlagsKHR.MinValue,
+                            VkXcbSurfaceCreateFlagsKHR.None,
                             info.connection,
                             info.window
                         )
@@ -235,7 +234,7 @@ module Surface =
                 | Wayland info ->
                     let! pInfo =
                         VkWaylandSurfaceCreateInfoKHR(
-                            VkWaylandSurfaceCreateFlagsKHR.MinValue,
+                            VkWaylandSurfaceCreateFlagsKHR.None,
                             info.display,
                             info.surface
                         )
@@ -247,7 +246,7 @@ module Surface =
                     (*let! pInfo =
                         VkMirSurfaceCreateInfoKHR(
                             VkStructureType.MirSurfaceCreateInfoKhr, 0n,
-                            VkMirSurfaceCreateFlagsKHR.MinValue,
+                            VkMirSurfaceCreateFlagsKHR.None,
                             info.connection,
                             info.mirSurface
                         )
@@ -257,7 +256,7 @@ module Surface =
                 | Android info ->
                     let! pInfo =
                         VkAndroidSurfaceCreateInfoKHR(
-                            VkAndroidSurfaceCreateFlagsKHR.MinValue,
+                            VkAndroidSurfaceCreateFlagsKHR.None,
                             info.window
                         )
                     VkRaw.vkCreateAndroidSurfaceKHR(instance.Handle, pInfo, NativePtr.zero, pHandle)
@@ -266,7 +265,7 @@ module Surface =
                 | Win32 info ->
                     let! pInfo =
                         VkWin32SurfaceCreateInfoKHR( 
-                            VkWin32SurfaceCreateFlagsKHR.MinValue,
+                            VkWin32SurfaceCreateFlagsKHR.None,
                             info.hinstance,
                             info.hwnd
                         )

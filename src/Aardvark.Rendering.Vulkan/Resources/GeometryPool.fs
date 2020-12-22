@@ -312,7 +312,7 @@ module GeometryPoolUtilities =
                     |> check "could not bind host memory"
 
                 let! pPtr = 0n
-                VkRaw.vkMapMemory(device.Handle, hm.Handle, 0UL, uint64 hm.Size, VkMemoryMapFlags.MinValue, pPtr)
+                VkRaw.vkMapMemory(device.Handle, hm.Handle, 0UL, uint64 hm.Size, VkMemoryMapFlags.None, pPtr)
                     |> check "could not map memory"
                     
                 return pPtr.Value, hm, new Buffer(device, handle, hm, size, VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit)
@@ -462,7 +462,7 @@ module GeometryPoolUtilities =
                         |> check "could not bind buffer memory"
 
                     let! pMemPtr = 0n
-                    VkRaw.vkMapMemory(device.Handle, bufferMem.Handle, 0UL, uint64 bufferMem.Size, VkMemoryMapFlags.MinValue, pMemPtr)
+                    VkRaw.vkMapMemory(device.Handle, bufferMem.Handle, 0UL, uint64 bufferMem.Size, VkMemoryMapFlags.None, pMemPtr)
                         |> check "could not map memory"
 
                     return buffer, bufferMem, !!pMemPtr

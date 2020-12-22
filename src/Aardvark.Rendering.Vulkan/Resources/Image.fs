@@ -1794,6 +1794,7 @@ module DeviceTensorCommandExtensions =
 module ``Image Command Extensions`` =
 
     open KHRSwapchain
+    open Vulkan11
 
     let private srcMasks =
         LookupTable.lookupTable [
@@ -2323,6 +2324,7 @@ module ``Image Command Extensions`` =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Image =
     open KHRBindMemory2
+    open Vulkan11
 
     let allocLinear (size : V2i) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
         let info =

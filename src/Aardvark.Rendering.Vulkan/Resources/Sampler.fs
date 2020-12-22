@@ -75,7 +75,7 @@ module Sampler =
 
             let! pInfo =
                 VkSamplerCreateInfo(
-                    VkSamplerCreateFlags.MinValue,
+                    VkSamplerCreateFlags.None,
                     desc.Filter |> TextureFilter.magnification |> VkFilter.ofFilterMode,
                     desc.Filter |> TextureFilter.minification |> VkFilter.ofFilterMode,
                     VkSamplerMipmapMode.ofTextureFilter desc.Filter,

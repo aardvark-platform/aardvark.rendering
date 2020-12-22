@@ -657,7 +657,7 @@ module Resources =
                 else InputAssemblyState.ofIndexedGeometryMode m
 
             VkPipelineInputAssemblyStateCreateInfo(
-                VkPipelineInputAssemblyStateCreateFlags.MinValue,
+                VkPipelineInputAssemblyStateCreateFlags.None,
                 res.topology,
                 (if res.restartEnable then 1u else 0u)
             )
@@ -717,7 +717,7 @@ module Resources =
                 NativePtr.set pInputAttributes i inputAttributes.[i]
 
             VkPipelineVertexInputStateCreateInfo(
-                VkPipelineVertexInputStateCreateFlags.MinValue,
+                VkPipelineVertexInputStateCreateFlags.None,
 
                 uint32 inputBindings.Length,
                 pInputBindings,
@@ -746,7 +746,7 @@ module Resources =
             let stencil = StencilState.create stencilMaskF stencilMaskB stencilModeF stencilModeB
 
             VkPipelineDepthStencilStateCreateInfo(
-                VkPipelineDepthStencilStateCreateFlags.MinValue,
+                VkPipelineDepthStencilStateCreateFlags.None,
                 (if depth.testEnabled then 1u else 0u),
                 (if depth.writeEnabled then 1u else 0u),
                 depth.compare,
@@ -778,7 +778,7 @@ module Resources =
 
             let conservativeRaster =
                 VkPipelineRasterizationConservativeStateCreateInfoEXT(
-                    VkPipelineRasterizationConservativeStateCreateFlagsEXT.MinValue,
+                    VkPipelineRasterizationConservativeStateCreateFlagsEXT.None,
                     (if conservativeRaster then VkConservativeRasterizationModeEXT.Overestimate else VkConservativeRasterizationModeEXT.Disabled),
                     0.0f
                 )
@@ -788,7 +788,7 @@ module Resources =
 
             VkPipelineRasterizationStateCreateInfo(
                 NativePtr.toNativeInt pConservativeRaster,
-                VkPipelineRasterizationStateCreateFlags.MinValue,
+                VkPipelineRasterizationStateCreateFlags.None,
                 (if state.depthClampEnable then 1u else 0u),
                 (if state.rasterizerDiscardEnable then 1u else 0u),
                 state.polygonMode,
@@ -833,7 +833,7 @@ module Resources =
 
 
             VkPipelineColorBlendStateCreateInfo(
-                VkPipelineColorBlendStateCreateFlags.MinValue,
+                VkPipelineColorBlendStateCreateFlags.None,
                 (if state.logicOpEnable then 1u else 0u),
                 state.logicOp,
                 uint32 writeMasks.Length,
@@ -853,7 +853,7 @@ module Resources =
             let state = MultisampleState.create false samples
 
             VkPipelineMultisampleStateCreateInfo(
-                VkPipelineMultisampleStateCreateFlags.MinValue,
+                VkPipelineMultisampleStateCreateFlags.None,
                 unbox state.samples,
                 (if state.sampleShadingEnable then 1u else 0u),
                 float32 state.minSampleShading,
@@ -982,7 +982,7 @@ module Resources =
         inherit AbstractPointerResource<VkPipeline>(owner, key)
 
         static let check str err =
-            if err <> VkResult.VkSuccess then failwithf "[Vulkan] %s" str
+            if err <> VkResult.Success then failwithf "[Vulkan] %s" str
 
         override x.Create() =
             base.Create()
@@ -1021,7 +1021,7 @@ module Resources =
                                 else device.AllCount
                             else 1u
                         VkPipelineViewportStateCreateInfo(
-                            VkPipelineViewportStateCreateFlags.MinValue,
+                            VkPipelineViewportStateCreateFlags.None,
 
                             uint32 vp,
                             NativePtr.zero,
@@ -1035,7 +1035,7 @@ module Resources =
         
                     let! pTessStateInfo = 
                         VkPipelineTessellationStateCreateInfo(
-                            VkPipelineTessellationStateCreateFlags.MinValue,
+                            VkPipelineTessellationStateCreateFlags.None,
                             uint32 prog.TessellationPatchSize
                         )
 
@@ -1045,7 +1045,7 @@ module Resources =
 
                     let! pDynamicStates =
                         VkPipelineDynamicStateCreateInfo(
-                            VkPipelineDynamicStateCreateFlags.MinValue, 
+                            VkPipelineDynamicStateCreateFlags.None, 
 
                             uint32 dynamicStates.Length,
                             NativePtr.cast pDynamicStates

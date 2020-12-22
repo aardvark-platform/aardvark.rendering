@@ -529,7 +529,7 @@ module BufferView =
         else
             let info = 
                 VkBufferViewCreateInfo(
-                    VkBufferViewCreateFlags.MinValue,
+                    VkBufferViewCreateFlags.None,
                     b.Handle, 
                     fmt,
                     offset,

@@ -1107,7 +1107,7 @@ module ComputeShader =
             native {
                 let shaderInfo =
                     VkPipelineShaderStageCreateInfo(
-                        VkPipelineShaderStageCreateFlags.MinValue,
+                        VkPipelineShaderStageCreateFlags.None,
                         VkShaderStageFlags.ComputeBit,
                         module_.Handle,
                         main,
@@ -1198,7 +1198,7 @@ module ComputeShader =
 
                 let shaderInfo =
                     VkPipelineShaderStageCreateInfo(
-                        VkPipelineShaderStageCreateFlags.MinValue,
+                        VkPipelineShaderStageCreateFlags.None,
                         VkShaderStageFlags.ComputeBit,
                         sm.Handle,
                         main,

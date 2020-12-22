@@ -201,7 +201,7 @@ module private DebugReportHelpers =
                 native {
                     let! pInfo =
                         VkDebugUtilsMessengerCreateInfoEXT(
-                            VkDebugUtilsMessengerCreateFlagsEXT.MinValue,
+                            VkDebugUtilsMessengerCreateFlagsEXT.None,
                             VkDebugUtilsMessageSeverityFlagsEXT.All,
 
                             VkDebugUtilsMessageTypeFlagsEXT.GeneralBit |||
@@ -272,7 +272,7 @@ module private DebugReportHelpers =
 
                 let! pInfo =
                     VkDebugUtilsMessengerCallbackDataEXT(
-                        VkDebugUtilsMessengerCallbackDataFlagsEXT.MinValue,
+                        VkDebugUtilsMessengerCallbackDataFlagsEXT.None,
                         layer, 0,
                         str,
                         0u, NativePtr.zero,

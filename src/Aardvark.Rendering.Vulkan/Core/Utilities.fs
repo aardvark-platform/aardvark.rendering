@@ -138,13 +138,13 @@ module private Utilities =
         }
 
     let check (str : string) (err : VkResult) =
-        if err <> VkResult.VkSuccess then 
+        if err <> VkResult.Success then 
             Log.error "[Vulkan] %s (%A)" str err
             failwithf "[Vulkan] %s (%A)" str err
 
     let checkf (fmt : Printf.StringFormat<'a, VkResult -> unit>) =
         Printf.kprintf (fun (str : string) (res : VkResult) ->
-            if res <> VkResult.VkSuccess then 
+            if res <> VkResult.Success then 
                 Log.error "[Vulkan] %s (%A)" str res
                 failwithf "[Vulkan] %s (%A)" str res
         ) fmt
