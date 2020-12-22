@@ -17,19 +17,15 @@ let main argv =
     (* failure cases: https://github.com/aardvark-platform/aardvark.rendering/issues/69
 
         Vk:
-            prepareIt,inlineDispose
-
-        Vk: 
-            prepareTexture -> race condition with copy engine. can be avoided by using sync upload mode
-        or locking using ResourceInUse lock. while rendering hand-over to copy engine which needs to deal with many uploads and crashes in driver
+            prepareIt
 
     *)
 
-    let prepareIt = false
-    let inlineDispose = false
+    let prepareIt = true
+    let inlineDispose = true
     let perObjTexture = true
     let prepareTexture = true
-    let addRemoveTest = false
+    let addRemoveTest = true
     let textureTest = true
     let jitterFrames = true
     
@@ -47,8 +43,8 @@ let main argv =
     //    }
 
 
-    use app = new VulkanApplication()
-    //use app = new OpenGlApplication()
+    //use app = new VulkanApplication()
+    use app = new OpenGlApplication()
     let win = app.CreateGameWindow(1)
 
     let signature =
@@ -230,7 +226,7 @@ let main argv =
                 do! DefaultSurfaces.diffuseTexture
                 do! DefaultSurfaces.simpleLighting
             }
-        //|> Sg.andAlso (Sg.renderObjectSet (things :> aset<_>))
+        |> Sg.andAlso (Sg.renderObjectSet (things :> aset<_>))
         |> Sg.diffuseTexture texture
         |> Sg.viewTrafo viewTrafo
         |> Sg.projTrafo projTrafo
