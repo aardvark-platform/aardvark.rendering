@@ -6,12 +6,28 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.SceneGraph.Semantics
 open Aardvark.Application.Slim
+open System
 
 // This example illustrates how to render a simple triangle using aardvark.
 
 [<EntryPoint>]
 let main argv = 
     
+
+    (* failure cases: https://github.com/aardvark-platform/aardvark.rendering/issues/69
+
+        Vk:
+            prepareIt
+
+    *)
+
+    let prepareIt = true  // VK: fail; GL: OK
+    let inlineDispose = true // OK
+    let perObjTexture = true // OK
+    let prepareTexture = true // GL: OK, Vk: only works with dubios 4089ebc1 fix
+    let addRemoveTest = true // OK
+    let textureTest = true // OK
+    let jitterFrames = false // OK
     
     Aardvark.Init()
 
@@ -59,24 +75,30 @@ let main argv =
 
     let texture = cval (DefaultTextures.blackTex.GetValue())
 
+
+    let createTexture (d : C4b) = 
+        let checkerboardPix = 
+            let pi = PixImage<byte>(Col.Format.RGBA, V2i.II * 256)
+            pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
+                let c = c / 16L
+                if (c.X + c.Y) % 2L = 0L then
+                    d
+                else
+                    C4b.Gray
+            ) |> ignore
+            pi
+
+        let tex = 
+            PixTexture2d(PixImageMipMap [| checkerboardPix :> PixImage |], true) :> ITexture //|> AVal.constant
+
+        tex
+
     let updateTexture () = 
         Thread.Sleep 2000
         let rnd = new System.Random()
         while true do
             let d = if rnd.NextDouble() < 0.5 then C4b.White else C4b.Gray
-            let checkerboardPix = 
-                let pi = PixImage<byte>(Col.Format.RGBA, V2i.II * 256)
-                pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
-                    let c = c / 16L
-                    if (c.X + c.Y) % 2L = 0L then
-                        d
-                    else
-                        C4b.Gray
-                ) |> ignore
-                pi
-
-            let tex = 
-                PixTexture2d(PixImageMipMap [| checkerboardPix :> PixImage |], true) :> ITexture //|> AVal.constant
+            let tex = createTexture d
 
             transact (fun _ -> texture.Value <- tex)
 
@@ -108,21 +130,17 @@ let main argv =
         template.RenderObjects(Ag.Scope.Root).Content |> AVal.force |> HashSet.toList |> List.head |> unbox<RenderObject>
     let cam = viewTrafo |> AVal.map (fun v -> v.Backward.TransformPosProj V3d.Zero)
 
-    let uniforms (t : Trafo3d) =
+    let uniforms (t : Trafo3d) (tex : aval<ITexture>) =
         UniformProvider.ofList [
             "ModelTrafo", AVal.constant t :> IAdaptiveValue
             "ViewTrafo", viewTrafo :> IAdaptiveValue
             "CameraLocation", cam :> IAdaptiveValue
             "LightLocation", cam :> IAdaptiveValue
             "ProjTrafo", projTrafo :> IAdaptiveValue
-            "DiffuseColorTexture", texture :> IAdaptiveValue
+            "DiffuseColorTexture", tex :> IAdaptiveValue
         ]
 
     let things = cset []
-
-    let prepareIt = true
-    let inlineDispose = false
-
 
     let delayedDisposals : ref<list<IRenderObject>> = ref []
 
@@ -143,14 +161,38 @@ let main argv =
             if runs % 10000 = 0 then Log.line "cnt: %A" things.Count
             if rnd.NextDouble() <= 0.5 then
                 let trafo = Trafo3d.Translation(rnd.NextDouble()*10.0,rnd.NextDouble()*10.0,rnd.NextDouble()*10.0)
+
+                let texture,activate = 
+                    if perObjTexture then
+                         let tex = createTexture C4b.Gray
+                         if prepareTexture then 
+                            let pTex = 
+                                let lockObj = match app.Runtime :> obj with :? Aardvark.Rendering.Vulkan.Runtime -> AbstractRenderTask.ResourcesInUse | _ -> obj()
+                                let lockObj = obj()
+                                lock lockObj (fun _ -> 
+                                    win.Runtime.PrepareTexture(tex) 
+                                )
+                            let activate = 
+                                { new IDisposable with
+                                    member x.Dispose() = 
+                                        win.Runtime.DeleteTexture pTex
+                                }
+                            AVal.constant (pTex :> ITexture), fun () -> activate
+                         else 
+                            AVal.constant tex, template.Activate
+                    else texture :> aval<_>, template.Activate
+
+
                 let ro = 
                     { template with
                         Id = newId()
-                        Uniforms = uniforms trafo
+                        Uniforms = uniforms trafo texture
+                        Activate = activate
                     } :> IRenderObject
                 
+                let prep = if prepareIt then win.Runtime.PrepareRenderObject(signature,ro) :> IRenderObject else ro
+
                 transact (fun _ -> 
-                    let prep = if prepareIt then win.Runtime.PrepareRenderObject(signature,ro) :> IRenderObject else ro
                     things.Add prep |> ignore
                 )
             elif things.Count > 0 then
@@ -158,19 +200,22 @@ let main argv =
                 if rndIndx < things.Count - 1 then
                     let nth = Seq.item rndIndx things
                     
+
                     transact (fun _ -> 
-                        if inlineDispose then
-                            match nth with | :? IPreparedRenderObject as p -> p.Dispose() | _ -> ()
-                        else
-                            delayedDisposals := nth :: !delayedDisposals
                         things.Remove nth |> ignore
+                        if not inlineDispose && prepareIt then delayedDisposals := nth :: !delayedDisposals
                     )
+
+                    if inlineDispose && prepareIt then
+                        match nth with | :? IPreparedRenderObject as p -> p.Dispose() | _ -> ()
             runs <- runs + 1
             //Thread.Sleep(10)
 
     let cameraThread = startThread cameraMovement
-    let textureThread = startThread updateTexture
-    let addRemoteThread = startThread addThings
+    let textureThread = 
+        if textureTest then startThread updateTexture |> ignore else ()
+    let addRemoteThread = 
+        if addRemoveTest then startThread addThings |> ignore else ()
 
 
     let sg = 
@@ -185,9 +230,13 @@ let main argv =
         |> Sg.diffuseTexture texture
         |> Sg.viewTrafo viewTrafo
         |> Sg.projTrafo projTrafo
-    
-    // show the window
-    win.RenderTask <- win.Runtime.CompileRender(signature,sg)
+
+    win.RenderTask <- 
+        let rnd = System.Random()
+        RenderTask.ofList [
+            if jitterFrames then RenderTask.custom (fun (a,rt,ot) -> Thread.Sleep(rnd.Next(0,100))) else RenderTask.empty
+            win.Runtime.CompileRender(signature,sg)
+        ]
     //win.Scene <- sg
     win.Run()
 
