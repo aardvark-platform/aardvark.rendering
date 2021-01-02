@@ -1550,30 +1550,16 @@ module FSharpWriter =
                     printfn' 2 "static member Empty ="
                     values |> toFunctionCall 3 s.name
 
-                // Static creators with only pNext parameter
-                let chainStaticCreators() =
-                    match nextPtrIndex with
-                    | Some index when fields.Length > 1 ->
-                        printfn ""
+                let isEmptyMember() =
+                    printfn ""
 
-                        printfn' 2 "/// Creates an empty %s with only pNext set to the given value." s.name
-                        printfn' 2 "static member Chain(pNext : nativeint) ="
-
-                        fields
-                        |> List.mapi (fun i f ->
-                            if i = index then
-                                fsharpName f.name
-                            else
-                                sprintf "Unchecked.defaultof<%s>" (typeName f.typ)
+                    let checks =
+                        fields |> List.map (fun f ->
+                            sprintf "x.%s = Unchecked.defaultof<%s>" (fsharpName f.name) (typeName f.typ)
                         )
-                        |> toFunctionCall 3 s.name
 
-                        printfn ""
-                        printfn' 2 "/// Creates an empty %s with only pNext set to the given value." s.name
-                        printfn' 2 "static member Chain(pNext : nativeptr<'a>) ="
-                        printfn' 3 "%s.Chain(NativePtr.toNativeInt pNext)" s.name
-
-                    | _ -> ()
+                    printfn' 2 "member x.IsEmpty ="
+                    printfn' 3 "%s" (checks |> String.concat " && ")
 
                 // Convenience constructor without pNext parameter
                 let constructorWithoutNextPtr () =
@@ -1616,11 +1602,11 @@ module FSharpWriter =
                     // Constructor without pNext
                     constructorWithoutNextPtr()
 
+                    // IsEmpty member
+                    isEmptyMember()
+
                     // Empty default "constructor"
                     defaultConstructor()
-
-                    // Static creators with only pNext
-                    chainStaticCreators()
 
                     if s.name = "VkExtent3D" then
                         printfn ""

@@ -63,6 +63,8 @@ type PipelineStatistics =
 
     with
 
+    static member None : Set<PipelineStatistics> = Set.empty
+
     static member All =
         Set.ofList [
             InputAssemblyVertices

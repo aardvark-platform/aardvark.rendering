@@ -1476,6 +1476,9 @@ type VkAllocationCallbacks =
                 pfnInternalFree = pfnInternalFree
             }
 
+        member x.IsEmpty =
+            x.pUserData = Unchecked.defaultof<nativeint> && x.pfnAllocation = Unchecked.defaultof<PFN_vkAllocationFunction> && x.pfnReallocation = Unchecked.defaultof<PFN_vkReallocationFunction> && x.pfnFree = Unchecked.defaultof<PFN_vkFreeFunction> && x.pfnInternalAllocation = Unchecked.defaultof<PFN_vkInternalAllocationNotification> && x.pfnInternalFree = Unchecked.defaultof<PFN_vkInternalFreeNotification>
+
         static member Empty =
             VkAllocationCallbacks(Unchecked.defaultof<nativeint>, Unchecked.defaultof<PFN_vkAllocationFunction>, Unchecked.defaultof<PFN_vkReallocationFunction>, Unchecked.defaultof<PFN_vkFreeFunction>, Unchecked.defaultof<PFN_vkInternalAllocationNotification>, Unchecked.defaultof<PFN_vkInternalFreeNotification>)
 
@@ -1515,16 +1518,11 @@ type VkApplicationInfo =
         new(pApplicationName : cstr, applicationVersion : uint32, pEngineName : cstr, engineVersion : uint32, apiVersion : uint32) =
             VkApplicationInfo(Unchecked.defaultof<nativeint>, pApplicationName, applicationVersion, pEngineName, engineVersion, apiVersion)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.pApplicationName = Unchecked.defaultof<cstr> && x.applicationVersion = Unchecked.defaultof<uint32> && x.pEngineName = Unchecked.defaultof<cstr> && x.engineVersion = Unchecked.defaultof<uint32> && x.apiVersion = Unchecked.defaultof<uint32>
+
         static member Empty =
             VkApplicationInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<cstr>, Unchecked.defaultof<uint32>, Unchecked.defaultof<cstr>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-        /// Creates an empty VkApplicationInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkApplicationInfo(pNext, Unchecked.defaultof<cstr>, Unchecked.defaultof<uint32>, Unchecked.defaultof<cstr>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-        /// Creates an empty VkApplicationInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkApplicationInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -1564,6 +1562,9 @@ type VkAttachmentDescription =
                 finalLayout = finalLayout
             }
 
+        member x.IsEmpty =
+            x.flags = Unchecked.defaultof<VkAttachmentDescriptionFlags> && x.format = Unchecked.defaultof<VkFormat> && x.samples = Unchecked.defaultof<VkSampleCountFlags> && x.loadOp = Unchecked.defaultof<VkAttachmentLoadOp> && x.storeOp = Unchecked.defaultof<VkAttachmentStoreOp> && x.stencilLoadOp = Unchecked.defaultof<VkAttachmentLoadOp> && x.stencilStoreOp = Unchecked.defaultof<VkAttachmentStoreOp> && x.initialLayout = Unchecked.defaultof<VkImageLayout> && x.finalLayout = Unchecked.defaultof<VkImageLayout>
+
         static member Empty =
             VkAttachmentDescription(Unchecked.defaultof<VkAttachmentDescriptionFlags>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkAttachmentLoadOp>, Unchecked.defaultof<VkAttachmentStoreOp>, Unchecked.defaultof<VkAttachmentLoadOp>, Unchecked.defaultof<VkAttachmentStoreOp>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImageLayout>)
 
@@ -1593,6 +1594,9 @@ type VkAttachmentReference =
                 layout = layout
             }
 
+        member x.IsEmpty =
+            x.attachment = Unchecked.defaultof<uint32> && x.layout = Unchecked.defaultof<VkImageLayout>
+
         static member Empty =
             VkAttachmentReference(Unchecked.defaultof<uint32>, Unchecked.defaultof<VkImageLayout>)
 
@@ -1615,6 +1619,9 @@ type VkBaseInStructure =
                 pNext = pNext
             }
 
+        member x.IsEmpty =
+            x.sType = Unchecked.defaultof<uint32> && x.pNext = Unchecked.defaultof<nativeptr<VkBaseInStructure>>
+
         static member Empty =
             VkBaseInStructure(Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkBaseInStructure>>)
 
@@ -1636,6 +1643,9 @@ type VkBaseOutStructure =
                 sType = sType
                 pNext = pNext
             }
+
+        member x.IsEmpty =
+            x.sType = Unchecked.defaultof<uint32> && x.pNext = Unchecked.defaultof<nativeptr<VkBaseOutStructure>>
 
         static member Empty =
             VkBaseOutStructure(Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkBaseOutStructure>>)
@@ -1665,6 +1675,9 @@ type VkSparseMemoryBind =
                 flags = flags
             }
 
+        member x.IsEmpty =
+            x.resourceOffset = Unchecked.defaultof<VkDeviceSize> && x.size = Unchecked.defaultof<VkDeviceSize> && x.memory = Unchecked.defaultof<VkDeviceMemory> && x.memoryOffset = Unchecked.defaultof<VkDeviceSize> && x.flags = Unchecked.defaultof<VkSparseMemoryBindFlags>
+
         static member Empty =
             VkSparseMemoryBind(Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceMemory>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkSparseMemoryBindFlags>)
 
@@ -1692,6 +1705,9 @@ type VkSparseBufferMemoryBindInfo =
                 pBinds = pBinds
             }
 
+        member x.IsEmpty =
+            x.buffer = Unchecked.defaultof<VkBuffer> && x.bindCount = Unchecked.defaultof<uint32> && x.pBinds = Unchecked.defaultof<nativeptr<VkSparseMemoryBind>>
+
         static member Empty =
             VkSparseBufferMemoryBindInfo(Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSparseMemoryBind>>)
 
@@ -1716,6 +1732,9 @@ type VkSparseImageOpaqueMemoryBindInfo =
                 bindCount = bindCount
                 pBinds = pBinds
             }
+
+        member x.IsEmpty =
+            x.image = Unchecked.defaultof<VkImage> && x.bindCount = Unchecked.defaultof<uint32> && x.pBinds = Unchecked.defaultof<nativeptr<VkSparseMemoryBind>>
 
         static member Empty =
             VkSparseImageOpaqueMemoryBindInfo(Unchecked.defaultof<VkImage>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSparseMemoryBind>>)
@@ -1742,6 +1761,9 @@ type VkImageSubresource =
                 arrayLayer = arrayLayer
             }
 
+        member x.IsEmpty =
+            x.aspectMask = Unchecked.defaultof<VkImageAspectFlags> && x.mipLevel = Unchecked.defaultof<uint32> && x.arrayLayer = Unchecked.defaultof<uint32>
+
         static member Empty =
             VkImageSubresource(Unchecked.defaultof<VkImageAspectFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
 
@@ -1766,6 +1788,9 @@ type VkOffset3D =
                 y = y
                 z = z
             }
+
+        member x.IsEmpty =
+            x.x = Unchecked.defaultof<int> && x.y = Unchecked.defaultof<int> && x.z = Unchecked.defaultof<int>
 
         static member Empty =
             VkOffset3D(Unchecked.defaultof<int>, Unchecked.defaultof<int>, Unchecked.defaultof<int>)
@@ -1815,6 +1840,9 @@ type VkExtent3D =
                 depth = depth
             }
 
+        member x.IsEmpty =
+            x.width = Unchecked.defaultof<uint32> && x.height = Unchecked.defaultof<uint32> && x.depth = Unchecked.defaultof<uint32>
+
         static member Empty =
             VkExtent3D(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
 
@@ -1848,6 +1876,9 @@ type VkSparseImageMemoryBind =
                 flags = flags
             }
 
+        member x.IsEmpty =
+            x.subresource = Unchecked.defaultof<VkImageSubresource> && x.offset = Unchecked.defaultof<VkOffset3D> && x.extent = Unchecked.defaultof<VkExtent3D> && x.memory = Unchecked.defaultof<VkDeviceMemory> && x.memoryOffset = Unchecked.defaultof<VkDeviceSize> && x.flags = Unchecked.defaultof<VkSparseMemoryBindFlags>
+
         static member Empty =
             VkSparseImageMemoryBind(Unchecked.defaultof<VkImageSubresource>, Unchecked.defaultof<VkOffset3D>, Unchecked.defaultof<VkExtent3D>, Unchecked.defaultof<VkDeviceMemory>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkSparseMemoryBindFlags>)
 
@@ -1875,6 +1906,9 @@ type VkSparseImageMemoryBindInfo =
                 bindCount = bindCount
                 pBinds = pBinds
             }
+
+        member x.IsEmpty =
+            x.image = Unchecked.defaultof<VkImage> && x.bindCount = Unchecked.defaultof<uint32> && x.pBinds = Unchecked.defaultof<nativeptr<VkSparseImageMemoryBind>>
 
         static member Empty =
             VkSparseImageMemoryBindInfo(Unchecked.defaultof<VkImage>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSparseImageMemoryBind>>)
@@ -1922,16 +1956,11 @@ type VkBindSparseInfo =
         new(waitSemaphoreCount : uint32, pWaitSemaphores : nativeptr<VkSemaphore>, bufferBindCount : uint32, pBufferBinds : nativeptr<VkSparseBufferMemoryBindInfo>, imageOpaqueBindCount : uint32, pImageOpaqueBinds : nativeptr<VkSparseImageOpaqueMemoryBindInfo>, imageBindCount : uint32, pImageBinds : nativeptr<VkSparseImageMemoryBindInfo>, signalSemaphoreCount : uint32, pSignalSemaphores : nativeptr<VkSemaphore>) =
             VkBindSparseInfo(Unchecked.defaultof<nativeint>, waitSemaphoreCount, pWaitSemaphores, bufferBindCount, pBufferBinds, imageOpaqueBindCount, pImageOpaqueBinds, imageBindCount, pImageBinds, signalSemaphoreCount, pSignalSemaphores)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.waitSemaphoreCount = Unchecked.defaultof<uint32> && x.pWaitSemaphores = Unchecked.defaultof<nativeptr<VkSemaphore>> && x.bufferBindCount = Unchecked.defaultof<uint32> && x.pBufferBinds = Unchecked.defaultof<nativeptr<VkSparseBufferMemoryBindInfo>> && x.imageOpaqueBindCount = Unchecked.defaultof<uint32> && x.pImageOpaqueBinds = Unchecked.defaultof<nativeptr<VkSparseImageOpaqueMemoryBindInfo>> && x.imageBindCount = Unchecked.defaultof<uint32> && x.pImageBinds = Unchecked.defaultof<nativeptr<VkSparseImageMemoryBindInfo>> && x.signalSemaphoreCount = Unchecked.defaultof<uint32> && x.pSignalSemaphores = Unchecked.defaultof<nativeptr<VkSemaphore>>
+
         static member Empty =
             VkBindSparseInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSemaphore>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSparseBufferMemoryBindInfo>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSparseImageOpaqueMemoryBindInfo>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSparseImageMemoryBindInfo>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSemaphore>>)
-
-        /// Creates an empty VkBindSparseInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkBindSparseInfo(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSemaphore>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSparseBufferMemoryBindInfo>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSparseImageOpaqueMemoryBindInfo>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSparseImageMemoryBindInfo>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSemaphore>>)
-
-        /// Creates an empty VkBindSparseInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkBindSparseInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -1963,6 +1992,9 @@ type VkBufferCopy =
                 dstOffset = dstOffset
                 size = size
             }
+
+        member x.IsEmpty =
+            x.srcOffset = Unchecked.defaultof<VkDeviceSize> && x.dstOffset = Unchecked.defaultof<VkDeviceSize> && x.size = Unchecked.defaultof<VkDeviceSize>
 
         static member Empty =
             VkBufferCopy(Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
@@ -2002,16 +2034,11 @@ type VkBufferCreateInfo =
         new(flags : VkBufferCreateFlags, size : VkDeviceSize, usage : VkBufferUsageFlags, sharingMode : VkSharingMode, queueFamilyIndexCount : uint32, pQueueFamilyIndices : nativeptr<uint32>) =
             VkBufferCreateInfo(Unchecked.defaultof<nativeint>, flags, size, usage, sharingMode, queueFamilyIndexCount, pQueueFamilyIndices)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkBufferCreateFlags> && x.size = Unchecked.defaultof<VkDeviceSize> && x.usage = Unchecked.defaultof<VkBufferUsageFlags> && x.sharingMode = Unchecked.defaultof<VkSharingMode> && x.queueFamilyIndexCount = Unchecked.defaultof<uint32> && x.pQueueFamilyIndices = Unchecked.defaultof<nativeptr<uint32>>
+
         static member Empty =
             VkBufferCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBufferCreateFlags>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkBufferUsageFlags>, Unchecked.defaultof<VkSharingMode>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-        /// Creates an empty VkBufferCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkBufferCreateInfo(pNext, Unchecked.defaultof<VkBufferCreateFlags>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkBufferUsageFlags>, Unchecked.defaultof<VkSharingMode>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-        /// Creates an empty VkBufferCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkBufferCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -2041,6 +2068,9 @@ type VkImageSubresourceLayers =
                 baseArrayLayer = baseArrayLayer
                 layerCount = layerCount
             }
+
+        member x.IsEmpty =
+            x.aspectMask = Unchecked.defaultof<VkImageAspectFlags> && x.mipLevel = Unchecked.defaultof<uint32> && x.baseArrayLayer = Unchecked.defaultof<uint32> && x.layerCount = Unchecked.defaultof<uint32>
 
         static member Empty =
             VkImageSubresourceLayers(Unchecked.defaultof<VkImageAspectFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
@@ -2073,6 +2103,9 @@ type VkBufferImageCopy =
                 imageOffset = imageOffset
                 imageExtent = imageExtent
             }
+
+        member x.IsEmpty =
+            x.bufferOffset = Unchecked.defaultof<VkDeviceSize> && x.bufferRowLength = Unchecked.defaultof<uint32> && x.bufferImageHeight = Unchecked.defaultof<uint32> && x.imageSubresource = Unchecked.defaultof<VkImageSubresourceLayers> && x.imageOffset = Unchecked.defaultof<VkOffset3D> && x.imageExtent = Unchecked.defaultof<VkExtent3D>
 
         static member Empty =
             VkBufferImageCopy(Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D>, Unchecked.defaultof<VkExtent3D>)
@@ -2117,16 +2150,11 @@ type VkBufferMemoryBarrier =
         new(srcAccessMask : VkAccessFlags, dstAccessMask : VkAccessFlags, srcQueueFamilyIndex : uint32, dstQueueFamilyIndex : uint32, buffer : VkBuffer, offset : VkDeviceSize, size : VkDeviceSize) =
             VkBufferMemoryBarrier(Unchecked.defaultof<nativeint>, srcAccessMask, dstAccessMask, srcQueueFamilyIndex, dstQueueFamilyIndex, buffer, offset, size)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.srcAccessMask = Unchecked.defaultof<VkAccessFlags> && x.dstAccessMask = Unchecked.defaultof<VkAccessFlags> && x.srcQueueFamilyIndex = Unchecked.defaultof<uint32> && x.dstQueueFamilyIndex = Unchecked.defaultof<uint32> && x.buffer = Unchecked.defaultof<VkBuffer> && x.offset = Unchecked.defaultof<VkDeviceSize> && x.size = Unchecked.defaultof<VkDeviceSize>
+
         static member Empty =
             VkBufferMemoryBarrier(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
-
-        /// Creates an empty VkBufferMemoryBarrier with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkBufferMemoryBarrier(pNext, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
-
-        /// Creates an empty VkBufferMemoryBarrier with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkBufferMemoryBarrier.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -2167,16 +2195,11 @@ type VkBufferViewCreateInfo =
         new(flags : VkBufferViewCreateFlags, buffer : VkBuffer, format : VkFormat, offset : VkDeviceSize, range : VkDeviceSize) =
             VkBufferViewCreateInfo(Unchecked.defaultof<nativeint>, flags, buffer, format, offset, range)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkBufferViewCreateFlags> && x.buffer = Unchecked.defaultof<VkBuffer> && x.format = Unchecked.defaultof<VkFormat> && x.offset = Unchecked.defaultof<VkDeviceSize> && x.range = Unchecked.defaultof<VkDeviceSize>
+
         static member Empty =
             VkBufferViewCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBufferViewCreateFlags>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
-
-        /// Creates an empty VkBufferViewCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkBufferViewCreateInfo(pNext, Unchecked.defaultof<VkBufferViewCreateFlags>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
-
-        /// Creates an empty VkBufferViewCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkBufferViewCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -2221,6 +2244,9 @@ type VkClearDepthStencilValue =
                 stencil = stencil
             }
 
+        member x.IsEmpty =
+            x.depth = Unchecked.defaultof<float32> && x.stencil = Unchecked.defaultof<uint32>
+
         static member Empty =
             VkClearDepthStencilValue(Unchecked.defaultof<float32>, Unchecked.defaultof<uint32>)
 
@@ -2261,6 +2287,9 @@ type VkClearAttachment =
                 clearValue = clearValue
             }
 
+        member x.IsEmpty =
+            x.aspectMask = Unchecked.defaultof<VkImageAspectFlags> && x.colorAttachment = Unchecked.defaultof<uint32> && x.clearValue = Unchecked.defaultof<VkClearValue>
+
         static member Empty =
             VkClearAttachment(Unchecked.defaultof<VkImageAspectFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkClearValue>)
 
@@ -2284,6 +2313,9 @@ type VkOffset2D =
                 y = y
             }
 
+        member x.IsEmpty =
+            x.x = Unchecked.defaultof<int> && x.y = Unchecked.defaultof<int>
+
         static member Empty =
             VkOffset2D(Unchecked.defaultof<int>, Unchecked.defaultof<int>)
 
@@ -2305,6 +2337,9 @@ type VkExtent2D =
                 width = width
                 height = height
             }
+
+        member x.IsEmpty =
+            x.width = Unchecked.defaultof<uint32> && x.height = Unchecked.defaultof<uint32>
 
         static member Empty =
             VkExtent2D(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
@@ -2330,6 +2365,9 @@ type VkRect2D =
                 extent = extent
             }
 
+        member x.IsEmpty =
+            x.offset = Unchecked.defaultof<VkOffset2D> && x.extent = Unchecked.defaultof<VkExtent2D>
+
         static member Empty =
             VkRect2D(Unchecked.defaultof<VkOffset2D>, Unchecked.defaultof<VkExtent2D>)
 
@@ -2353,6 +2391,9 @@ type VkClearRect =
                 baseArrayLayer = baseArrayLayer
                 layerCount = layerCount
             }
+
+        member x.IsEmpty =
+            x.rect = Unchecked.defaultof<VkRect2D> && x.baseArrayLayer = Unchecked.defaultof<uint32> && x.layerCount = Unchecked.defaultof<uint32>
 
         static member Empty =
             VkClearRect(Unchecked.defaultof<VkRect2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
@@ -2386,16 +2427,11 @@ type VkCommandBufferAllocateInfo =
         new(commandPool : VkCommandPool, level : VkCommandBufferLevel, commandBufferCount : uint32) =
             VkCommandBufferAllocateInfo(Unchecked.defaultof<nativeint>, commandPool, level, commandBufferCount)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.commandPool = Unchecked.defaultof<VkCommandPool> && x.level = Unchecked.defaultof<VkCommandBufferLevel> && x.commandBufferCount = Unchecked.defaultof<uint32>
+
         static member Empty =
             VkCommandBufferAllocateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkCommandPool>, Unchecked.defaultof<VkCommandBufferLevel>, Unchecked.defaultof<uint32>)
-
-        /// Creates an empty VkCommandBufferAllocateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkCommandBufferAllocateInfo(pNext, Unchecked.defaultof<VkCommandPool>, Unchecked.defaultof<VkCommandBufferLevel>, Unchecked.defaultof<uint32>)
-
-        /// Creates an empty VkCommandBufferAllocateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkCommandBufferAllocateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -2434,16 +2470,11 @@ type VkCommandBufferInheritanceInfo =
         new(renderPass : VkRenderPass, subpass : uint32, framebuffer : VkFramebuffer, occlusionQueryEnable : VkBool32, queryFlags : VkQueryControlFlags, pipelineStatistics : VkQueryPipelineStatisticFlags) =
             VkCommandBufferInheritanceInfo(Unchecked.defaultof<nativeint>, renderPass, subpass, framebuffer, occlusionQueryEnable, queryFlags, pipelineStatistics)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.renderPass = Unchecked.defaultof<VkRenderPass> && x.subpass = Unchecked.defaultof<uint32> && x.framebuffer = Unchecked.defaultof<VkFramebuffer> && x.occlusionQueryEnable = Unchecked.defaultof<VkBool32> && x.queryFlags = Unchecked.defaultof<VkQueryControlFlags> && x.pipelineStatistics = Unchecked.defaultof<VkQueryPipelineStatisticFlags>
+
         static member Empty =
             VkCommandBufferInheritanceInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkRenderPass>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkFramebuffer>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkQueryControlFlags>, Unchecked.defaultof<VkQueryPipelineStatisticFlags>)
-
-        /// Creates an empty VkCommandBufferInheritanceInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkCommandBufferInheritanceInfo(pNext, Unchecked.defaultof<VkRenderPass>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkFramebuffer>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkQueryControlFlags>, Unchecked.defaultof<VkQueryPipelineStatisticFlags>)
-
-        /// Creates an empty VkCommandBufferInheritanceInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkCommandBufferInheritanceInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -2477,16 +2508,11 @@ type VkCommandBufferBeginInfo =
         new(flags : VkCommandBufferUsageFlags, pInheritanceInfo : nativeptr<VkCommandBufferInheritanceInfo>) =
             VkCommandBufferBeginInfo(Unchecked.defaultof<nativeint>, flags, pInheritanceInfo)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkCommandBufferUsageFlags> && x.pInheritanceInfo = Unchecked.defaultof<nativeptr<VkCommandBufferInheritanceInfo>>
+
         static member Empty =
             VkCommandBufferBeginInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkCommandBufferUsageFlags>, Unchecked.defaultof<nativeptr<VkCommandBufferInheritanceInfo>>)
-
-        /// Creates an empty VkCommandBufferBeginInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkCommandBufferBeginInfo(pNext, Unchecked.defaultof<VkCommandBufferUsageFlags>, Unchecked.defaultof<nativeptr<VkCommandBufferInheritanceInfo>>)
-
-        /// Creates an empty VkCommandBufferBeginInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkCommandBufferBeginInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -2516,16 +2542,11 @@ type VkCommandPoolCreateInfo =
         new(flags : VkCommandPoolCreateFlags, queueFamilyIndex : uint32) =
             VkCommandPoolCreateInfo(Unchecked.defaultof<nativeint>, flags, queueFamilyIndex)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkCommandPoolCreateFlags> && x.queueFamilyIndex = Unchecked.defaultof<uint32>
+
         static member Empty =
             VkCommandPoolCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkCommandPoolCreateFlags>, Unchecked.defaultof<uint32>)
-
-        /// Creates an empty VkCommandPoolCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkCommandPoolCreateInfo(pNext, Unchecked.defaultof<VkCommandPoolCreateFlags>, Unchecked.defaultof<uint32>)
-
-        /// Creates an empty VkCommandPoolCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkCommandPoolCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -2551,6 +2572,9 @@ type VkComponentMapping =
                 b = b
                 a = a
             }
+
+        member x.IsEmpty =
+            x.r = Unchecked.defaultof<VkComponentSwizzle> && x.g = Unchecked.defaultof<VkComponentSwizzle> && x.b = Unchecked.defaultof<VkComponentSwizzle> && x.a = Unchecked.defaultof<VkComponentSwizzle>
 
         static member Empty =
             VkComponentMapping(Unchecked.defaultof<VkComponentSwizzle>, Unchecked.defaultof<VkComponentSwizzle>, Unchecked.defaultof<VkComponentSwizzle>, Unchecked.defaultof<VkComponentSwizzle>)
@@ -2578,6 +2602,9 @@ type VkSpecializationMapEntry =
                 size = size
             }
 
+        member x.IsEmpty =
+            x.constantID = Unchecked.defaultof<uint32> && x.offset = Unchecked.defaultof<uint32> && x.size = Unchecked.defaultof<uint64>
+
         static member Empty =
             VkSpecializationMapEntry(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint64>)
 
@@ -2604,6 +2631,9 @@ type VkSpecializationInfo =
                 dataSize = dataSize
                 pData = pData
             }
+
+        member x.IsEmpty =
+            x.mapEntryCount = Unchecked.defaultof<uint32> && x.pMapEntries = Unchecked.defaultof<nativeptr<VkSpecializationMapEntry>> && x.dataSize = Unchecked.defaultof<uint64> && x.pData = Unchecked.defaultof<nativeint>
 
         static member Empty =
             VkSpecializationInfo(Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSpecializationMapEntry>>, Unchecked.defaultof<uint64>, Unchecked.defaultof<nativeint>)
@@ -2642,16 +2672,11 @@ type VkPipelineShaderStageCreateInfo =
         new(flags : VkPipelineShaderStageCreateFlags, stage : VkShaderStageFlags, _module : VkShaderModule, pName : cstr, pSpecializationInfo : nativeptr<VkSpecializationInfo>) =
             VkPipelineShaderStageCreateInfo(Unchecked.defaultof<nativeint>, flags, stage, _module, pName, pSpecializationInfo)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineShaderStageCreateFlags> && x.stage = Unchecked.defaultof<VkShaderStageFlags> && x._module = Unchecked.defaultof<VkShaderModule> && x.pName = Unchecked.defaultof<cstr> && x.pSpecializationInfo = Unchecked.defaultof<nativeptr<VkSpecializationInfo>>
+
         static member Empty =
             VkPipelineShaderStageCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineShaderStageCreateFlags>, Unchecked.defaultof<VkShaderStageFlags>, Unchecked.defaultof<VkShaderModule>, Unchecked.defaultof<cstr>, Unchecked.defaultof<nativeptr<VkSpecializationInfo>>)
-
-        /// Creates an empty VkPipelineShaderStageCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkPipelineShaderStageCreateInfo(pNext, Unchecked.defaultof<VkPipelineShaderStageCreateFlags>, Unchecked.defaultof<VkShaderStageFlags>, Unchecked.defaultof<VkShaderModule>, Unchecked.defaultof<cstr>, Unchecked.defaultof<nativeptr<VkSpecializationInfo>>)
-
-        /// Creates an empty VkPipelineShaderStageCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkPipelineShaderStageCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -2690,16 +2715,11 @@ type VkComputePipelineCreateInfo =
         new(flags : VkPipelineCreateFlags, stage : VkPipelineShaderStageCreateInfo, layout : VkPipelineLayout, basePipelineHandle : VkPipeline, basePipelineIndex : int) =
             VkComputePipelineCreateInfo(Unchecked.defaultof<nativeint>, flags, stage, layout, basePipelineHandle, basePipelineIndex)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineCreateFlags> && x.stage = Unchecked.defaultof<VkPipelineShaderStageCreateInfo> && x.layout = Unchecked.defaultof<VkPipelineLayout> && x.basePipelineHandle = Unchecked.defaultof<VkPipeline> && x.basePipelineIndex = Unchecked.defaultof<int>
+
         static member Empty =
             VkComputePipelineCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineCreateFlags>, Unchecked.defaultof<VkPipelineShaderStageCreateInfo>, Unchecked.defaultof<VkPipelineLayout>, Unchecked.defaultof<VkPipeline>, Unchecked.defaultof<int>)
-
-        /// Creates an empty VkComputePipelineCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkComputePipelineCreateInfo(pNext, Unchecked.defaultof<VkPipelineCreateFlags>, Unchecked.defaultof<VkPipelineShaderStageCreateInfo>, Unchecked.defaultof<VkPipelineLayout>, Unchecked.defaultof<VkPipeline>, Unchecked.defaultof<int>)
-
-        /// Creates an empty VkComputePipelineCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkComputePipelineCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -2742,16 +2762,11 @@ type VkCopyDescriptorSet =
         new(srcSet : VkDescriptorSet, srcBinding : uint32, srcArrayElement : uint32, dstSet : VkDescriptorSet, dstBinding : uint32, dstArrayElement : uint32, descriptorCount : uint32) =
             VkCopyDescriptorSet(Unchecked.defaultof<nativeint>, srcSet, srcBinding, srcArrayElement, dstSet, dstBinding, dstArrayElement, descriptorCount)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.srcSet = Unchecked.defaultof<VkDescriptorSet> && x.srcBinding = Unchecked.defaultof<uint32> && x.srcArrayElement = Unchecked.defaultof<uint32> && x.dstSet = Unchecked.defaultof<VkDescriptorSet> && x.dstBinding = Unchecked.defaultof<uint32> && x.dstArrayElement = Unchecked.defaultof<uint32> && x.descriptorCount = Unchecked.defaultof<uint32>
+
         static member Empty =
             VkCopyDescriptorSet(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDescriptorSet>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDescriptorSet>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-        /// Creates an empty VkCopyDescriptorSet with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkCopyDescriptorSet(pNext, Unchecked.defaultof<VkDescriptorSet>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDescriptorSet>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-        /// Creates an empty VkCopyDescriptorSet with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkCopyDescriptorSet.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -2781,6 +2796,9 @@ type VkDescriptorBufferInfo =
                 range = range
             }
 
+        member x.IsEmpty =
+            x.buffer = Unchecked.defaultof<VkBuffer> && x.offset = Unchecked.defaultof<VkDeviceSize> && x.range = Unchecked.defaultof<VkDeviceSize>
+
         static member Empty =
             VkDescriptorBufferInfo(Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
 
@@ -2806,6 +2824,9 @@ type VkDescriptorImageInfo =
                 imageLayout = imageLayout
             }
 
+        member x.IsEmpty =
+            x.sampler = Unchecked.defaultof<VkSampler> && x.imageView = Unchecked.defaultof<VkImageView> && x.imageLayout = Unchecked.defaultof<VkImageLayout>
+
         static member Empty =
             VkDescriptorImageInfo(Unchecked.defaultof<VkSampler>, Unchecked.defaultof<VkImageView>, Unchecked.defaultof<VkImageLayout>)
 
@@ -2828,6 +2849,9 @@ type VkDescriptorPoolSize =
                 _type = _type
                 descriptorCount = descriptorCount
             }
+
+        member x.IsEmpty =
+            x._type = Unchecked.defaultof<VkDescriptorType> && x.descriptorCount = Unchecked.defaultof<uint32>
 
         static member Empty =
             VkDescriptorPoolSize(Unchecked.defaultof<VkDescriptorType>, Unchecked.defaultof<uint32>)
@@ -2862,16 +2886,11 @@ type VkDescriptorPoolCreateInfo =
         new(flags : VkDescriptorPoolCreateFlags, maxSets : uint32, poolSizeCount : uint32, pPoolSizes : nativeptr<VkDescriptorPoolSize>) =
             VkDescriptorPoolCreateInfo(Unchecked.defaultof<nativeint>, flags, maxSets, poolSizeCount, pPoolSizes)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkDescriptorPoolCreateFlags> && x.maxSets = Unchecked.defaultof<uint32> && x.poolSizeCount = Unchecked.defaultof<uint32> && x.pPoolSizes = Unchecked.defaultof<nativeptr<VkDescriptorPoolSize>>
+
         static member Empty =
             VkDescriptorPoolCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDescriptorPoolCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDescriptorPoolSize>>)
-
-        /// Creates an empty VkDescriptorPoolCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkDescriptorPoolCreateInfo(pNext, Unchecked.defaultof<VkDescriptorPoolCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDescriptorPoolSize>>)
-
-        /// Creates an empty VkDescriptorPoolCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkDescriptorPoolCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -2905,16 +2924,11 @@ type VkDescriptorSetAllocateInfo =
         new(descriptorPool : VkDescriptorPool, descriptorSetCount : uint32, pSetLayouts : nativeptr<VkDescriptorSetLayout>) =
             VkDescriptorSetAllocateInfo(Unchecked.defaultof<nativeint>, descriptorPool, descriptorSetCount, pSetLayouts)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.descriptorPool = Unchecked.defaultof<VkDescriptorPool> && x.descriptorSetCount = Unchecked.defaultof<uint32> && x.pSetLayouts = Unchecked.defaultof<nativeptr<VkDescriptorSetLayout>>
+
         static member Empty =
             VkDescriptorSetAllocateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDescriptorPool>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDescriptorSetLayout>>)
-
-        /// Creates an empty VkDescriptorSetAllocateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkDescriptorSetAllocateInfo(pNext, Unchecked.defaultof<VkDescriptorPool>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDescriptorSetLayout>>)
-
-        /// Creates an empty VkDescriptorSetAllocateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkDescriptorSetAllocateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -2943,6 +2957,9 @@ type VkDescriptorSetLayoutBinding =
                 stageFlags = stageFlags
                 pImmutableSamplers = pImmutableSamplers
             }
+
+        member x.IsEmpty =
+            x.binding = Unchecked.defaultof<uint32> && x.descriptorType = Unchecked.defaultof<VkDescriptorType> && x.descriptorCount = Unchecked.defaultof<uint32> && x.stageFlags = Unchecked.defaultof<VkShaderStageFlags> && x.pImmutableSamplers = Unchecked.defaultof<nativeptr<VkSampler>>
 
         static member Empty =
             VkDescriptorSetLayoutBinding(Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDescriptorType>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkShaderStageFlags>, Unchecked.defaultof<nativeptr<VkSampler>>)
@@ -2978,16 +2995,11 @@ type VkDescriptorSetLayoutCreateInfo =
         new(flags : VkDescriptorSetLayoutCreateFlags, bindingCount : uint32, pBindings : nativeptr<VkDescriptorSetLayoutBinding>) =
             VkDescriptorSetLayoutCreateInfo(Unchecked.defaultof<nativeint>, flags, bindingCount, pBindings)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkDescriptorSetLayoutCreateFlags> && x.bindingCount = Unchecked.defaultof<uint32> && x.pBindings = Unchecked.defaultof<nativeptr<VkDescriptorSetLayoutBinding>>
+
         static member Empty =
             VkDescriptorSetLayoutCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDescriptorSetLayoutCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDescriptorSetLayoutBinding>>)
-
-        /// Creates an empty VkDescriptorSetLayoutCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkDescriptorSetLayoutCreateInfo(pNext, Unchecked.defaultof<VkDescriptorSetLayoutCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDescriptorSetLayoutBinding>>)
-
-        /// Creates an empty VkDescriptorSetLayoutCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkDescriptorSetLayoutCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -3022,16 +3034,11 @@ type VkDeviceQueueCreateInfo =
         new(flags : VkDeviceQueueCreateFlags, queueFamilyIndex : uint32, queueCount : uint32, pQueuePriorities : nativeptr<float32>) =
             VkDeviceQueueCreateInfo(Unchecked.defaultof<nativeint>, flags, queueFamilyIndex, queueCount, pQueuePriorities)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkDeviceQueueCreateFlags> && x.queueFamilyIndex = Unchecked.defaultof<uint32> && x.queueCount = Unchecked.defaultof<uint32> && x.pQueuePriorities = Unchecked.defaultof<nativeptr<float32>>
+
         static member Empty =
             VkDeviceQueueCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceQueueCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<float32>>)
-
-        /// Creates an empty VkDeviceQueueCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkDeviceQueueCreateInfo(pNext, Unchecked.defaultof<VkDeviceQueueCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<float32>>)
-
-        /// Creates an empty VkDeviceQueueCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkDeviceQueueCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -3162,6 +3169,9 @@ type VkPhysicalDeviceFeatures =
                 inheritedQueries = inheritedQueries
             }
 
+        member x.IsEmpty =
+            x.robustBufferAccess = Unchecked.defaultof<VkBool32> && x.fullDrawIndexUint32 = Unchecked.defaultof<VkBool32> && x.imageCubeArray = Unchecked.defaultof<VkBool32> && x.independentBlend = Unchecked.defaultof<VkBool32> && x.geometryShader = Unchecked.defaultof<VkBool32> && x.tessellationShader = Unchecked.defaultof<VkBool32> && x.sampleRateShading = Unchecked.defaultof<VkBool32> && x.dualSrcBlend = Unchecked.defaultof<VkBool32> && x.logicOp = Unchecked.defaultof<VkBool32> && x.multiDrawIndirect = Unchecked.defaultof<VkBool32> && x.drawIndirectFirstInstance = Unchecked.defaultof<VkBool32> && x.depthClamp = Unchecked.defaultof<VkBool32> && x.depthBiasClamp = Unchecked.defaultof<VkBool32> && x.fillModeNonSolid = Unchecked.defaultof<VkBool32> && x.depthBounds = Unchecked.defaultof<VkBool32> && x.wideLines = Unchecked.defaultof<VkBool32> && x.largePoints = Unchecked.defaultof<VkBool32> && x.alphaToOne = Unchecked.defaultof<VkBool32> && x.multiViewport = Unchecked.defaultof<VkBool32> && x.samplerAnisotropy = Unchecked.defaultof<VkBool32> && x.textureCompressionETC2 = Unchecked.defaultof<VkBool32> && x.textureCompressionASTC_LDR = Unchecked.defaultof<VkBool32> && x.textureCompressionBC = Unchecked.defaultof<VkBool32> && x.occlusionQueryPrecise = Unchecked.defaultof<VkBool32> && x.pipelineStatisticsQuery = Unchecked.defaultof<VkBool32> && x.vertexPipelineStoresAndAtomics = Unchecked.defaultof<VkBool32> && x.fragmentStoresAndAtomics = Unchecked.defaultof<VkBool32> && x.shaderTessellationAndGeometryPointSize = Unchecked.defaultof<VkBool32> && x.shaderImageGatherExtended = Unchecked.defaultof<VkBool32> && x.shaderStorageImageExtendedFormats = Unchecked.defaultof<VkBool32> && x.shaderStorageImageMultisample = Unchecked.defaultof<VkBool32> && x.shaderStorageImageReadWithoutFormat = Unchecked.defaultof<VkBool32> && x.shaderStorageImageWriteWithoutFormat = Unchecked.defaultof<VkBool32> && x.shaderUniformBufferArrayDynamicIndexing = Unchecked.defaultof<VkBool32> && x.shaderSampledImageArrayDynamicIndexing = Unchecked.defaultof<VkBool32> && x.shaderStorageBufferArrayDynamicIndexing = Unchecked.defaultof<VkBool32> && x.shaderStorageImageArrayDynamicIndexing = Unchecked.defaultof<VkBool32> && x.shaderClipDistance = Unchecked.defaultof<VkBool32> && x.shaderCullDistance = Unchecked.defaultof<VkBool32> && x.shaderFloat64 = Unchecked.defaultof<VkBool32> && x.shaderInt64 = Unchecked.defaultof<VkBool32> && x.shaderInt16 = Unchecked.defaultof<VkBool32> && x.shaderResourceResidency = Unchecked.defaultof<VkBool32> && x.shaderResourceMinLod = Unchecked.defaultof<VkBool32> && x.sparseBinding = Unchecked.defaultof<VkBool32> && x.sparseResidencyBuffer = Unchecked.defaultof<VkBool32> && x.sparseResidencyImage2D = Unchecked.defaultof<VkBool32> && x.sparseResidencyImage3D = Unchecked.defaultof<VkBool32> && x.sparseResidency2Samples = Unchecked.defaultof<VkBool32> && x.sparseResidency4Samples = Unchecked.defaultof<VkBool32> && x.sparseResidency8Samples = Unchecked.defaultof<VkBool32> && x.sparseResidency16Samples = Unchecked.defaultof<VkBool32> && x.sparseResidencyAliased = Unchecked.defaultof<VkBool32> && x.variableMultisampleRate = Unchecked.defaultof<VkBool32> && x.inheritedQueries = Unchecked.defaultof<VkBool32>
+
         static member Empty =
             VkPhysicalDeviceFeatures(Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
 
@@ -3256,16 +3266,11 @@ type VkDeviceCreateInfo =
         new(flags : VkDeviceCreateFlags, queueCreateInfoCount : uint32, pQueueCreateInfos : nativeptr<VkDeviceQueueCreateInfo>, enabledLayerCount : uint32, ppEnabledLayerNames : nativeptr<cstr>, enabledExtensionCount : uint32, ppEnabledExtensionNames : nativeptr<cstr>, pEnabledFeatures : nativeptr<VkPhysicalDeviceFeatures>) =
             VkDeviceCreateInfo(Unchecked.defaultof<nativeint>, flags, queueCreateInfoCount, pQueueCreateInfos, enabledLayerCount, ppEnabledLayerNames, enabledExtensionCount, ppEnabledExtensionNames, pEnabledFeatures)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkDeviceCreateFlags> && x.queueCreateInfoCount = Unchecked.defaultof<uint32> && x.pQueueCreateInfos = Unchecked.defaultof<nativeptr<VkDeviceQueueCreateInfo>> && x.enabledLayerCount = Unchecked.defaultof<uint32> && x.ppEnabledLayerNames = Unchecked.defaultof<nativeptr<cstr>> && x.enabledExtensionCount = Unchecked.defaultof<uint32> && x.ppEnabledExtensionNames = Unchecked.defaultof<nativeptr<cstr>> && x.pEnabledFeatures = Unchecked.defaultof<nativeptr<VkPhysicalDeviceFeatures>>
+
         static member Empty =
             VkDeviceCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDeviceQueueCreateInfo>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<cstr>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<cstr>>, Unchecked.defaultof<nativeptr<VkPhysicalDeviceFeatures>>)
-
-        /// Creates an empty VkDeviceCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkDeviceCreateInfo(pNext, Unchecked.defaultof<VkDeviceCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDeviceQueueCreateInfo>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<cstr>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<cstr>>, Unchecked.defaultof<nativeptr<VkPhysicalDeviceFeatures>>)
-
-        /// Creates an empty VkDeviceCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkDeviceCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -3296,6 +3301,9 @@ type VkDispatchIndirectCommand =
                 z = z
             }
 
+        member x.IsEmpty =
+            x.x = Unchecked.defaultof<uint32> && x.y = Unchecked.defaultof<uint32> && x.z = Unchecked.defaultof<uint32>
+
         static member Empty =
             VkDispatchIndirectCommand(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
 
@@ -3324,6 +3332,9 @@ type VkDrawIndexedIndirectCommand =
                 vertexOffset = vertexOffset
                 firstInstance = firstInstance
             }
+
+        member x.IsEmpty =
+            x.indexCount = Unchecked.defaultof<uint32> && x.instanceCount = Unchecked.defaultof<uint32> && x.firstIndex = Unchecked.defaultof<uint32> && x.vertexOffset = Unchecked.defaultof<int> && x.firstInstance = Unchecked.defaultof<uint32>
 
         static member Empty =
             VkDrawIndexedIndirectCommand(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<int>, Unchecked.defaultof<uint32>)
@@ -3354,6 +3365,9 @@ type VkDrawIndirectCommand =
                 firstInstance = firstInstance
             }
 
+        member x.IsEmpty =
+            x.vertexCount = Unchecked.defaultof<uint32> && x.instanceCount = Unchecked.defaultof<uint32> && x.firstVertex = Unchecked.defaultof<uint32> && x.firstInstance = Unchecked.defaultof<uint32>
+
         static member Empty =
             VkDrawIndirectCommand(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
 
@@ -3383,16 +3397,11 @@ type VkEventCreateInfo =
         new(flags : VkEventCreateFlags) =
             VkEventCreateInfo(Unchecked.defaultof<nativeint>, flags)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkEventCreateFlags>
+
         static member Empty =
             VkEventCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkEventCreateFlags>)
-
-        /// Creates an empty VkEventCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkEventCreateInfo(pNext, Unchecked.defaultof<VkEventCreateFlags>)
-
-        /// Creates an empty VkEventCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkEventCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -3413,6 +3422,9 @@ type VkExtensionProperties =
                 extensionName = extensionName
                 specVersion = specVersion
             }
+
+        member x.IsEmpty =
+            x.extensionName = Unchecked.defaultof<String256> && x.specVersion = Unchecked.defaultof<uint32>
 
         static member Empty =
             VkExtensionProperties(Unchecked.defaultof<String256>, Unchecked.defaultof<uint32>)
@@ -3441,16 +3453,11 @@ type VkFenceCreateInfo =
         new(flags : VkFenceCreateFlags) =
             VkFenceCreateInfo(Unchecked.defaultof<nativeint>, flags)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkFenceCreateFlags>
+
         static member Empty =
             VkFenceCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkFenceCreateFlags>)
-
-        /// Creates an empty VkFenceCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkFenceCreateInfo(pNext, Unchecked.defaultof<VkFenceCreateFlags>)
-
-        /// Creates an empty VkFenceCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkFenceCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -3473,6 +3480,9 @@ type VkFormatProperties =
                 optimalTilingFeatures = optimalTilingFeatures
                 bufferFeatures = bufferFeatures
             }
+
+        member x.IsEmpty =
+            x.linearTilingFeatures = Unchecked.defaultof<VkFormatFeatureFlags> && x.optimalTilingFeatures = Unchecked.defaultof<VkFormatFeatureFlags> && x.bufferFeatures = Unchecked.defaultof<VkFormatFeatureFlags>
 
         static member Empty =
             VkFormatProperties(Unchecked.defaultof<VkFormatFeatureFlags>, Unchecked.defaultof<VkFormatFeatureFlags>, Unchecked.defaultof<VkFormatFeatureFlags>)
@@ -3514,16 +3524,11 @@ type VkFramebufferCreateInfo =
         new(flags : VkFramebufferCreateFlags, renderPass : VkRenderPass, attachmentCount : uint32, pAttachments : nativeptr<VkImageView>, width : uint32, height : uint32, layers : uint32) =
             VkFramebufferCreateInfo(Unchecked.defaultof<nativeint>, flags, renderPass, attachmentCount, pAttachments, width, height, layers)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkFramebufferCreateFlags> && x.renderPass = Unchecked.defaultof<VkRenderPass> && x.attachmentCount = Unchecked.defaultof<uint32> && x.pAttachments = Unchecked.defaultof<nativeptr<VkImageView>> && x.width = Unchecked.defaultof<uint32> && x.height = Unchecked.defaultof<uint32> && x.layers = Unchecked.defaultof<uint32>
+
         static member Empty =
             VkFramebufferCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkFramebufferCreateFlags>, Unchecked.defaultof<VkRenderPass>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkImageView>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-        /// Creates an empty VkFramebufferCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkFramebufferCreateInfo(pNext, Unchecked.defaultof<VkFramebufferCreateFlags>, Unchecked.defaultof<VkRenderPass>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkImageView>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-        /// Creates an empty VkFramebufferCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkFramebufferCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -3553,6 +3558,9 @@ type VkVertexInputBindingDescription =
                 inputRate = inputRate
             }
 
+        member x.IsEmpty =
+            x.binding = Unchecked.defaultof<uint32> && x.stride = Unchecked.defaultof<uint32> && x.inputRate = Unchecked.defaultof<VkVertexInputRate>
+
         static member Empty =
             VkVertexInputBindingDescription(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkVertexInputRate>)
 
@@ -3579,6 +3587,9 @@ type VkVertexInputAttributeDescription =
                 format = format
                 offset = offset
             }
+
+        member x.IsEmpty =
+            x.location = Unchecked.defaultof<uint32> && x.binding = Unchecked.defaultof<uint32> && x.format = Unchecked.defaultof<VkFormat> && x.offset = Unchecked.defaultof<uint32>
 
         static member Empty =
             VkVertexInputAttributeDescription(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<uint32>)
@@ -3617,16 +3628,11 @@ type VkPipelineVertexInputStateCreateInfo =
         new(flags : VkPipelineVertexInputStateCreateFlags, vertexBindingDescriptionCount : uint32, pVertexBindingDescriptions : nativeptr<VkVertexInputBindingDescription>, vertexAttributeDescriptionCount : uint32, pVertexAttributeDescriptions : nativeptr<VkVertexInputAttributeDescription>) =
             VkPipelineVertexInputStateCreateInfo(Unchecked.defaultof<nativeint>, flags, vertexBindingDescriptionCount, pVertexBindingDescriptions, vertexAttributeDescriptionCount, pVertexAttributeDescriptions)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineVertexInputStateCreateFlags> && x.vertexBindingDescriptionCount = Unchecked.defaultof<uint32> && x.pVertexBindingDescriptions = Unchecked.defaultof<nativeptr<VkVertexInputBindingDescription>> && x.vertexAttributeDescriptionCount = Unchecked.defaultof<uint32> && x.pVertexAttributeDescriptions = Unchecked.defaultof<nativeptr<VkVertexInputAttributeDescription>>
+
         static member Empty =
             VkPipelineVertexInputStateCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineVertexInputStateCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkVertexInputBindingDescription>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkVertexInputAttributeDescription>>)
-
-        /// Creates an empty VkPipelineVertexInputStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkPipelineVertexInputStateCreateInfo(pNext, Unchecked.defaultof<VkPipelineVertexInputStateCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkVertexInputBindingDescription>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkVertexInputAttributeDescription>>)
-
-        /// Creates an empty VkPipelineVertexInputStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkPipelineVertexInputStateCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -3661,16 +3667,11 @@ type VkPipelineInputAssemblyStateCreateInfo =
         new(flags : VkPipelineInputAssemblyStateCreateFlags, topology : VkPrimitiveTopology, primitiveRestartEnable : VkBool32) =
             VkPipelineInputAssemblyStateCreateInfo(Unchecked.defaultof<nativeint>, flags, topology, primitiveRestartEnable)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineInputAssemblyStateCreateFlags> && x.topology = Unchecked.defaultof<VkPrimitiveTopology> && x.primitiveRestartEnable = Unchecked.defaultof<VkBool32>
+
         static member Empty =
             VkPipelineInputAssemblyStateCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineInputAssemblyStateCreateFlags>, Unchecked.defaultof<VkPrimitiveTopology>, Unchecked.defaultof<VkBool32>)
-
-        /// Creates an empty VkPipelineInputAssemblyStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkPipelineInputAssemblyStateCreateInfo(pNext, Unchecked.defaultof<VkPipelineInputAssemblyStateCreateFlags>, Unchecked.defaultof<VkPrimitiveTopology>, Unchecked.defaultof<VkBool32>)
-
-        /// Creates an empty VkPipelineInputAssemblyStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkPipelineInputAssemblyStateCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -3701,16 +3702,11 @@ type VkPipelineTessellationStateCreateInfo =
         new(flags : VkPipelineTessellationStateCreateFlags, patchControlPoints : uint32) =
             VkPipelineTessellationStateCreateInfo(Unchecked.defaultof<nativeint>, flags, patchControlPoints)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineTessellationStateCreateFlags> && x.patchControlPoints = Unchecked.defaultof<uint32>
+
         static member Empty =
             VkPipelineTessellationStateCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineTessellationStateCreateFlags>, Unchecked.defaultof<uint32>)
-
-        /// Creates an empty VkPipelineTessellationStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkPipelineTessellationStateCreateInfo(pNext, Unchecked.defaultof<VkPipelineTessellationStateCreateFlags>, Unchecked.defaultof<uint32>)
-
-        /// Creates an empty VkPipelineTessellationStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkPipelineTessellationStateCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -3740,6 +3736,9 @@ type VkViewport =
                 minDepth = minDepth
                 maxDepth = maxDepth
             }
+
+        member x.IsEmpty =
+            x.x = Unchecked.defaultof<float32> && x.y = Unchecked.defaultof<float32> && x.width = Unchecked.defaultof<float32> && x.height = Unchecked.defaultof<float32> && x.minDepth = Unchecked.defaultof<float32> && x.maxDepth = Unchecked.defaultof<float32>
 
         static member Empty =
             VkViewport(Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>)
@@ -3780,16 +3779,11 @@ type VkPipelineViewportStateCreateInfo =
         new(flags : VkPipelineViewportStateCreateFlags, viewportCount : uint32, pViewports : nativeptr<VkViewport>, scissorCount : uint32, pScissors : nativeptr<VkRect2D>) =
             VkPipelineViewportStateCreateInfo(Unchecked.defaultof<nativeint>, flags, viewportCount, pViewports, scissorCount, pScissors)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineViewportStateCreateFlags> && x.viewportCount = Unchecked.defaultof<uint32> && x.pViewports = Unchecked.defaultof<nativeptr<VkViewport>> && x.scissorCount = Unchecked.defaultof<uint32> && x.pScissors = Unchecked.defaultof<nativeptr<VkRect2D>>
+
         static member Empty =
             VkPipelineViewportStateCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineViewportStateCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkViewport>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkRect2D>>)
-
-        /// Creates an empty VkPipelineViewportStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkPipelineViewportStateCreateInfo(pNext, Unchecked.defaultof<VkPipelineViewportStateCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkViewport>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkRect2D>>)
-
-        /// Creates an empty VkPipelineViewportStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkPipelineViewportStateCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -3840,16 +3834,11 @@ type VkPipelineRasterizationStateCreateInfo =
         new(flags : VkPipelineRasterizationStateCreateFlags, depthClampEnable : VkBool32, rasterizerDiscardEnable : VkBool32, polygonMode : VkPolygonMode, cullMode : VkCullModeFlags, frontFace : VkFrontFace, depthBiasEnable : VkBool32, depthBiasConstantFactor : float32, depthBiasClamp : float32, depthBiasSlopeFactor : float32, lineWidth : float32) =
             VkPipelineRasterizationStateCreateInfo(Unchecked.defaultof<nativeint>, flags, depthClampEnable, rasterizerDiscardEnable, polygonMode, cullMode, frontFace, depthBiasEnable, depthBiasConstantFactor, depthBiasClamp, depthBiasSlopeFactor, lineWidth)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineRasterizationStateCreateFlags> && x.depthClampEnable = Unchecked.defaultof<VkBool32> && x.rasterizerDiscardEnable = Unchecked.defaultof<VkBool32> && x.polygonMode = Unchecked.defaultof<VkPolygonMode> && x.cullMode = Unchecked.defaultof<VkCullModeFlags> && x.frontFace = Unchecked.defaultof<VkFrontFace> && x.depthBiasEnable = Unchecked.defaultof<VkBool32> && x.depthBiasConstantFactor = Unchecked.defaultof<float32> && x.depthBiasClamp = Unchecked.defaultof<float32> && x.depthBiasSlopeFactor = Unchecked.defaultof<float32> && x.lineWidth = Unchecked.defaultof<float32>
+
         static member Empty =
             VkPipelineRasterizationStateCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineRasterizationStateCreateFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkPolygonMode>, Unchecked.defaultof<VkCullModeFlags>, Unchecked.defaultof<VkFrontFace>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>)
-
-        /// Creates an empty VkPipelineRasterizationStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkPipelineRasterizationStateCreateInfo(pNext, Unchecked.defaultof<VkPipelineRasterizationStateCreateFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkPolygonMode>, Unchecked.defaultof<VkCullModeFlags>, Unchecked.defaultof<VkFrontFace>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>)
-
-        /// Creates an empty VkPipelineRasterizationStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkPipelineRasterizationStateCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -3898,16 +3887,11 @@ type VkPipelineMultisampleStateCreateInfo =
         new(flags : VkPipelineMultisampleStateCreateFlags, rasterizationSamples : VkSampleCountFlags, sampleShadingEnable : VkBool32, minSampleShading : float32, pSampleMask : nativeptr<VkSampleMask>, alphaToCoverageEnable : VkBool32, alphaToOneEnable : VkBool32) =
             VkPipelineMultisampleStateCreateInfo(Unchecked.defaultof<nativeint>, flags, rasterizationSamples, sampleShadingEnable, minSampleShading, pSampleMask, alphaToCoverageEnable, alphaToOneEnable)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineMultisampleStateCreateFlags> && x.rasterizationSamples = Unchecked.defaultof<VkSampleCountFlags> && x.sampleShadingEnable = Unchecked.defaultof<VkBool32> && x.minSampleShading = Unchecked.defaultof<float32> && x.pSampleMask = Unchecked.defaultof<nativeptr<VkSampleMask>> && x.alphaToCoverageEnable = Unchecked.defaultof<VkBool32> && x.alphaToOneEnable = Unchecked.defaultof<VkBool32>
+
         static member Empty =
             VkPipelineMultisampleStateCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineMultisampleStateCreateFlags>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<float32>, Unchecked.defaultof<nativeptr<VkSampleMask>>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-        /// Creates an empty VkPipelineMultisampleStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkPipelineMultisampleStateCreateInfo(pNext, Unchecked.defaultof<VkPipelineMultisampleStateCreateFlags>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<float32>, Unchecked.defaultof<nativeptr<VkSampleMask>>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-        /// Creates an empty VkPipelineMultisampleStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkPipelineMultisampleStateCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -3944,6 +3928,9 @@ type VkStencilOpState =
                 writeMask = writeMask
                 reference = reference
             }
+
+        member x.IsEmpty =
+            x.failOp = Unchecked.defaultof<VkStencilOp> && x.passOp = Unchecked.defaultof<VkStencilOp> && x.depthFailOp = Unchecked.defaultof<VkStencilOp> && x.compareOp = Unchecked.defaultof<VkCompareOp> && x.compareMask = Unchecked.defaultof<uint32> && x.writeMask = Unchecked.defaultof<uint32> && x.reference = Unchecked.defaultof<uint32>
 
         static member Empty =
             VkStencilOpState(Unchecked.defaultof<VkStencilOp>, Unchecked.defaultof<VkStencilOp>, Unchecked.defaultof<VkStencilOp>, Unchecked.defaultof<VkCompareOp>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
@@ -3995,16 +3982,11 @@ type VkPipelineDepthStencilStateCreateInfo =
         new(flags : VkPipelineDepthStencilStateCreateFlags, depthTestEnable : VkBool32, depthWriteEnable : VkBool32, depthCompareOp : VkCompareOp, depthBoundsTestEnable : VkBool32, stencilTestEnable : VkBool32, front : VkStencilOpState, back : VkStencilOpState, minDepthBounds : float32, maxDepthBounds : float32) =
             VkPipelineDepthStencilStateCreateInfo(Unchecked.defaultof<nativeint>, flags, depthTestEnable, depthWriteEnable, depthCompareOp, depthBoundsTestEnable, stencilTestEnable, front, back, minDepthBounds, maxDepthBounds)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineDepthStencilStateCreateFlags> && x.depthTestEnable = Unchecked.defaultof<VkBool32> && x.depthWriteEnable = Unchecked.defaultof<VkBool32> && x.depthCompareOp = Unchecked.defaultof<VkCompareOp> && x.depthBoundsTestEnable = Unchecked.defaultof<VkBool32> && x.stencilTestEnable = Unchecked.defaultof<VkBool32> && x.front = Unchecked.defaultof<VkStencilOpState> && x.back = Unchecked.defaultof<VkStencilOpState> && x.minDepthBounds = Unchecked.defaultof<float32> && x.maxDepthBounds = Unchecked.defaultof<float32>
+
         static member Empty =
             VkPipelineDepthStencilStateCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineDepthStencilStateCreateFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkCompareOp>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkStencilOpState>, Unchecked.defaultof<VkStencilOpState>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>)
-
-        /// Creates an empty VkPipelineDepthStencilStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkPipelineDepthStencilStateCreateInfo(pNext, Unchecked.defaultof<VkPipelineDepthStencilStateCreateFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkCompareOp>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkStencilOpState>, Unchecked.defaultof<VkStencilOpState>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>)
-
-        /// Creates an empty VkPipelineDepthStencilStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkPipelineDepthStencilStateCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -4046,6 +4028,9 @@ type VkPipelineColorBlendAttachmentState =
                 alphaBlendOp = alphaBlendOp
                 colorWriteMask = colorWriteMask
             }
+
+        member x.IsEmpty =
+            x.blendEnable = Unchecked.defaultof<VkBool32> && x.srcColorBlendFactor = Unchecked.defaultof<VkBlendFactor> && x.dstColorBlendFactor = Unchecked.defaultof<VkBlendFactor> && x.colorBlendOp = Unchecked.defaultof<VkBlendOp> && x.srcAlphaBlendFactor = Unchecked.defaultof<VkBlendFactor> && x.dstAlphaBlendFactor = Unchecked.defaultof<VkBlendFactor> && x.alphaBlendOp = Unchecked.defaultof<VkBlendOp> && x.colorWriteMask = Unchecked.defaultof<VkColorComponentFlags>
 
         static member Empty =
             VkPipelineColorBlendAttachmentState(Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBlendFactor>, Unchecked.defaultof<VkBlendFactor>, Unchecked.defaultof<VkBlendOp>, Unchecked.defaultof<VkBlendFactor>, Unchecked.defaultof<VkBlendFactor>, Unchecked.defaultof<VkBlendOp>, Unchecked.defaultof<VkColorComponentFlags>)
@@ -4090,16 +4075,11 @@ type VkPipelineColorBlendStateCreateInfo =
         new(flags : VkPipelineColorBlendStateCreateFlags, logicOpEnable : VkBool32, logicOp : VkLogicOp, attachmentCount : uint32, pAttachments : nativeptr<VkPipelineColorBlendAttachmentState>, blendConstants : V4f) =
             VkPipelineColorBlendStateCreateInfo(Unchecked.defaultof<nativeint>, flags, logicOpEnable, logicOp, attachmentCount, pAttachments, blendConstants)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineColorBlendStateCreateFlags> && x.logicOpEnable = Unchecked.defaultof<VkBool32> && x.logicOp = Unchecked.defaultof<VkLogicOp> && x.attachmentCount = Unchecked.defaultof<uint32> && x.pAttachments = Unchecked.defaultof<nativeptr<VkPipelineColorBlendAttachmentState>> && x.blendConstants = Unchecked.defaultof<V4f>
+
         static member Empty =
             VkPipelineColorBlendStateCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineColorBlendStateCreateFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkLogicOp>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipelineColorBlendAttachmentState>>, Unchecked.defaultof<V4f>)
-
-        /// Creates an empty VkPipelineColorBlendStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkPipelineColorBlendStateCreateInfo(pNext, Unchecked.defaultof<VkPipelineColorBlendStateCreateFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkLogicOp>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipelineColorBlendAttachmentState>>, Unchecked.defaultof<V4f>)
-
-        /// Creates an empty VkPipelineColorBlendStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkPipelineColorBlendStateCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -4135,16 +4115,11 @@ type VkPipelineDynamicStateCreateInfo =
         new(flags : VkPipelineDynamicStateCreateFlags, dynamicStateCount : uint32, pDynamicStates : nativeptr<VkDynamicState>) =
             VkPipelineDynamicStateCreateInfo(Unchecked.defaultof<nativeint>, flags, dynamicStateCount, pDynamicStates)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineDynamicStateCreateFlags> && x.dynamicStateCount = Unchecked.defaultof<uint32> && x.pDynamicStates = Unchecked.defaultof<nativeptr<VkDynamicState>>
+
         static member Empty =
             VkPipelineDynamicStateCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineDynamicStateCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDynamicState>>)
-
-        /// Creates an empty VkPipelineDynamicStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkPipelineDynamicStateCreateInfo(pNext, Unchecked.defaultof<VkPipelineDynamicStateCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDynamicState>>)
-
-        /// Creates an empty VkPipelineDynamicStateCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkPipelineDynamicStateCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -4205,16 +4180,11 @@ type VkGraphicsPipelineCreateInfo =
         new(flags : VkPipelineCreateFlags, stageCount : uint32, pStages : nativeptr<VkPipelineShaderStageCreateInfo>, pVertexInputState : nativeptr<VkPipelineVertexInputStateCreateInfo>, pInputAssemblyState : nativeptr<VkPipelineInputAssemblyStateCreateInfo>, pTessellationState : nativeptr<VkPipelineTessellationStateCreateInfo>, pViewportState : nativeptr<VkPipelineViewportStateCreateInfo>, pRasterizationState : nativeptr<VkPipelineRasterizationStateCreateInfo>, pMultisampleState : nativeptr<VkPipelineMultisampleStateCreateInfo>, pDepthStencilState : nativeptr<VkPipelineDepthStencilStateCreateInfo>, pColorBlendState : nativeptr<VkPipelineColorBlendStateCreateInfo>, pDynamicState : nativeptr<VkPipelineDynamicStateCreateInfo>, layout : VkPipelineLayout, renderPass : VkRenderPass, subpass : uint32, basePipelineHandle : VkPipeline, basePipelineIndex : int) =
             VkGraphicsPipelineCreateInfo(Unchecked.defaultof<nativeint>, flags, stageCount, pStages, pVertexInputState, pInputAssemblyState, pTessellationState, pViewportState, pRasterizationState, pMultisampleState, pDepthStencilState, pColorBlendState, pDynamicState, layout, renderPass, subpass, basePipelineHandle, basePipelineIndex)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineCreateFlags> && x.stageCount = Unchecked.defaultof<uint32> && x.pStages = Unchecked.defaultof<nativeptr<VkPipelineShaderStageCreateInfo>> && x.pVertexInputState = Unchecked.defaultof<nativeptr<VkPipelineVertexInputStateCreateInfo>> && x.pInputAssemblyState = Unchecked.defaultof<nativeptr<VkPipelineInputAssemblyStateCreateInfo>> && x.pTessellationState = Unchecked.defaultof<nativeptr<VkPipelineTessellationStateCreateInfo>> && x.pViewportState = Unchecked.defaultof<nativeptr<VkPipelineViewportStateCreateInfo>> && x.pRasterizationState = Unchecked.defaultof<nativeptr<VkPipelineRasterizationStateCreateInfo>> && x.pMultisampleState = Unchecked.defaultof<nativeptr<VkPipelineMultisampleStateCreateInfo>> && x.pDepthStencilState = Unchecked.defaultof<nativeptr<VkPipelineDepthStencilStateCreateInfo>> && x.pColorBlendState = Unchecked.defaultof<nativeptr<VkPipelineColorBlendStateCreateInfo>> && x.pDynamicState = Unchecked.defaultof<nativeptr<VkPipelineDynamicStateCreateInfo>> && x.layout = Unchecked.defaultof<VkPipelineLayout> && x.renderPass = Unchecked.defaultof<VkRenderPass> && x.subpass = Unchecked.defaultof<uint32> && x.basePipelineHandle = Unchecked.defaultof<VkPipeline> && x.basePipelineIndex = Unchecked.defaultof<int>
+
         static member Empty =
             VkGraphicsPipelineCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipelineShaderStageCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineVertexInputStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineInputAssemblyStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineTessellationStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineViewportStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineRasterizationStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineMultisampleStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineDepthStencilStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineColorBlendStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineDynamicStateCreateInfo>>, Unchecked.defaultof<VkPipelineLayout>, Unchecked.defaultof<VkRenderPass>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkPipeline>, Unchecked.defaultof<int>)
-
-        /// Creates an empty VkGraphicsPipelineCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkGraphicsPipelineCreateInfo(pNext, Unchecked.defaultof<VkPipelineCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipelineShaderStageCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineVertexInputStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineInputAssemblyStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineTessellationStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineViewportStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineRasterizationStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineMultisampleStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineDepthStencilStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineColorBlendStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineDynamicStateCreateInfo>>, Unchecked.defaultof<VkPipelineLayout>, Unchecked.defaultof<VkRenderPass>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkPipeline>, Unchecked.defaultof<int>)
-
-        /// Creates an empty VkGraphicsPipelineCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkGraphicsPipelineCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -4256,6 +4226,9 @@ type VkImageBlit =
                 dstOffsets = dstOffsets
             }
 
+        member x.IsEmpty =
+            x.srcSubresource = Unchecked.defaultof<VkImageSubresourceLayers> && x.srcOffsets = Unchecked.defaultof<VkOffset3D_2> && x.dstSubresource = Unchecked.defaultof<VkImageSubresourceLayers> && x.dstOffsets = Unchecked.defaultof<VkOffset3D_2>
+
         static member Empty =
             VkImageBlit(Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D_2>, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D_2>)
 
@@ -4285,6 +4258,9 @@ type VkImageCopy =
                 dstOffset = dstOffset
                 extent = extent
             }
+
+        member x.IsEmpty =
+            x.srcSubresource = Unchecked.defaultof<VkImageSubresourceLayers> && x.srcOffset = Unchecked.defaultof<VkOffset3D> && x.dstSubresource = Unchecked.defaultof<VkImageSubresourceLayers> && x.dstOffset = Unchecked.defaultof<VkOffset3D> && x.extent = Unchecked.defaultof<VkExtent3D>
 
         static member Empty =
             VkImageCopy(Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D>, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D>, Unchecked.defaultof<VkExtent3D>)
@@ -4340,16 +4316,11 @@ type VkImageCreateInfo =
         new(flags : VkImageCreateFlags, imageType : VkImageType, format : VkFormat, extent : VkExtent3D, mipLevels : uint32, arrayLayers : uint32, samples : VkSampleCountFlags, tiling : VkImageTiling, usage : VkImageUsageFlags, sharingMode : VkSharingMode, queueFamilyIndexCount : uint32, pQueueFamilyIndices : nativeptr<uint32>, initialLayout : VkImageLayout) =
             VkImageCreateInfo(Unchecked.defaultof<nativeint>, flags, imageType, format, extent, mipLevels, arrayLayers, samples, tiling, usage, sharingMode, queueFamilyIndexCount, pQueueFamilyIndices, initialLayout)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkImageCreateFlags> && x.imageType = Unchecked.defaultof<VkImageType> && x.format = Unchecked.defaultof<VkFormat> && x.extent = Unchecked.defaultof<VkExtent3D> && x.mipLevels = Unchecked.defaultof<uint32> && x.arrayLayers = Unchecked.defaultof<uint32> && x.samples = Unchecked.defaultof<VkSampleCountFlags> && x.tiling = Unchecked.defaultof<VkImageTiling> && x.usage = Unchecked.defaultof<VkImageUsageFlags> && x.sharingMode = Unchecked.defaultof<VkSharingMode> && x.queueFamilyIndexCount = Unchecked.defaultof<uint32> && x.pQueueFamilyIndices = Unchecked.defaultof<nativeptr<uint32>> && x.initialLayout = Unchecked.defaultof<VkImageLayout>
+
         static member Empty =
             VkImageCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageCreateFlags>, Unchecked.defaultof<VkImageType>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkExtent3D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkImageTiling>, Unchecked.defaultof<VkImageUsageFlags>, Unchecked.defaultof<VkSharingMode>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<VkImageLayout>)
-
-        /// Creates an empty VkImageCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkImageCreateInfo(pNext, Unchecked.defaultof<VkImageCreateFlags>, Unchecked.defaultof<VkImageType>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkExtent3D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkImageTiling>, Unchecked.defaultof<VkImageUsageFlags>, Unchecked.defaultof<VkSharingMode>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<VkImageLayout>)
-
-        /// Creates an empty VkImageCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkImageCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -4389,6 +4360,9 @@ type VkImageFormatProperties =
                 maxResourceSize = maxResourceSize
             }
 
+        member x.IsEmpty =
+            x.maxExtent = Unchecked.defaultof<VkExtent3D> && x.maxMipLevels = Unchecked.defaultof<uint32> && x.maxArrayLayers = Unchecked.defaultof<uint32> && x.sampleCounts = Unchecked.defaultof<VkSampleCountFlags> && x.maxResourceSize = Unchecked.defaultof<VkDeviceSize>
+
         static member Empty =
             VkImageFormatProperties(Unchecked.defaultof<VkExtent3D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkDeviceSize>)
 
@@ -4419,6 +4393,9 @@ type VkImageSubresourceRange =
                 baseArrayLayer = baseArrayLayer
                 layerCount = layerCount
             }
+
+        member x.IsEmpty =
+            x.aspectMask = Unchecked.defaultof<VkImageAspectFlags> && x.baseMipLevel = Unchecked.defaultof<uint32> && x.levelCount = Unchecked.defaultof<uint32> && x.baseArrayLayer = Unchecked.defaultof<uint32> && x.layerCount = Unchecked.defaultof<uint32>
 
         static member Empty =
             VkImageSubresourceRange(Unchecked.defaultof<VkImageAspectFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
@@ -4464,16 +4441,11 @@ type VkImageMemoryBarrier =
         new(srcAccessMask : VkAccessFlags, dstAccessMask : VkAccessFlags, oldLayout : VkImageLayout, newLayout : VkImageLayout, srcQueueFamilyIndex : uint32, dstQueueFamilyIndex : uint32, image : VkImage, subresourceRange : VkImageSubresourceRange) =
             VkImageMemoryBarrier(Unchecked.defaultof<nativeint>, srcAccessMask, dstAccessMask, oldLayout, newLayout, srcQueueFamilyIndex, dstQueueFamilyIndex, image, subresourceRange)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.srcAccessMask = Unchecked.defaultof<VkAccessFlags> && x.dstAccessMask = Unchecked.defaultof<VkAccessFlags> && x.oldLayout = Unchecked.defaultof<VkImageLayout> && x.newLayout = Unchecked.defaultof<VkImageLayout> && x.srcQueueFamilyIndex = Unchecked.defaultof<uint32> && x.dstQueueFamilyIndex = Unchecked.defaultof<uint32> && x.image = Unchecked.defaultof<VkImage> && x.subresourceRange = Unchecked.defaultof<VkImageSubresourceRange>
+
         static member Empty =
             VkImageMemoryBarrier(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageSubresourceRange>)
-
-        /// Creates an empty VkImageMemoryBarrier with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkImageMemoryBarrier(pNext, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageSubresourceRange>)
-
-        /// Creates an empty VkImageMemoryBarrier with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkImageMemoryBarrier.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -4507,6 +4479,9 @@ type VkImageResolve =
                 dstOffset = dstOffset
                 extent = extent
             }
+
+        member x.IsEmpty =
+            x.srcSubresource = Unchecked.defaultof<VkImageSubresourceLayers> && x.srcOffset = Unchecked.defaultof<VkOffset3D> && x.dstSubresource = Unchecked.defaultof<VkImageSubresourceLayers> && x.dstOffset = Unchecked.defaultof<VkOffset3D> && x.extent = Unchecked.defaultof<VkExtent3D>
 
         static member Empty =
             VkImageResolve(Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D>, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D>, Unchecked.defaultof<VkExtent3D>)
@@ -4548,16 +4523,11 @@ type VkImageViewCreateInfo =
         new(flags : VkImageViewCreateFlags, image : VkImage, viewType : VkImageViewType, format : VkFormat, components : VkComponentMapping, subresourceRange : VkImageSubresourceRange) =
             VkImageViewCreateInfo(Unchecked.defaultof<nativeint>, flags, image, viewType, format, components, subresourceRange)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkImageViewCreateFlags> && x.image = Unchecked.defaultof<VkImage> && x.viewType = Unchecked.defaultof<VkImageViewType> && x.format = Unchecked.defaultof<VkFormat> && x.components = Unchecked.defaultof<VkComponentMapping> && x.subresourceRange = Unchecked.defaultof<VkImageSubresourceRange>
+
         static member Empty =
             VkImageViewCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageViewCreateFlags>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageViewType>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkComponentMapping>, Unchecked.defaultof<VkImageSubresourceRange>)
-
-        /// Creates an empty VkImageViewCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkImageViewCreateInfo(pNext, Unchecked.defaultof<VkImageViewCreateFlags>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageViewType>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkComponentMapping>, Unchecked.defaultof<VkImageSubresourceRange>)
-
-        /// Creates an empty VkImageViewCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkImageViewCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -4599,16 +4569,11 @@ type VkInstanceCreateInfo =
         new(flags : VkInstanceCreateFlags, pApplicationInfo : nativeptr<VkApplicationInfo>, enabledLayerCount : uint32, ppEnabledLayerNames : nativeptr<cstr>, enabledExtensionCount : uint32, ppEnabledExtensionNames : nativeptr<cstr>) =
             VkInstanceCreateInfo(Unchecked.defaultof<nativeint>, flags, pApplicationInfo, enabledLayerCount, ppEnabledLayerNames, enabledExtensionCount, ppEnabledExtensionNames)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkInstanceCreateFlags> && x.pApplicationInfo = Unchecked.defaultof<nativeptr<VkApplicationInfo>> && x.enabledLayerCount = Unchecked.defaultof<uint32> && x.ppEnabledLayerNames = Unchecked.defaultof<nativeptr<cstr>> && x.enabledExtensionCount = Unchecked.defaultof<uint32> && x.ppEnabledExtensionNames = Unchecked.defaultof<nativeptr<cstr>>
+
         static member Empty =
             VkInstanceCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkInstanceCreateFlags>, Unchecked.defaultof<nativeptr<VkApplicationInfo>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<cstr>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<cstr>>)
-
-        /// Creates an empty VkInstanceCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkInstanceCreateInfo(pNext, Unchecked.defaultof<VkInstanceCreateFlags>, Unchecked.defaultof<nativeptr<VkApplicationInfo>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<cstr>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<cstr>>)
-
-        /// Creates an empty VkInstanceCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkInstanceCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -4638,6 +4603,9 @@ type VkLayerProperties =
                 implementationVersion = implementationVersion
                 description = description
             }
+
+        member x.IsEmpty =
+            x.layerName = Unchecked.defaultof<String256> && x.specVersion = Unchecked.defaultof<uint32> && x.implementationVersion = Unchecked.defaultof<uint32> && x.description = Unchecked.defaultof<String256>
 
         static member Empty =
             VkLayerProperties(Unchecked.defaultof<String256>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<String256>)
@@ -4672,16 +4640,11 @@ type VkMappedMemoryRange =
         new(memory : VkDeviceMemory, offset : VkDeviceSize, size : VkDeviceSize) =
             VkMappedMemoryRange(Unchecked.defaultof<nativeint>, memory, offset, size)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.memory = Unchecked.defaultof<VkDeviceMemory> && x.offset = Unchecked.defaultof<VkDeviceSize> && x.size = Unchecked.defaultof<VkDeviceSize>
+
         static member Empty =
             VkMappedMemoryRange(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceMemory>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
-
-        /// Creates an empty VkMappedMemoryRange with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkMappedMemoryRange(pNext, Unchecked.defaultof<VkDeviceMemory>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
-
-        /// Creates an empty VkMappedMemoryRange with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkMappedMemoryRange.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -4712,16 +4675,11 @@ type VkMemoryAllocateInfo =
         new(allocationSize : VkDeviceSize, memoryTypeIndex : uint32) =
             VkMemoryAllocateInfo(Unchecked.defaultof<nativeint>, allocationSize, memoryTypeIndex)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.allocationSize = Unchecked.defaultof<VkDeviceSize> && x.memoryTypeIndex = Unchecked.defaultof<uint32>
+
         static member Empty =
             VkMemoryAllocateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>)
-
-        /// Creates an empty VkMemoryAllocateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkMemoryAllocateInfo(pNext, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>)
-
-        /// Creates an empty VkMemoryAllocateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkMemoryAllocateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -4751,16 +4709,11 @@ type VkMemoryBarrier =
         new(srcAccessMask : VkAccessFlags, dstAccessMask : VkAccessFlags) =
             VkMemoryBarrier(Unchecked.defaultof<nativeint>, srcAccessMask, dstAccessMask)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.srcAccessMask = Unchecked.defaultof<VkAccessFlags> && x.dstAccessMask = Unchecked.defaultof<VkAccessFlags>
+
         static member Empty =
             VkMemoryBarrier(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkAccessFlags>)
-
-        /// Creates an empty VkMemoryBarrier with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkMemoryBarrier(pNext, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkAccessFlags>)
-
-        /// Creates an empty VkMemoryBarrier with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkMemoryBarrier.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -4782,6 +4735,9 @@ type VkMemoryHeap =
                 size = size
                 flags = flags
             }
+
+        member x.IsEmpty =
+            x.size = Unchecked.defaultof<VkDeviceSize> && x.flags = Unchecked.defaultof<VkMemoryHeapFlags>
 
         static member Empty =
             VkMemoryHeap(Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkMemoryHeapFlags>)
@@ -4830,6 +4786,9 @@ type VkMemoryRequirements =
                 memoryTypeBits = memoryTypeBits
             }
 
+        member x.IsEmpty =
+            x.size = Unchecked.defaultof<VkDeviceSize> && x.alignment = Unchecked.defaultof<VkDeviceSize> && x.memoryTypeBits = Unchecked.defaultof<uint32>
+
         static member Empty =
             VkMemoryRequirements(Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>)
 
@@ -4852,6 +4811,9 @@ type VkMemoryType =
                 propertyFlags = propertyFlags
                 heapIndex = heapIndex
             }
+
+        member x.IsEmpty =
+            x.propertyFlags = Unchecked.defaultof<VkMemoryPropertyFlags> && x.heapIndex = Unchecked.defaultof<uint32>
 
         static member Empty =
             VkMemoryType(Unchecked.defaultof<VkMemoryPropertyFlags>, Unchecked.defaultof<uint32>)
@@ -5106,6 +5068,9 @@ type VkPhysicalDeviceLimits =
                 nonCoherentAtomSize = nonCoherentAtomSize
             }
 
+        member x.IsEmpty =
+            x.maxImageDimension1D = Unchecked.defaultof<uint32> && x.maxImageDimension2D = Unchecked.defaultof<uint32> && x.maxImageDimension3D = Unchecked.defaultof<uint32> && x.maxImageDimensionCube = Unchecked.defaultof<uint32> && x.maxImageArrayLayers = Unchecked.defaultof<uint32> && x.maxTexelBufferElements = Unchecked.defaultof<uint32> && x.maxUniformBufferRange = Unchecked.defaultof<uint32> && x.maxStorageBufferRange = Unchecked.defaultof<uint32> && x.maxPushConstantsSize = Unchecked.defaultof<uint32> && x.maxMemoryAllocationCount = Unchecked.defaultof<uint32> && x.maxSamplerAllocationCount = Unchecked.defaultof<uint32> && x.bufferImageGranularity = Unchecked.defaultof<VkDeviceSize> && x.sparseAddressSpaceSize = Unchecked.defaultof<VkDeviceSize> && x.maxBoundDescriptorSets = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorSamplers = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorUniformBuffers = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorStorageBuffers = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorSampledImages = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorStorageImages = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorInputAttachments = Unchecked.defaultof<uint32> && x.maxPerStageResources = Unchecked.defaultof<uint32> && x.maxDescriptorSetSamplers = Unchecked.defaultof<uint32> && x.maxDescriptorSetUniformBuffers = Unchecked.defaultof<uint32> && x.maxDescriptorSetUniformBuffersDynamic = Unchecked.defaultof<uint32> && x.maxDescriptorSetStorageBuffers = Unchecked.defaultof<uint32> && x.maxDescriptorSetStorageBuffersDynamic = Unchecked.defaultof<uint32> && x.maxDescriptorSetSampledImages = Unchecked.defaultof<uint32> && x.maxDescriptorSetStorageImages = Unchecked.defaultof<uint32> && x.maxDescriptorSetInputAttachments = Unchecked.defaultof<uint32> && x.maxVertexInputAttributes = Unchecked.defaultof<uint32> && x.maxVertexInputBindings = Unchecked.defaultof<uint32> && x.maxVertexInputAttributeOffset = Unchecked.defaultof<uint32> && x.maxVertexInputBindingStride = Unchecked.defaultof<uint32> && x.maxVertexOutputComponents = Unchecked.defaultof<uint32> && x.maxTessellationGenerationLevel = Unchecked.defaultof<uint32> && x.maxTessellationPatchSize = Unchecked.defaultof<uint32> && x.maxTessellationControlPerVertexInputComponents = Unchecked.defaultof<uint32> && x.maxTessellationControlPerVertexOutputComponents = Unchecked.defaultof<uint32> && x.maxTessellationControlPerPatchOutputComponents = Unchecked.defaultof<uint32> && x.maxTessellationControlTotalOutputComponents = Unchecked.defaultof<uint32> && x.maxTessellationEvaluationInputComponents = Unchecked.defaultof<uint32> && x.maxTessellationEvaluationOutputComponents = Unchecked.defaultof<uint32> && x.maxGeometryShaderInvocations = Unchecked.defaultof<uint32> && x.maxGeometryInputComponents = Unchecked.defaultof<uint32> && x.maxGeometryOutputComponents = Unchecked.defaultof<uint32> && x.maxGeometryOutputVertices = Unchecked.defaultof<uint32> && x.maxGeometryTotalOutputComponents = Unchecked.defaultof<uint32> && x.maxFragmentInputComponents = Unchecked.defaultof<uint32> && x.maxFragmentOutputAttachments = Unchecked.defaultof<uint32> && x.maxFragmentDualSrcAttachments = Unchecked.defaultof<uint32> && x.maxFragmentCombinedOutputResources = Unchecked.defaultof<uint32> && x.maxComputeSharedMemorySize = Unchecked.defaultof<uint32> && x.maxComputeWorkGroupCount = Unchecked.defaultof<V3ui> && x.maxComputeWorkGroupInvocations = Unchecked.defaultof<uint32> && x.maxComputeWorkGroupSize = Unchecked.defaultof<V3ui> && x.subPixelPrecisionBits = Unchecked.defaultof<uint32> && x.subTexelPrecisionBits = Unchecked.defaultof<uint32> && x.mipmapPrecisionBits = Unchecked.defaultof<uint32> && x.maxDrawIndexedIndexValue = Unchecked.defaultof<uint32> && x.maxDrawIndirectCount = Unchecked.defaultof<uint32> && x.maxSamplerLodBias = Unchecked.defaultof<float32> && x.maxSamplerAnisotropy = Unchecked.defaultof<float32> && x.maxViewports = Unchecked.defaultof<uint32> && x.maxViewportDimensions = Unchecked.defaultof<V2ui> && x.viewportBoundsRange = Unchecked.defaultof<V2f> && x.viewportSubPixelBits = Unchecked.defaultof<uint32> && x.minMemoryMapAlignment = Unchecked.defaultof<uint64> && x.minTexelBufferOffsetAlignment = Unchecked.defaultof<VkDeviceSize> && x.minUniformBufferOffsetAlignment = Unchecked.defaultof<VkDeviceSize> && x.minStorageBufferOffsetAlignment = Unchecked.defaultof<VkDeviceSize> && x.minTexelOffset = Unchecked.defaultof<int> && x.maxTexelOffset = Unchecked.defaultof<uint32> && x.minTexelGatherOffset = Unchecked.defaultof<int> && x.maxTexelGatherOffset = Unchecked.defaultof<uint32> && x.minInterpolationOffset = Unchecked.defaultof<float32> && x.maxInterpolationOffset = Unchecked.defaultof<float32> && x.subPixelInterpolationOffsetBits = Unchecked.defaultof<uint32> && x.maxFramebufferWidth = Unchecked.defaultof<uint32> && x.maxFramebufferHeight = Unchecked.defaultof<uint32> && x.maxFramebufferLayers = Unchecked.defaultof<uint32> && x.framebufferColorSampleCounts = Unchecked.defaultof<VkSampleCountFlags> && x.framebufferDepthSampleCounts = Unchecked.defaultof<VkSampleCountFlags> && x.framebufferStencilSampleCounts = Unchecked.defaultof<VkSampleCountFlags> && x.framebufferNoAttachmentsSampleCounts = Unchecked.defaultof<VkSampleCountFlags> && x.maxColorAttachments = Unchecked.defaultof<uint32> && x.sampledImageColorSampleCounts = Unchecked.defaultof<VkSampleCountFlags> && x.sampledImageIntegerSampleCounts = Unchecked.defaultof<VkSampleCountFlags> && x.sampledImageDepthSampleCounts = Unchecked.defaultof<VkSampleCountFlags> && x.sampledImageStencilSampleCounts = Unchecked.defaultof<VkSampleCountFlags> && x.storageImageSampleCounts = Unchecked.defaultof<VkSampleCountFlags> && x.maxSampleMaskWords = Unchecked.defaultof<uint32> && x.timestampComputeAndGraphics = Unchecked.defaultof<VkBool32> && x.timestampPeriod = Unchecked.defaultof<float32> && x.maxClipDistances = Unchecked.defaultof<uint32> && x.maxCullDistances = Unchecked.defaultof<uint32> && x.maxCombinedClipAndCullDistances = Unchecked.defaultof<uint32> && x.discreteQueuePriorities = Unchecked.defaultof<uint32> && x.pointSizeRange = Unchecked.defaultof<V2f> && x.lineWidthRange = Unchecked.defaultof<V2f> && x.pointSizeGranularity = Unchecked.defaultof<float32> && x.lineWidthGranularity = Unchecked.defaultof<float32> && x.strictLines = Unchecked.defaultof<VkBool32> && x.standardSampleLocations = Unchecked.defaultof<VkBool32> && x.optimalBufferCopyOffsetAlignment = Unchecked.defaultof<VkDeviceSize> && x.optimalBufferCopyRowPitchAlignment = Unchecked.defaultof<VkDeviceSize> && x.nonCoherentAtomSize = Unchecked.defaultof<VkDeviceSize>
+
         static member Empty =
             VkPhysicalDeviceLimits(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<V3ui>, Unchecked.defaultof<uint32>, Unchecked.defaultof<V3ui>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<V2ui>, Unchecked.defaultof<V2f>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint64>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<int>, Unchecked.defaultof<uint32>, Unchecked.defaultof<int>, Unchecked.defaultof<uint32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<float32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<V2f>, Unchecked.defaultof<V2f>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
 
@@ -5236,6 +5201,9 @@ type VkPhysicalDeviceMemoryProperties =
                 memoryHeaps = memoryHeaps
             }
 
+        member x.IsEmpty =
+            x.memoryTypeCount = Unchecked.defaultof<uint32> && x.memoryTypes = Unchecked.defaultof<VkMemoryType_32> && x.memoryHeapCount = Unchecked.defaultof<uint32> && x.memoryHeaps = Unchecked.defaultof<VkMemoryHeap_16>
+
         static member Empty =
             VkPhysicalDeviceMemoryProperties(Unchecked.defaultof<uint32>, Unchecked.defaultof<VkMemoryType_32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkMemoryHeap_16>)
 
@@ -5265,6 +5233,9 @@ type VkPhysicalDeviceSparseProperties =
                 residencyAlignedMipSize = residencyAlignedMipSize
                 residencyNonResidentStrict = residencyNonResidentStrict
             }
+
+        member x.IsEmpty =
+            x.residencyStandard2DBlockShape = Unchecked.defaultof<VkBool32> && x.residencyStandard2DMultisampleBlockShape = Unchecked.defaultof<VkBool32> && x.residencyStandard3DBlockShape = Unchecked.defaultof<VkBool32> && x.residencyAlignedMipSize = Unchecked.defaultof<VkBool32> && x.residencyNonResidentStrict = Unchecked.defaultof<VkBool32>
 
         static member Empty =
             VkPhysicalDeviceSparseProperties(Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
@@ -5305,6 +5276,9 @@ type VkPhysicalDeviceProperties =
                 sparseProperties = sparseProperties
             }
 
+        member x.IsEmpty =
+            x.apiVersion = Unchecked.defaultof<uint32> && x.driverVersion = Unchecked.defaultof<uint32> && x.vendorID = Unchecked.defaultof<uint32> && x.deviceID = Unchecked.defaultof<uint32> && x.deviceType = Unchecked.defaultof<VkPhysicalDeviceType> && x.deviceName = Unchecked.defaultof<String256> && x.pipelineCacheUUID = Unchecked.defaultof<Guid> && x.limits = Unchecked.defaultof<VkPhysicalDeviceLimits> && x.sparseProperties = Unchecked.defaultof<VkPhysicalDeviceSparseProperties>
+
         static member Empty =
             VkPhysicalDeviceProperties(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkPhysicalDeviceType>, Unchecked.defaultof<String256>, Unchecked.defaultof<Guid>, Unchecked.defaultof<VkPhysicalDeviceLimits>, Unchecked.defaultof<VkPhysicalDeviceSparseProperties>)
 
@@ -5343,16 +5317,11 @@ type VkPipelineCacheCreateInfo =
         new(flags : VkPipelineCacheCreateFlags, initialDataSize : uint64, pInitialData : nativeint) =
             VkPipelineCacheCreateInfo(Unchecked.defaultof<nativeint>, flags, initialDataSize, pInitialData)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineCacheCreateFlags> && x.initialDataSize = Unchecked.defaultof<uint64> && x.pInitialData = Unchecked.defaultof<nativeint>
+
         static member Empty =
             VkPipelineCacheCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineCacheCreateFlags>, Unchecked.defaultof<uint64>, Unchecked.defaultof<nativeint>)
-
-        /// Creates an empty VkPipelineCacheCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkPipelineCacheCreateInfo(pNext, Unchecked.defaultof<VkPipelineCacheCreateFlags>, Unchecked.defaultof<uint64>, Unchecked.defaultof<nativeint>)
-
-        /// Creates an empty VkPipelineCacheCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkPipelineCacheCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -5377,6 +5346,9 @@ type VkPushConstantRange =
                 offset = offset
                 size = size
             }
+
+        member x.IsEmpty =
+            x.stageFlags = Unchecked.defaultof<VkShaderStageFlags> && x.offset = Unchecked.defaultof<uint32> && x.size = Unchecked.defaultof<uint32>
 
         static member Empty =
             VkPushConstantRange(Unchecked.defaultof<VkShaderStageFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
@@ -5414,16 +5386,11 @@ type VkPipelineLayoutCreateInfo =
         new(flags : VkPipelineLayoutCreateFlags, setLayoutCount : uint32, pSetLayouts : nativeptr<VkDescriptorSetLayout>, pushConstantRangeCount : uint32, pPushConstantRanges : nativeptr<VkPushConstantRange>) =
             VkPipelineLayoutCreateInfo(Unchecked.defaultof<nativeint>, flags, setLayoutCount, pSetLayouts, pushConstantRangeCount, pPushConstantRanges)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineLayoutCreateFlags> && x.setLayoutCount = Unchecked.defaultof<uint32> && x.pSetLayouts = Unchecked.defaultof<nativeptr<VkDescriptorSetLayout>> && x.pushConstantRangeCount = Unchecked.defaultof<uint32> && x.pPushConstantRanges = Unchecked.defaultof<nativeptr<VkPushConstantRange>>
+
         static member Empty =
             VkPipelineLayoutCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineLayoutCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDescriptorSetLayout>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPushConstantRange>>)
-
-        /// Creates an empty VkPipelineLayoutCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkPipelineLayoutCreateInfo(pNext, Unchecked.defaultof<VkPipelineLayoutCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDescriptorSetLayout>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPushConstantRange>>)
-
-        /// Creates an empty VkPipelineLayoutCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkPipelineLayoutCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -5460,16 +5427,11 @@ type VkQueryPoolCreateInfo =
         new(flags : VkQueryPoolCreateFlags, queryType : VkQueryType, queryCount : uint32, pipelineStatistics : VkQueryPipelineStatisticFlags) =
             VkQueryPoolCreateInfo(Unchecked.defaultof<nativeint>, flags, queryType, queryCount, pipelineStatistics)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkQueryPoolCreateFlags> && x.queryType = Unchecked.defaultof<VkQueryType> && x.queryCount = Unchecked.defaultof<uint32> && x.pipelineStatistics = Unchecked.defaultof<VkQueryPipelineStatisticFlags>
+
         static member Empty =
             VkQueryPoolCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkQueryPoolCreateFlags>, Unchecked.defaultof<VkQueryType>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkQueryPipelineStatisticFlags>)
-
-        /// Creates an empty VkQueryPoolCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkQueryPoolCreateInfo(pNext, Unchecked.defaultof<VkQueryPoolCreateFlags>, Unchecked.defaultof<VkQueryType>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkQueryPipelineStatisticFlags>)
-
-        /// Creates an empty VkQueryPoolCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkQueryPoolCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -5497,6 +5459,9 @@ type VkQueueFamilyProperties =
                 timestampValidBits = timestampValidBits
                 minImageTransferGranularity = minImageTransferGranularity
             }
+
+        member x.IsEmpty =
+            x.queueFlags = Unchecked.defaultof<VkQueueFlags> && x.queueCount = Unchecked.defaultof<uint32> && x.timestampValidBits = Unchecked.defaultof<uint32> && x.minImageTransferGranularity = Unchecked.defaultof<VkExtent3D>
 
         static member Empty =
             VkQueueFamilyProperties(Unchecked.defaultof<VkQueueFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkExtent3D>)
@@ -5535,16 +5500,11 @@ type VkRenderPassBeginInfo =
         new(renderPass : VkRenderPass, framebuffer : VkFramebuffer, renderArea : VkRect2D, clearValueCount : uint32, pClearValues : nativeptr<VkClearValue>) =
             VkRenderPassBeginInfo(Unchecked.defaultof<nativeint>, renderPass, framebuffer, renderArea, clearValueCount, pClearValues)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.renderPass = Unchecked.defaultof<VkRenderPass> && x.framebuffer = Unchecked.defaultof<VkFramebuffer> && x.renderArea = Unchecked.defaultof<VkRect2D> && x.clearValueCount = Unchecked.defaultof<uint32> && x.pClearValues = Unchecked.defaultof<nativeptr<VkClearValue>>
+
         static member Empty =
             VkRenderPassBeginInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkRenderPass>, Unchecked.defaultof<VkFramebuffer>, Unchecked.defaultof<VkRect2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkClearValue>>)
-
-        /// Creates an empty VkRenderPassBeginInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkRenderPassBeginInfo(pNext, Unchecked.defaultof<VkRenderPass>, Unchecked.defaultof<VkFramebuffer>, Unchecked.defaultof<VkRect2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkClearValue>>)
-
-        /// Creates an empty VkRenderPassBeginInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkRenderPassBeginInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -5586,6 +5546,9 @@ type VkSubpassDescription =
                 pPreserveAttachments = pPreserveAttachments
             }
 
+        member x.IsEmpty =
+            x.flags = Unchecked.defaultof<VkSubpassDescriptionFlags> && x.pipelineBindPoint = Unchecked.defaultof<VkPipelineBindPoint> && x.inputAttachmentCount = Unchecked.defaultof<uint32> && x.pInputAttachments = Unchecked.defaultof<nativeptr<VkAttachmentReference>> && x.colorAttachmentCount = Unchecked.defaultof<uint32> && x.pColorAttachments = Unchecked.defaultof<nativeptr<VkAttachmentReference>> && x.pResolveAttachments = Unchecked.defaultof<nativeptr<VkAttachmentReference>> && x.pDepthStencilAttachment = Unchecked.defaultof<nativeptr<VkAttachmentReference>> && x.preserveAttachmentCount = Unchecked.defaultof<uint32> && x.pPreserveAttachments = Unchecked.defaultof<nativeptr<uint32>>
+
         static member Empty =
             VkSubpassDescription(Unchecked.defaultof<VkSubpassDescriptionFlags>, Unchecked.defaultof<VkPipelineBindPoint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentReference>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentReference>>, Unchecked.defaultof<nativeptr<VkAttachmentReference>>, Unchecked.defaultof<nativeptr<VkAttachmentReference>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
 
@@ -5625,6 +5588,9 @@ type VkSubpassDependency =
                 dstAccessMask = dstAccessMask
                 dependencyFlags = dependencyFlags
             }
+
+        member x.IsEmpty =
+            x.srcSubpass = Unchecked.defaultof<uint32> && x.dstSubpass = Unchecked.defaultof<uint32> && x.srcStageMask = Unchecked.defaultof<VkPipelineStageFlags> && x.dstStageMask = Unchecked.defaultof<VkPipelineStageFlags> && x.srcAccessMask = Unchecked.defaultof<VkAccessFlags> && x.dstAccessMask = Unchecked.defaultof<VkAccessFlags> && x.dependencyFlags = Unchecked.defaultof<VkDependencyFlags>
 
         static member Empty =
             VkSubpassDependency(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkPipelineStageFlags>, Unchecked.defaultof<VkPipelineStageFlags>, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkDependencyFlags>)
@@ -5670,16 +5636,11 @@ type VkRenderPassCreateInfo =
         new(flags : VkRenderPassCreateFlags, attachmentCount : uint32, pAttachments : nativeptr<VkAttachmentDescription>, subpassCount : uint32, pSubpasses : nativeptr<VkSubpassDescription>, dependencyCount : uint32, pDependencies : nativeptr<VkSubpassDependency>) =
             VkRenderPassCreateInfo(Unchecked.defaultof<nativeint>, flags, attachmentCount, pAttachments, subpassCount, pSubpasses, dependencyCount, pDependencies)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkRenderPassCreateFlags> && x.attachmentCount = Unchecked.defaultof<uint32> && x.pAttachments = Unchecked.defaultof<nativeptr<VkAttachmentDescription>> && x.subpassCount = Unchecked.defaultof<uint32> && x.pSubpasses = Unchecked.defaultof<nativeptr<VkSubpassDescription>> && x.dependencyCount = Unchecked.defaultof<uint32> && x.pDependencies = Unchecked.defaultof<nativeptr<VkSubpassDependency>>
+
         static member Empty =
             VkRenderPassCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkRenderPassCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentDescription>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSubpassDescription>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSubpassDependency>>)
-
-        /// Creates an empty VkRenderPassCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkRenderPassCreateInfo(pNext, Unchecked.defaultof<VkRenderPassCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentDescription>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSubpassDescription>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSubpassDependency>>)
-
-        /// Creates an empty VkRenderPassCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkRenderPassCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -5742,16 +5703,11 @@ type VkSamplerCreateInfo =
         new(flags : VkSamplerCreateFlags, magFilter : VkFilter, minFilter : VkFilter, mipmapMode : VkSamplerMipmapMode, addressModeU : VkSamplerAddressMode, addressModeV : VkSamplerAddressMode, addressModeW : VkSamplerAddressMode, mipLodBias : float32, anisotropyEnable : VkBool32, maxAnisotropy : float32, compareEnable : VkBool32, compareOp : VkCompareOp, minLod : float32, maxLod : float32, borderColor : VkBorderColor, unnormalizedCoordinates : VkBool32) =
             VkSamplerCreateInfo(Unchecked.defaultof<nativeint>, flags, magFilter, minFilter, mipmapMode, addressModeU, addressModeV, addressModeW, mipLodBias, anisotropyEnable, maxAnisotropy, compareEnable, compareOp, minLod, maxLod, borderColor, unnormalizedCoordinates)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkSamplerCreateFlags> && x.magFilter = Unchecked.defaultof<VkFilter> && x.minFilter = Unchecked.defaultof<VkFilter> && x.mipmapMode = Unchecked.defaultof<VkSamplerMipmapMode> && x.addressModeU = Unchecked.defaultof<VkSamplerAddressMode> && x.addressModeV = Unchecked.defaultof<VkSamplerAddressMode> && x.addressModeW = Unchecked.defaultof<VkSamplerAddressMode> && x.mipLodBias = Unchecked.defaultof<float32> && x.anisotropyEnable = Unchecked.defaultof<VkBool32> && x.maxAnisotropy = Unchecked.defaultof<float32> && x.compareEnable = Unchecked.defaultof<VkBool32> && x.compareOp = Unchecked.defaultof<VkCompareOp> && x.minLod = Unchecked.defaultof<float32> && x.maxLod = Unchecked.defaultof<float32> && x.borderColor = Unchecked.defaultof<VkBorderColor> && x.unnormalizedCoordinates = Unchecked.defaultof<VkBool32>
+
         static member Empty =
             VkSamplerCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSamplerCreateFlags>, Unchecked.defaultof<VkFilter>, Unchecked.defaultof<VkFilter>, Unchecked.defaultof<VkSamplerMipmapMode>, Unchecked.defaultof<VkSamplerAddressMode>, Unchecked.defaultof<VkSamplerAddressMode>, Unchecked.defaultof<VkSamplerAddressMode>, Unchecked.defaultof<float32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<float32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkCompareOp>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<VkBorderColor>, Unchecked.defaultof<VkBool32>)
-
-        /// Creates an empty VkSamplerCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkSamplerCreateInfo(pNext, Unchecked.defaultof<VkSamplerCreateFlags>, Unchecked.defaultof<VkFilter>, Unchecked.defaultof<VkFilter>, Unchecked.defaultof<VkSamplerMipmapMode>, Unchecked.defaultof<VkSamplerAddressMode>, Unchecked.defaultof<VkSamplerAddressMode>, Unchecked.defaultof<VkSamplerAddressMode>, Unchecked.defaultof<float32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<float32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkCompareOp>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<VkBorderColor>, Unchecked.defaultof<VkBool32>)
-
-        /// Creates an empty VkSamplerCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkSamplerCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -5793,16 +5749,11 @@ type VkSemaphoreCreateInfo =
         new(flags : VkSemaphoreCreateFlags) =
             VkSemaphoreCreateInfo(Unchecked.defaultof<nativeint>, flags)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkSemaphoreCreateFlags>
+
         static member Empty =
             VkSemaphoreCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSemaphoreCreateFlags>)
-
-        /// Creates an empty VkSemaphoreCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkSemaphoreCreateInfo(pNext, Unchecked.defaultof<VkSemaphoreCreateFlags>)
-
-        /// Creates an empty VkSemaphoreCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkSemaphoreCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -5833,16 +5784,11 @@ type VkShaderModuleCreateInfo =
         new(flags : VkShaderModuleCreateFlags, codeSize : uint64, pCode : nativeptr<uint32>) =
             VkShaderModuleCreateInfo(Unchecked.defaultof<nativeint>, flags, codeSize, pCode)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkShaderModuleCreateFlags> && x.codeSize = Unchecked.defaultof<uint64> && x.pCode = Unchecked.defaultof<nativeptr<uint32>>
+
         static member Empty =
             VkShaderModuleCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkShaderModuleCreateFlags>, Unchecked.defaultof<uint64>, Unchecked.defaultof<nativeptr<uint32>>)
-
-        /// Creates an empty VkShaderModuleCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkShaderModuleCreateInfo(pNext, Unchecked.defaultof<VkShaderModuleCreateFlags>, Unchecked.defaultof<uint64>, Unchecked.defaultof<nativeptr<uint32>>)
-
-        /// Creates an empty VkShaderModuleCreateInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkShaderModuleCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -5867,6 +5813,9 @@ type VkSparseImageFormatProperties =
                 imageGranularity = imageGranularity
                 flags = flags
             }
+
+        member x.IsEmpty =
+            x.aspectMask = Unchecked.defaultof<VkImageAspectFlags> && x.imageGranularity = Unchecked.defaultof<VkExtent3D> && x.flags = Unchecked.defaultof<VkSparseImageFormatFlags>
 
         static member Empty =
             VkSparseImageFormatProperties(Unchecked.defaultof<VkImageAspectFlags>, Unchecked.defaultof<VkExtent3D>, Unchecked.defaultof<VkSparseImageFormatFlags>)
@@ -5896,6 +5845,9 @@ type VkSparseImageMemoryRequirements =
                 imageMipTailOffset = imageMipTailOffset
                 imageMipTailStride = imageMipTailStride
             }
+
+        member x.IsEmpty =
+            x.formatProperties = Unchecked.defaultof<VkSparseImageFormatProperties> && x.imageMipTailFirstLod = Unchecked.defaultof<uint32> && x.imageMipTailSize = Unchecked.defaultof<VkDeviceSize> && x.imageMipTailOffset = Unchecked.defaultof<VkDeviceSize> && x.imageMipTailStride = Unchecked.defaultof<VkDeviceSize>
 
         static member Empty =
             VkSparseImageMemoryRequirements(Unchecked.defaultof<VkSparseImageFormatProperties>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
@@ -5939,16 +5891,11 @@ type VkSubmitInfo =
         new(waitSemaphoreCount : uint32, pWaitSemaphores : nativeptr<VkSemaphore>, pWaitDstStageMask : nativeptr<VkPipelineStageFlags>, commandBufferCount : uint32, pCommandBuffers : nativeptr<VkCommandBuffer>, signalSemaphoreCount : uint32, pSignalSemaphores : nativeptr<VkSemaphore>) =
             VkSubmitInfo(Unchecked.defaultof<nativeint>, waitSemaphoreCount, pWaitSemaphores, pWaitDstStageMask, commandBufferCount, pCommandBuffers, signalSemaphoreCount, pSignalSemaphores)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.waitSemaphoreCount = Unchecked.defaultof<uint32> && x.pWaitSemaphores = Unchecked.defaultof<nativeptr<VkSemaphore>> && x.pWaitDstStageMask = Unchecked.defaultof<nativeptr<VkPipelineStageFlags>> && x.commandBufferCount = Unchecked.defaultof<uint32> && x.pCommandBuffers = Unchecked.defaultof<nativeptr<VkCommandBuffer>> && x.signalSemaphoreCount = Unchecked.defaultof<uint32> && x.pSignalSemaphores = Unchecked.defaultof<nativeptr<VkSemaphore>>
+
         static member Empty =
             VkSubmitInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSemaphore>>, Unchecked.defaultof<nativeptr<VkPipelineStageFlags>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkCommandBuffer>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSemaphore>>)
-
-        /// Creates an empty VkSubmitInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkSubmitInfo(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSemaphore>>, Unchecked.defaultof<nativeptr<VkPipelineStageFlags>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkCommandBuffer>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSemaphore>>)
-
-        /// Creates an empty VkSubmitInfo with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkSubmitInfo.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -5981,6 +5928,9 @@ type VkSubresourceLayout =
                 arrayPitch = arrayPitch
                 depthPitch = depthPitch
             }
+
+        member x.IsEmpty =
+            x.offset = Unchecked.defaultof<VkDeviceSize> && x.size = Unchecked.defaultof<VkDeviceSize> && x.rowPitch = Unchecked.defaultof<VkDeviceSize> && x.arrayPitch = Unchecked.defaultof<VkDeviceSize> && x.depthPitch = Unchecked.defaultof<VkDeviceSize>
 
         static member Empty =
             VkSubresourceLayout(Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
@@ -6026,16 +5976,11 @@ type VkWriteDescriptorSet =
         new(dstSet : VkDescriptorSet, dstBinding : uint32, dstArrayElement : uint32, descriptorCount : uint32, descriptorType : VkDescriptorType, pImageInfo : nativeptr<VkDescriptorImageInfo>, pBufferInfo : nativeptr<VkDescriptorBufferInfo>, pTexelBufferView : nativeptr<VkBufferView>) =
             VkWriteDescriptorSet(Unchecked.defaultof<nativeint>, dstSet, dstBinding, dstArrayElement, descriptorCount, descriptorType, pImageInfo, pBufferInfo, pTexelBufferView)
 
+        member x.IsEmpty =
+            x.pNext = Unchecked.defaultof<nativeint> && x.dstSet = Unchecked.defaultof<VkDescriptorSet> && x.dstBinding = Unchecked.defaultof<uint32> && x.dstArrayElement = Unchecked.defaultof<uint32> && x.descriptorCount = Unchecked.defaultof<uint32> && x.descriptorType = Unchecked.defaultof<VkDescriptorType> && x.pImageInfo = Unchecked.defaultof<nativeptr<VkDescriptorImageInfo>> && x.pBufferInfo = Unchecked.defaultof<nativeptr<VkDescriptorBufferInfo>> && x.pTexelBufferView = Unchecked.defaultof<nativeptr<VkBufferView>>
+
         static member Empty =
             VkWriteDescriptorSet(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDescriptorSet>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDescriptorType>, Unchecked.defaultof<nativeptr<VkDescriptorImageInfo>>, Unchecked.defaultof<nativeptr<VkDescriptorBufferInfo>>, Unchecked.defaultof<nativeptr<VkBufferView>>)
-
-        /// Creates an empty VkWriteDescriptorSet with only pNext set to the given value.
-        static member Chain(pNext : nativeint) =
-            VkWriteDescriptorSet(pNext, Unchecked.defaultof<VkDescriptorSet>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDescriptorType>, Unchecked.defaultof<nativeptr<VkDescriptorImageInfo>>, Unchecked.defaultof<nativeptr<VkDescriptorBufferInfo>>, Unchecked.defaultof<nativeptr<VkBufferView>>)
-
-        /// Creates an empty VkWriteDescriptorSet with only pNext set to the given value.
-        static member Chain(pNext : nativeptr<'a>) =
-            VkWriteDescriptorSet.Chain(NativePtr.toNativeInt pNext)
 
         override x.ToString() =
             String.concat "; " [
@@ -6670,16 +6615,11 @@ module Vulkan11 =
             new(deviceIndexCount : uint32, pDeviceIndices : nativeptr<uint32>) =
                 VkBindBufferMemoryDeviceGroupInfo(Unchecked.defaultof<nativeint>, deviceIndexCount, pDeviceIndices)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.deviceIndexCount = Unchecked.defaultof<uint32> && x.pDeviceIndices = Unchecked.defaultof<nativeptr<uint32>>
+
             static member Empty =
                 VkBindBufferMemoryDeviceGroupInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkBindBufferMemoryDeviceGroupInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkBindBufferMemoryDeviceGroupInfo(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkBindBufferMemoryDeviceGroupInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkBindBufferMemoryDeviceGroupInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -6711,16 +6651,11 @@ module Vulkan11 =
             new(buffer : VkBuffer, memory : VkDeviceMemory, memoryOffset : VkDeviceSize) =
                 VkBindBufferMemoryInfo(Unchecked.defaultof<nativeint>, buffer, memory, memoryOffset)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.buffer = Unchecked.defaultof<VkBuffer> && x.memory = Unchecked.defaultof<VkDeviceMemory> && x.memoryOffset = Unchecked.defaultof<VkDeviceSize>
+
             static member Empty =
                 VkBindBufferMemoryInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceMemory>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkBindBufferMemoryInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkBindBufferMemoryInfo(pNext, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceMemory>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkBindBufferMemoryInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkBindBufferMemoryInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -6755,16 +6690,11 @@ module Vulkan11 =
             new(deviceIndexCount : uint32, pDeviceIndices : nativeptr<uint32>, splitInstanceBindRegionCount : uint32, pSplitInstanceBindRegions : nativeptr<VkRect2D>) =
                 VkBindImageMemoryDeviceGroupInfo(Unchecked.defaultof<nativeint>, deviceIndexCount, pDeviceIndices, splitInstanceBindRegionCount, pSplitInstanceBindRegions)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.deviceIndexCount = Unchecked.defaultof<uint32> && x.pDeviceIndices = Unchecked.defaultof<nativeptr<uint32>> && x.splitInstanceBindRegionCount = Unchecked.defaultof<uint32> && x.pSplitInstanceBindRegions = Unchecked.defaultof<nativeptr<VkRect2D>>
+
             static member Empty =
                 VkBindImageMemoryDeviceGroupInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkRect2D>>)
-
-            /// Creates an empty VkBindImageMemoryDeviceGroupInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkBindImageMemoryDeviceGroupInfo(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkRect2D>>)
-
-            /// Creates an empty VkBindImageMemoryDeviceGroupInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkBindImageMemoryDeviceGroupInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -6798,16 +6728,11 @@ module Vulkan11 =
             new(image : VkImage, memory : VkDeviceMemory, memoryOffset : VkDeviceSize) =
                 VkBindImageMemoryInfo(Unchecked.defaultof<nativeint>, image, memory, memoryOffset)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.image = Unchecked.defaultof<VkImage> && x.memory = Unchecked.defaultof<VkDeviceMemory> && x.memoryOffset = Unchecked.defaultof<VkDeviceSize>
+
             static member Empty =
                 VkBindImageMemoryInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkDeviceMemory>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkBindImageMemoryInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkBindImageMemoryInfo(pNext, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkDeviceMemory>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkBindImageMemoryInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkBindImageMemoryInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -6836,16 +6761,11 @@ module Vulkan11 =
             new(planeAspect : VkImageAspectFlags) =
                 VkBindImagePlaneMemoryInfo(Unchecked.defaultof<nativeint>, planeAspect)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.planeAspect = Unchecked.defaultof<VkImageAspectFlags>
+
             static member Empty =
                 VkBindImagePlaneMemoryInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageAspectFlags>)
-
-            /// Creates an empty VkBindImagePlaneMemoryInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkBindImagePlaneMemoryInfo(pNext, Unchecked.defaultof<VkImageAspectFlags>)
-
-            /// Creates an empty VkBindImagePlaneMemoryInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkBindImagePlaneMemoryInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -6872,16 +6792,11 @@ module Vulkan11 =
             new(buffer : VkBuffer) =
                 VkBufferMemoryRequirementsInfo2(Unchecked.defaultof<nativeint>, buffer)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.buffer = Unchecked.defaultof<VkBuffer>
+
             static member Empty =
                 VkBufferMemoryRequirementsInfo2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBuffer>)
-
-            /// Creates an empty VkBufferMemoryRequirementsInfo2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkBufferMemoryRequirementsInfo2(pNext, Unchecked.defaultof<VkBuffer>)
-
-            /// Creates an empty VkBufferMemoryRequirementsInfo2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkBufferMemoryRequirementsInfo2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -6908,16 +6823,11 @@ module Vulkan11 =
             new(supported : VkBool32) =
                 VkDescriptorSetLayoutSupport(Unchecked.defaultof<nativeint>, supported)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.supported = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkDescriptorSetLayoutSupport(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkDescriptorSetLayoutSupport with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDescriptorSetLayoutSupport(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkDescriptorSetLayoutSupport with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDescriptorSetLayoutSupport.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -6946,6 +6856,9 @@ module Vulkan11 =
                     offset = offset
                     stride = stride
                 }
+
+            member x.IsEmpty =
+                x.dstBinding = Unchecked.defaultof<uint32> && x.dstArrayElement = Unchecked.defaultof<uint32> && x.descriptorCount = Unchecked.defaultof<uint32> && x.descriptorType = Unchecked.defaultof<VkDescriptorType> && x.offset = Unchecked.defaultof<uint64> && x.stride = Unchecked.defaultof<uint64>
 
             static member Empty =
                 VkDescriptorUpdateTemplateEntry(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDescriptorType>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>)
@@ -6992,16 +6905,11 @@ module Vulkan11 =
             new(flags : VkDescriptorUpdateTemplateCreateFlags, descriptorUpdateEntryCount : uint32, pDescriptorUpdateEntries : nativeptr<VkDescriptorUpdateTemplateEntry>, templateType : VkDescriptorUpdateTemplateType, descriptorSetLayout : VkDescriptorSetLayout, pipelineBindPoint : VkPipelineBindPoint, pipelineLayout : VkPipelineLayout, set : uint32) =
                 VkDescriptorUpdateTemplateCreateInfo(Unchecked.defaultof<nativeint>, flags, descriptorUpdateEntryCount, pDescriptorUpdateEntries, templateType, descriptorSetLayout, pipelineBindPoint, pipelineLayout, set)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkDescriptorUpdateTemplateCreateFlags> && x.descriptorUpdateEntryCount = Unchecked.defaultof<uint32> && x.pDescriptorUpdateEntries = Unchecked.defaultof<nativeptr<VkDescriptorUpdateTemplateEntry>> && x.templateType = Unchecked.defaultof<VkDescriptorUpdateTemplateType> && x.descriptorSetLayout = Unchecked.defaultof<VkDescriptorSetLayout> && x.pipelineBindPoint = Unchecked.defaultof<VkPipelineBindPoint> && x.pipelineLayout = Unchecked.defaultof<VkPipelineLayout> && x.set = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkDescriptorUpdateTemplateCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDescriptorUpdateTemplateCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDescriptorUpdateTemplateEntry>>, Unchecked.defaultof<VkDescriptorUpdateTemplateType>, Unchecked.defaultof<VkDescriptorSetLayout>, Unchecked.defaultof<VkPipelineBindPoint>, Unchecked.defaultof<VkPipelineLayout>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDescriptorUpdateTemplateCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDescriptorUpdateTemplateCreateInfo(pNext, Unchecked.defaultof<VkDescriptorUpdateTemplateCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDescriptorUpdateTemplateEntry>>, Unchecked.defaultof<VkDescriptorUpdateTemplateType>, Unchecked.defaultof<VkDescriptorSetLayout>, Unchecked.defaultof<VkPipelineBindPoint>, Unchecked.defaultof<VkPipelineLayout>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDescriptorUpdateTemplateCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDescriptorUpdateTemplateCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7037,16 +6945,11 @@ module Vulkan11 =
             new(resourceDeviceIndex : uint32, memoryDeviceIndex : uint32) =
                 VkDeviceGroupBindSparseInfo(Unchecked.defaultof<nativeint>, resourceDeviceIndex, memoryDeviceIndex)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.resourceDeviceIndex = Unchecked.defaultof<uint32> && x.memoryDeviceIndex = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkDeviceGroupBindSparseInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDeviceGroupBindSparseInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDeviceGroupBindSparseInfo(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDeviceGroupBindSparseInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDeviceGroupBindSparseInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7074,16 +6977,11 @@ module Vulkan11 =
             new(deviceMask : uint32) =
                 VkDeviceGroupCommandBufferBeginInfo(Unchecked.defaultof<nativeint>, deviceMask)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.deviceMask = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkDeviceGroupCommandBufferBeginInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDeviceGroupCommandBufferBeginInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDeviceGroupCommandBufferBeginInfo(pNext, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDeviceGroupCommandBufferBeginInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDeviceGroupCommandBufferBeginInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7112,16 +7010,11 @@ module Vulkan11 =
             new(physicalDeviceCount : uint32, pPhysicalDevices : nativeptr<VkPhysicalDevice>) =
                 VkDeviceGroupDeviceCreateInfo(Unchecked.defaultof<nativeint>, physicalDeviceCount, pPhysicalDevices)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.physicalDeviceCount = Unchecked.defaultof<uint32> && x.pPhysicalDevices = Unchecked.defaultof<nativeptr<VkPhysicalDevice>>
+
             static member Empty =
                 VkDeviceGroupDeviceCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPhysicalDevice>>)
-
-            /// Creates an empty VkDeviceGroupDeviceCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDeviceGroupDeviceCreateInfo(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPhysicalDevice>>)
-
-            /// Creates an empty VkDeviceGroupDeviceCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDeviceGroupDeviceCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7153,16 +7046,11 @@ module Vulkan11 =
             new(deviceMask : uint32, deviceRenderAreaCount : uint32, pDeviceRenderAreas : nativeptr<VkRect2D>) =
                 VkDeviceGroupRenderPassBeginInfo(Unchecked.defaultof<nativeint>, deviceMask, deviceRenderAreaCount, pDeviceRenderAreas)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.deviceMask = Unchecked.defaultof<uint32> && x.deviceRenderAreaCount = Unchecked.defaultof<uint32> && x.pDeviceRenderAreas = Unchecked.defaultof<nativeptr<VkRect2D>>
+
             static member Empty =
                 VkDeviceGroupRenderPassBeginInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkRect2D>>)
-
-            /// Creates an empty VkDeviceGroupRenderPassBeginInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDeviceGroupRenderPassBeginInfo(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkRect2D>>)
-
-            /// Creates an empty VkDeviceGroupRenderPassBeginInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDeviceGroupRenderPassBeginInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7201,16 +7089,11 @@ module Vulkan11 =
             new(waitSemaphoreCount : uint32, pWaitSemaphoreDeviceIndices : nativeptr<uint32>, commandBufferCount : uint32, pCommandBufferDeviceMasks : nativeptr<uint32>, signalSemaphoreCount : uint32, pSignalSemaphoreDeviceIndices : nativeptr<uint32>) =
                 VkDeviceGroupSubmitInfo(Unchecked.defaultof<nativeint>, waitSemaphoreCount, pWaitSemaphoreDeviceIndices, commandBufferCount, pCommandBufferDeviceMasks, signalSemaphoreCount, pSignalSemaphoreDeviceIndices)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.waitSemaphoreCount = Unchecked.defaultof<uint32> && x.pWaitSemaphoreDeviceIndices = Unchecked.defaultof<nativeptr<uint32>> && x.commandBufferCount = Unchecked.defaultof<uint32> && x.pCommandBufferDeviceMasks = Unchecked.defaultof<nativeptr<uint32>> && x.signalSemaphoreCount = Unchecked.defaultof<uint32> && x.pSignalSemaphoreDeviceIndices = Unchecked.defaultof<nativeptr<uint32>>
+
             static member Empty =
                 VkDeviceGroupSubmitInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkDeviceGroupSubmitInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDeviceGroupSubmitInfo(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkDeviceGroupSubmitInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDeviceGroupSubmitInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7246,16 +7129,11 @@ module Vulkan11 =
             new(flags : VkDeviceQueueCreateFlags, queueFamilyIndex : uint32, queueIndex : uint32) =
                 VkDeviceQueueInfo2(Unchecked.defaultof<nativeint>, flags, queueFamilyIndex, queueIndex)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkDeviceQueueCreateFlags> && x.queueFamilyIndex = Unchecked.defaultof<uint32> && x.queueIndex = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkDeviceQueueInfo2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceQueueCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDeviceQueueInfo2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDeviceQueueInfo2(pNext, Unchecked.defaultof<VkDeviceQueueCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDeviceQueueInfo2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDeviceQueueInfo2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7284,16 +7162,11 @@ module Vulkan11 =
             new(handleTypes : VkExternalFenceHandleTypeFlags) =
                 VkExportFenceCreateInfo(Unchecked.defaultof<nativeint>, handleTypes)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.handleTypes = Unchecked.defaultof<VkExternalFenceHandleTypeFlags>
+
             static member Empty =
                 VkExportFenceCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalFenceHandleTypeFlags>)
-
-            /// Creates an empty VkExportFenceCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkExportFenceCreateInfo(pNext, Unchecked.defaultof<VkExternalFenceHandleTypeFlags>)
-
-            /// Creates an empty VkExportFenceCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkExportFenceCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7320,16 +7193,11 @@ module Vulkan11 =
             new(handleTypes : VkExternalMemoryHandleTypeFlags) =
                 VkExportMemoryAllocateInfo(Unchecked.defaultof<nativeint>, handleTypes)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.handleTypes = Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>
+
             static member Empty =
                 VkExportMemoryAllocateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>)
-
-            /// Creates an empty VkExportMemoryAllocateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkExportMemoryAllocateInfo(pNext, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>)
-
-            /// Creates an empty VkExportMemoryAllocateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkExportMemoryAllocateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7356,16 +7224,11 @@ module Vulkan11 =
             new(handleTypes : VkExternalSemaphoreHandleTypeFlags) =
                 VkExportSemaphoreCreateInfo(Unchecked.defaultof<nativeint>, handleTypes)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.handleTypes = Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>
+
             static member Empty =
                 VkExportSemaphoreCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>)
-
-            /// Creates an empty VkExportSemaphoreCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkExportSemaphoreCreateInfo(pNext, Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>)
-
-            /// Creates an empty VkExportSemaphoreCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkExportSemaphoreCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7388,6 +7251,9 @@ module Vulkan11 =
                     exportFromImportedHandleTypes = exportFromImportedHandleTypes
                     compatibleHandleTypes = compatibleHandleTypes
                 }
+
+            member x.IsEmpty =
+                x.externalMemoryFeatures = Unchecked.defaultof<VkExternalMemoryFeatureFlags> && x.exportFromImportedHandleTypes = Unchecked.defaultof<VkExternalMemoryHandleTypeFlags> && x.compatibleHandleTypes = Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>
 
             static member Empty =
                 VkExternalMemoryProperties(Unchecked.defaultof<VkExternalMemoryFeatureFlags>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>)
@@ -7417,16 +7283,11 @@ module Vulkan11 =
             new(externalMemoryProperties : VkExternalMemoryProperties) =
                 VkExternalBufferProperties(Unchecked.defaultof<nativeint>, externalMemoryProperties)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.externalMemoryProperties = Unchecked.defaultof<VkExternalMemoryProperties>
+
             static member Empty =
                 VkExternalBufferProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalMemoryProperties>)
-
-            /// Creates an empty VkExternalBufferProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkExternalBufferProperties(pNext, Unchecked.defaultof<VkExternalMemoryProperties>)
-
-            /// Creates an empty VkExternalBufferProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkExternalBufferProperties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7457,16 +7318,11 @@ module Vulkan11 =
             new(exportFromImportedHandleTypes : VkExternalFenceHandleTypeFlags, compatibleHandleTypes : VkExternalFenceHandleTypeFlags, externalFenceFeatures : VkExternalFenceFeatureFlags) =
                 VkExternalFenceProperties(Unchecked.defaultof<nativeint>, exportFromImportedHandleTypes, compatibleHandleTypes, externalFenceFeatures)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.exportFromImportedHandleTypes = Unchecked.defaultof<VkExternalFenceHandleTypeFlags> && x.compatibleHandleTypes = Unchecked.defaultof<VkExternalFenceHandleTypeFlags> && x.externalFenceFeatures = Unchecked.defaultof<VkExternalFenceFeatureFlags>
+
             static member Empty =
                 VkExternalFenceProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalFenceHandleTypeFlags>, Unchecked.defaultof<VkExternalFenceHandleTypeFlags>, Unchecked.defaultof<VkExternalFenceFeatureFlags>)
-
-            /// Creates an empty VkExternalFenceProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkExternalFenceProperties(pNext, Unchecked.defaultof<VkExternalFenceHandleTypeFlags>, Unchecked.defaultof<VkExternalFenceHandleTypeFlags>, Unchecked.defaultof<VkExternalFenceFeatureFlags>)
-
-            /// Creates an empty VkExternalFenceProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkExternalFenceProperties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7495,16 +7351,11 @@ module Vulkan11 =
             new(externalMemoryProperties : VkExternalMemoryProperties) =
                 VkExternalImageFormatProperties(Unchecked.defaultof<nativeint>, externalMemoryProperties)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.externalMemoryProperties = Unchecked.defaultof<VkExternalMemoryProperties>
+
             static member Empty =
                 VkExternalImageFormatProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalMemoryProperties>)
-
-            /// Creates an empty VkExternalImageFormatProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkExternalImageFormatProperties(pNext, Unchecked.defaultof<VkExternalMemoryProperties>)
-
-            /// Creates an empty VkExternalImageFormatProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkExternalImageFormatProperties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7531,16 +7382,11 @@ module Vulkan11 =
             new(handleTypes : VkExternalMemoryHandleTypeFlags) =
                 VkExternalMemoryBufferCreateInfo(Unchecked.defaultof<nativeint>, handleTypes)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.handleTypes = Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>
+
             static member Empty =
                 VkExternalMemoryBufferCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>)
-
-            /// Creates an empty VkExternalMemoryBufferCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkExternalMemoryBufferCreateInfo(pNext, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>)
-
-            /// Creates an empty VkExternalMemoryBufferCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkExternalMemoryBufferCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7567,16 +7413,11 @@ module Vulkan11 =
             new(handleTypes : VkExternalMemoryHandleTypeFlags) =
                 VkExternalMemoryImageCreateInfo(Unchecked.defaultof<nativeint>, handleTypes)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.handleTypes = Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>
+
             static member Empty =
                 VkExternalMemoryImageCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>)
-
-            /// Creates an empty VkExternalMemoryImageCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkExternalMemoryImageCreateInfo(pNext, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>)
-
-            /// Creates an empty VkExternalMemoryImageCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkExternalMemoryImageCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7607,16 +7448,11 @@ module Vulkan11 =
             new(exportFromImportedHandleTypes : VkExternalSemaphoreHandleTypeFlags, compatibleHandleTypes : VkExternalSemaphoreHandleTypeFlags, externalSemaphoreFeatures : VkExternalSemaphoreFeatureFlags) =
                 VkExternalSemaphoreProperties(Unchecked.defaultof<nativeint>, exportFromImportedHandleTypes, compatibleHandleTypes, externalSemaphoreFeatures)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.exportFromImportedHandleTypes = Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags> && x.compatibleHandleTypes = Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags> && x.externalSemaphoreFeatures = Unchecked.defaultof<VkExternalSemaphoreFeatureFlags>
+
             static member Empty =
                 VkExternalSemaphoreProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>, Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>, Unchecked.defaultof<VkExternalSemaphoreFeatureFlags>)
-
-            /// Creates an empty VkExternalSemaphoreProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkExternalSemaphoreProperties(pNext, Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>, Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>, Unchecked.defaultof<VkExternalSemaphoreFeatureFlags>)
-
-            /// Creates an empty VkExternalSemaphoreProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkExternalSemaphoreProperties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7645,16 +7481,11 @@ module Vulkan11 =
             new(formatProperties : VkFormatProperties) =
                 VkFormatProperties2(Unchecked.defaultof<nativeint>, formatProperties)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.formatProperties = Unchecked.defaultof<VkFormatProperties>
+
             static member Empty =
                 VkFormatProperties2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkFormatProperties>)
-
-            /// Creates an empty VkFormatProperties2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkFormatProperties2(pNext, Unchecked.defaultof<VkFormatProperties>)
-
-            /// Creates an empty VkFormatProperties2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkFormatProperties2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7681,16 +7512,11 @@ module Vulkan11 =
             new(imageFormatProperties : VkImageFormatProperties) =
                 VkImageFormatProperties2(Unchecked.defaultof<nativeint>, imageFormatProperties)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.imageFormatProperties = Unchecked.defaultof<VkImageFormatProperties>
+
             static member Empty =
                 VkImageFormatProperties2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageFormatProperties>)
-
-            /// Creates an empty VkImageFormatProperties2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImageFormatProperties2(pNext, Unchecked.defaultof<VkImageFormatProperties>)
-
-            /// Creates an empty VkImageFormatProperties2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImageFormatProperties2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7717,16 +7543,11 @@ module Vulkan11 =
             new(image : VkImage) =
                 VkImageMemoryRequirementsInfo2(Unchecked.defaultof<nativeint>, image)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.image = Unchecked.defaultof<VkImage>
+
             static member Empty =
                 VkImageMemoryRequirementsInfo2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImage>)
-
-            /// Creates an empty VkImageMemoryRequirementsInfo2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImageMemoryRequirementsInfo2(pNext, Unchecked.defaultof<VkImage>)
-
-            /// Creates an empty VkImageMemoryRequirementsInfo2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImageMemoryRequirementsInfo2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7753,16 +7574,11 @@ module Vulkan11 =
             new(planeAspect : VkImageAspectFlags) =
                 VkImagePlaneMemoryRequirementsInfo(Unchecked.defaultof<nativeint>, planeAspect)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.planeAspect = Unchecked.defaultof<VkImageAspectFlags>
+
             static member Empty =
                 VkImagePlaneMemoryRequirementsInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageAspectFlags>)
-
-            /// Creates an empty VkImagePlaneMemoryRequirementsInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImagePlaneMemoryRequirementsInfo(pNext, Unchecked.defaultof<VkImageAspectFlags>)
-
-            /// Creates an empty VkImagePlaneMemoryRequirementsInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImagePlaneMemoryRequirementsInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7789,16 +7605,11 @@ module Vulkan11 =
             new(image : VkImage) =
                 VkImageSparseMemoryRequirementsInfo2(Unchecked.defaultof<nativeint>, image)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.image = Unchecked.defaultof<VkImage>
+
             static member Empty =
                 VkImageSparseMemoryRequirementsInfo2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImage>)
-
-            /// Creates an empty VkImageSparseMemoryRequirementsInfo2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImageSparseMemoryRequirementsInfo2(pNext, Unchecked.defaultof<VkImage>)
-
-            /// Creates an empty VkImageSparseMemoryRequirementsInfo2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImageSparseMemoryRequirementsInfo2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7825,16 +7636,11 @@ module Vulkan11 =
             new(usage : VkImageUsageFlags) =
                 VkImageViewUsageCreateInfo(Unchecked.defaultof<nativeint>, usage)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.usage = Unchecked.defaultof<VkImageUsageFlags>
+
             static member Empty =
                 VkImageViewUsageCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageUsageFlags>)
-
-            /// Creates an empty VkImageViewUsageCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImageViewUsageCreateInfo(pNext, Unchecked.defaultof<VkImageUsageFlags>)
-
-            /// Creates an empty VkImageViewUsageCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImageViewUsageCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7857,6 +7663,9 @@ module Vulkan11 =
                     inputAttachmentIndex = inputAttachmentIndex
                     aspectMask = aspectMask
                 }
+
+            member x.IsEmpty =
+                x.subpass = Unchecked.defaultof<uint32> && x.inputAttachmentIndex = Unchecked.defaultof<uint32> && x.aspectMask = Unchecked.defaultof<VkImageAspectFlags>
 
             static member Empty =
                 VkInputAttachmentAspectReference(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkImageAspectFlags>)
@@ -7888,16 +7697,11 @@ module Vulkan11 =
             new(flags : VkMemoryAllocateFlags, deviceMask : uint32) =
                 VkMemoryAllocateFlagsInfo(Unchecked.defaultof<nativeint>, flags, deviceMask)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkMemoryAllocateFlags> && x.deviceMask = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkMemoryAllocateFlagsInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkMemoryAllocateFlags>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkMemoryAllocateFlagsInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkMemoryAllocateFlagsInfo(pNext, Unchecked.defaultof<VkMemoryAllocateFlags>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkMemoryAllocateFlagsInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkMemoryAllocateFlagsInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7927,16 +7731,11 @@ module Vulkan11 =
             new(image : VkImage, buffer : VkBuffer) =
                 VkMemoryDedicatedAllocateInfo(Unchecked.defaultof<nativeint>, image, buffer)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.image = Unchecked.defaultof<VkImage> && x.buffer = Unchecked.defaultof<VkBuffer>
+
             static member Empty =
                 VkMemoryDedicatedAllocateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkBuffer>)
-
-            /// Creates an empty VkMemoryDedicatedAllocateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkMemoryDedicatedAllocateInfo(pNext, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkBuffer>)
-
-            /// Creates an empty VkMemoryDedicatedAllocateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkMemoryDedicatedAllocateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -7966,16 +7765,11 @@ module Vulkan11 =
             new(prefersDedicatedAllocation : VkBool32, requiresDedicatedAllocation : VkBool32) =
                 VkMemoryDedicatedRequirements(Unchecked.defaultof<nativeint>, prefersDedicatedAllocation, requiresDedicatedAllocation)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.prefersDedicatedAllocation = Unchecked.defaultof<VkBool32> && x.requiresDedicatedAllocation = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkMemoryDedicatedRequirements(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkMemoryDedicatedRequirements with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkMemoryDedicatedRequirements(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkMemoryDedicatedRequirements with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkMemoryDedicatedRequirements.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8003,16 +7797,11 @@ module Vulkan11 =
             new(memoryRequirements : VkMemoryRequirements) =
                 VkMemoryRequirements2(Unchecked.defaultof<nativeint>, memoryRequirements)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.memoryRequirements = Unchecked.defaultof<VkMemoryRequirements>
+
             static member Empty =
                 VkMemoryRequirements2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkMemoryRequirements>)
-
-            /// Creates an empty VkMemoryRequirements2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkMemoryRequirements2(pNext, Unchecked.defaultof<VkMemoryRequirements>)
-
-            /// Creates an empty VkMemoryRequirements2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkMemoryRequirements2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8045,16 +7834,11 @@ module Vulkan11 =
             new(storageBuffer16BitAccess : VkBool32, uniformAndStorageBuffer16BitAccess : VkBool32, storagePushConstant16 : VkBool32, storageInputOutput16 : VkBool32) =
                 VkPhysicalDevice16BitStorageFeatures(Unchecked.defaultof<nativeint>, storageBuffer16BitAccess, uniformAndStorageBuffer16BitAccess, storagePushConstant16, storageInputOutput16)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.storageBuffer16BitAccess = Unchecked.defaultof<VkBool32> && x.uniformAndStorageBuffer16BitAccess = Unchecked.defaultof<VkBool32> && x.storagePushConstant16 = Unchecked.defaultof<VkBool32> && x.storageInputOutput16 = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDevice16BitStorageFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevice16BitStorageFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDevice16BitStorageFeatures(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevice16BitStorageFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDevice16BitStorageFeatures.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8088,16 +7872,11 @@ module Vulkan11 =
             new(flags : VkBufferCreateFlags, usage : VkBufferUsageFlags, handleType : VkExternalMemoryHandleTypeFlags) =
                 VkPhysicalDeviceExternalBufferInfo(Unchecked.defaultof<nativeint>, flags, usage, handleType)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkBufferCreateFlags> && x.usage = Unchecked.defaultof<VkBufferUsageFlags> && x.handleType = Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>
+
             static member Empty =
                 VkPhysicalDeviceExternalBufferInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBufferCreateFlags>, Unchecked.defaultof<VkBufferUsageFlags>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>)
-
-            /// Creates an empty VkPhysicalDeviceExternalBufferInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceExternalBufferInfo(pNext, Unchecked.defaultof<VkBufferCreateFlags>, Unchecked.defaultof<VkBufferUsageFlags>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>)
-
-            /// Creates an empty VkPhysicalDeviceExternalBufferInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceExternalBufferInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8126,16 +7905,11 @@ module Vulkan11 =
             new(handleType : VkExternalFenceHandleTypeFlags) =
                 VkPhysicalDeviceExternalFenceInfo(Unchecked.defaultof<nativeint>, handleType)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.handleType = Unchecked.defaultof<VkExternalFenceHandleTypeFlags>
+
             static member Empty =
                 VkPhysicalDeviceExternalFenceInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalFenceHandleTypeFlags>)
-
-            /// Creates an empty VkPhysicalDeviceExternalFenceInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceExternalFenceInfo(pNext, Unchecked.defaultof<VkExternalFenceHandleTypeFlags>)
-
-            /// Creates an empty VkPhysicalDeviceExternalFenceInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceExternalFenceInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8162,16 +7936,11 @@ module Vulkan11 =
             new(handleType : VkExternalMemoryHandleTypeFlags) =
                 VkPhysicalDeviceExternalImageFormatInfo(Unchecked.defaultof<nativeint>, handleType)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.handleType = Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>
+
             static member Empty =
                 VkPhysicalDeviceExternalImageFormatInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>)
-
-            /// Creates an empty VkPhysicalDeviceExternalImageFormatInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceExternalImageFormatInfo(pNext, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>)
-
-            /// Creates an empty VkPhysicalDeviceExternalImageFormatInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceExternalImageFormatInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8198,16 +7967,11 @@ module Vulkan11 =
             new(handleType : VkExternalSemaphoreHandleTypeFlags) =
                 VkPhysicalDeviceExternalSemaphoreInfo(Unchecked.defaultof<nativeint>, handleType)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.handleType = Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>
+
             static member Empty =
                 VkPhysicalDeviceExternalSemaphoreInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>)
-
-            /// Creates an empty VkPhysicalDeviceExternalSemaphoreInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceExternalSemaphoreInfo(pNext, Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>)
-
-            /// Creates an empty VkPhysicalDeviceExternalSemaphoreInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceExternalSemaphoreInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8234,16 +7998,11 @@ module Vulkan11 =
             new(features : VkPhysicalDeviceFeatures) =
                 VkPhysicalDeviceFeatures2(Unchecked.defaultof<nativeint>, features)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.features = Unchecked.defaultof<VkPhysicalDeviceFeatures>
+
             static member Empty =
                 VkPhysicalDeviceFeatures2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPhysicalDeviceFeatures>)
-
-            /// Creates an empty VkPhysicalDeviceFeatures2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceFeatures2(pNext, Unchecked.defaultof<VkPhysicalDeviceFeatures>)
-
-            /// Creates an empty VkPhysicalDeviceFeatures2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceFeatures2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8274,16 +8033,11 @@ module Vulkan11 =
             new(physicalDeviceCount : uint32, physicalDevices : VkPhysicalDevice_32, subsetAllocation : VkBool32) =
                 VkPhysicalDeviceGroupProperties(Unchecked.defaultof<nativeint>, physicalDeviceCount, physicalDevices, subsetAllocation)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.physicalDeviceCount = Unchecked.defaultof<uint32> && x.physicalDevices = Unchecked.defaultof<VkPhysicalDevice_32> && x.subsetAllocation = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceGroupProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkPhysicalDevice_32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceGroupProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceGroupProperties(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkPhysicalDevice_32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceGroupProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceGroupProperties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8320,16 +8074,11 @@ module Vulkan11 =
             new(deviceUUID : Guid, driverUUID : Guid, deviceLUID : byte_8, deviceNodeMask : uint32, deviceLUIDValid : VkBool32) =
                 VkPhysicalDeviceIDProperties(Unchecked.defaultof<nativeint>, deviceUUID, driverUUID, deviceLUID, deviceNodeMask, deviceLUIDValid)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.deviceUUID = Unchecked.defaultof<Guid> && x.driverUUID = Unchecked.defaultof<Guid> && x.deviceLUID = Unchecked.defaultof<byte_8> && x.deviceNodeMask = Unchecked.defaultof<uint32> && x.deviceLUIDValid = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceIDProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<Guid>, Unchecked.defaultof<Guid>, Unchecked.defaultof<byte_8>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceIDProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceIDProperties(pNext, Unchecked.defaultof<Guid>, Unchecked.defaultof<Guid>, Unchecked.defaultof<byte_8>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceIDProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceIDProperties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8368,16 +8117,11 @@ module Vulkan11 =
             new(format : VkFormat, _type : VkImageType, tiling : VkImageTiling, usage : VkImageUsageFlags, flags : VkImageCreateFlags) =
                 VkPhysicalDeviceImageFormatInfo2(Unchecked.defaultof<nativeint>, format, _type, tiling, usage, flags)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.format = Unchecked.defaultof<VkFormat> && x._type = Unchecked.defaultof<VkImageType> && x.tiling = Unchecked.defaultof<VkImageTiling> && x.usage = Unchecked.defaultof<VkImageUsageFlags> && x.flags = Unchecked.defaultof<VkImageCreateFlags>
+
             static member Empty =
                 VkPhysicalDeviceImageFormatInfo2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkImageType>, Unchecked.defaultof<VkImageTiling>, Unchecked.defaultof<VkImageUsageFlags>, Unchecked.defaultof<VkImageCreateFlags>)
-
-            /// Creates an empty VkPhysicalDeviceImageFormatInfo2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceImageFormatInfo2(pNext, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkImageType>, Unchecked.defaultof<VkImageTiling>, Unchecked.defaultof<VkImageUsageFlags>, Unchecked.defaultof<VkImageCreateFlags>)
-
-            /// Creates an empty VkPhysicalDeviceImageFormatInfo2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceImageFormatInfo2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8410,16 +8154,11 @@ module Vulkan11 =
             new(maxPerSetDescriptors : uint32, maxMemoryAllocationSize : VkDeviceSize) =
                 VkPhysicalDeviceMaintenance3Properties(Unchecked.defaultof<nativeint>, maxPerSetDescriptors, maxMemoryAllocationSize)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxPerSetDescriptors = Unchecked.defaultof<uint32> && x.maxMemoryAllocationSize = Unchecked.defaultof<VkDeviceSize>
+
             static member Empty =
                 VkPhysicalDeviceMaintenance3Properties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkPhysicalDeviceMaintenance3Properties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceMaintenance3Properties(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkPhysicalDeviceMaintenance3Properties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceMaintenance3Properties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8447,16 +8186,11 @@ module Vulkan11 =
             new(memoryProperties : VkPhysicalDeviceMemoryProperties) =
                 VkPhysicalDeviceMemoryProperties2(Unchecked.defaultof<nativeint>, memoryProperties)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.memoryProperties = Unchecked.defaultof<VkPhysicalDeviceMemoryProperties>
+
             static member Empty =
                 VkPhysicalDeviceMemoryProperties2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPhysicalDeviceMemoryProperties>)
-
-            /// Creates an empty VkPhysicalDeviceMemoryProperties2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceMemoryProperties2(pNext, Unchecked.defaultof<VkPhysicalDeviceMemoryProperties>)
-
-            /// Creates an empty VkPhysicalDeviceMemoryProperties2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceMemoryProperties2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8487,16 +8221,11 @@ module Vulkan11 =
             new(multiview : VkBool32, multiviewGeometryShader : VkBool32, multiviewTessellationShader : VkBool32) =
                 VkPhysicalDeviceMultiviewFeatures(Unchecked.defaultof<nativeint>, multiview, multiviewGeometryShader, multiviewTessellationShader)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.multiview = Unchecked.defaultof<VkBool32> && x.multiviewGeometryShader = Unchecked.defaultof<VkBool32> && x.multiviewTessellationShader = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceMultiviewFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceMultiviewFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceMultiviewFeatures(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceMultiviewFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceMultiviewFeatures.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8527,16 +8256,11 @@ module Vulkan11 =
             new(maxMultiviewViewCount : uint32, maxMultiviewInstanceIndex : uint32) =
                 VkPhysicalDeviceMultiviewProperties(Unchecked.defaultof<nativeint>, maxMultiviewViewCount, maxMultiviewInstanceIndex)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxMultiviewViewCount = Unchecked.defaultof<uint32> && x.maxMultiviewInstanceIndex = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDeviceMultiviewProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceMultiviewProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceMultiviewProperties(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceMultiviewProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceMultiviewProperties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8564,16 +8288,11 @@ module Vulkan11 =
             new(pointClippingBehavior : VkPointClippingBehavior) =
                 VkPhysicalDevicePointClippingProperties(Unchecked.defaultof<nativeint>, pointClippingBehavior)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pointClippingBehavior = Unchecked.defaultof<VkPointClippingBehavior>
+
             static member Empty =
                 VkPhysicalDevicePointClippingProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPointClippingBehavior>)
-
-            /// Creates an empty VkPhysicalDevicePointClippingProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDevicePointClippingProperties(pNext, Unchecked.defaultof<VkPointClippingBehavior>)
-
-            /// Creates an empty VkPhysicalDevicePointClippingProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDevicePointClippingProperties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8600,16 +8319,11 @@ module Vulkan11 =
             new(properties : VkPhysicalDeviceProperties) =
                 VkPhysicalDeviceProperties2(Unchecked.defaultof<nativeint>, properties)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.properties = Unchecked.defaultof<VkPhysicalDeviceProperties>
+
             static member Empty =
                 VkPhysicalDeviceProperties2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPhysicalDeviceProperties>)
-
-            /// Creates an empty VkPhysicalDeviceProperties2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceProperties2(pNext, Unchecked.defaultof<VkPhysicalDeviceProperties>)
-
-            /// Creates an empty VkPhysicalDeviceProperties2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceProperties2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8636,16 +8350,11 @@ module Vulkan11 =
             new(protectedMemory : VkBool32) =
                 VkPhysicalDeviceProtectedMemoryFeatures(Unchecked.defaultof<nativeint>, protectedMemory)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.protectedMemory = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceProtectedMemoryFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceProtectedMemoryFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceProtectedMemoryFeatures(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceProtectedMemoryFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceProtectedMemoryFeatures.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8672,16 +8381,11 @@ module Vulkan11 =
             new(protectedNoFault : VkBool32) =
                 VkPhysicalDeviceProtectedMemoryProperties(Unchecked.defaultof<nativeint>, protectedNoFault)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.protectedNoFault = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceProtectedMemoryProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceProtectedMemoryProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceProtectedMemoryProperties(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceProtectedMemoryProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceProtectedMemoryProperties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8708,16 +8412,11 @@ module Vulkan11 =
             new(samplerYcbcrConversion : VkBool32) =
                 VkPhysicalDeviceSamplerYcbcrConversionFeatures(Unchecked.defaultof<nativeint>, samplerYcbcrConversion)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.samplerYcbcrConversion = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceSamplerYcbcrConversionFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceSamplerYcbcrConversionFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceSamplerYcbcrConversionFeatures(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceSamplerYcbcrConversionFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceSamplerYcbcrConversionFeatures.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8744,16 +8443,11 @@ module Vulkan11 =
             new(shaderDrawParameters : VkBool32) =
                 VkPhysicalDeviceShaderDrawParametersFeatures(Unchecked.defaultof<nativeint>, shaderDrawParameters)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shaderDrawParameters = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceShaderDrawParametersFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderDrawParametersFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceShaderDrawParametersFeatures(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderDrawParametersFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceShaderDrawParametersFeatures.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8790,16 +8484,11 @@ module Vulkan11 =
             new(format : VkFormat, _type : VkImageType, samples : VkSampleCountFlags, usage : VkImageUsageFlags, tiling : VkImageTiling) =
                 VkPhysicalDeviceSparseImageFormatInfo2(Unchecked.defaultof<nativeint>, format, _type, samples, usage, tiling)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.format = Unchecked.defaultof<VkFormat> && x._type = Unchecked.defaultof<VkImageType> && x.samples = Unchecked.defaultof<VkSampleCountFlags> && x.usage = Unchecked.defaultof<VkImageUsageFlags> && x.tiling = Unchecked.defaultof<VkImageTiling>
+
             static member Empty =
                 VkPhysicalDeviceSparseImageFormatInfo2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkImageType>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkImageUsageFlags>, Unchecked.defaultof<VkImageTiling>)
-
-            /// Creates an empty VkPhysicalDeviceSparseImageFormatInfo2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceSparseImageFormatInfo2(pNext, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkImageType>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkImageUsageFlags>, Unchecked.defaultof<VkImageTiling>)
-
-            /// Creates an empty VkPhysicalDeviceSparseImageFormatInfo2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceSparseImageFormatInfo2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8836,16 +8525,11 @@ module Vulkan11 =
             new(subgroupSize : uint32, supportedStages : VkShaderStageFlags, supportedOperations : VkSubgroupFeatureFlags, quadOperationsInAllStages : VkBool32) =
                 VkPhysicalDeviceSubgroupProperties(Unchecked.defaultof<nativeint>, subgroupSize, supportedStages, supportedOperations, quadOperationsInAllStages)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.subgroupSize = Unchecked.defaultof<uint32> && x.supportedStages = Unchecked.defaultof<VkShaderStageFlags> && x.supportedOperations = Unchecked.defaultof<VkSubgroupFeatureFlags> && x.quadOperationsInAllStages = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceSubgroupProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkShaderStageFlags>, Unchecked.defaultof<VkSubgroupFeatureFlags>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceSubgroupProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceSubgroupProperties(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkShaderStageFlags>, Unchecked.defaultof<VkSubgroupFeatureFlags>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceSubgroupProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceSubgroupProperties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8877,16 +8561,11 @@ module Vulkan11 =
             new(variablePointersStorageBuffer : VkBool32, variablePointers : VkBool32) =
                 VkPhysicalDeviceVariablePointersFeatures(Unchecked.defaultof<nativeint>, variablePointersStorageBuffer, variablePointers)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.variablePointersStorageBuffer = Unchecked.defaultof<VkBool32> && x.variablePointers = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceVariablePointersFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceVariablePointersFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceVariablePointersFeatures(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceVariablePointersFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceVariablePointersFeatures.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8916,16 +8595,11 @@ module Vulkan11 =
             new(domainOrigin : VkTessellationDomainOrigin) =
                 VkPipelineTessellationDomainOriginStateCreateInfo(Unchecked.defaultof<nativeint>, domainOrigin)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.domainOrigin = Unchecked.defaultof<VkTessellationDomainOrigin>
+
             static member Empty =
                 VkPipelineTessellationDomainOriginStateCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkTessellationDomainOrigin>)
-
-            /// Creates an empty VkPipelineTessellationDomainOriginStateCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineTessellationDomainOriginStateCreateInfo(pNext, Unchecked.defaultof<VkTessellationDomainOrigin>)
-
-            /// Creates an empty VkPipelineTessellationDomainOriginStateCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineTessellationDomainOriginStateCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8952,16 +8626,11 @@ module Vulkan11 =
             new(protectedSubmit : VkBool32) =
                 VkProtectedSubmitInfo(Unchecked.defaultof<nativeint>, protectedSubmit)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.protectedSubmit = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkProtectedSubmitInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkProtectedSubmitInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkProtectedSubmitInfo(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkProtectedSubmitInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkProtectedSubmitInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -8988,16 +8657,11 @@ module Vulkan11 =
             new(queueFamilyProperties : VkQueueFamilyProperties) =
                 VkQueueFamilyProperties2(Unchecked.defaultof<nativeint>, queueFamilyProperties)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.queueFamilyProperties = Unchecked.defaultof<VkQueueFamilyProperties>
+
             static member Empty =
                 VkQueueFamilyProperties2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkQueueFamilyProperties>)
-
-            /// Creates an empty VkQueueFamilyProperties2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkQueueFamilyProperties2(pNext, Unchecked.defaultof<VkQueueFamilyProperties>)
-
-            /// Creates an empty VkQueueFamilyProperties2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkQueueFamilyProperties2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -9026,16 +8690,11 @@ module Vulkan11 =
             new(aspectReferenceCount : uint32, pAspectReferences : nativeptr<VkInputAttachmentAspectReference>) =
                 VkRenderPassInputAttachmentAspectCreateInfo(Unchecked.defaultof<nativeint>, aspectReferenceCount, pAspectReferences)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.aspectReferenceCount = Unchecked.defaultof<uint32> && x.pAspectReferences = Unchecked.defaultof<nativeptr<VkInputAttachmentAspectReference>>
+
             static member Empty =
                 VkRenderPassInputAttachmentAspectCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkInputAttachmentAspectReference>>)
-
-            /// Creates an empty VkRenderPassInputAttachmentAspectCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkRenderPassInputAttachmentAspectCreateInfo(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkInputAttachmentAspectReference>>)
-
-            /// Creates an empty VkRenderPassInputAttachmentAspectCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkRenderPassInputAttachmentAspectCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -9073,16 +8732,11 @@ module Vulkan11 =
             new(subpassCount : uint32, pViewMasks : nativeptr<uint32>, dependencyCount : uint32, pViewOffsets : nativeptr<int>, correlationMaskCount : uint32, pCorrelationMasks : nativeptr<uint32>) =
                 VkRenderPassMultiviewCreateInfo(Unchecked.defaultof<nativeint>, subpassCount, pViewMasks, dependencyCount, pViewOffsets, correlationMaskCount, pCorrelationMasks)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.subpassCount = Unchecked.defaultof<uint32> && x.pViewMasks = Unchecked.defaultof<nativeptr<uint32>> && x.dependencyCount = Unchecked.defaultof<uint32> && x.pViewOffsets = Unchecked.defaultof<nativeptr<int>> && x.correlationMaskCount = Unchecked.defaultof<uint32> && x.pCorrelationMasks = Unchecked.defaultof<nativeptr<uint32>>
+
             static member Empty =
                 VkRenderPassMultiviewCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<int>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkRenderPassMultiviewCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkRenderPassMultiviewCreateInfo(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<int>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkRenderPassMultiviewCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkRenderPassMultiviewCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -9128,16 +8782,11 @@ module Vulkan11 =
             new(format : VkFormat, ycbcrModel : VkSamplerYcbcrModelConversion, ycbcrRange : VkSamplerYcbcrRange, components : VkComponentMapping, xChromaOffset : VkChromaLocation, yChromaOffset : VkChromaLocation, chromaFilter : VkFilter, forceExplicitReconstruction : VkBool32) =
                 VkSamplerYcbcrConversionCreateInfo(Unchecked.defaultof<nativeint>, format, ycbcrModel, ycbcrRange, components, xChromaOffset, yChromaOffset, chromaFilter, forceExplicitReconstruction)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.format = Unchecked.defaultof<VkFormat> && x.ycbcrModel = Unchecked.defaultof<VkSamplerYcbcrModelConversion> && x.ycbcrRange = Unchecked.defaultof<VkSamplerYcbcrRange> && x.components = Unchecked.defaultof<VkComponentMapping> && x.xChromaOffset = Unchecked.defaultof<VkChromaLocation> && x.yChromaOffset = Unchecked.defaultof<VkChromaLocation> && x.chromaFilter = Unchecked.defaultof<VkFilter> && x.forceExplicitReconstruction = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkSamplerYcbcrConversionCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkSamplerYcbcrModelConversion>, Unchecked.defaultof<VkSamplerYcbcrRange>, Unchecked.defaultof<VkComponentMapping>, Unchecked.defaultof<VkChromaLocation>, Unchecked.defaultof<VkChromaLocation>, Unchecked.defaultof<VkFilter>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkSamplerYcbcrConversionCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSamplerYcbcrConversionCreateInfo(pNext, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkSamplerYcbcrModelConversion>, Unchecked.defaultof<VkSamplerYcbcrRange>, Unchecked.defaultof<VkComponentMapping>, Unchecked.defaultof<VkChromaLocation>, Unchecked.defaultof<VkChromaLocation>, Unchecked.defaultof<VkFilter>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkSamplerYcbcrConversionCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSamplerYcbcrConversionCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -9171,16 +8820,11 @@ module Vulkan11 =
             new(combinedImageSamplerDescriptorCount : uint32) =
                 VkSamplerYcbcrConversionImageFormatProperties(Unchecked.defaultof<nativeint>, combinedImageSamplerDescriptorCount)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.combinedImageSamplerDescriptorCount = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkSamplerYcbcrConversionImageFormatProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkSamplerYcbcrConversionImageFormatProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSamplerYcbcrConversionImageFormatProperties(pNext, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkSamplerYcbcrConversionImageFormatProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSamplerYcbcrConversionImageFormatProperties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -9207,16 +8851,11 @@ module Vulkan11 =
             new(conversion : VkSamplerYcbcrConversion) =
                 VkSamplerYcbcrConversionInfo(Unchecked.defaultof<nativeint>, conversion)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.conversion = Unchecked.defaultof<VkSamplerYcbcrConversion>
+
             static member Empty =
                 VkSamplerYcbcrConversionInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSamplerYcbcrConversion>)
-
-            /// Creates an empty VkSamplerYcbcrConversionInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSamplerYcbcrConversionInfo(pNext, Unchecked.defaultof<VkSamplerYcbcrConversion>)
-
-            /// Creates an empty VkSamplerYcbcrConversionInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSamplerYcbcrConversionInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -9243,16 +8882,11 @@ module Vulkan11 =
             new(properties : VkSparseImageFormatProperties) =
                 VkSparseImageFormatProperties2(Unchecked.defaultof<nativeint>, properties)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.properties = Unchecked.defaultof<VkSparseImageFormatProperties>
+
             static member Empty =
                 VkSparseImageFormatProperties2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSparseImageFormatProperties>)
-
-            /// Creates an empty VkSparseImageFormatProperties2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSparseImageFormatProperties2(pNext, Unchecked.defaultof<VkSparseImageFormatProperties>)
-
-            /// Creates an empty VkSparseImageFormatProperties2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSparseImageFormatProperties2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -9279,16 +8913,11 @@ module Vulkan11 =
             new(memoryRequirements : VkSparseImageMemoryRequirements) =
                 VkSparseImageMemoryRequirements2(Unchecked.defaultof<nativeint>, memoryRequirements)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.memoryRequirements = Unchecked.defaultof<VkSparseImageMemoryRequirements>
+
             static member Empty =
                 VkSparseImageMemoryRequirements2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSparseImageMemoryRequirements>)
-
-            /// Creates an empty VkSparseImageMemoryRequirements2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSparseImageMemoryRequirements2(pNext, Unchecked.defaultof<VkSparseImageMemoryRequirements>)
-
-            /// Creates an empty VkSparseImageMemoryRequirements2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSparseImageMemoryRequirements2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -9598,16 +9227,11 @@ module Vulkan12 =
             new(flags : VkAttachmentDescriptionFlags, format : VkFormat, samples : VkSampleCountFlags, loadOp : VkAttachmentLoadOp, storeOp : VkAttachmentStoreOp, stencilLoadOp : VkAttachmentLoadOp, stencilStoreOp : VkAttachmentStoreOp, initialLayout : VkImageLayout, finalLayout : VkImageLayout) =
                 VkAttachmentDescription2(Unchecked.defaultof<nativeint>, flags, format, samples, loadOp, storeOp, stencilLoadOp, stencilStoreOp, initialLayout, finalLayout)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkAttachmentDescriptionFlags> && x.format = Unchecked.defaultof<VkFormat> && x.samples = Unchecked.defaultof<VkSampleCountFlags> && x.loadOp = Unchecked.defaultof<VkAttachmentLoadOp> && x.storeOp = Unchecked.defaultof<VkAttachmentStoreOp> && x.stencilLoadOp = Unchecked.defaultof<VkAttachmentLoadOp> && x.stencilStoreOp = Unchecked.defaultof<VkAttachmentStoreOp> && x.initialLayout = Unchecked.defaultof<VkImageLayout> && x.finalLayout = Unchecked.defaultof<VkImageLayout>
+
             static member Empty =
                 VkAttachmentDescription2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAttachmentDescriptionFlags>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkAttachmentLoadOp>, Unchecked.defaultof<VkAttachmentStoreOp>, Unchecked.defaultof<VkAttachmentLoadOp>, Unchecked.defaultof<VkAttachmentStoreOp>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImageLayout>)
-
-            /// Creates an empty VkAttachmentDescription2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAttachmentDescription2(pNext, Unchecked.defaultof<VkAttachmentDescriptionFlags>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkAttachmentLoadOp>, Unchecked.defaultof<VkAttachmentStoreOp>, Unchecked.defaultof<VkAttachmentLoadOp>, Unchecked.defaultof<VkAttachmentStoreOp>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImageLayout>)
-
-            /// Creates an empty VkAttachmentDescription2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAttachmentDescription2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -9644,16 +9268,11 @@ module Vulkan12 =
             new(stencilInitialLayout : VkImageLayout, stencilFinalLayout : VkImageLayout) =
                 VkAttachmentDescriptionStencilLayout(Unchecked.defaultof<nativeint>, stencilInitialLayout, stencilFinalLayout)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.stencilInitialLayout = Unchecked.defaultof<VkImageLayout> && x.stencilFinalLayout = Unchecked.defaultof<VkImageLayout>
+
             static member Empty =
                 VkAttachmentDescriptionStencilLayout(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImageLayout>)
-
-            /// Creates an empty VkAttachmentDescriptionStencilLayout with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAttachmentDescriptionStencilLayout(pNext, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImageLayout>)
-
-            /// Creates an empty VkAttachmentDescriptionStencilLayout with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAttachmentDescriptionStencilLayout.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -9685,16 +9304,11 @@ module Vulkan12 =
             new(attachment : uint32, layout : VkImageLayout, aspectMask : VkImageAspectFlags) =
                 VkAttachmentReference2(Unchecked.defaultof<nativeint>, attachment, layout, aspectMask)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.attachment = Unchecked.defaultof<uint32> && x.layout = Unchecked.defaultof<VkImageLayout> && x.aspectMask = Unchecked.defaultof<VkImageAspectFlags>
+
             static member Empty =
                 VkAttachmentReference2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImageAspectFlags>)
-
-            /// Creates an empty VkAttachmentReference2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAttachmentReference2(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImageAspectFlags>)
-
-            /// Creates an empty VkAttachmentReference2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAttachmentReference2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -9723,16 +9337,11 @@ module Vulkan12 =
             new(stencilLayout : VkImageLayout) =
                 VkAttachmentReferenceStencilLayout(Unchecked.defaultof<nativeint>, stencilLayout)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.stencilLayout = Unchecked.defaultof<VkImageLayout>
+
             static member Empty =
                 VkAttachmentReferenceStencilLayout(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageLayout>)
-
-            /// Creates an empty VkAttachmentReferenceStencilLayout with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAttachmentReferenceStencilLayout(pNext, Unchecked.defaultof<VkImageLayout>)
-
-            /// Creates an empty VkAttachmentReferenceStencilLayout with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAttachmentReferenceStencilLayout.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -9759,16 +9368,11 @@ module Vulkan12 =
             new(buffer : VkBuffer) =
                 VkBufferDeviceAddressInfo(Unchecked.defaultof<nativeint>, buffer)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.buffer = Unchecked.defaultof<VkBuffer>
+
             static member Empty =
                 VkBufferDeviceAddressInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBuffer>)
-
-            /// Creates an empty VkBufferDeviceAddressInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkBufferDeviceAddressInfo(pNext, Unchecked.defaultof<VkBuffer>)
-
-            /// Creates an empty VkBufferDeviceAddressInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkBufferDeviceAddressInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -9795,16 +9399,11 @@ module Vulkan12 =
             new(opaqueCaptureAddress : uint64) =
                 VkBufferOpaqueCaptureAddressCreateInfo(Unchecked.defaultof<nativeint>, opaqueCaptureAddress)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.opaqueCaptureAddress = Unchecked.defaultof<uint64>
+
             static member Empty =
                 VkBufferOpaqueCaptureAddressCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkBufferOpaqueCaptureAddressCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkBufferOpaqueCaptureAddressCreateInfo(pNext, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkBufferOpaqueCaptureAddressCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkBufferOpaqueCaptureAddressCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -9829,6 +9428,9 @@ module Vulkan12 =
                     subminor = subminor
                     patch = patch
                 }
+
+            member x.IsEmpty =
+                x.major = Unchecked.defaultof<byte> && x.minor = Unchecked.defaultof<byte> && x.subminor = Unchecked.defaultof<byte> && x.patch = Unchecked.defaultof<byte>
 
             static member Empty =
                 VkConformanceVersion(Unchecked.defaultof<byte>, Unchecked.defaultof<byte>, Unchecked.defaultof<byte>, Unchecked.defaultof<byte>)
@@ -9861,16 +9463,11 @@ module Vulkan12 =
             new(bindingCount : uint32, pBindingFlags : nativeptr<VkDescriptorBindingFlags>) =
                 VkDescriptorSetLayoutBindingFlagsCreateInfo(Unchecked.defaultof<nativeint>, bindingCount, pBindingFlags)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.bindingCount = Unchecked.defaultof<uint32> && x.pBindingFlags = Unchecked.defaultof<nativeptr<VkDescriptorBindingFlags>>
+
             static member Empty =
                 VkDescriptorSetLayoutBindingFlagsCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDescriptorBindingFlags>>)
-
-            /// Creates an empty VkDescriptorSetLayoutBindingFlagsCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDescriptorSetLayoutBindingFlagsCreateInfo(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDescriptorBindingFlags>>)
-
-            /// Creates an empty VkDescriptorSetLayoutBindingFlagsCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDescriptorSetLayoutBindingFlagsCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -9900,16 +9497,11 @@ module Vulkan12 =
             new(descriptorSetCount : uint32, pDescriptorCounts : nativeptr<uint32>) =
                 VkDescriptorSetVariableDescriptorCountAllocateInfo(Unchecked.defaultof<nativeint>, descriptorSetCount, pDescriptorCounts)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.descriptorSetCount = Unchecked.defaultof<uint32> && x.pDescriptorCounts = Unchecked.defaultof<nativeptr<uint32>>
+
             static member Empty =
                 VkDescriptorSetVariableDescriptorCountAllocateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkDescriptorSetVariableDescriptorCountAllocateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDescriptorSetVariableDescriptorCountAllocateInfo(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkDescriptorSetVariableDescriptorCountAllocateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDescriptorSetVariableDescriptorCountAllocateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -9937,16 +9529,11 @@ module Vulkan12 =
             new(maxVariableDescriptorCount : uint32) =
                 VkDescriptorSetVariableDescriptorCountLayoutSupport(Unchecked.defaultof<nativeint>, maxVariableDescriptorCount)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxVariableDescriptorCount = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkDescriptorSetVariableDescriptorCountLayoutSupport(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDescriptorSetVariableDescriptorCountLayoutSupport with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDescriptorSetVariableDescriptorCountLayoutSupport(pNext, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDescriptorSetVariableDescriptorCountLayoutSupport with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDescriptorSetVariableDescriptorCountLayoutSupport.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -9973,16 +9560,11 @@ module Vulkan12 =
             new(memory : VkDeviceMemory) =
                 VkDeviceMemoryOpaqueCaptureAddressInfo(Unchecked.defaultof<nativeint>, memory)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.memory = Unchecked.defaultof<VkDeviceMemory>
+
             static member Empty =
                 VkDeviceMemoryOpaqueCaptureAddressInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceMemory>)
-
-            /// Creates an empty VkDeviceMemoryOpaqueCaptureAddressInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDeviceMemoryOpaqueCaptureAddressInfo(pNext, Unchecked.defaultof<VkDeviceMemory>)
-
-            /// Creates an empty VkDeviceMemoryOpaqueCaptureAddressInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDeviceMemoryOpaqueCaptureAddressInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10021,16 +9603,11 @@ module Vulkan12 =
             new(flags : VkImageCreateFlags, usage : VkImageUsageFlags, width : uint32, height : uint32, layerCount : uint32, viewFormatCount : uint32, pViewFormats : nativeptr<VkFormat>) =
                 VkFramebufferAttachmentImageInfo(Unchecked.defaultof<nativeint>, flags, usage, width, height, layerCount, viewFormatCount, pViewFormats)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkImageCreateFlags> && x.usage = Unchecked.defaultof<VkImageUsageFlags> && x.width = Unchecked.defaultof<uint32> && x.height = Unchecked.defaultof<uint32> && x.layerCount = Unchecked.defaultof<uint32> && x.viewFormatCount = Unchecked.defaultof<uint32> && x.pViewFormats = Unchecked.defaultof<nativeptr<VkFormat>>
+
             static member Empty =
                 VkFramebufferAttachmentImageInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageCreateFlags>, Unchecked.defaultof<VkImageUsageFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkFormat>>)
-
-            /// Creates an empty VkFramebufferAttachmentImageInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkFramebufferAttachmentImageInfo(pNext, Unchecked.defaultof<VkImageCreateFlags>, Unchecked.defaultof<VkImageUsageFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkFormat>>)
-
-            /// Creates an empty VkFramebufferAttachmentImageInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkFramebufferAttachmentImageInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10065,16 +9642,11 @@ module Vulkan12 =
             new(attachmentImageInfoCount : uint32, pAttachmentImageInfos : nativeptr<VkFramebufferAttachmentImageInfo>) =
                 VkFramebufferAttachmentsCreateInfo(Unchecked.defaultof<nativeint>, attachmentImageInfoCount, pAttachmentImageInfos)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.attachmentImageInfoCount = Unchecked.defaultof<uint32> && x.pAttachmentImageInfos = Unchecked.defaultof<nativeptr<VkFramebufferAttachmentImageInfo>>
+
             static member Empty =
                 VkFramebufferAttachmentsCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkFramebufferAttachmentImageInfo>>)
-
-            /// Creates an empty VkFramebufferAttachmentsCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkFramebufferAttachmentsCreateInfo(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkFramebufferAttachmentImageInfo>>)
-
-            /// Creates an empty VkFramebufferAttachmentsCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkFramebufferAttachmentsCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10104,16 +9676,11 @@ module Vulkan12 =
             new(viewFormatCount : uint32, pViewFormats : nativeptr<VkFormat>) =
                 VkImageFormatListCreateInfo(Unchecked.defaultof<nativeint>, viewFormatCount, pViewFormats)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.viewFormatCount = Unchecked.defaultof<uint32> && x.pViewFormats = Unchecked.defaultof<nativeptr<VkFormat>>
+
             static member Empty =
                 VkImageFormatListCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkFormat>>)
-
-            /// Creates an empty VkImageFormatListCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImageFormatListCreateInfo(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkFormat>>)
-
-            /// Creates an empty VkImageFormatListCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImageFormatListCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10141,16 +9708,11 @@ module Vulkan12 =
             new(stencilUsage : VkImageUsageFlags) =
                 VkImageStencilUsageCreateInfo(Unchecked.defaultof<nativeint>, stencilUsage)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.stencilUsage = Unchecked.defaultof<VkImageUsageFlags>
+
             static member Empty =
                 VkImageStencilUsageCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageUsageFlags>)
-
-            /// Creates an empty VkImageStencilUsageCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImageStencilUsageCreateInfo(pNext, Unchecked.defaultof<VkImageUsageFlags>)
-
-            /// Creates an empty VkImageStencilUsageCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImageStencilUsageCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10177,16 +9739,11 @@ module Vulkan12 =
             new(opaqueCaptureAddress : uint64) =
                 VkMemoryOpaqueCaptureAddressAllocateInfo(Unchecked.defaultof<nativeint>, opaqueCaptureAddress)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.opaqueCaptureAddress = Unchecked.defaultof<uint64>
+
             static member Empty =
                 VkMemoryOpaqueCaptureAddressAllocateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkMemoryOpaqueCaptureAddressAllocateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkMemoryOpaqueCaptureAddressAllocateInfo(pNext, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkMemoryOpaqueCaptureAddressAllocateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkMemoryOpaqueCaptureAddressAllocateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10217,16 +9774,11 @@ module Vulkan12 =
             new(storageBuffer8BitAccess : VkBool32, uniformAndStorageBuffer8BitAccess : VkBool32, storagePushConstant8 : VkBool32) =
                 VkPhysicalDevice8BitStorageFeatures(Unchecked.defaultof<nativeint>, storageBuffer8BitAccess, uniformAndStorageBuffer8BitAccess, storagePushConstant8)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.storageBuffer8BitAccess = Unchecked.defaultof<VkBool32> && x.uniformAndStorageBuffer8BitAccess = Unchecked.defaultof<VkBool32> && x.storagePushConstant8 = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDevice8BitStorageFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevice8BitStorageFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDevice8BitStorageFeatures(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevice8BitStorageFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDevice8BitStorageFeatures.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10259,16 +9811,11 @@ module Vulkan12 =
             new(bufferDeviceAddress : VkBool32, bufferDeviceAddressCaptureReplay : VkBool32, bufferDeviceAddressMultiDevice : VkBool32) =
                 VkPhysicalDeviceBufferDeviceAddressFeatures(Unchecked.defaultof<nativeint>, bufferDeviceAddress, bufferDeviceAddressCaptureReplay, bufferDeviceAddressMultiDevice)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.bufferDeviceAddress = Unchecked.defaultof<VkBool32> && x.bufferDeviceAddressCaptureReplay = Unchecked.defaultof<VkBool32> && x.bufferDeviceAddressMultiDevice = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceBufferDeviceAddressFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceBufferDeviceAddressFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceBufferDeviceAddressFeatures(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceBufferDeviceAddressFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceBufferDeviceAddressFeatures.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10303,16 +9850,11 @@ module Vulkan12 =
             new(supportedDepthResolveModes : VkResolveModeFlags, supportedStencilResolveModes : VkResolveModeFlags, independentResolveNone : VkBool32, independentResolve : VkBool32) =
                 VkPhysicalDeviceDepthStencilResolveProperties(Unchecked.defaultof<nativeint>, supportedDepthResolveModes, supportedStencilResolveModes, independentResolveNone, independentResolve)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.supportedDepthResolveModes = Unchecked.defaultof<VkResolveModeFlags> && x.supportedStencilResolveModes = Unchecked.defaultof<VkResolveModeFlags> && x.independentResolveNone = Unchecked.defaultof<VkBool32> && x.independentResolve = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceDepthStencilResolveProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceDepthStencilResolveProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceDepthStencilResolveProperties(pNext, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceDepthStencilResolveProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceDepthStencilResolveProperties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10380,16 +9922,11 @@ module Vulkan12 =
             new(shaderInputAttachmentArrayDynamicIndexing : VkBool32, shaderUniformTexelBufferArrayDynamicIndexing : VkBool32, shaderStorageTexelBufferArrayDynamicIndexing : VkBool32, shaderUniformBufferArrayNonUniformIndexing : VkBool32, shaderSampledImageArrayNonUniformIndexing : VkBool32, shaderStorageBufferArrayNonUniformIndexing : VkBool32, shaderStorageImageArrayNonUniformIndexing : VkBool32, shaderInputAttachmentArrayNonUniformIndexing : VkBool32, shaderUniformTexelBufferArrayNonUniformIndexing : VkBool32, shaderStorageTexelBufferArrayNonUniformIndexing : VkBool32, descriptorBindingUniformBufferUpdateAfterBind : VkBool32, descriptorBindingSampledImageUpdateAfterBind : VkBool32, descriptorBindingStorageImageUpdateAfterBind : VkBool32, descriptorBindingStorageBufferUpdateAfterBind : VkBool32, descriptorBindingUniformTexelBufferUpdateAfterBind : VkBool32, descriptorBindingStorageTexelBufferUpdateAfterBind : VkBool32, descriptorBindingUpdateUnusedWhilePending : VkBool32, descriptorBindingPartiallyBound : VkBool32, descriptorBindingVariableDescriptorCount : VkBool32, runtimeDescriptorArray : VkBool32) =
                 VkPhysicalDeviceDescriptorIndexingFeatures(Unchecked.defaultof<nativeint>, shaderInputAttachmentArrayDynamicIndexing, shaderUniformTexelBufferArrayDynamicIndexing, shaderStorageTexelBufferArrayDynamicIndexing, shaderUniformBufferArrayNonUniformIndexing, shaderSampledImageArrayNonUniformIndexing, shaderStorageBufferArrayNonUniformIndexing, shaderStorageImageArrayNonUniformIndexing, shaderInputAttachmentArrayNonUniformIndexing, shaderUniformTexelBufferArrayNonUniformIndexing, shaderStorageTexelBufferArrayNonUniformIndexing, descriptorBindingUniformBufferUpdateAfterBind, descriptorBindingSampledImageUpdateAfterBind, descriptorBindingStorageImageUpdateAfterBind, descriptorBindingStorageBufferUpdateAfterBind, descriptorBindingUniformTexelBufferUpdateAfterBind, descriptorBindingStorageTexelBufferUpdateAfterBind, descriptorBindingUpdateUnusedWhilePending, descriptorBindingPartiallyBound, descriptorBindingVariableDescriptorCount, runtimeDescriptorArray)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shaderInputAttachmentArrayDynamicIndexing = Unchecked.defaultof<VkBool32> && x.shaderUniformTexelBufferArrayDynamicIndexing = Unchecked.defaultof<VkBool32> && x.shaderStorageTexelBufferArrayDynamicIndexing = Unchecked.defaultof<VkBool32> && x.shaderUniformBufferArrayNonUniformIndexing = Unchecked.defaultof<VkBool32> && x.shaderSampledImageArrayNonUniformIndexing = Unchecked.defaultof<VkBool32> && x.shaderStorageBufferArrayNonUniformIndexing = Unchecked.defaultof<VkBool32> && x.shaderStorageImageArrayNonUniformIndexing = Unchecked.defaultof<VkBool32> && x.shaderInputAttachmentArrayNonUniformIndexing = Unchecked.defaultof<VkBool32> && x.shaderUniformTexelBufferArrayNonUniformIndexing = Unchecked.defaultof<VkBool32> && x.shaderStorageTexelBufferArrayNonUniformIndexing = Unchecked.defaultof<VkBool32> && x.descriptorBindingUniformBufferUpdateAfterBind = Unchecked.defaultof<VkBool32> && x.descriptorBindingSampledImageUpdateAfterBind = Unchecked.defaultof<VkBool32> && x.descriptorBindingStorageImageUpdateAfterBind = Unchecked.defaultof<VkBool32> && x.descriptorBindingStorageBufferUpdateAfterBind = Unchecked.defaultof<VkBool32> && x.descriptorBindingUniformTexelBufferUpdateAfterBind = Unchecked.defaultof<VkBool32> && x.descriptorBindingStorageTexelBufferUpdateAfterBind = Unchecked.defaultof<VkBool32> && x.descriptorBindingUpdateUnusedWhilePending = Unchecked.defaultof<VkBool32> && x.descriptorBindingPartiallyBound = Unchecked.defaultof<VkBool32> && x.descriptorBindingVariableDescriptorCount = Unchecked.defaultof<VkBool32> && x.runtimeDescriptorArray = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceDescriptorIndexingFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceDescriptorIndexingFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceDescriptorIndexingFeatures(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceDescriptorIndexingFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceDescriptorIndexingFeatures.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10479,16 +10016,11 @@ module Vulkan12 =
             new(maxUpdateAfterBindDescriptorsInAllPools : uint32, shaderUniformBufferArrayNonUniformIndexingNative : VkBool32, shaderSampledImageArrayNonUniformIndexingNative : VkBool32, shaderStorageBufferArrayNonUniformIndexingNative : VkBool32, shaderStorageImageArrayNonUniformIndexingNative : VkBool32, shaderInputAttachmentArrayNonUniformIndexingNative : VkBool32, robustBufferAccessUpdateAfterBind : VkBool32, quadDivergentImplicitLod : VkBool32, maxPerStageDescriptorUpdateAfterBindSamplers : uint32, maxPerStageDescriptorUpdateAfterBindUniformBuffers : uint32, maxPerStageDescriptorUpdateAfterBindStorageBuffers : uint32, maxPerStageDescriptorUpdateAfterBindSampledImages : uint32, maxPerStageDescriptorUpdateAfterBindStorageImages : uint32, maxPerStageDescriptorUpdateAfterBindInputAttachments : uint32, maxPerStageUpdateAfterBindResources : uint32, maxDescriptorSetUpdateAfterBindSamplers : uint32, maxDescriptorSetUpdateAfterBindUniformBuffers : uint32, maxDescriptorSetUpdateAfterBindUniformBuffersDynamic : uint32, maxDescriptorSetUpdateAfterBindStorageBuffers : uint32, maxDescriptorSetUpdateAfterBindStorageBuffersDynamic : uint32, maxDescriptorSetUpdateAfterBindSampledImages : uint32, maxDescriptorSetUpdateAfterBindStorageImages : uint32, maxDescriptorSetUpdateAfterBindInputAttachments : uint32) =
                 VkPhysicalDeviceDescriptorIndexingProperties(Unchecked.defaultof<nativeint>, maxUpdateAfterBindDescriptorsInAllPools, shaderUniformBufferArrayNonUniformIndexingNative, shaderSampledImageArrayNonUniformIndexingNative, shaderStorageBufferArrayNonUniformIndexingNative, shaderStorageImageArrayNonUniformIndexingNative, shaderInputAttachmentArrayNonUniformIndexingNative, robustBufferAccessUpdateAfterBind, quadDivergentImplicitLod, maxPerStageDescriptorUpdateAfterBindSamplers, maxPerStageDescriptorUpdateAfterBindUniformBuffers, maxPerStageDescriptorUpdateAfterBindStorageBuffers, maxPerStageDescriptorUpdateAfterBindSampledImages, maxPerStageDescriptorUpdateAfterBindStorageImages, maxPerStageDescriptorUpdateAfterBindInputAttachments, maxPerStageUpdateAfterBindResources, maxDescriptorSetUpdateAfterBindSamplers, maxDescriptorSetUpdateAfterBindUniformBuffers, maxDescriptorSetUpdateAfterBindUniformBuffersDynamic, maxDescriptorSetUpdateAfterBindStorageBuffers, maxDescriptorSetUpdateAfterBindStorageBuffersDynamic, maxDescriptorSetUpdateAfterBindSampledImages, maxDescriptorSetUpdateAfterBindStorageImages, maxDescriptorSetUpdateAfterBindInputAttachments)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxUpdateAfterBindDescriptorsInAllPools = Unchecked.defaultof<uint32> && x.shaderUniformBufferArrayNonUniformIndexingNative = Unchecked.defaultof<VkBool32> && x.shaderSampledImageArrayNonUniformIndexingNative = Unchecked.defaultof<VkBool32> && x.shaderStorageBufferArrayNonUniformIndexingNative = Unchecked.defaultof<VkBool32> && x.shaderStorageImageArrayNonUniformIndexingNative = Unchecked.defaultof<VkBool32> && x.shaderInputAttachmentArrayNonUniformIndexingNative = Unchecked.defaultof<VkBool32> && x.robustBufferAccessUpdateAfterBind = Unchecked.defaultof<VkBool32> && x.quadDivergentImplicitLod = Unchecked.defaultof<VkBool32> && x.maxPerStageDescriptorUpdateAfterBindSamplers = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorUpdateAfterBindUniformBuffers = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorUpdateAfterBindStorageBuffers = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorUpdateAfterBindSampledImages = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorUpdateAfterBindStorageImages = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorUpdateAfterBindInputAttachments = Unchecked.defaultof<uint32> && x.maxPerStageUpdateAfterBindResources = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindSamplers = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindUniformBuffers = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindStorageBuffers = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindSampledImages = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindStorageImages = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindInputAttachments = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDeviceDescriptorIndexingProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceDescriptorIndexingProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceDescriptorIndexingProperties(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceDescriptorIndexingProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceDescriptorIndexingProperties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10543,16 +10075,11 @@ module Vulkan12 =
             new(driverID : VkDriverId, driverName : String256, driverInfo : String256, conformanceVersion : VkConformanceVersion) =
                 VkPhysicalDeviceDriverProperties(Unchecked.defaultof<nativeint>, driverID, driverName, driverInfo, conformanceVersion)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.driverID = Unchecked.defaultof<VkDriverId> && x.driverName = Unchecked.defaultof<String256> && x.driverInfo = Unchecked.defaultof<String256> && x.conformanceVersion = Unchecked.defaultof<VkConformanceVersion>
+
             static member Empty =
                 VkPhysicalDeviceDriverProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDriverId>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>, Unchecked.defaultof<VkConformanceVersion>)
-
-            /// Creates an empty VkPhysicalDeviceDriverProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceDriverProperties(pNext, Unchecked.defaultof<VkDriverId>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>, Unchecked.defaultof<VkConformanceVersion>)
-
-            /// Creates an empty VkPhysicalDeviceDriverProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceDriverProperties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10614,16 +10141,11 @@ module Vulkan12 =
             new(denormBehaviorIndependence : VkShaderFloatControlsIndependence, roundingModeIndependence : VkShaderFloatControlsIndependence, shaderSignedZeroInfNanPreserveFloat16 : VkBool32, shaderSignedZeroInfNanPreserveFloat32 : VkBool32, shaderSignedZeroInfNanPreserveFloat64 : VkBool32, shaderDenormPreserveFloat16 : VkBool32, shaderDenormPreserveFloat32 : VkBool32, shaderDenormPreserveFloat64 : VkBool32, shaderDenormFlushToZeroFloat16 : VkBool32, shaderDenormFlushToZeroFloat32 : VkBool32, shaderDenormFlushToZeroFloat64 : VkBool32, shaderRoundingModeRTEFloat16 : VkBool32, shaderRoundingModeRTEFloat32 : VkBool32, shaderRoundingModeRTEFloat64 : VkBool32, shaderRoundingModeRTZFloat16 : VkBool32, shaderRoundingModeRTZFloat32 : VkBool32, shaderRoundingModeRTZFloat64 : VkBool32) =
                 VkPhysicalDeviceFloatControlsProperties(Unchecked.defaultof<nativeint>, denormBehaviorIndependence, roundingModeIndependence, shaderSignedZeroInfNanPreserveFloat16, shaderSignedZeroInfNanPreserveFloat32, shaderSignedZeroInfNanPreserveFloat64, shaderDenormPreserveFloat16, shaderDenormPreserveFloat32, shaderDenormPreserveFloat64, shaderDenormFlushToZeroFloat16, shaderDenormFlushToZeroFloat32, shaderDenormFlushToZeroFloat64, shaderRoundingModeRTEFloat16, shaderRoundingModeRTEFloat32, shaderRoundingModeRTEFloat64, shaderRoundingModeRTZFloat16, shaderRoundingModeRTZFloat32, shaderRoundingModeRTZFloat64)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.denormBehaviorIndependence = Unchecked.defaultof<VkShaderFloatControlsIndependence> && x.roundingModeIndependence = Unchecked.defaultof<VkShaderFloatControlsIndependence> && x.shaderSignedZeroInfNanPreserveFloat16 = Unchecked.defaultof<VkBool32> && x.shaderSignedZeroInfNanPreserveFloat32 = Unchecked.defaultof<VkBool32> && x.shaderSignedZeroInfNanPreserveFloat64 = Unchecked.defaultof<VkBool32> && x.shaderDenormPreserveFloat16 = Unchecked.defaultof<VkBool32> && x.shaderDenormPreserveFloat32 = Unchecked.defaultof<VkBool32> && x.shaderDenormPreserveFloat64 = Unchecked.defaultof<VkBool32> && x.shaderDenormFlushToZeroFloat16 = Unchecked.defaultof<VkBool32> && x.shaderDenormFlushToZeroFloat32 = Unchecked.defaultof<VkBool32> && x.shaderDenormFlushToZeroFloat64 = Unchecked.defaultof<VkBool32> && x.shaderRoundingModeRTEFloat16 = Unchecked.defaultof<VkBool32> && x.shaderRoundingModeRTEFloat32 = Unchecked.defaultof<VkBool32> && x.shaderRoundingModeRTEFloat64 = Unchecked.defaultof<VkBool32> && x.shaderRoundingModeRTZFloat16 = Unchecked.defaultof<VkBool32> && x.shaderRoundingModeRTZFloat32 = Unchecked.defaultof<VkBool32> && x.shaderRoundingModeRTZFloat64 = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceFloatControlsProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkShaderFloatControlsIndependence>, Unchecked.defaultof<VkShaderFloatControlsIndependence>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFloatControlsProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceFloatControlsProperties(pNext, Unchecked.defaultof<VkShaderFloatControlsIndependence>, Unchecked.defaultof<VkShaderFloatControlsIndependence>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFloatControlsProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceFloatControlsProperties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10666,16 +10188,11 @@ module Vulkan12 =
             new(hostQueryReset : VkBool32) =
                 VkPhysicalDeviceHostQueryResetFeatures(Unchecked.defaultof<nativeint>, hostQueryReset)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.hostQueryReset = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceHostQueryResetFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceHostQueryResetFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceHostQueryResetFeatures(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceHostQueryResetFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceHostQueryResetFeatures.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10702,16 +10219,11 @@ module Vulkan12 =
             new(imagelessFramebuffer : VkBool32) =
                 VkPhysicalDeviceImagelessFramebufferFeatures(Unchecked.defaultof<nativeint>, imagelessFramebuffer)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.imagelessFramebuffer = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceImagelessFramebufferFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceImagelessFramebufferFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceImagelessFramebufferFeatures(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceImagelessFramebufferFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceImagelessFramebufferFeatures.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10740,16 +10252,11 @@ module Vulkan12 =
             new(filterMinmaxSingleComponentFormats : VkBool32, filterMinmaxImageComponentMapping : VkBool32) =
                 VkPhysicalDeviceSamplerFilterMinmaxProperties(Unchecked.defaultof<nativeint>, filterMinmaxSingleComponentFormats, filterMinmaxImageComponentMapping)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.filterMinmaxSingleComponentFormats = Unchecked.defaultof<VkBool32> && x.filterMinmaxImageComponentMapping = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceSamplerFilterMinmaxProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceSamplerFilterMinmaxProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceSamplerFilterMinmaxProperties(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceSamplerFilterMinmaxProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceSamplerFilterMinmaxProperties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10777,16 +10284,11 @@ module Vulkan12 =
             new(scalarBlockLayout : VkBool32) =
                 VkPhysicalDeviceScalarBlockLayoutFeatures(Unchecked.defaultof<nativeint>, scalarBlockLayout)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.scalarBlockLayout = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceScalarBlockLayoutFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceScalarBlockLayoutFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceScalarBlockLayoutFeatures(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceScalarBlockLayoutFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceScalarBlockLayoutFeatures.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10813,16 +10315,11 @@ module Vulkan12 =
             new(separateDepthStencilLayouts : VkBool32) =
                 VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures(Unchecked.defaultof<nativeint>, separateDepthStencilLayouts)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.separateDepthStencilLayouts = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceSeparateDepthStencilLayoutsFeatures.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10851,16 +10348,11 @@ module Vulkan12 =
             new(shaderBufferInt64Atomics : VkBool32, shaderSharedInt64Atomics : VkBool32) =
                 VkPhysicalDeviceShaderAtomicInt64Features(Unchecked.defaultof<nativeint>, shaderBufferInt64Atomics, shaderSharedInt64Atomics)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shaderBufferInt64Atomics = Unchecked.defaultof<VkBool32> && x.shaderSharedInt64Atomics = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceShaderAtomicInt64Features(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderAtomicInt64Features with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceShaderAtomicInt64Features(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderAtomicInt64Features with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceShaderAtomicInt64Features.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10890,16 +10382,11 @@ module Vulkan12 =
             new(shaderFloat16 : VkBool32, shaderInt8 : VkBool32) =
                 VkPhysicalDeviceShaderFloat16Int8Features(Unchecked.defaultof<nativeint>, shaderFloat16, shaderInt8)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shaderFloat16 = Unchecked.defaultof<VkBool32> && x.shaderInt8 = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceShaderFloat16Int8Features(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderFloat16Int8Features with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceShaderFloat16Int8Features(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderFloat16Int8Features with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceShaderFloat16Int8Features.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10927,16 +10414,11 @@ module Vulkan12 =
             new(shaderSubgroupExtendedTypes : VkBool32) =
                 VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures(Unchecked.defaultof<nativeint>, shaderSubgroupExtendedTypes)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shaderSubgroupExtendedTypes = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceShaderSubgroupExtendedTypesFeatures.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10963,16 +10445,11 @@ module Vulkan12 =
             new(timelineSemaphore : VkBool32) =
                 VkPhysicalDeviceTimelineSemaphoreFeatures(Unchecked.defaultof<nativeint>, timelineSemaphore)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.timelineSemaphore = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceTimelineSemaphoreFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceTimelineSemaphoreFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceTimelineSemaphoreFeatures(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceTimelineSemaphoreFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceTimelineSemaphoreFeatures.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -10999,16 +10476,11 @@ module Vulkan12 =
             new(maxTimelineSemaphoreValueDifference : uint64) =
                 VkPhysicalDeviceTimelineSemaphoreProperties(Unchecked.defaultof<nativeint>, maxTimelineSemaphoreValueDifference)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxTimelineSemaphoreValueDifference = Unchecked.defaultof<uint64>
+
             static member Empty =
                 VkPhysicalDeviceTimelineSemaphoreProperties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkPhysicalDeviceTimelineSemaphoreProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceTimelineSemaphoreProperties(pNext, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkPhysicalDeviceTimelineSemaphoreProperties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceTimelineSemaphoreProperties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -11035,16 +10507,11 @@ module Vulkan12 =
             new(uniformBufferStandardLayout : VkBool32) =
                 VkPhysicalDeviceUniformBufferStandardLayoutFeatures(Unchecked.defaultof<nativeint>, uniformBufferStandardLayout)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.uniformBufferStandardLayout = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceUniformBufferStandardLayoutFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceUniformBufferStandardLayoutFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceUniformBufferStandardLayoutFeatures(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceUniformBufferStandardLayoutFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceUniformBufferStandardLayoutFeatures.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -11093,16 +10560,11 @@ module Vulkan12 =
             new(storageBuffer16BitAccess : VkBool32, uniformAndStorageBuffer16BitAccess : VkBool32, storagePushConstant16 : VkBool32, storageInputOutput16 : VkBool32, multiview : VkBool32, multiviewGeometryShader : VkBool32, multiviewTessellationShader : VkBool32, variablePointersStorageBuffer : VkBool32, variablePointers : VkBool32, protectedMemory : VkBool32, samplerYcbcrConversion : VkBool32, shaderDrawParameters : VkBool32) =
                 VkPhysicalDeviceVulkan11Features(Unchecked.defaultof<nativeint>, storageBuffer16BitAccess, uniformAndStorageBuffer16BitAccess, storagePushConstant16, storageInputOutput16, multiview, multiviewGeometryShader, multiviewTessellationShader, variablePointersStorageBuffer, variablePointers, protectedMemory, samplerYcbcrConversion, shaderDrawParameters)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.storageBuffer16BitAccess = Unchecked.defaultof<VkBool32> && x.uniformAndStorageBuffer16BitAccess = Unchecked.defaultof<VkBool32> && x.storagePushConstant16 = Unchecked.defaultof<VkBool32> && x.storageInputOutput16 = Unchecked.defaultof<VkBool32> && x.multiview = Unchecked.defaultof<VkBool32> && x.multiviewGeometryShader = Unchecked.defaultof<VkBool32> && x.multiviewTessellationShader = Unchecked.defaultof<VkBool32> && x.variablePointersStorageBuffer = Unchecked.defaultof<VkBool32> && x.variablePointers = Unchecked.defaultof<VkBool32> && x.protectedMemory = Unchecked.defaultof<VkBool32> && x.samplerYcbcrConversion = Unchecked.defaultof<VkBool32> && x.shaderDrawParameters = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceVulkan11Features(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceVulkan11Features with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceVulkan11Features(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceVulkan11Features with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceVulkan11Features.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -11168,16 +10630,11 @@ module Vulkan12 =
             new(deviceUUID : Guid, driverUUID : Guid, deviceLUID : byte_8, deviceNodeMask : uint32, deviceLUIDValid : VkBool32, subgroupSize : uint32, subgroupSupportedStages : VkShaderStageFlags, subgroupSupportedOperations : VkSubgroupFeatureFlags, subgroupQuadOperationsInAllStages : VkBool32, pointClippingBehavior : VkPointClippingBehavior, maxMultiviewViewCount : uint32, maxMultiviewInstanceIndex : uint32, protectedNoFault : VkBool32, maxPerSetDescriptors : uint32, maxMemoryAllocationSize : VkDeviceSize) =
                 VkPhysicalDeviceVulkan11Properties(Unchecked.defaultof<nativeint>, deviceUUID, driverUUID, deviceLUID, deviceNodeMask, deviceLUIDValid, subgroupSize, subgroupSupportedStages, subgroupSupportedOperations, subgroupQuadOperationsInAllStages, pointClippingBehavior, maxMultiviewViewCount, maxMultiviewInstanceIndex, protectedNoFault, maxPerSetDescriptors, maxMemoryAllocationSize)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.deviceUUID = Unchecked.defaultof<Guid> && x.driverUUID = Unchecked.defaultof<Guid> && x.deviceLUID = Unchecked.defaultof<byte_8> && x.deviceNodeMask = Unchecked.defaultof<uint32> && x.deviceLUIDValid = Unchecked.defaultof<VkBool32> && x.subgroupSize = Unchecked.defaultof<uint32> && x.subgroupSupportedStages = Unchecked.defaultof<VkShaderStageFlags> && x.subgroupSupportedOperations = Unchecked.defaultof<VkSubgroupFeatureFlags> && x.subgroupQuadOperationsInAllStages = Unchecked.defaultof<VkBool32> && x.pointClippingBehavior = Unchecked.defaultof<VkPointClippingBehavior> && x.maxMultiviewViewCount = Unchecked.defaultof<uint32> && x.maxMultiviewInstanceIndex = Unchecked.defaultof<uint32> && x.protectedNoFault = Unchecked.defaultof<VkBool32> && x.maxPerSetDescriptors = Unchecked.defaultof<uint32> && x.maxMemoryAllocationSize = Unchecked.defaultof<VkDeviceSize>
+
             static member Empty =
                 VkPhysicalDeviceVulkan11Properties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<Guid>, Unchecked.defaultof<Guid>, Unchecked.defaultof<byte_8>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkShaderStageFlags>, Unchecked.defaultof<VkSubgroupFeatureFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkPointClippingBehavior>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkPhysicalDeviceVulkan11Properties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceVulkan11Properties(pNext, Unchecked.defaultof<Guid>, Unchecked.defaultof<Guid>, Unchecked.defaultof<byte_8>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkShaderStageFlags>, Unchecked.defaultof<VkSubgroupFeatureFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkPointClippingBehavior>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkPhysicalDeviceVulkan11Properties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceVulkan11Properties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -11310,16 +10767,11 @@ module Vulkan12 =
             new(samplerMirrorClampToEdge : VkBool32, drawIndirectCount : VkBool32, storageBuffer8BitAccess : VkBool32, uniformAndStorageBuffer8BitAccess : VkBool32, storagePushConstant8 : VkBool32, shaderBufferInt64Atomics : VkBool32, shaderSharedInt64Atomics : VkBool32, shaderFloat16 : VkBool32, shaderInt8 : VkBool32, descriptorIndexing : VkBool32, shaderInputAttachmentArrayDynamicIndexing : VkBool32, shaderUniformTexelBufferArrayDynamicIndexing : VkBool32, shaderStorageTexelBufferArrayDynamicIndexing : VkBool32, shaderUniformBufferArrayNonUniformIndexing : VkBool32, shaderSampledImageArrayNonUniformIndexing : VkBool32, shaderStorageBufferArrayNonUniformIndexing : VkBool32, shaderStorageImageArrayNonUniformIndexing : VkBool32, shaderInputAttachmentArrayNonUniformIndexing : VkBool32, shaderUniformTexelBufferArrayNonUniformIndexing : VkBool32, shaderStorageTexelBufferArrayNonUniformIndexing : VkBool32, descriptorBindingUniformBufferUpdateAfterBind : VkBool32, descriptorBindingSampledImageUpdateAfterBind : VkBool32, descriptorBindingStorageImageUpdateAfterBind : VkBool32, descriptorBindingStorageBufferUpdateAfterBind : VkBool32, descriptorBindingUniformTexelBufferUpdateAfterBind : VkBool32, descriptorBindingStorageTexelBufferUpdateAfterBind : VkBool32, descriptorBindingUpdateUnusedWhilePending : VkBool32, descriptorBindingPartiallyBound : VkBool32, descriptorBindingVariableDescriptorCount : VkBool32, runtimeDescriptorArray : VkBool32, samplerFilterMinmax : VkBool32, scalarBlockLayout : VkBool32, imagelessFramebuffer : VkBool32, uniformBufferStandardLayout : VkBool32, shaderSubgroupExtendedTypes : VkBool32, separateDepthStencilLayouts : VkBool32, hostQueryReset : VkBool32, timelineSemaphore : VkBool32, bufferDeviceAddress : VkBool32, bufferDeviceAddressCaptureReplay : VkBool32, bufferDeviceAddressMultiDevice : VkBool32, vulkanMemoryModel : VkBool32, vulkanMemoryModelDeviceScope : VkBool32, vulkanMemoryModelAvailabilityVisibilityChains : VkBool32, shaderOutputViewportIndex : VkBool32, shaderOutputLayer : VkBool32, subgroupBroadcastDynamicId : VkBool32) =
                 VkPhysicalDeviceVulkan12Features(Unchecked.defaultof<nativeint>, samplerMirrorClampToEdge, drawIndirectCount, storageBuffer8BitAccess, uniformAndStorageBuffer8BitAccess, storagePushConstant8, shaderBufferInt64Atomics, shaderSharedInt64Atomics, shaderFloat16, shaderInt8, descriptorIndexing, shaderInputAttachmentArrayDynamicIndexing, shaderUniformTexelBufferArrayDynamicIndexing, shaderStorageTexelBufferArrayDynamicIndexing, shaderUniformBufferArrayNonUniformIndexing, shaderSampledImageArrayNonUniformIndexing, shaderStorageBufferArrayNonUniformIndexing, shaderStorageImageArrayNonUniformIndexing, shaderInputAttachmentArrayNonUniformIndexing, shaderUniformTexelBufferArrayNonUniformIndexing, shaderStorageTexelBufferArrayNonUniformIndexing, descriptorBindingUniformBufferUpdateAfterBind, descriptorBindingSampledImageUpdateAfterBind, descriptorBindingStorageImageUpdateAfterBind, descriptorBindingStorageBufferUpdateAfterBind, descriptorBindingUniformTexelBufferUpdateAfterBind, descriptorBindingStorageTexelBufferUpdateAfterBind, descriptorBindingUpdateUnusedWhilePending, descriptorBindingPartiallyBound, descriptorBindingVariableDescriptorCount, runtimeDescriptorArray, samplerFilterMinmax, scalarBlockLayout, imagelessFramebuffer, uniformBufferStandardLayout, shaderSubgroupExtendedTypes, separateDepthStencilLayouts, hostQueryReset, timelineSemaphore, bufferDeviceAddress, bufferDeviceAddressCaptureReplay, bufferDeviceAddressMultiDevice, vulkanMemoryModel, vulkanMemoryModelDeviceScope, vulkanMemoryModelAvailabilityVisibilityChains, shaderOutputViewportIndex, shaderOutputLayer, subgroupBroadcastDynamicId)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.samplerMirrorClampToEdge = Unchecked.defaultof<VkBool32> && x.drawIndirectCount = Unchecked.defaultof<VkBool32> && x.storageBuffer8BitAccess = Unchecked.defaultof<VkBool32> && x.uniformAndStorageBuffer8BitAccess = Unchecked.defaultof<VkBool32> && x.storagePushConstant8 = Unchecked.defaultof<VkBool32> && x.shaderBufferInt64Atomics = Unchecked.defaultof<VkBool32> && x.shaderSharedInt64Atomics = Unchecked.defaultof<VkBool32> && x.shaderFloat16 = Unchecked.defaultof<VkBool32> && x.shaderInt8 = Unchecked.defaultof<VkBool32> && x.descriptorIndexing = Unchecked.defaultof<VkBool32> && x.shaderInputAttachmentArrayDynamicIndexing = Unchecked.defaultof<VkBool32> && x.shaderUniformTexelBufferArrayDynamicIndexing = Unchecked.defaultof<VkBool32> && x.shaderStorageTexelBufferArrayDynamicIndexing = Unchecked.defaultof<VkBool32> && x.shaderUniformBufferArrayNonUniformIndexing = Unchecked.defaultof<VkBool32> && x.shaderSampledImageArrayNonUniformIndexing = Unchecked.defaultof<VkBool32> && x.shaderStorageBufferArrayNonUniformIndexing = Unchecked.defaultof<VkBool32> && x.shaderStorageImageArrayNonUniformIndexing = Unchecked.defaultof<VkBool32> && x.shaderInputAttachmentArrayNonUniformIndexing = Unchecked.defaultof<VkBool32> && x.shaderUniformTexelBufferArrayNonUniformIndexing = Unchecked.defaultof<VkBool32> && x.shaderStorageTexelBufferArrayNonUniformIndexing = Unchecked.defaultof<VkBool32> && x.descriptorBindingUniformBufferUpdateAfterBind = Unchecked.defaultof<VkBool32> && x.descriptorBindingSampledImageUpdateAfterBind = Unchecked.defaultof<VkBool32> && x.descriptorBindingStorageImageUpdateAfterBind = Unchecked.defaultof<VkBool32> && x.descriptorBindingStorageBufferUpdateAfterBind = Unchecked.defaultof<VkBool32> && x.descriptorBindingUniformTexelBufferUpdateAfterBind = Unchecked.defaultof<VkBool32> && x.descriptorBindingStorageTexelBufferUpdateAfterBind = Unchecked.defaultof<VkBool32> && x.descriptorBindingUpdateUnusedWhilePending = Unchecked.defaultof<VkBool32> && x.descriptorBindingPartiallyBound = Unchecked.defaultof<VkBool32> && x.descriptorBindingVariableDescriptorCount = Unchecked.defaultof<VkBool32> && x.runtimeDescriptorArray = Unchecked.defaultof<VkBool32> && x.samplerFilterMinmax = Unchecked.defaultof<VkBool32> && x.scalarBlockLayout = Unchecked.defaultof<VkBool32> && x.imagelessFramebuffer = Unchecked.defaultof<VkBool32> && x.uniformBufferStandardLayout = Unchecked.defaultof<VkBool32> && x.shaderSubgroupExtendedTypes = Unchecked.defaultof<VkBool32> && x.separateDepthStencilLayouts = Unchecked.defaultof<VkBool32> && x.hostQueryReset = Unchecked.defaultof<VkBool32> && x.timelineSemaphore = Unchecked.defaultof<VkBool32> && x.bufferDeviceAddress = Unchecked.defaultof<VkBool32> && x.bufferDeviceAddressCaptureReplay = Unchecked.defaultof<VkBool32> && x.bufferDeviceAddressMultiDevice = Unchecked.defaultof<VkBool32> && x.vulkanMemoryModel = Unchecked.defaultof<VkBool32> && x.vulkanMemoryModelDeviceScope = Unchecked.defaultof<VkBool32> && x.vulkanMemoryModelAvailabilityVisibilityChains = Unchecked.defaultof<VkBool32> && x.shaderOutputViewportIndex = Unchecked.defaultof<VkBool32> && x.shaderOutputLayer = Unchecked.defaultof<VkBool32> && x.subgroupBroadcastDynamicId = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceVulkan12Features(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceVulkan12Features with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceVulkan12Features(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceVulkan12Features with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceVulkan12Features.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -11494,16 +10946,11 @@ module Vulkan12 =
             new(driverID : VkDriverId, driverName : String256, driverInfo : String256, conformanceVersion : VkConformanceVersion, denormBehaviorIndependence : VkShaderFloatControlsIndependence, roundingModeIndependence : VkShaderFloatControlsIndependence, shaderSignedZeroInfNanPreserveFloat16 : VkBool32, shaderSignedZeroInfNanPreserveFloat32 : VkBool32, shaderSignedZeroInfNanPreserveFloat64 : VkBool32, shaderDenormPreserveFloat16 : VkBool32, shaderDenormPreserveFloat32 : VkBool32, shaderDenormPreserveFloat64 : VkBool32, shaderDenormFlushToZeroFloat16 : VkBool32, shaderDenormFlushToZeroFloat32 : VkBool32, shaderDenormFlushToZeroFloat64 : VkBool32, shaderRoundingModeRTEFloat16 : VkBool32, shaderRoundingModeRTEFloat32 : VkBool32, shaderRoundingModeRTEFloat64 : VkBool32, shaderRoundingModeRTZFloat16 : VkBool32, shaderRoundingModeRTZFloat32 : VkBool32, shaderRoundingModeRTZFloat64 : VkBool32, maxUpdateAfterBindDescriptorsInAllPools : uint32, shaderUniformBufferArrayNonUniformIndexingNative : VkBool32, shaderSampledImageArrayNonUniformIndexingNative : VkBool32, shaderStorageBufferArrayNonUniformIndexingNative : VkBool32, shaderStorageImageArrayNonUniformIndexingNative : VkBool32, shaderInputAttachmentArrayNonUniformIndexingNative : VkBool32, robustBufferAccessUpdateAfterBind : VkBool32, quadDivergentImplicitLod : VkBool32, maxPerStageDescriptorUpdateAfterBindSamplers : uint32, maxPerStageDescriptorUpdateAfterBindUniformBuffers : uint32, maxPerStageDescriptorUpdateAfterBindStorageBuffers : uint32, maxPerStageDescriptorUpdateAfterBindSampledImages : uint32, maxPerStageDescriptorUpdateAfterBindStorageImages : uint32, maxPerStageDescriptorUpdateAfterBindInputAttachments : uint32, maxPerStageUpdateAfterBindResources : uint32, maxDescriptorSetUpdateAfterBindSamplers : uint32, maxDescriptorSetUpdateAfterBindUniformBuffers : uint32, maxDescriptorSetUpdateAfterBindUniformBuffersDynamic : uint32, maxDescriptorSetUpdateAfterBindStorageBuffers : uint32, maxDescriptorSetUpdateAfterBindStorageBuffersDynamic : uint32, maxDescriptorSetUpdateAfterBindSampledImages : uint32, maxDescriptorSetUpdateAfterBindStorageImages : uint32, maxDescriptorSetUpdateAfterBindInputAttachments : uint32, supportedDepthResolveModes : VkResolveModeFlags, supportedStencilResolveModes : VkResolveModeFlags, independentResolveNone : VkBool32, independentResolve : VkBool32, filterMinmaxSingleComponentFormats : VkBool32, filterMinmaxImageComponentMapping : VkBool32, maxTimelineSemaphoreValueDifference : uint64, framebufferIntegerColorSampleCounts : VkSampleCountFlags) =
                 VkPhysicalDeviceVulkan12Properties(Unchecked.defaultof<nativeint>, driverID, driverName, driverInfo, conformanceVersion, denormBehaviorIndependence, roundingModeIndependence, shaderSignedZeroInfNanPreserveFloat16, shaderSignedZeroInfNanPreserveFloat32, shaderSignedZeroInfNanPreserveFloat64, shaderDenormPreserveFloat16, shaderDenormPreserveFloat32, shaderDenormPreserveFloat64, shaderDenormFlushToZeroFloat16, shaderDenormFlushToZeroFloat32, shaderDenormFlushToZeroFloat64, shaderRoundingModeRTEFloat16, shaderRoundingModeRTEFloat32, shaderRoundingModeRTEFloat64, shaderRoundingModeRTZFloat16, shaderRoundingModeRTZFloat32, shaderRoundingModeRTZFloat64, maxUpdateAfterBindDescriptorsInAllPools, shaderUniformBufferArrayNonUniformIndexingNative, shaderSampledImageArrayNonUniformIndexingNative, shaderStorageBufferArrayNonUniformIndexingNative, shaderStorageImageArrayNonUniformIndexingNative, shaderInputAttachmentArrayNonUniformIndexingNative, robustBufferAccessUpdateAfterBind, quadDivergentImplicitLod, maxPerStageDescriptorUpdateAfterBindSamplers, maxPerStageDescriptorUpdateAfterBindUniformBuffers, maxPerStageDescriptorUpdateAfterBindStorageBuffers, maxPerStageDescriptorUpdateAfterBindSampledImages, maxPerStageDescriptorUpdateAfterBindStorageImages, maxPerStageDescriptorUpdateAfterBindInputAttachments, maxPerStageUpdateAfterBindResources, maxDescriptorSetUpdateAfterBindSamplers, maxDescriptorSetUpdateAfterBindUniformBuffers, maxDescriptorSetUpdateAfterBindUniformBuffersDynamic, maxDescriptorSetUpdateAfterBindStorageBuffers, maxDescriptorSetUpdateAfterBindStorageBuffersDynamic, maxDescriptorSetUpdateAfterBindSampledImages, maxDescriptorSetUpdateAfterBindStorageImages, maxDescriptorSetUpdateAfterBindInputAttachments, supportedDepthResolveModes, supportedStencilResolveModes, independentResolveNone, independentResolve, filterMinmaxSingleComponentFormats, filterMinmaxImageComponentMapping, maxTimelineSemaphoreValueDifference, framebufferIntegerColorSampleCounts)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.driverID = Unchecked.defaultof<VkDriverId> && x.driverName = Unchecked.defaultof<String256> && x.driverInfo = Unchecked.defaultof<String256> && x.conformanceVersion = Unchecked.defaultof<VkConformanceVersion> && x.denormBehaviorIndependence = Unchecked.defaultof<VkShaderFloatControlsIndependence> && x.roundingModeIndependence = Unchecked.defaultof<VkShaderFloatControlsIndependence> && x.shaderSignedZeroInfNanPreserveFloat16 = Unchecked.defaultof<VkBool32> && x.shaderSignedZeroInfNanPreserveFloat32 = Unchecked.defaultof<VkBool32> && x.shaderSignedZeroInfNanPreserveFloat64 = Unchecked.defaultof<VkBool32> && x.shaderDenormPreserveFloat16 = Unchecked.defaultof<VkBool32> && x.shaderDenormPreserveFloat32 = Unchecked.defaultof<VkBool32> && x.shaderDenormPreserveFloat64 = Unchecked.defaultof<VkBool32> && x.shaderDenormFlushToZeroFloat16 = Unchecked.defaultof<VkBool32> && x.shaderDenormFlushToZeroFloat32 = Unchecked.defaultof<VkBool32> && x.shaderDenormFlushToZeroFloat64 = Unchecked.defaultof<VkBool32> && x.shaderRoundingModeRTEFloat16 = Unchecked.defaultof<VkBool32> && x.shaderRoundingModeRTEFloat32 = Unchecked.defaultof<VkBool32> && x.shaderRoundingModeRTEFloat64 = Unchecked.defaultof<VkBool32> && x.shaderRoundingModeRTZFloat16 = Unchecked.defaultof<VkBool32> && x.shaderRoundingModeRTZFloat32 = Unchecked.defaultof<VkBool32> && x.shaderRoundingModeRTZFloat64 = Unchecked.defaultof<VkBool32> && x.maxUpdateAfterBindDescriptorsInAllPools = Unchecked.defaultof<uint32> && x.shaderUniformBufferArrayNonUniformIndexingNative = Unchecked.defaultof<VkBool32> && x.shaderSampledImageArrayNonUniformIndexingNative = Unchecked.defaultof<VkBool32> && x.shaderStorageBufferArrayNonUniformIndexingNative = Unchecked.defaultof<VkBool32> && x.shaderStorageImageArrayNonUniformIndexingNative = Unchecked.defaultof<VkBool32> && x.shaderInputAttachmentArrayNonUniformIndexingNative = Unchecked.defaultof<VkBool32> && x.robustBufferAccessUpdateAfterBind = Unchecked.defaultof<VkBool32> && x.quadDivergentImplicitLod = Unchecked.defaultof<VkBool32> && x.maxPerStageDescriptorUpdateAfterBindSamplers = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorUpdateAfterBindUniformBuffers = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorUpdateAfterBindStorageBuffers = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorUpdateAfterBindSampledImages = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorUpdateAfterBindStorageImages = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorUpdateAfterBindInputAttachments = Unchecked.defaultof<uint32> && x.maxPerStageUpdateAfterBindResources = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindSamplers = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindUniformBuffers = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindUniformBuffersDynamic = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindStorageBuffers = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindStorageBuffersDynamic = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindSampledImages = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindStorageImages = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindInputAttachments = Unchecked.defaultof<uint32> && x.supportedDepthResolveModes = Unchecked.defaultof<VkResolveModeFlags> && x.supportedStencilResolveModes = Unchecked.defaultof<VkResolveModeFlags> && x.independentResolveNone = Unchecked.defaultof<VkBool32> && x.independentResolve = Unchecked.defaultof<VkBool32> && x.filterMinmaxSingleComponentFormats = Unchecked.defaultof<VkBool32> && x.filterMinmaxImageComponentMapping = Unchecked.defaultof<VkBool32> && x.maxTimelineSemaphoreValueDifference = Unchecked.defaultof<uint64> && x.framebufferIntegerColorSampleCounts = Unchecked.defaultof<VkSampleCountFlags>
+
             static member Empty =
                 VkPhysicalDeviceVulkan12Properties(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDriverId>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>, Unchecked.defaultof<VkConformanceVersion>, Unchecked.defaultof<VkShaderFloatControlsIndependence>, Unchecked.defaultof<VkShaderFloatControlsIndependence>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint64>, Unchecked.defaultof<VkSampleCountFlags>)
-
-            /// Creates an empty VkPhysicalDeviceVulkan12Properties with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceVulkan12Properties(pNext, Unchecked.defaultof<VkDriverId>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>, Unchecked.defaultof<VkConformanceVersion>, Unchecked.defaultof<VkShaderFloatControlsIndependence>, Unchecked.defaultof<VkShaderFloatControlsIndependence>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint64>, Unchecked.defaultof<VkSampleCountFlags>)
-
-            /// Creates an empty VkPhysicalDeviceVulkan12Properties with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceVulkan12Properties.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -11585,16 +11032,11 @@ module Vulkan12 =
             new(vulkanMemoryModel : VkBool32, vulkanMemoryModelDeviceScope : VkBool32, vulkanMemoryModelAvailabilityVisibilityChains : VkBool32) =
                 VkPhysicalDeviceVulkanMemoryModelFeatures(Unchecked.defaultof<nativeint>, vulkanMemoryModel, vulkanMemoryModelDeviceScope, vulkanMemoryModelAvailabilityVisibilityChains)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.vulkanMemoryModel = Unchecked.defaultof<VkBool32> && x.vulkanMemoryModelDeviceScope = Unchecked.defaultof<VkBool32> && x.vulkanMemoryModelAvailabilityVisibilityChains = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceVulkanMemoryModelFeatures(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceVulkanMemoryModelFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceVulkanMemoryModelFeatures(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceVulkanMemoryModelFeatures with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceVulkanMemoryModelFeatures.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -11625,16 +11067,11 @@ module Vulkan12 =
             new(attachmentCount : uint32, pAttachments : nativeptr<VkImageView>) =
                 VkRenderPassAttachmentBeginInfo(Unchecked.defaultof<nativeint>, attachmentCount, pAttachments)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.attachmentCount = Unchecked.defaultof<uint32> && x.pAttachments = Unchecked.defaultof<nativeptr<VkImageView>>
+
             static member Empty =
                 VkRenderPassAttachmentBeginInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkImageView>>)
-
-            /// Creates an empty VkRenderPassAttachmentBeginInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkRenderPassAttachmentBeginInfo(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkImageView>>)
-
-            /// Creates an empty VkRenderPassAttachmentBeginInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkRenderPassAttachmentBeginInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -11682,16 +11119,11 @@ module Vulkan12 =
             new(flags : VkSubpassDescriptionFlags, pipelineBindPoint : VkPipelineBindPoint, viewMask : uint32, inputAttachmentCount : uint32, pInputAttachments : nativeptr<VkAttachmentReference2>, colorAttachmentCount : uint32, pColorAttachments : nativeptr<VkAttachmentReference2>, pResolveAttachments : nativeptr<VkAttachmentReference2>, pDepthStencilAttachment : nativeptr<VkAttachmentReference2>, preserveAttachmentCount : uint32, pPreserveAttachments : nativeptr<uint32>) =
                 VkSubpassDescription2(Unchecked.defaultof<nativeint>, flags, pipelineBindPoint, viewMask, inputAttachmentCount, pInputAttachments, colorAttachmentCount, pColorAttachments, pResolveAttachments, pDepthStencilAttachment, preserveAttachmentCount, pPreserveAttachments)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkSubpassDescriptionFlags> && x.pipelineBindPoint = Unchecked.defaultof<VkPipelineBindPoint> && x.viewMask = Unchecked.defaultof<uint32> && x.inputAttachmentCount = Unchecked.defaultof<uint32> && x.pInputAttachments = Unchecked.defaultof<nativeptr<VkAttachmentReference2>> && x.colorAttachmentCount = Unchecked.defaultof<uint32> && x.pColorAttachments = Unchecked.defaultof<nativeptr<VkAttachmentReference2>> && x.pResolveAttachments = Unchecked.defaultof<nativeptr<VkAttachmentReference2>> && x.pDepthStencilAttachment = Unchecked.defaultof<nativeptr<VkAttachmentReference2>> && x.preserveAttachmentCount = Unchecked.defaultof<uint32> && x.pPreserveAttachments = Unchecked.defaultof<nativeptr<uint32>>
+
             static member Empty =
                 VkSubpassDescription2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSubpassDescriptionFlags>, Unchecked.defaultof<VkPipelineBindPoint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentReference2>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentReference2>>, Unchecked.defaultof<nativeptr<VkAttachmentReference2>>, Unchecked.defaultof<nativeptr<VkAttachmentReference2>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkSubpassDescription2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSubpassDescription2(pNext, Unchecked.defaultof<VkSubpassDescriptionFlags>, Unchecked.defaultof<VkPipelineBindPoint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentReference2>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentReference2>>, Unchecked.defaultof<nativeptr<VkAttachmentReference2>>, Unchecked.defaultof<nativeptr<VkAttachmentReference2>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkSubpassDescription2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSubpassDescription2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -11742,16 +11174,11 @@ module Vulkan12 =
             new(srcSubpass : uint32, dstSubpass : uint32, srcStageMask : VkPipelineStageFlags, dstStageMask : VkPipelineStageFlags, srcAccessMask : VkAccessFlags, dstAccessMask : VkAccessFlags, dependencyFlags : VkDependencyFlags, viewOffset : int) =
                 VkSubpassDependency2(Unchecked.defaultof<nativeint>, srcSubpass, dstSubpass, srcStageMask, dstStageMask, srcAccessMask, dstAccessMask, dependencyFlags, viewOffset)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.srcSubpass = Unchecked.defaultof<uint32> && x.dstSubpass = Unchecked.defaultof<uint32> && x.srcStageMask = Unchecked.defaultof<VkPipelineStageFlags> && x.dstStageMask = Unchecked.defaultof<VkPipelineStageFlags> && x.srcAccessMask = Unchecked.defaultof<VkAccessFlags> && x.dstAccessMask = Unchecked.defaultof<VkAccessFlags> && x.dependencyFlags = Unchecked.defaultof<VkDependencyFlags> && x.viewOffset = Unchecked.defaultof<int>
+
             static member Empty =
                 VkSubpassDependency2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkPipelineStageFlags>, Unchecked.defaultof<VkPipelineStageFlags>, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkDependencyFlags>, Unchecked.defaultof<int>)
-
-            /// Creates an empty VkSubpassDependency2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSubpassDependency2(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkPipelineStageFlags>, Unchecked.defaultof<VkPipelineStageFlags>, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkAccessFlags>, Unchecked.defaultof<VkDependencyFlags>, Unchecked.defaultof<int>)
-
-            /// Creates an empty VkSubpassDependency2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSubpassDependency2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -11801,16 +11228,11 @@ module Vulkan12 =
             new(flags : VkRenderPassCreateFlags, attachmentCount : uint32, pAttachments : nativeptr<VkAttachmentDescription2>, subpassCount : uint32, pSubpasses : nativeptr<VkSubpassDescription2>, dependencyCount : uint32, pDependencies : nativeptr<VkSubpassDependency2>, correlatedViewMaskCount : uint32, pCorrelatedViewMasks : nativeptr<uint32>) =
                 VkRenderPassCreateInfo2(Unchecked.defaultof<nativeint>, flags, attachmentCount, pAttachments, subpassCount, pSubpasses, dependencyCount, pDependencies, correlatedViewMaskCount, pCorrelatedViewMasks)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkRenderPassCreateFlags> && x.attachmentCount = Unchecked.defaultof<uint32> && x.pAttachments = Unchecked.defaultof<nativeptr<VkAttachmentDescription2>> && x.subpassCount = Unchecked.defaultof<uint32> && x.pSubpasses = Unchecked.defaultof<nativeptr<VkSubpassDescription2>> && x.dependencyCount = Unchecked.defaultof<uint32> && x.pDependencies = Unchecked.defaultof<nativeptr<VkSubpassDependency2>> && x.correlatedViewMaskCount = Unchecked.defaultof<uint32> && x.pCorrelatedViewMasks = Unchecked.defaultof<nativeptr<uint32>>
+
             static member Empty =
                 VkRenderPassCreateInfo2(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkRenderPassCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentDescription2>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSubpassDescription2>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSubpassDependency2>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkRenderPassCreateInfo2 with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkRenderPassCreateInfo2(pNext, Unchecked.defaultof<VkRenderPassCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentDescription2>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSubpassDescription2>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSubpassDependency2>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkRenderPassCreateInfo2 with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkRenderPassCreateInfo2.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -11845,16 +11267,11 @@ module Vulkan12 =
             new(reductionMode : VkSamplerReductionMode) =
                 VkSamplerReductionModeCreateInfo(Unchecked.defaultof<nativeint>, reductionMode)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.reductionMode = Unchecked.defaultof<VkSamplerReductionMode>
+
             static member Empty =
                 VkSamplerReductionModeCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSamplerReductionMode>)
-
-            /// Creates an empty VkSamplerReductionModeCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSamplerReductionModeCreateInfo(pNext, Unchecked.defaultof<VkSamplerReductionMode>)
-
-            /// Creates an empty VkSamplerReductionModeCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSamplerReductionModeCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -11883,16 +11300,11 @@ module Vulkan12 =
             new(semaphore : VkSemaphore, value : uint64) =
                 VkSemaphoreSignalInfo(Unchecked.defaultof<nativeint>, semaphore, value)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.semaphore = Unchecked.defaultof<VkSemaphore> && x.value = Unchecked.defaultof<uint64>
+
             static member Empty =
                 VkSemaphoreSignalInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSemaphore>, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkSemaphoreSignalInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSemaphoreSignalInfo(pNext, Unchecked.defaultof<VkSemaphore>, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkSemaphoreSignalInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSemaphoreSignalInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -11922,16 +11334,11 @@ module Vulkan12 =
             new(semaphoreType : VkSemaphoreType, initialValue : uint64) =
                 VkSemaphoreTypeCreateInfo(Unchecked.defaultof<nativeint>, semaphoreType, initialValue)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.semaphoreType = Unchecked.defaultof<VkSemaphoreType> && x.initialValue = Unchecked.defaultof<uint64>
+
             static member Empty =
                 VkSemaphoreTypeCreateInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSemaphoreType>, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkSemaphoreTypeCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSemaphoreTypeCreateInfo(pNext, Unchecked.defaultof<VkSemaphoreType>, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkSemaphoreTypeCreateInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSemaphoreTypeCreateInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -11965,16 +11372,11 @@ module Vulkan12 =
             new(flags : VkSemaphoreWaitFlags, semaphoreCount : uint32, pSemaphores : nativeptr<VkSemaphore>, pValues : nativeptr<uint64>) =
                 VkSemaphoreWaitInfo(Unchecked.defaultof<nativeint>, flags, semaphoreCount, pSemaphores, pValues)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkSemaphoreWaitFlags> && x.semaphoreCount = Unchecked.defaultof<uint32> && x.pSemaphores = Unchecked.defaultof<nativeptr<VkSemaphore>> && x.pValues = Unchecked.defaultof<nativeptr<uint64>>
+
             static member Empty =
                 VkSemaphoreWaitInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSemaphoreWaitFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSemaphore>>, Unchecked.defaultof<nativeptr<uint64>>)
-
-            /// Creates an empty VkSemaphoreWaitInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSemaphoreWaitInfo(pNext, Unchecked.defaultof<VkSemaphoreWaitFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSemaphore>>, Unchecked.defaultof<nativeptr<uint64>>)
-
-            /// Creates an empty VkSemaphoreWaitInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSemaphoreWaitInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -12004,16 +11406,11 @@ module Vulkan12 =
             new(contents : VkSubpassContents) =
                 VkSubpassBeginInfo(Unchecked.defaultof<nativeint>, contents)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.contents = Unchecked.defaultof<VkSubpassContents>
+
             static member Empty =
                 VkSubpassBeginInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSubpassContents>)
-
-            /// Creates an empty VkSubpassBeginInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSubpassBeginInfo(pNext, Unchecked.defaultof<VkSubpassContents>)
-
-            /// Creates an empty VkSubpassBeginInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSubpassBeginInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -12044,16 +11441,11 @@ module Vulkan12 =
             new(depthResolveMode : VkResolveModeFlags, stencilResolveMode : VkResolveModeFlags, pDepthStencilResolveAttachment : nativeptr<VkAttachmentReference2>) =
                 VkSubpassDescriptionDepthStencilResolve(Unchecked.defaultof<nativeint>, depthResolveMode, stencilResolveMode, pDepthStencilResolveAttachment)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.depthResolveMode = Unchecked.defaultof<VkResolveModeFlags> && x.stencilResolveMode = Unchecked.defaultof<VkResolveModeFlags> && x.pDepthStencilResolveAttachment = Unchecked.defaultof<nativeptr<VkAttachmentReference2>>
+
             static member Empty =
                 VkSubpassDescriptionDepthStencilResolve(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<nativeptr<VkAttachmentReference2>>)
-
-            /// Creates an empty VkSubpassDescriptionDepthStencilResolve with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSubpassDescriptionDepthStencilResolve(pNext, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<VkResolveModeFlags>, Unchecked.defaultof<nativeptr<VkAttachmentReference2>>)
-
-            /// Creates an empty VkSubpassDescriptionDepthStencilResolve with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSubpassDescriptionDepthStencilResolve.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -12076,6 +11468,9 @@ module Vulkan12 =
                     sType = 1000109006u
                     pNext = pNext
                 }
+
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint>
 
             static member Empty =
                 VkSubpassEndInfo(Unchecked.defaultof<nativeint>)
@@ -12110,16 +11505,11 @@ module Vulkan12 =
             new(waitSemaphoreValueCount : uint32, pWaitSemaphoreValues : nativeptr<uint64>, signalSemaphoreValueCount : uint32, pSignalSemaphoreValues : nativeptr<uint64>) =
                 VkTimelineSemaphoreSubmitInfo(Unchecked.defaultof<nativeint>, waitSemaphoreValueCount, pWaitSemaphoreValues, signalSemaphoreValueCount, pSignalSemaphoreValues)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.waitSemaphoreValueCount = Unchecked.defaultof<uint32> && x.pWaitSemaphoreValues = Unchecked.defaultof<nativeptr<uint64>> && x.signalSemaphoreValueCount = Unchecked.defaultof<uint32> && x.pSignalSemaphoreValues = Unchecked.defaultof<nativeptr<uint64>>
+
             static member Empty =
                 VkTimelineSemaphoreSubmitInfo(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint64>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint64>>)
-
-            /// Creates an empty VkTimelineSemaphoreSubmitInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkTimelineSemaphoreSubmitInfo(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint64>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint64>>)
-
-            /// Creates an empty VkTimelineSemaphoreSubmitInfo with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkTimelineSemaphoreSubmitInfo.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -12250,16 +11640,11 @@ module AMDDeviceCoherentMemory =
             new(deviceCoherentMemory : VkBool32) =
                 VkPhysicalDeviceCoherentMemoryFeaturesAMD(Unchecked.defaultof<nativeint>, deviceCoherentMemory)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.deviceCoherentMemory = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceCoherentMemoryFeaturesAMD(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceCoherentMemoryFeaturesAMD with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceCoherentMemoryFeaturesAMD(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceCoherentMemoryFeaturesAMD with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceCoherentMemoryFeaturesAMD.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -12424,6 +11809,9 @@ module KHRSurface =
                     supportedUsageFlags = supportedUsageFlags
                 }
 
+            member x.IsEmpty =
+                x.minImageCount = Unchecked.defaultof<uint32> && x.maxImageCount = Unchecked.defaultof<uint32> && x.currentExtent = Unchecked.defaultof<VkExtent2D> && x.minImageExtent = Unchecked.defaultof<VkExtent2D> && x.maxImageExtent = Unchecked.defaultof<VkExtent2D> && x.maxImageArrayLayers = Unchecked.defaultof<uint32> && x.supportedTransforms = Unchecked.defaultof<VkSurfaceTransformFlagsKHR> && x.currentTransform = Unchecked.defaultof<VkSurfaceTransformFlagsKHR> && x.supportedCompositeAlpha = Unchecked.defaultof<VkCompositeAlphaFlagsKHR> && x.supportedUsageFlags = Unchecked.defaultof<VkImageUsageFlags>
+
             static member Empty =
                 VkSurfaceCapabilitiesKHR(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkCompositeAlphaFlagsKHR>, Unchecked.defaultof<VkImageUsageFlags>)
 
@@ -12453,6 +11841,9 @@ module KHRSurface =
                     format = format
                     colorSpace = colorSpace
                 }
+
+            member x.IsEmpty =
+                x.format = Unchecked.defaultof<VkFormat> && x.colorSpace = Unchecked.defaultof<VkColorSpaceKHR>
 
             static member Empty =
                 VkSurfaceFormatKHR(Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkColorSpaceKHR>)
@@ -12533,16 +11924,11 @@ module KHRGetSurfaceCapabilities2 =
             new(surface : VkSurfaceKHR) =
                 VkPhysicalDeviceSurfaceInfo2KHR(Unchecked.defaultof<nativeint>, surface)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.surface = Unchecked.defaultof<VkSurfaceKHR>
+
             static member Empty =
                 VkPhysicalDeviceSurfaceInfo2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSurfaceKHR>)
-
-            /// Creates an empty VkPhysicalDeviceSurfaceInfo2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceSurfaceInfo2KHR(pNext, Unchecked.defaultof<VkSurfaceKHR>)
-
-            /// Creates an empty VkPhysicalDeviceSurfaceInfo2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceSurfaceInfo2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -12569,16 +11955,11 @@ module KHRGetSurfaceCapabilities2 =
             new(surfaceCapabilities : VkSurfaceCapabilitiesKHR) =
                 VkSurfaceCapabilities2KHR(Unchecked.defaultof<nativeint>, surfaceCapabilities)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.surfaceCapabilities = Unchecked.defaultof<VkSurfaceCapabilitiesKHR>
+
             static member Empty =
                 VkSurfaceCapabilities2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSurfaceCapabilitiesKHR>)
-
-            /// Creates an empty VkSurfaceCapabilities2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSurfaceCapabilities2KHR(pNext, Unchecked.defaultof<VkSurfaceCapabilitiesKHR>)
-
-            /// Creates an empty VkSurfaceCapabilities2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSurfaceCapabilities2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -12605,16 +11986,11 @@ module KHRGetSurfaceCapabilities2 =
             new(surfaceFormat : VkSurfaceFormatKHR) =
                 VkSurfaceFormat2KHR(Unchecked.defaultof<nativeint>, surfaceFormat)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.surfaceFormat = Unchecked.defaultof<VkSurfaceFormatKHR>
+
             static member Empty =
                 VkSurfaceFormat2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSurfaceFormatKHR>)
-
-            /// Creates an empty VkSurfaceFormat2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSurfaceFormat2KHR(pNext, Unchecked.defaultof<VkSurfaceFormatKHR>)
-
-            /// Creates an empty VkSurfaceFormat2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSurfaceFormat2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -12696,16 +12072,11 @@ module KHRSwapchain =
             new(waitSemaphoreCount : uint32, pWaitSemaphores : nativeptr<VkSemaphore>, swapchainCount : uint32, pSwapchains : nativeptr<VkSwapchainKHR>, pImageIndices : nativeptr<uint32>, pResults : nativeptr<VkResult>) =
                 VkPresentInfoKHR(Unchecked.defaultof<nativeint>, waitSemaphoreCount, pWaitSemaphores, swapchainCount, pSwapchains, pImageIndices, pResults)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.waitSemaphoreCount = Unchecked.defaultof<uint32> && x.pWaitSemaphores = Unchecked.defaultof<nativeptr<VkSemaphore>> && x.swapchainCount = Unchecked.defaultof<uint32> && x.pSwapchains = Unchecked.defaultof<nativeptr<VkSwapchainKHR>> && x.pImageIndices = Unchecked.defaultof<nativeptr<uint32>> && x.pResults = Unchecked.defaultof<nativeptr<VkResult>>
+
             static member Empty =
                 VkPresentInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSemaphore>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSwapchainKHR>>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<nativeptr<VkResult>>)
-
-            /// Creates an empty VkPresentInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPresentInfoKHR(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSemaphore>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSwapchainKHR>>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<nativeptr<VkResult>>)
-
-            /// Creates an empty VkPresentInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPresentInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -12767,16 +12138,11 @@ module KHRSwapchain =
             new(flags : VkSwapchainCreateFlagsKHR, surface : VkSurfaceKHR, minImageCount : uint32, imageFormat : VkFormat, imageColorSpace : VkColorSpaceKHR, imageExtent : VkExtent2D, imageArrayLayers : uint32, imageUsage : VkImageUsageFlags, imageSharingMode : VkSharingMode, queueFamilyIndexCount : uint32, pQueueFamilyIndices : nativeptr<uint32>, preTransform : VkSurfaceTransformFlagsKHR, compositeAlpha : VkCompositeAlphaFlagsKHR, presentMode : VkPresentModeKHR, clipped : VkBool32, oldSwapchain : VkSwapchainKHR) =
                 VkSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, flags, surface, minImageCount, imageFormat, imageColorSpace, imageExtent, imageArrayLayers, imageUsage, imageSharingMode, queueFamilyIndexCount, pQueueFamilyIndices, preTransform, compositeAlpha, presentMode, clipped, oldSwapchain)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkSwapchainCreateFlagsKHR> && x.surface = Unchecked.defaultof<VkSurfaceKHR> && x.minImageCount = Unchecked.defaultof<uint32> && x.imageFormat = Unchecked.defaultof<VkFormat> && x.imageColorSpace = Unchecked.defaultof<VkColorSpaceKHR> && x.imageExtent = Unchecked.defaultof<VkExtent2D> && x.imageArrayLayers = Unchecked.defaultof<uint32> && x.imageUsage = Unchecked.defaultof<VkImageUsageFlags> && x.imageSharingMode = Unchecked.defaultof<VkSharingMode> && x.queueFamilyIndexCount = Unchecked.defaultof<uint32> && x.pQueueFamilyIndices = Unchecked.defaultof<nativeptr<uint32>> && x.preTransform = Unchecked.defaultof<VkSurfaceTransformFlagsKHR> && x.compositeAlpha = Unchecked.defaultof<VkCompositeAlphaFlagsKHR> && x.presentMode = Unchecked.defaultof<VkPresentModeKHR> && x.clipped = Unchecked.defaultof<VkBool32> && x.oldSwapchain = Unchecked.defaultof<VkSwapchainKHR>
+
             static member Empty =
                 VkSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSwapchainCreateFlagsKHR>, Unchecked.defaultof<VkSurfaceKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkColorSpaceKHR>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkImageUsageFlags>, Unchecked.defaultof<VkSharingMode>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkCompositeAlphaFlagsKHR>, Unchecked.defaultof<VkPresentModeKHR>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkSwapchainKHR>)
-
-            /// Creates an empty VkSwapchainCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSwapchainCreateInfoKHR(pNext, Unchecked.defaultof<VkSwapchainCreateFlagsKHR>, Unchecked.defaultof<VkSurfaceKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkColorSpaceKHR>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkImageUsageFlags>, Unchecked.defaultof<VkSharingMode>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkCompositeAlphaFlagsKHR>, Unchecked.defaultof<VkPresentModeKHR>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkSwapchainKHR>)
-
-            /// Creates an empty VkSwapchainCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSwapchainCreateInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -12885,16 +12251,11 @@ module KHRSwapchain =
                 new(swapchain : VkSwapchainKHR, timeout : uint64, semaphore : VkSemaphore, fence : VkFence, deviceMask : uint32) =
                     VkAcquireNextImageInfoKHR(Unchecked.defaultof<nativeint>, swapchain, timeout, semaphore, fence, deviceMask)
 
+                member x.IsEmpty =
+                    x.pNext = Unchecked.defaultof<nativeint> && x.swapchain = Unchecked.defaultof<VkSwapchainKHR> && x.timeout = Unchecked.defaultof<uint64> && x.semaphore = Unchecked.defaultof<VkSemaphore> && x.fence = Unchecked.defaultof<VkFence> && x.deviceMask = Unchecked.defaultof<uint32>
+
                 static member Empty =
                     VkAcquireNextImageInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSwapchainKHR>, Unchecked.defaultof<uint64>, Unchecked.defaultof<VkSemaphore>, Unchecked.defaultof<VkFence>, Unchecked.defaultof<uint32>)
-
-                /// Creates an empty VkAcquireNextImageInfoKHR with only pNext set to the given value.
-                static member Chain(pNext : nativeint) =
-                    VkAcquireNextImageInfoKHR(pNext, Unchecked.defaultof<VkSwapchainKHR>, Unchecked.defaultof<uint64>, Unchecked.defaultof<VkSemaphore>, Unchecked.defaultof<VkFence>, Unchecked.defaultof<uint32>)
-
-                /// Creates an empty VkAcquireNextImageInfoKHR with only pNext set to the given value.
-                static member Chain(pNext : nativeptr<'a>) =
-                    VkAcquireNextImageInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
                 override x.ToString() =
                     String.concat "; " [
@@ -12927,16 +12288,11 @@ module KHRSwapchain =
                 new(swapchain : VkSwapchainKHR, imageIndex : uint32) =
                     VkBindImageMemorySwapchainInfoKHR(Unchecked.defaultof<nativeint>, swapchain, imageIndex)
 
+                member x.IsEmpty =
+                    x.pNext = Unchecked.defaultof<nativeint> && x.swapchain = Unchecked.defaultof<VkSwapchainKHR> && x.imageIndex = Unchecked.defaultof<uint32>
+
                 static member Empty =
                     VkBindImageMemorySwapchainInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSwapchainKHR>, Unchecked.defaultof<uint32>)
-
-                /// Creates an empty VkBindImageMemorySwapchainInfoKHR with only pNext set to the given value.
-                static member Chain(pNext : nativeint) =
-                    VkBindImageMemorySwapchainInfoKHR(pNext, Unchecked.defaultof<VkSwapchainKHR>, Unchecked.defaultof<uint32>)
-
-                /// Creates an empty VkBindImageMemorySwapchainInfoKHR with only pNext set to the given value.
-                static member Chain(pNext : nativeptr<'a>) =
-                    VkBindImageMemorySwapchainInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
                 override x.ToString() =
                     String.concat "; " [
@@ -12966,16 +12322,11 @@ module KHRSwapchain =
                 new(presentMask : uint32_32, modes : VkDeviceGroupPresentModeFlagsKHR) =
                     VkDeviceGroupPresentCapabilitiesKHR(Unchecked.defaultof<nativeint>, presentMask, modes)
 
+                member x.IsEmpty =
+                    x.pNext = Unchecked.defaultof<nativeint> && x.presentMask = Unchecked.defaultof<uint32_32> && x.modes = Unchecked.defaultof<VkDeviceGroupPresentModeFlagsKHR>
+
                 static member Empty =
                     VkDeviceGroupPresentCapabilitiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32_32>, Unchecked.defaultof<VkDeviceGroupPresentModeFlagsKHR>)
-
-                /// Creates an empty VkDeviceGroupPresentCapabilitiesKHR with only pNext set to the given value.
-                static member Chain(pNext : nativeint) =
-                    VkDeviceGroupPresentCapabilitiesKHR(pNext, Unchecked.defaultof<uint32_32>, Unchecked.defaultof<VkDeviceGroupPresentModeFlagsKHR>)
-
-                /// Creates an empty VkDeviceGroupPresentCapabilitiesKHR with only pNext set to the given value.
-                static member Chain(pNext : nativeptr<'a>) =
-                    VkDeviceGroupPresentCapabilitiesKHR.Chain(NativePtr.toNativeInt pNext)
 
                 override x.ToString() =
                     String.concat "; " [
@@ -13007,16 +12358,11 @@ module KHRSwapchain =
                 new(swapchainCount : uint32, pDeviceMasks : nativeptr<uint32>, mode : VkDeviceGroupPresentModeFlagsKHR) =
                     VkDeviceGroupPresentInfoKHR(Unchecked.defaultof<nativeint>, swapchainCount, pDeviceMasks, mode)
 
+                member x.IsEmpty =
+                    x.pNext = Unchecked.defaultof<nativeint> && x.swapchainCount = Unchecked.defaultof<uint32> && x.pDeviceMasks = Unchecked.defaultof<nativeptr<uint32>> && x.mode = Unchecked.defaultof<VkDeviceGroupPresentModeFlagsKHR>
+
                 static member Empty =
                     VkDeviceGroupPresentInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<VkDeviceGroupPresentModeFlagsKHR>)
-
-                /// Creates an empty VkDeviceGroupPresentInfoKHR with only pNext set to the given value.
-                static member Chain(pNext : nativeint) =
-                    VkDeviceGroupPresentInfoKHR(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<VkDeviceGroupPresentModeFlagsKHR>)
-
-                /// Creates an empty VkDeviceGroupPresentInfoKHR with only pNext set to the given value.
-                static member Chain(pNext : nativeptr<'a>) =
-                    VkDeviceGroupPresentInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
                 override x.ToString() =
                     String.concat "; " [
@@ -13045,16 +12391,11 @@ module KHRSwapchain =
                 new(modes : VkDeviceGroupPresentModeFlagsKHR) =
                     VkDeviceGroupSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, modes)
 
+                member x.IsEmpty =
+                    x.pNext = Unchecked.defaultof<nativeint> && x.modes = Unchecked.defaultof<VkDeviceGroupPresentModeFlagsKHR>
+
                 static member Empty =
                     VkDeviceGroupSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceGroupPresentModeFlagsKHR>)
-
-                /// Creates an empty VkDeviceGroupSwapchainCreateInfoKHR with only pNext set to the given value.
-                static member Chain(pNext : nativeint) =
-                    VkDeviceGroupSwapchainCreateInfoKHR(pNext, Unchecked.defaultof<VkDeviceGroupPresentModeFlagsKHR>)
-
-                /// Creates an empty VkDeviceGroupSwapchainCreateInfoKHR with only pNext set to the given value.
-                static member Chain(pNext : nativeptr<'a>) =
-                    VkDeviceGroupSwapchainCreateInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
                 override x.ToString() =
                     String.concat "; " [
@@ -13081,16 +12422,11 @@ module KHRSwapchain =
                 new(swapchain : VkSwapchainKHR) =
                     VkImageSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, swapchain)
 
+                member x.IsEmpty =
+                    x.pNext = Unchecked.defaultof<nativeint> && x.swapchain = Unchecked.defaultof<VkSwapchainKHR>
+
                 static member Empty =
                     VkImageSwapchainCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSwapchainKHR>)
-
-                /// Creates an empty VkImageSwapchainCreateInfoKHR with only pNext set to the given value.
-                static member Chain(pNext : nativeint) =
-                    VkImageSwapchainCreateInfoKHR(pNext, Unchecked.defaultof<VkSwapchainKHR>)
-
-                /// Creates an empty VkImageSwapchainCreateInfoKHR with only pNext set to the given value.
-                static member Chain(pNext : nativeptr<'a>) =
-                    VkImageSwapchainCreateInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
                 override x.ToString() =
                     String.concat "; " [
@@ -13166,16 +12502,11 @@ module AMDDisplayNativeHdr =
             new(localDimmingSupport : VkBool32) =
                 VkDisplayNativeHdrSurfaceCapabilitiesAMD(Unchecked.defaultof<nativeint>, localDimmingSupport)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.localDimmingSupport = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkDisplayNativeHdrSurfaceCapabilitiesAMD(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkDisplayNativeHdrSurfaceCapabilitiesAMD with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDisplayNativeHdrSurfaceCapabilitiesAMD(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkDisplayNativeHdrSurfaceCapabilitiesAMD with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDisplayNativeHdrSurfaceCapabilitiesAMD.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -13202,16 +12533,11 @@ module AMDDisplayNativeHdr =
             new(localDimmingEnable : VkBool32) =
                 VkSwapchainDisplayNativeHdrCreateInfoAMD(Unchecked.defaultof<nativeint>, localDimmingEnable)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.localDimmingEnable = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkSwapchainDisplayNativeHdrCreateInfoAMD(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkSwapchainDisplayNativeHdrCreateInfoAMD with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSwapchainDisplayNativeHdrCreateInfoAMD(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkSwapchainDisplayNativeHdrCreateInfoAMD with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSwapchainDisplayNativeHdrCreateInfoAMD.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -13314,16 +12640,11 @@ module AMDMemoryOverallocationBehavior =
             new(overallocationBehavior : VkMemoryOverallocationBehaviorAMD) =
                 VkDeviceMemoryOverallocationCreateInfoAMD(Unchecked.defaultof<nativeint>, overallocationBehavior)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.overallocationBehavior = Unchecked.defaultof<VkMemoryOverallocationBehaviorAMD>
+
             static member Empty =
                 VkDeviceMemoryOverallocationCreateInfoAMD(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkMemoryOverallocationBehaviorAMD>)
-
-            /// Creates an empty VkDeviceMemoryOverallocationCreateInfoAMD with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDeviceMemoryOverallocationCreateInfoAMD(pNext, Unchecked.defaultof<VkMemoryOverallocationBehaviorAMD>)
-
-            /// Creates an empty VkDeviceMemoryOverallocationCreateInfoAMD with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDeviceMemoryOverallocationCreateInfoAMD.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -13379,16 +12700,11 @@ module AMDPipelineCompilerControl =
             new(compilerControlFlags : VkPipelineCompilerControlFlagsAMD) =
                 VkPipelineCompilerControlCreateInfoAMD(Unchecked.defaultof<nativeint>, compilerControlFlags)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.compilerControlFlags = Unchecked.defaultof<VkPipelineCompilerControlFlagsAMD>
+
             static member Empty =
                 VkPipelineCompilerControlCreateInfoAMD(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineCompilerControlFlagsAMD>)
-
-            /// Creates an empty VkPipelineCompilerControlCreateInfoAMD with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineCompilerControlCreateInfoAMD(pNext, Unchecked.defaultof<VkPipelineCompilerControlFlagsAMD>)
-
-            /// Creates an empty VkPipelineCompilerControlCreateInfoAMD with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineCompilerControlCreateInfoAMD.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -13429,16 +12745,11 @@ module AMDRasterizationOrder =
             new(rasterizationOrder : VkRasterizationOrderAMD) =
                 VkPipelineRasterizationStateRasterizationOrderAMD(Unchecked.defaultof<nativeint>, rasterizationOrder)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.rasterizationOrder = Unchecked.defaultof<VkRasterizationOrderAMD>
+
             static member Empty =
                 VkPipelineRasterizationStateRasterizationOrderAMD(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkRasterizationOrderAMD>)
-
-            /// Creates an empty VkPipelineRasterizationStateRasterizationOrderAMD with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineRasterizationStateRasterizationOrderAMD(pNext, Unchecked.defaultof<VkRasterizationOrderAMD>)
-
-            /// Creates an empty VkPipelineRasterizationStateRasterizationOrderAMD with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineRasterizationStateRasterizationOrderAMD.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -13510,16 +12821,11 @@ module AMDShaderCoreProperties =
             new(shaderEngineCount : uint32, shaderArraysPerEngineCount : uint32, computeUnitsPerShaderArray : uint32, simdPerComputeUnit : uint32, wavefrontsPerSimd : uint32, wavefrontSize : uint32, sgprsPerSimd : uint32, minSgprAllocation : uint32, maxSgprAllocation : uint32, sgprAllocationGranularity : uint32, vgprsPerSimd : uint32, minVgprAllocation : uint32, maxVgprAllocation : uint32, vgprAllocationGranularity : uint32) =
                 VkPhysicalDeviceShaderCorePropertiesAMD(Unchecked.defaultof<nativeint>, shaderEngineCount, shaderArraysPerEngineCount, computeUnitsPerShaderArray, simdPerComputeUnit, wavefrontsPerSimd, wavefrontSize, sgprsPerSimd, minSgprAllocation, maxSgprAllocation, sgprAllocationGranularity, vgprsPerSimd, minVgprAllocation, maxVgprAllocation, vgprAllocationGranularity)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shaderEngineCount = Unchecked.defaultof<uint32> && x.shaderArraysPerEngineCount = Unchecked.defaultof<uint32> && x.computeUnitsPerShaderArray = Unchecked.defaultof<uint32> && x.simdPerComputeUnit = Unchecked.defaultof<uint32> && x.wavefrontsPerSimd = Unchecked.defaultof<uint32> && x.wavefrontSize = Unchecked.defaultof<uint32> && x.sgprsPerSimd = Unchecked.defaultof<uint32> && x.minSgprAllocation = Unchecked.defaultof<uint32> && x.maxSgprAllocation = Unchecked.defaultof<uint32> && x.sgprAllocationGranularity = Unchecked.defaultof<uint32> && x.vgprsPerSimd = Unchecked.defaultof<uint32> && x.minVgprAllocation = Unchecked.defaultof<uint32> && x.maxVgprAllocation = Unchecked.defaultof<uint32> && x.vgprAllocationGranularity = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDeviceShaderCorePropertiesAMD(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderCorePropertiesAMD with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceShaderCorePropertiesAMD(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderCorePropertiesAMD with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceShaderCorePropertiesAMD.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -13580,16 +12886,11 @@ module AMDShaderCoreProperties2 =
             new(shaderCoreFeatures : VkShaderCorePropertiesFlagsAMD, activeComputeUnitCount : uint32) =
                 VkPhysicalDeviceShaderCoreProperties2AMD(Unchecked.defaultof<nativeint>, shaderCoreFeatures, activeComputeUnitCount)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shaderCoreFeatures = Unchecked.defaultof<VkShaderCorePropertiesFlagsAMD> && x.activeComputeUnitCount = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDeviceShaderCoreProperties2AMD(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkShaderCorePropertiesFlagsAMD>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderCoreProperties2AMD with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceShaderCoreProperties2AMD(pNext, Unchecked.defaultof<VkShaderCorePropertiesFlagsAMD>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderCoreProperties2AMD with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceShaderCoreProperties2AMD.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -13654,6 +12955,9 @@ module AMDShaderInfo =
                     scratchMemUsageInBytes = scratchMemUsageInBytes
                 }
 
+            member x.IsEmpty =
+                x.numUsedVgprs = Unchecked.defaultof<uint32> && x.numUsedSgprs = Unchecked.defaultof<uint32> && x.ldsSizePerLocalWorkGroup = Unchecked.defaultof<uint32> && x.ldsUsageSizeInBytes = Unchecked.defaultof<uint64> && x.scratchMemUsageInBytes = Unchecked.defaultof<uint64>
+
             static member Empty =
                 VkShaderResourceUsageAMD(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>)
 
@@ -13688,6 +12992,9 @@ module AMDShaderInfo =
                     numAvailableSgprs = numAvailableSgprs
                     computeWorkGroupSize = computeWorkGroupSize
                 }
+
+            member x.IsEmpty =
+                x.shaderStageMask = Unchecked.defaultof<VkShaderStageFlags> && x.resourceUsage = Unchecked.defaultof<VkShaderResourceUsageAMD> && x.numPhysicalVgprs = Unchecked.defaultof<uint32> && x.numPhysicalSgprs = Unchecked.defaultof<uint32> && x.numAvailableVgprs = Unchecked.defaultof<uint32> && x.numAvailableSgprs = Unchecked.defaultof<uint32> && x.computeWorkGroupSize = Unchecked.defaultof<V3ui>
 
             static member Empty =
                 VkShaderStatisticsInfoAMD(Unchecked.defaultof<VkShaderStageFlags>, Unchecked.defaultof<VkShaderResourceUsageAMD>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<V3ui>)
@@ -13751,16 +13058,11 @@ module AMDTextureGatherBiasLod =
             new(supportsTextureGatherLODBiasAMD : VkBool32) =
                 VkTextureLODGatherFormatPropertiesAMD(Unchecked.defaultof<nativeint>, supportsTextureGatherLODBiasAMD)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.supportsTextureGatherLODBiasAMD = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkTextureLODGatherFormatPropertiesAMD(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkTextureLODGatherFormatPropertiesAMD with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkTextureLODGatherFormatPropertiesAMD(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkTextureLODGatherFormatPropertiesAMD with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkTextureLODGatherFormatPropertiesAMD.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -14068,16 +13370,11 @@ module EXTDebugReport =
             new(flags : VkDebugReportFlagsEXT, pfnCallback : PFN_vkDebugReportCallbackEXT, pUserData : nativeint) =
                 VkDebugReportCallbackCreateInfoEXT(Unchecked.defaultof<nativeint>, flags, pfnCallback, pUserData)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkDebugReportFlagsEXT> && x.pfnCallback = Unchecked.defaultof<PFN_vkDebugReportCallbackEXT> && x.pUserData = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkDebugReportCallbackCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDebugReportFlagsEXT>, Unchecked.defaultof<PFN_vkDebugReportCallbackEXT>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkDebugReportCallbackCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDebugReportCallbackCreateInfoEXT(pNext, Unchecked.defaultof<VkDebugReportFlagsEXT>, Unchecked.defaultof<PFN_vkDebugReportCallbackEXT>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkDebugReportCallbackCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDebugReportCallbackCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -14302,16 +13599,11 @@ module ANDROIDExternalMemoryAndroidHardwareBuffer =
             new(format : VkFormat, externalFormat : uint64, formatFeatures : VkFormatFeatureFlags, samplerYcbcrConversionComponents : VkComponentMapping, suggestedYcbcrModel : VkSamplerYcbcrModelConversion, suggestedYcbcrRange : VkSamplerYcbcrRange, suggestedXChromaOffset : VkChromaLocation, suggestedYChromaOffset : VkChromaLocation) =
                 VkAndroidHardwareBufferFormatPropertiesANDROID(Unchecked.defaultof<nativeint>, format, externalFormat, formatFeatures, samplerYcbcrConversionComponents, suggestedYcbcrModel, suggestedYcbcrRange, suggestedXChromaOffset, suggestedYChromaOffset)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.format = Unchecked.defaultof<VkFormat> && x.externalFormat = Unchecked.defaultof<uint64> && x.formatFeatures = Unchecked.defaultof<VkFormatFeatureFlags> && x.samplerYcbcrConversionComponents = Unchecked.defaultof<VkComponentMapping> && x.suggestedYcbcrModel = Unchecked.defaultof<VkSamplerYcbcrModelConversion> && x.suggestedYcbcrRange = Unchecked.defaultof<VkSamplerYcbcrRange> && x.suggestedXChromaOffset = Unchecked.defaultof<VkChromaLocation> && x.suggestedYChromaOffset = Unchecked.defaultof<VkChromaLocation>
+
             static member Empty =
                 VkAndroidHardwareBufferFormatPropertiesANDROID(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<uint64>, Unchecked.defaultof<VkFormatFeatureFlags>, Unchecked.defaultof<VkComponentMapping>, Unchecked.defaultof<VkSamplerYcbcrModelConversion>, Unchecked.defaultof<VkSamplerYcbcrRange>, Unchecked.defaultof<VkChromaLocation>, Unchecked.defaultof<VkChromaLocation>)
-
-            /// Creates an empty VkAndroidHardwareBufferFormatPropertiesANDROID with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAndroidHardwareBufferFormatPropertiesANDROID(pNext, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<uint64>, Unchecked.defaultof<VkFormatFeatureFlags>, Unchecked.defaultof<VkComponentMapping>, Unchecked.defaultof<VkSamplerYcbcrModelConversion>, Unchecked.defaultof<VkSamplerYcbcrRange>, Unchecked.defaultof<VkChromaLocation>, Unchecked.defaultof<VkChromaLocation>)
-
-            /// Creates an empty VkAndroidHardwareBufferFormatPropertiesANDROID with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAndroidHardwareBufferFormatPropertiesANDROID.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -14347,16 +13639,11 @@ module ANDROIDExternalMemoryAndroidHardwareBuffer =
             new(allocationSize : VkDeviceSize, memoryTypeBits : uint32) =
                 VkAndroidHardwareBufferPropertiesANDROID(Unchecked.defaultof<nativeint>, allocationSize, memoryTypeBits)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.allocationSize = Unchecked.defaultof<VkDeviceSize> && x.memoryTypeBits = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkAndroidHardwareBufferPropertiesANDROID(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkAndroidHardwareBufferPropertiesANDROID with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAndroidHardwareBufferPropertiesANDROID(pNext, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkAndroidHardwareBufferPropertiesANDROID with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAndroidHardwareBufferPropertiesANDROID.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -14384,16 +13671,11 @@ module ANDROIDExternalMemoryAndroidHardwareBuffer =
             new(androidHardwareBufferUsage : uint64) =
                 VkAndroidHardwareBufferUsageANDROID(Unchecked.defaultof<nativeint>, androidHardwareBufferUsage)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.androidHardwareBufferUsage = Unchecked.defaultof<uint64>
+
             static member Empty =
                 VkAndroidHardwareBufferUsageANDROID(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkAndroidHardwareBufferUsageANDROID with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAndroidHardwareBufferUsageANDROID(pNext, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkAndroidHardwareBufferUsageANDROID with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAndroidHardwareBufferUsageANDROID.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -14420,16 +13702,11 @@ module ANDROIDExternalMemoryAndroidHardwareBuffer =
             new(externalFormat : uint64) =
                 VkExternalFormatANDROID(Unchecked.defaultof<nativeint>, externalFormat)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.externalFormat = Unchecked.defaultof<uint64>
+
             static member Empty =
                 VkExternalFormatANDROID(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkExternalFormatANDROID with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkExternalFormatANDROID(pNext, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkExternalFormatANDROID with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkExternalFormatANDROID.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -14456,16 +13733,11 @@ module ANDROIDExternalMemoryAndroidHardwareBuffer =
             new(buffer : nativeptr<nativeint>) =
                 VkImportAndroidHardwareBufferInfoANDROID(Unchecked.defaultof<nativeint>, buffer)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.buffer = Unchecked.defaultof<nativeptr<nativeint>>
+
             static member Empty =
                 VkImportAndroidHardwareBufferInfoANDROID(Unchecked.defaultof<nativeint>, Unchecked.defaultof<nativeptr<nativeint>>)
-
-            /// Creates an empty VkImportAndroidHardwareBufferInfoANDROID with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImportAndroidHardwareBufferInfoANDROID(pNext, Unchecked.defaultof<nativeptr<nativeint>>)
-
-            /// Creates an empty VkImportAndroidHardwareBufferInfoANDROID with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImportAndroidHardwareBufferInfoANDROID.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -14492,16 +13764,11 @@ module ANDROIDExternalMemoryAndroidHardwareBuffer =
             new(memory : VkDeviceMemory) =
                 VkMemoryGetAndroidHardwareBufferInfoANDROID(Unchecked.defaultof<nativeint>, memory)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.memory = Unchecked.defaultof<VkDeviceMemory>
+
             static member Empty =
                 VkMemoryGetAndroidHardwareBufferInfoANDROID(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceMemory>)
-
-            /// Creates an empty VkMemoryGetAndroidHardwareBufferInfoANDROID with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkMemoryGetAndroidHardwareBufferInfoANDROID(pNext, Unchecked.defaultof<VkDeviceMemory>)
-
-            /// Creates an empty VkMemoryGetAndroidHardwareBufferInfoANDROID with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkMemoryGetAndroidHardwareBufferInfoANDROID.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -14563,16 +13830,11 @@ module EXT4444Formats =
             new(formatA4R4G4B4 : VkBool32, formatA4B4G4R4 : VkBool32) =
                 VkPhysicalDevice4444FormatsFeaturesEXT(Unchecked.defaultof<nativeint>, formatA4R4G4B4, formatA4B4G4R4)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.formatA4R4G4B4 = Unchecked.defaultof<VkBool32> && x.formatA4B4G4R4 = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDevice4444FormatsFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevice4444FormatsFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDevice4444FormatsFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevice4444FormatsFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDevice4444FormatsFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -14644,6 +13906,9 @@ module KHRDisplay =
                     refreshRate = refreshRate
                 }
 
+            member x.IsEmpty =
+                x.visibleRegion = Unchecked.defaultof<VkExtent2D> && x.refreshRate = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkDisplayModeParametersKHR(Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>)
 
@@ -14673,16 +13938,11 @@ module KHRDisplay =
             new(flags : VkDisplayModeCreateFlagsKHR, parameters : VkDisplayModeParametersKHR) =
                 VkDisplayModeCreateInfoKHR(Unchecked.defaultof<nativeint>, flags, parameters)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkDisplayModeCreateFlagsKHR> && x.parameters = Unchecked.defaultof<VkDisplayModeParametersKHR>
+
             static member Empty =
                 VkDisplayModeCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDisplayModeCreateFlagsKHR>, Unchecked.defaultof<VkDisplayModeParametersKHR>)
-
-            /// Creates an empty VkDisplayModeCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDisplayModeCreateInfoKHR(pNext, Unchecked.defaultof<VkDisplayModeCreateFlagsKHR>, Unchecked.defaultof<VkDisplayModeParametersKHR>)
-
-            /// Creates an empty VkDisplayModeCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDisplayModeCreateInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -14704,6 +13964,9 @@ module KHRDisplay =
                     displayMode = displayMode
                     parameters = parameters
                 }
+
+            member x.IsEmpty =
+                x.displayMode = Unchecked.defaultof<VkDisplayModeKHR> && x.parameters = Unchecked.defaultof<VkDisplayModeParametersKHR>
 
             static member Empty =
                 VkDisplayModePropertiesKHR(Unchecked.defaultof<VkDisplayModeKHR>, Unchecked.defaultof<VkDisplayModeParametersKHR>)
@@ -14741,6 +14004,9 @@ module KHRDisplay =
                     maxDstExtent = maxDstExtent
                 }
 
+            member x.IsEmpty =
+                x.supportedAlpha = Unchecked.defaultof<VkDisplayPlaneAlphaFlagsKHR> && x.minSrcPosition = Unchecked.defaultof<VkOffset2D> && x.maxSrcPosition = Unchecked.defaultof<VkOffset2D> && x.minSrcExtent = Unchecked.defaultof<VkExtent2D> && x.maxSrcExtent = Unchecked.defaultof<VkExtent2D> && x.minDstPosition = Unchecked.defaultof<VkOffset2D> && x.maxDstPosition = Unchecked.defaultof<VkOffset2D> && x.minDstExtent = Unchecked.defaultof<VkExtent2D> && x.maxDstExtent = Unchecked.defaultof<VkExtent2D>
+
             static member Empty =
                 VkDisplayPlaneCapabilitiesKHR(Unchecked.defaultof<VkDisplayPlaneAlphaFlagsKHR>, Unchecked.defaultof<VkOffset2D>, Unchecked.defaultof<VkOffset2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkOffset2D>, Unchecked.defaultof<VkOffset2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkExtent2D>)
 
@@ -14769,6 +14035,9 @@ module KHRDisplay =
                     currentDisplay = currentDisplay
                     currentStackIndex = currentStackIndex
                 }
+
+            member x.IsEmpty =
+                x.currentDisplay = Unchecked.defaultof<VkDisplayKHR> && x.currentStackIndex = Unchecked.defaultof<uint32>
 
             static member Empty =
                 VkDisplayPlanePropertiesKHR(Unchecked.defaultof<VkDisplayKHR>, Unchecked.defaultof<uint32>)
@@ -14801,6 +14070,9 @@ module KHRDisplay =
                     planeReorderPossible = planeReorderPossible
                     persistentContent = persistentContent
                 }
+
+            member x.IsEmpty =
+                x.display = Unchecked.defaultof<VkDisplayKHR> && x.displayName = Unchecked.defaultof<cstr> && x.physicalDimensions = Unchecked.defaultof<VkExtent2D> && x.physicalResolution = Unchecked.defaultof<VkExtent2D> && x.supportedTransforms = Unchecked.defaultof<VkSurfaceTransformFlagsKHR> && x.planeReorderPossible = Unchecked.defaultof<VkBool32> && x.persistentContent = Unchecked.defaultof<VkBool32>
 
             static member Empty =
                 VkDisplayPropertiesKHR(Unchecked.defaultof<VkDisplayKHR>, Unchecked.defaultof<cstr>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
@@ -14848,16 +14120,11 @@ module KHRDisplay =
             new(flags : VkDisplaySurfaceCreateFlagsKHR, displayMode : VkDisplayModeKHR, planeIndex : uint32, planeStackIndex : uint32, transform : VkSurfaceTransformFlagsKHR, globalAlpha : float32, alphaMode : VkDisplayPlaneAlphaFlagsKHR, imageExtent : VkExtent2D) =
                 VkDisplaySurfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, flags, displayMode, planeIndex, planeStackIndex, transform, globalAlpha, alphaMode, imageExtent)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkDisplaySurfaceCreateFlagsKHR> && x.displayMode = Unchecked.defaultof<VkDisplayModeKHR> && x.planeIndex = Unchecked.defaultof<uint32> && x.planeStackIndex = Unchecked.defaultof<uint32> && x.transform = Unchecked.defaultof<VkSurfaceTransformFlagsKHR> && x.globalAlpha = Unchecked.defaultof<float32> && x.alphaMode = Unchecked.defaultof<VkDisplayPlaneAlphaFlagsKHR> && x.imageExtent = Unchecked.defaultof<VkExtent2D>
+
             static member Empty =
                 VkDisplaySurfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDisplaySurfaceCreateFlagsKHR>, Unchecked.defaultof<VkDisplayModeKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<float32>, Unchecked.defaultof<VkDisplayPlaneAlphaFlagsKHR>, Unchecked.defaultof<VkExtent2D>)
-
-            /// Creates an empty VkDisplaySurfaceCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDisplaySurfaceCreateInfoKHR(pNext, Unchecked.defaultof<VkDisplaySurfaceCreateFlagsKHR>, Unchecked.defaultof<VkDisplayModeKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<float32>, Unchecked.defaultof<VkDisplayPlaneAlphaFlagsKHR>, Unchecked.defaultof<VkExtent2D>)
-
-            /// Creates an empty VkDisplaySurfaceCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDisplaySurfaceCreateInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15004,16 +14271,11 @@ module EXTAstcDecodeMode =
             new(decodeMode : VkFormat) =
                 VkImageViewASTCDecodeModeEXT(Unchecked.defaultof<nativeint>, decodeMode)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.decodeMode = Unchecked.defaultof<VkFormat>
+
             static member Empty =
                 VkImageViewASTCDecodeModeEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkFormat>)
-
-            /// Creates an empty VkImageViewASTCDecodeModeEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImageViewASTCDecodeModeEXT(pNext, Unchecked.defaultof<VkFormat>)
-
-            /// Creates an empty VkImageViewASTCDecodeModeEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImageViewASTCDecodeModeEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15040,16 +14302,11 @@ module EXTAstcDecodeMode =
             new(decodeModeSharedExponent : VkBool32) =
                 VkPhysicalDeviceASTCDecodeFeaturesEXT(Unchecked.defaultof<nativeint>, decodeModeSharedExponent)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.decodeModeSharedExponent = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceASTCDecodeFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceASTCDecodeFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceASTCDecodeFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceASTCDecodeFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceASTCDecodeFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15091,16 +14348,11 @@ module EXTBlendOperationAdvanced =
             new(advancedBlendCoherentOperations : VkBool32) =
                 VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT(Unchecked.defaultof<nativeint>, advancedBlendCoherentOperations)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.advancedBlendCoherentOperations = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceBlendOperationAdvancedFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15137,16 +14389,11 @@ module EXTBlendOperationAdvanced =
             new(advancedBlendMaxColorAttachments : uint32, advancedBlendIndependentBlend : VkBool32, advancedBlendNonPremultipliedSrcColor : VkBool32, advancedBlendNonPremultipliedDstColor : VkBool32, advancedBlendCorrelatedOverlap : VkBool32, advancedBlendAllOperations : VkBool32) =
                 VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT(Unchecked.defaultof<nativeint>, advancedBlendMaxColorAttachments, advancedBlendIndependentBlend, advancedBlendNonPremultipliedSrcColor, advancedBlendNonPremultipliedDstColor, advancedBlendCorrelatedOverlap, advancedBlendAllOperations)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.advancedBlendMaxColorAttachments = Unchecked.defaultof<uint32> && x.advancedBlendIndependentBlend = Unchecked.defaultof<VkBool32> && x.advancedBlendNonPremultipliedSrcColor = Unchecked.defaultof<VkBool32> && x.advancedBlendNonPremultipliedDstColor = Unchecked.defaultof<VkBool32> && x.advancedBlendCorrelatedOverlap = Unchecked.defaultof<VkBool32> && x.advancedBlendAllOperations = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceBlendOperationAdvancedPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15182,16 +14429,11 @@ module EXTBlendOperationAdvanced =
             new(srcPremultiplied : VkBool32, dstPremultiplied : VkBool32, blendOverlap : VkBlendOverlapEXT) =
                 VkPipelineColorBlendAdvancedStateCreateInfoEXT(Unchecked.defaultof<nativeint>, srcPremultiplied, dstPremultiplied, blendOverlap)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.srcPremultiplied = Unchecked.defaultof<VkBool32> && x.dstPremultiplied = Unchecked.defaultof<VkBool32> && x.blendOverlap = Unchecked.defaultof<VkBlendOverlapEXT>
+
             static member Empty =
                 VkPipelineColorBlendAdvancedStateCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBlendOverlapEXT>)
-
-            /// Creates an empty VkPipelineColorBlendAdvancedStateCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineColorBlendAdvancedStateCreateInfoEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBlendOverlapEXT>)
-
-            /// Creates an empty VkPipelineColorBlendAdvancedStateCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineColorBlendAdvancedStateCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15284,16 +14526,11 @@ module EXTBufferDeviceAddress =
             new(deviceAddress : VkDeviceAddress) =
                 VkBufferDeviceAddressCreateInfoEXT(Unchecked.defaultof<nativeint>, deviceAddress)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.deviceAddress = Unchecked.defaultof<VkDeviceAddress>
+
             static member Empty =
                 VkBufferDeviceAddressCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceAddress>)
-
-            /// Creates an empty VkBufferDeviceAddressCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkBufferDeviceAddressCreateInfoEXT(pNext, Unchecked.defaultof<VkDeviceAddress>)
-
-            /// Creates an empty VkBufferDeviceAddressCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkBufferDeviceAddressCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15326,16 +14563,11 @@ module EXTBufferDeviceAddress =
             new(bufferDeviceAddress : VkBool32, bufferDeviceAddressCaptureReplay : VkBool32, bufferDeviceAddressMultiDevice : VkBool32) =
                 VkPhysicalDeviceBufferDeviceAddressFeaturesEXT(Unchecked.defaultof<nativeint>, bufferDeviceAddress, bufferDeviceAddressCaptureReplay, bufferDeviceAddressMultiDevice)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.bufferDeviceAddress = Unchecked.defaultof<VkBool32> && x.bufferDeviceAddressCaptureReplay = Unchecked.defaultof<VkBool32> && x.bufferDeviceAddressMultiDevice = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceBufferDeviceAddressFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceBufferDeviceAddressFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceBufferDeviceAddressFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceBufferDeviceAddressFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceBufferDeviceAddressFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15402,16 +14634,11 @@ module EXTCalibratedTimestamps =
             new(timeDomain : VkTimeDomainEXT) =
                 VkCalibratedTimestampInfoEXT(Unchecked.defaultof<nativeint>, timeDomain)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.timeDomain = Unchecked.defaultof<VkTimeDomainEXT>
+
             static member Empty =
                 VkCalibratedTimestampInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkTimeDomainEXT>)
-
-            /// Creates an empty VkCalibratedTimestampInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkCalibratedTimestampInfoEXT(pNext, Unchecked.defaultof<VkTimeDomainEXT>)
-
-            /// Creates an empty VkCalibratedTimestampInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkCalibratedTimestampInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15470,16 +14697,11 @@ module EXTConditionalRendering =
             new(conditionalRenderingEnable : VkBool32) =
                 VkCommandBufferInheritanceConditionalRenderingInfoEXT(Unchecked.defaultof<nativeint>, conditionalRenderingEnable)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.conditionalRenderingEnable = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkCommandBufferInheritanceConditionalRenderingInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkCommandBufferInheritanceConditionalRenderingInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkCommandBufferInheritanceConditionalRenderingInfoEXT(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkCommandBufferInheritanceConditionalRenderingInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkCommandBufferInheritanceConditionalRenderingInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15510,16 +14732,11 @@ module EXTConditionalRendering =
             new(buffer : VkBuffer, offset : VkDeviceSize, flags : VkConditionalRenderingFlagsEXT) =
                 VkConditionalRenderingBeginInfoEXT(Unchecked.defaultof<nativeint>, buffer, offset, flags)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.buffer = Unchecked.defaultof<VkBuffer> && x.offset = Unchecked.defaultof<VkDeviceSize> && x.flags = Unchecked.defaultof<VkConditionalRenderingFlagsEXT>
+
             static member Empty =
                 VkConditionalRenderingBeginInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkConditionalRenderingFlagsEXT>)
-
-            /// Creates an empty VkConditionalRenderingBeginInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkConditionalRenderingBeginInfoEXT(pNext, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkConditionalRenderingFlagsEXT>)
-
-            /// Creates an empty VkConditionalRenderingBeginInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkConditionalRenderingBeginInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15550,16 +14767,11 @@ module EXTConditionalRendering =
             new(conditionalRendering : VkBool32, inheritedConditionalRendering : VkBool32) =
                 VkPhysicalDeviceConditionalRenderingFeaturesEXT(Unchecked.defaultof<nativeint>, conditionalRendering, inheritedConditionalRendering)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.conditionalRendering = Unchecked.defaultof<VkBool32> && x.inheritedConditionalRendering = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceConditionalRenderingFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceConditionalRenderingFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceConditionalRenderingFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceConditionalRenderingFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceConditionalRenderingFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15649,16 +14861,11 @@ module EXTConservativeRasterization =
             new(primitiveOverestimationSize : float32, maxExtraPrimitiveOverestimationSize : float32, extraPrimitiveOverestimationSizeGranularity : float32, primitiveUnderestimation : VkBool32, conservativePointAndLineRasterization : VkBool32, degenerateTrianglesRasterized : VkBool32, degenerateLinesRasterized : VkBool32, fullyCoveredFragmentShaderInputVariable : VkBool32, conservativeRasterizationPostDepthCoverage : VkBool32) =
                 VkPhysicalDeviceConservativeRasterizationPropertiesEXT(Unchecked.defaultof<nativeint>, primitiveOverestimationSize, maxExtraPrimitiveOverestimationSize, extraPrimitiveOverestimationSizeGranularity, primitiveUnderestimation, conservativePointAndLineRasterization, degenerateTrianglesRasterized, degenerateLinesRasterized, fullyCoveredFragmentShaderInputVariable, conservativeRasterizationPostDepthCoverage)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.primitiveOverestimationSize = Unchecked.defaultof<float32> && x.maxExtraPrimitiveOverestimationSize = Unchecked.defaultof<float32> && x.extraPrimitiveOverestimationSizeGranularity = Unchecked.defaultof<float32> && x.primitiveUnderestimation = Unchecked.defaultof<VkBool32> && x.conservativePointAndLineRasterization = Unchecked.defaultof<VkBool32> && x.degenerateTrianglesRasterized = Unchecked.defaultof<VkBool32> && x.degenerateLinesRasterized = Unchecked.defaultof<VkBool32> && x.fullyCoveredFragmentShaderInputVariable = Unchecked.defaultof<VkBool32> && x.conservativeRasterizationPostDepthCoverage = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceConservativeRasterizationPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceConservativeRasterizationPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceConservativeRasterizationPropertiesEXT(pNext, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceConservativeRasterizationPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceConservativeRasterizationPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15697,16 +14904,11 @@ module EXTConservativeRasterization =
             new(flags : VkPipelineRasterizationConservativeStateCreateFlagsEXT, conservativeRasterizationMode : VkConservativeRasterizationModeEXT, extraPrimitiveOverestimationSize : float32) =
                 VkPipelineRasterizationConservativeStateCreateInfoEXT(Unchecked.defaultof<nativeint>, flags, conservativeRasterizationMode, extraPrimitiveOverestimationSize)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineRasterizationConservativeStateCreateFlagsEXT> && x.conservativeRasterizationMode = Unchecked.defaultof<VkConservativeRasterizationModeEXT> && x.extraPrimitiveOverestimationSize = Unchecked.defaultof<float32>
+
             static member Empty =
                 VkPipelineRasterizationConservativeStateCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineRasterizationConservativeStateCreateFlagsEXT>, Unchecked.defaultof<VkConservativeRasterizationModeEXT>, Unchecked.defaultof<float32>)
-
-            /// Creates an empty VkPipelineRasterizationConservativeStateCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineRasterizationConservativeStateCreateInfoEXT(pNext, Unchecked.defaultof<VkPipelineRasterizationConservativeStateCreateFlagsEXT>, Unchecked.defaultof<VkConservativeRasterizationModeEXT>, Unchecked.defaultof<float32>)
-
-            /// Creates an empty VkPipelineRasterizationConservativeStateCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineRasterizationConservativeStateCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15746,16 +14948,11 @@ module EXTCustomBorderColor =
             new(customBorderColors : VkBool32, customBorderColorWithoutFormat : VkBool32) =
                 VkPhysicalDeviceCustomBorderColorFeaturesEXT(Unchecked.defaultof<nativeint>, customBorderColors, customBorderColorWithoutFormat)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.customBorderColors = Unchecked.defaultof<VkBool32> && x.customBorderColorWithoutFormat = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceCustomBorderColorFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceCustomBorderColorFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceCustomBorderColorFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceCustomBorderColorFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceCustomBorderColorFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15783,16 +14980,11 @@ module EXTCustomBorderColor =
             new(maxCustomBorderColorSamplers : uint32) =
                 VkPhysicalDeviceCustomBorderColorPropertiesEXT(Unchecked.defaultof<nativeint>, maxCustomBorderColorSamplers)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxCustomBorderColorSamplers = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDeviceCustomBorderColorPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceCustomBorderColorPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceCustomBorderColorPropertiesEXT(pNext, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceCustomBorderColorPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceCustomBorderColorPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15821,16 +15013,11 @@ module EXTCustomBorderColor =
             new(customBorderColor : VkClearColorValue, format : VkFormat) =
                 VkSamplerCustomBorderColorCreateInfoEXT(Unchecked.defaultof<nativeint>, customBorderColor, format)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.customBorderColor = Unchecked.defaultof<VkClearColorValue> && x.format = Unchecked.defaultof<VkFormat>
+
             static member Empty =
                 VkSamplerCustomBorderColorCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkClearColorValue>, Unchecked.defaultof<VkFormat>)
-
-            /// Creates an empty VkSamplerCustomBorderColorCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSamplerCustomBorderColorCreateInfoEXT(pNext, Unchecked.defaultof<VkClearColorValue>, Unchecked.defaultof<VkFormat>)
-
-            /// Creates an empty VkSamplerCustomBorderColorCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSamplerCustomBorderColorCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15880,16 +15067,11 @@ module EXTDebugMarker =
             new(pMarkerName : cstr, color : V4f) =
                 VkDebugMarkerMarkerInfoEXT(Unchecked.defaultof<nativeint>, pMarkerName, color)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pMarkerName = Unchecked.defaultof<cstr> && x.color = Unchecked.defaultof<V4f>
+
             static member Empty =
                 VkDebugMarkerMarkerInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<cstr>, Unchecked.defaultof<V4f>)
-
-            /// Creates an empty VkDebugMarkerMarkerInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDebugMarkerMarkerInfoEXT(pNext, Unchecked.defaultof<cstr>, Unchecked.defaultof<V4f>)
-
-            /// Creates an empty VkDebugMarkerMarkerInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDebugMarkerMarkerInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15921,16 +15103,11 @@ module EXTDebugMarker =
             new(objectType : VkDebugReportObjectTypeEXT, _object : uint64, pObjectName : cstr) =
                 VkDebugMarkerObjectNameInfoEXT(Unchecked.defaultof<nativeint>, objectType, _object, pObjectName)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.objectType = Unchecked.defaultof<VkDebugReportObjectTypeEXT> && x._object = Unchecked.defaultof<uint64> && x.pObjectName = Unchecked.defaultof<cstr>
+
             static member Empty =
                 VkDebugMarkerObjectNameInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDebugReportObjectTypeEXT>, Unchecked.defaultof<uint64>, Unchecked.defaultof<cstr>)
-
-            /// Creates an empty VkDebugMarkerObjectNameInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDebugMarkerObjectNameInfoEXT(pNext, Unchecked.defaultof<VkDebugReportObjectTypeEXT>, Unchecked.defaultof<uint64>, Unchecked.defaultof<cstr>)
-
-            /// Creates an empty VkDebugMarkerObjectNameInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDebugMarkerObjectNameInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -15967,16 +15144,11 @@ module EXTDebugMarker =
             new(objectType : VkDebugReportObjectTypeEXT, _object : uint64, tagName : uint64, tagSize : uint64, pTag : nativeint) =
                 VkDebugMarkerObjectTagInfoEXT(Unchecked.defaultof<nativeint>, objectType, _object, tagName, tagSize, pTag)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.objectType = Unchecked.defaultof<VkDebugReportObjectTypeEXT> && x._object = Unchecked.defaultof<uint64> && x.tagName = Unchecked.defaultof<uint64> && x.tagSize = Unchecked.defaultof<uint64> && x.pTag = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkDebugMarkerObjectTagInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDebugReportObjectTypeEXT>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkDebugMarkerObjectTagInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDebugMarkerObjectTagInfoEXT(pNext, Unchecked.defaultof<VkDebugReportObjectTypeEXT>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkDebugMarkerObjectTagInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDebugMarkerObjectTagInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -16080,16 +15252,11 @@ module EXTDebugUtils =
             new(pLabelName : cstr, color : V4f) =
                 VkDebugUtilsLabelEXT(Unchecked.defaultof<nativeint>, pLabelName, color)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pLabelName = Unchecked.defaultof<cstr> && x.color = Unchecked.defaultof<V4f>
+
             static member Empty =
                 VkDebugUtilsLabelEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<cstr>, Unchecked.defaultof<V4f>)
-
-            /// Creates an empty VkDebugUtilsLabelEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDebugUtilsLabelEXT(pNext, Unchecked.defaultof<cstr>, Unchecked.defaultof<V4f>)
-
-            /// Creates an empty VkDebugUtilsLabelEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDebugUtilsLabelEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -16121,16 +15288,11 @@ module EXTDebugUtils =
             new(objectType : VkObjectType, objectHandle : uint64, pObjectName : cstr) =
                 VkDebugUtilsObjectNameInfoEXT(Unchecked.defaultof<nativeint>, objectType, objectHandle, pObjectName)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.objectType = Unchecked.defaultof<VkObjectType> && x.objectHandle = Unchecked.defaultof<uint64> && x.pObjectName = Unchecked.defaultof<cstr>
+
             static member Empty =
                 VkDebugUtilsObjectNameInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkObjectType>, Unchecked.defaultof<uint64>, Unchecked.defaultof<cstr>)
-
-            /// Creates an empty VkDebugUtilsObjectNameInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDebugUtilsObjectNameInfoEXT(pNext, Unchecked.defaultof<VkObjectType>, Unchecked.defaultof<uint64>, Unchecked.defaultof<cstr>)
-
-            /// Creates an empty VkDebugUtilsObjectNameInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDebugUtilsObjectNameInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -16177,16 +15339,11 @@ module EXTDebugUtils =
             new(flags : VkDebugUtilsMessengerCallbackDataFlagsEXT, pMessageIdName : cstr, messageIdNumber : int, pMessage : cstr, queueLabelCount : uint32, pQueueLabels : nativeptr<VkDebugUtilsLabelEXT>, cmdBufLabelCount : uint32, pCmdBufLabels : nativeptr<VkDebugUtilsLabelEXT>, objectCount : uint32, pObjects : nativeptr<VkDebugUtilsObjectNameInfoEXT>) =
                 VkDebugUtilsMessengerCallbackDataEXT(Unchecked.defaultof<nativeint>, flags, pMessageIdName, messageIdNumber, pMessage, queueLabelCount, pQueueLabels, cmdBufLabelCount, pCmdBufLabels, objectCount, pObjects)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkDebugUtilsMessengerCallbackDataFlagsEXT> && x.pMessageIdName = Unchecked.defaultof<cstr> && x.messageIdNumber = Unchecked.defaultof<int> && x.pMessage = Unchecked.defaultof<cstr> && x.queueLabelCount = Unchecked.defaultof<uint32> && x.pQueueLabels = Unchecked.defaultof<nativeptr<VkDebugUtilsLabelEXT>> && x.cmdBufLabelCount = Unchecked.defaultof<uint32> && x.pCmdBufLabels = Unchecked.defaultof<nativeptr<VkDebugUtilsLabelEXT>> && x.objectCount = Unchecked.defaultof<uint32> && x.pObjects = Unchecked.defaultof<nativeptr<VkDebugUtilsObjectNameInfoEXT>>
+
             static member Empty =
                 VkDebugUtilsMessengerCallbackDataEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDebugUtilsMessengerCallbackDataFlagsEXT>, Unchecked.defaultof<cstr>, Unchecked.defaultof<int>, Unchecked.defaultof<cstr>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDebugUtilsLabelEXT>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDebugUtilsLabelEXT>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDebugUtilsObjectNameInfoEXT>>)
-
-            /// Creates an empty VkDebugUtilsMessengerCallbackDataEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDebugUtilsMessengerCallbackDataEXT(pNext, Unchecked.defaultof<VkDebugUtilsMessengerCallbackDataFlagsEXT>, Unchecked.defaultof<cstr>, Unchecked.defaultof<int>, Unchecked.defaultof<cstr>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDebugUtilsLabelEXT>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDebugUtilsLabelEXT>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDebugUtilsObjectNameInfoEXT>>)
-
-            /// Creates an empty VkDebugUtilsMessengerCallbackDataEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDebugUtilsMessengerCallbackDataEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -16230,16 +15387,11 @@ module EXTDebugUtils =
             new(flags : VkDebugUtilsMessengerCreateFlagsEXT, messageSeverity : VkDebugUtilsMessageSeverityFlagsEXT, messageType : VkDebugUtilsMessageTypeFlagsEXT, pfnUserCallback : PFN_vkDebugUtilsMessengerCallbackEXT, pUserData : nativeint) =
                 VkDebugUtilsMessengerCreateInfoEXT(Unchecked.defaultof<nativeint>, flags, messageSeverity, messageType, pfnUserCallback, pUserData)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkDebugUtilsMessengerCreateFlagsEXT> && x.messageSeverity = Unchecked.defaultof<VkDebugUtilsMessageSeverityFlagsEXT> && x.messageType = Unchecked.defaultof<VkDebugUtilsMessageTypeFlagsEXT> && x.pfnUserCallback = Unchecked.defaultof<PFN_vkDebugUtilsMessengerCallbackEXT> && x.pUserData = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkDebugUtilsMessengerCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDebugUtilsMessengerCreateFlagsEXT>, Unchecked.defaultof<VkDebugUtilsMessageSeverityFlagsEXT>, Unchecked.defaultof<VkDebugUtilsMessageTypeFlagsEXT>, Unchecked.defaultof<PFN_vkDebugUtilsMessengerCallbackEXT>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkDebugUtilsMessengerCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDebugUtilsMessengerCreateInfoEXT(pNext, Unchecked.defaultof<VkDebugUtilsMessengerCreateFlagsEXT>, Unchecked.defaultof<VkDebugUtilsMessageSeverityFlagsEXT>, Unchecked.defaultof<VkDebugUtilsMessageTypeFlagsEXT>, Unchecked.defaultof<PFN_vkDebugUtilsMessengerCallbackEXT>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkDebugUtilsMessengerCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDebugUtilsMessengerCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -16278,16 +15430,11 @@ module EXTDebugUtils =
             new(objectType : VkObjectType, objectHandle : uint64, tagName : uint64, tagSize : uint64, pTag : nativeint) =
                 VkDebugUtilsObjectTagInfoEXT(Unchecked.defaultof<nativeint>, objectType, objectHandle, tagName, tagSize, pTag)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.objectType = Unchecked.defaultof<VkObjectType> && x.objectHandle = Unchecked.defaultof<uint64> && x.tagName = Unchecked.defaultof<uint64> && x.tagSize = Unchecked.defaultof<uint64> && x.pTag = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkDebugUtilsObjectTagInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkObjectType>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkDebugUtilsObjectTagInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDebugUtilsObjectTagInfoEXT(pNext, Unchecked.defaultof<VkObjectType>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkDebugUtilsObjectTagInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDebugUtilsObjectTagInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -16394,16 +15541,11 @@ module EXTDepthClipEnable =
             new(depthClipEnable : VkBool32) =
                 VkPhysicalDeviceDepthClipEnableFeaturesEXT(Unchecked.defaultof<nativeint>, depthClipEnable)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.depthClipEnable = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceDepthClipEnableFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceDepthClipEnableFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceDepthClipEnableFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceDepthClipEnableFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceDepthClipEnableFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -16432,16 +15574,11 @@ module EXTDepthClipEnable =
             new(flags : VkPipelineRasterizationDepthClipStateCreateFlagsEXT, depthClipEnable : VkBool32) =
                 VkPipelineRasterizationDepthClipStateCreateInfoEXT(Unchecked.defaultof<nativeint>, flags, depthClipEnable)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineRasterizationDepthClipStateCreateFlagsEXT> && x.depthClipEnable = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPipelineRasterizationDepthClipStateCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineRasterizationDepthClipStateCreateFlagsEXT>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPipelineRasterizationDepthClipStateCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineRasterizationDepthClipStateCreateInfoEXT(pNext, Unchecked.defaultof<VkPipelineRasterizationDepthClipStateCreateFlagsEXT>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPipelineRasterizationDepthClipStateCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineRasterizationDepthClipStateCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -16568,16 +15705,11 @@ module EXTDeviceMemoryReport =
             new(flags : VkDeviceMemoryReportFlagsEXT, pfnUserCallback : PFN_vkDeviceMemoryReportCallbackEXT, pUserData : nativeint) =
                 VkDeviceDeviceMemoryReportCreateInfoEXT(Unchecked.defaultof<nativeint>, flags, pfnUserCallback, pUserData)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkDeviceMemoryReportFlagsEXT> && x.pfnUserCallback = Unchecked.defaultof<PFN_vkDeviceMemoryReportCallbackEXT> && x.pUserData = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkDeviceDeviceMemoryReportCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceMemoryReportFlagsEXT>, Unchecked.defaultof<PFN_vkDeviceMemoryReportCallbackEXT>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkDeviceDeviceMemoryReportCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDeviceDeviceMemoryReportCreateInfoEXT(pNext, Unchecked.defaultof<VkDeviceMemoryReportFlagsEXT>, Unchecked.defaultof<PFN_vkDeviceMemoryReportCallbackEXT>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkDeviceDeviceMemoryReportCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDeviceDeviceMemoryReportCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -16618,16 +15750,11 @@ module EXTDeviceMemoryReport =
             new(flags : VkDeviceMemoryReportFlagsEXT, _type : VkDeviceMemoryReportEventTypeEXT, memoryObjectId : uint64, size : VkDeviceSize, objectType : VkObjectType, objectHandle : uint64, heapIndex : uint32) =
                 VkDeviceMemoryReportCallbackDataEXT(Unchecked.defaultof<nativeint>, flags, _type, memoryObjectId, size, objectType, objectHandle, heapIndex)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkDeviceMemoryReportFlagsEXT> && x._type = Unchecked.defaultof<VkDeviceMemoryReportEventTypeEXT> && x.memoryObjectId = Unchecked.defaultof<uint64> && x.size = Unchecked.defaultof<VkDeviceSize> && x.objectType = Unchecked.defaultof<VkObjectType> && x.objectHandle = Unchecked.defaultof<uint64> && x.heapIndex = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkDeviceMemoryReportCallbackDataEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceMemoryReportFlagsEXT>, Unchecked.defaultof<VkDeviceMemoryReportEventTypeEXT>, Unchecked.defaultof<uint64>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkObjectType>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDeviceMemoryReportCallbackDataEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDeviceMemoryReportCallbackDataEXT(pNext, Unchecked.defaultof<VkDeviceMemoryReportFlagsEXT>, Unchecked.defaultof<VkDeviceMemoryReportEventTypeEXT>, Unchecked.defaultof<uint64>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkObjectType>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDeviceMemoryReportCallbackDataEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDeviceMemoryReportCallbackDataEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -16660,16 +15787,11 @@ module EXTDeviceMemoryReport =
             new(deviceMemoryReport : VkBool32) =
                 VkPhysicalDeviceDeviceMemoryReportFeaturesEXT(Unchecked.defaultof<nativeint>, deviceMemoryReport)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.deviceMemoryReport = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceDeviceMemoryReportFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceDeviceMemoryReportFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceDeviceMemoryReportFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceDeviceMemoryReportFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceDeviceMemoryReportFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -16712,16 +15834,11 @@ module EXTDirectfbSurface =
             new(flags : VkDirectFBSurfaceCreateFlagsEXT, dfb : nativeptr<nativeint>, surface : nativeptr<nativeint>) =
                 VkDirectFBSurfaceCreateInfoEXT(Unchecked.defaultof<nativeint>, flags, dfb, surface)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkDirectFBSurfaceCreateFlagsEXT> && x.dfb = Unchecked.defaultof<nativeptr<nativeint>> && x.surface = Unchecked.defaultof<nativeptr<nativeint>>
+
             static member Empty =
                 VkDirectFBSurfaceCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDirectFBSurfaceCreateFlagsEXT>, Unchecked.defaultof<nativeptr<nativeint>>, Unchecked.defaultof<nativeptr<nativeint>>)
-
-            /// Creates an empty VkDirectFBSurfaceCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDirectFBSurfaceCreateInfoEXT(pNext, Unchecked.defaultof<VkDirectFBSurfaceCreateFlagsEXT>, Unchecked.defaultof<nativeptr<nativeint>>, Unchecked.defaultof<nativeptr<nativeint>>)
-
-            /// Creates an empty VkDirectFBSurfaceCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDirectFBSurfaceCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -16783,16 +15900,11 @@ module EXTDiscardRectangles =
             new(maxDiscardRectangles : uint32) =
                 VkPhysicalDeviceDiscardRectanglePropertiesEXT(Unchecked.defaultof<nativeint>, maxDiscardRectangles)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxDiscardRectangles = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDeviceDiscardRectanglePropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceDiscardRectanglePropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceDiscardRectanglePropertiesEXT(pNext, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceDiscardRectanglePropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceDiscardRectanglePropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -16825,16 +15937,11 @@ module EXTDiscardRectangles =
             new(flags : VkPipelineDiscardRectangleStateCreateFlagsEXT, discardRectangleMode : VkDiscardRectangleModeEXT, discardRectangleCount : uint32, pDiscardRectangles : nativeptr<VkRect2D>) =
                 VkPipelineDiscardRectangleStateCreateInfoEXT(Unchecked.defaultof<nativeint>, flags, discardRectangleMode, discardRectangleCount, pDiscardRectangles)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineDiscardRectangleStateCreateFlagsEXT> && x.discardRectangleMode = Unchecked.defaultof<VkDiscardRectangleModeEXT> && x.discardRectangleCount = Unchecked.defaultof<uint32> && x.pDiscardRectangles = Unchecked.defaultof<nativeptr<VkRect2D>>
+
             static member Empty =
                 VkPipelineDiscardRectangleStateCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineDiscardRectangleStateCreateFlagsEXT>, Unchecked.defaultof<VkDiscardRectangleModeEXT>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkRect2D>>)
-
-            /// Creates an empty VkPipelineDiscardRectangleStateCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineDiscardRectangleStateCreateInfoEXT(pNext, Unchecked.defaultof<VkPipelineDiscardRectangleStateCreateFlagsEXT>, Unchecked.defaultof<VkDiscardRectangleModeEXT>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkRect2D>>)
-
-            /// Creates an empty VkPipelineDiscardRectangleStateCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineDiscardRectangleStateCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -16920,16 +16027,11 @@ module EXTDisplaySurfaceCounter =
             new(minImageCount : uint32, maxImageCount : uint32, currentExtent : VkExtent2D, minImageExtent : VkExtent2D, maxImageExtent : VkExtent2D, maxImageArrayLayers : uint32, supportedTransforms : VkSurfaceTransformFlagsKHR, currentTransform : VkSurfaceTransformFlagsKHR, supportedCompositeAlpha : VkCompositeAlphaFlagsKHR, supportedUsageFlags : VkImageUsageFlags, supportedSurfaceCounters : VkSurfaceCounterFlagsEXT) =
                 VkSurfaceCapabilities2EXT(Unchecked.defaultof<nativeint>, minImageCount, maxImageCount, currentExtent, minImageExtent, maxImageExtent, maxImageArrayLayers, supportedTransforms, currentTransform, supportedCompositeAlpha, supportedUsageFlags, supportedSurfaceCounters)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.minImageCount = Unchecked.defaultof<uint32> && x.maxImageCount = Unchecked.defaultof<uint32> && x.currentExtent = Unchecked.defaultof<VkExtent2D> && x.minImageExtent = Unchecked.defaultof<VkExtent2D> && x.maxImageExtent = Unchecked.defaultof<VkExtent2D> && x.maxImageArrayLayers = Unchecked.defaultof<uint32> && x.supportedTransforms = Unchecked.defaultof<VkSurfaceTransformFlagsKHR> && x.currentTransform = Unchecked.defaultof<VkSurfaceTransformFlagsKHR> && x.supportedCompositeAlpha = Unchecked.defaultof<VkCompositeAlphaFlagsKHR> && x.supportedUsageFlags = Unchecked.defaultof<VkImageUsageFlags> && x.supportedSurfaceCounters = Unchecked.defaultof<VkSurfaceCounterFlagsEXT>
+
             static member Empty =
                 VkSurfaceCapabilities2EXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkCompositeAlphaFlagsKHR>, Unchecked.defaultof<VkImageUsageFlags>, Unchecked.defaultof<VkSurfaceCounterFlagsEXT>)
-
-            /// Creates an empty VkSurfaceCapabilities2EXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSurfaceCapabilities2EXT(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkCompositeAlphaFlagsKHR>, Unchecked.defaultof<VkImageUsageFlags>, Unchecked.defaultof<VkSurfaceCounterFlagsEXT>)
-
-            /// Creates an empty VkSurfaceCapabilities2EXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSurfaceCapabilities2EXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17004,16 +16106,11 @@ module EXTDisplayControl =
             new(deviceEvent : VkDeviceEventTypeEXT) =
                 VkDeviceEventInfoEXT(Unchecked.defaultof<nativeint>, deviceEvent)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.deviceEvent = Unchecked.defaultof<VkDeviceEventTypeEXT>
+
             static member Empty =
                 VkDeviceEventInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceEventTypeEXT>)
-
-            /// Creates an empty VkDeviceEventInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDeviceEventInfoEXT(pNext, Unchecked.defaultof<VkDeviceEventTypeEXT>)
-
-            /// Creates an empty VkDeviceEventInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDeviceEventInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17040,16 +16137,11 @@ module EXTDisplayControl =
             new(displayEvent : VkDisplayEventTypeEXT) =
                 VkDisplayEventInfoEXT(Unchecked.defaultof<nativeint>, displayEvent)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.displayEvent = Unchecked.defaultof<VkDisplayEventTypeEXT>
+
             static member Empty =
                 VkDisplayEventInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDisplayEventTypeEXT>)
-
-            /// Creates an empty VkDisplayEventInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDisplayEventInfoEXT(pNext, Unchecked.defaultof<VkDisplayEventTypeEXT>)
-
-            /// Creates an empty VkDisplayEventInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDisplayEventInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17076,16 +16168,11 @@ module EXTDisplayControl =
             new(powerState : VkDisplayPowerStateEXT) =
                 VkDisplayPowerInfoEXT(Unchecked.defaultof<nativeint>, powerState)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.powerState = Unchecked.defaultof<VkDisplayPowerStateEXT>
+
             static member Empty =
                 VkDisplayPowerInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDisplayPowerStateEXT>)
-
-            /// Creates an empty VkDisplayPowerInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDisplayPowerInfoEXT(pNext, Unchecked.defaultof<VkDisplayPowerStateEXT>)
-
-            /// Creates an empty VkDisplayPowerInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDisplayPowerInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17112,16 +16199,11 @@ module EXTDisplayControl =
             new(surfaceCounters : VkSurfaceCounterFlagsEXT) =
                 VkSwapchainCounterCreateInfoEXT(Unchecked.defaultof<nativeint>, surfaceCounters)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.surfaceCounters = Unchecked.defaultof<VkSurfaceCounterFlagsEXT>
+
             static member Empty =
                 VkSwapchainCounterCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSurfaceCounterFlagsEXT>)
-
-            /// Creates an empty VkSwapchainCounterCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSwapchainCounterCreateInfoEXT(pNext, Unchecked.defaultof<VkSurfaceCounterFlagsEXT>)
-
-            /// Creates an empty VkSwapchainCounterCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSwapchainCounterCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17186,16 +16268,11 @@ module EXTExtendedDynamicState =
             new(extendedDynamicState : VkBool32) =
                 VkPhysicalDeviceExtendedDynamicStateFeaturesEXT(Unchecked.defaultof<nativeint>, extendedDynamicState)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.extendedDynamicState = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceExtendedDynamicStateFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceExtendedDynamicStateFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceExtendedDynamicStateFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceExtendedDynamicStateFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceExtendedDynamicStateFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17320,16 +16397,11 @@ module KHRExternalMemoryFd =
             new(handleType : VkExternalMemoryHandleTypeFlags, fd : int) =
                 VkImportMemoryFdInfoKHR(Unchecked.defaultof<nativeint>, handleType, fd)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.handleType = Unchecked.defaultof<VkExternalMemoryHandleTypeFlags> && x.fd = Unchecked.defaultof<int>
+
             static member Empty =
                 VkImportMemoryFdInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>, Unchecked.defaultof<int>)
-
-            /// Creates an empty VkImportMemoryFdInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImportMemoryFdInfoKHR(pNext, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>, Unchecked.defaultof<int>)
-
-            /// Creates an empty VkImportMemoryFdInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImportMemoryFdInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17357,16 +16429,11 @@ module KHRExternalMemoryFd =
             new(memoryTypeBits : uint32) =
                 VkMemoryFdPropertiesKHR(Unchecked.defaultof<nativeint>, memoryTypeBits)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.memoryTypeBits = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkMemoryFdPropertiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkMemoryFdPropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkMemoryFdPropertiesKHR(pNext, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkMemoryFdPropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkMemoryFdPropertiesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17395,16 +16462,11 @@ module KHRExternalMemoryFd =
             new(memory : VkDeviceMemory, handleType : VkExternalMemoryHandleTypeFlags) =
                 VkMemoryGetFdInfoKHR(Unchecked.defaultof<nativeint>, memory, handleType)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.memory = Unchecked.defaultof<VkDeviceMemory> && x.handleType = Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>
+
             static member Empty =
                 VkMemoryGetFdInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceMemory>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>)
-
-            /// Creates an empty VkMemoryGetFdInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkMemoryGetFdInfoKHR(pNext, Unchecked.defaultof<VkDeviceMemory>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>)
-
-            /// Creates an empty VkMemoryGetFdInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkMemoryGetFdInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17483,16 +16545,11 @@ module EXTExternalMemoryHost =
             new(handleType : VkExternalMemoryHandleTypeFlags, pHostPointer : nativeint) =
                 VkImportMemoryHostPointerInfoEXT(Unchecked.defaultof<nativeint>, handleType, pHostPointer)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.handleType = Unchecked.defaultof<VkExternalMemoryHandleTypeFlags> && x.pHostPointer = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkImportMemoryHostPointerInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkImportMemoryHostPointerInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImportMemoryHostPointerInfoEXT(pNext, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkImportMemoryHostPointerInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImportMemoryHostPointerInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17520,16 +16577,11 @@ module EXTExternalMemoryHost =
             new(memoryTypeBits : uint32) =
                 VkMemoryHostPointerPropertiesEXT(Unchecked.defaultof<nativeint>, memoryTypeBits)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.memoryTypeBits = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkMemoryHostPointerPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkMemoryHostPointerPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkMemoryHostPointerPropertiesEXT(pNext, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkMemoryHostPointerPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkMemoryHostPointerPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17556,16 +16608,11 @@ module EXTExternalMemoryHost =
             new(minImportedHostPointerAlignment : VkDeviceSize) =
                 VkPhysicalDeviceExternalMemoryHostPropertiesEXT(Unchecked.defaultof<nativeint>, minImportedHostPointerAlignment)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.minImportedHostPointerAlignment = Unchecked.defaultof<VkDeviceSize>
+
             static member Empty =
                 VkPhysicalDeviceExternalMemoryHostPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkPhysicalDeviceExternalMemoryHostPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceExternalMemoryHostPropertiesEXT(pNext, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkPhysicalDeviceExternalMemoryHostPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceExternalMemoryHostPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17620,16 +16667,11 @@ module EXTFilterCubic =
             new(filterCubic : VkBool32, filterCubicMinmax : VkBool32) =
                 VkFilterCubicImageViewImageFormatPropertiesEXT(Unchecked.defaultof<nativeint>, filterCubic, filterCubicMinmax)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.filterCubic = Unchecked.defaultof<VkBool32> && x.filterCubicMinmax = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkFilterCubicImageViewImageFormatPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkFilterCubicImageViewImageFormatPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkFilterCubicImageViewImageFormatPropertiesEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkFilterCubicImageViewImageFormatPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkFilterCubicImageViewImageFormatPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17657,16 +16699,11 @@ module EXTFilterCubic =
             new(imageViewType : VkImageViewType) =
                 VkPhysicalDeviceImageViewImageFormatInfoEXT(Unchecked.defaultof<nativeint>, imageViewType)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.imageViewType = Unchecked.defaultof<VkImageViewType>
+
             static member Empty =
                 VkPhysicalDeviceImageViewImageFormatInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageViewType>)
-
-            /// Creates an empty VkPhysicalDeviceImageViewImageFormatInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceImageViewImageFormatInfoEXT(pNext, Unchecked.defaultof<VkImageViewType>)
-
-            /// Creates an empty VkPhysicalDeviceImageViewImageFormatInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceImageViewImageFormatInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17716,16 +16753,11 @@ module EXTFragmentDensityMap =
             new(fragmentDensityMap : VkBool32, fragmentDensityMapDynamic : VkBool32, fragmentDensityMapNonSubsampledImages : VkBool32) =
                 VkPhysicalDeviceFragmentDensityMapFeaturesEXT(Unchecked.defaultof<nativeint>, fragmentDensityMap, fragmentDensityMapDynamic, fragmentDensityMapNonSubsampledImages)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.fragmentDensityMap = Unchecked.defaultof<VkBool32> && x.fragmentDensityMapDynamic = Unchecked.defaultof<VkBool32> && x.fragmentDensityMapNonSubsampledImages = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceFragmentDensityMapFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentDensityMapFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceFragmentDensityMapFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentDensityMapFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceFragmentDensityMapFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17758,16 +16790,11 @@ module EXTFragmentDensityMap =
             new(minFragmentDensityTexelSize : VkExtent2D, maxFragmentDensityTexelSize : VkExtent2D, fragmentDensityInvocations : VkBool32) =
                 VkPhysicalDeviceFragmentDensityMapPropertiesEXT(Unchecked.defaultof<nativeint>, minFragmentDensityTexelSize, maxFragmentDensityTexelSize, fragmentDensityInvocations)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.minFragmentDensityTexelSize = Unchecked.defaultof<VkExtent2D> && x.maxFragmentDensityTexelSize = Unchecked.defaultof<VkExtent2D> && x.fragmentDensityInvocations = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceFragmentDensityMapPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentDensityMapPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceFragmentDensityMapPropertiesEXT(pNext, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentDensityMapPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceFragmentDensityMapPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17796,16 +16823,11 @@ module EXTFragmentDensityMap =
             new(fragmentDensityMapAttachment : VkAttachmentReference) =
                 VkRenderPassFragmentDensityMapCreateInfoEXT(Unchecked.defaultof<nativeint>, fragmentDensityMapAttachment)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.fragmentDensityMapAttachment = Unchecked.defaultof<VkAttachmentReference>
+
             static member Empty =
                 VkRenderPassFragmentDensityMapCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAttachmentReference>)
-
-            /// Creates an empty VkRenderPassFragmentDensityMapCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkRenderPassFragmentDensityMapCreateInfoEXT(pNext, Unchecked.defaultof<VkAttachmentReference>)
-
-            /// Creates an empty VkRenderPassFragmentDensityMapCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkRenderPassFragmentDensityMapCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17865,16 +16887,11 @@ module EXTFragmentDensityMap2 =
             new(fragmentDensityMapDeferred : VkBool32) =
                 VkPhysicalDeviceFragmentDensityMap2FeaturesEXT(Unchecked.defaultof<nativeint>, fragmentDensityMapDeferred)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.fragmentDensityMapDeferred = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceFragmentDensityMap2FeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentDensityMap2FeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceFragmentDensityMap2FeaturesEXT(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentDensityMap2FeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceFragmentDensityMap2FeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17907,16 +16924,11 @@ module EXTFragmentDensityMap2 =
             new(subsampledLoads : VkBool32, subsampledCoarseReconstructionEarlyAccess : VkBool32, maxSubsampledArrayLayers : uint32, maxDescriptorSetSubsampledSamplers : uint32) =
                 VkPhysicalDeviceFragmentDensityMap2PropertiesEXT(Unchecked.defaultof<nativeint>, subsampledLoads, subsampledCoarseReconstructionEarlyAccess, maxSubsampledArrayLayers, maxDescriptorSetSubsampledSamplers)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.subsampledLoads = Unchecked.defaultof<VkBool32> && x.subsampledCoarseReconstructionEarlyAccess = Unchecked.defaultof<VkBool32> && x.maxSubsampledArrayLayers = Unchecked.defaultof<uint32> && x.maxDescriptorSetSubsampledSamplers = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDeviceFragmentDensityMap2PropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentDensityMap2PropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceFragmentDensityMap2PropertiesEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentDensityMap2PropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceFragmentDensityMap2PropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -17967,16 +16979,11 @@ module EXTFragmentShaderInterlock =
             new(fragmentShaderSampleInterlock : VkBool32, fragmentShaderPixelInterlock : VkBool32, fragmentShaderShadingRateInterlock : VkBool32) =
                 VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT(Unchecked.defaultof<nativeint>, fragmentShaderSampleInterlock, fragmentShaderPixelInterlock, fragmentShaderShadingRateInterlock)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.fragmentShaderSampleInterlock = Unchecked.defaultof<VkBool32> && x.fragmentShaderPixelInterlock = Unchecked.defaultof<VkBool32> && x.fragmentShaderShadingRateInterlock = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceFragmentShaderInterlockFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -18021,16 +17028,11 @@ module KHRWin32Surface =
             new(flags : VkWin32SurfaceCreateFlagsKHR, hinstance : nativeint, hwnd : nativeint) =
                 VkWin32SurfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, flags, hinstance, hwnd)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkWin32SurfaceCreateFlagsKHR> && x.hinstance = Unchecked.defaultof<nativeint> && x.hwnd = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkWin32SurfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkWin32SurfaceCreateFlagsKHR>, Unchecked.defaultof<nativeint>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkWin32SurfaceCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkWin32SurfaceCreateInfoKHR(pNext, Unchecked.defaultof<VkWin32SurfaceCreateFlagsKHR>, Unchecked.defaultof<nativeint>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkWin32SurfaceCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkWin32SurfaceCreateInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -18233,16 +17235,11 @@ module EXTFullScreenExclusive =
             new(fullScreenExclusiveSupported : VkBool32) =
                 VkSurfaceCapabilitiesFullScreenExclusiveEXT(Unchecked.defaultof<nativeint>, fullScreenExclusiveSupported)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.fullScreenExclusiveSupported = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkSurfaceCapabilitiesFullScreenExclusiveEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkSurfaceCapabilitiesFullScreenExclusiveEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSurfaceCapabilitiesFullScreenExclusiveEXT(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkSurfaceCapabilitiesFullScreenExclusiveEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSurfaceCapabilitiesFullScreenExclusiveEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -18269,16 +17266,11 @@ module EXTFullScreenExclusive =
             new(fullScreenExclusive : VkFullScreenExclusiveEXT) =
                 VkSurfaceFullScreenExclusiveInfoEXT(Unchecked.defaultof<nativeint>, fullScreenExclusive)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.fullScreenExclusive = Unchecked.defaultof<VkFullScreenExclusiveEXT>
+
             static member Empty =
                 VkSurfaceFullScreenExclusiveInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkFullScreenExclusiveEXT>)
-
-            /// Creates an empty VkSurfaceFullScreenExclusiveInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSurfaceFullScreenExclusiveInfoEXT(pNext, Unchecked.defaultof<VkFullScreenExclusiveEXT>)
-
-            /// Creates an empty VkSurfaceFullScreenExclusiveInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSurfaceFullScreenExclusiveInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -18334,16 +17326,11 @@ module EXTFullScreenExclusive =
                 new(hmonitor : nativeint) =
                     VkSurfaceFullScreenExclusiveWin32InfoEXT(Unchecked.defaultof<nativeint>, hmonitor)
 
+                member x.IsEmpty =
+                    x.pNext = Unchecked.defaultof<nativeint> && x.hmonitor = Unchecked.defaultof<nativeint>
+
                 static member Empty =
                     VkSurfaceFullScreenExclusiveWin32InfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<nativeint>)
-
-                /// Creates an empty VkSurfaceFullScreenExclusiveWin32InfoEXT with only pNext set to the given value.
-                static member Chain(pNext : nativeint) =
-                    VkSurfaceFullScreenExclusiveWin32InfoEXT(pNext, Unchecked.defaultof<nativeint>)
-
-                /// Creates an empty VkSurfaceFullScreenExclusiveWin32InfoEXT with only pNext set to the given value.
-                static member Chain(pNext : nativeptr<'a>) =
-                    VkSurfaceFullScreenExclusiveWin32InfoEXT.Chain(NativePtr.toNativeInt pNext)
 
                 override x.ToString() =
                     String.concat "; " [
@@ -18403,16 +17390,11 @@ module EXTGlobalPriority =
             new(globalPriority : VkQueueGlobalPriorityEXT) =
                 VkDeviceQueueGlobalPriorityCreateInfoEXT(Unchecked.defaultof<nativeint>, globalPriority)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.globalPriority = Unchecked.defaultof<VkQueueGlobalPriorityEXT>
+
             static member Empty =
                 VkDeviceQueueGlobalPriorityCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkQueueGlobalPriorityEXT>)
-
-            /// Creates an empty VkDeviceQueueGlobalPriorityCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDeviceQueueGlobalPriorityCreateInfoEXT(pNext, Unchecked.defaultof<VkQueueGlobalPriorityEXT>)
-
-            /// Creates an empty VkDeviceQueueGlobalPriorityCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDeviceQueueGlobalPriorityCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -18452,6 +17434,9 @@ module EXTHdrMetadata =
                     x = x
                     y = y
                 }
+
+            member x.IsEmpty =
+                x.x = Unchecked.defaultof<float32> && x.y = Unchecked.defaultof<float32>
 
             static member Empty =
                 VkXYColorEXT(Unchecked.defaultof<float32>, Unchecked.defaultof<float32>)
@@ -18494,16 +17479,11 @@ module EXTHdrMetadata =
             new(displayPrimaryRed : VkXYColorEXT, displayPrimaryGreen : VkXYColorEXT, displayPrimaryBlue : VkXYColorEXT, whitePoint : VkXYColorEXT, maxLuminance : float32, minLuminance : float32, maxContentLightLevel : float32, maxFrameAverageLightLevel : float32) =
                 VkHdrMetadataEXT(Unchecked.defaultof<nativeint>, displayPrimaryRed, displayPrimaryGreen, displayPrimaryBlue, whitePoint, maxLuminance, minLuminance, maxContentLightLevel, maxFrameAverageLightLevel)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.displayPrimaryRed = Unchecked.defaultof<VkXYColorEXT> && x.displayPrimaryGreen = Unchecked.defaultof<VkXYColorEXT> && x.displayPrimaryBlue = Unchecked.defaultof<VkXYColorEXT> && x.whitePoint = Unchecked.defaultof<VkXYColorEXT> && x.maxLuminance = Unchecked.defaultof<float32> && x.minLuminance = Unchecked.defaultof<float32> && x.maxContentLightLevel = Unchecked.defaultof<float32> && x.maxFrameAverageLightLevel = Unchecked.defaultof<float32>
+
             static member Empty =
                 VkHdrMetadataEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkXYColorEXT>, Unchecked.defaultof<VkXYColorEXT>, Unchecked.defaultof<VkXYColorEXT>, Unchecked.defaultof<VkXYColorEXT>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>)
-
-            /// Creates an empty VkHdrMetadataEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkHdrMetadataEXT(pNext, Unchecked.defaultof<VkXYColorEXT>, Unchecked.defaultof<VkXYColorEXT>, Unchecked.defaultof<VkXYColorEXT>, Unchecked.defaultof<VkXYColorEXT>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>)
-
-            /// Creates an empty VkHdrMetadataEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkHdrMetadataEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -18560,16 +17540,11 @@ module EXTHeadlessSurface =
             new(flags : VkHeadlessSurfaceCreateFlagsEXT) =
                 VkHeadlessSurfaceCreateInfoEXT(Unchecked.defaultof<nativeint>, flags)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkHeadlessSurfaceCreateFlagsEXT>
+
             static member Empty =
                 VkHeadlessSurfaceCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkHeadlessSurfaceCreateFlagsEXT>)
-
-            /// Creates an empty VkHeadlessSurfaceCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkHeadlessSurfaceCreateInfoEXT(pNext, Unchecked.defaultof<VkHeadlessSurfaceCreateFlagsEXT>)
-
-            /// Creates an empty VkHeadlessSurfaceCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkHeadlessSurfaceCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -18658,6 +17633,9 @@ module EXTImageDrmFormatModifier =
                     drmFormatModifierTilingFeatures = drmFormatModifierTilingFeatures
                 }
 
+            member x.IsEmpty =
+                x.drmFormatModifier = Unchecked.defaultof<uint64> && x.drmFormatModifierPlaneCount = Unchecked.defaultof<uint32> && x.drmFormatModifierTilingFeatures = Unchecked.defaultof<VkFormatFeatureFlags>
+
             static member Empty =
                 VkDrmFormatModifierPropertiesEXT(Unchecked.defaultof<uint64>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkFormatFeatureFlags>)
 
@@ -18688,16 +17666,11 @@ module EXTImageDrmFormatModifier =
             new(drmFormatModifierCount : uint32, pDrmFormatModifierProperties : nativeptr<VkDrmFormatModifierPropertiesEXT>) =
                 VkDrmFormatModifierPropertiesListEXT(Unchecked.defaultof<nativeint>, drmFormatModifierCount, pDrmFormatModifierProperties)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.drmFormatModifierCount = Unchecked.defaultof<uint32> && x.pDrmFormatModifierProperties = Unchecked.defaultof<nativeptr<VkDrmFormatModifierPropertiesEXT>>
+
             static member Empty =
                 VkDrmFormatModifierPropertiesListEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDrmFormatModifierPropertiesEXT>>)
-
-            /// Creates an empty VkDrmFormatModifierPropertiesListEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDrmFormatModifierPropertiesListEXT(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDrmFormatModifierPropertiesEXT>>)
-
-            /// Creates an empty VkDrmFormatModifierPropertiesListEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDrmFormatModifierPropertiesListEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -18729,16 +17702,11 @@ module EXTImageDrmFormatModifier =
             new(drmFormatModifier : uint64, drmFormatModifierPlaneCount : uint32, pPlaneLayouts : nativeptr<VkSubresourceLayout>) =
                 VkImageDrmFormatModifierExplicitCreateInfoEXT(Unchecked.defaultof<nativeint>, drmFormatModifier, drmFormatModifierPlaneCount, pPlaneLayouts)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.drmFormatModifier = Unchecked.defaultof<uint64> && x.drmFormatModifierPlaneCount = Unchecked.defaultof<uint32> && x.pPlaneLayouts = Unchecked.defaultof<nativeptr<VkSubresourceLayout>>
+
             static member Empty =
                 VkImageDrmFormatModifierExplicitCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSubresourceLayout>>)
-
-            /// Creates an empty VkImageDrmFormatModifierExplicitCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImageDrmFormatModifierExplicitCreateInfoEXT(pNext, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSubresourceLayout>>)
-
-            /// Creates an empty VkImageDrmFormatModifierExplicitCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImageDrmFormatModifierExplicitCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -18769,16 +17737,11 @@ module EXTImageDrmFormatModifier =
             new(drmFormatModifierCount : uint32, pDrmFormatModifiers : nativeptr<uint64>) =
                 VkImageDrmFormatModifierListCreateInfoEXT(Unchecked.defaultof<nativeint>, drmFormatModifierCount, pDrmFormatModifiers)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.drmFormatModifierCount = Unchecked.defaultof<uint32> && x.pDrmFormatModifiers = Unchecked.defaultof<nativeptr<uint64>>
+
             static member Empty =
                 VkImageDrmFormatModifierListCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint64>>)
-
-            /// Creates an empty VkImageDrmFormatModifierListCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImageDrmFormatModifierListCreateInfoEXT(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint64>>)
-
-            /// Creates an empty VkImageDrmFormatModifierListCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImageDrmFormatModifierListCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -18806,16 +17769,11 @@ module EXTImageDrmFormatModifier =
             new(drmFormatModifier : uint64) =
                 VkImageDrmFormatModifierPropertiesEXT(Unchecked.defaultof<nativeint>, drmFormatModifier)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.drmFormatModifier = Unchecked.defaultof<uint64>
+
             static member Empty =
                 VkImageDrmFormatModifierPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkImageDrmFormatModifierPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImageDrmFormatModifierPropertiesEXT(pNext, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkImageDrmFormatModifierPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImageDrmFormatModifierPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -18848,16 +17806,11 @@ module EXTImageDrmFormatModifier =
             new(drmFormatModifier : uint64, sharingMode : VkSharingMode, queueFamilyIndexCount : uint32, pQueueFamilyIndices : nativeptr<uint32>) =
                 VkPhysicalDeviceImageDrmFormatModifierInfoEXT(Unchecked.defaultof<nativeint>, drmFormatModifier, sharingMode, queueFamilyIndexCount, pQueueFamilyIndices)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.drmFormatModifier = Unchecked.defaultof<uint64> && x.sharingMode = Unchecked.defaultof<VkSharingMode> && x.queueFamilyIndexCount = Unchecked.defaultof<uint32> && x.pQueueFamilyIndices = Unchecked.defaultof<nativeptr<uint32>>
+
             static member Empty =
                 VkPhysicalDeviceImageDrmFormatModifierInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint64>, Unchecked.defaultof<VkSharingMode>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkPhysicalDeviceImageDrmFormatModifierInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceImageDrmFormatModifierInfoEXT(pNext, Unchecked.defaultof<uint64>, Unchecked.defaultof<VkSharingMode>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkPhysicalDeviceImageDrmFormatModifierInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceImageDrmFormatModifierInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -18922,16 +17875,11 @@ module EXTImageRobustness =
             new(robustImageAccess : VkBool32) =
                 VkPhysicalDeviceImageRobustnessFeaturesEXT(Unchecked.defaultof<nativeint>, robustImageAccess)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.robustImageAccess = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceImageRobustnessFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceImageRobustnessFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceImageRobustnessFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceImageRobustnessFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceImageRobustnessFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -18967,16 +17915,11 @@ module EXTIndexTypeUint8 =
             new(indexTypeUint8 : VkBool32) =
                 VkPhysicalDeviceIndexTypeUint8FeaturesEXT(Unchecked.defaultof<nativeint>, indexTypeUint8)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.indexTypeUint8 = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceIndexTypeUint8FeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceIndexTypeUint8FeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceIndexTypeUint8FeaturesEXT(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceIndexTypeUint8FeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceIndexTypeUint8FeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19021,16 +17964,11 @@ module EXTInlineUniformBlock =
             new(maxInlineUniformBlockBindings : uint32) =
                 VkDescriptorPoolInlineUniformBlockCreateInfoEXT(Unchecked.defaultof<nativeint>, maxInlineUniformBlockBindings)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxInlineUniformBlockBindings = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkDescriptorPoolInlineUniformBlockCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDescriptorPoolInlineUniformBlockCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDescriptorPoolInlineUniformBlockCreateInfoEXT(pNext, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDescriptorPoolInlineUniformBlockCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDescriptorPoolInlineUniformBlockCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19059,16 +17997,11 @@ module EXTInlineUniformBlock =
             new(inlineUniformBlock : VkBool32, descriptorBindingInlineUniformBlockUpdateAfterBind : VkBool32) =
                 VkPhysicalDeviceInlineUniformBlockFeaturesEXT(Unchecked.defaultof<nativeint>, inlineUniformBlock, descriptorBindingInlineUniformBlockUpdateAfterBind)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.inlineUniformBlock = Unchecked.defaultof<VkBool32> && x.descriptorBindingInlineUniformBlockUpdateAfterBind = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceInlineUniformBlockFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceInlineUniformBlockFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceInlineUniformBlockFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceInlineUniformBlockFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceInlineUniformBlockFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19104,16 +18037,11 @@ module EXTInlineUniformBlock =
             new(maxInlineUniformBlockSize : uint32, maxPerStageDescriptorInlineUniformBlocks : uint32, maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks : uint32, maxDescriptorSetInlineUniformBlocks : uint32, maxDescriptorSetUpdateAfterBindInlineUniformBlocks : uint32) =
                 VkPhysicalDeviceInlineUniformBlockPropertiesEXT(Unchecked.defaultof<nativeint>, maxInlineUniformBlockSize, maxPerStageDescriptorInlineUniformBlocks, maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks, maxDescriptorSetInlineUniformBlocks, maxDescriptorSetUpdateAfterBindInlineUniformBlocks)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxInlineUniformBlockSize = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorInlineUniformBlocks = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorUpdateAfterBindInlineUniformBlocks = Unchecked.defaultof<uint32> && x.maxDescriptorSetInlineUniformBlocks = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindInlineUniformBlocks = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDeviceInlineUniformBlockPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceInlineUniformBlockPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceInlineUniformBlockPropertiesEXT(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceInlineUniformBlockPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceInlineUniformBlockPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19146,16 +18074,11 @@ module EXTInlineUniformBlock =
             new(dataSize : uint32, pData : nativeint) =
                 VkWriteDescriptorSetInlineUniformBlockEXT(Unchecked.defaultof<nativeint>, dataSize, pData)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.dataSize = Unchecked.defaultof<uint32> && x.pData = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkWriteDescriptorSetInlineUniformBlockEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkWriteDescriptorSetInlineUniformBlockEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkWriteDescriptorSetInlineUniformBlockEXT(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkWriteDescriptorSetInlineUniformBlockEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkWriteDescriptorSetInlineUniformBlockEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19217,16 +18140,11 @@ module EXTLineRasterization =
             new(rectangularLines : VkBool32, bresenhamLines : VkBool32, smoothLines : VkBool32, stippledRectangularLines : VkBool32, stippledBresenhamLines : VkBool32, stippledSmoothLines : VkBool32) =
                 VkPhysicalDeviceLineRasterizationFeaturesEXT(Unchecked.defaultof<nativeint>, rectangularLines, bresenhamLines, smoothLines, stippledRectangularLines, stippledBresenhamLines, stippledSmoothLines)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.rectangularLines = Unchecked.defaultof<VkBool32> && x.bresenhamLines = Unchecked.defaultof<VkBool32> && x.smoothLines = Unchecked.defaultof<VkBool32> && x.stippledRectangularLines = Unchecked.defaultof<VkBool32> && x.stippledBresenhamLines = Unchecked.defaultof<VkBool32> && x.stippledSmoothLines = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceLineRasterizationFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceLineRasterizationFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceLineRasterizationFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceLineRasterizationFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceLineRasterizationFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19258,16 +18176,11 @@ module EXTLineRasterization =
             new(lineSubPixelPrecisionBits : uint32) =
                 VkPhysicalDeviceLineRasterizationPropertiesEXT(Unchecked.defaultof<nativeint>, lineSubPixelPrecisionBits)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.lineSubPixelPrecisionBits = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDeviceLineRasterizationPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceLineRasterizationPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceLineRasterizationPropertiesEXT(pNext, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceLineRasterizationPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceLineRasterizationPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19300,16 +18213,11 @@ module EXTLineRasterization =
             new(lineRasterizationMode : VkLineRasterizationModeEXT, stippledLineEnable : VkBool32, lineStippleFactor : uint32, lineStipplePattern : nativeint) =
                 VkPipelineRasterizationLineStateCreateInfoEXT(Unchecked.defaultof<nativeint>, lineRasterizationMode, stippledLineEnable, lineStippleFactor, lineStipplePattern)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.lineRasterizationMode = Unchecked.defaultof<VkLineRasterizationModeEXT> && x.stippledLineEnable = Unchecked.defaultof<VkBool32> && x.lineStippleFactor = Unchecked.defaultof<uint32> && x.lineStipplePattern = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkPipelineRasterizationLineStateCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkLineRasterizationModeEXT>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkPipelineRasterizationLineStateCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineRasterizationLineStateCreateInfoEXT(pNext, Unchecked.defaultof<VkLineRasterizationModeEXT>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkPipelineRasterizationLineStateCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineRasterizationLineStateCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19369,16 +18277,11 @@ module EXTMemoryBudget =
             new(heapBudget : VkDeviceSize_16, heapUsage : VkDeviceSize_16) =
                 VkPhysicalDeviceMemoryBudgetPropertiesEXT(Unchecked.defaultof<nativeint>, heapBudget, heapUsage)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.heapBudget = Unchecked.defaultof<VkDeviceSize_16> && x.heapUsage = Unchecked.defaultof<VkDeviceSize_16>
+
             static member Empty =
                 VkPhysicalDeviceMemoryBudgetPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceSize_16>, Unchecked.defaultof<VkDeviceSize_16>)
-
-            /// Creates an empty VkPhysicalDeviceMemoryBudgetPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceMemoryBudgetPropertiesEXT(pNext, Unchecked.defaultof<VkDeviceSize_16>, Unchecked.defaultof<VkDeviceSize_16>)
-
-            /// Creates an empty VkPhysicalDeviceMemoryBudgetPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceMemoryBudgetPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19418,16 +18321,11 @@ module EXTMemoryPriority =
             new(priority : float32) =
                 VkMemoryPriorityAllocateInfoEXT(Unchecked.defaultof<nativeint>, priority)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.priority = Unchecked.defaultof<float32>
+
             static member Empty =
                 VkMemoryPriorityAllocateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<float32>)
-
-            /// Creates an empty VkMemoryPriorityAllocateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkMemoryPriorityAllocateInfoEXT(pNext, Unchecked.defaultof<float32>)
-
-            /// Creates an empty VkMemoryPriorityAllocateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkMemoryPriorityAllocateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19454,16 +18352,11 @@ module EXTMemoryPriority =
             new(memoryPriority : VkBool32) =
                 VkPhysicalDeviceMemoryPriorityFeaturesEXT(Unchecked.defaultof<nativeint>, memoryPriority)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.memoryPriority = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceMemoryPriorityFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceMemoryPriorityFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceMemoryPriorityFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceMemoryPriorityFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceMemoryPriorityFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19504,16 +18397,11 @@ module EXTMetalSurface =
             new(flags : VkMetalSurfaceCreateFlagsEXT, pLayer : nativeptr<nativeint>) =
                 VkMetalSurfaceCreateInfoEXT(Unchecked.defaultof<nativeint>, flags, pLayer)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkMetalSurfaceCreateFlagsEXT> && x.pLayer = Unchecked.defaultof<nativeptr<nativeint>>
+
             static member Empty =
                 VkMetalSurfaceCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkMetalSurfaceCreateFlagsEXT>, Unchecked.defaultof<nativeptr<nativeint>>)
-
-            /// Creates an empty VkMetalSurfaceCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkMetalSurfaceCreateInfoEXT(pNext, Unchecked.defaultof<VkMetalSurfaceCreateFlagsEXT>, Unchecked.defaultof<nativeptr<nativeint>>)
-
-            /// Creates an empty VkMetalSurfaceCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkMetalSurfaceCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19570,16 +18458,11 @@ module EXTPciBusInfo =
             new(pciDomain : uint32, pciBus : uint32, pciDevice : uint32, pciFunction : uint32) =
                 VkPhysicalDevicePCIBusInfoPropertiesEXT(Unchecked.defaultof<nativeint>, pciDomain, pciBus, pciDevice, pciFunction)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pciDomain = Unchecked.defaultof<uint32> && x.pciBus = Unchecked.defaultof<uint32> && x.pciDevice = Unchecked.defaultof<uint32> && x.pciFunction = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDevicePCIBusInfoPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDevicePCIBusInfoPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDevicePCIBusInfoPropertiesEXT(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDevicePCIBusInfoPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDevicePCIBusInfoPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19618,16 +18501,11 @@ module EXTPipelineCreationCacheControl =
             new(pipelineCreationCacheControl : VkBool32) =
                 VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT(Unchecked.defaultof<nativeint>, pipelineCreationCacheControl)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pipelineCreationCacheControl = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDevicePipelineCreationCacheControlFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19678,6 +18556,9 @@ module EXTPipelineCreationFeedback =
                     duration = duration
                 }
 
+            member x.IsEmpty =
+                x.flags = Unchecked.defaultof<VkPipelineCreationFeedbackFlagsEXT> && x.duration = Unchecked.defaultof<uint64>
+
             static member Empty =
                 VkPipelineCreationFeedbackEXT(Unchecked.defaultof<VkPipelineCreationFeedbackFlagsEXT>, Unchecked.defaultof<uint64>)
 
@@ -19709,16 +18590,11 @@ module EXTPipelineCreationFeedback =
             new(pPipelineCreationFeedback : nativeptr<VkPipelineCreationFeedbackEXT>, pipelineStageCreationFeedbackCount : uint32, pPipelineStageCreationFeedbacks : nativeptr<VkPipelineCreationFeedbackEXT>) =
                 VkPipelineCreationFeedbackCreateInfoEXT(Unchecked.defaultof<nativeint>, pPipelineCreationFeedback, pipelineStageCreationFeedbackCount, pPipelineStageCreationFeedbacks)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pPipelineCreationFeedback = Unchecked.defaultof<nativeptr<VkPipelineCreationFeedbackEXT>> && x.pipelineStageCreationFeedbackCount = Unchecked.defaultof<uint32> && x.pPipelineStageCreationFeedbacks = Unchecked.defaultof<nativeptr<VkPipelineCreationFeedbackEXT>>
+
             static member Empty =
                 VkPipelineCreationFeedbackCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<nativeptr<VkPipelineCreationFeedbackEXT>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipelineCreationFeedbackEXT>>)
-
-            /// Creates an empty VkPipelineCreationFeedbackCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineCreationFeedbackCreateInfoEXT(pNext, Unchecked.defaultof<nativeptr<VkPipelineCreationFeedbackEXT>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipelineCreationFeedbackEXT>>)
-
-            /// Creates an empty VkPipelineCreationFeedbackCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineCreationFeedbackCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19780,16 +18656,11 @@ module EXTPrivateData =
             new(privateDataSlotRequestCount : uint32) =
                 VkDevicePrivateDataCreateInfoEXT(Unchecked.defaultof<nativeint>, privateDataSlotRequestCount)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.privateDataSlotRequestCount = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkDevicePrivateDataCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDevicePrivateDataCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDevicePrivateDataCreateInfoEXT(pNext, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDevicePrivateDataCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDevicePrivateDataCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19816,16 +18687,11 @@ module EXTPrivateData =
             new(privateData : VkBool32) =
                 VkPhysicalDevicePrivateDataFeaturesEXT(Unchecked.defaultof<nativeint>, privateData)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.privateData = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDevicePrivateDataFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevicePrivateDataFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDevicePrivateDataFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevicePrivateDataFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDevicePrivateDataFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19852,16 +18718,11 @@ module EXTPrivateData =
             new(flags : VkPrivateDataSlotCreateFlagsEXT) =
                 VkPrivateDataSlotCreateInfoEXT(Unchecked.defaultof<nativeint>, flags)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPrivateDataSlotCreateFlagsEXT>
+
             static member Empty =
                 VkPrivateDataSlotCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPrivateDataSlotCreateFlagsEXT>)
-
-            /// Creates an empty VkPrivateDataSlotCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPrivateDataSlotCreateInfoEXT(pNext, Unchecked.defaultof<VkPrivateDataSlotCreateFlagsEXT>)
-
-            /// Creates an empty VkPrivateDataSlotCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPrivateDataSlotCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19932,16 +18793,11 @@ module EXTRobustness2 =
             new(robustBufferAccess2 : VkBool32, robustImageAccess2 : VkBool32, nullDescriptor : VkBool32) =
                 VkPhysicalDeviceRobustness2FeaturesEXT(Unchecked.defaultof<nativeint>, robustBufferAccess2, robustImageAccess2, nullDescriptor)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.robustBufferAccess2 = Unchecked.defaultof<VkBool32> && x.robustImageAccess2 = Unchecked.defaultof<VkBool32> && x.nullDescriptor = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceRobustness2FeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceRobustness2FeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceRobustness2FeaturesEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceRobustness2FeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceRobustness2FeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -19972,16 +18828,11 @@ module EXTRobustness2 =
             new(robustStorageBufferAccessSizeAlignment : VkDeviceSize, robustUniformBufferAccessSizeAlignment : VkDeviceSize) =
                 VkPhysicalDeviceRobustness2PropertiesEXT(Unchecked.defaultof<nativeint>, robustStorageBufferAccessSizeAlignment, robustUniformBufferAccessSizeAlignment)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.robustStorageBufferAccessSizeAlignment = Unchecked.defaultof<VkDeviceSize> && x.robustUniformBufferAccessSizeAlignment = Unchecked.defaultof<VkDeviceSize>
+
             static member Empty =
                 VkPhysicalDeviceRobustness2PropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkPhysicalDeviceRobustness2PropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceRobustness2PropertiesEXT(pNext, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkPhysicalDeviceRobustness2PropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceRobustness2PropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -20016,6 +18867,9 @@ module EXTSampleLocations =
                     y = y
                 }
 
+            member x.IsEmpty =
+                x.x = Unchecked.defaultof<float32> && x.y = Unchecked.defaultof<float32>
+
             static member Empty =
                 VkSampleLocationEXT(Unchecked.defaultof<float32>, Unchecked.defaultof<float32>)
 
@@ -20049,16 +18903,11 @@ module EXTSampleLocations =
             new(sampleLocationsPerPixel : VkSampleCountFlags, sampleLocationGridSize : VkExtent2D, sampleLocationsCount : uint32, pSampleLocations : nativeptr<VkSampleLocationEXT>) =
                 VkSampleLocationsInfoEXT(Unchecked.defaultof<nativeint>, sampleLocationsPerPixel, sampleLocationGridSize, sampleLocationsCount, pSampleLocations)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.sampleLocationsPerPixel = Unchecked.defaultof<VkSampleCountFlags> && x.sampleLocationGridSize = Unchecked.defaultof<VkExtent2D> && x.sampleLocationsCount = Unchecked.defaultof<uint32> && x.pSampleLocations = Unchecked.defaultof<nativeptr<VkSampleLocationEXT>>
+
             static member Empty =
                 VkSampleLocationsInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSampleLocationEXT>>)
-
-            /// Creates an empty VkSampleLocationsInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSampleLocationsInfoEXT(pNext, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSampleLocationEXT>>)
-
-            /// Creates an empty VkSampleLocationsInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSampleLocationsInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -20082,6 +18931,9 @@ module EXTSampleLocations =
                     attachmentIndex = attachmentIndex
                     sampleLocationsInfo = sampleLocationsInfo
                 }
+
+            member x.IsEmpty =
+                x.attachmentIndex = Unchecked.defaultof<uint32> && x.sampleLocationsInfo = Unchecked.defaultof<VkSampleLocationsInfoEXT>
 
             static member Empty =
                 VkAttachmentSampleLocationsEXT(Unchecked.defaultof<uint32>, Unchecked.defaultof<VkSampleLocationsInfoEXT>)
@@ -20110,16 +18962,11 @@ module EXTSampleLocations =
             new(maxSampleLocationGridSize : VkExtent2D) =
                 VkMultisamplePropertiesEXT(Unchecked.defaultof<nativeint>, maxSampleLocationGridSize)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxSampleLocationGridSize = Unchecked.defaultof<VkExtent2D>
+
             static member Empty =
                 VkMultisamplePropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExtent2D>)
-
-            /// Creates an empty VkMultisamplePropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkMultisamplePropertiesEXT(pNext, Unchecked.defaultof<VkExtent2D>)
-
-            /// Creates an empty VkMultisamplePropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkMultisamplePropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -20154,16 +19001,11 @@ module EXTSampleLocations =
             new(sampleLocationSampleCounts : VkSampleCountFlags, maxSampleLocationGridSize : VkExtent2D, sampleLocationCoordinateRange : V2f, sampleLocationSubPixelBits : uint32, variableSampleLocations : VkBool32) =
                 VkPhysicalDeviceSampleLocationsPropertiesEXT(Unchecked.defaultof<nativeint>, sampleLocationSampleCounts, maxSampleLocationGridSize, sampleLocationCoordinateRange, sampleLocationSubPixelBits, variableSampleLocations)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.sampleLocationSampleCounts = Unchecked.defaultof<VkSampleCountFlags> && x.maxSampleLocationGridSize = Unchecked.defaultof<VkExtent2D> && x.sampleLocationCoordinateRange = Unchecked.defaultof<V2f> && x.sampleLocationSubPixelBits = Unchecked.defaultof<uint32> && x.variableSampleLocations = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceSampleLocationsPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<V2f>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceSampleLocationsPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceSampleLocationsPropertiesEXT(pNext, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<V2f>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceSampleLocationsPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceSampleLocationsPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -20196,16 +19038,11 @@ module EXTSampleLocations =
             new(sampleLocationsEnable : VkBool32, sampleLocationsInfo : VkSampleLocationsInfoEXT) =
                 VkPipelineSampleLocationsStateCreateInfoEXT(Unchecked.defaultof<nativeint>, sampleLocationsEnable, sampleLocationsInfo)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.sampleLocationsEnable = Unchecked.defaultof<VkBool32> && x.sampleLocationsInfo = Unchecked.defaultof<VkSampleLocationsInfoEXT>
+
             static member Empty =
                 VkPipelineSampleLocationsStateCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkSampleLocationsInfoEXT>)
-
-            /// Creates an empty VkPipelineSampleLocationsStateCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineSampleLocationsStateCreateInfoEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkSampleLocationsInfoEXT>)
-
-            /// Creates an empty VkPipelineSampleLocationsStateCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineSampleLocationsStateCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -20227,6 +19064,9 @@ module EXTSampleLocations =
                     subpassIndex = subpassIndex
                     sampleLocationsInfo = sampleLocationsInfo
                 }
+
+            member x.IsEmpty =
+                x.subpassIndex = Unchecked.defaultof<uint32> && x.sampleLocationsInfo = Unchecked.defaultof<VkSampleLocationsInfoEXT>
 
             static member Empty =
                 VkSubpassSampleLocationsEXT(Unchecked.defaultof<uint32>, Unchecked.defaultof<VkSampleLocationsInfoEXT>)
@@ -20261,16 +19101,11 @@ module EXTSampleLocations =
             new(attachmentInitialSampleLocationsCount : uint32, pAttachmentInitialSampleLocations : nativeptr<VkAttachmentSampleLocationsEXT>, postSubpassSampleLocationsCount : uint32, pPostSubpassSampleLocations : nativeptr<VkSubpassSampleLocationsEXT>) =
                 VkRenderPassSampleLocationsBeginInfoEXT(Unchecked.defaultof<nativeint>, attachmentInitialSampleLocationsCount, pAttachmentInitialSampleLocations, postSubpassSampleLocationsCount, pPostSubpassSampleLocations)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.attachmentInitialSampleLocationsCount = Unchecked.defaultof<uint32> && x.pAttachmentInitialSampleLocations = Unchecked.defaultof<nativeptr<VkAttachmentSampleLocationsEXT>> && x.postSubpassSampleLocationsCount = Unchecked.defaultof<uint32> && x.pPostSubpassSampleLocations = Unchecked.defaultof<nativeptr<VkSubpassSampleLocationsEXT>>
+
             static member Empty =
                 VkRenderPassSampleLocationsBeginInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentSampleLocationsEXT>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSubpassSampleLocationsEXT>>)
-
-            /// Creates an empty VkRenderPassSampleLocationsBeginInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkRenderPassSampleLocationsBeginInfoEXT(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAttachmentSampleLocationsEXT>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkSubpassSampleLocationsEXT>>)
-
-            /// Creates an empty VkRenderPassSampleLocationsBeginInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkRenderPassSampleLocationsBeginInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -20409,16 +19244,11 @@ module EXTShaderAtomicFloat =
             new(shaderBufferFloat32Atomics : VkBool32, shaderBufferFloat32AtomicAdd : VkBool32, shaderBufferFloat64Atomics : VkBool32, shaderBufferFloat64AtomicAdd : VkBool32, shaderSharedFloat32Atomics : VkBool32, shaderSharedFloat32AtomicAdd : VkBool32, shaderSharedFloat64Atomics : VkBool32, shaderSharedFloat64AtomicAdd : VkBool32, shaderImageFloat32Atomics : VkBool32, shaderImageFloat32AtomicAdd : VkBool32, sparseImageFloat32Atomics : VkBool32, sparseImageFloat32AtomicAdd : VkBool32) =
                 VkPhysicalDeviceShaderAtomicFloatFeaturesEXT(Unchecked.defaultof<nativeint>, shaderBufferFloat32Atomics, shaderBufferFloat32AtomicAdd, shaderBufferFloat64Atomics, shaderBufferFloat64AtomicAdd, shaderSharedFloat32Atomics, shaderSharedFloat32AtomicAdd, shaderSharedFloat64Atomics, shaderSharedFloat64AtomicAdd, shaderImageFloat32Atomics, shaderImageFloat32AtomicAdd, sparseImageFloat32Atomics, sparseImageFloat32AtomicAdd)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shaderBufferFloat32Atomics = Unchecked.defaultof<VkBool32> && x.shaderBufferFloat32AtomicAdd = Unchecked.defaultof<VkBool32> && x.shaderBufferFloat64Atomics = Unchecked.defaultof<VkBool32> && x.shaderBufferFloat64AtomicAdd = Unchecked.defaultof<VkBool32> && x.shaderSharedFloat32Atomics = Unchecked.defaultof<VkBool32> && x.shaderSharedFloat32AtomicAdd = Unchecked.defaultof<VkBool32> && x.shaderSharedFloat64Atomics = Unchecked.defaultof<VkBool32> && x.shaderSharedFloat64AtomicAdd = Unchecked.defaultof<VkBool32> && x.shaderImageFloat32Atomics = Unchecked.defaultof<VkBool32> && x.shaderImageFloat32AtomicAdd = Unchecked.defaultof<VkBool32> && x.sparseImageFloat32Atomics = Unchecked.defaultof<VkBool32> && x.sparseImageFloat32AtomicAdd = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceShaderAtomicFloatFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderAtomicFloatFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceShaderAtomicFloatFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderAtomicFloatFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceShaderAtomicFloatFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -20468,16 +19298,11 @@ module EXTShaderDemoteToHelperInvocation =
             new(shaderDemoteToHelperInvocation : VkBool32) =
                 VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT(Unchecked.defaultof<nativeint>, shaderDemoteToHelperInvocation)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shaderDemoteToHelperInvocation = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceShaderDemoteToHelperInvocationFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -20518,16 +19343,11 @@ module EXTShaderImageAtomicInt64 =
             new(shaderImageInt64Atomics : VkBool32, sparseImageInt64Atomics : VkBool32) =
                 VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT(Unchecked.defaultof<nativeint>, shaderImageInt64Atomics, sparseImageInt64Atomics)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shaderImageInt64Atomics = Unchecked.defaultof<VkBool32> && x.sparseImageInt64Atomics = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceShaderImageAtomicInt64FeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -20594,16 +19414,11 @@ module EXTSubgroupSizeControl =
             new(subgroupSizeControl : VkBool32, computeFullSubgroups : VkBool32) =
                 VkPhysicalDeviceSubgroupSizeControlFeaturesEXT(Unchecked.defaultof<nativeint>, subgroupSizeControl, computeFullSubgroups)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.subgroupSizeControl = Unchecked.defaultof<VkBool32> && x.computeFullSubgroups = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceSubgroupSizeControlFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceSubgroupSizeControlFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceSubgroupSizeControlFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceSubgroupSizeControlFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceSubgroupSizeControlFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -20637,16 +19452,11 @@ module EXTSubgroupSizeControl =
             new(minSubgroupSize : uint32, maxSubgroupSize : uint32, maxComputeWorkgroupSubgroups : uint32, requiredSubgroupSizeStages : VkShaderStageFlags) =
                 VkPhysicalDeviceSubgroupSizeControlPropertiesEXT(Unchecked.defaultof<nativeint>, minSubgroupSize, maxSubgroupSize, maxComputeWorkgroupSubgroups, requiredSubgroupSizeStages)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.minSubgroupSize = Unchecked.defaultof<uint32> && x.maxSubgroupSize = Unchecked.defaultof<uint32> && x.maxComputeWorkgroupSubgroups = Unchecked.defaultof<uint32> && x.requiredSubgroupSizeStages = Unchecked.defaultof<VkShaderStageFlags>
+
             static member Empty =
                 VkPhysicalDeviceSubgroupSizeControlPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkShaderStageFlags>)
-
-            /// Creates an empty VkPhysicalDeviceSubgroupSizeControlPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceSubgroupSizeControlPropertiesEXT(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkShaderStageFlags>)
-
-            /// Creates an empty VkPhysicalDeviceSubgroupSizeControlPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceSubgroupSizeControlPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -20676,16 +19486,11 @@ module EXTSubgroupSizeControl =
             new(requiredSubgroupSize : uint32) =
                 VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT(Unchecked.defaultof<nativeint>, requiredSubgroupSize)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.requiredSubgroupSize = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT(pNext, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineShaderStageRequiredSubgroupSizeCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -20759,16 +19564,11 @@ module EXTTexelBufferAlignment =
             new(texelBufferAlignment : VkBool32) =
                 VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT(Unchecked.defaultof<nativeint>, texelBufferAlignment)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.texelBufferAlignment = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceTexelBufferAlignmentFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -20801,16 +19601,11 @@ module EXTTexelBufferAlignment =
             new(storageTexelBufferOffsetAlignmentBytes : VkDeviceSize, storageTexelBufferOffsetSingleTexelAlignment : VkBool32, uniformTexelBufferOffsetAlignmentBytes : VkDeviceSize, uniformTexelBufferOffsetSingleTexelAlignment : VkBool32) =
                 VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT(Unchecked.defaultof<nativeint>, storageTexelBufferOffsetAlignmentBytes, storageTexelBufferOffsetSingleTexelAlignment, uniformTexelBufferOffsetAlignmentBytes, uniformTexelBufferOffsetSingleTexelAlignment)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.storageTexelBufferOffsetAlignmentBytes = Unchecked.defaultof<VkDeviceSize> && x.storageTexelBufferOffsetSingleTexelAlignment = Unchecked.defaultof<VkBool32> && x.uniformTexelBufferOffsetAlignmentBytes = Unchecked.defaultof<VkDeviceSize> && x.uniformTexelBufferOffsetSingleTexelAlignment = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT(pNext, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceTexelBufferAlignmentPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -20852,16 +19647,11 @@ module EXTTextureCompressionAstcHdr =
             new(textureCompressionASTC_HDR : VkBool32) =
                 VkPhysicalDeviceTextureCompressionASTCHDRFeaturesEXT(Unchecked.defaultof<nativeint>, textureCompressionASTC_HDR)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.textureCompressionASTC_HDR = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceTextureCompressionASTCHDRFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceTextureCompressionASTCHDRFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceTextureCompressionASTCHDRFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceTextureCompressionASTCHDRFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceTextureCompressionASTCHDRFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -20934,16 +19724,11 @@ module EXTToolingInfo =
             new(name : String256, version : String256, purposes : VkToolPurposeFlagsEXT, description : String256, layer : String256) =
                 VkPhysicalDeviceToolPropertiesEXT(Unchecked.defaultof<nativeint>, name, version, purposes, description, layer)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.name = Unchecked.defaultof<String256> && x.version = Unchecked.defaultof<String256> && x.purposes = Unchecked.defaultof<VkToolPurposeFlagsEXT> && x.description = Unchecked.defaultof<String256> && x.layer = Unchecked.defaultof<String256>
+
             static member Empty =
                 VkPhysicalDeviceToolPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>, Unchecked.defaultof<VkToolPurposeFlagsEXT>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>)
-
-            /// Creates an empty VkPhysicalDeviceToolPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceToolPropertiesEXT(pNext, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>, Unchecked.defaultof<VkToolPurposeFlagsEXT>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>)
-
-            /// Creates an empty VkPhysicalDeviceToolPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceToolPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -21021,16 +19806,11 @@ module EXTTransformFeedback =
             new(transformFeedback : VkBool32, geometryStreams : VkBool32) =
                 VkPhysicalDeviceTransformFeedbackFeaturesEXT(Unchecked.defaultof<nativeint>, transformFeedback, geometryStreams)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.transformFeedback = Unchecked.defaultof<VkBool32> && x.geometryStreams = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceTransformFeedbackFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceTransformFeedbackFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceTransformFeedbackFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceTransformFeedbackFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceTransformFeedbackFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -21076,16 +19856,11 @@ module EXTTransformFeedback =
             new(maxTransformFeedbackStreams : uint32, maxTransformFeedbackBuffers : uint32, maxTransformFeedbackBufferSize : VkDeviceSize, maxTransformFeedbackStreamDataSize : uint32, maxTransformFeedbackBufferDataSize : uint32, maxTransformFeedbackBufferDataStride : uint32, transformFeedbackQueries : VkBool32, transformFeedbackStreamsLinesTriangles : VkBool32, transformFeedbackRasterizationStreamSelect : VkBool32, transformFeedbackDraw : VkBool32) =
                 VkPhysicalDeviceTransformFeedbackPropertiesEXT(Unchecked.defaultof<nativeint>, maxTransformFeedbackStreams, maxTransformFeedbackBuffers, maxTransformFeedbackBufferSize, maxTransformFeedbackStreamDataSize, maxTransformFeedbackBufferDataSize, maxTransformFeedbackBufferDataStride, transformFeedbackQueries, transformFeedbackStreamsLinesTriangles, transformFeedbackRasterizationStreamSelect, transformFeedbackDraw)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxTransformFeedbackStreams = Unchecked.defaultof<uint32> && x.maxTransformFeedbackBuffers = Unchecked.defaultof<uint32> && x.maxTransformFeedbackBufferSize = Unchecked.defaultof<VkDeviceSize> && x.maxTransformFeedbackStreamDataSize = Unchecked.defaultof<uint32> && x.maxTransformFeedbackBufferDataSize = Unchecked.defaultof<uint32> && x.maxTransformFeedbackBufferDataStride = Unchecked.defaultof<uint32> && x.transformFeedbackQueries = Unchecked.defaultof<VkBool32> && x.transformFeedbackStreamsLinesTriangles = Unchecked.defaultof<VkBool32> && x.transformFeedbackRasterizationStreamSelect = Unchecked.defaultof<VkBool32> && x.transformFeedbackDraw = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceTransformFeedbackPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceTransformFeedbackPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceTransformFeedbackPropertiesEXT(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceTransformFeedbackPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceTransformFeedbackPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -21123,16 +19898,11 @@ module EXTTransformFeedback =
             new(flags : VkPipelineRasterizationStateStreamCreateFlagsEXT, rasterizationStream : uint32) =
                 VkPipelineRasterizationStateStreamCreateInfoEXT(Unchecked.defaultof<nativeint>, flags, rasterizationStream)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineRasterizationStateStreamCreateFlagsEXT> && x.rasterizationStream = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPipelineRasterizationStateStreamCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineRasterizationStateStreamCreateFlagsEXT>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPipelineRasterizationStateStreamCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineRasterizationStateStreamCreateInfoEXT(pNext, Unchecked.defaultof<VkPipelineRasterizationStateStreamCreateFlagsEXT>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPipelineRasterizationStateStreamCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineRasterizationStateStreamCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -21234,16 +20004,11 @@ module EXTValidationCache =
             new(validationCache : VkValidationCacheEXT) =
                 VkShaderModuleValidationCacheCreateInfoEXT(Unchecked.defaultof<nativeint>, validationCache)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.validationCache = Unchecked.defaultof<VkValidationCacheEXT>
+
             static member Empty =
                 VkShaderModuleValidationCacheCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkValidationCacheEXT>)
-
-            /// Creates an empty VkShaderModuleValidationCacheCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkShaderModuleValidationCacheCreateInfoEXT(pNext, Unchecked.defaultof<VkValidationCacheEXT>)
-
-            /// Creates an empty VkShaderModuleValidationCacheCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkShaderModuleValidationCacheCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -21274,16 +20039,11 @@ module EXTValidationCache =
             new(flags : VkValidationCacheCreateFlagsEXT, initialDataSize : uint64, pInitialData : nativeint) =
                 VkValidationCacheCreateInfoEXT(Unchecked.defaultof<nativeint>, flags, initialDataSize, pInitialData)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkValidationCacheCreateFlagsEXT> && x.initialDataSize = Unchecked.defaultof<uint64> && x.pInitialData = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkValidationCacheCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkValidationCacheCreateFlagsEXT>, Unchecked.defaultof<uint64>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkValidationCacheCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkValidationCacheCreateInfoEXT(pNext, Unchecked.defaultof<VkValidationCacheCreateFlagsEXT>, Unchecked.defaultof<uint64>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkValidationCacheCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkValidationCacheCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -21376,16 +20136,11 @@ module EXTValidationFeatures =
             new(enabledValidationFeatureCount : uint32, pEnabledValidationFeatures : nativeptr<VkValidationFeatureEnableEXT>, disabledValidationFeatureCount : uint32, pDisabledValidationFeatures : nativeptr<VkValidationFeatureDisableEXT>) =
                 VkValidationFeaturesEXT(Unchecked.defaultof<nativeint>, enabledValidationFeatureCount, pEnabledValidationFeatures, disabledValidationFeatureCount, pDisabledValidationFeatures)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.enabledValidationFeatureCount = Unchecked.defaultof<uint32> && x.pEnabledValidationFeatures = Unchecked.defaultof<nativeptr<VkValidationFeatureEnableEXT>> && x.disabledValidationFeatureCount = Unchecked.defaultof<uint32> && x.pDisabledValidationFeatures = Unchecked.defaultof<nativeptr<VkValidationFeatureDisableEXT>>
+
             static member Empty =
                 VkValidationFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkValidationFeatureEnableEXT>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkValidationFeatureDisableEXT>>)
-
-            /// Creates an empty VkValidationFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkValidationFeaturesEXT(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkValidationFeatureEnableEXT>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkValidationFeatureDisableEXT>>)
-
-            /// Creates an empty VkValidationFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkValidationFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -21431,16 +20186,11 @@ module EXTValidationFlags =
             new(disabledValidationCheckCount : uint32, pDisabledValidationChecks : nativeptr<VkValidationCheckEXT>) =
                 VkValidationFlagsEXT(Unchecked.defaultof<nativeint>, disabledValidationCheckCount, pDisabledValidationChecks)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.disabledValidationCheckCount = Unchecked.defaultof<uint32> && x.pDisabledValidationChecks = Unchecked.defaultof<nativeptr<VkValidationCheckEXT>>
+
             static member Empty =
                 VkValidationFlagsEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkValidationCheckEXT>>)
-
-            /// Creates an empty VkValidationFlagsEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkValidationFlagsEXT(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkValidationCheckEXT>>)
-
-            /// Creates an empty VkValidationFlagsEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkValidationFlagsEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -21482,16 +20232,11 @@ module EXTVertexAttributeDivisor =
             new(vertexAttributeInstanceRateDivisor : VkBool32, vertexAttributeInstanceRateZeroDivisor : VkBool32) =
                 VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT(Unchecked.defaultof<nativeint>, vertexAttributeInstanceRateDivisor, vertexAttributeInstanceRateZeroDivisor)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.vertexAttributeInstanceRateDivisor = Unchecked.defaultof<VkBool32> && x.vertexAttributeInstanceRateZeroDivisor = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceVertexAttributeDivisorFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -21519,16 +20264,11 @@ module EXTVertexAttributeDivisor =
             new(maxVertexAttribDivisor : uint32) =
                 VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT(Unchecked.defaultof<nativeint>, maxVertexAttribDivisor)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxVertexAttribDivisor = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT(pNext, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceVertexAttributeDivisorPropertiesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -21549,6 +20289,9 @@ module EXTVertexAttributeDivisor =
                     binding = binding
                     divisor = divisor
                 }
+
+            member x.IsEmpty =
+                x.binding = Unchecked.defaultof<uint32> && x.divisor = Unchecked.defaultof<uint32>
 
             static member Empty =
                 VkVertexInputBindingDivisorDescriptionEXT(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
@@ -21579,16 +20322,11 @@ module EXTVertexAttributeDivisor =
             new(vertexBindingDivisorCount : uint32, pVertexBindingDivisors : nativeptr<VkVertexInputBindingDivisorDescriptionEXT>) =
                 VkPipelineVertexInputDivisorStateCreateInfoEXT(Unchecked.defaultof<nativeint>, vertexBindingDivisorCount, pVertexBindingDivisors)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.vertexBindingDivisorCount = Unchecked.defaultof<uint32> && x.pVertexBindingDivisors = Unchecked.defaultof<nativeptr<VkVertexInputBindingDivisorDescriptionEXT>>
+
             static member Empty =
                 VkPipelineVertexInputDivisorStateCreateInfoEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkVertexInputBindingDivisorDescriptionEXT>>)
-
-            /// Creates an empty VkPipelineVertexInputDivisorStateCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineVertexInputDivisorStateCreateInfoEXT(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkVertexInputBindingDivisorDescriptionEXT>>)
-
-            /// Creates an empty VkPipelineVertexInputDivisorStateCreateInfoEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineVertexInputDivisorStateCreateInfoEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -21633,16 +20371,11 @@ module EXTYcbcrImageArrays =
             new(ycbcrImageArrays : VkBool32) =
                 VkPhysicalDeviceYcbcrImageArraysFeaturesEXT(Unchecked.defaultof<nativeint>, ycbcrImageArrays)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.ycbcrImageArrays = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceYcbcrImageArraysFeaturesEXT(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceYcbcrImageArraysFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceYcbcrImageArraysFeaturesEXT(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceYcbcrImageArraysFeaturesEXT with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceYcbcrImageArraysFeaturesEXT.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -21683,16 +20416,11 @@ module FUCHSIAImagepipeSurface =
             new(flags : VkImagePipeSurfaceCreateFlagsFUCHSIA, imagePipeHandle : nativeint) =
                 VkImagePipeSurfaceCreateInfoFUCHSIA(Unchecked.defaultof<nativeint>, flags, imagePipeHandle)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkImagePipeSurfaceCreateFlagsFUCHSIA> && x.imagePipeHandle = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkImagePipeSurfaceCreateInfoFUCHSIA(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImagePipeSurfaceCreateFlagsFUCHSIA>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkImagePipeSurfaceCreateInfoFUCHSIA with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImagePipeSurfaceCreateInfoFUCHSIA(pNext, Unchecked.defaultof<VkImagePipeSurfaceCreateFlagsFUCHSIA>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkImagePipeSurfaceCreateInfoFUCHSIA with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImagePipeSurfaceCreateInfoFUCHSIA.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -21745,16 +20473,11 @@ module GGPStreamDescriptorSurface =
             new(flags : VkStreamDescriptorSurfaceCreateFlagsGGP, streamDescriptor : nativeint) =
                 VkStreamDescriptorSurfaceCreateInfoGGP(Unchecked.defaultof<nativeint>, flags, streamDescriptor)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkStreamDescriptorSurfaceCreateFlagsGGP> && x.streamDescriptor = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkStreamDescriptorSurfaceCreateInfoGGP(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkStreamDescriptorSurfaceCreateFlagsGGP>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkStreamDescriptorSurfaceCreateInfoGGP with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkStreamDescriptorSurfaceCreateInfoGGP(pNext, Unchecked.defaultof<VkStreamDescriptorSurfaceCreateFlagsGGP>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkStreamDescriptorSurfaceCreateInfoGGP with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkStreamDescriptorSurfaceCreateInfoGGP.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -21807,16 +20530,11 @@ module GGPFrameToken =
             new(frameToken : nativeint) =
                 VkPresentFrameTokenGGP(Unchecked.defaultof<nativeint>, frameToken)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.frameToken = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkPresentFrameTokenGGP(Unchecked.defaultof<nativeint>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkPresentFrameTokenGGP with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPresentFrameTokenGGP(pNext, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkPresentFrameTokenGGP with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPresentFrameTokenGGP.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -21864,6 +20582,9 @@ module GOOGLEDisplayTiming =
                     presentMargin = presentMargin
                 }
 
+            member x.IsEmpty =
+                x.presentID = Unchecked.defaultof<uint32> && x.desiredPresentTime = Unchecked.defaultof<uint64> && x.actualPresentTime = Unchecked.defaultof<uint64> && x.earliestPresentTime = Unchecked.defaultof<uint64> && x.presentMargin = Unchecked.defaultof<uint64>
+
             static member Empty =
                 VkPastPresentationTimingGOOGLE(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>)
 
@@ -21888,6 +20609,9 @@ module GOOGLEDisplayTiming =
                     presentID = presentID
                     desiredPresentTime = desiredPresentTime
                 }
+
+            member x.IsEmpty =
+                x.presentID = Unchecked.defaultof<uint32> && x.desiredPresentTime = Unchecked.defaultof<uint64>
 
             static member Empty =
                 VkPresentTimeGOOGLE(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint64>)
@@ -21918,16 +20642,11 @@ module GOOGLEDisplayTiming =
             new(swapchainCount : uint32, pTimes : nativeptr<VkPresentTimeGOOGLE>) =
                 VkPresentTimesInfoGOOGLE(Unchecked.defaultof<nativeint>, swapchainCount, pTimes)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.swapchainCount = Unchecked.defaultof<uint32> && x.pTimes = Unchecked.defaultof<nativeptr<VkPresentTimeGOOGLE>>
+
             static member Empty =
                 VkPresentTimesInfoGOOGLE(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPresentTimeGOOGLE>>)
-
-            /// Creates an empty VkPresentTimesInfoGOOGLE with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPresentTimesInfoGOOGLE(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPresentTimeGOOGLE>>)
-
-            /// Creates an empty VkPresentTimesInfoGOOGLE with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPresentTimesInfoGOOGLE.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -21947,6 +20666,9 @@ module GOOGLEDisplayTiming =
                 {
                     refreshDuration = refreshDuration
                 }
+
+            member x.IsEmpty =
+                x.refreshDuration = Unchecked.defaultof<uint64>
 
             static member Empty =
                 VkRefreshCycleDurationGOOGLE(Unchecked.defaultof<uint64>)
@@ -22082,16 +20804,11 @@ module INTELPerformanceQuery =
             new(pUserData : nativeint) =
                 VkInitializePerformanceApiInfoINTEL(Unchecked.defaultof<nativeint>, pUserData)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pUserData = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkInitializePerformanceApiInfoINTEL(Unchecked.defaultof<nativeint>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkInitializePerformanceApiInfoINTEL with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkInitializePerformanceApiInfoINTEL(pNext, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkInitializePerformanceApiInfoINTEL with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkInitializePerformanceApiInfoINTEL.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -22118,16 +20835,11 @@ module INTELPerformanceQuery =
             new(_type : VkPerformanceConfigurationTypeINTEL) =
                 VkPerformanceConfigurationAcquireInfoINTEL(Unchecked.defaultof<nativeint>, _type)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x._type = Unchecked.defaultof<VkPerformanceConfigurationTypeINTEL>
+
             static member Empty =
                 VkPerformanceConfigurationAcquireInfoINTEL(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPerformanceConfigurationTypeINTEL>)
-
-            /// Creates an empty VkPerformanceConfigurationAcquireInfoINTEL with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPerformanceConfigurationAcquireInfoINTEL(pNext, Unchecked.defaultof<VkPerformanceConfigurationTypeINTEL>)
-
-            /// Creates an empty VkPerformanceConfigurationAcquireInfoINTEL with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPerformanceConfigurationAcquireInfoINTEL.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -22154,16 +20866,11 @@ module INTELPerformanceQuery =
             new(marker : uint64) =
                 VkPerformanceMarkerInfoINTEL(Unchecked.defaultof<nativeint>, marker)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.marker = Unchecked.defaultof<uint64>
+
             static member Empty =
                 VkPerformanceMarkerInfoINTEL(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkPerformanceMarkerInfoINTEL with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPerformanceMarkerInfoINTEL(pNext, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkPerformanceMarkerInfoINTEL with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPerformanceMarkerInfoINTEL.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -22194,16 +20901,11 @@ module INTELPerformanceQuery =
             new(_type : VkPerformanceOverrideTypeINTEL, enable : VkBool32, parameter : uint64) =
                 VkPerformanceOverrideInfoINTEL(Unchecked.defaultof<nativeint>, _type, enable, parameter)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x._type = Unchecked.defaultof<VkPerformanceOverrideTypeINTEL> && x.enable = Unchecked.defaultof<VkBool32> && x.parameter = Unchecked.defaultof<uint64>
+
             static member Empty =
                 VkPerformanceOverrideInfoINTEL(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPerformanceOverrideTypeINTEL>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkPerformanceOverrideInfoINTEL with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPerformanceOverrideInfoINTEL(pNext, Unchecked.defaultof<VkPerformanceOverrideTypeINTEL>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkPerformanceOverrideInfoINTEL with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPerformanceOverrideInfoINTEL.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -22232,16 +20934,11 @@ module INTELPerformanceQuery =
             new(marker : uint32) =
                 VkPerformanceStreamMarkerInfoINTEL(Unchecked.defaultof<nativeint>, marker)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.marker = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPerformanceStreamMarkerInfoINTEL(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPerformanceStreamMarkerInfoINTEL with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPerformanceStreamMarkerInfoINTEL(pNext, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPerformanceStreamMarkerInfoINTEL with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPerformanceStreamMarkerInfoINTEL.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -22287,6 +20984,9 @@ module INTELPerformanceQuery =
                     data = data
                 }
 
+            member x.IsEmpty =
+                x._type = Unchecked.defaultof<VkPerformanceValueTypeINTEL> && x.data = Unchecked.defaultof<VkPerformanceValueDataINTEL>
+
             static member Empty =
                 VkPerformanceValueINTEL(Unchecked.defaultof<VkPerformanceValueTypeINTEL>, Unchecked.defaultof<VkPerformanceValueDataINTEL>)
 
@@ -22314,16 +21014,11 @@ module INTELPerformanceQuery =
             new(performanceCountersSampling : VkQueryPoolSamplingModeINTEL) =
                 VkQueryPoolPerformanceQueryCreateInfoINTEL(Unchecked.defaultof<nativeint>, performanceCountersSampling)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.performanceCountersSampling = Unchecked.defaultof<VkQueryPoolSamplingModeINTEL>
+
             static member Empty =
                 VkQueryPoolPerformanceQueryCreateInfoINTEL(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkQueryPoolSamplingModeINTEL>)
-
-            /// Creates an empty VkQueryPoolPerformanceQueryCreateInfoINTEL with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkQueryPoolPerformanceQueryCreateInfoINTEL(pNext, Unchecked.defaultof<VkQueryPoolSamplingModeINTEL>)
-
-            /// Creates an empty VkQueryPoolPerformanceQueryCreateInfoINTEL with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkQueryPoolPerformanceQueryCreateInfoINTEL.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -22422,16 +21117,11 @@ module INTELShaderIntegerFunctions2 =
             new(shaderIntegerFunctions2 : VkBool32) =
                 VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL(Unchecked.defaultof<nativeint>, shaderIntegerFunctions2)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shaderIntegerFunctions2 = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceShaderIntegerFunctions2FeaturesINTEL.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -22703,6 +21393,9 @@ module KHRAccelerationStructure =
                     maxZ = maxZ
                 }
 
+            member x.IsEmpty =
+                x.minX = Unchecked.defaultof<float32> && x.minY = Unchecked.defaultof<float32> && x.minZ = Unchecked.defaultof<float32> && x.maxX = Unchecked.defaultof<float32> && x.maxY = Unchecked.defaultof<float32> && x.maxZ = Unchecked.defaultof<float32>
+
             static member Empty =
                 VkAabbPositionsKHR(Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>, Unchecked.defaultof<float32>)
 
@@ -22761,16 +21454,11 @@ module KHRAccelerationStructure =
             new(vertexFormat : VkFormat, vertexData : VkDeviceOrHostAddressConstKHR, vertexStride : VkDeviceSize, maxVertex : uint32, indexType : VkIndexType, indexData : VkDeviceOrHostAddressConstKHR, transformData : VkDeviceOrHostAddressConstKHR) =
                 VkAccelerationStructureGeometryTrianglesDataKHR(Unchecked.defaultof<nativeint>, vertexFormat, vertexData, vertexStride, maxVertex, indexType, indexData, transformData)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.vertexFormat = Unchecked.defaultof<VkFormat> && x.vertexData = Unchecked.defaultof<VkDeviceOrHostAddressConstKHR> && x.vertexStride = Unchecked.defaultof<VkDeviceSize> && x.maxVertex = Unchecked.defaultof<uint32> && x.indexType = Unchecked.defaultof<VkIndexType> && x.indexData = Unchecked.defaultof<VkDeviceOrHostAddressConstKHR> && x.transformData = Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>
+
             static member Empty =
                 VkAccelerationStructureGeometryTrianglesDataKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkIndexType>, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>)
-
-            /// Creates an empty VkAccelerationStructureGeometryTrianglesDataKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAccelerationStructureGeometryTrianglesDataKHR(pNext, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkIndexType>, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>)
-
-            /// Creates an empty VkAccelerationStructureGeometryTrianglesDataKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAccelerationStructureGeometryTrianglesDataKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -22805,16 +21493,11 @@ module KHRAccelerationStructure =
             new(data : VkDeviceOrHostAddressConstKHR, stride : VkDeviceSize) =
                 VkAccelerationStructureGeometryAabbsDataKHR(Unchecked.defaultof<nativeint>, data, stride)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.data = Unchecked.defaultof<VkDeviceOrHostAddressConstKHR> && x.stride = Unchecked.defaultof<VkDeviceSize>
+
             static member Empty =
                 VkAccelerationStructureGeometryAabbsDataKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkAccelerationStructureGeometryAabbsDataKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAccelerationStructureGeometryAabbsDataKHR(pNext, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkAccelerationStructureGeometryAabbsDataKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAccelerationStructureGeometryAabbsDataKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -22844,16 +21527,11 @@ module KHRAccelerationStructure =
             new(arrayOfPointers : VkBool32, data : VkDeviceOrHostAddressConstKHR) =
                 VkAccelerationStructureGeometryInstancesDataKHR(Unchecked.defaultof<nativeint>, arrayOfPointers, data)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.arrayOfPointers = Unchecked.defaultof<VkBool32> && x.data = Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>
+
             static member Empty =
                 VkAccelerationStructureGeometryInstancesDataKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>)
-
-            /// Creates an empty VkAccelerationStructureGeometryInstancesDataKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAccelerationStructureGeometryInstancesDataKHR(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>)
-
-            /// Creates an empty VkAccelerationStructureGeometryInstancesDataKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAccelerationStructureGeometryInstancesDataKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -22903,16 +21581,11 @@ module KHRAccelerationStructure =
             new(geometryType : VkGeometryTypeKHR, geometry : VkAccelerationStructureGeometryDataKHR, flags : VkGeometryFlagsKHR) =
                 VkAccelerationStructureGeometryKHR(Unchecked.defaultof<nativeint>, geometryType, geometry, flags)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.geometryType = Unchecked.defaultof<VkGeometryTypeKHR> && x.geometry = Unchecked.defaultof<VkAccelerationStructureGeometryDataKHR> && x.flags = Unchecked.defaultof<VkGeometryFlagsKHR>
+
             static member Empty =
                 VkAccelerationStructureGeometryKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkGeometryTypeKHR>, Unchecked.defaultof<VkAccelerationStructureGeometryDataKHR>, Unchecked.defaultof<VkGeometryFlagsKHR>)
-
-            /// Creates an empty VkAccelerationStructureGeometryKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAccelerationStructureGeometryKHR(pNext, Unchecked.defaultof<VkGeometryTypeKHR>, Unchecked.defaultof<VkAccelerationStructureGeometryDataKHR>, Unchecked.defaultof<VkGeometryFlagsKHR>)
-
-            /// Creates an empty VkAccelerationStructureGeometryKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAccelerationStructureGeometryKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -22972,16 +21645,11 @@ module KHRAccelerationStructure =
             new(_type : VkAccelerationStructureTypeKHR, flags : VkBuildAccelerationStructureFlagsKHR, mode : VkBuildAccelerationStructureModeKHR, srcAccelerationStructure : VkAccelerationStructureKHR, dstAccelerationStructure : VkAccelerationStructureKHR, geometryCount : uint32, pGeometries : nativeptr<VkAccelerationStructureGeometryKHR>, ppGeometries : nativeptr<nativeptr<VkAccelerationStructureGeometryKHR>>, scratchData : VkDeviceOrHostAddressKHR) =
                 VkAccelerationStructureBuildGeometryInfoKHR(Unchecked.defaultof<nativeint>, _type, flags, mode, srcAccelerationStructure, dstAccelerationStructure, geometryCount, pGeometries, ppGeometries, scratchData)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x._type = Unchecked.defaultof<VkAccelerationStructureTypeKHR> && x.flags = Unchecked.defaultof<VkBuildAccelerationStructureFlagsKHR> && x.mode = Unchecked.defaultof<VkBuildAccelerationStructureModeKHR> && x.srcAccelerationStructure = Unchecked.defaultof<VkAccelerationStructureKHR> && x.dstAccelerationStructure = Unchecked.defaultof<VkAccelerationStructureKHR> && x.geometryCount = Unchecked.defaultof<uint32> && x.pGeometries = Unchecked.defaultof<nativeptr<VkAccelerationStructureGeometryKHR>> && x.ppGeometries = Unchecked.defaultof<nativeptr<nativeptr<VkAccelerationStructureGeometryKHR>>> && x.scratchData = Unchecked.defaultof<VkDeviceOrHostAddressKHR>
+
             static member Empty =
                 VkAccelerationStructureBuildGeometryInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccelerationStructureTypeKHR>, Unchecked.defaultof<VkBuildAccelerationStructureFlagsKHR>, Unchecked.defaultof<VkBuildAccelerationStructureModeKHR>, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAccelerationStructureGeometryKHR>>, Unchecked.defaultof<nativeptr<nativeptr<VkAccelerationStructureGeometryKHR>>>, Unchecked.defaultof<VkDeviceOrHostAddressKHR>)
-
-            /// Creates an empty VkAccelerationStructureBuildGeometryInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAccelerationStructureBuildGeometryInfoKHR(pNext, Unchecked.defaultof<VkAccelerationStructureTypeKHR>, Unchecked.defaultof<VkBuildAccelerationStructureFlagsKHR>, Unchecked.defaultof<VkBuildAccelerationStructureModeKHR>, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAccelerationStructureGeometryKHR>>, Unchecked.defaultof<nativeptr<nativeptr<VkAccelerationStructureGeometryKHR>>>, Unchecked.defaultof<VkDeviceOrHostAddressKHR>)
-
-            /// Creates an empty VkAccelerationStructureBuildGeometryInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAccelerationStructureBuildGeometryInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -23014,6 +21682,9 @@ module KHRAccelerationStructure =
                     firstVertex = firstVertex
                     transformOffset = transformOffset
                 }
+
+            member x.IsEmpty =
+                x.primitiveCount = Unchecked.defaultof<uint32> && x.primitiveOffset = Unchecked.defaultof<uint32> && x.firstVertex = Unchecked.defaultof<uint32> && x.transformOffset = Unchecked.defaultof<uint32>
 
             static member Empty =
                 VkAccelerationStructureBuildRangeInfoKHR(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
@@ -23048,16 +21719,11 @@ module KHRAccelerationStructure =
             new(accelerationStructureSize : VkDeviceSize, updateScratchSize : VkDeviceSize, buildScratchSize : VkDeviceSize) =
                 VkAccelerationStructureBuildSizesInfoKHR(Unchecked.defaultof<nativeint>, accelerationStructureSize, updateScratchSize, buildScratchSize)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.accelerationStructureSize = Unchecked.defaultof<VkDeviceSize> && x.updateScratchSize = Unchecked.defaultof<VkDeviceSize> && x.buildScratchSize = Unchecked.defaultof<VkDeviceSize>
+
             static member Empty =
                 VkAccelerationStructureBuildSizesInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkAccelerationStructureBuildSizesInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAccelerationStructureBuildSizesInfoKHR(pNext, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkAccelerationStructureBuildSizesInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAccelerationStructureBuildSizesInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -23096,16 +21762,11 @@ module KHRAccelerationStructure =
             new(createFlags : VkAccelerationStructureCreateFlagsKHR, buffer : VkBuffer, offset : VkDeviceSize, size : VkDeviceSize, _type : VkAccelerationStructureTypeKHR, deviceAddress : VkDeviceAddress) =
                 VkAccelerationStructureCreateInfoKHR(Unchecked.defaultof<nativeint>, createFlags, buffer, offset, size, _type, deviceAddress)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.createFlags = Unchecked.defaultof<VkAccelerationStructureCreateFlagsKHR> && x.buffer = Unchecked.defaultof<VkBuffer> && x.offset = Unchecked.defaultof<VkDeviceSize> && x.size = Unchecked.defaultof<VkDeviceSize> && x._type = Unchecked.defaultof<VkAccelerationStructureTypeKHR> && x.deviceAddress = Unchecked.defaultof<VkDeviceAddress>
+
             static member Empty =
                 VkAccelerationStructureCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccelerationStructureCreateFlagsKHR>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkAccelerationStructureTypeKHR>, Unchecked.defaultof<VkDeviceAddress>)
-
-            /// Creates an empty VkAccelerationStructureCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAccelerationStructureCreateInfoKHR(pNext, Unchecked.defaultof<VkAccelerationStructureCreateFlagsKHR>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkAccelerationStructureTypeKHR>, Unchecked.defaultof<VkDeviceAddress>)
-
-            /// Creates an empty VkAccelerationStructureCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAccelerationStructureCreateInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -23137,16 +21798,11 @@ module KHRAccelerationStructure =
             new(accelerationStructure : VkAccelerationStructureKHR) =
                 VkAccelerationStructureDeviceAddressInfoKHR(Unchecked.defaultof<nativeint>, accelerationStructure)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.accelerationStructure = Unchecked.defaultof<VkAccelerationStructureKHR>
+
             static member Empty =
                 VkAccelerationStructureDeviceAddressInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccelerationStructureKHR>)
-
-            /// Creates an empty VkAccelerationStructureDeviceAddressInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAccelerationStructureDeviceAddressInfoKHR(pNext, Unchecked.defaultof<VkAccelerationStructureKHR>)
-
-            /// Creates an empty VkAccelerationStructureDeviceAddressInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAccelerationStructureDeviceAddressInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -23165,6 +21821,9 @@ module KHRAccelerationStructure =
                 {
                     matrix = matrix
                 }
+
+            member x.IsEmpty =
+                x.matrix = Unchecked.defaultof<M34f>
 
             static member Empty =
                 VkTransformMatrixKHR(Unchecked.defaultof<M34f>)
@@ -23194,6 +21853,9 @@ module KHRAccelerationStructure =
                     flags = flags
                     accelerationStructureReference = accelerationStructureReference
                 }
+
+            member x.IsEmpty =
+                x.transform = Unchecked.defaultof<VkTransformMatrixKHR> && x.instanceCustomIndex = Unchecked.defaultof<uint24> && x.mask = Unchecked.defaultof<uint8> && x.instanceShaderBindingTableRecordOffset = Unchecked.defaultof<uint24> && x.flags = Unchecked.defaultof<uint8> && x.accelerationStructureReference = Unchecked.defaultof<uint64>
 
             static member Empty =
                 VkAccelerationStructureInstanceKHR(Unchecked.defaultof<VkTransformMatrixKHR>, Unchecked.defaultof<uint24>, Unchecked.defaultof<uint8>, Unchecked.defaultof<uint24>, Unchecked.defaultof<uint8>, Unchecked.defaultof<uint64>)
@@ -23226,16 +21888,11 @@ module KHRAccelerationStructure =
             new(pVersionData : nativeptr<byte>) =
                 VkAccelerationStructureVersionInfoKHR(Unchecked.defaultof<nativeint>, pVersionData)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pVersionData = Unchecked.defaultof<nativeptr<byte>>
+
             static member Empty =
                 VkAccelerationStructureVersionInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<nativeptr<byte>>)
-
-            /// Creates an empty VkAccelerationStructureVersionInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAccelerationStructureVersionInfoKHR(pNext, Unchecked.defaultof<nativeptr<byte>>)
-
-            /// Creates an empty VkAccelerationStructureVersionInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAccelerationStructureVersionInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -23266,16 +21923,11 @@ module KHRAccelerationStructure =
             new(src : VkAccelerationStructureKHR, dst : VkAccelerationStructureKHR, mode : VkCopyAccelerationStructureModeKHR) =
                 VkCopyAccelerationStructureInfoKHR(Unchecked.defaultof<nativeint>, src, dst, mode)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.src = Unchecked.defaultof<VkAccelerationStructureKHR> && x.dst = Unchecked.defaultof<VkAccelerationStructureKHR> && x.mode = Unchecked.defaultof<VkCopyAccelerationStructureModeKHR>
+
             static member Empty =
                 VkCopyAccelerationStructureInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<VkCopyAccelerationStructureModeKHR>)
-
-            /// Creates an empty VkCopyAccelerationStructureInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkCopyAccelerationStructureInfoKHR(pNext, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<VkCopyAccelerationStructureModeKHR>)
-
-            /// Creates an empty VkCopyAccelerationStructureInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkCopyAccelerationStructureInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -23308,16 +21960,11 @@ module KHRAccelerationStructure =
             new(src : VkAccelerationStructureKHR, dst : VkDeviceOrHostAddressKHR, mode : VkCopyAccelerationStructureModeKHR) =
                 VkCopyAccelerationStructureToMemoryInfoKHR(Unchecked.defaultof<nativeint>, src, dst, mode)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.src = Unchecked.defaultof<VkAccelerationStructureKHR> && x.dst = Unchecked.defaultof<VkDeviceOrHostAddressKHR> && x.mode = Unchecked.defaultof<VkCopyAccelerationStructureModeKHR>
+
             static member Empty =
                 VkCopyAccelerationStructureToMemoryInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<VkDeviceOrHostAddressKHR>, Unchecked.defaultof<VkCopyAccelerationStructureModeKHR>)
-
-            /// Creates an empty VkCopyAccelerationStructureToMemoryInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkCopyAccelerationStructureToMemoryInfoKHR(pNext, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<VkDeviceOrHostAddressKHR>, Unchecked.defaultof<VkCopyAccelerationStructureModeKHR>)
-
-            /// Creates an empty VkCopyAccelerationStructureToMemoryInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkCopyAccelerationStructureToMemoryInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -23350,16 +21997,11 @@ module KHRAccelerationStructure =
             new(src : VkDeviceOrHostAddressConstKHR, dst : VkAccelerationStructureKHR, mode : VkCopyAccelerationStructureModeKHR) =
                 VkCopyMemoryToAccelerationStructureInfoKHR(Unchecked.defaultof<nativeint>, src, dst, mode)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.src = Unchecked.defaultof<VkDeviceOrHostAddressConstKHR> && x.dst = Unchecked.defaultof<VkAccelerationStructureKHR> && x.mode = Unchecked.defaultof<VkCopyAccelerationStructureModeKHR>
+
             static member Empty =
                 VkCopyMemoryToAccelerationStructureInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<VkCopyAccelerationStructureModeKHR>)
-
-            /// Creates an empty VkCopyMemoryToAccelerationStructureInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkCopyMemoryToAccelerationStructureInfoKHR(pNext, Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>, Unchecked.defaultof<VkAccelerationStructureKHR>, Unchecked.defaultof<VkCopyAccelerationStructureModeKHR>)
-
-            /// Creates an empty VkCopyMemoryToAccelerationStructureInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkCopyMemoryToAccelerationStructureInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -23396,16 +22038,11 @@ module KHRAccelerationStructure =
             new(accelerationStructure : VkBool32, accelerationStructureCaptureReplay : VkBool32, accelerationStructureIndirectBuild : VkBool32, accelerationStructureHostCommands : VkBool32, descriptorBindingAccelerationStructureUpdateAfterBind : VkBool32) =
                 VkPhysicalDeviceAccelerationStructureFeaturesKHR(Unchecked.defaultof<nativeint>, accelerationStructure, accelerationStructureCaptureReplay, accelerationStructureIndirectBuild, accelerationStructureHostCommands, descriptorBindingAccelerationStructureUpdateAfterBind)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.accelerationStructure = Unchecked.defaultof<VkBool32> && x.accelerationStructureCaptureReplay = Unchecked.defaultof<VkBool32> && x.accelerationStructureIndirectBuild = Unchecked.defaultof<VkBool32> && x.accelerationStructureHostCommands = Unchecked.defaultof<VkBool32> && x.descriptorBindingAccelerationStructureUpdateAfterBind = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceAccelerationStructureFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceAccelerationStructureFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceAccelerationStructureFeaturesKHR(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceAccelerationStructureFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceAccelerationStructureFeaturesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -23450,16 +22087,11 @@ module KHRAccelerationStructure =
             new(maxGeometryCount : uint64, maxInstanceCount : uint64, maxPrimitiveCount : uint64, maxPerStageDescriptorAccelerationStructures : uint32, maxPerStageDescriptorUpdateAfterBindAccelerationStructures : uint32, maxDescriptorSetAccelerationStructures : uint32, maxDescriptorSetUpdateAfterBindAccelerationStructures : uint32, minAccelerationStructureScratchOffsetAlignment : uint32) =
                 VkPhysicalDeviceAccelerationStructurePropertiesKHR(Unchecked.defaultof<nativeint>, maxGeometryCount, maxInstanceCount, maxPrimitiveCount, maxPerStageDescriptorAccelerationStructures, maxPerStageDescriptorUpdateAfterBindAccelerationStructures, maxDescriptorSetAccelerationStructures, maxDescriptorSetUpdateAfterBindAccelerationStructures, minAccelerationStructureScratchOffsetAlignment)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxGeometryCount = Unchecked.defaultof<uint64> && x.maxInstanceCount = Unchecked.defaultof<uint64> && x.maxPrimitiveCount = Unchecked.defaultof<uint64> && x.maxPerStageDescriptorAccelerationStructures = Unchecked.defaultof<uint32> && x.maxPerStageDescriptorUpdateAfterBindAccelerationStructures = Unchecked.defaultof<uint32> && x.maxDescriptorSetAccelerationStructures = Unchecked.defaultof<uint32> && x.maxDescriptorSetUpdateAfterBindAccelerationStructures = Unchecked.defaultof<uint32> && x.minAccelerationStructureScratchOffsetAlignment = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDeviceAccelerationStructurePropertiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceAccelerationStructurePropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceAccelerationStructurePropertiesKHR(pNext, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceAccelerationStructurePropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceAccelerationStructurePropertiesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -23495,16 +22127,11 @@ module KHRAccelerationStructure =
             new(accelerationStructureCount : uint32, pAccelerationStructures : nativeptr<VkAccelerationStructureKHR>) =
                 VkWriteDescriptorSetAccelerationStructureKHR(Unchecked.defaultof<nativeint>, accelerationStructureCount, pAccelerationStructures)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.accelerationStructureCount = Unchecked.defaultof<uint32> && x.pAccelerationStructures = Unchecked.defaultof<nativeptr<VkAccelerationStructureKHR>>
+
             static member Empty =
                 VkWriteDescriptorSetAccelerationStructureKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAccelerationStructureKHR>>)
-
-            /// Creates an empty VkWriteDescriptorSetAccelerationStructureKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkWriteDescriptorSetAccelerationStructureKHR(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAccelerationStructureKHR>>)
-
-            /// Creates an empty VkWriteDescriptorSetAccelerationStructureKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkWriteDescriptorSetAccelerationStructureKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -23656,16 +22283,11 @@ module KHRAndroidSurface =
             new(flags : VkAndroidSurfaceCreateFlagsKHR, window : nativeptr<nativeint>) =
                 VkAndroidSurfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, flags, window)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkAndroidSurfaceCreateFlagsKHR> && x.window = Unchecked.defaultof<nativeptr<nativeint>>
+
             static member Empty =
                 VkAndroidSurfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAndroidSurfaceCreateFlagsKHR>, Unchecked.defaultof<nativeptr<nativeint>>)
-
-            /// Creates an empty VkAndroidSurfaceCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAndroidSurfaceCreateInfoKHR(pNext, Unchecked.defaultof<VkAndroidSurfaceCreateFlagsKHR>, Unchecked.defaultof<nativeptr<nativeint>>)
-
-            /// Creates an empty VkAndroidSurfaceCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAndroidSurfaceCreateInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -23719,16 +22341,11 @@ module KHRCopyCommands2 =
             new(srcSubresource : VkImageSubresourceLayers, srcOffsets : VkOffset3D_2, dstSubresource : VkImageSubresourceLayers, dstOffsets : VkOffset3D_2) =
                 VkImageBlit2KHR(Unchecked.defaultof<nativeint>, srcSubresource, srcOffsets, dstSubresource, dstOffsets)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.srcSubresource = Unchecked.defaultof<VkImageSubresourceLayers> && x.srcOffsets = Unchecked.defaultof<VkOffset3D_2> && x.dstSubresource = Unchecked.defaultof<VkImageSubresourceLayers> && x.dstOffsets = Unchecked.defaultof<VkOffset3D_2>
+
             static member Empty =
                 VkImageBlit2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D_2>, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D_2>)
-
-            /// Creates an empty VkImageBlit2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImageBlit2KHR(pNext, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D_2>, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D_2>)
-
-            /// Creates an empty VkImageBlit2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImageBlit2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -23770,16 +22387,11 @@ module KHRCopyCommands2 =
             new(srcImage : VkImage, srcImageLayout : VkImageLayout, dstImage : VkImage, dstImageLayout : VkImageLayout, regionCount : uint32, pRegions : nativeptr<VkImageBlit2KHR>, filter : VkFilter) =
                 VkBlitImageInfo2KHR(Unchecked.defaultof<nativeint>, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions, filter)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.srcImage = Unchecked.defaultof<VkImage> && x.srcImageLayout = Unchecked.defaultof<VkImageLayout> && x.dstImage = Unchecked.defaultof<VkImage> && x.dstImageLayout = Unchecked.defaultof<VkImageLayout> && x.regionCount = Unchecked.defaultof<uint32> && x.pRegions = Unchecked.defaultof<nativeptr<VkImageBlit2KHR>> && x.filter = Unchecked.defaultof<VkFilter>
+
             static member Empty =
                 VkBlitImageInfo2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkImageBlit2KHR>>, Unchecked.defaultof<VkFilter>)
-
-            /// Creates an empty VkBlitImageInfo2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkBlitImageInfo2KHR(pNext, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkImageBlit2KHR>>, Unchecked.defaultof<VkFilter>)
-
-            /// Creates an empty VkBlitImageInfo2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkBlitImageInfo2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -23816,16 +22428,11 @@ module KHRCopyCommands2 =
             new(srcOffset : VkDeviceSize, dstOffset : VkDeviceSize, size : VkDeviceSize) =
                 VkBufferCopy2KHR(Unchecked.defaultof<nativeint>, srcOffset, dstOffset, size)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.srcOffset = Unchecked.defaultof<VkDeviceSize> && x.dstOffset = Unchecked.defaultof<VkDeviceSize> && x.size = Unchecked.defaultof<VkDeviceSize>
+
             static member Empty =
                 VkBufferCopy2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkBufferCopy2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkBufferCopy2KHR(pNext, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkBufferCopy2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkBufferCopy2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -23864,16 +22471,11 @@ module KHRCopyCommands2 =
             new(bufferOffset : VkDeviceSize, bufferRowLength : uint32, bufferImageHeight : uint32, imageSubresource : VkImageSubresourceLayers, imageOffset : VkOffset3D, imageExtent : VkExtent3D) =
                 VkBufferImageCopy2KHR(Unchecked.defaultof<nativeint>, bufferOffset, bufferRowLength, bufferImageHeight, imageSubresource, imageOffset, imageExtent)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.bufferOffset = Unchecked.defaultof<VkDeviceSize> && x.bufferRowLength = Unchecked.defaultof<uint32> && x.bufferImageHeight = Unchecked.defaultof<uint32> && x.imageSubresource = Unchecked.defaultof<VkImageSubresourceLayers> && x.imageOffset = Unchecked.defaultof<VkOffset3D> && x.imageExtent = Unchecked.defaultof<VkExtent3D>
+
             static member Empty =
                 VkBufferImageCopy2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D>, Unchecked.defaultof<VkExtent3D>)
-
-            /// Creates an empty VkBufferImageCopy2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkBufferImageCopy2KHR(pNext, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D>, Unchecked.defaultof<VkExtent3D>)
-
-            /// Creates an empty VkBufferImageCopy2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkBufferImageCopy2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -23911,16 +22513,11 @@ module KHRCopyCommands2 =
             new(srcBuffer : VkBuffer, dstBuffer : VkBuffer, regionCount : uint32, pRegions : nativeptr<VkBufferCopy2KHR>) =
                 VkCopyBufferInfo2KHR(Unchecked.defaultof<nativeint>, srcBuffer, dstBuffer, regionCount, pRegions)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.srcBuffer = Unchecked.defaultof<VkBuffer> && x.dstBuffer = Unchecked.defaultof<VkBuffer> && x.regionCount = Unchecked.defaultof<uint32> && x.pRegions = Unchecked.defaultof<nativeptr<VkBufferCopy2KHR>>
+
             static member Empty =
                 VkCopyBufferInfo2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkBufferCopy2KHR>>)
-
-            /// Creates an empty VkCopyBufferInfo2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkCopyBufferInfo2KHR(pNext, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkBufferCopy2KHR>>)
-
-            /// Creates an empty VkCopyBufferInfo2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkCopyBufferInfo2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -23958,16 +22555,11 @@ module KHRCopyCommands2 =
             new(srcBuffer : VkBuffer, dstImage : VkImage, dstImageLayout : VkImageLayout, regionCount : uint32, pRegions : nativeptr<VkBufferImageCopy2KHR>) =
                 VkCopyBufferToImageInfo2KHR(Unchecked.defaultof<nativeint>, srcBuffer, dstImage, dstImageLayout, regionCount, pRegions)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.srcBuffer = Unchecked.defaultof<VkBuffer> && x.dstImage = Unchecked.defaultof<VkImage> && x.dstImageLayout = Unchecked.defaultof<VkImageLayout> && x.regionCount = Unchecked.defaultof<uint32> && x.pRegions = Unchecked.defaultof<nativeptr<VkBufferImageCopy2KHR>>
+
             static member Empty =
                 VkCopyBufferToImageInfo2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkBufferImageCopy2KHR>>)
-
-            /// Creates an empty VkCopyBufferToImageInfo2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkCopyBufferToImageInfo2KHR(pNext, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkBufferImageCopy2KHR>>)
-
-            /// Creates an empty VkCopyBufferToImageInfo2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkCopyBufferToImageInfo2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -24006,16 +22598,11 @@ module KHRCopyCommands2 =
             new(srcSubresource : VkImageSubresourceLayers, srcOffset : VkOffset3D, dstSubresource : VkImageSubresourceLayers, dstOffset : VkOffset3D, extent : VkExtent3D) =
                 VkImageCopy2KHR(Unchecked.defaultof<nativeint>, srcSubresource, srcOffset, dstSubresource, dstOffset, extent)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.srcSubresource = Unchecked.defaultof<VkImageSubresourceLayers> && x.srcOffset = Unchecked.defaultof<VkOffset3D> && x.dstSubresource = Unchecked.defaultof<VkImageSubresourceLayers> && x.dstOffset = Unchecked.defaultof<VkOffset3D> && x.extent = Unchecked.defaultof<VkExtent3D>
+
             static member Empty =
                 VkImageCopy2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D>, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D>, Unchecked.defaultof<VkExtent3D>)
-
-            /// Creates an empty VkImageCopy2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImageCopy2KHR(pNext, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D>, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D>, Unchecked.defaultof<VkExtent3D>)
-
-            /// Creates an empty VkImageCopy2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImageCopy2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -24056,16 +22643,11 @@ module KHRCopyCommands2 =
             new(srcImage : VkImage, srcImageLayout : VkImageLayout, dstImage : VkImage, dstImageLayout : VkImageLayout, regionCount : uint32, pRegions : nativeptr<VkImageCopy2KHR>) =
                 VkCopyImageInfo2KHR(Unchecked.defaultof<nativeint>, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.srcImage = Unchecked.defaultof<VkImage> && x.srcImageLayout = Unchecked.defaultof<VkImageLayout> && x.dstImage = Unchecked.defaultof<VkImage> && x.dstImageLayout = Unchecked.defaultof<VkImageLayout> && x.regionCount = Unchecked.defaultof<uint32> && x.pRegions = Unchecked.defaultof<nativeptr<VkImageCopy2KHR>>
+
             static member Empty =
                 VkCopyImageInfo2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkImageCopy2KHR>>)
-
-            /// Creates an empty VkCopyImageInfo2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkCopyImageInfo2KHR(pNext, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkImageCopy2KHR>>)
-
-            /// Creates an empty VkCopyImageInfo2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkCopyImageInfo2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -24105,16 +22687,11 @@ module KHRCopyCommands2 =
             new(srcImage : VkImage, srcImageLayout : VkImageLayout, dstBuffer : VkBuffer, regionCount : uint32, pRegions : nativeptr<VkBufferImageCopy2KHR>) =
                 VkCopyImageToBufferInfo2KHR(Unchecked.defaultof<nativeint>, srcImage, srcImageLayout, dstBuffer, regionCount, pRegions)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.srcImage = Unchecked.defaultof<VkImage> && x.srcImageLayout = Unchecked.defaultof<VkImageLayout> && x.dstBuffer = Unchecked.defaultof<VkBuffer> && x.regionCount = Unchecked.defaultof<uint32> && x.pRegions = Unchecked.defaultof<nativeptr<VkBufferImageCopy2KHR>>
+
             static member Empty =
                 VkCopyImageToBufferInfo2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkBufferImageCopy2KHR>>)
-
-            /// Creates an empty VkCopyImageToBufferInfo2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkCopyImageToBufferInfo2KHR(pNext, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkBufferImageCopy2KHR>>)
-
-            /// Creates an empty VkCopyImageToBufferInfo2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkCopyImageToBufferInfo2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -24153,16 +22730,11 @@ module KHRCopyCommands2 =
             new(srcSubresource : VkImageSubresourceLayers, srcOffset : VkOffset3D, dstSubresource : VkImageSubresourceLayers, dstOffset : VkOffset3D, extent : VkExtent3D) =
                 VkImageResolve2KHR(Unchecked.defaultof<nativeint>, srcSubresource, srcOffset, dstSubresource, dstOffset, extent)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.srcSubresource = Unchecked.defaultof<VkImageSubresourceLayers> && x.srcOffset = Unchecked.defaultof<VkOffset3D> && x.dstSubresource = Unchecked.defaultof<VkImageSubresourceLayers> && x.dstOffset = Unchecked.defaultof<VkOffset3D> && x.extent = Unchecked.defaultof<VkExtent3D>
+
             static member Empty =
                 VkImageResolve2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D>, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D>, Unchecked.defaultof<VkExtent3D>)
-
-            /// Creates an empty VkImageResolve2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImageResolve2KHR(pNext, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D>, Unchecked.defaultof<VkImageSubresourceLayers>, Unchecked.defaultof<VkOffset3D>, Unchecked.defaultof<VkExtent3D>)
-
-            /// Creates an empty VkImageResolve2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImageResolve2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -24203,16 +22775,11 @@ module KHRCopyCommands2 =
             new(srcImage : VkImage, srcImageLayout : VkImageLayout, dstImage : VkImage, dstImageLayout : VkImageLayout, regionCount : uint32, pRegions : nativeptr<VkImageResolve2KHR>) =
                 VkResolveImageInfo2KHR(Unchecked.defaultof<nativeint>, srcImage, srcImageLayout, dstImage, dstImageLayout, regionCount, pRegions)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.srcImage = Unchecked.defaultof<VkImage> && x.srcImageLayout = Unchecked.defaultof<VkImageLayout> && x.dstImage = Unchecked.defaultof<VkImage> && x.dstImageLayout = Unchecked.defaultof<VkImageLayout> && x.regionCount = Unchecked.defaultof<uint32> && x.pRegions = Unchecked.defaultof<nativeptr<VkImageResolve2KHR>>
+
             static member Empty =
                 VkResolveImageInfo2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkImageResolve2KHR>>)
-
-            /// Creates an empty VkResolveImageInfo2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkResolveImageInfo2KHR(pNext, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkImageLayout>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkImageResolve2KHR>>)
-
-            /// Creates an empty VkResolveImageInfo2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkResolveImageInfo2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -24436,16 +23003,11 @@ module KHRPushDescriptor =
             new(maxPushDescriptors : uint32) =
                 VkPhysicalDevicePushDescriptorPropertiesKHR(Unchecked.defaultof<nativeint>, maxPushDescriptors)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxPushDescriptors = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDevicePushDescriptorPropertiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDevicePushDescriptorPropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDevicePushDescriptorPropertiesKHR(pNext, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDevicePushDescriptorPropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDevicePushDescriptorPropertiesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -24599,16 +23161,11 @@ module KHRDisplaySwapchain =
             new(srcRect : VkRect2D, dstRect : VkRect2D, persistent : VkBool32) =
                 VkDisplayPresentInfoKHR(Unchecked.defaultof<nativeint>, srcRect, dstRect, persistent)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.srcRect = Unchecked.defaultof<VkRect2D> && x.dstRect = Unchecked.defaultof<VkRect2D> && x.persistent = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkDisplayPresentInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkRect2D>, Unchecked.defaultof<VkRect2D>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkDisplayPresentInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDisplayPresentInfoKHR(pNext, Unchecked.defaultof<VkRect2D>, Unchecked.defaultof<VkRect2D>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkDisplayPresentInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDisplayPresentInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -24792,16 +23349,11 @@ module KHRExternalFenceFd =
             new(fence : VkFence, handleType : VkExternalFenceHandleTypeFlags) =
                 VkFenceGetFdInfoKHR(Unchecked.defaultof<nativeint>, fence, handleType)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.fence = Unchecked.defaultof<VkFence> && x.handleType = Unchecked.defaultof<VkExternalFenceHandleTypeFlags>
+
             static member Empty =
                 VkFenceGetFdInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkFence>, Unchecked.defaultof<VkExternalFenceHandleTypeFlags>)
-
-            /// Creates an empty VkFenceGetFdInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkFenceGetFdInfoKHR(pNext, Unchecked.defaultof<VkFence>, Unchecked.defaultof<VkExternalFenceHandleTypeFlags>)
-
-            /// Creates an empty VkFenceGetFdInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkFenceGetFdInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -24835,16 +23387,11 @@ module KHRExternalFenceFd =
             new(fence : VkFence, flags : VkFenceImportFlags, handleType : VkExternalFenceHandleTypeFlags, fd : int) =
                 VkImportFenceFdInfoKHR(Unchecked.defaultof<nativeint>, fence, flags, handleType, fd)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.fence = Unchecked.defaultof<VkFence> && x.flags = Unchecked.defaultof<VkFenceImportFlags> && x.handleType = Unchecked.defaultof<VkExternalFenceHandleTypeFlags> && x.fd = Unchecked.defaultof<int>
+
             static member Empty =
                 VkImportFenceFdInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkFence>, Unchecked.defaultof<VkFenceImportFlags>, Unchecked.defaultof<VkExternalFenceHandleTypeFlags>, Unchecked.defaultof<int>)
-
-            /// Creates an empty VkImportFenceFdInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImportFenceFdInfoKHR(pNext, Unchecked.defaultof<VkFence>, Unchecked.defaultof<VkFenceImportFlags>, Unchecked.defaultof<VkExternalFenceHandleTypeFlags>, Unchecked.defaultof<int>)
-
-            /// Creates an empty VkImportFenceFdInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImportFenceFdInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -24908,16 +23455,11 @@ module KHRExternalFenceWin32 =
             new(pAttributes : nativeptr<nativeint>, dwAccess : uint32, name : cstr) =
                 VkExportFenceWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, pAttributes, dwAccess, name)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pAttributes = Unchecked.defaultof<nativeptr<nativeint>> && x.dwAccess = Unchecked.defaultof<uint32> && x.name = Unchecked.defaultof<cstr>
+
             static member Empty =
                 VkExportFenceWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<nativeptr<nativeint>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<cstr>)
-
-            /// Creates an empty VkExportFenceWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkExportFenceWin32HandleInfoKHR(pNext, Unchecked.defaultof<nativeptr<nativeint>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<cstr>)
-
-            /// Creates an empty VkExportFenceWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkExportFenceWin32HandleInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -24948,16 +23490,11 @@ module KHRExternalFenceWin32 =
             new(fence : VkFence, handleType : VkExternalFenceHandleTypeFlags) =
                 VkFenceGetWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, fence, handleType)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.fence = Unchecked.defaultof<VkFence> && x.handleType = Unchecked.defaultof<VkExternalFenceHandleTypeFlags>
+
             static member Empty =
                 VkFenceGetWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkFence>, Unchecked.defaultof<VkExternalFenceHandleTypeFlags>)
-
-            /// Creates an empty VkFenceGetWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkFenceGetWin32HandleInfoKHR(pNext, Unchecked.defaultof<VkFence>, Unchecked.defaultof<VkExternalFenceHandleTypeFlags>)
-
-            /// Creates an empty VkFenceGetWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkFenceGetWin32HandleInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -24993,16 +23530,11 @@ module KHRExternalFenceWin32 =
             new(fence : VkFence, flags : VkFenceImportFlags, handleType : VkExternalFenceHandleTypeFlags, handle : nativeint, name : cstr) =
                 VkImportFenceWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, fence, flags, handleType, handle, name)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.fence = Unchecked.defaultof<VkFence> && x.flags = Unchecked.defaultof<VkFenceImportFlags> && x.handleType = Unchecked.defaultof<VkExternalFenceHandleTypeFlags> && x.handle = Unchecked.defaultof<nativeint> && x.name = Unchecked.defaultof<cstr>
+
             static member Empty =
                 VkImportFenceWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkFence>, Unchecked.defaultof<VkFenceImportFlags>, Unchecked.defaultof<VkExternalFenceHandleTypeFlags>, Unchecked.defaultof<nativeint>, Unchecked.defaultof<cstr>)
-
-            /// Creates an empty VkImportFenceWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImportFenceWin32HandleInfoKHR(pNext, Unchecked.defaultof<VkFence>, Unchecked.defaultof<VkFenceImportFlags>, Unchecked.defaultof<VkExternalFenceHandleTypeFlags>, Unchecked.defaultof<nativeint>, Unchecked.defaultof<cstr>)
-
-            /// Creates an empty VkImportFenceWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImportFenceWin32HandleInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -25067,16 +23599,11 @@ module KHRExternalMemoryWin32 =
             new(pAttributes : nativeptr<nativeint>, dwAccess : uint32, name : cstr) =
                 VkExportMemoryWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, pAttributes, dwAccess, name)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pAttributes = Unchecked.defaultof<nativeptr<nativeint>> && x.dwAccess = Unchecked.defaultof<uint32> && x.name = Unchecked.defaultof<cstr>
+
             static member Empty =
                 VkExportMemoryWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<nativeptr<nativeint>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<cstr>)
-
-            /// Creates an empty VkExportMemoryWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkExportMemoryWin32HandleInfoKHR(pNext, Unchecked.defaultof<nativeptr<nativeint>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<cstr>)
-
-            /// Creates an empty VkExportMemoryWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkExportMemoryWin32HandleInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -25109,16 +23636,11 @@ module KHRExternalMemoryWin32 =
             new(handleType : VkExternalMemoryHandleTypeFlags, handle : nativeint, name : cstr) =
                 VkImportMemoryWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, handleType, handle, name)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.handleType = Unchecked.defaultof<VkExternalMemoryHandleTypeFlags> && x.handle = Unchecked.defaultof<nativeint> && x.name = Unchecked.defaultof<cstr>
+
             static member Empty =
                 VkImportMemoryWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>, Unchecked.defaultof<nativeint>, Unchecked.defaultof<cstr>)
-
-            /// Creates an empty VkImportMemoryWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImportMemoryWin32HandleInfoKHR(pNext, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>, Unchecked.defaultof<nativeint>, Unchecked.defaultof<cstr>)
-
-            /// Creates an empty VkImportMemoryWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImportMemoryWin32HandleInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -25149,16 +23671,11 @@ module KHRExternalMemoryWin32 =
             new(memory : VkDeviceMemory, handleType : VkExternalMemoryHandleTypeFlags) =
                 VkMemoryGetWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, memory, handleType)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.memory = Unchecked.defaultof<VkDeviceMemory> && x.handleType = Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>
+
             static member Empty =
                 VkMemoryGetWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceMemory>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>)
-
-            /// Creates an empty VkMemoryGetWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkMemoryGetWin32HandleInfoKHR(pNext, Unchecked.defaultof<VkDeviceMemory>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlags>)
-
-            /// Creates an empty VkMemoryGetWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkMemoryGetWin32HandleInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -25186,16 +23703,11 @@ module KHRExternalMemoryWin32 =
             new(memoryTypeBits : uint32) =
                 VkMemoryWin32HandlePropertiesKHR(Unchecked.defaultof<nativeint>, memoryTypeBits)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.memoryTypeBits = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkMemoryWin32HandlePropertiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkMemoryWin32HandlePropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkMemoryWin32HandlePropertiesKHR(pNext, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkMemoryWin32HandlePropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkMemoryWin32HandlePropertiesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -25324,16 +23836,11 @@ module KHRExternalSemaphoreFd =
             new(semaphore : VkSemaphore, flags : VkSemaphoreImportFlags, handleType : VkExternalSemaphoreHandleTypeFlags, fd : int) =
                 VkImportSemaphoreFdInfoKHR(Unchecked.defaultof<nativeint>, semaphore, flags, handleType, fd)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.semaphore = Unchecked.defaultof<VkSemaphore> && x.flags = Unchecked.defaultof<VkSemaphoreImportFlags> && x.handleType = Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags> && x.fd = Unchecked.defaultof<int>
+
             static member Empty =
                 VkImportSemaphoreFdInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSemaphore>, Unchecked.defaultof<VkSemaphoreImportFlags>, Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>, Unchecked.defaultof<int>)
-
-            /// Creates an empty VkImportSemaphoreFdInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImportSemaphoreFdInfoKHR(pNext, Unchecked.defaultof<VkSemaphore>, Unchecked.defaultof<VkSemaphoreImportFlags>, Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>, Unchecked.defaultof<int>)
-
-            /// Creates an empty VkImportSemaphoreFdInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImportSemaphoreFdInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -25365,16 +23872,11 @@ module KHRExternalSemaphoreFd =
             new(semaphore : VkSemaphore, handleType : VkExternalSemaphoreHandleTypeFlags) =
                 VkSemaphoreGetFdInfoKHR(Unchecked.defaultof<nativeint>, semaphore, handleType)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.semaphore = Unchecked.defaultof<VkSemaphore> && x.handleType = Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>
+
             static member Empty =
                 VkSemaphoreGetFdInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSemaphore>, Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>)
-
-            /// Creates an empty VkSemaphoreGetFdInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSemaphoreGetFdInfoKHR(pNext, Unchecked.defaultof<VkSemaphore>, Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>)
-
-            /// Creates an empty VkSemaphoreGetFdInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSemaphoreGetFdInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -25438,16 +23940,11 @@ module KHRExternalSemaphoreWin32 =
             new(waitSemaphoreValuesCount : uint32, pWaitSemaphoreValues : nativeptr<uint64>, signalSemaphoreValuesCount : uint32, pSignalSemaphoreValues : nativeptr<uint64>) =
                 VkD3D12FenceSubmitInfoKHR(Unchecked.defaultof<nativeint>, waitSemaphoreValuesCount, pWaitSemaphoreValues, signalSemaphoreValuesCount, pSignalSemaphoreValues)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.waitSemaphoreValuesCount = Unchecked.defaultof<uint32> && x.pWaitSemaphoreValues = Unchecked.defaultof<nativeptr<uint64>> && x.signalSemaphoreValuesCount = Unchecked.defaultof<uint32> && x.pSignalSemaphoreValues = Unchecked.defaultof<nativeptr<uint64>>
+
             static member Empty =
                 VkD3D12FenceSubmitInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint64>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint64>>)
-
-            /// Creates an empty VkD3D12FenceSubmitInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkD3D12FenceSubmitInfoKHR(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint64>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint64>>)
-
-            /// Creates an empty VkD3D12FenceSubmitInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkD3D12FenceSubmitInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -25481,16 +23978,11 @@ module KHRExternalSemaphoreWin32 =
             new(pAttributes : nativeptr<nativeint>, dwAccess : uint32, name : cstr) =
                 VkExportSemaphoreWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, pAttributes, dwAccess, name)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pAttributes = Unchecked.defaultof<nativeptr<nativeint>> && x.dwAccess = Unchecked.defaultof<uint32> && x.name = Unchecked.defaultof<cstr>
+
             static member Empty =
                 VkExportSemaphoreWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<nativeptr<nativeint>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<cstr>)
-
-            /// Creates an empty VkExportSemaphoreWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkExportSemaphoreWin32HandleInfoKHR(pNext, Unchecked.defaultof<nativeptr<nativeint>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<cstr>)
-
-            /// Creates an empty VkExportSemaphoreWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkExportSemaphoreWin32HandleInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -25527,16 +24019,11 @@ module KHRExternalSemaphoreWin32 =
             new(semaphore : VkSemaphore, flags : VkSemaphoreImportFlags, handleType : VkExternalSemaphoreHandleTypeFlags, handle : nativeint, name : cstr) =
                 VkImportSemaphoreWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, semaphore, flags, handleType, handle, name)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.semaphore = Unchecked.defaultof<VkSemaphore> && x.flags = Unchecked.defaultof<VkSemaphoreImportFlags> && x.handleType = Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags> && x.handle = Unchecked.defaultof<nativeint> && x.name = Unchecked.defaultof<cstr>
+
             static member Empty =
                 VkImportSemaphoreWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSemaphore>, Unchecked.defaultof<VkSemaphoreImportFlags>, Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>, Unchecked.defaultof<nativeint>, Unchecked.defaultof<cstr>)
-
-            /// Creates an empty VkImportSemaphoreWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImportSemaphoreWin32HandleInfoKHR(pNext, Unchecked.defaultof<VkSemaphore>, Unchecked.defaultof<VkSemaphoreImportFlags>, Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>, Unchecked.defaultof<nativeint>, Unchecked.defaultof<cstr>)
-
-            /// Creates an empty VkImportSemaphoreWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImportSemaphoreWin32HandleInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -25569,16 +24056,11 @@ module KHRExternalSemaphoreWin32 =
             new(semaphore : VkSemaphore, handleType : VkExternalSemaphoreHandleTypeFlags) =
                 VkSemaphoreGetWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, semaphore, handleType)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.semaphore = Unchecked.defaultof<VkSemaphore> && x.handleType = Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>
+
             static member Empty =
                 VkSemaphoreGetWin32HandleInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSemaphore>, Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>)
-
-            /// Creates an empty VkSemaphoreGetWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSemaphoreGetWin32HandleInfoKHR(pNext, Unchecked.defaultof<VkSemaphore>, Unchecked.defaultof<VkExternalSemaphoreHandleTypeFlags>)
-
-            /// Creates an empty VkSemaphoreGetWin32HandleInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSemaphoreGetWin32HandleInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -25670,16 +24152,11 @@ module KHRFragmentShadingRate =
             new(pFragmentShadingRateAttachment : nativeptr<VkAttachmentReference2>, shadingRateAttachmentTexelSize : VkExtent2D) =
                 VkFragmentShadingRateAttachmentInfoKHR(Unchecked.defaultof<nativeint>, pFragmentShadingRateAttachment, shadingRateAttachmentTexelSize)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pFragmentShadingRateAttachment = Unchecked.defaultof<nativeptr<VkAttachmentReference2>> && x.shadingRateAttachmentTexelSize = Unchecked.defaultof<VkExtent2D>
+
             static member Empty =
                 VkFragmentShadingRateAttachmentInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<nativeptr<VkAttachmentReference2>>, Unchecked.defaultof<VkExtent2D>)
-
-            /// Creates an empty VkFragmentShadingRateAttachmentInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkFragmentShadingRateAttachmentInfoKHR(pNext, Unchecked.defaultof<nativeptr<VkAttachmentReference2>>, Unchecked.defaultof<VkExtent2D>)
-
-            /// Creates an empty VkFragmentShadingRateAttachmentInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkFragmentShadingRateAttachmentInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -25711,16 +24188,11 @@ module KHRFragmentShadingRate =
             new(pipelineFragmentShadingRate : VkBool32, primitiveFragmentShadingRate : VkBool32, attachmentFragmentShadingRate : VkBool32) =
                 VkPhysicalDeviceFragmentShadingRateFeaturesKHR(Unchecked.defaultof<nativeint>, pipelineFragmentShadingRate, primitiveFragmentShadingRate, attachmentFragmentShadingRate)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pipelineFragmentShadingRate = Unchecked.defaultof<VkBool32> && x.primitiveFragmentShadingRate = Unchecked.defaultof<VkBool32> && x.attachmentFragmentShadingRate = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceFragmentShadingRateFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentShadingRateFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceFragmentShadingRateFeaturesKHR(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentShadingRateFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceFragmentShadingRateFeaturesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -25751,16 +24223,11 @@ module KHRFragmentShadingRate =
             new(sampleCounts : VkSampleCountFlags, fragmentSize : VkExtent2D) =
                 VkPhysicalDeviceFragmentShadingRateKHR(Unchecked.defaultof<nativeint>, sampleCounts, fragmentSize)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.sampleCounts = Unchecked.defaultof<VkSampleCountFlags> && x.fragmentSize = Unchecked.defaultof<VkExtent2D>
+
             static member Empty =
                 VkPhysicalDeviceFragmentShadingRateKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkExtent2D>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentShadingRateKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceFragmentShadingRateKHR(pNext, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkExtent2D>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentShadingRateKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceFragmentShadingRateKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -25820,16 +24287,11 @@ module KHRFragmentShadingRate =
             new(minFragmentShadingRateAttachmentTexelSize : VkExtent2D, maxFragmentShadingRateAttachmentTexelSize : VkExtent2D, maxFragmentShadingRateAttachmentTexelSizeAspectRatio : uint32, primitiveFragmentShadingRateWithMultipleViewports : VkBool32, layeredShadingRateAttachments : VkBool32, fragmentShadingRateNonTrivialCombinerOps : VkBool32, maxFragmentSize : VkExtent2D, maxFragmentSizeAspectRatio : uint32, maxFragmentShadingRateCoverageSamples : uint32, maxFragmentShadingRateRasterizationSamples : VkSampleCountFlags, fragmentShadingRateWithShaderDepthStencilWrites : VkBool32, fragmentShadingRateWithSampleMask : VkBool32, fragmentShadingRateWithShaderSampleMask : VkBool32, fragmentShadingRateWithConservativeRasterization : VkBool32, fragmentShadingRateWithFragmentShaderInterlock : VkBool32, fragmentShadingRateWithCustomSampleLocations : VkBool32, fragmentShadingRateStrictMultiplyCombiner : VkBool32) =
                 VkPhysicalDeviceFragmentShadingRatePropertiesKHR(Unchecked.defaultof<nativeint>, minFragmentShadingRateAttachmentTexelSize, maxFragmentShadingRateAttachmentTexelSize, maxFragmentShadingRateAttachmentTexelSizeAspectRatio, primitiveFragmentShadingRateWithMultipleViewports, layeredShadingRateAttachments, fragmentShadingRateNonTrivialCombinerOps, maxFragmentSize, maxFragmentSizeAspectRatio, maxFragmentShadingRateCoverageSamples, maxFragmentShadingRateRasterizationSamples, fragmentShadingRateWithShaderDepthStencilWrites, fragmentShadingRateWithSampleMask, fragmentShadingRateWithShaderSampleMask, fragmentShadingRateWithConservativeRasterization, fragmentShadingRateWithFragmentShaderInterlock, fragmentShadingRateWithCustomSampleLocations, fragmentShadingRateStrictMultiplyCombiner)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.minFragmentShadingRateAttachmentTexelSize = Unchecked.defaultof<VkExtent2D> && x.maxFragmentShadingRateAttachmentTexelSize = Unchecked.defaultof<VkExtent2D> && x.maxFragmentShadingRateAttachmentTexelSizeAspectRatio = Unchecked.defaultof<uint32> && x.primitiveFragmentShadingRateWithMultipleViewports = Unchecked.defaultof<VkBool32> && x.layeredShadingRateAttachments = Unchecked.defaultof<VkBool32> && x.fragmentShadingRateNonTrivialCombinerOps = Unchecked.defaultof<VkBool32> && x.maxFragmentSize = Unchecked.defaultof<VkExtent2D> && x.maxFragmentSizeAspectRatio = Unchecked.defaultof<uint32> && x.maxFragmentShadingRateCoverageSamples = Unchecked.defaultof<uint32> && x.maxFragmentShadingRateRasterizationSamples = Unchecked.defaultof<VkSampleCountFlags> && x.fragmentShadingRateWithShaderDepthStencilWrites = Unchecked.defaultof<VkBool32> && x.fragmentShadingRateWithSampleMask = Unchecked.defaultof<VkBool32> && x.fragmentShadingRateWithShaderSampleMask = Unchecked.defaultof<VkBool32> && x.fragmentShadingRateWithConservativeRasterization = Unchecked.defaultof<VkBool32> && x.fragmentShadingRateWithFragmentShaderInterlock = Unchecked.defaultof<VkBool32> && x.fragmentShadingRateWithCustomSampleLocations = Unchecked.defaultof<VkBool32> && x.fragmentShadingRateStrictMultiplyCombiner = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceFragmentShadingRatePropertiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentShadingRatePropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceFragmentShadingRatePropertiesKHR(pNext, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentShadingRatePropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceFragmentShadingRatePropertiesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -25874,16 +24336,11 @@ module KHRFragmentShadingRate =
             new(fragmentSize : VkExtent2D, combinerOps : VkFragmentShadingRateCombinerOpKHR_2) =
                 VkPipelineFragmentShadingRateStateCreateInfoKHR(Unchecked.defaultof<nativeint>, fragmentSize, combinerOps)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.fragmentSize = Unchecked.defaultof<VkExtent2D> && x.combinerOps = Unchecked.defaultof<VkFragmentShadingRateCombinerOpKHR_2>
+
             static member Empty =
                 VkPipelineFragmentShadingRateStateCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkFragmentShadingRateCombinerOpKHR_2>)
-
-            /// Creates an empty VkPipelineFragmentShadingRateStateCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineFragmentShadingRateStateCreateInfoKHR(pNext, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<VkFragmentShadingRateCombinerOpKHR_2>)
-
-            /// Creates an empty VkPipelineFragmentShadingRateStateCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineFragmentShadingRateStateCreateInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -25955,16 +24412,11 @@ module KHRGetDisplayProperties2 =
             new(displayModeProperties : VkDisplayModePropertiesKHR) =
                 VkDisplayModeProperties2KHR(Unchecked.defaultof<nativeint>, displayModeProperties)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.displayModeProperties = Unchecked.defaultof<VkDisplayModePropertiesKHR>
+
             static member Empty =
                 VkDisplayModeProperties2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDisplayModePropertiesKHR>)
-
-            /// Creates an empty VkDisplayModeProperties2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDisplayModeProperties2KHR(pNext, Unchecked.defaultof<VkDisplayModePropertiesKHR>)
-
-            /// Creates an empty VkDisplayModeProperties2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDisplayModeProperties2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -25991,16 +24443,11 @@ module KHRGetDisplayProperties2 =
             new(capabilities : VkDisplayPlaneCapabilitiesKHR) =
                 VkDisplayPlaneCapabilities2KHR(Unchecked.defaultof<nativeint>, capabilities)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.capabilities = Unchecked.defaultof<VkDisplayPlaneCapabilitiesKHR>
+
             static member Empty =
                 VkDisplayPlaneCapabilities2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDisplayPlaneCapabilitiesKHR>)
-
-            /// Creates an empty VkDisplayPlaneCapabilities2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDisplayPlaneCapabilities2KHR(pNext, Unchecked.defaultof<VkDisplayPlaneCapabilitiesKHR>)
-
-            /// Creates an empty VkDisplayPlaneCapabilities2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDisplayPlaneCapabilities2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -26029,16 +24476,11 @@ module KHRGetDisplayProperties2 =
             new(mode : VkDisplayModeKHR, planeIndex : uint32) =
                 VkDisplayPlaneInfo2KHR(Unchecked.defaultof<nativeint>, mode, planeIndex)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.mode = Unchecked.defaultof<VkDisplayModeKHR> && x.planeIndex = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkDisplayPlaneInfo2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDisplayModeKHR>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDisplayPlaneInfo2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDisplayPlaneInfo2KHR(pNext, Unchecked.defaultof<VkDisplayModeKHR>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkDisplayPlaneInfo2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDisplayPlaneInfo2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -26066,16 +24508,11 @@ module KHRGetDisplayProperties2 =
             new(displayPlaneProperties : VkDisplayPlanePropertiesKHR) =
                 VkDisplayPlaneProperties2KHR(Unchecked.defaultof<nativeint>, displayPlaneProperties)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.displayPlaneProperties = Unchecked.defaultof<VkDisplayPlanePropertiesKHR>
+
             static member Empty =
                 VkDisplayPlaneProperties2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDisplayPlanePropertiesKHR>)
-
-            /// Creates an empty VkDisplayPlaneProperties2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDisplayPlaneProperties2KHR(pNext, Unchecked.defaultof<VkDisplayPlanePropertiesKHR>)
-
-            /// Creates an empty VkDisplayPlaneProperties2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDisplayPlaneProperties2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -26102,16 +24539,11 @@ module KHRGetDisplayProperties2 =
             new(displayProperties : VkDisplayPropertiesKHR) =
                 VkDisplayProperties2KHR(Unchecked.defaultof<nativeint>, displayProperties)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.displayProperties = Unchecked.defaultof<VkDisplayPropertiesKHR>
+
             static member Empty =
                 VkDisplayProperties2KHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDisplayPropertiesKHR>)
-
-            /// Creates an empty VkDisplayProperties2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDisplayProperties2KHR(pNext, Unchecked.defaultof<VkDisplayPropertiesKHR>)
-
-            /// Creates an empty VkDisplayProperties2KHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDisplayProperties2KHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -26200,6 +24632,9 @@ module KHRIncrementalPresent =
                     layer = layer
                 }
 
+            member x.IsEmpty =
+                x.offset = Unchecked.defaultof<VkOffset2D> && x.extent = Unchecked.defaultof<VkExtent2D> && x.layer = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkRectLayerKHR(Unchecked.defaultof<VkOffset2D>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>)
 
@@ -26222,6 +24657,9 @@ module KHRIncrementalPresent =
                     rectangleCount = rectangleCount
                     pRectangles = pRectangles
                 }
+
+            member x.IsEmpty =
+                x.rectangleCount = Unchecked.defaultof<uint32> && x.pRectangles = Unchecked.defaultof<nativeptr<VkRectLayerKHR>>
 
             static member Empty =
                 VkPresentRegionKHR(Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkRectLayerKHR>>)
@@ -26252,16 +24690,11 @@ module KHRIncrementalPresent =
             new(swapchainCount : uint32, pRegions : nativeptr<VkPresentRegionKHR>) =
                 VkPresentRegionsKHR(Unchecked.defaultof<nativeint>, swapchainCount, pRegions)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.swapchainCount = Unchecked.defaultof<uint32> && x.pRegions = Unchecked.defaultof<nativeptr<VkPresentRegionKHR>>
+
             static member Empty =
                 VkPresentRegionsKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPresentRegionKHR>>)
-
-            /// Creates an empty VkPresentRegionsKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPresentRegionsKHR(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPresentRegionKHR>>)
-
-            /// Creates an empty VkPresentRegionsKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPresentRegionsKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -26345,16 +24778,11 @@ module KHRPerformanceQuery =
             new(flags : VkAcquireProfilingLockFlagsKHR, timeout : uint64) =
                 VkAcquireProfilingLockInfoKHR(Unchecked.defaultof<nativeint>, flags, timeout)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkAcquireProfilingLockFlagsKHR> && x.timeout = Unchecked.defaultof<uint64>
+
             static member Empty =
                 VkAcquireProfilingLockInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAcquireProfilingLockFlagsKHR>, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkAcquireProfilingLockInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAcquireProfilingLockInfoKHR(pNext, Unchecked.defaultof<VkAcquireProfilingLockFlagsKHR>, Unchecked.defaultof<uint64>)
-
-            /// Creates an empty VkAcquireProfilingLockInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAcquireProfilingLockInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -26388,16 +24816,11 @@ module KHRPerformanceQuery =
             new(flags : VkPerformanceCounterDescriptionFlagsKHR, name : String256, category : String256, description : String256) =
                 VkPerformanceCounterDescriptionKHR(Unchecked.defaultof<nativeint>, flags, name, category, description)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPerformanceCounterDescriptionFlagsKHR> && x.name = Unchecked.defaultof<String256> && x.category = Unchecked.defaultof<String256> && x.description = Unchecked.defaultof<String256>
+
             static member Empty =
                 VkPerformanceCounterDescriptionKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPerformanceCounterDescriptionFlagsKHR>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>)
-
-            /// Creates an empty VkPerformanceCounterDescriptionKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPerformanceCounterDescriptionKHR(pNext, Unchecked.defaultof<VkPerformanceCounterDescriptionFlagsKHR>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>)
-
-            /// Creates an empty VkPerformanceCounterDescriptionKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPerformanceCounterDescriptionKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -26433,16 +24856,11 @@ module KHRPerformanceQuery =
             new(unit : VkPerformanceCounterUnitKHR, scope : VkPerformanceCounterScopeKHR, storage : VkPerformanceCounterStorageKHR, uuid : Guid) =
                 VkPerformanceCounterKHR(Unchecked.defaultof<nativeint>, unit, scope, storage, uuid)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.unit = Unchecked.defaultof<VkPerformanceCounterUnitKHR> && x.scope = Unchecked.defaultof<VkPerformanceCounterScopeKHR> && x.storage = Unchecked.defaultof<VkPerformanceCounterStorageKHR> && x.uuid = Unchecked.defaultof<Guid>
+
             static member Empty =
                 VkPerformanceCounterKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPerformanceCounterUnitKHR>, Unchecked.defaultof<VkPerformanceCounterScopeKHR>, Unchecked.defaultof<VkPerformanceCounterStorageKHR>, Unchecked.defaultof<Guid>)
-
-            /// Creates an empty VkPerformanceCounterKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPerformanceCounterKHR(pNext, Unchecked.defaultof<VkPerformanceCounterUnitKHR>, Unchecked.defaultof<VkPerformanceCounterScopeKHR>, Unchecked.defaultof<VkPerformanceCounterStorageKHR>, Unchecked.defaultof<Guid>)
-
-            /// Creates an empty VkPerformanceCounterKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPerformanceCounterKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -26500,16 +24918,11 @@ module KHRPerformanceQuery =
             new(counterPassIndex : uint32) =
                 VkPerformanceQuerySubmitInfoKHR(Unchecked.defaultof<nativeint>, counterPassIndex)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.counterPassIndex = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPerformanceQuerySubmitInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPerformanceQuerySubmitInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPerformanceQuerySubmitInfoKHR(pNext, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPerformanceQuerySubmitInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPerformanceQuerySubmitInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -26538,16 +24951,11 @@ module KHRPerformanceQuery =
             new(performanceCounterQueryPools : VkBool32, performanceCounterMultipleQueryPools : VkBool32) =
                 VkPhysicalDevicePerformanceQueryFeaturesKHR(Unchecked.defaultof<nativeint>, performanceCounterQueryPools, performanceCounterMultipleQueryPools)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.performanceCounterQueryPools = Unchecked.defaultof<VkBool32> && x.performanceCounterMultipleQueryPools = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDevicePerformanceQueryFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevicePerformanceQueryFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDevicePerformanceQueryFeaturesKHR(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevicePerformanceQueryFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDevicePerformanceQueryFeaturesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -26575,16 +24983,11 @@ module KHRPerformanceQuery =
             new(allowCommandBufferQueryCopies : VkBool32) =
                 VkPhysicalDevicePerformanceQueryPropertiesKHR(Unchecked.defaultof<nativeint>, allowCommandBufferQueryCopies)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.allowCommandBufferQueryCopies = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDevicePerformanceQueryPropertiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevicePerformanceQueryPropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDevicePerformanceQueryPropertiesKHR(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevicePerformanceQueryPropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDevicePerformanceQueryPropertiesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -26615,16 +25018,11 @@ module KHRPerformanceQuery =
             new(queueFamilyIndex : uint32, counterIndexCount : uint32, pCounterIndices : nativeptr<uint32>) =
                 VkQueryPoolPerformanceCreateInfoKHR(Unchecked.defaultof<nativeint>, queueFamilyIndex, counterIndexCount, pCounterIndices)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.queueFamilyIndex = Unchecked.defaultof<uint32> && x.counterIndexCount = Unchecked.defaultof<uint32> && x.pCounterIndices = Unchecked.defaultof<nativeptr<uint32>>
+
             static member Empty =
                 VkQueryPoolPerformanceCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkQueryPoolPerformanceCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkQueryPoolPerformanceCreateInfoKHR(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkQueryPoolPerformanceCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkQueryPoolPerformanceCreateInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -26703,16 +25101,11 @@ module KHRPipelineExecutableProperties =
             new(pipelineExecutableInfo : VkBool32) =
                 VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR(Unchecked.defaultof<nativeint>, pipelineExecutableInfo)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pipelineExecutableInfo = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDevicePipelineExecutablePropertiesFeaturesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -26741,16 +25134,11 @@ module KHRPipelineExecutableProperties =
             new(pipeline : VkPipeline, executableIndex : uint32) =
                 VkPipelineExecutableInfoKHR(Unchecked.defaultof<nativeint>, pipeline, executableIndex)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pipeline = Unchecked.defaultof<VkPipeline> && x.executableIndex = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPipelineExecutableInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipeline>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPipelineExecutableInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineExecutableInfoKHR(pNext, Unchecked.defaultof<VkPipeline>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPipelineExecutableInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineExecutableInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -26786,16 +25174,11 @@ module KHRPipelineExecutableProperties =
             new(name : String256, description : String256, isText : VkBool32, dataSize : uint64, pData : nativeint) =
                 VkPipelineExecutableInternalRepresentationKHR(Unchecked.defaultof<nativeint>, name, description, isText, dataSize, pData)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.name = Unchecked.defaultof<String256> && x.description = Unchecked.defaultof<String256> && x.isText = Unchecked.defaultof<VkBool32> && x.dataSize = Unchecked.defaultof<uint64> && x.pData = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkPipelineExecutableInternalRepresentationKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint64>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkPipelineExecutableInternalRepresentationKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineExecutableInternalRepresentationKHR(pNext, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint64>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkPipelineExecutableInternalRepresentationKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineExecutableInternalRepresentationKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -26832,16 +25215,11 @@ module KHRPipelineExecutableProperties =
             new(stages : VkShaderStageFlags, name : String256, description : String256, subgroupSize : uint32) =
                 VkPipelineExecutablePropertiesKHR(Unchecked.defaultof<nativeint>, stages, name, description, subgroupSize)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.stages = Unchecked.defaultof<VkShaderStageFlags> && x.name = Unchecked.defaultof<String256> && x.description = Unchecked.defaultof<String256> && x.subgroupSize = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPipelineExecutablePropertiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkShaderStageFlags>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPipelineExecutablePropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineExecutablePropertiesKHR(pNext, Unchecked.defaultof<VkShaderStageFlags>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPipelineExecutablePropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineExecutablePropertiesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -26898,16 +25276,11 @@ module KHRPipelineExecutableProperties =
             new(name : String256, description : String256, format : VkPipelineExecutableStatisticFormatKHR, value : VkPipelineExecutableStatisticValueKHR) =
                 VkPipelineExecutableStatisticKHR(Unchecked.defaultof<nativeint>, name, description, format, value)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.name = Unchecked.defaultof<String256> && x.description = Unchecked.defaultof<String256> && x.format = Unchecked.defaultof<VkPipelineExecutableStatisticFormatKHR> && x.value = Unchecked.defaultof<VkPipelineExecutableStatisticValueKHR>
+
             static member Empty =
                 VkPipelineExecutableStatisticKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>, Unchecked.defaultof<VkPipelineExecutableStatisticFormatKHR>, Unchecked.defaultof<VkPipelineExecutableStatisticValueKHR>)
-
-            /// Creates an empty VkPipelineExecutableStatisticKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineExecutableStatisticKHR(pNext, Unchecked.defaultof<String256>, Unchecked.defaultof<String256>, Unchecked.defaultof<VkPipelineExecutableStatisticFormatKHR>, Unchecked.defaultof<VkPipelineExecutableStatisticValueKHR>)
-
-            /// Creates an empty VkPipelineExecutableStatisticKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineExecutableStatisticKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -26937,16 +25310,11 @@ module KHRPipelineExecutableProperties =
             new(pipeline : VkPipeline) =
                 VkPipelineInfoKHR(Unchecked.defaultof<nativeint>, pipeline)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pipeline = Unchecked.defaultof<VkPipeline>
+
             static member Empty =
                 VkPipelineInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipeline>)
-
-            /// Creates an empty VkPipelineInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineInfoKHR(pNext, Unchecked.defaultof<VkPipeline>)
-
-            /// Creates an empty VkPipelineInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -27011,16 +25379,11 @@ module KHRPipelineLibrary =
             new(libraryCount : uint32, pLibraries : nativeptr<VkPipeline>) =
                 VkPipelineLibraryCreateInfoKHR(Unchecked.defaultof<nativeint>, libraryCount, pLibraries)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.libraryCount = Unchecked.defaultof<uint32> && x.pLibraries = Unchecked.defaultof<nativeptr<VkPipeline>>
+
             static member Empty =
                 VkPipelineLibraryCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipeline>>)
-
-            /// Creates an empty VkPipelineLibraryCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineLibraryCreateInfoKHR(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipeline>>)
-
-            /// Creates an empty VkPipelineLibraryCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineLibraryCreateInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -27093,16 +25456,11 @@ module KHRPortabilitySubset =
             new(constantAlphaColorBlendFactors : VkBool32, events : VkBool32, imageViewFormatReinterpretation : VkBool32, imageViewFormatSwizzle : VkBool32, imageView2DOn3DImage : VkBool32, multisampleArrayImage : VkBool32, mutableComparisonSamplers : VkBool32, pointPolygons : VkBool32, samplerMipLodBias : VkBool32, separateStencilMaskRef : VkBool32, shaderSampleRateInterpolationFunctions : VkBool32, tessellationIsolines : VkBool32, tessellationPointMode : VkBool32, triangleFans : VkBool32, vertexAttributeAccessBeyondStride : VkBool32) =
                 VkPhysicalDevicePortabilitySubsetFeaturesKHR(Unchecked.defaultof<nativeint>, constantAlphaColorBlendFactors, events, imageViewFormatReinterpretation, imageViewFormatSwizzle, imageView2DOn3DImage, multisampleArrayImage, mutableComparisonSamplers, pointPolygons, samplerMipLodBias, separateStencilMaskRef, shaderSampleRateInterpolationFunctions, tessellationIsolines, tessellationPointMode, triangleFans, vertexAttributeAccessBeyondStride)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.constantAlphaColorBlendFactors = Unchecked.defaultof<VkBool32> && x.events = Unchecked.defaultof<VkBool32> && x.imageViewFormatReinterpretation = Unchecked.defaultof<VkBool32> && x.imageViewFormatSwizzle = Unchecked.defaultof<VkBool32> && x.imageView2DOn3DImage = Unchecked.defaultof<VkBool32> && x.multisampleArrayImage = Unchecked.defaultof<VkBool32> && x.mutableComparisonSamplers = Unchecked.defaultof<VkBool32> && x.pointPolygons = Unchecked.defaultof<VkBool32> && x.samplerMipLodBias = Unchecked.defaultof<VkBool32> && x.separateStencilMaskRef = Unchecked.defaultof<VkBool32> && x.shaderSampleRateInterpolationFunctions = Unchecked.defaultof<VkBool32> && x.tessellationIsolines = Unchecked.defaultof<VkBool32> && x.tessellationPointMode = Unchecked.defaultof<VkBool32> && x.triangleFans = Unchecked.defaultof<VkBool32> && x.vertexAttributeAccessBeyondStride = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDevicePortabilitySubsetFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevicePortabilitySubsetFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDevicePortabilitySubsetFeaturesKHR(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDevicePortabilitySubsetFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDevicePortabilitySubsetFeaturesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -27143,16 +25501,11 @@ module KHRPortabilitySubset =
             new(minVertexInputBindingStrideAlignment : uint32) =
                 VkPhysicalDevicePortabilitySubsetPropertiesKHR(Unchecked.defaultof<nativeint>, minVertexInputBindingStrideAlignment)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.minVertexInputBindingStrideAlignment = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDevicePortabilitySubsetPropertiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDevicePortabilitySubsetPropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDevicePortabilitySubsetPropertiesKHR(pNext, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDevicePortabilitySubsetPropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDevicePortabilitySubsetPropertiesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -27233,16 +25586,11 @@ module KHRRayQuery =
             new(rayQuery : VkBool32) =
                 VkPhysicalDeviceRayQueryFeaturesKHR(Unchecked.defaultof<nativeint>, rayQuery)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.rayQuery = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceRayQueryFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceRayQueryFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceRayQueryFeaturesKHR(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceRayQueryFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceRayQueryFeaturesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -27310,16 +25658,11 @@ module KHRRayTracingPipeline =
             new(rayTracingPipeline : VkBool32, rayTracingPipelineShaderGroupHandleCaptureReplay : VkBool32, rayTracingPipelineShaderGroupHandleCaptureReplayMixed : VkBool32, rayTracingPipelineTraceRaysIndirect : VkBool32, rayTraversalPrimitiveCulling : VkBool32) =
                 VkPhysicalDeviceRayTracingPipelineFeaturesKHR(Unchecked.defaultof<nativeint>, rayTracingPipeline, rayTracingPipelineShaderGroupHandleCaptureReplay, rayTracingPipelineShaderGroupHandleCaptureReplayMixed, rayTracingPipelineTraceRaysIndirect, rayTraversalPrimitiveCulling)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.rayTracingPipeline = Unchecked.defaultof<VkBool32> && x.rayTracingPipelineShaderGroupHandleCaptureReplay = Unchecked.defaultof<VkBool32> && x.rayTracingPipelineShaderGroupHandleCaptureReplayMixed = Unchecked.defaultof<VkBool32> && x.rayTracingPipelineTraceRaysIndirect = Unchecked.defaultof<VkBool32> && x.rayTraversalPrimitiveCulling = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceRayTracingPipelineFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceRayTracingPipelineFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceRayTracingPipelineFeaturesKHR(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceRayTracingPipelineFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceRayTracingPipelineFeaturesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -27364,16 +25707,11 @@ module KHRRayTracingPipeline =
             new(shaderGroupHandleSize : uint32, maxRayRecursionDepth : uint32, maxShaderGroupStride : uint32, shaderGroupBaseAlignment : uint32, shaderGroupHandleCaptureReplaySize : uint32, maxRayDispatchInvocationCount : uint32, shaderGroupHandleAlignment : uint32, maxRayHitAttributeSize : uint32) =
                 VkPhysicalDeviceRayTracingPipelinePropertiesKHR(Unchecked.defaultof<nativeint>, shaderGroupHandleSize, maxRayRecursionDepth, maxShaderGroupStride, shaderGroupBaseAlignment, shaderGroupHandleCaptureReplaySize, maxRayDispatchInvocationCount, shaderGroupHandleAlignment, maxRayHitAttributeSize)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shaderGroupHandleSize = Unchecked.defaultof<uint32> && x.maxRayRecursionDepth = Unchecked.defaultof<uint32> && x.maxShaderGroupStride = Unchecked.defaultof<uint32> && x.shaderGroupBaseAlignment = Unchecked.defaultof<uint32> && x.shaderGroupHandleCaptureReplaySize = Unchecked.defaultof<uint32> && x.maxRayDispatchInvocationCount = Unchecked.defaultof<uint32> && x.shaderGroupHandleAlignment = Unchecked.defaultof<uint32> && x.maxRayHitAttributeSize = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDeviceRayTracingPipelinePropertiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceRayTracingPipelinePropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceRayTracingPipelinePropertiesKHR(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceRayTracingPipelinePropertiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceRayTracingPipelinePropertiesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -27417,16 +25755,11 @@ module KHRRayTracingPipeline =
             new(_type : VkRayTracingShaderGroupTypeKHR, generalShader : uint32, closestHitShader : uint32, anyHitShader : uint32, intersectionShader : uint32, pShaderGroupCaptureReplayHandle : nativeint) =
                 VkRayTracingShaderGroupCreateInfoKHR(Unchecked.defaultof<nativeint>, _type, generalShader, closestHitShader, anyHitShader, intersectionShader, pShaderGroupCaptureReplayHandle)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x._type = Unchecked.defaultof<VkRayTracingShaderGroupTypeKHR> && x.generalShader = Unchecked.defaultof<uint32> && x.closestHitShader = Unchecked.defaultof<uint32> && x.anyHitShader = Unchecked.defaultof<uint32> && x.intersectionShader = Unchecked.defaultof<uint32> && x.pShaderGroupCaptureReplayHandle = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkRayTracingShaderGroupCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkRayTracingShaderGroupTypeKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkRayTracingShaderGroupCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkRayTracingShaderGroupCreateInfoKHR(pNext, Unchecked.defaultof<VkRayTracingShaderGroupTypeKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkRayTracingShaderGroupCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkRayTracingShaderGroupCreateInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -27460,16 +25793,11 @@ module KHRRayTracingPipeline =
             new(maxPipelineRayPayloadSize : uint32, maxPipelineRayHitAttributeSize : uint32) =
                 VkRayTracingPipelineInterfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, maxPipelineRayPayloadSize, maxPipelineRayHitAttributeSize)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxPipelineRayPayloadSize = Unchecked.defaultof<uint32> && x.maxPipelineRayHitAttributeSize = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkRayTracingPipelineInterfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkRayTracingPipelineInterfaceCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkRayTracingPipelineInterfaceCreateInfoKHR(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkRayTracingPipelineInterfaceCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkRayTracingPipelineInterfaceCreateInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -27519,16 +25847,11 @@ module KHRRayTracingPipeline =
             new(flags : VkPipelineCreateFlags, stageCount : uint32, pStages : nativeptr<VkPipelineShaderStageCreateInfo>, groupCount : uint32, pGroups : nativeptr<VkRayTracingShaderGroupCreateInfoKHR>, maxPipelineRayRecursionDepth : uint32, pLibraryInfo : nativeptr<VkPipelineLibraryCreateInfoKHR>, pLibraryInterface : nativeptr<VkRayTracingPipelineInterfaceCreateInfoKHR>, pDynamicState : nativeptr<VkPipelineDynamicStateCreateInfo>, layout : VkPipelineLayout, basePipelineHandle : VkPipeline, basePipelineIndex : int) =
                 VkRayTracingPipelineCreateInfoKHR(Unchecked.defaultof<nativeint>, flags, stageCount, pStages, groupCount, pGroups, maxPipelineRayRecursionDepth, pLibraryInfo, pLibraryInterface, pDynamicState, layout, basePipelineHandle, basePipelineIndex)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineCreateFlags> && x.stageCount = Unchecked.defaultof<uint32> && x.pStages = Unchecked.defaultof<nativeptr<VkPipelineShaderStageCreateInfo>> && x.groupCount = Unchecked.defaultof<uint32> && x.pGroups = Unchecked.defaultof<nativeptr<VkRayTracingShaderGroupCreateInfoKHR>> && x.maxPipelineRayRecursionDepth = Unchecked.defaultof<uint32> && x.pLibraryInfo = Unchecked.defaultof<nativeptr<VkPipelineLibraryCreateInfoKHR>> && x.pLibraryInterface = Unchecked.defaultof<nativeptr<VkRayTracingPipelineInterfaceCreateInfoKHR>> && x.pDynamicState = Unchecked.defaultof<nativeptr<VkPipelineDynamicStateCreateInfo>> && x.layout = Unchecked.defaultof<VkPipelineLayout> && x.basePipelineHandle = Unchecked.defaultof<VkPipeline> && x.basePipelineIndex = Unchecked.defaultof<int>
+
             static member Empty =
                 VkRayTracingPipelineCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipelineShaderStageCreateInfo>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkRayTracingShaderGroupCreateInfoKHR>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipelineLibraryCreateInfoKHR>>, Unchecked.defaultof<nativeptr<VkRayTracingPipelineInterfaceCreateInfoKHR>>, Unchecked.defaultof<nativeptr<VkPipelineDynamicStateCreateInfo>>, Unchecked.defaultof<VkPipelineLayout>, Unchecked.defaultof<VkPipeline>, Unchecked.defaultof<int>)
-
-            /// Creates an empty VkRayTracingPipelineCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkRayTracingPipelineCreateInfoKHR(pNext, Unchecked.defaultof<VkPipelineCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipelineShaderStageCreateInfo>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkRayTracingShaderGroupCreateInfoKHR>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipelineLibraryCreateInfoKHR>>, Unchecked.defaultof<nativeptr<VkRayTracingPipelineInterfaceCreateInfoKHR>>, Unchecked.defaultof<nativeptr<VkPipelineDynamicStateCreateInfo>>, Unchecked.defaultof<VkPipelineLayout>, Unchecked.defaultof<VkPipeline>, Unchecked.defaultof<int>)
-
-            /// Creates an empty VkRayTracingPipelineCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkRayTracingPipelineCreateInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -27563,6 +25886,9 @@ module KHRRayTracingPipeline =
                     size = size
                 }
 
+            member x.IsEmpty =
+                x.deviceAddress = Unchecked.defaultof<VkDeviceAddress> && x.stride = Unchecked.defaultof<VkDeviceSize> && x.size = Unchecked.defaultof<VkDeviceSize>
+
             static member Empty =
                 VkStridedDeviceAddressRegionKHR(Unchecked.defaultof<VkDeviceAddress>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>)
 
@@ -27587,6 +25913,9 @@ module KHRRayTracingPipeline =
                     height = height
                     depth = depth
                 }
+
+            member x.IsEmpty =
+                x.width = Unchecked.defaultof<uint32> && x.height = Unchecked.defaultof<uint32> && x.depth = Unchecked.defaultof<uint32>
 
             static member Empty =
                 VkTraceRaysIndirectCommandKHR(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
@@ -27763,16 +26092,11 @@ module KHRShaderClock =
             new(shaderSubgroupClock : VkBool32, shaderDeviceClock : VkBool32) =
                 VkPhysicalDeviceShaderClockFeaturesKHR(Unchecked.defaultof<nativeint>, shaderSubgroupClock, shaderDeviceClock)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shaderSubgroupClock = Unchecked.defaultof<VkBool32> && x.shaderDeviceClock = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceShaderClockFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderClockFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceShaderClockFeaturesKHR(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderClockFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceShaderClockFeaturesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -27853,16 +26177,11 @@ module KHRShaderTerminateInvocation =
             new(shaderTerminateInvocation : VkBool32) =
                 VkPhysicalDeviceShaderTerminateInvocationFeaturesKHR(Unchecked.defaultof<nativeint>, shaderTerminateInvocation)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shaderTerminateInvocation = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceShaderTerminateInvocationFeaturesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderTerminateInvocationFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceShaderTerminateInvocationFeaturesKHR(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderTerminateInvocationFeaturesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceShaderTerminateInvocationFeaturesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -27904,16 +26223,11 @@ module KHRSharedPresentableImage =
             new(sharedPresentSupportedUsageFlags : VkImageUsageFlags) =
                 VkSharedPresentSurfaceCapabilitiesKHR(Unchecked.defaultof<nativeint>, sharedPresentSupportedUsageFlags)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.sharedPresentSupportedUsageFlags = Unchecked.defaultof<VkImageUsageFlags>
+
             static member Empty =
                 VkSharedPresentSurfaceCapabilitiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageUsageFlags>)
-
-            /// Creates an empty VkSharedPresentSurfaceCapabilitiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSharedPresentSurfaceCapabilitiesKHR(pNext, Unchecked.defaultof<VkImageUsageFlags>)
-
-            /// Creates an empty VkSharedPresentSurfaceCapabilitiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSharedPresentSurfaceCapabilitiesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -27972,16 +26286,11 @@ module KHRSurfaceProtectedCapabilities =
             new(supportsProtected : VkBool32) =
                 VkSurfaceProtectedCapabilitiesKHR(Unchecked.defaultof<nativeint>, supportsProtected)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.supportsProtected = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkSurfaceProtectedCapabilitiesKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkSurfaceProtectedCapabilitiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkSurfaceProtectedCapabilitiesKHR(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkSurfaceProtectedCapabilitiesKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkSurfaceProtectedCapabilitiesKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -28141,16 +26450,11 @@ module KHRWaylandSurface =
             new(flags : VkWaylandSurfaceCreateFlagsKHR, display : nativeptr<nativeint>, surface : nativeptr<nativeint>) =
                 VkWaylandSurfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, flags, display, surface)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkWaylandSurfaceCreateFlagsKHR> && x.display = Unchecked.defaultof<nativeptr<nativeint>> && x.surface = Unchecked.defaultof<nativeptr<nativeint>>
+
             static member Empty =
                 VkWaylandSurfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkWaylandSurfaceCreateFlagsKHR>, Unchecked.defaultof<nativeptr<nativeint>>, Unchecked.defaultof<nativeptr<nativeint>>)
-
-            /// Creates an empty VkWaylandSurfaceCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkWaylandSurfaceCreateInfoKHR(pNext, Unchecked.defaultof<VkWaylandSurfaceCreateFlagsKHR>, Unchecked.defaultof<nativeptr<nativeint>>, Unchecked.defaultof<nativeptr<nativeint>>)
-
-            /// Creates an empty VkWaylandSurfaceCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkWaylandSurfaceCreateInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -28222,16 +26526,11 @@ module KHRWin32KeyedMutex =
             new(acquireCount : uint32, pAcquireSyncs : nativeptr<VkDeviceMemory>, pAcquireKeys : nativeptr<uint64>, pAcquireTimeouts : nativeptr<uint32>, releaseCount : uint32, pReleaseSyncs : nativeptr<VkDeviceMemory>, pReleaseKeys : nativeptr<uint64>) =
                 VkWin32KeyedMutexAcquireReleaseInfoKHR(Unchecked.defaultof<nativeint>, acquireCount, pAcquireSyncs, pAcquireKeys, pAcquireTimeouts, releaseCount, pReleaseSyncs, pReleaseKeys)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.acquireCount = Unchecked.defaultof<uint32> && x.pAcquireSyncs = Unchecked.defaultof<nativeptr<VkDeviceMemory>> && x.pAcquireKeys = Unchecked.defaultof<nativeptr<uint64>> && x.pAcquireTimeouts = Unchecked.defaultof<nativeptr<uint32>> && x.releaseCount = Unchecked.defaultof<uint32> && x.pReleaseSyncs = Unchecked.defaultof<nativeptr<VkDeviceMemory>> && x.pReleaseKeys = Unchecked.defaultof<nativeptr<uint64>>
+
             static member Empty =
                 VkWin32KeyedMutexAcquireReleaseInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDeviceMemory>>, Unchecked.defaultof<nativeptr<uint64>>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDeviceMemory>>, Unchecked.defaultof<nativeptr<uint64>>)
-
-            /// Creates an empty VkWin32KeyedMutexAcquireReleaseInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkWin32KeyedMutexAcquireReleaseInfoKHR(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDeviceMemory>>, Unchecked.defaultof<nativeptr<uint64>>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDeviceMemory>>, Unchecked.defaultof<nativeptr<uint64>>)
-
-            /// Creates an empty VkWin32KeyedMutexAcquireReleaseInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkWin32KeyedMutexAcquireReleaseInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -28280,16 +26579,11 @@ module KHRXcbSurface =
             new(flags : VkXcbSurfaceCreateFlagsKHR, connection : nativeptr<nativeint>, window : nativeint) =
                 VkXcbSurfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, flags, connection, window)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkXcbSurfaceCreateFlagsKHR> && x.connection = Unchecked.defaultof<nativeptr<nativeint>> && x.window = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkXcbSurfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkXcbSurfaceCreateFlagsKHR>, Unchecked.defaultof<nativeptr<nativeint>>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkXcbSurfaceCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkXcbSurfaceCreateInfoKHR(pNext, Unchecked.defaultof<VkXcbSurfaceCreateFlagsKHR>, Unchecked.defaultof<nativeptr<nativeint>>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkXcbSurfaceCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkXcbSurfaceCreateInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -28350,16 +26644,11 @@ module KHRXlibSurface =
             new(flags : VkXlibSurfaceCreateFlagsKHR, dpy : nativeptr<nativeint>, window : nativeint) =
                 VkXlibSurfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, flags, dpy, window)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkXlibSurfaceCreateFlagsKHR> && x.dpy = Unchecked.defaultof<nativeptr<nativeint>> && x.window = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkXlibSurfaceCreateInfoKHR(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkXlibSurfaceCreateFlagsKHR>, Unchecked.defaultof<nativeptr<nativeint>>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkXlibSurfaceCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkXlibSurfaceCreateInfoKHR(pNext, Unchecked.defaultof<VkXlibSurfaceCreateFlagsKHR>, Unchecked.defaultof<nativeptr<nativeint>>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkXlibSurfaceCreateInfoKHR with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkXlibSurfaceCreateInfoKHR.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -28418,16 +26707,11 @@ module MVKIosSurface =
             new(flags : VkIOSSurfaceCreateFlagsMVK, pView : nativeint) =
                 VkIOSSurfaceCreateInfoMVK(Unchecked.defaultof<nativeint>, flags, pView)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkIOSSurfaceCreateFlagsMVK> && x.pView = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkIOSSurfaceCreateInfoMVK(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkIOSSurfaceCreateFlagsMVK>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkIOSSurfaceCreateInfoMVK with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkIOSSurfaceCreateInfoMVK(pNext, Unchecked.defaultof<VkIOSSurfaceCreateFlagsMVK>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkIOSSurfaceCreateInfoMVK with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkIOSSurfaceCreateInfoMVK.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -28480,16 +26764,11 @@ module MVKMacosSurface =
             new(flags : VkMacOSSurfaceCreateFlagsMVK, pView : nativeint) =
                 VkMacOSSurfaceCreateInfoMVK(Unchecked.defaultof<nativeint>, flags, pView)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkMacOSSurfaceCreateFlagsMVK> && x.pView = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkMacOSSurfaceCreateInfoMVK(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkMacOSSurfaceCreateFlagsMVK>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkMacOSSurfaceCreateInfoMVK with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkMacOSSurfaceCreateInfoMVK(pNext, Unchecked.defaultof<VkMacOSSurfaceCreateFlagsMVK>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkMacOSSurfaceCreateInfoMVK with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkMacOSSurfaceCreateInfoMVK.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -28542,16 +26821,11 @@ module NNViSurface =
             new(flags : VkViSurfaceCreateFlagsNN, window : nativeint) =
                 VkViSurfaceCreateInfoNN(Unchecked.defaultof<nativeint>, flags, window)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkViSurfaceCreateFlagsNN> && x.window = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkViSurfaceCreateInfoNN(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkViSurfaceCreateFlagsNN>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkViSurfaceCreateInfoNN with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkViSurfaceCreateInfoNN(pNext, Unchecked.defaultof<VkViSurfaceCreateFlagsNN>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkViSurfaceCreateInfoNN with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkViSurfaceCreateInfoNN.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -28601,16 +26875,11 @@ module NVXImageViewHandle =
             new(deviceAddress : VkDeviceAddress, size : VkDeviceSize) =
                 VkImageViewAddressPropertiesNVX(Unchecked.defaultof<nativeint>, deviceAddress, size)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.deviceAddress = Unchecked.defaultof<VkDeviceAddress> && x.size = Unchecked.defaultof<VkDeviceSize>
+
             static member Empty =
                 VkImageViewAddressPropertiesNVX(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceAddress>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkImageViewAddressPropertiesNVX with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImageViewAddressPropertiesNVX(pNext, Unchecked.defaultof<VkDeviceAddress>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkImageViewAddressPropertiesNVX with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImageViewAddressPropertiesNVX.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -28642,16 +26911,11 @@ module NVXImageViewHandle =
             new(imageView : VkImageView, descriptorType : VkDescriptorType, sampler : VkSampler) =
                 VkImageViewHandleInfoNVX(Unchecked.defaultof<nativeint>, imageView, descriptorType, sampler)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.imageView = Unchecked.defaultof<VkImageView> && x.descriptorType = Unchecked.defaultof<VkDescriptorType> && x.sampler = Unchecked.defaultof<VkSampler>
+
             static member Empty =
                 VkImageViewHandleInfoNVX(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImageView>, Unchecked.defaultof<VkDescriptorType>, Unchecked.defaultof<VkSampler>)
-
-            /// Creates an empty VkImageViewHandleInfoNVX with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImageViewHandleInfoNVX(pNext, Unchecked.defaultof<VkImageView>, Unchecked.defaultof<VkDescriptorType>, Unchecked.defaultof<VkSampler>)
-
-            /// Creates an empty VkImageViewHandleInfoNVX with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImageViewHandleInfoNVX.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -28709,16 +26973,11 @@ module NVXMultiviewPerViewAttributes =
             new(perViewPositionAllComponents : VkBool32) =
                 VkPhysicalDeviceMultiviewPerViewAttributesPropertiesNVX(Unchecked.defaultof<nativeint>, perViewPositionAllComponents)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.perViewPositionAllComponents = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceMultiviewPerViewAttributesPropertiesNVX(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceMultiviewPerViewAttributesPropertiesNVX with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceMultiviewPerViewAttributesPropertiesNVX(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceMultiviewPerViewAttributesPropertiesNVX with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceMultiviewPerViewAttributesPropertiesNVX.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -28784,6 +27043,9 @@ module NVClipSpaceWScaling =
                     ycoeff = ycoeff
                 }
 
+            member x.IsEmpty =
+                x.xcoeff = Unchecked.defaultof<float32> && x.ycoeff = Unchecked.defaultof<float32>
+
             static member Empty =
                 VkViewportWScalingNV(Unchecked.defaultof<float32>, Unchecked.defaultof<float32>)
 
@@ -28815,16 +27077,11 @@ module NVClipSpaceWScaling =
             new(viewportWScalingEnable : VkBool32, viewportCount : uint32, pViewportWScalings : nativeptr<VkViewportWScalingNV>) =
                 VkPipelineViewportWScalingStateCreateInfoNV(Unchecked.defaultof<nativeint>, viewportWScalingEnable, viewportCount, pViewportWScalings)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.viewportWScalingEnable = Unchecked.defaultof<VkBool32> && x.viewportCount = Unchecked.defaultof<uint32> && x.pViewportWScalings = Unchecked.defaultof<nativeptr<VkViewportWScalingNV>>
+
             static member Empty =
                 VkPipelineViewportWScalingStateCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkViewportWScalingNV>>)
-
-            /// Creates an empty VkPipelineViewportWScalingStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineViewportWScalingStateCreateInfoNV(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkViewportWScalingNV>>)
-
-            /// Creates an empty VkPipelineViewportWScalingStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineViewportWScalingStateCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -28883,16 +27140,11 @@ module NVComputeShaderDerivatives =
             new(computeDerivativeGroupQuads : VkBool32, computeDerivativeGroupLinear : VkBool32) =
                 VkPhysicalDeviceComputeShaderDerivativesFeaturesNV(Unchecked.defaultof<nativeint>, computeDerivativeGroupQuads, computeDerivativeGroupLinear)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.computeDerivativeGroupQuads = Unchecked.defaultof<VkBool32> && x.computeDerivativeGroupLinear = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceComputeShaderDerivativesFeaturesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceComputeShaderDerivativesFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceComputeShaderDerivativesFeaturesNV(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceComputeShaderDerivativesFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceComputeShaderDerivativesFeaturesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -28966,16 +27218,11 @@ module NVCooperativeMatrix =
             new(MSize : uint32, NSize : uint32, KSize : uint32, AType : VkComponentTypeNV, BType : VkComponentTypeNV, CType : VkComponentTypeNV, DType : VkComponentTypeNV, scope : VkScopeNV) =
                 VkCooperativeMatrixPropertiesNV(Unchecked.defaultof<nativeint>, MSize, NSize, KSize, AType, BType, CType, DType, scope)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.MSize = Unchecked.defaultof<uint32> && x.NSize = Unchecked.defaultof<uint32> && x.KSize = Unchecked.defaultof<uint32> && x.AType = Unchecked.defaultof<VkComponentTypeNV> && x.BType = Unchecked.defaultof<VkComponentTypeNV> && x.CType = Unchecked.defaultof<VkComponentTypeNV> && x.DType = Unchecked.defaultof<VkComponentTypeNV> && x.scope = Unchecked.defaultof<VkScopeNV>
+
             static member Empty =
                 VkCooperativeMatrixPropertiesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkComponentTypeNV>, Unchecked.defaultof<VkComponentTypeNV>, Unchecked.defaultof<VkComponentTypeNV>, Unchecked.defaultof<VkComponentTypeNV>, Unchecked.defaultof<VkScopeNV>)
-
-            /// Creates an empty VkCooperativeMatrixPropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkCooperativeMatrixPropertiesNV(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkComponentTypeNV>, Unchecked.defaultof<VkComponentTypeNV>, Unchecked.defaultof<VkComponentTypeNV>, Unchecked.defaultof<VkComponentTypeNV>, Unchecked.defaultof<VkScopeNV>)
-
-            /// Creates an empty VkCooperativeMatrixPropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkCooperativeMatrixPropertiesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29011,16 +27258,11 @@ module NVCooperativeMatrix =
             new(cooperativeMatrix : VkBool32, cooperativeMatrixRobustBufferAccess : VkBool32) =
                 VkPhysicalDeviceCooperativeMatrixFeaturesNV(Unchecked.defaultof<nativeint>, cooperativeMatrix, cooperativeMatrixRobustBufferAccess)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.cooperativeMatrix = Unchecked.defaultof<VkBool32> && x.cooperativeMatrixRobustBufferAccess = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceCooperativeMatrixFeaturesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceCooperativeMatrixFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceCooperativeMatrixFeaturesNV(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceCooperativeMatrixFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceCooperativeMatrixFeaturesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29048,16 +27290,11 @@ module NVCooperativeMatrix =
             new(cooperativeMatrixSupportedStages : VkShaderStageFlags) =
                 VkPhysicalDeviceCooperativeMatrixPropertiesNV(Unchecked.defaultof<nativeint>, cooperativeMatrixSupportedStages)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.cooperativeMatrixSupportedStages = Unchecked.defaultof<VkShaderStageFlags>
+
             static member Empty =
                 VkPhysicalDeviceCooperativeMatrixPropertiesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkShaderStageFlags>)
-
-            /// Creates an empty VkPhysicalDeviceCooperativeMatrixPropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceCooperativeMatrixPropertiesNV(pNext, Unchecked.defaultof<VkShaderStageFlags>)
-
-            /// Creates an empty VkPhysicalDeviceCooperativeMatrixPropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceCooperativeMatrixPropertiesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29107,16 +27344,11 @@ module NVCornerSampledImage =
             new(cornerSampledImage : VkBool32) =
                 VkPhysicalDeviceCornerSampledImageFeaturesNV(Unchecked.defaultof<nativeint>, cornerSampledImage)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.cornerSampledImage = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceCornerSampledImageFeaturesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceCornerSampledImageFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceCornerSampledImageFeaturesNV(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceCornerSampledImageFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceCornerSampledImageFeaturesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29172,16 +27404,11 @@ module NVFramebufferMixedSamples =
             new(flags : VkPipelineCoverageModulationStateCreateFlagsNV, coverageModulationMode : VkCoverageModulationModeNV, coverageModulationTableEnable : VkBool32, coverageModulationTableCount : uint32, pCoverageModulationTable : nativeptr<float32>) =
                 VkPipelineCoverageModulationStateCreateInfoNV(Unchecked.defaultof<nativeint>, flags, coverageModulationMode, coverageModulationTableEnable, coverageModulationTableCount, pCoverageModulationTable)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineCoverageModulationStateCreateFlagsNV> && x.coverageModulationMode = Unchecked.defaultof<VkCoverageModulationModeNV> && x.coverageModulationTableEnable = Unchecked.defaultof<VkBool32> && x.coverageModulationTableCount = Unchecked.defaultof<uint32> && x.pCoverageModulationTable = Unchecked.defaultof<nativeptr<float32>>
+
             static member Empty =
                 VkPipelineCoverageModulationStateCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineCoverageModulationStateCreateFlagsNV>, Unchecked.defaultof<VkCoverageModulationModeNV>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<float32>>)
-
-            /// Creates an empty VkPipelineCoverageModulationStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineCoverageModulationStateCreateInfoNV(pNext, Unchecked.defaultof<VkPipelineCoverageModulationStateCreateFlagsNV>, Unchecked.defaultof<VkCoverageModulationModeNV>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<float32>>)
-
-            /// Creates an empty VkPipelineCoverageModulationStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineCoverageModulationStateCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29235,16 +27462,11 @@ module NVCoverageReductionMode =
             new(coverageReductionMode : VkCoverageReductionModeNV, rasterizationSamples : VkSampleCountFlags, depthStencilSamples : VkSampleCountFlags, colorSamples : VkSampleCountFlags) =
                 VkFramebufferMixedSamplesCombinationNV(Unchecked.defaultof<nativeint>, coverageReductionMode, rasterizationSamples, depthStencilSamples, colorSamples)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.coverageReductionMode = Unchecked.defaultof<VkCoverageReductionModeNV> && x.rasterizationSamples = Unchecked.defaultof<VkSampleCountFlags> && x.depthStencilSamples = Unchecked.defaultof<VkSampleCountFlags> && x.colorSamples = Unchecked.defaultof<VkSampleCountFlags>
+
             static member Empty =
                 VkFramebufferMixedSamplesCombinationNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkCoverageReductionModeNV>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkSampleCountFlags>)
-
-            /// Creates an empty VkFramebufferMixedSamplesCombinationNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkFramebufferMixedSamplesCombinationNV(pNext, Unchecked.defaultof<VkCoverageReductionModeNV>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkSampleCountFlags>, Unchecked.defaultof<VkSampleCountFlags>)
-
-            /// Creates an empty VkFramebufferMixedSamplesCombinationNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkFramebufferMixedSamplesCombinationNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29274,16 +27496,11 @@ module NVCoverageReductionMode =
             new(coverageReductionMode : VkBool32) =
                 VkPhysicalDeviceCoverageReductionModeFeaturesNV(Unchecked.defaultof<nativeint>, coverageReductionMode)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.coverageReductionMode = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceCoverageReductionModeFeaturesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceCoverageReductionModeFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceCoverageReductionModeFeaturesNV(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceCoverageReductionModeFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceCoverageReductionModeFeaturesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29312,16 +27529,11 @@ module NVCoverageReductionMode =
             new(flags : VkPipelineCoverageReductionStateCreateFlagsNV, coverageReductionMode : VkCoverageReductionModeNV) =
                 VkPipelineCoverageReductionStateCreateInfoNV(Unchecked.defaultof<nativeint>, flags, coverageReductionMode)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineCoverageReductionStateCreateFlagsNV> && x.coverageReductionMode = Unchecked.defaultof<VkCoverageReductionModeNV>
+
             static member Empty =
                 VkPipelineCoverageReductionStateCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineCoverageReductionStateCreateFlagsNV>, Unchecked.defaultof<VkCoverageReductionModeNV>)
-
-            /// Creates an empty VkPipelineCoverageReductionStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineCoverageReductionStateCreateInfoNV(pNext, Unchecked.defaultof<VkPipelineCoverageReductionStateCreateFlagsNV>, Unchecked.defaultof<VkCoverageReductionModeNV>)
-
-            /// Creates an empty VkPipelineCoverageReductionStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineCoverageReductionStateCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29369,16 +27581,11 @@ module NVDedicatedAllocation =
             new(dedicatedAllocation : VkBool32) =
                 VkDedicatedAllocationBufferCreateInfoNV(Unchecked.defaultof<nativeint>, dedicatedAllocation)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.dedicatedAllocation = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkDedicatedAllocationBufferCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkDedicatedAllocationBufferCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDedicatedAllocationBufferCreateInfoNV(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkDedicatedAllocationBufferCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDedicatedAllocationBufferCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29405,16 +27612,11 @@ module NVDedicatedAllocation =
             new(dedicatedAllocation : VkBool32) =
                 VkDedicatedAllocationImageCreateInfoNV(Unchecked.defaultof<nativeint>, dedicatedAllocation)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.dedicatedAllocation = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkDedicatedAllocationImageCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkDedicatedAllocationImageCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDedicatedAllocationImageCreateInfoNV(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkDedicatedAllocationImageCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDedicatedAllocationImageCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29443,16 +27645,11 @@ module NVDedicatedAllocation =
             new(image : VkImage, buffer : VkBuffer) =
                 VkDedicatedAllocationMemoryAllocateInfoNV(Unchecked.defaultof<nativeint>, image, buffer)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.image = Unchecked.defaultof<VkImage> && x.buffer = Unchecked.defaultof<VkBuffer>
+
             static member Empty =
                 VkDedicatedAllocationMemoryAllocateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkBuffer>)
-
-            /// Creates an empty VkDedicatedAllocationMemoryAllocateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDedicatedAllocationMemoryAllocateInfoNV(pNext, Unchecked.defaultof<VkImage>, Unchecked.defaultof<VkBuffer>)
-
-            /// Creates an empty VkDedicatedAllocationMemoryAllocateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDedicatedAllocationMemoryAllocateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29493,16 +27690,11 @@ module NVDedicatedAllocationImageAliasing =
             new(dedicatedAllocationImageAliasing : VkBool32) =
                 VkPhysicalDeviceDedicatedAllocationImageAliasingFeaturesNV(Unchecked.defaultof<nativeint>, dedicatedAllocationImageAliasing)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.dedicatedAllocationImageAliasing = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceDedicatedAllocationImageAliasingFeaturesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceDedicatedAllocationImageAliasingFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceDedicatedAllocationImageAliasingFeaturesNV(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceDedicatedAllocationImageAliasingFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceDedicatedAllocationImageAliasingFeaturesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29543,16 +27735,11 @@ module NVDeviceDiagnosticCheckpoints =
             new(stage : VkPipelineStageFlags, pCheckpointMarker : nativeint) =
                 VkCheckpointDataNV(Unchecked.defaultof<nativeint>, stage, pCheckpointMarker)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.stage = Unchecked.defaultof<VkPipelineStageFlags> && x.pCheckpointMarker = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkCheckpointDataNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineStageFlags>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkCheckpointDataNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkCheckpointDataNV(pNext, Unchecked.defaultof<VkPipelineStageFlags>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkCheckpointDataNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkCheckpointDataNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29580,16 +27767,11 @@ module NVDeviceDiagnosticCheckpoints =
             new(checkpointExecutionStageMask : VkPipelineStageFlags) =
                 VkQueueFamilyCheckpointPropertiesNV(Unchecked.defaultof<nativeint>, checkpointExecutionStageMask)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.checkpointExecutionStageMask = Unchecked.defaultof<VkPipelineStageFlags>
+
             static member Empty =
                 VkQueueFamilyCheckpointPropertiesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineStageFlags>)
-
-            /// Creates an empty VkQueueFamilyCheckpointPropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkQueueFamilyCheckpointPropertiesNV(pNext, Unchecked.defaultof<VkPipelineStageFlags>)
-
-            /// Creates an empty VkQueueFamilyCheckpointPropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkQueueFamilyCheckpointPropertiesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29653,16 +27835,11 @@ module NVDeviceDiagnosticsConfig =
             new(flags : VkDeviceDiagnosticsConfigFlagsNV) =
                 VkDeviceDiagnosticsConfigCreateInfoNV(Unchecked.defaultof<nativeint>, flags)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkDeviceDiagnosticsConfigFlagsNV>
+
             static member Empty =
                 VkDeviceDiagnosticsConfigCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceDiagnosticsConfigFlagsNV>)
-
-            /// Creates an empty VkDeviceDiagnosticsConfigCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkDeviceDiagnosticsConfigCreateInfoNV(pNext, Unchecked.defaultof<VkDeviceDiagnosticsConfigFlagsNV>)
-
-            /// Creates an empty VkDeviceDiagnosticsConfigCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkDeviceDiagnosticsConfigCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29689,16 +27866,11 @@ module NVDeviceDiagnosticsConfig =
             new(diagnosticsConfig : VkBool32) =
                 VkPhysicalDeviceDiagnosticsConfigFeaturesNV(Unchecked.defaultof<nativeint>, diagnosticsConfig)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.diagnosticsConfig = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceDiagnosticsConfigFeaturesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceDiagnosticsConfigFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceDiagnosticsConfigFeaturesNV(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceDiagnosticsConfigFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceDiagnosticsConfigFeaturesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29767,6 +27939,9 @@ module NVDeviceGeneratedCommands =
                     indexType = indexType
                 }
 
+            member x.IsEmpty =
+                x.bufferAddress = Unchecked.defaultof<VkDeviceAddress> && x.size = Unchecked.defaultof<uint32> && x.indexType = Unchecked.defaultof<VkIndexType>
+
             static member Empty =
                 VkBindIndexBufferIndirectCommandNV(Unchecked.defaultof<VkDeviceAddress>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkIndexType>)
 
@@ -29787,6 +27962,9 @@ module NVDeviceGeneratedCommands =
                 {
                     groupIndex = groupIndex
                 }
+
+            member x.IsEmpty =
+                x.groupIndex = Unchecked.defaultof<uint32>
 
             static member Empty =
                 VkBindShaderGroupIndirectCommandNV(Unchecked.defaultof<uint32>)
@@ -29811,6 +27989,9 @@ module NVDeviceGeneratedCommands =
                     stride = stride
                 }
 
+            member x.IsEmpty =
+                x.bufferAddress = Unchecked.defaultof<VkDeviceAddress> && x.size = Unchecked.defaultof<uint32> && x.stride = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkBindVertexBufferIndirectCommandNV(Unchecked.defaultof<VkDeviceAddress>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
 
@@ -29833,6 +28014,9 @@ module NVDeviceGeneratedCommands =
                     buffer = buffer
                     offset = offset
                 }
+
+            member x.IsEmpty =
+                x.buffer = Unchecked.defaultof<VkBuffer> && x.offset = Unchecked.defaultof<VkDeviceSize>
 
             static member Empty =
                 VkIndirectCommandsStreamNV(Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>)
@@ -29885,16 +28069,11 @@ module NVDeviceGeneratedCommands =
             new(pipelineBindPoint : VkPipelineBindPoint, pipeline : VkPipeline, indirectCommandsLayout : VkIndirectCommandsLayoutNV, streamCount : uint32, pStreams : nativeptr<VkIndirectCommandsStreamNV>, sequencesCount : uint32, preprocessBuffer : VkBuffer, preprocessOffset : VkDeviceSize, preprocessSize : VkDeviceSize, sequencesCountBuffer : VkBuffer, sequencesCountOffset : VkDeviceSize, sequencesIndexBuffer : VkBuffer, sequencesIndexOffset : VkDeviceSize) =
                 VkGeneratedCommandsInfoNV(Unchecked.defaultof<nativeint>, pipelineBindPoint, pipeline, indirectCommandsLayout, streamCount, pStreams, sequencesCount, preprocessBuffer, preprocessOffset, preprocessSize, sequencesCountBuffer, sequencesCountOffset, sequencesIndexBuffer, sequencesIndexOffset)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pipelineBindPoint = Unchecked.defaultof<VkPipelineBindPoint> && x.pipeline = Unchecked.defaultof<VkPipeline> && x.indirectCommandsLayout = Unchecked.defaultof<VkIndirectCommandsLayoutNV> && x.streamCount = Unchecked.defaultof<uint32> && x.pStreams = Unchecked.defaultof<nativeptr<VkIndirectCommandsStreamNV>> && x.sequencesCount = Unchecked.defaultof<uint32> && x.preprocessBuffer = Unchecked.defaultof<VkBuffer> && x.preprocessOffset = Unchecked.defaultof<VkDeviceSize> && x.preprocessSize = Unchecked.defaultof<VkDeviceSize> && x.sequencesCountBuffer = Unchecked.defaultof<VkBuffer> && x.sequencesCountOffset = Unchecked.defaultof<VkDeviceSize> && x.sequencesIndexBuffer = Unchecked.defaultof<VkBuffer> && x.sequencesIndexOffset = Unchecked.defaultof<VkDeviceSize>
+
             static member Empty =
                 VkGeneratedCommandsInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineBindPoint>, Unchecked.defaultof<VkPipeline>, Unchecked.defaultof<VkIndirectCommandsLayoutNV>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkIndirectCommandsStreamNV>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkGeneratedCommandsInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkGeneratedCommandsInfoNV(pNext, Unchecked.defaultof<VkPipelineBindPoint>, Unchecked.defaultof<VkPipeline>, Unchecked.defaultof<VkIndirectCommandsLayoutNV>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkIndirectCommandsStreamNV>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkGeneratedCommandsInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkGeneratedCommandsInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29939,16 +28118,11 @@ module NVDeviceGeneratedCommands =
             new(pipelineBindPoint : VkPipelineBindPoint, pipeline : VkPipeline, indirectCommandsLayout : VkIndirectCommandsLayoutNV, maxSequencesCount : uint32) =
                 VkGeneratedCommandsMemoryRequirementsInfoNV(Unchecked.defaultof<nativeint>, pipelineBindPoint, pipeline, indirectCommandsLayout, maxSequencesCount)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pipelineBindPoint = Unchecked.defaultof<VkPipelineBindPoint> && x.pipeline = Unchecked.defaultof<VkPipeline> && x.indirectCommandsLayout = Unchecked.defaultof<VkIndirectCommandsLayoutNV> && x.maxSequencesCount = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkGeneratedCommandsMemoryRequirementsInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineBindPoint>, Unchecked.defaultof<VkPipeline>, Unchecked.defaultof<VkIndirectCommandsLayoutNV>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkGeneratedCommandsMemoryRequirementsInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkGeneratedCommandsMemoryRequirementsInfoNV(pNext, Unchecked.defaultof<VkPipelineBindPoint>, Unchecked.defaultof<VkPipeline>, Unchecked.defaultof<VkIndirectCommandsLayoutNV>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkGeneratedCommandsMemoryRequirementsInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkGeneratedCommandsMemoryRequirementsInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -29984,16 +28158,11 @@ module NVDeviceGeneratedCommands =
             new(stageCount : uint32, pStages : nativeptr<VkPipelineShaderStageCreateInfo>, pVertexInputState : nativeptr<VkPipelineVertexInputStateCreateInfo>, pTessellationState : nativeptr<VkPipelineTessellationStateCreateInfo>) =
                 VkGraphicsShaderGroupCreateInfoNV(Unchecked.defaultof<nativeint>, stageCount, pStages, pVertexInputState, pTessellationState)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.stageCount = Unchecked.defaultof<uint32> && x.pStages = Unchecked.defaultof<nativeptr<VkPipelineShaderStageCreateInfo>> && x.pVertexInputState = Unchecked.defaultof<nativeptr<VkPipelineVertexInputStateCreateInfo>> && x.pTessellationState = Unchecked.defaultof<nativeptr<VkPipelineTessellationStateCreateInfo>>
+
             static member Empty =
                 VkGraphicsShaderGroupCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipelineShaderStageCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineVertexInputStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineTessellationStateCreateInfo>>)
-
-            /// Creates an empty VkGraphicsShaderGroupCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkGraphicsShaderGroupCreateInfoNV(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipelineShaderStageCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineVertexInputStateCreateInfo>>, Unchecked.defaultof<nativeptr<VkPipelineTessellationStateCreateInfo>>)
-
-            /// Creates an empty VkGraphicsShaderGroupCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkGraphicsShaderGroupCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -30029,16 +28198,11 @@ module NVDeviceGeneratedCommands =
             new(groupCount : uint32, pGroups : nativeptr<VkGraphicsShaderGroupCreateInfoNV>, pipelineCount : uint32, pPipelines : nativeptr<VkPipeline>) =
                 VkGraphicsPipelineShaderGroupsCreateInfoNV(Unchecked.defaultof<nativeint>, groupCount, pGroups, pipelineCount, pPipelines)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.groupCount = Unchecked.defaultof<uint32> && x.pGroups = Unchecked.defaultof<nativeptr<VkGraphicsShaderGroupCreateInfoNV>> && x.pipelineCount = Unchecked.defaultof<uint32> && x.pPipelines = Unchecked.defaultof<nativeptr<VkPipeline>>
+
             static member Empty =
                 VkGraphicsPipelineShaderGroupsCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkGraphicsShaderGroupCreateInfoNV>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipeline>>)
-
-            /// Creates an empty VkGraphicsPipelineShaderGroupsCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkGraphicsPipelineShaderGroupsCreateInfoNV(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkGraphicsShaderGroupCreateInfoNV>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipeline>>)
-
-            /// Creates an empty VkGraphicsPipelineShaderGroupsCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkGraphicsPipelineShaderGroupsCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -30092,16 +28256,11 @@ module NVDeviceGeneratedCommands =
             new(tokenType : VkIndirectCommandsTokenTypeNV, stream : uint32, offset : uint32, vertexBindingUnit : uint32, vertexDynamicStride : VkBool32, pushconstantPipelineLayout : VkPipelineLayout, pushconstantShaderStageFlags : VkShaderStageFlags, pushconstantOffset : uint32, pushconstantSize : uint32, indirectStateFlags : VkIndirectStateFlagsNV, indexTypeCount : uint32, pIndexTypes : nativeptr<VkIndexType>, pIndexTypeValues : nativeptr<uint32>) =
                 VkIndirectCommandsLayoutTokenNV(Unchecked.defaultof<nativeint>, tokenType, stream, offset, vertexBindingUnit, vertexDynamicStride, pushconstantPipelineLayout, pushconstantShaderStageFlags, pushconstantOffset, pushconstantSize, indirectStateFlags, indexTypeCount, pIndexTypes, pIndexTypeValues)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.tokenType = Unchecked.defaultof<VkIndirectCommandsTokenTypeNV> && x.stream = Unchecked.defaultof<uint32> && x.offset = Unchecked.defaultof<uint32> && x.vertexBindingUnit = Unchecked.defaultof<uint32> && x.vertexDynamicStride = Unchecked.defaultof<VkBool32> && x.pushconstantPipelineLayout = Unchecked.defaultof<VkPipelineLayout> && x.pushconstantShaderStageFlags = Unchecked.defaultof<VkShaderStageFlags> && x.pushconstantOffset = Unchecked.defaultof<uint32> && x.pushconstantSize = Unchecked.defaultof<uint32> && x.indirectStateFlags = Unchecked.defaultof<VkIndirectStateFlagsNV> && x.indexTypeCount = Unchecked.defaultof<uint32> && x.pIndexTypes = Unchecked.defaultof<nativeptr<VkIndexType>> && x.pIndexTypeValues = Unchecked.defaultof<nativeptr<uint32>>
+
             static member Empty =
                 VkIndirectCommandsLayoutTokenNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkIndirectCommandsTokenTypeNV>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkPipelineLayout>, Unchecked.defaultof<VkShaderStageFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkIndirectStateFlagsNV>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkIndexType>>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkIndirectCommandsLayoutTokenNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkIndirectCommandsLayoutTokenNV(pNext, Unchecked.defaultof<VkIndirectCommandsTokenTypeNV>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkPipelineLayout>, Unchecked.defaultof<VkShaderStageFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkIndirectStateFlagsNV>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkIndexType>>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkIndirectCommandsLayoutTokenNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkIndirectCommandsLayoutTokenNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -30150,16 +28309,11 @@ module NVDeviceGeneratedCommands =
             new(flags : VkIndirectCommandsLayoutUsageFlagsNV, pipelineBindPoint : VkPipelineBindPoint, tokenCount : uint32, pTokens : nativeptr<VkIndirectCommandsLayoutTokenNV>, streamCount : uint32, pStreamStrides : nativeptr<uint32>) =
                 VkIndirectCommandsLayoutCreateInfoNV(Unchecked.defaultof<nativeint>, flags, pipelineBindPoint, tokenCount, pTokens, streamCount, pStreamStrides)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkIndirectCommandsLayoutUsageFlagsNV> && x.pipelineBindPoint = Unchecked.defaultof<VkPipelineBindPoint> && x.tokenCount = Unchecked.defaultof<uint32> && x.pTokens = Unchecked.defaultof<nativeptr<VkIndirectCommandsLayoutTokenNV>> && x.streamCount = Unchecked.defaultof<uint32> && x.pStreamStrides = Unchecked.defaultof<nativeptr<uint32>>
+
             static member Empty =
                 VkIndirectCommandsLayoutCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkIndirectCommandsLayoutUsageFlagsNV>, Unchecked.defaultof<VkPipelineBindPoint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkIndirectCommandsLayoutTokenNV>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkIndirectCommandsLayoutCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkIndirectCommandsLayoutCreateInfoNV(pNext, Unchecked.defaultof<VkIndirectCommandsLayoutUsageFlagsNV>, Unchecked.defaultof<VkPipelineBindPoint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkIndirectCommandsLayoutTokenNV>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkIndirectCommandsLayoutCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkIndirectCommandsLayoutCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -30191,16 +28345,11 @@ module NVDeviceGeneratedCommands =
             new(deviceGeneratedCommands : VkBool32) =
                 VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV(Unchecked.defaultof<nativeint>, deviceGeneratedCommands)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.deviceGeneratedCommands = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceDeviceGeneratedCommandsFeaturesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -30243,16 +28392,11 @@ module NVDeviceGeneratedCommands =
             new(maxGraphicsShaderGroupCount : uint32, maxIndirectSequenceCount : uint32, maxIndirectCommandsTokenCount : uint32, maxIndirectCommandsStreamCount : uint32, maxIndirectCommandsTokenOffset : uint32, maxIndirectCommandsStreamStride : uint32, minSequencesCountBufferOffsetAlignment : uint32, minSequencesIndexBufferOffsetAlignment : uint32, minIndirectCommandsBufferOffsetAlignment : uint32) =
                 VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV(Unchecked.defaultof<nativeint>, maxGraphicsShaderGroupCount, maxIndirectSequenceCount, maxIndirectCommandsTokenCount, maxIndirectCommandsStreamCount, maxIndirectCommandsTokenOffset, maxIndirectCommandsStreamStride, minSequencesCountBufferOffsetAlignment, minSequencesIndexBufferOffsetAlignment, minIndirectCommandsBufferOffsetAlignment)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxGraphicsShaderGroupCount = Unchecked.defaultof<uint32> && x.maxIndirectSequenceCount = Unchecked.defaultof<uint32> && x.maxIndirectCommandsTokenCount = Unchecked.defaultof<uint32> && x.maxIndirectCommandsStreamCount = Unchecked.defaultof<uint32> && x.maxIndirectCommandsTokenOffset = Unchecked.defaultof<uint32> && x.maxIndirectCommandsStreamStride = Unchecked.defaultof<uint32> && x.minSequencesCountBufferOffsetAlignment = Unchecked.defaultof<uint32> && x.minSequencesIndexBufferOffsetAlignment = Unchecked.defaultof<uint32> && x.minIndirectCommandsBufferOffsetAlignment = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceDeviceGeneratedCommandsPropertiesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -30279,6 +28423,9 @@ module NVDeviceGeneratedCommands =
                 {
                     data = data
                 }
+
+            member x.IsEmpty =
+                x.data = Unchecked.defaultof<uint32>
 
             static member Empty =
                 VkSetStateFlagsIndirectCommandNV(Unchecked.defaultof<uint32>)
@@ -30381,6 +28528,9 @@ module NVExternalMemoryCapabilities =
                     compatibleHandleTypes = compatibleHandleTypes
                 }
 
+            member x.IsEmpty =
+                x.imageFormatProperties = Unchecked.defaultof<VkImageFormatProperties> && x.externalMemoryFeatures = Unchecked.defaultof<VkExternalMemoryFeatureFlagsNV> && x.exportFromImportedHandleTypes = Unchecked.defaultof<VkExternalMemoryHandleTypeFlagsNV> && x.compatibleHandleTypes = Unchecked.defaultof<VkExternalMemoryHandleTypeFlagsNV>
+
             static member Empty =
                 VkExternalImageFormatPropertiesNV(Unchecked.defaultof<VkImageFormatProperties>, Unchecked.defaultof<VkExternalMemoryFeatureFlagsNV>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlagsNV>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlagsNV>)
 
@@ -30433,16 +28583,11 @@ module NVExternalMemory =
             new(handleTypes : VkExternalMemoryHandleTypeFlagsNV) =
                 VkExportMemoryAllocateInfoNV(Unchecked.defaultof<nativeint>, handleTypes)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.handleTypes = Unchecked.defaultof<VkExternalMemoryHandleTypeFlagsNV>
+
             static member Empty =
                 VkExportMemoryAllocateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlagsNV>)
-
-            /// Creates an empty VkExportMemoryAllocateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkExportMemoryAllocateInfoNV(pNext, Unchecked.defaultof<VkExternalMemoryHandleTypeFlagsNV>)
-
-            /// Creates an empty VkExportMemoryAllocateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkExportMemoryAllocateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -30469,16 +28614,11 @@ module NVExternalMemory =
             new(handleTypes : VkExternalMemoryHandleTypeFlagsNV) =
                 VkExternalMemoryImageCreateInfoNV(Unchecked.defaultof<nativeint>, handleTypes)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.handleTypes = Unchecked.defaultof<VkExternalMemoryHandleTypeFlagsNV>
+
             static member Empty =
                 VkExternalMemoryImageCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlagsNV>)
-
-            /// Creates an empty VkExternalMemoryImageCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkExternalMemoryImageCreateInfoNV(pNext, Unchecked.defaultof<VkExternalMemoryHandleTypeFlagsNV>)
-
-            /// Creates an empty VkExternalMemoryImageCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkExternalMemoryImageCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -30520,16 +28660,11 @@ module NVExternalMemoryWin32 =
             new(pAttributes : nativeptr<nativeint>, dwAccess : uint32) =
                 VkExportMemoryWin32HandleInfoNV(Unchecked.defaultof<nativeint>, pAttributes, dwAccess)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.pAttributes = Unchecked.defaultof<nativeptr<nativeint>> && x.dwAccess = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkExportMemoryWin32HandleInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<nativeptr<nativeint>>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkExportMemoryWin32HandleInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkExportMemoryWin32HandleInfoNV(pNext, Unchecked.defaultof<nativeptr<nativeint>>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkExportMemoryWin32HandleInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkExportMemoryWin32HandleInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -30559,16 +28694,11 @@ module NVExternalMemoryWin32 =
             new(handleType : VkExternalMemoryHandleTypeFlagsNV, handle : nativeint) =
                 VkImportMemoryWin32HandleInfoNV(Unchecked.defaultof<nativeint>, handleType, handle)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.handleType = Unchecked.defaultof<VkExternalMemoryHandleTypeFlagsNV> && x.handle = Unchecked.defaultof<nativeint>
+
             static member Empty =
                 VkImportMemoryWin32HandleInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExternalMemoryHandleTypeFlagsNV>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkImportMemoryWin32HandleInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkImportMemoryWin32HandleInfoNV(pNext, Unchecked.defaultof<VkExternalMemoryHandleTypeFlagsNV>, Unchecked.defaultof<nativeint>)
-
-            /// Creates an empty VkImportMemoryWin32HandleInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkImportMemoryWin32HandleInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -30633,16 +28763,11 @@ module NVFragmentCoverageToColor =
             new(flags : VkPipelineCoverageToColorStateCreateFlagsNV, coverageToColorEnable : VkBool32, coverageToColorLocation : uint32) =
                 VkPipelineCoverageToColorStateCreateInfoNV(Unchecked.defaultof<nativeint>, flags, coverageToColorEnable, coverageToColorLocation)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineCoverageToColorStateCreateFlagsNV> && x.coverageToColorEnable = Unchecked.defaultof<VkBool32> && x.coverageToColorLocation = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPipelineCoverageToColorStateCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineCoverageToColorStateCreateFlagsNV>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPipelineCoverageToColorStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineCoverageToColorStateCreateInfoNV(pNext, Unchecked.defaultof<VkPipelineCoverageToColorStateCreateFlagsNV>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPipelineCoverageToColorStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineCoverageToColorStateCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -30683,16 +28808,11 @@ module NVFragmentShaderBarycentric =
             new(fragmentShaderBarycentric : VkBool32) =
                 VkPhysicalDeviceFragmentShaderBarycentricFeaturesNV(Unchecked.defaultof<nativeint>, fragmentShaderBarycentric)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.fragmentShaderBarycentric = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceFragmentShaderBarycentricFeaturesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentShaderBarycentricFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceFragmentShaderBarycentricFeaturesNV(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentShaderBarycentricFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceFragmentShaderBarycentricFeaturesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -30758,16 +28878,11 @@ module NVFragmentShadingRateEnums =
             new(fragmentShadingRateEnums : VkBool32, supersampleFragmentShadingRates : VkBool32, noInvocationFragmentShadingRates : VkBool32) =
                 VkPhysicalDeviceFragmentShadingRateEnumsFeaturesNV(Unchecked.defaultof<nativeint>, fragmentShadingRateEnums, supersampleFragmentShadingRates, noInvocationFragmentShadingRates)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.fragmentShadingRateEnums = Unchecked.defaultof<VkBool32> && x.supersampleFragmentShadingRates = Unchecked.defaultof<VkBool32> && x.noInvocationFragmentShadingRates = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceFragmentShadingRateEnumsFeaturesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentShadingRateEnumsFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceFragmentShadingRateEnumsFeaturesNV(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentShadingRateEnumsFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceFragmentShadingRateEnumsFeaturesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -30796,16 +28911,11 @@ module NVFragmentShadingRateEnums =
             new(maxFragmentShadingRateInvocationCount : VkSampleCountFlags) =
                 VkPhysicalDeviceFragmentShadingRateEnumsPropertiesNV(Unchecked.defaultof<nativeint>, maxFragmentShadingRateInvocationCount)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxFragmentShadingRateInvocationCount = Unchecked.defaultof<VkSampleCountFlags>
+
             static member Empty =
                 VkPhysicalDeviceFragmentShadingRateEnumsPropertiesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSampleCountFlags>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentShadingRateEnumsPropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceFragmentShadingRateEnumsPropertiesNV(pNext, Unchecked.defaultof<VkSampleCountFlags>)
-
-            /// Creates an empty VkPhysicalDeviceFragmentShadingRateEnumsPropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceFragmentShadingRateEnumsPropertiesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -30836,16 +28946,11 @@ module NVFragmentShadingRateEnums =
             new(shadingRateType : VkFragmentShadingRateTypeNV, shadingRate : VkFragmentShadingRateNV, combinerOps : VkFragmentShadingRateCombinerOpKHR_2) =
                 VkPipelineFragmentShadingRateEnumStateCreateInfoNV(Unchecked.defaultof<nativeint>, shadingRateType, shadingRate, combinerOps)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shadingRateType = Unchecked.defaultof<VkFragmentShadingRateTypeNV> && x.shadingRate = Unchecked.defaultof<VkFragmentShadingRateNV> && x.combinerOps = Unchecked.defaultof<VkFragmentShadingRateCombinerOpKHR_2>
+
             static member Empty =
                 VkPipelineFragmentShadingRateEnumStateCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkFragmentShadingRateTypeNV>, Unchecked.defaultof<VkFragmentShadingRateNV>, Unchecked.defaultof<VkFragmentShadingRateCombinerOpKHR_2>)
-
-            /// Creates an empty VkPipelineFragmentShadingRateEnumStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineFragmentShadingRateEnumStateCreateInfoNV(pNext, Unchecked.defaultof<VkFragmentShadingRateTypeNV>, Unchecked.defaultof<VkFragmentShadingRateNV>, Unchecked.defaultof<VkFragmentShadingRateCombinerOpKHR_2>)
-
-            /// Creates an empty VkPipelineFragmentShadingRateEnumStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineFragmentShadingRateEnumStateCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -30912,6 +29017,9 @@ module NVMeshShader =
                     firstTask = firstTask
                 }
 
+            member x.IsEmpty =
+                x.taskCount = Unchecked.defaultof<uint32> && x.firstTask = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkDrawMeshTasksIndirectCommandNV(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
 
@@ -30941,16 +29049,11 @@ module NVMeshShader =
             new(taskShader : VkBool32, meshShader : VkBool32) =
                 VkPhysicalDeviceMeshShaderFeaturesNV(Unchecked.defaultof<nativeint>, taskShader, meshShader)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.taskShader = Unchecked.defaultof<VkBool32> && x.meshShader = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceMeshShaderFeaturesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceMeshShaderFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceMeshShaderFeaturesNV(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceMeshShaderFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceMeshShaderFeaturesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -31002,16 +29105,11 @@ module NVMeshShader =
             new(maxDrawMeshTasksCount : uint32, maxTaskWorkGroupInvocations : uint32, maxTaskWorkGroupSize : V3ui, maxTaskTotalMemorySize : uint32, maxTaskOutputCount : uint32, maxMeshWorkGroupInvocations : uint32, maxMeshWorkGroupSize : V3ui, maxMeshTotalMemorySize : uint32, maxMeshOutputVertices : uint32, maxMeshOutputPrimitives : uint32, maxMeshMultiviewViewCount : uint32, meshOutputPerVertexGranularity : uint32, meshOutputPerPrimitiveGranularity : uint32) =
                 VkPhysicalDeviceMeshShaderPropertiesNV(Unchecked.defaultof<nativeint>, maxDrawMeshTasksCount, maxTaskWorkGroupInvocations, maxTaskWorkGroupSize, maxTaskTotalMemorySize, maxTaskOutputCount, maxMeshWorkGroupInvocations, maxMeshWorkGroupSize, maxMeshTotalMemorySize, maxMeshOutputVertices, maxMeshOutputPrimitives, maxMeshMultiviewViewCount, meshOutputPerVertexGranularity, meshOutputPerPrimitiveGranularity)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.maxDrawMeshTasksCount = Unchecked.defaultof<uint32> && x.maxTaskWorkGroupInvocations = Unchecked.defaultof<uint32> && x.maxTaskWorkGroupSize = Unchecked.defaultof<V3ui> && x.maxTaskTotalMemorySize = Unchecked.defaultof<uint32> && x.maxTaskOutputCount = Unchecked.defaultof<uint32> && x.maxMeshWorkGroupInvocations = Unchecked.defaultof<uint32> && x.maxMeshWorkGroupSize = Unchecked.defaultof<V3ui> && x.maxMeshTotalMemorySize = Unchecked.defaultof<uint32> && x.maxMeshOutputVertices = Unchecked.defaultof<uint32> && x.maxMeshOutputPrimitives = Unchecked.defaultof<uint32> && x.maxMeshMultiviewViewCount = Unchecked.defaultof<uint32> && x.meshOutputPerVertexGranularity = Unchecked.defaultof<uint32> && x.meshOutputPerPrimitiveGranularity = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDeviceMeshShaderPropertiesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<V3ui>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<V3ui>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceMeshShaderPropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceMeshShaderPropertiesNV(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<V3ui>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<V3ui>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceMeshShaderPropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceMeshShaderPropertiesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -31150,16 +29248,11 @@ module NVRayTracing =
             new(vertexData : VkBuffer, vertexOffset : VkDeviceSize, vertexCount : uint32, vertexStride : VkDeviceSize, vertexFormat : VkFormat, indexData : VkBuffer, indexOffset : VkDeviceSize, indexCount : uint32, indexType : VkIndexType, transformData : VkBuffer, transformOffset : VkDeviceSize) =
                 VkGeometryTrianglesNV(Unchecked.defaultof<nativeint>, vertexData, vertexOffset, vertexCount, vertexStride, vertexFormat, indexData, indexOffset, indexCount, indexType, transformData, transformOffset)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.vertexData = Unchecked.defaultof<VkBuffer> && x.vertexOffset = Unchecked.defaultof<VkDeviceSize> && x.vertexCount = Unchecked.defaultof<uint32> && x.vertexStride = Unchecked.defaultof<VkDeviceSize> && x.vertexFormat = Unchecked.defaultof<VkFormat> && x.indexData = Unchecked.defaultof<VkBuffer> && x.indexOffset = Unchecked.defaultof<VkDeviceSize> && x.indexCount = Unchecked.defaultof<uint32> && x.indexType = Unchecked.defaultof<VkIndexType> && x.transformData = Unchecked.defaultof<VkBuffer> && x.transformOffset = Unchecked.defaultof<VkDeviceSize>
+
             static member Empty =
                 VkGeometryTrianglesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkIndexType>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkGeometryTrianglesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkGeometryTrianglesNV(pNext, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkFormat>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkIndexType>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkGeometryTrianglesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkGeometryTrianglesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -31202,16 +29295,11 @@ module NVRayTracing =
             new(aabbData : VkBuffer, numAABBs : uint32, stride : uint32, offset : VkDeviceSize) =
                 VkGeometryAABBNV(Unchecked.defaultof<nativeint>, aabbData, numAABBs, stride, offset)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.aabbData = Unchecked.defaultof<VkBuffer> && x.numAABBs = Unchecked.defaultof<uint32> && x.stride = Unchecked.defaultof<uint32> && x.offset = Unchecked.defaultof<VkDeviceSize>
+
             static member Empty =
                 VkGeometryAABBNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkGeometryAABBNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkGeometryAABBNV(pNext, Unchecked.defaultof<VkBuffer>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkDeviceSize>)
-
-            /// Creates an empty VkGeometryAABBNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkGeometryAABBNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -31235,6 +29323,9 @@ module NVRayTracing =
                     triangles = triangles
                     aabbs = aabbs
                 }
+
+            member x.IsEmpty =
+                x.triangles = Unchecked.defaultof<VkGeometryTrianglesNV> && x.aabbs = Unchecked.defaultof<VkGeometryAABBNV>
 
             static member Empty =
                 VkGeometryDataNV(Unchecked.defaultof<VkGeometryTrianglesNV>, Unchecked.defaultof<VkGeometryAABBNV>)
@@ -31267,16 +29358,11 @@ module NVRayTracing =
             new(geometryType : VkGeometryTypeKHR, geometry : VkGeometryDataNV, flags : VkGeometryFlagsKHR) =
                 VkGeometryNV(Unchecked.defaultof<nativeint>, geometryType, geometry, flags)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.geometryType = Unchecked.defaultof<VkGeometryTypeKHR> && x.geometry = Unchecked.defaultof<VkGeometryDataNV> && x.flags = Unchecked.defaultof<VkGeometryFlagsKHR>
+
             static member Empty =
                 VkGeometryNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkGeometryTypeKHR>, Unchecked.defaultof<VkGeometryDataNV>, Unchecked.defaultof<VkGeometryFlagsKHR>)
-
-            /// Creates an empty VkGeometryNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkGeometryNV(pNext, Unchecked.defaultof<VkGeometryTypeKHR>, Unchecked.defaultof<VkGeometryDataNV>, Unchecked.defaultof<VkGeometryFlagsKHR>)
-
-            /// Creates an empty VkGeometryNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkGeometryNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -31313,16 +29399,11 @@ module NVRayTracing =
             new(_type : VkAccelerationStructureTypeNV, flags : VkBuildAccelerationStructureFlagsNV, instanceCount : uint32, geometryCount : uint32, pGeometries : nativeptr<VkGeometryNV>) =
                 VkAccelerationStructureInfoNV(Unchecked.defaultof<nativeint>, _type, flags, instanceCount, geometryCount, pGeometries)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x._type = Unchecked.defaultof<VkAccelerationStructureTypeNV> && x.flags = Unchecked.defaultof<VkBuildAccelerationStructureFlagsNV> && x.instanceCount = Unchecked.defaultof<uint32> && x.geometryCount = Unchecked.defaultof<uint32> && x.pGeometries = Unchecked.defaultof<nativeptr<VkGeometryNV>>
+
             static member Empty =
                 VkAccelerationStructureInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccelerationStructureTypeNV>, Unchecked.defaultof<VkBuildAccelerationStructureFlagsNV>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkGeometryNV>>)
-
-            /// Creates an empty VkAccelerationStructureInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAccelerationStructureInfoNV(pNext, Unchecked.defaultof<VkAccelerationStructureTypeNV>, Unchecked.defaultof<VkBuildAccelerationStructureFlagsNV>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkGeometryNV>>)
-
-            /// Creates an empty VkAccelerationStructureInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAccelerationStructureInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -31355,16 +29436,11 @@ module NVRayTracing =
             new(compactedSize : VkDeviceSize, info : VkAccelerationStructureInfoNV) =
                 VkAccelerationStructureCreateInfoNV(Unchecked.defaultof<nativeint>, compactedSize, info)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.compactedSize = Unchecked.defaultof<VkDeviceSize> && x.info = Unchecked.defaultof<VkAccelerationStructureInfoNV>
+
             static member Empty =
                 VkAccelerationStructureCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkAccelerationStructureInfoNV>)
-
-            /// Creates an empty VkAccelerationStructureCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAccelerationStructureCreateInfoNV(pNext, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<VkAccelerationStructureInfoNV>)
-
-            /// Creates an empty VkAccelerationStructureCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAccelerationStructureCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -31396,16 +29472,11 @@ module NVRayTracing =
             new(_type : VkAccelerationStructureMemoryRequirementsTypeNV, accelerationStructure : VkAccelerationStructureNV) =
                 VkAccelerationStructureMemoryRequirementsInfoNV(Unchecked.defaultof<nativeint>, _type, accelerationStructure)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x._type = Unchecked.defaultof<VkAccelerationStructureMemoryRequirementsTypeNV> && x.accelerationStructure = Unchecked.defaultof<VkAccelerationStructureNV>
+
             static member Empty =
                 VkAccelerationStructureMemoryRequirementsInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccelerationStructureMemoryRequirementsTypeNV>, Unchecked.defaultof<VkAccelerationStructureNV>)
-
-            /// Creates an empty VkAccelerationStructureMemoryRequirementsInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkAccelerationStructureMemoryRequirementsInfoNV(pNext, Unchecked.defaultof<VkAccelerationStructureMemoryRequirementsTypeNV>, Unchecked.defaultof<VkAccelerationStructureNV>)
-
-            /// Creates an empty VkAccelerationStructureMemoryRequirementsInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkAccelerationStructureMemoryRequirementsInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -31441,16 +29512,11 @@ module NVRayTracing =
             new(accelerationStructure : VkAccelerationStructureNV, memory : VkDeviceMemory, memoryOffset : VkDeviceSize, deviceIndexCount : uint32, pDeviceIndices : nativeptr<uint32>) =
                 VkBindAccelerationStructureMemoryInfoNV(Unchecked.defaultof<nativeint>, accelerationStructure, memory, memoryOffset, deviceIndexCount, pDeviceIndices)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.accelerationStructure = Unchecked.defaultof<VkAccelerationStructureNV> && x.memory = Unchecked.defaultof<VkDeviceMemory> && x.memoryOffset = Unchecked.defaultof<VkDeviceSize> && x.deviceIndexCount = Unchecked.defaultof<uint32> && x.pDeviceIndices = Unchecked.defaultof<nativeptr<uint32>>
+
             static member Empty =
                 VkBindAccelerationStructureMemoryInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkAccelerationStructureNV>, Unchecked.defaultof<VkDeviceMemory>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkBindAccelerationStructureMemoryInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkBindAccelerationStructureMemoryInfoNV(pNext, Unchecked.defaultof<VkAccelerationStructureNV>, Unchecked.defaultof<VkDeviceMemory>, Unchecked.defaultof<VkDeviceSize>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<uint32>>)
-
-            /// Creates an empty VkBindAccelerationStructureMemoryInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkBindAccelerationStructureMemoryInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -31497,16 +29563,11 @@ module NVRayTracing =
             new(shaderGroupHandleSize : uint32, maxRecursionDepth : uint32, maxShaderGroupStride : uint32, shaderGroupBaseAlignment : uint32, maxGeometryCount : uint64, maxInstanceCount : uint64, maxTriangleCount : uint64, maxDescriptorSetAccelerationStructures : uint32) =
                 VkPhysicalDeviceRayTracingPropertiesNV(Unchecked.defaultof<nativeint>, shaderGroupHandleSize, maxRecursionDepth, maxShaderGroupStride, shaderGroupBaseAlignment, maxGeometryCount, maxInstanceCount, maxTriangleCount, maxDescriptorSetAccelerationStructures)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shaderGroupHandleSize = Unchecked.defaultof<uint32> && x.maxRecursionDepth = Unchecked.defaultof<uint32> && x.maxShaderGroupStride = Unchecked.defaultof<uint32> && x.shaderGroupBaseAlignment = Unchecked.defaultof<uint32> && x.maxGeometryCount = Unchecked.defaultof<uint64> && x.maxInstanceCount = Unchecked.defaultof<uint64> && x.maxTriangleCount = Unchecked.defaultof<uint64> && x.maxDescriptorSetAccelerationStructures = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDeviceRayTracingPropertiesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceRayTracingPropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceRayTracingPropertiesNV(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint64>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceRayTracingPropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceRayTracingPropertiesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -31548,16 +29609,11 @@ module NVRayTracing =
             new(_type : VkRayTracingShaderGroupTypeKHR, generalShader : uint32, closestHitShader : uint32, anyHitShader : uint32, intersectionShader : uint32) =
                 VkRayTracingShaderGroupCreateInfoNV(Unchecked.defaultof<nativeint>, _type, generalShader, closestHitShader, anyHitShader, intersectionShader)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x._type = Unchecked.defaultof<VkRayTracingShaderGroupTypeKHR> && x.generalShader = Unchecked.defaultof<uint32> && x.closestHitShader = Unchecked.defaultof<uint32> && x.anyHitShader = Unchecked.defaultof<uint32> && x.intersectionShader = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkRayTracingShaderGroupCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkRayTracingShaderGroupTypeKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkRayTracingShaderGroupCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkRayTracingShaderGroupCreateInfoNV(pNext, Unchecked.defaultof<VkRayTracingShaderGroupTypeKHR>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkRayTracingShaderGroupCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkRayTracingShaderGroupCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -31604,16 +29660,11 @@ module NVRayTracing =
             new(flags : VkPipelineCreateFlags, stageCount : uint32, pStages : nativeptr<VkPipelineShaderStageCreateInfo>, groupCount : uint32, pGroups : nativeptr<VkRayTracingShaderGroupCreateInfoNV>, maxRecursionDepth : uint32, layout : VkPipelineLayout, basePipelineHandle : VkPipeline, basePipelineIndex : int) =
                 VkRayTracingPipelineCreateInfoNV(Unchecked.defaultof<nativeint>, flags, stageCount, pStages, groupCount, pGroups, maxRecursionDepth, layout, basePipelineHandle, basePipelineIndex)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineCreateFlags> && x.stageCount = Unchecked.defaultof<uint32> && x.pStages = Unchecked.defaultof<nativeptr<VkPipelineShaderStageCreateInfo>> && x.groupCount = Unchecked.defaultof<uint32> && x.pGroups = Unchecked.defaultof<nativeptr<VkRayTracingShaderGroupCreateInfoNV>> && x.maxRecursionDepth = Unchecked.defaultof<uint32> && x.layout = Unchecked.defaultof<VkPipelineLayout> && x.basePipelineHandle = Unchecked.defaultof<VkPipeline> && x.basePipelineIndex = Unchecked.defaultof<int>
+
             static member Empty =
                 VkRayTracingPipelineCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipelineShaderStageCreateInfo>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkRayTracingShaderGroupCreateInfoNV>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkPipelineLayout>, Unchecked.defaultof<VkPipeline>, Unchecked.defaultof<int>)
-
-            /// Creates an empty VkRayTracingPipelineCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkRayTracingPipelineCreateInfoNV(pNext, Unchecked.defaultof<VkPipelineCreateFlags>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkPipelineShaderStageCreateInfo>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkRayTracingShaderGroupCreateInfoNV>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<VkPipelineLayout>, Unchecked.defaultof<VkPipeline>, Unchecked.defaultof<int>)
-
-            /// Creates an empty VkRayTracingPipelineCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkRayTracingPipelineCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -31652,16 +29703,11 @@ module NVRayTracing =
             new(accelerationStructureCount : uint32, pAccelerationStructures : nativeptr<VkAccelerationStructureNV>) =
                 VkWriteDescriptorSetAccelerationStructureNV(Unchecked.defaultof<nativeint>, accelerationStructureCount, pAccelerationStructures)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.accelerationStructureCount = Unchecked.defaultof<uint32> && x.pAccelerationStructures = Unchecked.defaultof<nativeptr<VkAccelerationStructureNV>>
+
             static member Empty =
                 VkWriteDescriptorSetAccelerationStructureNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAccelerationStructureNV>>)
-
-            /// Creates an empty VkWriteDescriptorSetAccelerationStructureNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkWriteDescriptorSetAccelerationStructureNV(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkAccelerationStructureNV>>)
-
-            /// Creates an empty VkWriteDescriptorSetAccelerationStructureNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkWriteDescriptorSetAccelerationStructureNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -31823,16 +29869,11 @@ module NVRepresentativeFragmentTest =
             new(representativeFragmentTest : VkBool32) =
                 VkPhysicalDeviceRepresentativeFragmentTestFeaturesNV(Unchecked.defaultof<nativeint>, representativeFragmentTest)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.representativeFragmentTest = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceRepresentativeFragmentTestFeaturesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceRepresentativeFragmentTestFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceRepresentativeFragmentTestFeaturesNV(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceRepresentativeFragmentTestFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceRepresentativeFragmentTestFeaturesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -31859,16 +29900,11 @@ module NVRepresentativeFragmentTest =
             new(representativeFragmentTestEnable : VkBool32) =
                 VkPipelineRepresentativeFragmentTestStateCreateInfoNV(Unchecked.defaultof<nativeint>, representativeFragmentTestEnable)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.representativeFragmentTestEnable = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPipelineRepresentativeFragmentTestStateCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPipelineRepresentativeFragmentTestStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineRepresentativeFragmentTestStateCreateInfoNV(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPipelineRepresentativeFragmentTestStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineRepresentativeFragmentTestStateCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -31914,16 +29950,11 @@ module NVScissorExclusive =
             new(exclusiveScissor : VkBool32) =
                 VkPhysicalDeviceExclusiveScissorFeaturesNV(Unchecked.defaultof<nativeint>, exclusiveScissor)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.exclusiveScissor = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceExclusiveScissorFeaturesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceExclusiveScissorFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceExclusiveScissorFeaturesNV(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceExclusiveScissorFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceExclusiveScissorFeaturesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -31952,16 +29983,11 @@ module NVScissorExclusive =
             new(exclusiveScissorCount : uint32, pExclusiveScissors : nativeptr<VkRect2D>) =
                 VkPipelineViewportExclusiveScissorStateCreateInfoNV(Unchecked.defaultof<nativeint>, exclusiveScissorCount, pExclusiveScissors)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.exclusiveScissorCount = Unchecked.defaultof<uint32> && x.pExclusiveScissors = Unchecked.defaultof<nativeptr<VkRect2D>>
+
             static member Empty =
                 VkPipelineViewportExclusiveScissorStateCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkRect2D>>)
-
-            /// Creates an empty VkPipelineViewportExclusiveScissorStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineViewportExclusiveScissorStateCreateInfoNV(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkRect2D>>)
-
-            /// Creates an empty VkPipelineViewportExclusiveScissorStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineViewportExclusiveScissorStateCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -32017,16 +30043,11 @@ module NVShaderImageFootprint =
             new(imageFootprint : VkBool32) =
                 VkPhysicalDeviceShaderImageFootprintFeaturesNV(Unchecked.defaultof<nativeint>, imageFootprint)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.imageFootprint = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceShaderImageFootprintFeaturesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderImageFootprintFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceShaderImageFootprintFeaturesNV(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderImageFootprintFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceShaderImageFootprintFeaturesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -32062,16 +30083,11 @@ module NVShaderSmBuiltins =
             new(shaderSMBuiltins : VkBool32) =
                 VkPhysicalDeviceShaderSMBuiltinsFeaturesNV(Unchecked.defaultof<nativeint>, shaderSMBuiltins)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shaderSMBuiltins = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceShaderSMBuiltinsFeaturesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderSMBuiltinsFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceShaderSMBuiltinsFeaturesNV(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderSMBuiltinsFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceShaderSMBuiltinsFeaturesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -32100,16 +30116,11 @@ module NVShaderSmBuiltins =
             new(shaderSMCount : uint32, shaderWarpsPerSM : uint32) =
                 VkPhysicalDeviceShaderSMBuiltinsPropertiesNV(Unchecked.defaultof<nativeint>, shaderSMCount, shaderWarpsPerSM)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shaderSMCount = Unchecked.defaultof<uint32> && x.shaderWarpsPerSM = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDeviceShaderSMBuiltinsPropertiesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderSMBuiltinsPropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceShaderSMBuiltinsPropertiesNV(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceShaderSMBuiltinsPropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceShaderSMBuiltinsPropertiesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -32180,6 +30191,9 @@ module NVShadingRateImage =
                     sample = sample
                 }
 
+            member x.IsEmpty =
+                x.pixelX = Unchecked.defaultof<uint32> && x.pixelY = Unchecked.defaultof<uint32> && x.sample = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkCoarseSampleLocationNV(Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
 
@@ -32206,6 +30220,9 @@ module NVShadingRateImage =
                     sampleLocationCount = sampleLocationCount
                     pSampleLocations = pSampleLocations
                 }
+
+            member x.IsEmpty =
+                x.shadingRate = Unchecked.defaultof<VkShadingRatePaletteEntryNV> && x.sampleCount = Unchecked.defaultof<uint32> && x.sampleLocationCount = Unchecked.defaultof<uint32> && x.pSampleLocations = Unchecked.defaultof<nativeptr<VkCoarseSampleLocationNV>>
 
             static member Empty =
                 VkCoarseSampleOrderCustomNV(Unchecked.defaultof<VkShadingRatePaletteEntryNV>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkCoarseSampleLocationNV>>)
@@ -32238,16 +30255,11 @@ module NVShadingRateImage =
             new(shadingRateImage : VkBool32, shadingRateCoarseSampleOrder : VkBool32) =
                 VkPhysicalDeviceShadingRateImageFeaturesNV(Unchecked.defaultof<nativeint>, shadingRateImage, shadingRateCoarseSampleOrder)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shadingRateImage = Unchecked.defaultof<VkBool32> && x.shadingRateCoarseSampleOrder = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceShadingRateImageFeaturesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShadingRateImageFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceShadingRateImageFeaturesNV(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceShadingRateImageFeaturesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceShadingRateImageFeaturesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -32279,16 +30291,11 @@ module NVShadingRateImage =
             new(shadingRateTexelSize : VkExtent2D, shadingRatePaletteSize : uint32, shadingRateMaxCoarseSamples : uint32) =
                 VkPhysicalDeviceShadingRateImagePropertiesNV(Unchecked.defaultof<nativeint>, shadingRateTexelSize, shadingRatePaletteSize, shadingRateMaxCoarseSamples)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shadingRateTexelSize = Unchecked.defaultof<VkExtent2D> && x.shadingRatePaletteSize = Unchecked.defaultof<uint32> && x.shadingRateMaxCoarseSamples = Unchecked.defaultof<uint32>
+
             static member Empty =
                 VkPhysicalDeviceShadingRateImagePropertiesNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceShadingRateImagePropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceShadingRateImagePropertiesNV(pNext, Unchecked.defaultof<VkExtent2D>, Unchecked.defaultof<uint32>, Unchecked.defaultof<uint32>)
-
-            /// Creates an empty VkPhysicalDeviceShadingRateImagePropertiesNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceShadingRateImagePropertiesNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -32321,16 +30328,11 @@ module NVShadingRateImage =
             new(sampleOrderType : VkCoarseSampleOrderTypeNV, customSampleOrderCount : uint32, pCustomSampleOrders : nativeptr<VkCoarseSampleOrderCustomNV>) =
                 VkPipelineViewportCoarseSampleOrderStateCreateInfoNV(Unchecked.defaultof<nativeint>, sampleOrderType, customSampleOrderCount, pCustomSampleOrders)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.sampleOrderType = Unchecked.defaultof<VkCoarseSampleOrderTypeNV> && x.customSampleOrderCount = Unchecked.defaultof<uint32> && x.pCustomSampleOrders = Unchecked.defaultof<nativeptr<VkCoarseSampleOrderCustomNV>>
+
             static member Empty =
                 VkPipelineViewportCoarseSampleOrderStateCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkCoarseSampleOrderTypeNV>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkCoarseSampleOrderCustomNV>>)
-
-            /// Creates an empty VkPipelineViewportCoarseSampleOrderStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineViewportCoarseSampleOrderStateCreateInfoNV(pNext, Unchecked.defaultof<VkCoarseSampleOrderTypeNV>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkCoarseSampleOrderCustomNV>>)
-
-            /// Creates an empty VkPipelineViewportCoarseSampleOrderStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineViewportCoarseSampleOrderStateCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -32353,6 +30355,9 @@ module NVShadingRateImage =
                     shadingRatePaletteEntryCount = shadingRatePaletteEntryCount
                     pShadingRatePaletteEntries = pShadingRatePaletteEntries
                 }
+
+            member x.IsEmpty =
+                x.shadingRatePaletteEntryCount = Unchecked.defaultof<uint32> && x.pShadingRatePaletteEntries = Unchecked.defaultof<nativeptr<VkShadingRatePaletteEntryNV>>
 
             static member Empty =
                 VkShadingRatePaletteNV(Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkShadingRatePaletteEntryNV>>)
@@ -32385,16 +30390,11 @@ module NVShadingRateImage =
             new(shadingRateImageEnable : VkBool32, viewportCount : uint32, pShadingRatePalettes : nativeptr<VkShadingRatePaletteNV>) =
                 VkPipelineViewportShadingRateImageStateCreateInfoNV(Unchecked.defaultof<nativeint>, shadingRateImageEnable, viewportCount, pShadingRatePalettes)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.shadingRateImageEnable = Unchecked.defaultof<VkBool32> && x.viewportCount = Unchecked.defaultof<uint32> && x.pShadingRatePalettes = Unchecked.defaultof<nativeptr<VkShadingRatePaletteNV>>
+
             static member Empty =
                 VkPipelineViewportShadingRateImageStateCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkShadingRatePaletteNV>>)
-
-            /// Creates an empty VkPipelineViewportShadingRateImageStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineViewportShadingRateImageStateCreateInfoNV(pNext, Unchecked.defaultof<VkBool32>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkShadingRatePaletteNV>>)
-
-            /// Creates an empty VkPipelineViewportShadingRateImageStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineViewportShadingRateImageStateCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -32484,6 +30484,9 @@ module NVViewportSwizzle =
                     w = w
                 }
 
+            member x.IsEmpty =
+                x.x = Unchecked.defaultof<VkViewportCoordinateSwizzleNV> && x.y = Unchecked.defaultof<VkViewportCoordinateSwizzleNV> && x.z = Unchecked.defaultof<VkViewportCoordinateSwizzleNV> && x.w = Unchecked.defaultof<VkViewportCoordinateSwizzleNV>
+
             static member Empty =
                 VkViewportSwizzleNV(Unchecked.defaultof<VkViewportCoordinateSwizzleNV>, Unchecked.defaultof<VkViewportCoordinateSwizzleNV>, Unchecked.defaultof<VkViewportCoordinateSwizzleNV>, Unchecked.defaultof<VkViewportCoordinateSwizzleNV>)
 
@@ -32517,16 +30520,11 @@ module NVViewportSwizzle =
             new(flags : VkPipelineViewportSwizzleStateCreateFlagsNV, viewportCount : uint32, pViewportSwizzles : nativeptr<VkViewportSwizzleNV>) =
                 VkPipelineViewportSwizzleStateCreateInfoNV(Unchecked.defaultof<nativeint>, flags, viewportCount, pViewportSwizzles)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.flags = Unchecked.defaultof<VkPipelineViewportSwizzleStateCreateFlagsNV> && x.viewportCount = Unchecked.defaultof<uint32> && x.pViewportSwizzles = Unchecked.defaultof<nativeptr<VkViewportSwizzleNV>>
+
             static member Empty =
                 VkPipelineViewportSwizzleStateCreateInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkPipelineViewportSwizzleStateCreateFlagsNV>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkViewportSwizzleNV>>)
-
-            /// Creates an empty VkPipelineViewportSwizzleStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPipelineViewportSwizzleStateCreateInfoNV(pNext, Unchecked.defaultof<VkPipelineViewportSwizzleStateCreateFlagsNV>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkViewportSwizzleNV>>)
-
-            /// Creates an empty VkPipelineViewportSwizzleStateCreateInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPipelineViewportSwizzleStateCreateInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -32581,16 +30579,11 @@ module NVWin32KeyedMutex =
             new(acquireCount : uint32, pAcquireSyncs : nativeptr<VkDeviceMemory>, pAcquireKeys : nativeptr<uint64>, pAcquireTimeoutMilliseconds : nativeptr<uint32>, releaseCount : uint32, pReleaseSyncs : nativeptr<VkDeviceMemory>, pReleaseKeys : nativeptr<uint64>) =
                 VkWin32KeyedMutexAcquireReleaseInfoNV(Unchecked.defaultof<nativeint>, acquireCount, pAcquireSyncs, pAcquireKeys, pAcquireTimeoutMilliseconds, releaseCount, pReleaseSyncs, pReleaseKeys)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.acquireCount = Unchecked.defaultof<uint32> && x.pAcquireSyncs = Unchecked.defaultof<nativeptr<VkDeviceMemory>> && x.pAcquireKeys = Unchecked.defaultof<nativeptr<uint64>> && x.pAcquireTimeoutMilliseconds = Unchecked.defaultof<nativeptr<uint32>> && x.releaseCount = Unchecked.defaultof<uint32> && x.pReleaseSyncs = Unchecked.defaultof<nativeptr<VkDeviceMemory>> && x.pReleaseKeys = Unchecked.defaultof<nativeptr<uint64>>
+
             static member Empty =
                 VkWin32KeyedMutexAcquireReleaseInfoNV(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDeviceMemory>>, Unchecked.defaultof<nativeptr<uint64>>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDeviceMemory>>, Unchecked.defaultof<nativeptr<uint64>>)
-
-            /// Creates an empty VkWin32KeyedMutexAcquireReleaseInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkWin32KeyedMutexAcquireReleaseInfoNV(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDeviceMemory>>, Unchecked.defaultof<nativeptr<uint64>>, Unchecked.defaultof<nativeptr<uint32>>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDeviceMemory>>, Unchecked.defaultof<nativeptr<uint64>>)
-
-            /// Creates an empty VkWin32KeyedMutexAcquireReleaseInfoNV with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkWin32KeyedMutexAcquireReleaseInfoNV.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -32665,16 +30658,11 @@ module QCOMRenderPassTransform =
             new(transform : VkSurfaceTransformFlagsKHR, renderArea : VkRect2D) =
                 VkCommandBufferInheritanceRenderPassTransformInfoQCOM(Unchecked.defaultof<nativeint>, transform, renderArea)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.transform = Unchecked.defaultof<VkSurfaceTransformFlagsKHR> && x.renderArea = Unchecked.defaultof<VkRect2D>
+
             static member Empty =
                 VkCommandBufferInheritanceRenderPassTransformInfoQCOM(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkRect2D>)
-
-            /// Creates an empty VkCommandBufferInheritanceRenderPassTransformInfoQCOM with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkCommandBufferInheritanceRenderPassTransformInfoQCOM(pNext, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>, Unchecked.defaultof<VkRect2D>)
-
-            /// Creates an empty VkCommandBufferInheritanceRenderPassTransformInfoQCOM with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkCommandBufferInheritanceRenderPassTransformInfoQCOM.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -32702,16 +30690,11 @@ module QCOMRenderPassTransform =
             new(transform : VkSurfaceTransformFlagsKHR) =
                 VkRenderPassTransformBeginInfoQCOM(Unchecked.defaultof<nativeint>, transform)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.transform = Unchecked.defaultof<VkSurfaceTransformFlagsKHR>
+
             static member Empty =
                 VkRenderPassTransformBeginInfoQCOM(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>)
-
-            /// Creates an empty VkRenderPassTransformBeginInfoQCOM with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkRenderPassTransformBeginInfoQCOM(pNext, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>)
-
-            /// Creates an empty VkRenderPassTransformBeginInfoQCOM with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkRenderPassTransformBeginInfoQCOM.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -32757,16 +30740,11 @@ module QCOMRotatedCopyCommands =
             new(transform : VkSurfaceTransformFlagsKHR) =
                 VkCopyCommandTransformInfoQCOM(Unchecked.defaultof<nativeint>, transform)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.transform = Unchecked.defaultof<VkSurfaceTransformFlagsKHR>
+
             static member Empty =
                 VkCopyCommandTransformInfoQCOM(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>)
-
-            /// Creates an empty VkCopyCommandTransformInfoQCOM with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkCopyCommandTransformInfoQCOM(pNext, Unchecked.defaultof<VkSurfaceTransformFlagsKHR>)
-
-            /// Creates an empty VkCopyCommandTransformInfoQCOM with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkCopyCommandTransformInfoQCOM.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -32801,6 +30779,9 @@ module VALVEMutableDescriptorType =
                     pDescriptorTypes = pDescriptorTypes
                 }
 
+            member x.IsEmpty =
+                x.descriptorTypeCount = Unchecked.defaultof<uint32> && x.pDescriptorTypes = Unchecked.defaultof<nativeptr<VkDescriptorType>>
+
             static member Empty =
                 VkMutableDescriptorTypeListVALVE(Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkDescriptorType>>)
 
@@ -32830,16 +30811,11 @@ module VALVEMutableDescriptorType =
             new(mutableDescriptorTypeListCount : uint32, pMutableDescriptorTypeLists : nativeptr<VkMutableDescriptorTypeListVALVE>) =
                 VkMutableDescriptorTypeCreateInfoVALVE(Unchecked.defaultof<nativeint>, mutableDescriptorTypeListCount, pMutableDescriptorTypeLists)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.mutableDescriptorTypeListCount = Unchecked.defaultof<uint32> && x.pMutableDescriptorTypeLists = Unchecked.defaultof<nativeptr<VkMutableDescriptorTypeListVALVE>>
+
             static member Empty =
                 VkMutableDescriptorTypeCreateInfoVALVE(Unchecked.defaultof<nativeint>, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkMutableDescriptorTypeListVALVE>>)
-
-            /// Creates an empty VkMutableDescriptorTypeCreateInfoVALVE with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkMutableDescriptorTypeCreateInfoVALVE(pNext, Unchecked.defaultof<uint32>, Unchecked.defaultof<nativeptr<VkMutableDescriptorTypeListVALVE>>)
-
-            /// Creates an empty VkMutableDescriptorTypeCreateInfoVALVE with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkMutableDescriptorTypeCreateInfoVALVE.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [
@@ -32867,16 +30843,11 @@ module VALVEMutableDescriptorType =
             new(mutableDescriptorType : VkBool32) =
                 VkPhysicalDeviceMutableDescriptorTypeFeaturesVALVE(Unchecked.defaultof<nativeint>, mutableDescriptorType)
 
+            member x.IsEmpty =
+                x.pNext = Unchecked.defaultof<nativeint> && x.mutableDescriptorType = Unchecked.defaultof<VkBool32>
+
             static member Empty =
                 VkPhysicalDeviceMutableDescriptorTypeFeaturesVALVE(Unchecked.defaultof<nativeint>, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceMutableDescriptorTypeFeaturesVALVE with only pNext set to the given value.
-            static member Chain(pNext : nativeint) =
-                VkPhysicalDeviceMutableDescriptorTypeFeaturesVALVE(pNext, Unchecked.defaultof<VkBool32>)
-
-            /// Creates an empty VkPhysicalDeviceMutableDescriptorTypeFeaturesVALVE with only pNext set to the given value.
-            static member Chain(pNext : nativeptr<'a>) =
-                VkPhysicalDeviceMutableDescriptorTypeFeaturesVALVE.Chain(NativePtr.toNativeInt pNext)
 
             override x.ToString() =
                 String.concat "; " [

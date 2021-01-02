@@ -10,6 +10,10 @@ open Aardvark.Base
 open System.Reflection
 open KHRGetPhysicalDeviceProperties2
 open KHRExternalMemoryCapabilities
+open KHRRayTracingPipeline
+open KHRRayQuery
+open KHRAccelerationStructure
+open EXTDescriptorIndexing
 open Vulkan11
 
 #nowarn "9"
@@ -250,6 +254,10 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                                 l.line "%s (v%A)" ext.name ext.specification
                         )
 
+                        l.section "features: " (fun () ->
+                            d.Features.Print(l)
+                        )
+
                         l.section "limits:" (fun () ->
                             d.Limits.Print(l)
                         )
@@ -328,21 +336,61 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
             return props |> Array.map ExtensionInfo.ofVulkan
         }
 
-    let properties =
-        temporary<VkPhysicalDeviceProperties,_> (fun pProp -> 
-            VkRaw.vkGetPhysicalDeviceProperties(handle, pProp)
-            NativePtr.read pProp
-        )
-    
-    let name = properties.deviceName.Value
-    let driverVersion = Version.FromVulkan properties.driverVersion
-    let apiVersion = Version.FromVulkan properties.apiVersion
-
     let hasInstanceExtension (name : string) =
         enabledInstanceExtensions |> List.exists (fun e -> e = name)
 
     let hasExtension (name : string) =
         globalExtensions |> Array.exists (fun e -> e.name = name)
+
+    let features =
+        let inline readOrEmpty (ptr : nativeptr< ^a>) =
+            if NativePtr.isNull ptr then
+                ((^a) : (static member Empty : ^a) ())
+            else
+                !!ptr
+
+        let f, pm, ycbcr, s16, vp, sdp, idx, rtp, acc, rq =
+            use chain = new VkStructChain()
+            let pMem        = chain.Add<VkPhysicalDeviceProtectedMemoryFeatures>()
+            let pYcbcr      = chain.Add<VkPhysicalDeviceSamplerYcbcrConversionFeatures>()
+            let p16bit      = chain.Add<VkPhysicalDevice16BitStorageFeatures>()
+            let pVarPtrs    = chain.Add<VkPhysicalDeviceVariablePointersFeatures>()
+            let pDrawParams = chain.Add<VkPhysicalDeviceShaderDrawParametersFeatures>()
+            let pIdx        = if hasExtension EXTDescriptorIndexing.Name then chain.Add<VkPhysicalDeviceDescriptorIndexingFeaturesEXT>() else NativePtr.zero
+            let pRTP        = if hasExtension KHRRayTracingPipeline.Name then chain.Add<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>() else NativePtr.zero
+            let pAcc        = if hasExtension KHRAccelerationStructure.Name then chain.Add<VkPhysicalDeviceAccelerationStructureFeaturesKHR>() else NativePtr.zero
+            let pRQ         = if hasExtension KHRRayQuery.Name then chain.Add<VkPhysicalDeviceRayQueryFeaturesKHR>() else NativePtr.zero
+            let pFeatures   = chain.Add<VkPhysicalDeviceFeatures2>()
+
+            VkRaw.vkGetPhysicalDeviceFeatures2(handle, VkStructChain.toNativePtr chain)
+            (!!pFeatures).features, !!pMem, !!pYcbcr, !!p16bit, !!pVarPtrs, !!pDrawParams, readOrEmpty pIdx, readOrEmpty pRTP, readOrEmpty pAcc, readOrEmpty pRQ
+
+        DeviceFeatures.create pm ycbcr s16 vp sdp idx rtp acc rq f
+
+    let properties, raytracingProperties =
+        use chain = new VkStructChain()
+
+        let pRTP, pAcc =
+            if hasExtension KHRRayTracingPipeline.Name then
+                chain.Add<VkPhysicalDeviceRayTracingPipelinePropertiesKHR>(),
+                chain.Add<VkPhysicalDeviceAccelerationStructurePropertiesKHR>()
+            else
+                NativePtr.zero, NativePtr.zero
+
+        let pProperties = chain.Add<VkPhysicalDeviceProperties2>()
+
+        VkRaw.vkGetPhysicalDeviceProperties2(handle, VkStructChain.toNativePtr chain)
+        let props = (!!pProperties).properties
+
+        if hasExtension KHRRayTracingPipeline.Name then
+            props, Some(!!pRTP, !!pAcc)
+        else
+            props, None
+
+    let name = properties.deviceName.Value
+    let driverVersion = Version.FromVulkan properties.driverVersion
+    let apiVersion = Version.FromVulkan properties.apiVersion
+
 
     let maxAllocationSize, maxPerSetDescriptors =
         if apiVersion >= Version(1,1,0) || hasExtension KHRMaintenance3.Name then
@@ -367,7 +415,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
             )
         else
             Int64.MaxValue, Int32.MaxValue
-  
+
     let uniqueId, deviceMask =
         if apiVersion >= Version(1,1,0) || hasInstanceExtension "VK_KHR_get_physical_device_properties2" then
             let id =
@@ -397,7 +445,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
             uid, mask
      
 
-    let limits = DeviceLimits.ofVkDeviceLimits (Mem maxAllocationSize) properties.limits
+    let limits = DeviceLimits.create (Mem maxAllocationSize) raytracingProperties properties.limits
     let vendor = PCI.vendorName (int properties.vendorID)
 
 
@@ -485,6 +533,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
     member x.DeviceMemory = deviceMemory
 
     member x.Instance = instance
+    member x.Features : DeviceFeatures = features
     member x.Limits : DeviceLimits = limits
 
     abstract member DeviceMask : uint32

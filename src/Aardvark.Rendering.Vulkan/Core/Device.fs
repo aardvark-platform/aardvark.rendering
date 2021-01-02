@@ -208,34 +208,31 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
             let extensions = List.toArray extensions
             let! pExtensions = extensions
 
-            let features = 
-                temporary<VkPhysicalDeviceFeatures, VkPhysicalDeviceFeatures> (fun pFeatures ->
-                    VkRaw.vkGetPhysicalDeviceFeatures(physical.Handle, pFeatures)
-                    NativePtr.read pFeatures
-                )
-
-
             let deviceHandles = deviceGroup |> Array.map (fun d -> d.Handle)
             let! pDevices = deviceHandles
-            let! pGroupInfo =
+            let groupInfo =
                 VkDeviceGroupDeviceCreateInfo(
                     uint32 deviceGroup.Length,
                     pDevices
                 )
-                
-            let next = if isGroup then NativePtr.toNativeInt pGroupInfo else 0n
-            let! pFeatures = features
+
+            // TODO: Do we really want to enable all available features?
+            // Does this have real performance implications?
+            use pNext =
+                DeviceFeatures.toNativeChain dev.Features
+                |> if isGroup then VkStructChain.add groupInfo else id
+
             let! pInfo =
                 VkDeviceCreateInfo(
-                    next,
+                    pNext.Handle,
                     VkDeviceCreateFlags.None,
                     uint32 queueInfos.Length, ptr,
                     0u, NativePtr.zero,
                     uint32 extensions.Length, pExtensions,
-                    pFeatures
+                    NativePtr.zero
                 )
             let! pDevice = VkDevice.Zero
-            
+
             VkRaw.vkCreateDevice(physical.Handle,pInfo, NativePtr.zero, pDevice)
                 |> check "could not create device"
 

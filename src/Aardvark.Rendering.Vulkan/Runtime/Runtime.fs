@@ -501,7 +501,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         new PipelineQuery(device, statistics) :> IPipelineQuery
 
     member x.SupportedPipelineStatistics =
-        PipelineStatistics.All
+        if x.Device.PhysicalDevice.Features.Queries.PipelineStatistics then
+            PipelineStatistics.All
+        else
+            PipelineStatistics.None
 
 
     interface IRuntime with

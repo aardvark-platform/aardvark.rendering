@@ -19,7 +19,7 @@ type ImageLimits =
         MaxDimensionCube : V2i
 
         /// the maximum number of layers (arrayLayers) for an image.
-        MaxArrayLayers : int       
+        MaxArrayLayers : int
     }
 
     member x.Print(l : ILogger) =
@@ -415,7 +415,7 @@ type PrecisionLimits =
         /// the number of bits of division that the LOD calculation for mipmap fetching get snapped to when determining the contribution from each mip level to the mip filtered results.
         MipMapPrecisionBits : int
 
-        /// indicates support for timestamps on all graphics and compute queues. If this limit is set to true, all queues that advertise the VK_QUEUE_GRAPHICS_BIT or VK_QUEUE_COMPUTE_BIT in the VkQueueFamilyProperties::queueFlags support VkQueueFamilyProperties::timestampValidBits of at least 36. 
+        /// indicates support for timestamps on all graphics and compute queues. If this limit is set to true, all queues that advertise the VK_QUEUE_GRAPHICS_BIT or VK_QUEUE_COMPUTE_BIT in the VkQueueFamilyProperties::queueFlags support VkQueueFamilyProperties::timestampValidBits of at least 36.
         TimestampComputeAndGraphics : bool
 
         /// the number of nanoseconds required for a timestamp query to be incremented by 1.
@@ -493,7 +493,7 @@ type FramebufferLimits =
             l.line "color:   %A" x.ColorSampleCounts
             l.line "depth:   %A" x.DepthSampleCounts
             l.line "stencil: %A" x.StencilSampleCounts
-            l.line "empty:   %A" x.NoAttachmentsSampleCounts 
+            l.line "empty:   %A" x.NoAttachmentsSampleCounts
         )
         l.section "viewports:" (fun () ->
             l.line "max count:      %d" x.MaxViewports
@@ -529,7 +529,85 @@ type RasterizerLimits =
         l.line "strict lines:     %A" x.StrictLines
         l.line "standard samples: %A" x.StandardSampleLocations
 
+type RaytracingLimits =
+    {
+        /// Maximum number of geometries in the bottom level acceleration structure.
+        MaxGeometryCount                                            : uint64
 
+        /// Maximum number of instances in the top level acceleration structure.
+        MaxInstanceCount                                            : uint64
+
+        /// Maximum number of triangles or AABBs in all geometries in the bottom level acceleration structure.
+        MaxPrimitiveCount                                           : uint64
+
+        /// Maximum number of acceleration structure bindings that can be accessible to a single shader stage in a pipeline layout.
+        /// Descriptor bindings with a descriptor type of VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR count against this limit.
+        /// Only descriptor bindings in descriptor set layouts created without the VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT bit set count against this limit.
+        MaxPerStageDescriptorAccelerationStructures                 : uint32
+
+        /// Similar to maxPerStageDescriptorAccelerationStructures but counts descriptor bindings from
+        /// descriptor sets created with or without the VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT bit set.
+        MaxPerStageDescriptorUpdateAfterBindAccelerationStructures  : uint32
+
+        /// Maximum number of acceleration structure descriptors that can be included in descriptor bindings in a pipeline layout across
+        /// all pipeline shader stages and descriptor set numbers. Descriptor bindings with a descriptor type of
+        /// VK_DESCRIPTOR_TYPE_ACCELERATION_STRUCTURE_KHR count against this limit. Only descriptor bindings in descriptor set layouts
+        /// created without the VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT bit set count against this limit.
+        MaxDescriptorSetAccelerationStructures                      : uint32
+
+        /// Similar to maxDescriptorSetAccelerationStructures but counts descriptor bindings from
+        /// descriptor sets created with or without the VK_DESCRIPTOR_SET_LAYOUT_CREATE_UPDATE_AFTER_BIND_POOL_BIT bit set.
+        MaxDescriptorSetUpdateAfterBindAccelerationStructures       : uint32
+
+        /// Minimum required alignment, in bytes, for scratch data passed in to an acceleration structure build command.
+        MinAccelerationStructureScratchOffsetAlignment              : uint32
+
+        /// Size in bytes of the shader header.
+        ShaderGroupHandleSize                                       : uint32
+
+        /// Maximum number of levels of ray recursion allowed in a trace command.
+        MaxRayRecursionDepth                                        : uint32
+
+        /// Maximum stride in bytes allowed between shader groups in the shader binding table.
+        MaxShaderGroupStride                                        : uint32
+
+        /// Required alignment in bytes for the base of the shader binding table.
+        ShaderGroupBaseAlignment                                    : uint32
+
+        /// Number of bytes for the information required to do capture and replay for shader group handles.
+        ShaderGroupHandleCaptureReplaySize                          : uint32
+
+        /// Maximum number of ray generation shader invocations which may be produced by a single vkCmdTraceRaysIndirectKHR or vkCmdTraceRaysKHR command.
+        MaxRayDispatchInvocationCount                               : uint32
+
+        /// Required alignment in bytes for each shader binding table entry.
+        ShaderGroupHandleAlignment                                  : uint32
+
+        /// Maximum size in bytes for a ray attribute structure.
+        MaxRayHitAttributeSize                                      : uint32
+    }
+
+    member x.Print(l : ILogger) =
+        l.line "max ray recursion depth:      %d" x.MaxRayRecursionDepth
+        l.line "max ray dispatch invocations: %d" x.MaxRayDispatchInvocationCount
+        l.line "max ray hit attribute size:   %d" x.MaxRayHitAttributeSize
+        l.section "acceleration structures: " (fun () ->
+            l.line "max geometry count:                            %d" x.MaxGeometryCount
+            l.line "max instance count:                            %d" x.MaxInstanceCount
+            l.line "max primitive count:                           %d" x.MaxPrimitiveCount
+            l.line "max descriptors per stage:                     %d" x.MaxPerStageDescriptorAccelerationStructures
+            l.line "max descriptors per stage (update after bind): %d" x.MaxPerStageDescriptorUpdateAfterBindAccelerationStructures
+            l.line "max descriptors:                               %d" x.MaxDescriptorSetAccelerationStructures
+            l.line "max descriptors (updater atfer bind):          %d" x.MaxDescriptorSetUpdateAfterBindAccelerationStructures
+            l.line "min scratch offset alignment:                  %d" x.MinAccelerationStructureScratchOffsetAlignment
+        )
+        l.section "shader binding table: " (fun () ->
+            l.line "header size:     %d" x.ShaderGroupHandleSize
+            l.line "max stride:      %d" x.MaxShaderGroupStride
+            l.line "base alignment:  %d" x.ShaderGroupBaseAlignment
+            l.line "entry alignment: %d" x.ShaderGroupHandleAlignment
+            l.line "replay size:     %d" x.ShaderGroupHandleCaptureReplaySize
+        )
 
 type DeviceLimits =
     {
@@ -551,30 +629,34 @@ type DeviceLimits =
         Draw            : DrawLimits
         Framebuffer     : FramebufferLimits
         Rasterizer      : RasterizerLimits
+        Raytracing      : RaytracingLimits option
     }
 
     member x.Print(l : ILogger) =
-        l.section "image:" (fun () -> x.Image.Print(l)) 
-        l.section "sampled image:" (fun () -> x.SampledImage.Print(l)) 
-        l.section "sampler:" (fun () -> x.Sampler.Print(l)) 
-        l.section "uniform:" (fun () -> x.Uniform.Print(l)) 
-        l.section "memory:" (fun () -> x.Memory.Print(l)) 
-        l.section "descriptors:" (fun () -> x.Descriptor.Print(l)) 
-        l.section "vertex shader:" (fun () -> x.Vertex.Print(l)) 
-        l.section "tessellation shader:" (fun () -> x.Tessellation.Print(l)) 
-        l.section "geometry shader:" (fun () -> x.Geometry.Print(l)) 
-        l.section "fragment shader:" (fun () -> x.Fragment.Print(l)) 
-        l.section "shader sampling:" (fun () -> x.Shader.Print(l)) 
-        l.section "compute shader:" (fun () -> x.Compute.Print(l)) 
-        l.section "precision:" (fun () -> x.Precision.Print(l)) 
-        l.section "draw:" (fun () -> x.Draw.Print(l)) 
-        l.section "framebuffer:" (fun () -> x.Framebuffer.Print(l)) 
-        l.section "rasterizer:" (fun () -> x.Rasterizer.Print(l)) 
+        l.section "image:" (fun () -> x.Image.Print(l))
+        l.section "sampled image:" (fun () -> x.SampledImage.Print(l))
+        l.section "sampler:" (fun () -> x.Sampler.Print(l))
+        l.section "uniform:" (fun () -> x.Uniform.Print(l))
+        l.section "memory:" (fun () -> x.Memory.Print(l))
+        l.section "descriptors:" (fun () -> x.Descriptor.Print(l))
+        l.section "vertex shader:" (fun () -> x.Vertex.Print(l))
+        l.section "tessellation shader:" (fun () -> x.Tessellation.Print(l))
+        l.section "geometry shader:" (fun () -> x.Geometry.Print(l))
+        l.section "fragment shader:" (fun () -> x.Fragment.Print(l))
+        l.section "shader sampling:" (fun () -> x.Shader.Print(l))
+        l.section "compute shader:" (fun () -> x.Compute.Print(l))
+        l.section "precision:" (fun () -> x.Precision.Print(l))
+        l.section "draw:" (fun () -> x.Draw.Print(l))
+        l.section "framebuffer:" (fun () -> x.Framebuffer.Print(l))
+        l.section "rasterizer:" (fun () -> x.Rasterizer.Print(l))
+        x.Raytracing |> Option.iter (fun rt -> l.section "raytracing:" (fun () ->  rt.Print(l)))
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DeviceLimits =
-    
+    open KHRRayTracingPipeline
+    open KHRAccelerationStructure
+
     [<AutoOpen>]
     module private Helpers =
         let ofVkSampleCountFlags (flags : VkSampleCountFlags) =
@@ -588,9 +670,11 @@ module DeviceLimits =
                 if flags.HasFlag VkSampleCountFlags.D64Bit then yield 64
             ]
 
-    let ofVkDeviceLimits (maxAllocationSize : Mem) (limits : VkPhysicalDeviceLimits) =
+    let create (maxAllocationSize : Mem)
+               (raytracingProperties : Option<VkPhysicalDeviceRayTracingPipelinePropertiesKHR * VkPhysicalDeviceAccelerationStructurePropertiesKHR>)
+               (limits : VkPhysicalDeviceLimits) =
         {
-            Image = 
+            Image =
                 {
                     MaxDimension1D      = int limits.maxImageDimension1D
                     MaxDimension2D      = V2i(int limits.maxImageDimension2D, int limits.maxImageDimension2D)
@@ -608,14 +692,14 @@ module DeviceLimits =
                     StorageSampleCounts     = ofVkSampleCountFlags limits.storageImageSampleCounts
                 }
 
-            Sampler = 
+            Sampler =
                 {
                     MaxAllocationCount  = int limits.maxSamplerAllocationCount
                     MaxLodBias          = float limits.maxSamplerLodBias
                     MaxAnisotropy       = float limits.maxSamplerAnisotropy
                 }
 
-            Uniform = 
+            Uniform =
                 {
                     MaxBufferViewRange      = Mem limits.maxUniformBufferRange
                     MaxStorageViewRange     = Mem limits.maxStorageBufferRange
@@ -623,7 +707,7 @@ module DeviceLimits =
                     MaxPushConstantsSize    = Mem limits.maxPushConstantsSize
                 }
 
-            Memory = 
+            Memory =
                 {
                     MaxAllocationCount                  = int limits.maxMemoryAllocationCount
                     MaxAllocationSize                   = maxAllocationSize
@@ -673,7 +757,7 @@ module DeviceLimits =
                 {
                     MaxGenerationLevel  = int limits.maxTessellationGenerationLevel
                     MaxPatchSize        = int limits.maxTessellationPatchSize
-                    TessControlLimits = 
+                    TessControlLimits =
                         {
                             MaxPerVertexInputComponents     = int limits.maxTessellationControlPerVertexInputComponents
                             MaxPerVertexOutputComponents    = int limits.maxTessellationControlPerVertexOutputComponents
@@ -687,7 +771,7 @@ module DeviceLimits =
                         }
                 }
 
-            Geometry = 
+            Geometry =
                 {
                     MaxInvocations              = int limits.maxGeometryShaderInvocations
                     MaxInputComponents          = int limits.maxGeometryInputComponents
@@ -738,7 +822,7 @@ module DeviceLimits =
                     DiscreteQueuePriorities     = int limits.discreteQueuePriorities
                 }
 
-            Draw = 
+            Draw =
                 {
                     MaxIndexValue       = limits.maxDrawIndexedIndexValue
                     MaxIndirectCount    = limits.maxDrawIndirectCount
@@ -768,4 +852,26 @@ module DeviceLimits =
                     StrictLines             = limits.strictLines <> 0u
                     StandardSampleLocations = limits.standardSampleLocations <> 0u
                 }
+
+            Raytracing =
+                raytracingProperties |> Option.map (fun (pipeline, accel) ->
+                    {
+                        MaxGeometryCount                                            = accel.maxGeometryCount
+                        MaxInstanceCount                                            = accel.maxInstanceCount
+                        MaxPrimitiveCount                                           = accel.maxPrimitiveCount
+                        MaxPerStageDescriptorAccelerationStructures                 = accel.maxPerStageDescriptorAccelerationStructures
+                        MaxPerStageDescriptorUpdateAfterBindAccelerationStructures  = accel.maxPerStageDescriptorUpdateAfterBindAccelerationStructures
+                        MaxDescriptorSetAccelerationStructures                      = accel.maxDescriptorSetAccelerationStructures
+                        MaxDescriptorSetUpdateAfterBindAccelerationStructures       = accel.maxDescriptorSetUpdateAfterBindAccelerationStructures
+                        MinAccelerationStructureScratchOffsetAlignment              = accel.minAccelerationStructureScratchOffsetAlignment
+                        ShaderGroupHandleSize                                       = pipeline.shaderGroupHandleSize
+                        MaxRayRecursionDepth                                        = pipeline.maxRayRecursionDepth
+                        MaxShaderGroupStride                                        = pipeline.maxShaderGroupStride
+                        ShaderGroupBaseAlignment                                    = pipeline.shaderGroupBaseAlignment
+                        ShaderGroupHandleCaptureReplaySize                          = pipeline.shaderGroupHandleCaptureReplaySize
+                        MaxRayDispatchInvocationCount                               = pipeline.maxRayDispatchInvocationCount
+                        ShaderGroupHandleAlignment                                  = pipeline.shaderGroupHandleAlignment
+                        MaxRayHitAttributeSize                                      = pipeline.maxRayHitAttributeSize
+                    }
+                )
         }
