@@ -831,24 +831,26 @@ type PreparedCommand(ctx : Context, renderPass : RenderPass) =
         for r in x.Resources do r.Update(token, rt)
 
     member x.Dispose() =
-        if Interlocked.Decrement(&refCount) = 0 then
-            lock x (fun () ->
-                let token = try Some ctx.ResourceLock with :? ObjectDisposedException -> None
+        lock AbstractRenderTask.ResourcesInUse (fun _ -> 
+            if Interlocked.Decrement(&refCount) = 0 then
+                lock x (fun () ->
+                    let token = try Some ctx.ResourceLock with :? ObjectDisposedException -> None
             
-                match token with
-                | Some token ->
-                    try
-                        cleanup |> List.iter (fun f -> f())
-                        x.Release()
-                        cleanup <- []
-                        resourceStats <- None
-                        resources <- None
-                    finally
-                        token.Dispose()
-                | None ->
-                    //OpenGL died
-                    ()
-            )
+                    match token with
+                    | Some token ->
+                        try
+                            cleanup |> List.iter (fun f -> f())
+                            x.Release()
+                            cleanup <- []
+                            resourceStats <- None
+                            resources <- None
+                        finally
+                            token.Dispose()
+                    | None ->
+                        //OpenGL died
+                        ()
+                )
+        )
 
     interface IRenderObject with
         member x.AttributeScope = Ag.Scope.Root
@@ -875,21 +877,24 @@ type PreparedObjectInfo =
     }
     
     member x.Dispose() =
-        x.oBeginMode.Dispose()
+        lock AbstractRenderTask.ResourcesInUse (fun _ -> 
+            if x.oIsActive.IsDisposed then failwith "double free"
+            x.oBeginMode.Dispose()
 
-        for (_,_,_,b) in x.oBuffers do b.Dispose()
-        match x.oIndexBuffer with
-            | Some (_,b) -> b.Dispose()
-            | _ -> ()
+            for (_,_,_,b) in x.oBuffers do b.Dispose()
+            match x.oIndexBuffer with
+                | Some (_,b) -> b.Dispose()
+                | _ -> ()
 
-        x.oIsActive.Dispose()
-        match x.oIndirectBuffer with
-            | Some i -> i.Dispose()
-            | None -> x.oDrawCallInfos.Dispose()
+            x.oIsActive.Dispose()
+            match x.oIndirectBuffer with
+                | Some i -> i.Dispose()
+                | None -> x.oDrawCallInfos.Dispose()
 
-        x.oVertexInputBinding.Dispose()
+            x.oVertexInputBinding.Dispose()
 
-        x.oActivation.Dispose()
+            x.oActivation.Dispose()
+        )
 
     member x.Resources =
         seq {

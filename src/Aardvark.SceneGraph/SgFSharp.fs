@@ -214,6 +214,10 @@ module SgFSharp =
         let adapter (o : obj) =
             Sg.AdapterNode(o) :> ISg
 
+        /// Combines the render objects in the given adaptive set.
+        let renderObjectSet (s : #aset<IRenderObject>) = 
+            Sg.RenderObjectNode(s) :> ISg
+
         // ================================================================================================================
         // Uniforms & Textures
         // ================================================================================================================

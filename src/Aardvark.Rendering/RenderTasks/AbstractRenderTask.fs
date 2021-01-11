@@ -11,6 +11,8 @@ type AbstractRenderTask() =
 
     let id = newId()
 
+    static let resourcesInUse = obj()
+
     //static let dynamicUniforms =
     //    Set.ofList [
     //        "ViewTrafo"
@@ -105,6 +107,8 @@ type AbstractRenderTask() =
     member x.HookRenderObject (ro : RenderObject) =
         { ro with Uniforms = hookProvider ro.Uniforms }
 
+    static member ResourcesInUse = resourcesInUse
+
     abstract member FramebufferSignature : Option<IFramebufferSignature>
     abstract member Runtime : Option<IRuntime>
     abstract member PerformUpdate : AdaptiveToken * RenderToken -> unit
@@ -118,18 +122,22 @@ type AbstractRenderTask() =
 
     member x.FrameId = frameId
     member x.Run(token : AdaptiveToken, t : RenderToken, out : OutputDescription, queries : IQuery) =
-        x.EvaluateAlways token (fun token ->
-            x.OutOfDate <- true
-            x.UseValues(token, out, fun token ->
-                x.Perform(token, t, out, queries)
-                frameId <- frameId + 1UL
+        lock resourcesInUse (fun _ ->
+            x.EvaluateAlways token (fun token ->
+                x.OutOfDate <- true
+                x.UseValues(token, out, fun token ->
+                    x.Perform(token, t, out, queries)
+                    frameId <- frameId + 1UL
+                )
             )
         )
 
     member x.Update(token : AdaptiveToken, t : RenderToken) =
-        x.EvaluateAlways token (fun token ->
-            if x.OutOfDate then
-                x.PerformUpdate(token, t)
+        lock resourcesInUse (fun _ ->
+            x.EvaluateAlways token (fun token ->
+                if x.OutOfDate then
+                    x.PerformUpdate(token, t)
+            )
         )
 
     interface IDisposable with
