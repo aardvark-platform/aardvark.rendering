@@ -287,7 +287,7 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
         member x.Run() = x.Run()
 
 
-type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
+type VulkanApplication(debug : DebugConfig option, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
     let requestedExtensions =
         [
             yield Instance.Extensions.Surface
@@ -300,7 +300,7 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
             yield Instance.Extensions.ShaderSubgroupBallot
             yield Instance.Extensions.GetPhysicalDeviceProperties2
 
-            if debug then
+            if debug.IsSome then
                 yield Instance.Extensions.DebugReport
                 yield Instance.Extensions.DebugUtils
 
@@ -308,7 +308,7 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
 
     let requestedLayers =
         [
-            if debug then
+            if debug.IsSome then
                 yield Instance.Layers.Validation
                 yield Instance.Layers.StandardValidation
                 yield Instance.Layers.AssistantLayer
@@ -408,6 +408,10 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
         member x.Initialize(ctrl : IRenderControl, samples : int) = failwithf "[Vulkan] unsupported RenderControl: %A" ctrl
            
            
+    new(debug : bool, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
+        new VulkanApplication((if debug then Some DebugConfig.Default else None), chooseDevice)
+
     new(debug : bool) = new VulkanApplication(debug, ConsoleDeviceChooser.run)
-    new(choose : list<PhysicalDevice> -> PhysicalDevice) = new VulkanApplication(false, choose)
-    new() = new VulkanApplication(false, ConsoleDeviceChooser.run)
+    new(debug : DebugConfig) = new VulkanApplication(Some debug, ConsoleDeviceChooser.run)
+    new(choose : list<PhysicalDevice> -> PhysicalDevice) = new VulkanApplication(None, choose)
+    new() = new VulkanApplication(None, ConsoleDeviceChooser.run)

@@ -58,7 +58,7 @@ module StereoShader =
 type private DummyObject() =
     inherit AdaptiveObject()
 
-type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i -> V2i) as this  =
+type VulkanVRApplicationLayered(samples : int, debug : DebugConfig option, adjustSize : V2i -> V2i) as this  =
     inherit VrRenderer(adjustSize)
     
     let app = new HeadlessVulkanApplication(debug, this.GetVulkanInstanceExtensions(), fun d -> this.GetVulkanDeviceExtensions d.Handle)
@@ -135,14 +135,19 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
     
     let queue = device.GraphicsFamily.Queues |> List.head
     
-    new(samples, adjustSize) = new VulkanVRApplicationLayered(samples, false, adjustSize)
-    new(debug, adjustSize) = new VulkanVRApplicationLayered(1, debug, adjustSize)
-    new(adjustSize) = new VulkanVRApplicationLayered(1, false, adjustSize)
+    new(samples, debug, adjustSize) = new VulkanVRApplicationLayered(samples, (if debug then Some DebugConfig.Default else None), adjustSize)
+
+    new(samples, adjustSize) = new VulkanVRApplicationLayered(samples, None, adjustSize)
+    new(debug : DebugConfig, adjustSize) = new VulkanVRApplicationLayered(1, Some debug, adjustSize)
+    new(debug : bool, adjustSize) = new VulkanVRApplicationLayered(1, debug, adjustSize)
+    new(adjustSize) = new VulkanVRApplicationLayered(1, None, adjustSize)
     
-    new(samples, debug) = new VulkanVRApplicationLayered(samples, debug, id)
-    new(samples) = new VulkanVRApplicationLayered(samples, false, id)
-    new(debug) = new VulkanVRApplicationLayered(1, debug, id)
-    new() = new VulkanVRApplicationLayered(1, false, id)
+    new(samples, debug : bool) = new VulkanVRApplicationLayered(samples, debug, id)
+    new(samples, debug : DebugConfig) = new VulkanVRApplicationLayered(samples, Some debug, id)
+    new(samples) = new VulkanVRApplicationLayered(samples, None, id)
+    new(debug : DebugConfig) = new VulkanVRApplicationLayered(1, Some debug, id)
+    new(debug : bool) = new VulkanVRApplicationLayered(1, debug, id)
+    new() = new VulkanVRApplicationLayered(1, None, id)
 
     member x.Version = version
     member x.Texture = tex

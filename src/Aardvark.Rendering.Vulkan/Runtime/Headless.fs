@@ -2,7 +2,7 @@
 
 open System
 
-type HeadlessVulkanApplication(debug : bool, instanceExtensions : list<string>, deviceExtensions : PhysicalDevice -> list<string>) =
+type HeadlessVulkanApplication(debug : DebugConfig option, instanceExtensions : list<string>, deviceExtensions : PhysicalDevice -> list<string>) =
     let requestedExtensions =
         [
             yield! instanceExtensions
@@ -10,14 +10,14 @@ type HeadlessVulkanApplication(debug : bool, instanceExtensions : list<string>, 
             yield Instance.Extensions.ShaderSubgroupVote
             yield Instance.Extensions.ShaderSubgroupBallot
             yield Instance.Extensions.GetPhysicalDeviceProperties2
-            if debug then
+            if debug.IsSome then
                 yield Instance.Extensions.DebugReport
                 yield Instance.Extensions.DebugUtils
         ]
 
     let requestedLayers =
         [
-            if debug then
+            if debug.IsSome then
                 yield Instance.Layers.StandardValidation
                 yield Instance.Layers.AssistantLayer
         ]
@@ -78,8 +78,12 @@ type HeadlessVulkanApplication(debug : bool, instanceExtensions : list<string>, 
     member x.Device = device
     member x.Runtime = runtime
 
-    new() = new HeadlessVulkanApplication(false, [], fun _ -> [])
-    new(debug) = new HeadlessVulkanApplication(debug, [], fun _ -> [])
+    new(debug : bool, instanceExtensions : list<string>, deviceExtensions : PhysicalDevice -> list<string>) =
+        new HeadlessVulkanApplication((if debug then Some DebugConfig.Default else None), instanceExtensions, deviceExtensions)
+
+    new() = new HeadlessVulkanApplication(None, [], fun _ -> [])
+    new(debug : DebugConfig) = new HeadlessVulkanApplication(Some debug, [], fun _ -> [])
+    new(debug : bool) = new HeadlessVulkanApplication(debug, [], fun _ -> [])
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

@@ -11,8 +11,21 @@ open System.Collections.Generic
 open FShade
 #nowarn "9"
 
+type DebugConfig =
+    {
+        /// Indicates whether stack traces of (almost) all vulkan handles are stored to
+        /// print the origin of objects in debug messages. Note: Impacts performance significantly.
+        traceHandles : bool
+    }
 
-type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug : bool) as this =
+    static member Default =
+        { traceHandles = false }
+
+    static member TraceHandles =
+        { DebugConfig.Default with traceHandles = true }
+
+
+type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug : DebugConfig option) as this =
     let instance = device.Instance
     do device.Runtime <- this
 
@@ -100,12 +113,14 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 Report.End() |> ignore
 
     // install debug output to file (and errors/warnings to console)
-    let debugSubscription = 
-        if debug then 
+    let debugSubscription =
+        match debug with
+        | Some debug ->
             let res = instance.DebugMessages.Subscribe(debugMessage, debugSummary)
+            instance.SetDebugTracingEnabled(debug.traceHandles)
             instance.RaiseDebugMessage(MessageSeverity.Information, "Enabled debug report")
             res
-        else 
+        | _ ->
             { new IDisposable with member x.Dispose() = () }
 
     let onDispose = Event<unit>()
