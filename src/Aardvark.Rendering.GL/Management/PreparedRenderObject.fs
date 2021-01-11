@@ -1417,27 +1417,31 @@ module rec Command =
 
         let cache = Dict<list<obj>, SingleObjectCommand>()
 
+        // We cannot use null as key, so we use some obj() in case
+        // there is no surface in an IRenderObject
+        static let nullSurf = obj()
+
         let rec surface (o : IRenderObject) =
             match o with
             | :? RenderObject as o -> o.Surface :> obj
             | :? MultiRenderObject as o -> 
                 match List.tryHead o.Children with
                 | Some o -> surface o
-                | None -> null
+                | None -> nullSurf
             | :? IPreparedRenderObject as o ->
                 match o.Original with
                 | Some o -> surface o
-                | None -> null
+                | None -> nullSurf
             | :? CommandRenderObject as o ->
-                null
+                nullSurf
             | _ ->
-                null
+                nullSurf
 
         let key (o : IRenderObject) =
-            [ 
+            [
                 o.RenderPass :> obj
                 surface o
-                o.Id :> obj 
+                o.Id :> obj
             ]
 
         static let compileEpilog (program : FragmentProgram) (info : CompilerInfo) =
