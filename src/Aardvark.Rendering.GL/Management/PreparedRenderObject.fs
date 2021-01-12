@@ -768,7 +768,7 @@ module PreparedPipelineStateAssembler =
 
 
 [<AbstractClass>]
-type PreparedCommand(ctx : Context, renderPass : RenderPass) =
+type PreparedCommand(ctx : Context, renderPass : RenderPass, renderObject : RenderObject option) =
     
     let mutable refCount = 1
     let id = newId()
@@ -799,6 +799,9 @@ type PreparedCommand(ctx : Context, renderPass : RenderPass) =
                 resourceStats <- Some (cnt, counts)
                 (cnt, counts)
         )
+
+    new(ctx : Context, renderPass : RenderPass) =
+        new PreparedCommand(ctx, renderPass, None)
         
     abstract member GetResources : unit -> seq<IResource>
     abstract member Release : unit -> unit
@@ -811,6 +814,7 @@ type PreparedCommand(ctx : Context, renderPass : RenderPass) =
 
     member x.Id = id
     member x.Pass = renderPass
+    member x.Original = renderObject
     member x.IsDisposed = refCount = 0
     member x.Context = ctx
 
@@ -859,12 +863,13 @@ type PreparedCommand(ctx : Context, renderPass : RenderPass) =
 
     interface IPreparedRenderObject with
         member x.Update(t,rt) = x.Update(t, rt)
-        member x.Original = None
+        member x.Original = x.Original
         member x.Dispose() = x.Dispose()
 
 type PreparedObjectInfo =
     {   
         oContext : Context
+        oOriginal : RenderObject
         oActivation : IDisposable
         oFramebufferSignature : IFramebufferSignature
         oBeginMode : IResource<GLBeginMode, GLBeginMode>
@@ -1032,6 +1037,7 @@ module PreparedObjectInfo =
         
         {
             oContext = x.Context
+            oOriginal = rj
             oActivation = activation
             oFramebufferSignature = fboSignature
             oBuffers = buffers
@@ -1138,7 +1144,7 @@ type NopCommand(ctx : Context, pass : RenderPass) =
     override x.ExitState = None
 
 type PreparedObjectCommand(state : PreparedPipelineState, info : PreparedObjectInfo, renderPass : RenderPass) =
-    inherit PreparedCommand(state.pContext, renderPass)
+    inherit PreparedCommand(state.pContext, renderPass, Some info.oOriginal)
 
     member x.Info = info
 

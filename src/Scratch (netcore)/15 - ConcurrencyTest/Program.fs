@@ -44,6 +44,7 @@ let main argv =
 
 
     //use app = new VulkanApplication(debug = true)
+    //GL.Config.UseNewRenderTask <- true
     use app = new OpenGlApplication()
     let win = app.CreateGameWindow(1)
 
