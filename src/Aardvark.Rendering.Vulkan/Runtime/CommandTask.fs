@@ -2222,6 +2222,7 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
                 transact (fun () -> viewports.Value <- vp; scissors.Value <- sc)
                 true
 
+        use tt = device.Token
         let commandChanged =
             lock compiled (fun () ->
                 if compiled.OutOfDate then
@@ -2266,6 +2267,8 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
 
             inner.End()
 
+        tt.Sync()
+
         queries.Begin()
 
         cmd.Begin(renderPass, CommandBufferUsage.OneTimeSubmit)
@@ -2308,8 +2311,6 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
 
         queries.End()
 
-        use tt = device.Token
-        tt.Sync()
 
         device.GraphicsFamily.RunSynchronously cmd
 

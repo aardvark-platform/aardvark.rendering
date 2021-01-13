@@ -21,11 +21,11 @@ let main argv =
 
     *)
 
-    let prepareIt = true  // VK: fail; GL: OK
-    let inlineDispose = true // OK
-    let perObjTexture = true // OK
-    let prepareTexture = true // GL: OK, Vk: only works with dubios 4089ebc1 fix
-    let addRemoveTest = true // OK
+    let prepareIt = false  // VK: fail; GL: OK
+    let inlineDispose = false // OK
+    let perObjTexture = false // OK
+    let prepareTexture = false // GL: OK, Vk: only works with dubios 4089ebc1 fix
+    let addRemoveTest = false // OK
     let textureTest = true // OK
     let jitterFrames = false // OK
     
@@ -43,16 +43,16 @@ let main argv =
     //    }
 
 
-    //use app = new VulkanApplication(debug = true)
+    use app = new VulkanApplication(debug = Vulkan.DebugConfig.TraceHandles)
     //GL.Config.UseNewRenderTask <- true
-    use app = new OpenGlApplication()
+    //use app = new OpenGlApplication()
     let win = app.CreateGameWindow(1)
 
-    let signature =
-        win.Runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
-            DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
-        ]
+    let signature = win.FramebufferSignature
+        //win.Runtime.CreateFramebufferSignature [
+        //    DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+        //    DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+        //]
 
     let box = Box3d(-V3d.III, V3d.III)
     let color = C4b.Red
@@ -67,9 +67,10 @@ let main argv =
                 angle.Value <- angle.Value + 0.01
             )
 
-    let startThread (f : unit -> unit) = 
+    let startThread (name : string) (f : unit -> unit) = 
         let t = Thread(f)
         t.IsBackground <- true
+        t.Name <- name
         t.Start()
         t
 
@@ -212,11 +213,11 @@ let main argv =
             runs <- runs + 1
             //Thread.Sleep(10)
 
-    let cameraThread = startThread cameraMovement
+    let cameraThread = startThread "cameraThread" cameraMovement
     let textureThread = 
-        if textureTest then startThread updateTexture |> ignore else ()
+        if textureTest then startThread "textureThread" updateTexture |> ignore else ()
     let addRemoteThread = 
-        if addRemoveTest then startThread addThings |> ignore else ()
+        if addRemoveTest then startThread "addRemoteThread" addThings |> ignore else ()
 
 
     let sg = 

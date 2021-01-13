@@ -2690,8 +2690,9 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
         pool.Dispose()
 
     let threads = 
-        family.Queues |> List.map (fun q -> 
-            let thread = Thread(ThreadStart(run q), IsBackground = true)
+        family.Queues |> List.map (fun q ->
+            let name = sprintf "DeviceQueueThread(%d, %d)" q.FamilyIndex q.Index
+            let thread = Thread(ThreadStart(run q), Name = name, IsBackground = true)
             thread.Start()
             thread
         )
