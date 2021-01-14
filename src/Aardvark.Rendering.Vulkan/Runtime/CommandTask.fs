@@ -2094,40 +2094,40 @@ module private RuntimeCommands =
 
         member x.Compile (cmd : RuntimeCommand) : PreparedCommand =
             match cmd with
-                | RuntimeCommand.EmptyCmd ->
-                    new EmptyCommand()
-                        :> PreparedCommand
+            | RuntimeCommand.EmptyCmd ->
+                new EmptyCommand()
+                    :> PreparedCommand
 
-                | RuntimeCommand.RenderCmd objects ->
-                    new UnorderedRenderObjectCommand(x, objects)
-                        :> PreparedCommand
+            | RuntimeCommand.RenderCmd objects ->
+                new UnorderedRenderObjectCommand(x, objects)
+                    :> PreparedCommand
 
-                | RuntimeCommand.ClearCmd(colors, depth, stencil) ->
-                    new ClearCommand(x, colors, depth, stencil)
-                        :> PreparedCommand
+            | RuntimeCommand.ClearCmd(colors, depth, stencil) ->
+                new ClearCommand(x, colors, depth, stencil)
+                    :> PreparedCommand
 
-                | RuntimeCommand.OrderedCmd commands ->
-                    new OrderedCommand(x, commands)
-                        :> PreparedCommand
+            | RuntimeCommand.OrderedCmd commands ->
+                new OrderedCommand(x, commands)
+                    :> PreparedCommand
 
-                | RuntimeCommand.IfThenElseCmd(c,i,e) ->
-                    new IfThenElseCommand(x, c, i, e)
-                        :> PreparedCommand
+            | RuntimeCommand.IfThenElseCmd(c,i,e) ->
+                new IfThenElseCommand(x, c, i, e)
+                    :> PreparedCommand
 
-                | RuntimeCommand.GeometriesCmd(surface, state, geometries) ->
-                    new GroupedCommand(x, surface, state, geometries)
-                        :> PreparedCommand
+            | RuntimeCommand.GeometriesCmd(surface, state, geometries) ->
+                new GroupedCommand(x, surface, state, geometries)
+                    :> PreparedCommand
 
-                | RuntimeCommand.LodTreeCmd(surface, state, geometries) ->
-                    new LodTreeCommand(x, surface, state, geometries)
-                        :> PreparedCommand
-                        
-                | RuntimeCommand.GeometriesSimpleCmd(effect, state, geometries) ->
-                    new IndirectDrawCommand(x, effect, state, fun () -> geometries.GetReader() :> _)
-                        :> PreparedCommand
+            | RuntimeCommand.LodTreeCmd(surface, state, geometries) ->
+                new LodTreeCommand(x, surface, state, geometries)
+                    :> PreparedCommand
 
-                | RuntimeCommand.DispatchCmd _  ->
-                    failwith "[Vulkan] compute commands not implemented"
+            | RuntimeCommand.GeometriesSimpleCmd(effect, state, geometries) ->
+                new IndirectDrawCommand(x, effect, state, fun () -> geometries.GetReader() :> _)
+                    :> PreparedCommand
+
+            | RuntimeCommand.DispatchCmd _  ->
+                failwith "[Vulkan] compute commands not implemented"
 
 type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeCommand) as this =
     inherit AbstractRenderTask()
@@ -2191,8 +2191,8 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
 
         let fbo =
             match desc.framebuffer with
-                | :? Framebuffer as fbo -> fbo
-                | fbo -> failwithf "unsupported framebuffer: %A" fbo
+            | :? Framebuffer as fbo -> fbo
+            | fbo -> failwithf "unsupported framebuffer: %A" fbo
 
         let ranges =
             let range =
@@ -2311,6 +2311,4 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
 
         queries.End()
 
-
         device.GraphicsFamily.RunSynchronously cmd
-

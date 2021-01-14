@@ -1695,19 +1695,18 @@ type ResourceLocationReader(resource : IResourceLocation) =
     inherit AdaptiveObject()
 
     let mutable lastVersion = 0
-    
+
     let changable =
         match resource with
-            | :? IResourceLocation<UniformBuffer> -> false
-            | _ -> true
+        | :? IResourceLocation<UniformBuffer> -> false
+        | _ -> true
 
     let priority =
         match resource with
-            | :? INativeResourceLocation<DrawCall> -> 1
-            | _ -> 0
+        | :? INativeResourceLocation<DrawCall> -> 0
+        | _ -> 1
 
     member x.Priority = priority
-                
 
     member x.Dispose() =
         lock resource (fun () ->
@@ -1732,50 +1731,79 @@ module ``Resource Reader Extensions`` =
     type IResourceLocation with
         member x.GetReader() = new ResourceLocationReader(x)
 
+
 type ResourceLocationSet(user : IResourceUser) =
     inherit AdaptiveObject()
 
+    let updateLock = obj()
+
     let all = ReferenceCountingSet<IResourceLocation>()
     let readers = Dict<IResourceLocation, ResourceLocationReader>()
-    let dirtyCalls = List<ResourceLocationReader>()
-    let dirty = List<HashSet<ResourceLocationReader>>()
 
-    let addDirty (r : ResourceLocationReader) =
-        let priority = r.Priority
+    // Resources to be updated during the current or next update loop
+    let outdated = Dict<int, HashSet<ResourceLocationReader>>()
 
-        lock dirty (fun () ->
-            while dirty.Count <= priority do
-                dirty.Add(HashSet())
-                        
-            dirty.[priority].Add(r) |> ignore
-        )
+    // Resources to be updated during the next update loop
+    let dirty = Dict<int, HashSet<ResourceLocationReader>>()
 
-    let remDirty (r : ResourceLocationReader) =
-        lock dirty (fun () -> 
-            if dirty.Count > r.Priority then
-                dirty.[r.Priority].Remove r |> ignore
-        )
+    let addOutdated (r : ResourceLocationReader) =
+
+        let add (perPriority : Dict<int, HashSet<ResourceLocationReader>>) =
+            lock perPriority (fun () ->
+                let set = perPriority.GetOrCreate(r.Priority, fun _ -> HashSet())
+                set.Add(r) |> ignore
+            )
+
+        // We try to directly add to the outdated sets, if we're within an update loop
+        // only the current thread will be able to do so. In this case, other threads will add to the dirty
+        // sets instead, effectively delaying the updates to take effect until the next frame.
+        // This way we prevent the same resource to be updated (and deleted) multiple times before the
+        // render task has finished execution.
+        if Monitor.TryEnter(updateLock) then
+            try
+                add outdated
+            finally
+                Monitor.Exit(updateLock)
+        else
+            add dirty
+
+    let remOutdated (r : ResourceLocationReader) =
+
+        let rem (perPriority : Dict<int, HashSet<ResourceLocationReader>>) =
+            lock perPriority (fun () ->
+                match perPriority.TryGetValue(r.Priority) with
+                | (true, set) -> set.Remove(r) |> ignore
+                | _ -> ()
+            )
+
+        if Monitor.TryEnter(updateLock) then
+            try
+                rem outdated
+            finally
+                Monitor.Exit(updateLock)
+
+        rem dirty
 
     member private x.AddInput(r : IResourceLocation) =
         let reader = r.GetReader()
         lock readers (fun () -> readers.[r] <- reader)
-        addDirty reader
+        addOutdated reader
         transact (fun () -> x.MarkOutdated())
 
     member private x.RemoveInput(r : IResourceLocation) =
         match lock readers (fun () -> readers.TryRemove r) with
-            | (true, reader) ->
-                remDirty reader
-                reader.Dispose()
-            | _ ->
-                ()
+        | (true, reader) ->
+            remOutdated reader
+            reader.Dispose()
+        | _ ->
+            ()
 
     override x.InputChangedObject(t,i) =
         match i with
-            | :? ResourceLocationReader as r ->
-                addDirty r
-            | _ ->
-                ()
+        | :? ResourceLocationReader as r ->
+            addOutdated r
+        | _ ->
+            ()
 
     member x.Add(r : IResourceLocation) =
         if lock all (fun () -> all.Add r) then
@@ -1787,132 +1815,38 @@ type ResourceLocationSet(user : IResourceUser) =
             lock r r.Release
             x.RemoveInput r
 
-
-
     member x.Update(token : AdaptiveToken) =
         x.EvaluateAlways token (fun t ->
             x.OutOfDate <- true
 
             let rec run (changed : bool) =
-                let mine = 
-                    lock dirty (fun () ->
-                        if dirty.Count > 0 then
-                            let last = dirty.[dirty.Count - 1]
-                            dirty.RemoveAt (dirty.Count - 1)
-                            last
-                        else
-                            null
-                    )
+                match Seq.tryHead outdated.Keys with
+                | Some p ->
+                    let set = outdated.GetAndRemove(p)
 
-                if not (isNull mine) then
                     let mutable changed = changed
-                    for r in mine do
+                    for r in set do
                         let c = r.Update(t)
                         changed <- changed || c
 
                     run changed
-                else
+                | _ ->
                     changed
 
-            run false
+            lock updateLock (fun () ->
+                lock dirty (fun () ->
+                    for KeyValue(p, d) in dirty do
+                        match outdated.TryGetValue(p) with
+                        | (true, set) -> set.UnionWith(d)
+                        | _ -> outdated.Add(p, d)
+
+                    dirty.Clear()
+                )
+
+                run false
+            )
         )
 
     interface IResourceUser with
         member x.AddLocked l = user.AddLocked l
         member x.RemoveLocked l = user.RemoveLocked l
-//
-//
-//type ResourceSet() =
-//    inherit AdaptiveObject()
-//    
-//    let all = ReferenceCountingSet<IResourceLocation>()
-//    let locked = ReferenceCountingSet<ILockedResource>()
-//    let dirty = System.Collections.Generic.HashSet<IResourceLocation>()
-//    let dirtyCalls = System.Collections.Generic.HashSet<IResourceLocation>()
-//
-//    member x.AddLocked(l : ILockedResource) =
-//        lock locked (fun () -> locked.Add l |> ignore)
-//        
-//    member x.RemoveLocked(l : ILockedResource) =
-//        lock locked (fun () -> locked.Remove l |> ignore)
-//
-//    interface IResourceUser with
-//        member x.AddLocked l = x.AddLocked l
-//        member x.RemoveLocked l = x.RemoveLocked l
-//
-//    override x.InputChanged(_,i) =
-//        match i with
-//            | :? INativeResourceLocation<DrawCall> as c -> lock dirty (fun () -> dirtyCalls.Add c |> ignore)
-//            | :? IResourceLocation as r -> lock dirty (fun () -> dirty.Add r |> ignore)
-//            | _ -> ()
-//
-//    member x.Add(r : IResourceLocation) =
-//        if all.Add r then
-//            lock r (fun () ->
-//                r.Acquire()
-//                if r.OutOfDate then
-//                    x.InputChanged(null, r)
-//                else
-//                    r.Outputs.Add x |> ignore
-//            )
-//
-//    member x.AddAndUpdate(r : IResourceLocation) =
-//        x.EvaluateAlways AdaptiveToken.Top (fun t ->
-//            if all.Add r then
-//                lock r (fun () ->
-//                    r.Acquire()
-//                )
-//            r.Update(t) |> ignore
-//        )   
-//
-//    member x.Remove(r : IResourceLocation) =
-//        if all.Remove r then
-//            lock r (fun () ->
-//                r.Release()
-//                r.RemoveOutput x
-//                lock dirty (fun () ->
-//                    match r with
-//                        | :? INativeResourceLocation<DrawCall> as r -> dirtyCalls.Remove r |> ignore
-//                        | _ -> dirty.Remove r |> ignore
-//                )
-//            )
-//
-//    member x.Update(token : AdaptiveToken) =
-//        x.EvaluateAlways token (fun token ->
-//            let rec update () =
-//                x.OutOfDate <- true
-//                let arr = 
-//                    lock dirty (fun () -> 
-//                        if dirtyCalls.Count = 0 then
-//                            let arr = HashSet.toArray dirty
-//                            dirty.Clear()
-//                            arr
-//                        else
-//                            let arr = HashSet.toArray dirtyCalls
-//                            dirtyCalls.Clear()
-//                            arr
-//                    )
-//
-//                if arr.Length > 0 then
-//                    let mutable changed = false
-//                    for r in arr do
-//                        let info = r.Update(token)
-//                        changed <- changed || info.version <> -100
-//
-//                    let rest = update()
-//                    changed || rest
-//
-//                else
-//                    false
-//
-//            update()
-//        )
-//
-//    member x.Use(action : unit -> 'r) =
-//        let list = lock locked (fun () -> Seq.toArray locked)
-//        for l in list do l.Lock.Enter(ResourceUsage.Render, l.OnLock)
-//        try 
-//            action()
-//        finally 
-//            for l in list do l.Lock.Exit(l.OnUnlock)
-//
