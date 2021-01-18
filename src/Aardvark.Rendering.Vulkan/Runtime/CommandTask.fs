@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Rendering.Vulkan.Temp
+﻿namespace Aardvark.Rendering.Vulkan
 
 open System
 open System.Threading
@@ -784,62 +784,62 @@ module private RuntimeCommands =
             lazy (
                 match o.AttributeScope.TryGetSynthesized<aval<Box3d>>("GlobalBoundingBox") with
                 | Some b -> b
-                | _ -> 
+                | _ ->
                     Log.warn "[Vulkan] no bounding box for Object %A" o.AttributeScope
                     AVal.constant Box3d.Unit
             )
 
         static let rec hook (task : AbstractRenderTask) (o : IRenderObject) =
             match o with
-                | :? RenderObject as o -> task.HookRenderObject(o) :> IRenderObject
-                | :? MultiRenderObject as o -> o.Children |> List.map (hook task) |> MultiRenderObject :> IRenderObject
-                | o -> o
+            | :? RenderObject as o -> task.HookRenderObject(o) :> IRenderObject
+            | :? MultiRenderObject as o -> o.Children |> List.map (hook task) |> MultiRenderObject :> IRenderObject
+            | o -> o
 
         member x.Uniforms =
             let rec get (o : IRenderObject) =
                 match o with
-                    | :? RenderObject as o -> o.Uniforms
-                    | :? MultiRenderObject as o -> get (List.head o.Children)
-                    | :? IPreparedRenderObject as o -> 
-                        match o.Original with
-                            | Some o -> get o
-                            | None -> failwithf "[Vulkan] no uniforms for object: %A" o
-                    | _ ->
-                        failwithf "[Vulkan] no uniforms for object: %A" o
+                | :? RenderObject as o -> o.Uniforms
+                | :? MultiRenderObject as o -> get (List.head o.Children)
+                | :? IPreparedRenderObject as o -> 
+                    match o.Original with
+                    | Some o -> get o
+                    | None -> failwithf "[Vulkan] no uniforms for object: %A" o
+                | _ ->
+                    failwithf "[Vulkan] no uniforms for object: %A" o
             get o
 
         member x.BoundingBox = boundingBox.Value
 
         override x.GroupKey =
             match prepared with
-                | Some p -> [ p.First.pipeline :> obj; p.Id :> obj ]
-                | None -> failwith "inconsistent state"
+            | Some p -> [ p.First.pipeline :> obj; p.Id :> obj ]
+            | None -> failwith "inconsistent state"
 
         override x.Free() =
             match prepared with
-                | Some o -> 
-                    for o in o.Children do
-                        for r in o.resources do compiler.resources.Remove r   
-                            
-                    prepared <- None
-                | None ->
-                    ()     
+            | Some o ->
+                for o in o.Children do
+                    for r in o.resources do compiler.resources.Remove r
+
+                prepared <- None
+            | None ->
+                ()
 
         override x.Compile(_, stream) =
             // never gets re-executed so the stream does not need to be cleared
-            
+
             let o = compiler.manager.PrepareRenderObject(compiler.renderPass, hook compiler.task o)
             for o in o.Children do
-                for r in o.resources do compiler.resources.Add r        
+                for r in o.resources do compiler.resources.Add r
 
                 stream.IndirectBindPipeline(o.pipeline.Pointer) |> ignore
                 stream.IndirectBindDescriptorSets(o.descriptorSets.Pointer) |> ignore
 
                 match o.indexBuffer with
-                    | Some ib ->
-                        stream.IndirectBindIndexBuffer(ib.Pointer) |> ignore
-                    | None ->
-                        ()
+                | Some ib ->
+                    stream.IndirectBindIndexBuffer(ib.Pointer) |> ignore
+                | None ->
+                    ()
 
                 stream.IndirectBindVertexBuffers(o.vertexBuffers.Pointer) |> ignore
                 stream.IndirectDraw(compiler.stats, o.isActive.Pointer, o.drawCalls.Pointer) |> ignore
@@ -849,7 +849,6 @@ module private RuntimeCommands =
     and [<AbstractClass>] CommandBucket() =
         inherit AdaptiveObject()
 
-        
         let mutable prev : Option<CommandBucket> = None
         let mutable next : Option<CommandBucket> = None
 
@@ -861,9 +860,9 @@ module private RuntimeCommands =
                 let prev = prev |> Option.map (fun p -> p.Last)
                 first.Prev <- prev
                 match prev with
-                    | Some p -> p.Next <- Some first
-                    | None -> ()
-                        
+                | Some p -> p.Next <- Some first
+                | None -> ()
+
         member x.Next
             with get() = next
             and set v = 
@@ -872,14 +871,12 @@ module private RuntimeCommands =
                 let next = next |> Option.map (fun n -> n.First)
                 last.Next <- next
                 match next with
-                    | Some n -> n.Prev <- Some last
-                    | None -> ()
-
-
+                | Some n -> n.Prev <- Some last
+                | None -> ()
 
         abstract member First : PreparedCommand
         abstract member Last : PreparedCommand
-        
+
         abstract member Add : PreparedCommand -> unit
         abstract member Remove : PreparedCommand -> bool
 
@@ -905,7 +902,7 @@ module private RuntimeCommands =
                 override x.Free() = ()
                 override x.Compile(_,_) = ()
             }
-        
+
         let trie = OrderMaintenanceTrie<obj,PreparedCommand>()
         do trie.Set([], firstCommand) |> ignore
 
@@ -917,18 +914,18 @@ module private RuntimeCommands =
             let ref = trie.Set(cmd.GroupKey, cmd)
             match ref.Prev with
             | ValueNone -> ()
-            | ValueSome v -> 
+            | ValueSome v ->
                 v.Value.Next <- Some cmd
                 cmd.Prev <- Some v.Value
             match ref.Next with
             | ValueNone -> ()
-            | ValueSome next -> 
+            | ValueSome next ->
                 next.Value.Prev <- Some cmd
                 cmd.Next <- Some next.Value
 
             match trie.Last with
             | ValueNone -> failwith "[Vulkan] empty CommandBucket"
-            | ValueSome l -> 
+            | ValueSome l ->
                 let next = x.Next |> Option.map (fun n -> n.First)
                 l.Value.Next <- next
                 match next with
@@ -939,12 +936,12 @@ module private RuntimeCommands =
             let res = trie.TryRemove(cmd.GroupKey)
             match res with
             | ValueNone -> false
-            | ValueSome (prev,next) -> 
+            | ValueSome (prev,next) ->
                 match prev,next with
-                | ValueSome prev, ValueSome next -> 
+                | ValueSome prev, ValueSome next ->
                     prev.Value.Next <- Some next.Value
                     next.Value.Prev <- Some prev.Value
-                | ValueSome last, ValueNone  -> 
+                | ValueSome last, ValueNone  ->
                     let next = x.Next |> Option.map (fun n -> n.First)
                     last.Value.Next <- next
                     match next with
@@ -961,13 +958,12 @@ module private RuntimeCommands =
             firstCommand.Dispose()
             trie.Clear()
 
-        override x.PerformUpdate token = 
-            
+        override x.PerformUpdate token =
             ()
 
     and SortedCommandBucket(order : RenderPassOrder) =
         inherit CommandBucket()
-        
+
         let commands = Dict<RenderObjectCommand, aval<float>>()
 
         let firstCommand =
@@ -990,9 +986,9 @@ module private RuntimeCommands =
 
         override x.Add(cmd : PreparedCommand) =
             let cmd = unbox<RenderObjectCommand> cmd
-            let depth = 
+            let depth =
                 let u = cmd.Uniforms
-                    
+
                 let box = cmd.BoundingBox
                 let view = u.TryGetUniform(Ag.Scope.Root, Symbol.Create "ViewTrafo")
                 let proj = u.TryGetUniform(Ag.Scope.Root, Symbol.Create "ProjTrafo")
@@ -1014,7 +1010,7 @@ module private RuntimeCommands =
                             let pp = Array.map (fun (v : Trafo3d) -> box.Center |> v.Forward.TransformPos |> p.Forward.TransformPosProj) v
                             pp |> Seq.map (fun pp -> pp.Z) |> Seq.min
                         )
-                        
+
                     | Some (:? aval<Trafo3d> as v), Some (:? aval<Trafo3d[]> as p) ->
                         AVal.custom (fun t ->
                             let v = v.GetValue t
@@ -1047,13 +1043,12 @@ module private RuntimeCommands =
             lastCommand.Dispose()
             commands.Clear()
 
-            
-        override x.PerformUpdate token = 
+        override x.PerformUpdate token =
             let boxes = commands |> Dict.toArray |> Array.map (fun (k,v) -> k, v.GetValue token)
 
             match order with
-                | RenderPassOrder.FrontToBack -> boxes.QuickSortAscending snd
-                | _ -> boxes.QuickSortDescending snd
+            | RenderPassOrder.FrontToBack -> boxes.QuickSortAscending snd
+            | _ -> boxes.QuickSortDescending snd
 
             let mutable p = firstCommand
 
@@ -1072,82 +1067,75 @@ module private RuntimeCommands =
 
         let mutable reader = objects.GetReader()
 
-
-
         let trie = SortedDictionaryExt<Aardvark.Rendering.RenderPass, CommandBucket>(Comparer<Aardvark.Rendering.RenderPass>.Default)
         let mutable firstBucket : Option<CommandBucket> = None
         let mutable lastBucket : Option<CommandBucket> = None
 
-
         let getBucket(pass : Aardvark.Rendering.RenderPass) =
             trie |> SortedDictionary.setWithNeighbours pass (fun l s r ->
                 match s with
-                    | Some s -> s
-                    | None ->
-                        let bucket = 
-                            match pass.Order with
-                                | RenderPassOrder.Arbitrary -> 
-                                    new UnorderedCommandBucket() :> CommandBucket
-                                | o -> 
-                                    Log.warn "[Vulkan] renderpass order %A not implemented" o
-                                    new UnorderedCommandBucket() :> CommandBucket
+                | Some s -> s
+                | None ->
+                    let bucket =
+                        match pass.Order with
+                        | RenderPassOrder.Arbitrary ->
+                            new UnorderedCommandBucket() :> CommandBucket
+                        | o ->
+                            Log.warn "[Vulkan] renderpass order %A not implemented" o
+                            new UnorderedCommandBucket() :> CommandBucket
 
-                        let prev = l |> Option.map snd
-                        let next = r |> Option.map snd
+                    let prev = l |> Option.map snd
+                    let next = r |> Option.map snd
 
-                        bucket.Prev <- prev
-                        match prev with
-                            | Some p -> p.Next <- Some bucket
-                            | None -> firstBucket <- Some bucket
+                    bucket.Prev <- prev
+                    match prev with
+                    | Some p -> p.Next <- Some bucket
+                    | None -> firstBucket <- Some bucket
 
-                        bucket.Next <- next
-                        match next with
-                            | Some n -> n.Prev <- Some bucket
-                            | None -> lastBucket <- Some bucket
+                    bucket.Next <- next
+                    match next with
+                    | Some n -> n.Prev <- Some bucket
+                    | None -> lastBucket <- Some bucket
 
-                        bucket
+                    bucket
             )
-            
+
         let cache = Dict<IRenderObject, PreparedCommand>()
         let dirty = HashSet<PreparedCommand>()
 
         let compile (o : IRenderObject) =
             match o with
-                | :? CommandRenderObject as o -> compiler.Compile o.Command
-                | _ -> new RenderObjectCommand(compiler, o) :> PreparedCommand
+            | :? CommandRenderObject as o -> compiler.Compile o.Command
+            | _ -> new RenderObjectCommand(compiler, o) :> PreparedCommand
 
         let insert (token : AdaptiveToken) (o : IRenderObject) =
             // insert cmd into trie (link programs)
             let cmd = compile o
             cmd.Update token
-            
+
             let bucket = getBucket o.RenderPass
             bucket.Add cmd
-            //trie.Add(cmd.GroupKey, cmd)
             cache.[o] <- cmd
-            
 
         let remove (o : IRenderObject) =
             match cache.TryRemove(o) with
-                | (true, cmd) ->
-                    // unlink stuff (remove from trie)
-                    
-                    let bucket = getBucket o.RenderPass
-                    bucket.Remove(cmd) |> ignore
+            | (true, cmd) ->
+                // unlink stuff (remove from trie)
+                let bucket = getBucket o.RenderPass
+                bucket.Remove(cmd) |> ignore
 
-                    lock dirty (fun () -> dirty.Remove cmd |> ignore)
-                    cmd.Dispose()
-                | _ ->
-                    ()
-            
+                lock dirty (fun () -> dirty.Remove cmd |> ignore)
+                cmd.Dispose()
+            | _ ->
+                ()
 
-        override x.InputChangedObject(_,i) =
+        override x.InputChangedObject(_, i) =
             match i with
-                | :? PreparedCommand as c ->
-                    // should be unreachable
-                    lock dirty (fun () -> dirty.Add c |> ignore)
-                | _ ->
-                    ()
+            | :? PreparedCommand as c ->
+                // should be unreachable
+                lock dirty (fun () -> dirty.Add c |> ignore)
+            | _ ->
+                ()
 
         override x.Free() =
             // release all RenderObjectCommands
@@ -1161,7 +1149,6 @@ module private RuntimeCommands =
             // free the entry-command
             for (KeyValue(_,b)) in trie do b.Dispose()
             trie.Clear()
-
 
         override x.Compile(token, stream) =
             let deltas = reader.GetChanges token
@@ -1180,10 +1167,10 @@ module private RuntimeCommands =
             // rebuild the top-level stream
             stream.Clear()
             match firstBucket with
-                | Some first ->
-                    stream.Call(first.First.Stream) |> ignore
-                | None ->
-                    ()
+            | Some first ->
+                stream.Call(first.First.Stream) |> ignore
+            | None ->
+                ()
 
 
     /// Clearing the current Framebuffer using the supplied values
@@ -2129,8 +2116,11 @@ module private RuntimeCommands =
             | RuntimeCommand.DispatchCmd _  ->
                 failwith "[Vulkan] compute commands not implemented"
 
-type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeCommand) as this =
+type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : RuntimeCommand) as this =
     inherit AbstractRenderTask()
+
+    let device = manager.Device
+    let user = manager.ResourceUser
 
     let pool = device.GraphicsFamily.CreateCommandPool(CommandPoolFlags.ResetBuffer)
     let viewports = AVal.init [||]
@@ -2139,16 +2129,7 @@ type CommandTask(device : Device, renderPass : RenderPass, command : RuntimeComm
     let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
     let inner = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)
 
-    let locks = ReferenceCountingSet<ILockedResource>()
-
-    let user =
-        { new IResourceUser with
-            member x.AddLocked l = lock locks (fun () -> locks.Add l |> ignore)
-            member x.RemoveLocked l = lock locks (fun () -> locks.Remove l |> ignore)
-        }
-
     let stats = NativePtr.alloc 1
-    let manager = new ResourceManager(user, device)
     let resources = ResourceLocationSet(user)
     let mutable lastFramebuffer = None
 

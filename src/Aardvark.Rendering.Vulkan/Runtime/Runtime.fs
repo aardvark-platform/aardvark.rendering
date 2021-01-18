@@ -187,12 +187,12 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) =
         manager.PrepareRenderObject(unbox fboSignature, rj) :> IPreparedRenderObject
 
+    member x.CompileRender(renderPass : IFramebufferSignature, cmd : RuntimeCommand) =
+        new CommandTask(manager, unbox renderPass, cmd)
 
-    member x.CompileRender (renderPass : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) =
+    member x.CompileRender (renderPass : IFramebufferSignature, set : aset<IRenderObject>) =
         let set = EffectDebugger.Hook set
-        new Temp.CommandTask(device, unbox renderPass, RuntimeCommand.Render set) :> IRenderTask
-        //new RenderTask.DependentRenderTask(device, unbox renderPass, set, true, true) :> IRenderTask
-        //new RenderTasks.RenderTask(device, unbox renderPass, set, AVal.constant engine, shareTextures, shareBuffers) :> IRenderTask
+        new CommandTask(manager, unbox renderPass, RuntimeCommand.Render set) :> IRenderTask
 
     member x.CompileClear(signature : IFramebufferSignature, color : aval<Map<Symbol, C4f>>, depth : aval<float option>, stencil : aval<int option>) : IRenderTask =
         let colors =
@@ -202,7 +202,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 )
             )
 
-        new RenderTask.ClearTask(device, unbox signature, colors, depth, stencil |> AVal.map (Option.map uint32)) :> IRenderTask
+        new ClearTask(device, unbox signature, colors, depth, stencil |> AVal.map (Option.map uint32)) :> IRenderTask
 
 
 
@@ -579,7 +579,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t) = x.GenerateMipMaps(t)
         member x.ContextLock = x.ContextLock
-        member x.CompileRender (signature, engine, set) = x.CompileRender(signature, engine, set)
+        member x.CompileRender (signature, engine, set) = x.CompileRender(signature, set)
         member x.CompileClear(signature, color, depth, stencil) = x.CompileClear(signature, color, depth, stencil)
 
         member x.PrepareSurface(signature, s) = x.PrepareSurface(signature, s)

@@ -175,7 +175,7 @@ module CommandTest =
 //            )
 
 
-        win.RenderTask <- new Temp.CommandTask(device, unbox win.FramebufferSignature, cmd)
+        win.RenderTask <- runtime.CompileRender(unbox win.FramebufferSignature, cmd)
         win.Run()
 
         win.Dispose()

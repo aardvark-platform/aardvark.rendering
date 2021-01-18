@@ -74,7 +74,7 @@
     <Compile Include="Runtime\GraphicsCommands.fs" />
     <Compile Include="Runtime\CommandTask.fs" />
     <Compile Include="Runtime\Compiler.fs" />
-    <Compile Include="Runtime\RenderTask.fs" />
+    <Compile Include="Runtime\ClearTask.fs" />
     <Compile Include="Runtime\Runtime.fs" />
     <Compile Include="Runtime\Headless.fs" />
     <Content Include="Aardvark.Rendering.Vulkan.dll.config">

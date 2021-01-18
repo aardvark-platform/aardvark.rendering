@@ -165,7 +165,7 @@ type VulkanVRApplicationLayered(samples : int, debug : DebugConfig option, adjus
             userCmd <- t
             if loaded then
                 let list = AList.ofList [ hiddenTask; t ]
-                task <- new Aardvark.Rendering.Vulkan.Temp.CommandTask(app.Device, renderPass, RuntimeCommand.Ordered list)
+                task <- app.Runtime.CompileRender(renderPass, RuntimeCommand.Ordered list)
                 
     override x.OnLoad(i : VrRenderInfo) : VrTexture * VrTexture =
         info <- i
@@ -250,7 +250,7 @@ type VulkanVRApplicationLayered(samples : int, debug : DebugConfig option, adjus
         
         
         let list = AList.ofList [ hiddenTask; userCmd ]
-        task <- new Aardvark.Rendering.Vulkan.Temp.CommandTask(app.Device, renderPass, RuntimeCommand.Ordered list)
+        task <- app.Runtime.CompileRender(renderPass, RuntimeCommand.Ordered list)
         loaded <- true
 
         VrTexture.Vulkan(fTex, Box2d(V2d(0.0, 1.0), V2d(0.5, 0.0))), VrTexture.Vulkan(fTex, Box2d(V2d(0.5, 1.0), V2d(1.0, 0.0)))

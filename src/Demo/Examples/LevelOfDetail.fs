@@ -570,10 +570,7 @@ module LevelOfDetail =
                 PerGeometryUniforms = Map.ofList [ "ModelTrafo", typeof<Trafo3d>; "NodeColor", typeof<V4d> ]
             }
 
-        let task = new Temp.CommandTask(device, unbox win.FramebufferSignature, RuntimeCommand.LodTree(surface, state, loader))
-
-
-        win.RenderTask <- task
+        win.RenderTask <- runtime.CompileRender(unbox win.FramebufferSignature, RuntimeCommand.LodTree(surface, state, loader))
 
 
 
