@@ -1762,6 +1762,7 @@ type ResourceLocationSet(user : IResourceUser) =
     member private x.RemoveInput(r : IResourceLocation) =
         match lock readers (fun () -> readers.TryRemove r) with
         | (true, reader) ->
+            reader.Outputs.Remove(x) |> ignore
             remDirty reader
             reader.Dispose()
         | _ ->
