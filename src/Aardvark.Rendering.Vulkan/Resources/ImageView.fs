@@ -17,6 +17,14 @@ type ImageView =
         val mutable public ArrayRange       : Range1i
         val mutable public IsResolved       : bool
 
+        override x.Destroy() =
+            if x.Device.Handle <> 0n && x.Handle.IsValid then
+                VkRaw.vkDestroyImageView(x.Device.Handle, x.Handle, NativePtr.zero)
+                x.Handle <- VkImageView.Null
+
+                if x.IsResolved then
+                    x.Image.Dispose()
+
         interface IBackendTextureOutputView with
             member x.texture = x.Image :> IBackendTexture
             member x.level = x.MipLevelRange.Min
@@ -179,8 +187,9 @@ module ImageView =
             VkRaw.vkCreateImageView(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create image view"
 
-            return ImageView(device, !!pHandle, img, viewType, levelRange, arrayRange, isResolved)
+            return new ImageView(device, !!pHandle, img, viewType, levelRange, arrayRange, isResolved)
         }
+
     let createStorageView (componentMapping : VkComponentMapping) (img : Image) (imageType : FShade.GLSL.GLSLImageType) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
         let levels = 1 + levelRange.Max - levelRange.Min |> min img.MipMapLevels
         let slices = 1 + arrayRange.Max - arrayRange.Min |> min img.Count
@@ -237,7 +246,7 @@ module ImageView =
             VkRaw.vkCreateImageView(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create image view"
 
-            return ImageView(device, !!pHandle, img, viewType, levelRange, arrayRange, isResolved)
+            return new ImageView(device, !!pHandle, img, viewType, levelRange, arrayRange, isResolved)
         }
 
     let createOutputView (img : Image) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
@@ -269,19 +278,8 @@ module ImageView =
             VkRaw.vkCreateImageView(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create image view"
 
-            return ImageView(device, !!pHandle, img, viewType, levelRange, arrayRange, false)
+            return new ImageView(device, !!pHandle, img, viewType, levelRange, arrayRange, false)
         }
-
-    let delete (view : ImageView) (device : Device) =
-        if device.Handle <> 0n && view.Handle.IsValid then
-            VkRaw.vkDestroyImageView(device.Handle, view.Handle, NativePtr.zero)
-            view.Handle <- VkImageView.Null
-
-            if view.IsResolved then
-                device.Delete view.Image
-
-
-
 
 [<AbstractClass; Sealed; Extension>]
 type ContextImageViewExtensions private() =
@@ -350,9 +348,3 @@ type ContextImageViewExtensions private() =
     [<Extension>]
     static member inline CreateOutputImageView(this : Device, image : Image, level : int, slice : int) =
         this |> ImageView.createOutputView image (Range1i(level, level)) (Range1i(slice, slice))
-
-
-
-    [<Extension>]
-    static member inline Delete(this : Device, view : ImageView) =
-        this |> ImageView.delete view

@@ -509,7 +509,7 @@ module LevelOfDetail =
             do! Command.Copy(hostVisible.[ImageAspect.Color, 0, 0], V3i.Zero, img.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(size, 1))
         }
 
-        device.Delete hostVisible
+        hostVisible.Dispose()
 
         let tex = AVal.constant (img :> ITexture)
 

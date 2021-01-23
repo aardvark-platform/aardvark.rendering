@@ -84,6 +84,11 @@ type UniformBuffer =
         val mutable public Storage : UnmanagedStruct
         val mutable public Layout : FShade.GLSL.GLSLUniformBuffer
 
+        override x.Destroy() =
+            base.Destroy()
+            UnmanagedStruct.free x.Storage
+            x.Storage <- UnmanagedStruct.Null
+
         new(buffer : Buffer, storage : UnmanagedStruct, layout : FShade.GLSL.GLSLUniformBuffer) = 
             { inherit Buffer(buffer.Device, buffer.Handle, buffer.Memory, buffer.Size, buffer.Usage, RefCount = buffer.RefCount); Storage = storage; Layout = layout }
     end
@@ -112,7 +117,7 @@ module UniformBuffer =
                 member x.Enqueue cmd = 
                     cmd.AppendCommand()
                     VkRaw.vkCmdUpdateBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Storage.Size, b.Storage.Pointer)
-                    Disposable.Empty
+                    [b]
             }
 
         //Command.Sync(b, VkAccessFlags.TransferWriteBit, VkAccessFlags.UniformReadBit)
@@ -121,13 +126,6 @@ module UniformBuffer =
             do! upload
             do! Command.Sync(b, VkAccessFlags.TransferWriteBit, VkAccessFlags.UniformReadBit)
         }
-
-    let delete (b : UniformBuffer) (device : Device) =
-        if b <> Unchecked.defaultof<_> then
-            device.Delete(b :> Buffer)
-            UnmanagedStruct.free b.Storage
-            b.Storage <- UnmanagedStruct.Null
-
 
 [<AbstractClass; Sealed; Extension>]
 type ContextUniformBufferExtensions private() =
@@ -138,8 +136,3 @@ type ContextUniformBufferExtensions private() =
     [<Extension>]
     static member inline Upload(this : Device, b : UniformBuffer) =
         this |> UniformBuffer.upload b
-
-    [<Extension>]
-    static member inline Delete(this : Device, b : UniformBuffer) =
-        this |> UniformBuffer.delete b       
-

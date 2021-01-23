@@ -58,6 +58,11 @@ type Sampler =
         inherit Resource<VkSampler>
         val mutable public Description : SamplerState
 
+        override x.Destroy() =
+            if x.Handle.IsValid then
+                VkRaw.vkDestroySampler(x.Device.Handle, x.Handle, NativePtr.zero)
+                x.Handle <- VkSampler.Null
+
         new(device : Device, desc : SamplerState, handle : VkSampler) = { inherit Resource<_>(device, handle); Description = desc  }
     end
 
@@ -98,20 +103,11 @@ module Sampler =
             VkRaw.vkCreateSampler(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create sampler"
 
-            return Sampler(device, desc, !!pHandle)
+            return new Sampler(device, desc, !!pHandle)
         }
-
-    let delete (sampler : Sampler) (device : Device) =
-        if sampler.Handle.IsValid then
-            VkRaw.vkDestroySampler(device.Handle, sampler.Handle, NativePtr.zero)
-            sampler.Handle <- VkSampler.Null
 
 [<AbstractClass; Sealed; Extension>]
 type ContextSamplerExtensions private() =
     [<Extension>]
     static member inline CreateSampler(this : Device, desc : SamplerState) =
         this |> Sampler.create desc
-
-    [<Extension>]
-    static member inline Delete(this : Device, sampler : Sampler) =
-        this |> Sampler.delete sampler

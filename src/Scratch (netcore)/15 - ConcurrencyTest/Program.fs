@@ -17,33 +17,23 @@ let main argv =
     (* failure cases: https://github.com/aardvark-platform/aardvark.rendering/issues/69
 
         Vk:
-            prepareIt
+            prepareTexture
 
     *)
 
-    let prepareIt = false  // VK: fail; GL: OK
-    let inlineDispose = false // OK
-    let perObjTexture = false // OK
-    let prepareTexture = false // GL: OK, Vk: only works with dubios 4089ebc1 fix
-    let addRemoveTest = false // OK
-    let textureTest = true // OK
-    let jitterFrames = false // OK
+    let mutable running = true
+    let prepareIt = true       // OK
+    let inlineDispose = true   // OK
+    let perObjTexture = false  // OK
+    let prepareTexture = false // GL: OK, Vk: Fail (Copy engine sync issue?, sync upload works, how does 4089ebc1 fix relate to this?)
+    let addRemoveTest = true   // OK
+    let textureTest = true     // OK
+    let jitterFrames = false   // OK
     
     Aardvark.Init()
 
-    // window { ... } is similar to show { ... } but instead
-    // of directly showing the window we get the window-instance
-    // and may show it later.
-    //let win =
-    //    window {
-    //        backend Backend.GL
-    //        display Display.Mono
-    //        debug true
-    //        samples 1
-    //    }
 
-
-    use app = new VulkanApplication(debug = Vulkan.DebugConfig.TraceHandles)
+    use app = new VulkanApplication(debug = Vulkan.DebugConfig.Default)
     //GL.Config.UseNewRenderTask <- true
     //use app = new OpenGlApplication()
     let win = app.CreateGameWindow(1)
@@ -62,7 +52,7 @@ let main argv =
 
     let cameraMovement () = 
         Thread.Sleep 2000
-        while true do
+        while running do
             transact (fun _ -> 
                 angle.Value <- angle.Value + 0.01
             )
@@ -76,7 +66,7 @@ let main argv =
 
 
     let texture = cval (DefaultTextures.blackTex.GetValue())
-
+    let mutable preparedTextures = []
 
     let createTexture (d : C4b) = 
         let checkerboardPix = 
@@ -98,7 +88,7 @@ let main argv =
     let updateTexture () = 
         Thread.Sleep 2000
         let rnd = new System.Random()
-        while true do
+        while running do
             let d = if rnd.NextDouble() < 0.5 then C4b.White else C4b.Gray
             let tex = createTexture d
 
@@ -117,7 +107,7 @@ let main argv =
 
 
     let geometry = Primitives.unitBox
-    
+
     let template =
         geometry
             |> Sg.ofIndexedGeometry
@@ -155,48 +145,51 @@ let main argv =
 
     win.AfterRender.Add(cleanup)
 
+    let addThing (trafo : Trafo3d) =
+        let texture,activate = 
+            if perObjTexture then
+                 let tex = createTexture C4b.Gray
+                 if prepareTexture then 
+                    let pTex = 
+                        let lockObj = match app.Runtime :> obj with :? Aardvark.Rendering.Vulkan.Runtime -> AbstractRenderTask.ResourcesInUse | _ -> obj()
+                        let lockObj = obj()
+                        lock lockObj (fun _ -> 
+                            win.Runtime.PrepareTexture(tex) 
+                        )
+                    let activate = 
+                        { new IDisposable with
+                            member x.Dispose() = 
+                                win.Runtime.DeleteTexture pTex
+                        }
+
+                    preparedTextures <- pTex :: preparedTextures
+                    AVal.constant (pTex :> ITexture), fun () -> activate
+                 else 
+                    AVal.constant tex, template.Activate
+            else texture :> aval<_>, template.Activate
+
+        let ro = 
+            { template with
+                Id = newId()
+                Uniforms = uniforms trafo texture
+                Activate = activate
+            } :> IRenderObject
+
+        let prep = if prepareIt then win.Runtime.PrepareRenderObject(signature,ro) :> IRenderObject else ro
+
+        transact (fun _ -> 
+            things.Add prep |> ignore
+        )
+
     let addThings () = 
         Thread.Sleep 2000
         let rnd = new System.Random()
         let mutable runs = 0
-        while true do
+        while running do
             if runs % 10000 = 0 then Log.line "cnt: %A" things.Count
             if rnd.NextDouble() <= 0.5 then
                 let trafo = Trafo3d.Translation(rnd.NextDouble()*10.0,rnd.NextDouble()*10.0,rnd.NextDouble()*10.0)
-
-                let texture,activate = 
-                    if perObjTexture then
-                         let tex = createTexture C4b.Gray
-                         if prepareTexture then 
-                            let pTex = 
-                                let lockObj = match app.Runtime :> obj with :? Aardvark.Rendering.Vulkan.Runtime -> AbstractRenderTask.ResourcesInUse | _ -> obj()
-                                let lockObj = obj()
-                                lock lockObj (fun _ -> 
-                                    win.Runtime.PrepareTexture(tex) 
-                                )
-                            let activate = 
-                                { new IDisposable with
-                                    member x.Dispose() = 
-                                        win.Runtime.DeleteTexture pTex
-                                }
-                            AVal.constant (pTex :> ITexture), fun () -> activate
-                         else 
-                            AVal.constant tex, template.Activate
-                    else texture :> aval<_>, template.Activate
-
-
-                let ro = 
-                    { template with
-                        Id = newId()
-                        Uniforms = uniforms trafo texture
-                        Activate = activate
-                    } :> IRenderObject
-                
-                let prep = if prepareIt then win.Runtime.PrepareRenderObject(signature,ro) :> IRenderObject else ro
-
-                transact (fun _ -> 
-                    things.Add prep |> ignore
-                )
+                addThing trafo
             elif things.Count > 0 then
                 let rndIndx = rnd.Next(0,things.Count-1)
                 if rndIndx < things.Count - 1 then
@@ -213,14 +206,24 @@ let main argv =
             runs <- runs + 1
             //Thread.Sleep(10)
 
-    let cameraThread = startThread "cameraThread" cameraMovement
-    let textureThread = 
-        if textureTest then startThread "textureThread" updateTexture |> ignore else ()
-    let addRemoteThread = 
-        if addRemoveTest then startThread "addRemoteThread" addThings |> ignore else ()
+    let rnd = new System.Random()
 
+    for i in 1 .. 10 do
+        let trafo = Trafo3d.Translation(rnd.NextDouble()*10.0,rnd.NextDouble()*10.0,rnd.NextDouble()*10.0)
+        addThing trafo
 
-    let sg = 
+    let threads =
+        [
+            startThread "cameraThread" cameraMovement
+
+            if textureTest then
+                startThread "textureThread" updateTexture
+
+            if addRemoveTest then
+                startThread "addRemoveThread" addThings
+        ]
+
+    let sg =
         // create a red box with a simple shader
         Sg.box (AVal.constant color) (AVal.constant box)
             |> Sg.shader {
@@ -241,5 +244,11 @@ let main argv =
         ]
     //win.Scene <- sg
     win.Run()
+
+    running <- false
+    threads |> List.iter (fun t -> t.Join())
+
+    for t in preparedTextures do
+        win.Runtime.DeleteTexture(t)
 
     0

@@ -77,9 +77,9 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
         if loaded then
             loaded <- false
             x.OnUnload()
-            device.Delete swapchain
-            device.Delete swapchainDescription
-            device.Delete surface
+            swapchain.Dispose()
+            swapchainDescription.Dispose()
+            surface.Dispose()
 
         base.Dispose(d)
 

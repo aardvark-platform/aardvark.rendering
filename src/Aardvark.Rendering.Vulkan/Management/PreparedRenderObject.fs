@@ -15,9 +15,10 @@ type PreparedRenderObject =
     {
         device                  : Device
         original                : RenderObject
-        
+
         resources               : list<IResourceLocation>
 
+        program                 : IResourceLocation<ShaderProgram>
         pipelineLayout          : PipelineLayout
         pipeline                : INativeResourceLocation<VkPipeline>
         indexBuffer             : Option<INativeResourceLocation<IndexBufferBinding>>
@@ -32,16 +33,12 @@ type PreparedRenderObject =
     member x.AttributeScope = x.original.AttributeScope
 
     member x.Dispose() =
-        lock AbstractRenderTask.ResourcesInUse (fun _ -> 
-            for r in x.resources do r.Release()
-        )
+        // TODO: Resources aren't actually acquired by preparing the render object (except the program) but only
+        // when added to the compiler. Thus, we don't release them here. May wanna change that behavior.
+        x.program.Release()
 
     member x.Update(caller : AdaptiveToken, token : RenderToken) =
         for r in x.resources do r.Update(caller) |> ignore
-
-    member x.IncrementReferenceCount() =
-        for r in x.resources do r.Acquire()
-
 
     interface IPreparedRenderObject with
         member x.Id = x.original.Id
@@ -72,7 +69,6 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
 
     member x.Update(caller : AdaptiveToken, token : RenderToken) =
         children |> List.iter (fun c -> c.Update(caller, token))
-        
 
     member x.RenderPass = first.RenderPass
     member x.Original = first.original
@@ -272,12 +268,13 @@ type DevicePreparedRenderObjectExtensions private() =
 
         //for r in resources do r.Acquire()
 
-        let res = 
+        let res =
             {
                 device                      = this.Device
                 original                    = ro
                 resources                   = CSharpList.toList resources
                 descriptorSets              = descriptorBindings
+                program                     = program
                 pipelineLayout              = programLayout
                 pipeline                    = pipeline
                 vertexBuffers               = bindings

@@ -145,7 +145,7 @@ module VulkanTests =
                 let tensor = Tensor4<uint16>(V4i(brickSize, 1))
 
                 let sizeInBytes = int64 brickSize.X * int64 brickSize.Y * int64 brickSize.Z * int64 sizeof<uint16>
-                let tempBuffer = device.HostMemory |> Buffer.create (VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit) sizeInBytes
+                use tempBuffer = device.HostMemory |> Buffer.create (VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit) sizeInBytes
                 
 
                 device.perform {
@@ -182,7 +182,6 @@ module VulkanTests =
 
                     ]
                 
-                device.Delete tempBuffer
                 result
             )
 

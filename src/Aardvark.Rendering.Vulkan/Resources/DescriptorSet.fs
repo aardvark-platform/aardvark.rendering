@@ -10,8 +10,6 @@ open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
-// #nowarn "51"
-
 
 type Descriptor =
     | UniformBuffer         of slot: int * buffer: UniformBuffer
@@ -19,13 +17,85 @@ type Descriptor =
     | CombinedImageSampler  of slot: int * images: array<int * VkImageLayout * ImageView * Sampler>
     | StorageImage          of slot: int * view: ImageView
 
-type DescriptorSet =
+type internal DescriptorPoolBag(device : Device, perPool : int, resourcesPerPool : int) =
+    inherit CachedResource(device)
+
+    let pools = System.Collections.Generic.HashSet<DescriptorPool>()
+    let partialSet = System.Collections.Generic.HashSet<DescriptorPool>()
+    let mutable partial = []
+
+    let createNew() =
+        let pool = device.CreateDescriptorPool(perPool, resourcesPerPool)
+        pools.Add pool |> ignore
+        partialSet.Add pool |> ignore
+        partial <- pool :: partial
+        Log.line "[Vulkan] using %d descriptor pools" pools.Count
+
+    member x.CreateSet(layout : DescriptorSetLayout, tryAllocSet : DescriptorSetLayout -> DescriptorPool -> DescriptorSet option) =
+        lock pools (fun () ->
+            match partial with
+            | [] ->
+                createNew()
+                x.CreateSet(layout, tryAllocSet)
+            | h :: t ->
+                match h |> tryAllocSet layout with
+                | Some set ->
+                    set.PoolBag <- Some x
+                    set
+                | None ->
+                    partialSet.Remove h |> ignore
+                    partial <- t
+                    x.CreateSet(layout, tryAllocSet)
+        )
+
+    member x.RemoveSet (set : DescriptorSet) =
+        lock pools (fun () ->
+            let pool = set.Pool
+            if pools.Contains pool then
+                if pool.SetCount = perPool then
+                    if partialSet.Remove pool then partial <- List.filter (fun p -> p <> pool) partial
+                    pool.Dispose()
+                    pools.Remove pool |> ignore
+                    Log.line "[Vulkan] using %d descriptor pools" pools.Count
+                else
+                    if partialSet.Add pool then
+                        partial <- pool :: partial
+            else
+                failf "cannot free non-pooled DescriptorSet using pool"
+         )
+
+    override x.Destroy() =
+        pools |> Seq.iter Disposable.dispose
+        pools.Clear()
+        partial <- []
+
+and DescriptorSet =
     class
         inherit Resource<VkDescriptorSet>
+        val mutable internal PoolBag : DescriptorPoolBag option
         val mutable public Pool : DescriptorPool
         val mutable public Layout : DescriptorSetLayout
+        val mutable public BoundResources : array<Resource>
 
-        new(device : Device, pool : DescriptorPool, layout : DescriptorSetLayout, handle : VkDescriptorSet) = { inherit Resource<_>(device, handle); Pool = pool; Layout = layout }
+        override x.Destroy() =
+            lock x.Pool (fun () ->
+                if x.Handle.IsValid then
+                    native {
+                        let! pHandle = x.Handle
+                        VkRaw.vkFreeDescriptorSets(x.Device.Handle, x.Pool.Handle, 1u, pHandle)
+                            |> check "could not free DescriptorSet"
+                    }
+
+                    x.Handle <- VkDescriptorSet.Null
+                    Interlocked.Increment(&x.Pool.SetCount) |> ignore
+
+                    x.PoolBag |> Option.iter (fun b -> b.RemoveSet(x))
+            )
+
+            x.BoundResources |> Array.iter Disposable.dispose
+
+        new(device : Device, pool : DescriptorPool, layout : DescriptorSetLayout, handle : VkDescriptorSet) =
+            { inherit Resource<_>(device, handle); PoolBag = None; Pool = pool; Layout = layout; BoundResources = [||] }
     end
 
 
@@ -53,7 +123,7 @@ module DescriptorSet =
                         return None
                     else
                         res |> check "could not allocate DescriptorSet"
-                        return Some (DescriptorSet(pool.Device, pool, layout, !!pHandle))
+                        return Some (new DescriptorSet(pool.Device, pool, layout, !!pHandle))
                 }
             else
                 None
@@ -63,19 +133,6 @@ module DescriptorSet =
         match tryAlloc layout pool with
             | Some d -> d
             | None -> failf "cannot allocate DescriptorSet (out of slots)"
-
-    let free (desc : DescriptorSet) (pool : DescriptorPool) =
-        lock pool (fun () ->
-            if desc.Handle.IsValid then
-                native {
-                    let! pHandle = desc.Handle
-                    VkRaw.vkFreeDescriptorSets(pool.Device.Handle, pool.Handle, 1u, pHandle)
-                        |> check "could not free DescriptorSet"
-                }
-
-                desc.Handle <- VkDescriptorSet.Null
-                Interlocked.Increment(&pool.SetCount) |> ignore
-        )
 
     let update (descriptors : array<Descriptor>) (set : DescriptorSet) (pool : DescriptorPool) =
         let device = pool.Device
@@ -88,165 +145,125 @@ module DescriptorSet =
             let cnt = descriptors |> Array.sumBy (function StorageBuffer _ | UniformBuffer _ -> 1 | _ -> 0)
             NativePtr.stackalloc cnt
 
+        let resources : Resource[] =
+            descriptors |> Array.collect (function
+                | StorageBuffer (_, b, _, _) ->
+                    [| b |]
+                | UniformBuffer (_, b) ->
+                    [| b |]
+                | CombinedImageSampler (_, arr) ->
+                    arr |> Array.collect (fun (_, _, v, s) -> [| v; s |] )
+                | StorageImage (_, v) ->
+                    [| v |]
+            )
+
         let writes =
             descriptors
-                |> Array.collect (fun desc ->
-                    match desc with
-                    | StorageBuffer (binding, b, offset, size) ->
-                        let info =
-                            VkDescriptorBufferInfo(
-                                b.Handle,
-                                uint64 offset,
-                                uint64 size
-                            )
-
-                        NativePtr.write bufferInfos info
-                        let ptr = bufferInfos
-                        bufferInfos <- NativePtr.step 1 bufferInfos
-
-                        [|
-                            VkWriteDescriptorSet(
-                                set.Handle,
-                                uint32 binding,
-                                0u, 1u, VkDescriptorType.StorageBuffer,
-                                NativePtr.zero,
-                                ptr,
-                                NativePtr.zero
-                            )
-                        |]
-
-                    | UniformBuffer (binding, ub) ->
-                        let info =
-                            VkDescriptorBufferInfo(
-                                ub.Handle,
-                                0UL,
-                                uint64 ub.Storage.Size
-                            )
-
-                        NativePtr.write bufferInfos info
-                        let ptr = bufferInfos
-                        bufferInfos <- NativePtr.step 1 bufferInfos
-
-                        [|
-                            VkWriteDescriptorSet(
-                                set.Handle,
-                                uint32 binding,
-                                0u, 1u, VkDescriptorType.UniformBuffer,
-                                NativePtr.zero,
-                                ptr,
-                                NativePtr.zero
-                            )
-                        |]
-
-                    | CombinedImageSampler(binding, arr) ->
-                        arr |> Array.map (fun (i, expectedLayout, view, sam) ->
-                            let info =
-                                VkDescriptorImageInfo(
-                                    sam.Handle,
-                                    view.Handle,
-                                    expectedLayout
-                                )
-
-                            NativePtr.write imageInfos info
-                            let ptr = imageInfos
-                            imageInfos <- NativePtr.step 1 imageInfos
-
-                            VkWriteDescriptorSet(
-                                set.Handle,
-                                uint32 binding,
-                                uint32 i, 1u, VkDescriptorType.CombinedImageSampler,
-                                ptr,
-                                NativePtr.zero,
-                                NativePtr.zero
-                            )
+            |> Array.collect (fun desc ->
+                match desc with
+                | StorageBuffer (binding, b, offset, size) ->
+                    let info =
+                        VkDescriptorBufferInfo(
+                            b.Handle,
+                            uint64 offset,
+                            uint64 size
                         )
 
-                    | StorageImage(binding, view) ->
+                    NativePtr.write bufferInfos info
+                    let ptr = bufferInfos
+                    bufferInfos <- NativePtr.step 1 bufferInfos
+
+                    [|
+                        VkWriteDescriptorSet(
+                            set.Handle,
+                            uint32 binding,
+                            0u, 1u, VkDescriptorType.StorageBuffer,
+                            NativePtr.zero,
+                            ptr,
+                            NativePtr.zero
+                        )
+                    |]
+
+                | UniformBuffer (binding, ub) ->
+                    let info =
+                        VkDescriptorBufferInfo(
+                            ub.Handle,
+                            0UL,
+                            uint64 ub.Storage.Size
+                        )
+
+                    NativePtr.write bufferInfos info
+                    let ptr = bufferInfos
+                    bufferInfos <- NativePtr.step 1 bufferInfos
+
+                    [|
+                        VkWriteDescriptorSet(
+                            set.Handle,
+                            uint32 binding,
+                            0u, 1u, VkDescriptorType.UniformBuffer,
+                            NativePtr.zero,
+                            ptr,
+                            NativePtr.zero
+                        )
+                    |]
+
+                | CombinedImageSampler(binding, arr) ->
+                    arr |> Array.map (fun (i, expectedLayout, view, sam) ->
                         let info =
                             VkDescriptorImageInfo(
-                                VkSampler.Null,
+                                sam.Handle,
                                 view.Handle,
-                                VkImageLayout.General
+                                expectedLayout
                             )
 
                         NativePtr.write imageInfos info
                         let ptr = imageInfos
                         imageInfos <- NativePtr.step 1 imageInfos
 
-                        let write =
-                            VkWriteDescriptorSet(
-                                set.Handle,
-                                uint32 binding,
-                                0u, 1u, VkDescriptorType.StorageImage,
-                                ptr,
-                                NativePtr.zero,
-                                NativePtr.zero
-                            )
+                        VkWriteDescriptorSet(
+                            set.Handle,
+                            uint32 binding,
+                            uint32 i, 1u, VkDescriptorType.CombinedImageSampler,
+                            ptr,
+                            NativePtr.zero,
+                            NativePtr.zero
+                        )
+                    )
 
-                        [| write |]
-                   )
+                | StorageImage(binding, view) ->
+                    let info =
+                        VkDescriptorImageInfo(
+                            VkSampler.Null,
+                            view.Handle,
+                            VkImageLayout.General
+                        )
+
+                    NativePtr.write imageInfos info
+                    let ptr = imageInfos
+                    imageInfos <- NativePtr.step 1 imageInfos
+
+                    let write =
+                        VkWriteDescriptorSet(
+                            set.Handle,
+                            uint32 binding,
+                            0u, 1u, VkDescriptorType.StorageImage,
+                            ptr,
+                            NativePtr.zero,
+                            NativePtr.zero
+                        )
+
+                    [| write |]
+                )
+
+        resources |> Array.iter (fun r -> r.AddReference())
+
         native {
             let! pWrites = writes
             VkRaw.vkUpdateDescriptorSets(device.Handle, uint32 writes.Length, pWrites, 0u, NativePtr.zero)
         }
 
-type private DescriptorPoolBag(device : Device, perPool : int, resourcesPerPool : int) =
-    inherit RefCountedResource()
-
-    let pools = System.Collections.Generic.HashSet<DescriptorPool>()
-    let partialSet = System.Collections.Generic.HashSet<DescriptorPool>()
-    let mutable partial = []
-
-    let createNew() =
-        let pool = device.CreateDescriptorPool(perPool, resourcesPerPool)
-        pools.Add pool |> ignore
-        partialSet.Add pool |> ignore
-        partial <- pool :: partial
-        Log.line "[Vulkan] using %d descriptor pools" pools.Count
-
-    member x.CreateDescriptorSet(layout : DescriptorSetLayout) =
-        lock pools (fun () ->
-            match partial with
-                | [] ->
-                    createNew()
-                    x.CreateDescriptorSet(layout)
-                | h :: t ->
-                    match DescriptorSet.tryAlloc layout h with
-                        | Some set ->
-                            set
-                        | None ->
-                            partialSet.Remove h |> ignore
-                            partial <- t
-                            x.CreateDescriptorSet(layout)
-        )
-
-    member x.Delete (set : DescriptorSet) =
-        lock pools (fun () ->
-            let pool = set.Pool
-            if pools.Contains pool then
-                lock pool (fun () ->
-                    DescriptorSet.free set pool
-                    if pool.SetCount = perPool then
-                        if partialSet.Remove pool then partial <- List.filter (fun p -> p <> pool) partial
-                        DescriptorPool.delete pool device
-                        pools.Remove pool |> ignore
-                        Log.line "[Vulkan] using %d descriptor pools" pools.Count
-
-                    else
-                        if partialSet.Add pool then
-                            partial <- pool :: partial
-                )
-            else
-                failf "cannot free non-pooled DescriptorSet using pool"
-        )
-
-    member x.Update(set : DescriptorSet, values : array<Descriptor>) =
-        set.Pool |> DescriptorSet.update values set
-
-    override x.Destroy() =
-        pools |> Seq.iter (fun p -> device.Delete p)
-        pools.Clear()
-        partial <- []
+        set.BoundResources |> Array.iter Disposable.dispose
+        set.BoundResources <- resources
 
 [<AbstractClass; Sealed; Extension>]
 type ContextDescriptorSetExtensions private() =
@@ -260,20 +277,11 @@ type ContextDescriptorSetExtensions private() =
     static member inline Update(this : DescriptorPool, set : DescriptorSet, values : array<Descriptor>) =
         this |> DescriptorSet.update values set
 
-    [<Extension>]
-    static member inline Free(this : DescriptorPool, set : DescriptorSet) =
-        this |> DescriptorSet.free set
-
 
     [<Extension>]
     static member CreateDescriptorSet(this : Device, layout : DescriptorSetLayout) =
-        let bag = this.GetCached(DescriptorPoolBag, 0, fun _ -> new DescriptorPoolBag(this, 1024, 1024))
-        bag.CreateDescriptorSet layout
-
-    [<Extension>]
-    static member Delete(this : Device, set : DescriptorSet) =
-        let bag = this.GetCached(DescriptorPoolBag, 0, fun _ -> new DescriptorPoolBag(this, 1024, 1024))
-        bag.Delete set
+        use bag = this.GetCached(DescriptorPoolBag, 0, fun _ -> new DescriptorPoolBag(this, 1024, 1024))
+        bag.CreateSet(layout, DescriptorSet.tryAlloc)
 
     [<Extension>]
     static member Update(set : DescriptorSet, values : array<Descriptor>) =

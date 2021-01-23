@@ -32,6 +32,11 @@ type Pipeline =
         inherit Resource<VkPipeline>
         val mutable public Description : PipelineDescription
 
+        override x.Destroy() =
+            if x.Handle.IsValid then
+                VkRaw.vkDestroyPipeline(x.Device.Handle, x.Handle, NativePtr.zero)
+                x.Handle <- VkPipeline.Null
+
         new(device : Device, handle : VkPipeline, description : PipelineDescription) = { inherit Resource<_>(device, handle); Description = description }
     end
 
@@ -239,12 +244,8 @@ module Pipeline =
             VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, pPipelineCreateInfo, NativePtr.zero, pPipeline) 
                 |> check "vkCreateGraphicsPipelines"
                 
-            return Pipeline(device, !!pPipeline, desc)
+            return new Pipeline(device, !!pPipeline, desc)
         }
-    let delete (p : Pipeline) (device : Device) =
-        if p.Handle.IsValid then
-            VkRaw.vkDestroyPipeline(device.Handle, p.Handle, NativePtr.zero)
-            p.Handle <- VkPipeline.Null
 
 
 [<AbstractClass; Sealed; Extension>]
@@ -252,7 +253,3 @@ type ContextPipelineExtensions private() =
     [<Extension>]
     static member inline CreateGraphicsPipeline(this : Device, description : PipelineDescription) =
         this |> Pipeline.createGraphics description
-
-    [<Extension>]
-    static member inline Delete(this : Device, pipeline : Pipeline) =
-        this |> Pipeline.delete pipeline

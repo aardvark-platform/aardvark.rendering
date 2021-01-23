@@ -18,9 +18,13 @@ type Framebuffer =
         val mutable public ImageViews : ImageView[]
         val mutable public Attachments : Map<Symbol, ImageView>
 
+        override x.Destroy() =
+            if x.Device.Handle <> 0n && x.Handle.IsValid then
+                VkRaw.vkDestroyFramebuffer(x.Device.Handle, x.Handle, NativePtr.zero)
+                x.Handle <- VkFramebuffer.Null
+
         interface IFramebuffer with
             member x.Signature = x.RenderPass :> IFramebufferSignature
-            member x.Dispose() = ()
             member x.GetHandle _ = x.Handle :> obj
             member x.Size = x.Size
             member x.Attachments = x.Attachments |> Map.map (fun _ v -> v :> IFramebufferOutput)
@@ -31,7 +35,7 @@ type Framebuffer =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Framebuffer =
-    
+
     let create (pass : RenderPass) (views : Map<Symbol, ImageView>) (device : Device) =
         if Map.isEmpty views then
             failf "cannot create empty framebuffer"
@@ -63,7 +67,7 @@ module Framebuffer =
                             view
                         | _ -> failf "missing framebuffer attachment %A/%A" idx sem
                 )
-                
+
         native {
             let! pAttachments = attachments |> Array.map (fun a -> a.Handle)
             let! pInfo =
@@ -88,19 +92,8 @@ module Framebuffer =
             return new Framebuffer(device, handle, pass, minSize, real, attachments)
         }
 
-    let delete (fbo : Framebuffer) (device : Device) =
-        if device.Handle <> 0n && fbo.Handle.IsValid then
-            VkRaw.vkDestroyFramebuffer(device.Handle, fbo.Handle, NativePtr.zero)
-            fbo.Handle <- VkFramebuffer.Null
-
-
 [<AbstractClass; Sealed; Extension>]
 type ContextFramebufferExtensions private() =
     [<Extension>]
     static member inline CreateFramebuffer(this : Device, pass : RenderPass, attachments : Map<Symbol, ImageView>) =
         this |> Framebuffer.create pass attachments
-        
-    [<Extension>]
-    static member inline Delete(this : Device, framebuffer : Framebuffer) =
-        this |> Framebuffer.delete framebuffer
-        

@@ -201,6 +201,11 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
     member x.HasCompositeAlpha (t : VkCompositeAlphaFlagsKHR) = (t &&& supportedCompositeAlpha) = t
     member x.HasUsage (t : VkImageUsageFlags) = (t &&& supportedUsage) = t
 
+    override x.Destroy() =
+        if x.Handle.IsValid then
+            VkRaw.vkDestroySurfaceKHR(x.Device.Instance.Handle, x.Handle, NativePtr.zero)
+            x.Handle <- VkSurfaceKHR.Null
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Surface =
@@ -272,20 +277,11 @@ module Surface =
                     VkRaw.vkCreateWin32SurfaceKHR(instance.Handle, pInfo, NativePtr.zero, pHandle)
                         |> check "could not create win32 surface"
 
-            return Surface(device, !!pHandle)
+            return new Surface(device, !!pHandle)
         }
-
-    let delete (s : Surface) (device : Device) =
-        if s.Handle.IsValid then
-            VkRaw.vkDestroySurfaceKHR(device.Instance.Handle, s.Handle, NativePtr.zero)
-            s.Handle <- VkSurfaceKHR.Null
 
 [<AbstractClass; Sealed; Extension>]
 type DeviceSurfaceExtensions private() =
     [<Extension>]
     static member inline CreateSurface(this : Device, info : SurfaceInfo) =
         this |> Surface.create info
-
-    [<Extension>]
-    static member inline Delete(this : Device, s : Surface) =
-        this |> Surface.delete s

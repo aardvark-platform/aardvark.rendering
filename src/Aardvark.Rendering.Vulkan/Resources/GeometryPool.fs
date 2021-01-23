@@ -410,20 +410,17 @@ module GeometryPoolUtilities =
         member x.Realloc(newCapacity : int64) =
             x.Realloc(newCapacity, transfer.RunSynchronously)
 
-        member x.Dispose() =
+        override x.Destroy() =
             if hostBuffer.Handle.IsValid then
                 //VkRaw.vkUnmapMemory(device.Handle, hm.Handle)
-                device.Delete hostBuffer
+                hostBuffer.Dispose()
                 ptr <- 0n
-                device.Delete(x)
+                base.Destroy()
 
         interface ILockedResource with
             member x.Lock = lock.Lock
             member x.OnLock c = lock.OnLock c
             member x.OnUnlock c = lock.OnUnlock c
-
-        interface IDisposable with
-            member x.Dispose() = x.Dispose()
 
     type StreamingBufferOld(device : Device, rlock : ResourceLock2, usage : VkBufferUsageFlags, handle : VkBuffer, devPtr : DevicePtr, size : int64) =
         inherit Buffer(device, handle, devPtr, size, usage)
@@ -499,12 +496,12 @@ module GeometryPoolUtilities =
                         VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, uint32 todoCount, NativePtr.ofNativeInt (gc.AddrOfPinnedObject()))
                         gc.Free()
 
-                    Disposable.Empty
+                    []
             }
 
-        member x.Dispose() =
+        override x.Destroy() =
             if scratchBuffer.IsValid then
-                device.Delete x
+                base.Destroy()
                 VkRaw.vkDestroyBuffer(device.Handle, scratchBuffer, NativePtr.zero)
                 scratchMem.Dispose()
                 scratchBuffer <- VkBuffer.Null
@@ -564,7 +561,7 @@ module GeometryPoolUtilities =
                                         let! pCopyInfo = VkBufferCopy(uint64 scratchOffset, uint64 offset, uint64 size)
                                         cmd.AppendCommand()
                                         VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, pCopyInfo)
-                                        return Disposable.Empty
+                                        return []
                                     }
                             }
 
@@ -621,9 +618,9 @@ module GeometryPoolUtilities =
 
         let mutable isEmpty = true
 
-        member x.Dispose() =
+        override x.Destroy() =
             if scratchBuffer.IsValid then
-                device.Delete x
+                base.Destroy()
                 VkRaw.vkDestroyBuffer(device.Handle, scratchBuffer, NativePtr.zero)
                 scratchMem.Dispose()
                 scratchBuffer <- VkBuffer.Null
@@ -655,7 +652,7 @@ module GeometryPoolUtilities =
                                         native {
                                             let! pCopyInfo = VkBufferCopy(uint64 offset, uint64 offset, uint64 size)
                                             VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, pCopyInfo)
-                                            return Disposable.Empty
+                                            return []
                                         }
                                 }
                             )
@@ -672,9 +669,6 @@ module GeometryPoolUtilities =
             member x.Lock = rlock.Lock
             member x.OnLock c = rlock.OnLock c
             member x.OnUnlock c = rlock.OnUnlock c
-
-        interface IDisposable with
-            member x.Dispose() = x.Dispose()
 
     [<AbstractClass; Sealed; Extension>]
     type DeviceMappedBufferExts private() =

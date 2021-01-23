@@ -49,7 +49,7 @@ module private EnumExtensions =
                             )
 
                             img.Layout <- VkImageLayout.PresentSrcKhr
-                            return Disposable.Empty
+                            return [img :> ICommandResource]
                         }
                 }
 
@@ -132,7 +132,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
 
                 return imageHandles |> Array.map (fun handle ->
                     let image = 
-                        Image(
+                        new Image(
                             device,
                             handle,
                             V3i(size.X, size.Y, 1),
@@ -229,13 +229,13 @@ type Swapchain(device : Device, description : SwapchainDescription) =
 
                 framebuffer |> Option.iter (fun framebuffer ->
                     framebuffer.Attachments |> Map.iter (fun _ v ->
-                        device.Delete v.Image
-                        device.Delete v
+                        v.Image.Dispose()
+                        v.Dispose()
                     )
-                    device.Delete framebuffer
+                    framebuffer.Dispose()
                 )
-                resolvedImage|> Option.iter device.Delete
-                buffers |> Array.iter device.Delete
+                resolvedImage |> Option.iter Disposable.dispose
+                buffers |> Array.iter Disposable.dispose
 
                 //handle, buffers, framebuffer, resolvedView
                 let (newHandle, newBuffers, newFramebuffer, newResolvedImage) = recreate handle newSize
@@ -387,14 +387,14 @@ type Swapchain(device : Device, description : SwapchainDescription) =
             
             framebuffer |> Option.iter (fun framebuffer ->
                 framebuffer.Attachments |> Map.iter (fun _ v ->
-                    device.Delete v.Image
-                    device.Delete v
+                    v.Image.Dispose()
+                    v.Dispose()
                 )
-                device.Delete framebuffer
+                framebuffer.Dispose()
             )
 
-            resolvedImage|> Option.iter device.Delete
-            buffers |> Array.iter device.Delete
+            resolvedImage|> Option.iter Disposable.dispose
+            buffers |> Array.iter Disposable.dispose
 
             handle <- VkSwapchainKHR.Null
             size <- V2i.Zero
@@ -411,17 +411,9 @@ module Swapchain =
     let create (desc : SwapchainDescription) (device : Device) =
         new Swapchain(device, desc)
 
-    let delete (chain : Swapchain) (device : Device) =
-        chain.Dispose()
-
-
 [<AbstractClass; Sealed; Extension>]
 type DeviceSwapchainExtensions private() =
 
     [<Extension>]
     static member CreateSwapchain(this : Device, description : SwapchainDescription) =
         this |> Swapchain.create description
-
-    [<Extension>]
-    static member Delete(this : Device, chain : Swapchain) =
-        this |> Swapchain.delete chain

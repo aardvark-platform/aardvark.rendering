@@ -115,7 +115,7 @@ module private FShadeAdapter =
         }
 
 type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLayout, original : string, iface : FShade.GLSL.GLSLProgramInterface) =
-    inherit RefCountedResource()
+    inherit CachedResource(device)
 
     static let allTopologies = Enum.GetValues(typeof<IndexedGeometryMode>) |> unbox<IndexedGeometryMode[]> |> Set.ofArray
     
@@ -201,13 +201,7 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
             )
         )
 
-    let mutable cacheName = Symbol.Empty
-
     member x.Interface = iface
-
-    member internal x.CacheName
-        with get() = cacheName
-        and set n = cacheName <- n
 
     member x.Device = device
     member x.Shaders = shaders
@@ -230,8 +224,8 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
             | None -> 0
 
     override x.Destroy() =
-        for s in shaders do device.Delete(s.Module)
-        device.Delete(layout)
+        for s in shaders do s.Module.Dispose()
+        layout.Dispose()
 
         for i in 0 .. createInfos.Length-1 do
             let ptr = createInfos.[i].pName
@@ -365,10 +359,10 @@ module ShaderProgram =
                     shader 
                 )
 
-        let layout = 
+        let layout =
             match layout with
-                | Some l -> l.AddRef(); l
-                | None -> device.CreatePipelineLayout(shaders, layers, perLayer)
+            | Some l -> l.AddReference(); l
+            | None -> device.CreatePipelineLayout(shaders, layers, perLayer)
 
         new ShaderProgram(device, shaders, layout, code, iface)
 
@@ -682,38 +676,30 @@ module ShaderProgram =
             match device.ShaderCachePath with
                 | Some shaderCachePath ->
                     let fileName = hashFileName (module_.hash)
-        
+
                     let cacheFile = Path.Combine(shaderCachePath, fileName + ".module")
                     match tryRead cacheFile device with
-                        | Some p ->
-                            p.CacheName <- moduleCache
-                            p.RefCount <- 1 // leak
-                            p
+                        | Some p -> p
 
                         | None ->
                             let glsl = 
                                 module_ 
                                 |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
                                 |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
-                
+
                             let res = ofGLSL glsl device
                             write cacheFile res
-                            res.CacheName <- moduleCache
-                            res.RefCount <- 1 // leak
                             res
                 | None ->
                     let glsl = 
                         module_ 
                         |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
                         |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
-                
-                    let res = ofGLSL glsl device
-                    res.CacheName <- moduleCache
-                    res.RefCount <- 1 // leak
-                    res
-                    
+
+                    ofGLSL glsl device
+
         )
-    
+
     let ofEffect (effect : FShade.Effect) (mode : IndexedGeometryMode) (pass : RenderPass) (device : Device) =
         device.GetCached(effectCache, (effect, mode, pass), fun (effect, mode, pass) ->
             match device.ShaderCachePath with
@@ -725,7 +711,7 @@ module ShaderProgram =
                             hashFileName (effect.Id, mode, colors, depth, pass.LayerCount, pass.PerLayerUniforms)
                         else
                             hashFileName (effect.Id, colors, depth)
-                    
+
                     let cacheFile = Path.Combine(shaderCachePath, fileName + ".effect")
                     match tryRead cacheFile device with
                         | Some p ->
@@ -734,7 +720,7 @@ module ShaderProgram =
                                     pass.Link(effect, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, mode)
                                     |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
                                     |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
-                
+
                                 let temp = ofGLSL glsl device
                                 let real = toByteArray p
                                 let should = toByteArray temp
@@ -747,10 +733,7 @@ module ShaderProgram =
                                     File.WriteAllBytes(tmpReal, real)
                                     File.WriteAllBytes(tmpShould, should)
                                     failf "invalid cache for Effect: real: %s vs. should: %s" tmpReal tmpShould
-                                    
 
-                            p.CacheName <- effectCache
-                            p.RefCount <- 1 // leak
                             p
 
                         | None ->
@@ -758,11 +741,9 @@ module ShaderProgram =
                                 pass.Link(effect, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, mode)
                                 |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
                                 |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
-                
+
                             let res = ofGLSL glsl device
                             write cacheFile res
-                            res.CacheName <- effectCache
-                            res.RefCount <- 1 // leak
                             res
 
                 | None ->
@@ -770,20 +751,9 @@ module ShaderProgram =
                         pass.Link(effect, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, mode)
                         |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
                         |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
-                
-                    let res = ofGLSL glsl device
-                    res.CacheName <- effectCache
-                    res.RefCount <- 1 // leak
-                    res
-                    
-        )
 
-    let delete (program : ShaderProgram) (device : Device) =
-        if program.CacheName <> Symbol.Empty then
-            device.RemoveCached(program.CacheName, program)
-        else
-            program.Shaders |> Array.iter (fun s -> device.Delete s.Module)
-            device.Delete program.PipelineLayout
+                    ofGLSL glsl device
+        )
 
 
 
@@ -801,13 +771,8 @@ type ContextShaderProgramExtensions private() =
     [<Extension>]
     static member CreateShaderProgram(this : Device, surface : ISurface) =
         match surface with
-            | :? ShaderProgram as p ->
-                Interlocked.Increment(&p.RefCount) |> ignore
-                p
-            | _ ->
-                failf "unknown surface %A" surface
-             
-
-    [<Extension>]
-    static member inline Delete(this : Device, program : ShaderProgram) =
-        this |> ShaderProgram.delete program       
+        | :? ShaderProgram as p ->
+            p.AddReference()
+            p
+        | _ ->
+            failf "unknown surface %A" surface

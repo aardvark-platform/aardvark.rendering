@@ -193,7 +193,7 @@ module ``Query Command Extensions`` =
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
                     query.Begin cmd
-                    Disposable.Empty
+                    []
             }
 
         static member End(query : IVulkanQuery) =
@@ -201,5 +201,5 @@ module ``Query Command Extensions`` =
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
                     query.End cmd
-                    Disposable.Empty
+                    []
             }

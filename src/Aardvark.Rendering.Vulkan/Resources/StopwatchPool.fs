@@ -29,7 +29,7 @@ type StopwatchPool(handle : VkQueryPool, count : int, accumulate : ComputeShader
             member __.Enqueue cmd =
                 cmd.AppendCommand()
                 VkRaw.vkCmdResetQueryPool(cmd.Handle, handle, 0u, uint32 stampCount)
-                Disposable.Empty
+                []
         }
 
     let reset =
@@ -38,7 +38,7 @@ type StopwatchPool(handle : VkQueryPool, count : int, accumulate : ComputeShader
             member __.Enqueue cmd =
                 cmd.AppendCommand()
                 VkRaw.vkCmdFillBuffer(cmd.Handle, values.Handle, 0UL, uint64 values.Size, 0u)
-                Disposable.Empty
+                []
         }
 
     let stop =
@@ -69,7 +69,7 @@ type StopwatchPool(handle : VkQueryPool, count : int, accumulate : ComputeShader
             member x.Enqueue cmd =
                 cmd.AppendCommand()
                 VkRaw.vkCmdWriteTimestamp(cmd.Handle, VkPipelineStageFlags.BottomOfPipeBit, handle, uint32 i)
-                Disposable.Empty
+                []
         }
 
     member x.Stop(i : int) =
@@ -79,7 +79,7 @@ type StopwatchPool(handle : VkQueryPool, count : int, accumulate : ComputeShader
             member x.Enqueue cmd =
                 cmd.AppendCommand()
                 VkRaw.vkCmdWriteTimestamp(cmd.Handle, VkPipelineStageFlags.BottomOfPipeBit, handle, uint32 i)
-                Disposable.Empty
+                []
         }
 
     member x.Download() =
@@ -99,8 +99,8 @@ type StopwatchPool(handle : VkQueryPool, count : int, accumulate : ComputeShader
         arr
 
     member x.Dispose() =
-        device.Delete values
-        device.Delete stamps
+        values.Dispose()
+        stamps.Dispose()
         accumulateIn.Dispose()
         VkRaw.vkDestroyQueryPool(device.Handle, handle, NativePtr.zero)
 

@@ -47,6 +47,11 @@ type RenderPass =
             |> add DefaultSemantic.Depth x.DepthAttachment
             |> add DefaultSemantic.Stencil x.StencilAttachment
 
+        override x.Destroy() =
+            if x.Handle.IsValid then
+                VkRaw.vkDestroyRenderPass(x.Device.Handle, x.Handle, NativePtr.zero)
+                x.Handle <- VkRenderPass.Null
+
         interface IFramebufferSignature with
             member x.Runtime = x.Device.Runtime :> IFramebufferRuntime
             member x.ColorAttachments = x.ColorAttachments
@@ -198,20 +203,11 @@ module RenderPass =
             VkRaw.vkCreateRenderPass(device.Handle, pInfo, NativePtr.zero, pHandle) |> check "vkCreateRenderPass"
 
             let colorMap = colorAtt |> Array.map (fun (i,s,v) -> i,(s,v)) |> Map.ofArray
-            return RenderPass(device, !!pHandle, colorMap, depthAtt, layers, perLayer)
+            return new RenderPass(device, !!pHandle, colorMap, depthAtt, layers, perLayer)
         }
-
-    let delete (pass : RenderPass) (device : Device) =
-        if pass.Handle.IsValid then
-            VkRaw.vkDestroyRenderPass(device.Handle, pass.Handle, NativePtr.zero)
-            pass.Handle <- VkRenderPass.Null
 
 [<AbstractClass; Sealed; Extension>]
 type ContextRenderPassExtensions private() =
     [<Extension>]
     static member inline CreateRenderPass(this : Device, attachments : Map<Symbol, AttachmentSignature>, layers : int, perLayer : Set<string>) =
         this |> RenderPass.create attachments layers perLayer
-
-    [<Extension>]
-    static member inline Delete(this : Device, pass : RenderPass) =
-        this |> RenderPass.delete pass

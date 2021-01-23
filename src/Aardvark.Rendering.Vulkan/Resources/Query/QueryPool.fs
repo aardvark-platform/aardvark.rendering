@@ -88,7 +88,7 @@ module QueryCommandExtensions =
                     cmd.AppendCommand()
                     VkRaw.vkCmdResetQueryPool(cmd.Handle, pool.Handle, 0u, uint32 pool.Count)
 
-                    Disposable.Empty
+                    []
             }
         static member BeginQuery(pool : QueryPool, index : int, flags : VkQueryControlFlags) =
             { new Command() with
@@ -97,7 +97,7 @@ module QueryCommandExtensions =
                     cmd.AppendCommand()
                     VkRaw.vkCmdBeginQuery(cmd.Handle, pool.Handle, uint32 index, flags)
 
-                    Disposable.Empty
+                    []
             }
         static member EndQuery(pool : QueryPool, index : int) =
             { new Command() with
@@ -106,7 +106,7 @@ module QueryCommandExtensions =
                     cmd.AppendCommand()
                     VkRaw.vkCmdEndQuery(cmd.Handle, pool.Handle, uint32 index)
 
-                    Disposable.Empty
+                    []
             }
 
         static member CopyQueryResults(pool : QueryPool, target : Buffer) =
@@ -116,7 +116,7 @@ module QueryCommandExtensions =
                     cmd.AppendCommand()
                     VkRaw.vkCmdCopyQueryPoolResults(cmd.Handle, pool.Handle, 0u, uint32 pool.Count, target.Handle, 0UL, 8UL, VkQueryResultFlags.D64Bit ||| VkQueryResultFlags.WaitBit ||| VkQueryResultFlags.PartialBit)
 
-                    Disposable.Empty
+                    []
             }
 
         static member WriteTimestamp(pool : QueryPool, pipelineFlags : VkPipelineStageFlags, index : int) =
@@ -126,7 +126,7 @@ module QueryCommandExtensions =
                     cmd.AppendCommand()
                     VkRaw.vkCmdWriteTimestamp(cmd.Handle, pipelineFlags, pool.Handle, uint32 index)
 
-                    Disposable.Empty
+                    []
             }
 
 [<AbstractClass; Sealed; Extension>]

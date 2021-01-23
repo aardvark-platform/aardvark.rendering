@@ -70,8 +70,8 @@ module Program =
         Aardvark.Init()
 
         // uncomment/comment to switch between the backends
-        //use app = new VulkanApplication(debug = true)
-        use app = new OpenGlApplication()
+        use app = new VulkanApplication(debug = true)
+        //use app = new OpenGlApplication()
         let runtime = app.Runtime :> IRuntime
         let samples = 8
 
@@ -180,5 +180,8 @@ module Program =
 
         win.RenderTask <- RenderTask.ofList [ task; overlayTask ]
         win.Run()
+
+        for t in techniques do
+            t.Dispose()
 
         0

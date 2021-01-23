@@ -62,11 +62,10 @@ type INativeResourceLocation<'a when 'a : unmanaged> =
     inherit IResourceLocation<'a>
     abstract member Pointer : nativeptr<'a>
 
-
 [<AbstractClass>]
 type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
     inherit AdaptiveObject()
-    
+
     let mutable refCount = 0
 
     abstract member Create : unit -> unit
@@ -91,7 +90,7 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
                 x.Outputs.Clear()
                 x.OutOfDate <- true
         )
-  
+
     member x.ReleaseAll() =
         lock x (fun () ->
             refCount <- 0
@@ -106,7 +105,7 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
             if refCount <= 0 then failwithf "[Resource] no ref count"
             x.GetHandle token
         )
-        
+
     interface IResourceLocation with
         member x.ReferenceCount = refCount
         member x.Update t = 
@@ -121,15 +120,16 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
 
     interface IResourceLocation<'a> with
         member x.Update t = x.Update t
-//   
-//[<AbstractClass>]
-//type AbstractNativeResourceLocation<'a when 'a : unmanaged>(owner : IResourceCache, key : list<obj>) =
-//    inherit AbstractResourceLocation<'a>(owner, key)
-//    abstract member Pointer : nativeptr<'a>
-//
-//    interface INativeResourceLocation<'a> with
-//        member x.Pointer = x.Pointer
-//
+
+type private DummyResourceCache() =
+    interface IResourceCache with
+        member x.AddLocked l = ()
+        member x.RemoveLocked l = ()
+        member x.Remove key = ()
+
+[<AbstractClass>]
+type UncachedResourceLocation<'a>() =
+    inherit AbstractResourceLocation<'a>(DummyResourceCache(), [])
 
 [<AbstractClass; Sealed; Extension>]
 type ModResourceExtensionStuff() =
@@ -452,7 +452,7 @@ module Resources =
             input,
             {
                 mcreate          = fun (b : IBuffer) -> device.CreateBuffer(usage, b)
-                mdestroy         = fun b -> device.Delete b
+                mdestroy         = fun b -> b.Dispose()
                 mtryUpdate       = fun (b : Buffer) (v : IBuffer) -> Buffer.tryUpdate v b
             }
         )
@@ -473,7 +473,7 @@ module Resources =
             input,
             {
                 icreate = fun (b : IndirectBuffer) -> device.CreateIndirectBuffer(indexed, b)
-                idestroy = fun b -> device.Delete b
+                idestroy = fun b -> b.Dispose()
                 ieagerDestroy = true
             }
         )
@@ -490,9 +490,10 @@ module Resources =
             handle <- device.CreateUniformBuffer(layout)
 
         override x.Destroy() =
-            device.Delete handle
-            handle <- Unchecked.defaultof<_>
-                
+            if handle <> Unchecked.defaultof<_> then
+                handle.Dispose()
+                handle <- Unchecked.defaultof<_>
+
         override x.GetHandle(token : AdaptiveToken) =
             if x.OutOfDate then
                 for (m,w) in writers do
@@ -510,8 +511,8 @@ module Resources =
             owner, key, 
             input,
             {
-                icreate = fun (b : ITexture) -> device.CreateImage(b)
-                idestroy = fun b -> device.Delete b
+                icreate = fun (t : ITexture) -> device.CreateImage(t)
+                idestroy = fun t -> t.Dispose()
                 ieagerDestroy = true
             }
         )
@@ -521,8 +522,8 @@ module Resources =
             owner, key, 
             input,
             {
-                icreate = fun (b : SamplerState) -> device.CreateSampler(b)
-                idestroy = fun b -> device.Delete b
+                icreate = fun (s : SamplerState) -> device.CreateSampler(s)
+                idestroy = fun s -> s.Dispose()
                 ieagerDestroy = true
             }
         )
@@ -537,7 +538,7 @@ module Resources =
         let destroy() =
             match handle with
             | Some (_, (i, v, s)) ->
-                device.Delete s; device.Delete v; device.Delete i
+                s.Dispose(); v.Dispose(); i.Dispose()
                 handle <- None
             | _ ->
                 ()
@@ -635,7 +636,7 @@ module Resources =
             input,
             {
                 icreate = fun (e : FShade.Imperative.Module) -> ShaderProgram.ofModule e device
-                idestroy = fun b -> device.Delete b
+                idestroy = fun p -> p.Dispose()
                 ieagerDestroy = false
             }
         )
@@ -647,7 +648,7 @@ module Resources =
             AVal.constant input,
             {
                 icreate = fun (b : ISurface) -> device.CreateShaderProgram(b)
-                idestroy = fun b -> device.Delete b
+                idestroy = fun p -> p.Dispose()
                 ieagerDestroy = false
             }
         )
@@ -926,10 +927,10 @@ module Resources =
                     b.Release()
 
             match handle with
-                | Some set -> 
-                    device.Delete set
-                    handle <- None
-                | _ -> ()
+            | Some set -> 
+                set.Dispose()
+                handle <- None
+            | _ -> ()
 
         override x.GetHandle(token : AdaptiveToken) =
             if x.OutOfDate then
@@ -1105,11 +1106,11 @@ module Resources =
                     VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, pDesc, NativePtr.zero, pHandle)
                         |> check "could not create pipeline"
 
-                    return Pipeline(device, !!pHandle, Unchecked.defaultof<_>)
+                    return !!pHandle
                 }
 
-            pipeline.Handle
-    
+            pipeline
+
         override x.Free(p : VkPipeline) =
             VkRaw.vkDestroyPipeline(renderPass.Device.Handle, p, NativePtr.zero)
 
@@ -1229,11 +1230,11 @@ module Resources =
             image.Acquire()
 
         override x.Destroy() =
-            match handle with   
-                | Some h -> 
-                    device.Delete h
-                    handle <- None
-                | None -> ()
+            match handle with
+            | Some h ->
+                h.Dispose()
+                handle <- None
+            | None -> ()
             image.Release()
 
         override x.GetHandle(token : AdaptiveToken) =
@@ -1251,8 +1252,8 @@ module Resources =
                     { handle = handle.Value; version = 0 }
                 else
                     match handle with
-                        | Some h -> device.Delete h
-                        | None -> ()
+                    | Some h -> h.Dispose()
+                    | None -> ()
 
                     let h = device.CreateInputImageView(image.handle, samplerType, VkComponentMapping.Identity)
                     handle <- Some h
@@ -1274,9 +1275,9 @@ module Resources =
             image.Acquire()
 
         override x.Destroy() =
-            match handle with   
-                | Some h -> 
-                    device.Delete h
+            match handle with
+                | Some h ->
+                    h.Dispose()
                     handle <- None
                 | None -> ()
             image.Release()
@@ -1295,8 +1296,8 @@ module Resources =
                     { handle = handle.Value; version = 0 }
                 else
                     match handle with
-                        | Some h -> device.Delete h
-                        | None -> ()
+                    | Some h -> h.Dispose()
+                    | None -> ()
 
                     let h = device.CreateStorageView(image.handle, imageType, VkComponentMapping.Identity)
                     handle <- Some h
@@ -1436,36 +1437,36 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateShaderProgram(data : ISurface) =
         let programKey = (data) :> obj
 
-        let program = 
+        let program =
             simpleSurfaceCache.GetOrAdd(programKey, fun _ ->
                 device.CreateShaderProgram(data)
             )
 
-        let resource = 
-            programCache.GetOrCreate([program :> obj], fun cache key -> 
-                { new AbstractResourceLocation<ShaderProgram>(cache, key) with
-                    override x.Create () = ()
-                    override x.Destroy () = ()
-                    override x.GetHandle t = { handle = program; version = 0 }
-                }
-            )
+        let resource =
+            { new UncachedResourceLocation<ShaderProgram>() with
+                override x.Create () = ()
+                override x.Destroy () = program.Dispose()
+                override x.GetHandle t = { handle = program; version = 0 }
+            } :> IResourceLocation<_>
+        resource.Acquire()
+
         program.PipelineLayout, resource
 
     member x.CreateShaderProgram(signature : RenderPass, data : FShade.Effect, top : IndexedGeometryMode) =
 
         let program = device.CreateShaderProgram(signature, data, top)
-         
+
         if FShade.EffectDebugger.isAttached then
             FShade.EffectDebugger.saveCode data program.Surface
 
-        let resource = 
-            programCache.GetOrCreate([program :> obj], fun cache key -> 
-                { new AbstractResourceLocation<ShaderProgram>(cache, key) with
-                    override x.Create () = ()
-                    override x.Destroy () = ()
-                    override x.GetHandle t = { handle = program; version = 0 }
-                }
-            )
+        let resource =
+            { new UncachedResourceLocation<ShaderProgram>() with
+                override x.Create () = ()
+                override x.Destroy () = program.Dispose()
+                override x.GetHandle t = { handle = program; version = 0 }
+            } :> IResourceLocation<_>
+        resource.Acquire()
+
         program.PipelineLayout, resource
 
     member x.CreateShaderProgram(layout : PipelineLayout, data : aval<FShade.Imperative.Module>) =
@@ -1735,65 +1736,33 @@ module ``Resource Reader Extensions`` =
 type ResourceLocationSet(user : IResourceUser) =
     inherit AdaptiveObject()
 
-    let updateLock = obj()
-
     let all = ReferenceCountingSet<IResourceLocation>()
     let readers = Dict<IResourceLocation, ResourceLocationReader>()
-
-    // Resources to be updated during the current or next update loop
-    let outdated = Dict<int, HashSet<ResourceLocationReader>>()
-
-    // Resources to be updated during the next update loop
     let dirty = Dict<int, HashSet<ResourceLocationReader>>()
 
-    let addOutdated (r : ResourceLocationReader) =
+    let addDirty (r : ResourceLocationReader) =
+        lock dirty (fun () ->
+            let set = dirty.GetOrCreate(r.Priority, fun _ -> HashSet())
+            set.Add(r) |> ignore
+        )
 
-        let add (perPriority : Dict<int, HashSet<ResourceLocationReader>>) =
-            lock perPriority (fun () ->
-                let set = perPriority.GetOrCreate(r.Priority, fun _ -> HashSet())
-                set.Add(r) |> ignore
-            )
-
-        // We try to directly add to the outdated sets, if we're within an update loop
-        // only the current thread will be able to do so. In this case, other threads will add to the dirty
-        // sets instead, effectively delaying the updates to take effect until the next frame.
-        // This way we prevent the same resource to be updated (and deleted) multiple times before the
-        // render task has finished execution.
-        if Monitor.TryEnter(updateLock) then
-            try
-                add outdated
-            finally
-                Monitor.Exit(updateLock)
-        else
-            add dirty
-
-    let remOutdated (r : ResourceLocationReader) =
-
-        let rem (perPriority : Dict<int, HashSet<ResourceLocationReader>>) =
-            lock perPriority (fun () ->
-                match perPriority.TryGetValue(r.Priority) with
-                | (true, set) -> set.Remove(r) |> ignore
-                | _ -> ()
-            )
-
-        if Monitor.TryEnter(updateLock) then
-            try
-                rem outdated
-            finally
-                Monitor.Exit(updateLock)
-
-        rem dirty
+    let remDirty (r : ResourceLocationReader) =
+        lock dirty (fun () ->
+            match dirty.TryGetValue(r.Priority) with
+            | (true, set) -> set.Remove(r) |> ignore
+            | _ -> ()
+        )
 
     member private x.AddInput(r : IResourceLocation) =
         let reader = r.GetReader()
         lock readers (fun () -> readers.[r] <- reader)
-        addOutdated reader
+        addDirty reader
         transact (fun () -> x.MarkOutdated())
 
     member private x.RemoveInput(r : IResourceLocation) =
         match lock readers (fun () -> readers.TryRemove r) with
         | (true, reader) ->
-            remOutdated reader
+            remDirty reader
             reader.Dispose()
         | _ ->
             ()
@@ -1801,7 +1770,7 @@ type ResourceLocationSet(user : IResourceUser) =
     override x.InputChangedObject(t,i) =
         match i with
         | :? ResourceLocationReader as r ->
-            addOutdated r
+            addDirty r
         | _ ->
             ()
 
@@ -1820,10 +1789,13 @@ type ResourceLocationSet(user : IResourceUser) =
             x.OutOfDate <- true
 
             let rec run (changed : bool) =
-                match Seq.tryHead outdated.Keys with
-                | Some p ->
-                    let set = outdated.GetAndRemove(p)
+                let mine =
+                    lock dirty (fun _ ->
+                        dirty.Keys |> Seq.tryHead |> Option.map dirty.GetAndRemove
+                    )
 
+                match mine with
+                | Some set ->
                     let mutable changed = changed
                     for r in set do
                         let c = r.Update(t)
@@ -1833,18 +1805,7 @@ type ResourceLocationSet(user : IResourceUser) =
                 | _ ->
                     changed
 
-            lock updateLock (fun () ->
-                lock dirty (fun () ->
-                    for KeyValue(p, d) in dirty do
-                        match outdated.TryGetValue(p) with
-                        | (true, set) -> set.UnionWith(d)
-                        | _ -> outdated.Add(p, d)
-
-                    dirty.Clear()
-                )
-
-                run false
-            )
+            run false
         )
 
     interface IResourceUser with

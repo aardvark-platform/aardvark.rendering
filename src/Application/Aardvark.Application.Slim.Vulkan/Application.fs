@@ -177,12 +177,12 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
     override x.OnUnload() =
         match swapchain with
             | Some c -> 
-                device.Delete c
+                c.Dispose()
                 swapchain <- None
             | None -> ()
 
-        device.Delete swapchainDesc
-        device.Delete surface
+        swapchainDesc.Dispose()
+        surface.Dispose()
         surface <- Unchecked.defaultof<_>
         swapchainDesc <- Unchecked.defaultof<_>
 

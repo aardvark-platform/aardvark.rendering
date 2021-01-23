@@ -31,6 +31,11 @@ type ShaderModule =
                     | Some i -> Shader(x, stage, i)
                     | _ -> failf "cannot get %A-Shader from module %A" stage x.Interface
 
+        override x.Destroy() =
+            if x.Handle.IsValid then
+                VkRaw.vkDestroyShaderModule(x.Device.Handle, x.Handle, NativePtr.zero)
+                x.Handle <- VkShaderModule.Null
+
         new(device : Device, handle : VkShaderModule, stage, iface, spv) = { inherit Resource<_>(device, handle); Stage = stage; Interface = iface; SpirV = spv }
     end
 
@@ -89,7 +94,7 @@ module ShaderModule =
                 let binary = GLSLang.GLSLang.optimizeDefault binary
                 let iface = Map.ofList [stage, siface]
                 let handle = device |> createRaw binary
-                let result = ShaderModule(device, handle, stage, iface, binary)
+                let result = new ShaderModule(device, handle, stage, iface, binary)
                 result
             | None, err ->
                 Log.error "[Vulkan] %A shader compilation failed: %A" stage err
@@ -98,14 +103,9 @@ module ShaderModule =
     let ofBinaryWithInfo (stage : ShaderStage) (info : FShade.GLSL.GLSLShaderInterface) (binary : byte[]) (device : Device) =
         let iface = Map.ofList [stage, info]
         let handle = device |> createRaw binary
-        let result = ShaderModule(device, handle, stage, iface, binary)
+        let result = new ShaderModule(device, handle, stage, iface, binary)
         result
 
-    let delete (shader : ShaderModule) (device : Device) =
-        if shader.Handle.IsValid then
-            VkRaw.vkDestroyShaderModule(device.Handle, shader.Handle, NativePtr.zero)
-            shader.Handle <- VkShaderModule.Null
-    
     let get (stage : ShaderStage) (m : ShaderModule) =
         m.[stage]
 
@@ -126,12 +126,7 @@ type ContextShaderModuleExtensions private() =
     //[<Extension>]
     //static member inline CreateShaderModule(this : Device, stage : ShaderStage, spirv : byte[]) =
     //    this |> ShaderModule.ofBinary stage spirv
-        
+
     [<Extension>]
     static member inline CreateShaderModule(this : Device, stage : ShaderStage, spirv : byte[], info : FShade.GLSL.GLSLShaderInterface) =
         this |> ShaderModule.ofBinaryWithInfo stage info spirv
-        
-    [<Extension>]
-    static member inline Delete(this : Device, shader : ShaderModule) =
-        this |> ShaderModule.delete shader
-        

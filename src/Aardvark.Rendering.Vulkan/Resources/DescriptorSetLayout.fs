@@ -43,7 +43,7 @@ module DescriptorSetLayoutBinding =
                 stages,
                 NativePtr.zero
             )
-            
+
         DescriptorSetLayoutBinding(device, handle, parameter)
 
 
@@ -51,13 +51,20 @@ type DescriptorSetLayout =
     class
         inherit Resource<VkDescriptorSetLayout>
         val mutable public Bindings : array<DescriptorSetLayoutBinding>
-        new(device : Device, handle : VkDescriptorSetLayout, bindings) = { inherit Resource<_>(device, handle); Bindings = bindings }
+
+        override x.Destroy() =
+            if x.Handle.IsValid then
+                VkRaw.vkDestroyDescriptorSetLayout(x.Device.Handle, x.Handle, NativePtr.zero)
+                x.Handle <- VkDescriptorSetLayout.Null
+
+        new(device : Device, handle : VkDescriptorSetLayout, bindings) =
+            { inherit Resource<_>(device, handle); Bindings = bindings }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DescriptorSetLayout =
 
-    let empty (d : Device) = DescriptorSetLayout(d, VkDescriptorSetLayout.Null, Array.empty)
+    let empty (d : Device) = new DescriptorSetLayout(d, VkDescriptorSetLayout.Null, Array.empty)
 
     let create (bindings : array<DescriptorSetLayoutBinding>) (device : Device) =
         assert (
@@ -78,12 +85,5 @@ module DescriptorSetLayout =
                 |> check "could not create DescriptorSetLayout"
 
             let handle = NativePtr.read pHandle
-            return DescriptorSetLayout(device, handle, bindings)
+            return new DescriptorSetLayout(device, handle, bindings)
         }
-
-
-    let delete (layout : DescriptorSetLayout) (device : Device) =
-        if layout.Handle.IsValid then
-            VkRaw.vkDestroyDescriptorSetLayout(device.Handle, layout.Handle, NativePtr.zero)
-            layout.Handle <- VkDescriptorSetLayout.Null
-

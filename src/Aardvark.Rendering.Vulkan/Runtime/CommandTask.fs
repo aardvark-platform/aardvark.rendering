@@ -351,7 +351,7 @@ module private RuntimeCommands =
                 )
 
                 //let tcs = System.Threading.Tasks.TaskCompletionSource()
-                copies.Add(CopyCommand.Callback (fun () -> Buffer.delete temp device))
+                copies.Add(CopyCommand.Callback (fun () -> temp.Dispose()))
                 device.CopyEngine.Enqueue copies
 
 
@@ -384,7 +384,7 @@ module private RuntimeCommands =
                     )
 
                     ids <- Marshal.ReAllocHGlobal(ids, 4n * nativeint newCapacity)
-                    Buffer.delete cpuBuffer device
+                    cpuBuffer.Dispose()
                     dead.Add gpuBuffer
 
                     cpuBuffer <- newCpuBuffer
@@ -437,7 +437,7 @@ module private RuntimeCommands =
                     x.Add call
 
             member x.Upload() =
-                for d in consumeList dead do Buffer.delete d device
+                for d in consumeList dead do d.Dispose()
 
                 if gpuBufferDirty then
                     device.perform {
@@ -451,9 +451,9 @@ module private RuntimeCommands =
                 with get v : DrawCallInfo = cpuBuffer.Memory.Mapped (fun ptr -> NativeInt.read (ptr + 20n * nativeint v))
 
             member x.Dispose() =
-                for d in consumeList dead do Buffer.delete d device
-                Buffer.delete cpuBuffer device
-                Buffer.delete gpuBuffer device
+                for d in consumeList dead do d.Dispose()
+                cpuBuffer.Dispose()
+                gpuBuffer.Dispose()
                 Marshal.FreeHGlobal ids
                 capacity <- 0
                 
@@ -586,18 +586,18 @@ module private RuntimeCommands =
 
             member x.Kill() =
                 manager.Dispose()
-                for d in lock dead (fun () -> consumeList dead) do Buffer.delete d device
+                for d in lock dead (fun () -> consumeList dead) do d.Dispose()
 
             override x.Create() =
                 ()
 
             override x.Destroy() = 
-                buffer |> Map.iter (fun _ b -> Buffer.delete b device)
+                buffer |> Map.iter (fun _ b -> b.Dispose())
                 buffer <- Map.empty
 
             override x.GetHandle(token : AdaptiveToken) =
                 use t = device.Token
-                for d in lock dead (fun () -> consumeList dead) do Buffer.delete d device
+                for d in lock dead (fun () -> consumeList dead) do d.Dispose()
 
                 let buffer = getBuffer()
 
@@ -683,14 +683,14 @@ module private RuntimeCommands =
                     
                 let freeBuffers = lock freeBuffers (fun () -> consumeList freeBuffers)
                 for b in freeBuffers do
-                    Buffer.delete b device
+                    b.Dispose()
 
             member x.AllVertexBuffers =
                 vertexBuffers |> Dict.toList
 
             member x.Dispose() =
                 vertexManager.Dispose()
-                for b in freeBuffers do Buffer.delete b device
+                for b in freeBuffers do b.Dispose()
                 freeBuffers.Clear()
                 freeSlots.Clear()
                 vertexBuffers.Clear()
@@ -821,6 +821,7 @@ module private RuntimeCommands =
                 for o in o.Children do
                     for r in o.resources do compiler.resources.Remove r
 
+                o.Dispose()
                 prepared <- None
             | None ->
                 ()

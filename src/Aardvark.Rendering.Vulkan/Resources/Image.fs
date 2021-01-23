@@ -408,11 +408,16 @@ type Image =
         val mutable public Format : VkFormat
         val mutable public Memory : DevicePtr
         val mutable public Layout : VkImageLayout
-        val mutable public RefCount : int
         val mutable public PeerHandles : VkImage[]
         val mutable public Version : cval<int>
 
-        member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
+        override x.Destroy() =
+            if x.Device.Handle <> 0n && x.Handle.IsValid then
+                VkRaw.vkDestroyImage(x.Device.Handle, x.Handle, NativePtr.zero)
+                for p in x.PeerHandles do VkRaw.vkDestroyImage(x.Device.Handle, p, NativePtr.zero)
+                x.PeerHandles <- null
+                x.Memory.Dispose()
+                x.Handle <- VkImage.Null
 
         interface ITexture with 
             member x.WantMipMaps = x.MipMapLevels > 1
@@ -465,7 +470,6 @@ type Image =
                 Format = fmt
                 Memory = mem
                 Layout = layout
-                RefCount = 1
                 PeerHandles = [||]
                 Version = AVal.init 0
             }
@@ -1116,7 +1120,13 @@ type TensorImage(buffer : Buffer, info : Tensor4Info, format : PixFormat, imageF
                     )
                     1
         } |> ignore
-        
+
+    member x.Dispose() =
+        buffer.Dispose()
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
 type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4Info, format : Col.Format, imageFormat : VkFormat) =
     inherit TensorImage(buffer, info, PixFormat(typeof<'a>, format), imageFormat)
 
@@ -1321,16 +1331,28 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
                 s,
                 V4l(s.W, s.W * s.X, s.W * s.X * s.Y, 1L)
             )
-        TensorImage<'a>(buffer, info, format, imageFormat)
+        new TensorImage<'a>(buffer, info, format, imageFormat)
  
 type TensorImageMipMap(images : TensorImage[]) =
     member x.LevelCount = images.Length
     member x.ImageArray = images
     member x.Format = images.[0].PixFormat
 
+    member x.Dispose() =
+        images |> Array.iter Disposable.dispose
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
 type TensorImageCube(faces : TensorImageMipMap[]) =
     do assert(faces.Length = 6)
     member x.MipMapArray = faces
+
+    member x.Dispose() =
+        faces |> Array.iter Disposable.dispose
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module TensorImage =
@@ -1344,7 +1366,7 @@ module TensorImage =
         let channels = format.Format.Channels
         let sizeInBytes = int64 size.X * int64 size.Y * int64 size.Z * int64 channels * int64 sizeof<'a>
         let buffer = device.HostMemory |> Buffer.create (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.TransferSrcBit) sizeInBytes
-        TensorImage<'a>(buffer, size, format.Format, imageFormat)
+        new TensorImage<'a>(buffer, size, format.Format, imageFormat)
 
     let inline private erase (creator : V3i -> Col.Format -> bool -> Device-> TensorImage<'a>) (size : V3i) (format : Col.Format) (tp : bool) (device : Device) = creator size format tp device :> TensorImage
 
@@ -1468,13 +1490,13 @@ type DeviceTensorExtensions private() =
         
     [<Extension>]
     static member inline Create(device : Device, data : PixImageMipMap, levels : int, srgb : bool) : TensorImageMipMap =
-        TensorImageMipMap(
+        new TensorImageMipMap(
             data.ImageArray |> Array.take levels |> Array.map (fun l -> TensorImage.ofPixImage l srgb device)
         )
 
     [<Extension>]
     static member inline Create(device : Device, data : PixImageCube, levels : int, srgb : bool) : TensorImageCube =
-        TensorImageCube(
+        new TensorImageCube(
             data.MipMapArray |> Array.map (fun face ->
                 DeviceTensorExtensions.Create(device, face, levels, srgb)
             )
@@ -1491,18 +1513,6 @@ type DeviceTensorExtensions private() =
     [<Extension>]
     static member inline Create(device : Device, data : PixVolume, srgb : bool) : TensorImage =
         device |> TensorImage.ofPixVolume data srgb
-
-    [<Extension>]
-    static member Delete(device : Device, m : TensorImage) =
-        device.Delete m.Buffer
-
-    [<Extension>]
-    static member Delete(device : Device, m : TensorImageMipMap) =
-        for i in m.ImageArray do DeviceTensorExtensions.Delete (device, i)
-        
-    [<Extension>]
-    static member Delete(device : Device, m : TensorImageCube) =
-        for i in m.MipMapArray do DeviceTensorExtensions.Delete (device, i)
 
 [<AutoOpen>]
 module DeviceTensorCommandExtensions =
@@ -1545,7 +1555,8 @@ module DeviceTensorCommandExtensions =
                     copy |> pin (fun pCopy ->
                         VkRaw.vkCmdCopyBufferToImage(cmd.Handle, src.Buffer.Handle, dst.Image.Handle, dst.Image.Layout, 1u, pCopy)
                     )
-                    Disposable.Empty
+
+                    [src.Buffer; dst.Image]
             }
 
         static member Copy(src : TensorImage, dst : ImageSubresource) =
@@ -1590,7 +1601,8 @@ module DeviceTensorCommandExtensions =
                     copy |> pin (fun pCopy ->
                         VkRaw.vkCmdCopyImageToBuffer(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Buffer.Handle, 1u, pCopy)
                     )
-                    Disposable.Empty
+
+                    [src.Image; dst.Buffer]
             }
 
         static member Copy(src : ImageSubresource, dst : TensorImage) =
@@ -1627,7 +1639,7 @@ module DeviceTensorCommandExtensions =
                         )
                     )
 
-                    Disposable.Empty
+                    [src.Image]
             }
             
         static member Acquire(src : ImageSubresourceRange, layout : VkImageLayout, srcQueue : DeviceQueueFamily) =
@@ -1707,14 +1719,13 @@ module DeviceTensorCommandExtensions =
     module private MustCompile =
 
         let createImage (device : Device) =
-            let img = device.CreateTensorImage<byte>(V3i.III, Col.Format.RGBA, false)
+            use img = device.CreateTensorImage<byte>(V3i.III, Col.Format.RGBA, false)
 
             let v = img.Vector
             let m = img.Matrix
             let v = img.Volume
             let t = img.Tensor4
-            
-            device.Delete img
+
             ()
 
         let testVec (v : DeviceVector<int>) =
@@ -1848,7 +1859,8 @@ module ``Image Command Extensions`` =
                     copy |> pin (fun pCopy ->
                         VkRaw.vkCmdCopyImage(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Image.Handle, dst.Image.Layout, 1u, pCopy)
                     )
-                    Disposable.Empty
+
+                    [src.Image; dst.Image]
             }
 
         static member Copy(src : ImageSubresourceLayers, dst : ImageSubresourceLayers) =
@@ -1894,7 +1906,8 @@ module ``Image Command Extensions`` =
                     copy |> pin (fun pCopy ->
                         VkRaw.vkCmdCopyBufferToImage(cmd.Handle, src.Handle, dst.Image.Handle, dst.Image.Layout, 1u, pCopy)
                     )
-                    Disposable.Empty
+
+                    [src; dst.Image]
             }
 
         static member Copy(src : ImageSubresourceLayers, srcOffset : V3i, dst : Buffer, dstOffset : int64, dstStride : V2i, size : V3i) =
@@ -1915,7 +1928,8 @@ module ``Image Command Extensions`` =
                     copy |> pin (fun pCopy ->
                         VkRaw.vkCmdCopyImageToBuffer(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Handle, 1u, pCopy)
                     )
-                    Disposable.Empty
+
+                    [src.Image; dst]
             }
 
         static member ResolveMultisamples(src : ImageSubresourceLayers, srcOffset : V3i, dst : ImageSubresourceLayers, dstOffset : V3i, size : V3i) =
@@ -1938,7 +1952,8 @@ module ``Image Command Extensions`` =
                     resolve |> pin (fun pResolve ->
                         VkRaw.vkCmdResolveImage(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Image.Handle, dst.Image.Layout, 1u, pResolve)
                     )
-                    Disposable.Empty
+
+                    [src.Image; dst.Image]
             }
 
         static member ResolveMultisamples(src : ImageSubresourceLayers, dst : ImageSubresourceLayers) =
@@ -1993,7 +2008,8 @@ module ``Image Command Extensions`` =
                     blit |> pin (fun pBlit ->
                         VkRaw.vkCmdBlitImage(cmd.Handle, src.Image.Handle, srcLayout, dst.Image.Handle, dstLayout, 1u, pBlit, filter)
                     )
-                    Disposable.Empty
+
+                    [src.Image; dst.Image]
             }
 
         static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout, dst : ImageSubresourceLayers, dstLayout : VkImageLayout, dstRange : Box3i, filter : VkFilter) =
@@ -2029,7 +2045,8 @@ module ``Image Command Extensions`` =
                             )
                         )
                         cmd.Enqueue (Command.TransformLayout(img.Image, originalLayout))
-                        Disposable.Empty
+                        
+                        [img.Image]
                 }
 
         static member ClearDepthStencil(img : ImageSubresourceRange, depth : float, stencil : uint32) =
@@ -2054,7 +2071,8 @@ module ``Image Command Extensions`` =
                             )
                         )
                         cmd.Enqueue (Command.TransformLayout(img.Image, originalLayout))
-                        Disposable.Empty
+                        
+                        [img.Image]
                 }
 
 
@@ -2086,7 +2104,7 @@ module ``Image Command Extensions`` =
                         )
                     )
 
-                    Disposable.Empty
+                    [img.Image]
             }
 
         static member GenerateMipMaps (img : ImageSubresourceRange) =
@@ -2185,7 +2203,8 @@ module ``Image Command Extensions`` =
                                 1u, pBarrier
                             )
                         )
-                        Disposable.Empty
+
+                        [img.Image]
                 }
 
         static member TransformLayout(img : Image, levels : Range1i, slices : Range1i, target : VkImageLayout) =
@@ -2196,7 +2215,7 @@ module ``Image Command Extensions`` =
                     member x.Compatible = QueueFlags.All
                     member x.Enqueue (cmd : CommandBuffer) =
                         if img.Layout = target then
-                            Disposable.Empty
+                            []
                         else
                             let source = img.Layout
                             img.Layout <- target
@@ -2277,7 +2296,7 @@ module ``Image Command Extensions`` =
                             )
                         )
 
-                    Disposable.Empty
+                    [img.Image]
             }
 
         static member SyncPeersDefault(img : Image, dstLayout : VkImageLayout) =
@@ -2395,9 +2414,8 @@ module Image =
         VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
             |> check "could not bind image memory"
 
-        let result = Image(device, handle, V3i(size, 1), 1, 1, 1, TextureDimension.Texture2D, fmt, ptr, VkImageLayout.Preinitialized)
-        
-        result
+        new Image(device, handle, V3i(size, 1), 1, 1, 1, TextureDimension.Texture2D, fmt, ptr, VkImageLayout.Preinitialized)
+
 
     let rec alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
         if device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt) = VkFormatFeatureFlags.None then
@@ -2497,12 +2515,12 @@ module Image =
                     }
                     
 
-                let result = Image(device, handles.[0], size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
+                let result = new Image(device, handles.[0], size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
                 result.PeerHandles <- Array.skip 1 handles
 
                 device.perform {
                     for i in 1 .. handles.Length - 1 do
-                        let img = Image(device, handles.[i], size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
+                        let img = new Image(device, handles.[i], size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
                         do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
                 }
 
@@ -2511,18 +2529,7 @@ module Image =
                 VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
                     |> check "could not bind image memory"
 
-                let result = Image(device, handle, size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
-        
-                result
-
-    let delete (img : Image) (device : Device) =
-        if Interlocked.Decrement(&img.RefCount) = 0 then
-            if device.Handle <> 0n && img.Handle.IsValid then
-                VkRaw.vkDestroyImage(img.Device.Handle, img.Handle, NativePtr.zero)
-                for p in img.PeerHandles do VkRaw.vkDestroyImage(img.Device.Handle, p, NativePtr.zero)
-                img.PeerHandles <- null
-                img.Memory.Dispose()
-                img.Handle <- VkImage.Null
+                new Image(device, handle, size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
 
     let create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
         alloc size mipMapLevels count samples dim fmt usage device
@@ -2576,11 +2583,11 @@ module Image =
                 device.CopyEngine.EnqueueSafe [
                     yield CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
                     yield! tempImages |> List.mapi (fun level src -> CopyCommand.Copy(src, imageRange.[level, 0]))
-                    
+
                     yield CopyCommand.SyncImage(imageRange, VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
 
                     yield CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
-                    yield CopyCommand.Callback (fun () -> tempImages |> List.iter device.Delete)
+                    yield CopyCommand.Callback (fun () -> tempImages |> List.iter Disposable.dispose)
                 ]
 
                 device.eventually {
@@ -2608,7 +2615,7 @@ module Image =
                         do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
 
                     finally
-                        for t in tempImages do device.Delete t
+                        for t in tempImages do t.Dispose()
                 }
 
         image
@@ -2654,7 +2661,7 @@ module Image =
                     CopyCommand.SyncImage(imageRange, VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
 
                     CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)   
-                    CopyCommand.Callback(fun () -> device.Delete temp)
+                    CopyCommand.Callback(fun () -> temp.Dispose())
                 ]
 
                 device.eventually {
@@ -2682,7 +2689,7 @@ module Image =
                         do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
 
                     finally
-                        device.Delete temp
+                        temp.Dispose()
                 }
 
         image
@@ -2746,7 +2753,7 @@ module Image =
                     yield CopyCommand.SyncImage(imageRange, VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
 
                     yield CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
-                    yield CopyCommand.Callback (fun () -> tempImages |> List.iter (List.iter device.Delete))
+                    yield CopyCommand.Callback (fun () -> tempImages |> List.iter (List.iter Disposable.dispose))
                 ]
 
                 device.eventually {
@@ -2775,7 +2782,7 @@ module Image =
                         do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
 
                     finally
-                        tempImages |> List.iter (List.iter device.Delete)
+                        tempImages |> List.iter (List.iter Disposable.dispose)
                 }
 
         image
@@ -2941,7 +2948,7 @@ module Image =
                         yield CopyCommand.SyncImage(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
 
                         yield CopyCommand.Release(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
-                        yield CopyCommand.Callback (fun () -> levels |> Array.iter (fun i -> delete i device))
+                        yield CopyCommand.Callback (fun () -> levels |> Array.iter Disposable.dispose)
                     ]
 
                     result.Layout <- VkImageLayout.TransferDstOptimal
@@ -2994,7 +3001,7 @@ module Image =
                         yield CopyCommand.SyncImage(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
 
                         yield CopyCommand.Release(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
-                        yield CopyCommand.Callback(fun () -> tempImages |> Array.iter (fst >> device.Delete))
+                        yield CopyCommand.Callback(fun () -> tempImages |> Array.iter (fst >> Disposable.dispose))
                     ]
 
                     result.Layout <- VkImageLayout.TransferDstOptimal
@@ -3042,7 +3049,7 @@ module Image =
                     CopyCommand.SyncImage(imageRange, VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
 
                     CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
-                    CopyCommand.Callback(fun () -> device.Delete temp)
+                    CopyCommand.Callback(fun () -> temp.Dispose())
                 ]
                 
                 device.eventually {
@@ -3072,7 +3079,7 @@ module Image =
                         do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
 
                     finally
-                        device.Delete temp
+                        temp.Dispose()
                 }
         image
 
@@ -3080,30 +3087,30 @@ module Image =
 
     let ofTexture (t : ITexture) (device : Device) =
         match t with
-            | :? PixTexture2d as t ->
-                device |> ofPixImageMipMap t.PixImageMipMap t.TextureParams
+        | :? PixTexture2d as t ->
+            device |> ofPixImageMipMap t.PixImageMipMap t.TextureParams
 
-            | :? PixTextureCube as c ->
-                device |> ofPixImageCube c.PixImageCube c.TextureParams
+        | :? PixTextureCube as c ->
+            device |> ofPixImageCube c.PixImageCube c.TextureParams
 
-            | :? NullTexture as t ->
-                device |> ofPixImageMipMap (PixImageMipMap [| PixImage<byte>(Col.Format.RGBA, V2i.II) :> PixImage |]) TextureParams.empty
+        | :? NullTexture as t ->
+            device |> ofPixImageMipMap (PixImageMipMap [| PixImage<byte>(Col.Format.RGBA, V2i.II) :> PixImage |]) TextureParams.empty
 
-            | :? PixTexture3d as t ->
-                device |> ofPixVolume t.PixVolume t.TextureParams
+        | :? PixTexture3d as t ->
+            device |> ofPixVolume t.PixVolume t.TextureParams
 
-            | :? FileTexture as t ->
-                device |> ofFile t.FileName t.TextureParams
+        | :? FileTexture as t ->
+            device |> ofFile t.FileName t.TextureParams
 
-            | :? INativeTexture as nt ->
-                device |> ofNativeImage nt
+        | :? INativeTexture as nt ->
+            device |> ofNativeImage nt
 
-            | :? Image as t ->
-                t.AddReference()
-                t
+        | :? Image as t ->
+            t.AddReference()
+            t
 
-            | _ ->
-                failf "unsupported texture-type: %A" t
+        | _ ->
+            failf "unsupported texture-type: %A" t
 
     let private downloadLevel (src : ImageSubresource) (writeToDst : TensorImage -> unit) (dstSize : V3i) (srcOffset : V3i) (device : Device) =
         let format = src.Image.Format
@@ -3149,9 +3156,9 @@ module Image =
             device.GraphicsFamily.RunSynchronously(cmd)
             writeToDst temp
         finally
-            device.Delete temp
+            temp.Dispose()
             if srcResolved <> src then
-                delete srcResolved.Image device
+                srcResolved.Image.Dispose()
 
     let downloadLevel2d (offset : V2i) (src : ImageSubresource) (dst : PixImage) (device : Device) =
         let write (buffer : TensorImage) = buffer.Read(dst, ImageTrafo.MirrorY)
@@ -3177,8 +3184,8 @@ module Image =
                 do! Command.TransformLayout(dst.Image, VkImageLayout.TransferDstOptimal)
                 do! Command.Copy(temp, dst, offset, temp.Size)
                 do! Command.TransformLayout(dst.Image, layout)
-            finally 
-                device.Delete temp
+            finally
+                temp.Dispose()
         }
 
 
@@ -3196,10 +3203,6 @@ type ContextImageExtensions private() =
     [<Extension>]
     static member inline CreateImage(this : Device, t : ITexture) =
         this |> Image.ofTexture t
-
-    [<Extension>]
-    static member inline Delete(this : Device, img : Image) =
-        this |> Image.delete img
 
     [<Extension>]
     static member inline CreateImage(this : Device, size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : VkFormat, usage : VkImageUsageFlags) =

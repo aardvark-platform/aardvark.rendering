@@ -171,10 +171,10 @@ type VulkanVRApplicationLayered(samples : int, debug : DebugConfig option, adjus
         info <- i
 
         if loaded then
-            device.Delete fbo
-            device.Delete cImg
-            device.Delete dImg
-            device.Delete fImg
+            fbo.Dispose()
+            cImg.Dispose()
+            dImg.Dispose()
+            fImg.Dispose()
         else
             compileHidden x.HiddenAreaMesh
 
@@ -355,16 +355,16 @@ type VulkanVRApplicationLayered(samples : int, debug : DebugConfig option, adjus
 
     override x.Release() = 
         // delete views
-        device.Delete fbo.Attachments.[DefaultSemantic.Colors]
-        device.Delete fbo.Attachments.[DefaultSemantic.Depth]
+        fbo.Attachments.[DefaultSemantic.Colors].Dispose()
+        fbo.Attachments.[DefaultSemantic.Depth].Dispose()
 
         // delete FBOs
-        device.Delete fbo
+        fbo.Dispose()
 
         // delete images
-        device.Delete cImg
-        device.Delete dImg
-        device.Delete fImg
+        cImg.Dispose()
+        dImg.Dispose()
+        fImg.Dispose()
 
         // dispose the app
         app.Dispose()

@@ -20,7 +20,7 @@ open FSharp.Data.Adaptive
 
 type ComputeShader =
     class
-        inherit RefCountedResource
+        inherit CachedResource
 
         val mutable public Device : Device
         val mutable public ShaderModule : ShaderModule
@@ -29,7 +29,6 @@ type ComputeShader =
         val mutable public TextureNames : Map<string * int, string>
         val mutable public Samplers : Map<string * int, Sampler>
         val mutable public GroupSize : V3i
-        val mutable public CacheName : Symbol
         val mutable public Interface : FShade.GLSL.GLSLShaderInterface
         val mutable public GLSL : Option<string>
 
@@ -41,9 +40,9 @@ type ComputeShader =
             let device = x.Device
             VkRaw.vkDestroyPipeline(device.Handle, x.Handle, NativePtr.zero)
 
-            for (_,s) in Map.toSeq x.Samplers do device.Delete s
-            device.Delete x.Layout
-            device.Delete x.ShaderModule
+            for (_,s) in Map.toSeq x.Samplers do s.Dispose()
+            x.Layout.Dispose()
+            x.ShaderModule.Dispose()
 
             x.ShaderModule <- Unchecked.defaultof<_>
             x.Layout <- Unchecked.defaultof<_>
@@ -52,7 +51,7 @@ type ComputeShader =
             x.Samplers <- Map.empty
 
 
-        new(d,s : ShaderModule,l,p,tn,sd,gs,glsl) = { inherit RefCountedResource(); Device = d; ShaderModule = s; Layout = l; Handle = p; TextureNames = tn; Samplers = sd; GroupSize = gs; CacheName = Symbol.Empty; Interface = s.Interface.[ShaderStage.Compute]; GLSL = glsl }
+        new(d,s : ShaderModule,l,p,tn,sd,gs,glsl) = { inherit CachedResource(d); Device = d; ShaderModule = s; Layout = l; Handle = p; TextureNames = tn; Samplers = sd; GroupSize = gs; Interface = s.Interface.[ShaderStage.Compute]; GLSL = glsl }
     end
 
 type BindingReference =
@@ -106,7 +105,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
             override x.Enqueue(cmd : CommandBuffer) =
                 cmd.AppendCommand()
                 VkRaw.vkCmdBindDescriptorSets(cmd.Handle, VkPipelineBindPoint.Compute, shader.Layout.Handle, 0u, uint32 sets.Length, setHandles, 0u, NativePtr.zero)
-                Disposable.Empty
+                [shader.Layout] @ (sets |> List.ofArray |> List.map (fun s -> s :> ICommandResource))
         }
 
 
@@ -143,19 +142,19 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                     match value with
                         | :? Image as img -> 
                             let view = device.CreateOutputImageView(img, 0, 1, 0, 1)
-                            view, Some { new IDisposable with member x.Dispose() = device.Delete view }
+                            view, Some { new IDisposable with member x.Dispose() = view.Dispose() }
 
                         | :? ImageView as view ->
                             view, None
 
                         | :? ImageSubresourceRange as r ->
                             let view = device.CreateOutputImageView(r.Image, r.BaseLevel, r.LevelCount, r.BaseSlice, r.SliceCount)
-                            view, Some { new IDisposable with member x.Dispose() = device.Delete view }
+                            view, Some { new IDisposable with member x.Dispose() = view.Dispose() }
 
                         | :? ITextureRange as r ->
                             let image = r.Texture |> unbox<Image>
                             let view = device.CreateOutputImageView(image, r.Levels.Min, 1 + r.Levels.Max - r.Levels.Min, r.Slices.Min, 1 + r.Slices.Max - r.Slices.Min)
-                            view, Some { new IDisposable with member x.Dispose() = device.Delete view }
+                            view, Some { new IDisposable with member x.Dispose() = view.Dispose() }
 
                         | _ -> 
                             failf "invalid storage image argument: %A" value
@@ -176,13 +175,13 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                             let image = device.CreateImage tex
                             let view = device.CreateInputImageView(image, info, VkComponentMapping.Identity)
                             content.[index] <- Some (VkImageLayout.General, view, sampler)
-                            Some { new IDisposable with member x.Dispose() = device.Delete image; device.Delete view }
+                            Some { new IDisposable with member x.Dispose() = image.Dispose(); view.Dispose() }
 
                         | :? ITextureRange as r ->
                             let image = unbox<Image> r.Texture
                             let view = device.CreateInputImageView(image, info, r.Levels, r.Slices, VkComponentMapping.Identity)
                             content.[index] <- Some (VkImageLayout.General, view, sampler)
-                            Some { new IDisposable with member x.Dispose() = device.Delete view }
+                            Some { new IDisposable with member x.Dispose() = view.Dispose() }
 
                         | _ -> 
                             failf "invalid storage image argument: %A" value
@@ -204,7 +203,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                     match value with
                         | :? IBuffer as b -> 
                             let buffer = device.CreateBuffer(VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.StorageBufferBit, b)
-                            buffer, 0L, buffer.Size, Some { new IDisposable with member x.Dispose() = device.Delete buffer }
+                            buffer, 0L, buffer.Size, Some { new IDisposable with member x.Dispose() = buffer.Dispose() }
 
                         | :? IBufferRange as b ->
                             let buffer = b.Buffer |> unbox<Buffer>
@@ -238,10 +237,10 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
             dirtyBuffers <- ref HashSet.empty
             pendingWrites <- MapExt.empty
             for (_,d) in MapExt.toSeq disposables do d.Dispose()
-            for b in buffers do device.Delete b
+            for b in buffers do b.Dispose()
             buffers.Clear()
             disposables <- MapExt.empty
-            for s in sets do device.Delete s
+            for s in sets do s.Dispose()
             NativePtr.free setHandles
         )   
 
@@ -255,7 +254,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                         cmd.AppendCommand()
                         for b in buffers do
                             VkRaw.vkCmdUpdateBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Storage.Size, b.Storage.Pointer)
-                        Disposable.Empty
+                        buffers |> List.map (fun b -> b :> ICommandResource)
                 }
 
     let missingNames = System.Collections.Generic.HashSet (Map.toSeq references |> Seq.map fst)
@@ -363,7 +362,7 @@ module ``Compute Commands`` =
                     cmd.AppendCommand()
                     VkRaw.vkCmdBindPipeline(cmd.Handle, VkPipelineBindPoint.Compute, shader.Handle)
 
-                    Disposable.Empty
+                    []
             }
 
         static member Dispatch (size : V3i) =
@@ -377,7 +376,7 @@ module ``Compute Commands`` =
                         cmd.AppendCommand()
                         VkRaw.vkCmdDispatch(cmd.Handle, uint32 size.X, uint32 size.Y, uint32 size.Z)
 
-                        Disposable.Empty
+                        []
                 }
 
         static member DispatchIndirect (b : Buffer) =
@@ -388,7 +387,7 @@ module ``Compute Commands`` =
                     cmd.AppendCommand()
                     VkRaw.vkCmdDispatchIndirect(cmd.Handle, b.Handle, 0UL)
 
-                    Disposable.Empty
+                    []
             }
             
         static member Dispatch (size : V2i) = Command.Dispatch(V3i(size.X, size.Y, 1))
@@ -434,7 +433,7 @@ module ``Compute Commands`` =
                             1u, pImageMemoryBarrier
                         )
 
-                        return Disposable.Empty
+                        return [img.Image :> ICommandResource]
                     }
             }
 
@@ -787,8 +786,8 @@ module ``Compute Commands`` =
                 
 
                 override x.Release() =
-                    for (_,b) in state.uploads do device.Delete b
-                    for (b,_) in state.downloads do device.Delete b
+                    for (_,b) in state.uploads do b.Dispose()
+                    for (b,_) in state.downloads do b.Dispose()
                     stream.Dispose()
 
                 override x.RunUnit(queries : IQuery) =
@@ -848,7 +847,7 @@ module ``Compute Commands`` =
                                     do! Command.Copy(srcBuffer, int64 src.Offset, temp, 0L, temp.Size)
                                 finally
                                     temp.Memory.Mapped (fun src -> Marshal.Copy(src, dst, temp.Size))
-                                    device.Delete temp
+                                    temp.Dispose()
                             }
                         | HostMemory.Managed(dst, dstOffset) ->
                             let elementSize = dst.GetType().GetElementType() |> Marshal.SizeOf |> nativeint
@@ -865,7 +864,7 @@ module ``Compute Commands`` =
                                         finally 
                                             gc.Free()
                                     )
-                                    device.Delete temp
+                                    temp.Dispose()
                             }
                             
                 | ComputeCommand.UploadBufferCmd(src, dst) ->
@@ -889,7 +888,7 @@ module ``Compute Commands`` =
                             
                             do! Command.Copy(temp, 0L, unbox<Buffer> dst.Buffer, int64 dst.Offset, int64 temp.Size)     
                         finally
-                            device.Delete temp
+                            temp.Dispose()
                     }
 
                 | ComputeCommand.CopyImageCmd(src, srcOffset, dst, dstOffset, size) ->
@@ -929,7 +928,7 @@ module ``Compute Commands`` =
                                     o.Upload()
                                     cmd.AppendCommand()
                                     o.Stream.Run(cmd.Handle)
-                                    Disposable.Custom o.Download
+                                    [CommandResource.compensation o.Download]
                             }
                         | _ ->
                             failf "not implemented"
@@ -1077,9 +1076,6 @@ module ComputeShader =
 
     let private main = CStr.malloc "main"
 
-    let delete (shader : ComputeShader) =
-        shader.Device.RemoveCached(cache, shader)
-
     let toByteArray (shader : ComputeShader) =
         ShaderProgram.pickler.Pickle( 
             (
@@ -1145,7 +1141,7 @@ module ComputeShader =
                     )
                     |> Map.ofSeq
                 
-                return ComputeShader(device, module_, layout, !!pHandle, textureNames, samplers, groupSize, glsl)
+                return new ComputeShader(device, module_, layout, !!pHandle, textureNames, samplers, groupSize, glsl)
                     |> LoadResult.Loaded
             }
         with _ ->
@@ -1224,7 +1220,7 @@ module ComputeShader =
                         shader.csSamplerStates |> Map.map (fun _ s -> device.CreateSampler s.SamplerState)
                 
 
-                    return ComputeShader(device, sm, layout, !!pHandle, shader.csTextureNames, samplers, shader.csLocalSize, Some glsl.code)
+                    return new ComputeShader(device, sm, layout, !!pHandle, shader.csTextureNames, samplers, shader.csLocalSize, Some glsl.code)
                 }
             | _ ->
                 failf "could not create compute shader"
@@ -1253,22 +1249,15 @@ module ComputeShader =
                                     File.WriteAllBytes(tmpShould, should)
                                     failf "invalid cache for ComputeShader: real: %s vs. should: %s" tmpReal tmpShould
                                     
-                            loaded.CacheName <- cache
-                            loaded.RefCount <- 1 // leak
                             loaded
                         | Failed reason ->
                             let shader = ofFShadeInternal shader device
                             write reason file shader
-                            shader.CacheName <- cache
-                            shader.RefCount <- 1 // leak
                             shader
 
 
                 | None -> 
-                    let shader = ofFShadeInternal shader device
-                    shader.CacheName <- cache
-                    shader.RefCount <- 1 // leak
-                    shader
+                    ofFShadeInternal shader device
         )
 
     let ofFunction (f : 'a -> 'b) (device : Device) =

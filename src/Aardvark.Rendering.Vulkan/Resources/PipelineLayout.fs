@@ -62,23 +62,17 @@ type PipelineLayout =
 
         val mutable public DescriptorSetLayouts : array<DescriptorSetLayout>
         val mutable public PipelineInfo : PipelineInfo
-        
-        val mutable public ReferenceCount : int
+
         val mutable public LayerCount : int
         val mutable public PerLayerUniforms : Set<string>
 
-        member x.AddRef() =
-            if Interlocked.Increment(&x.ReferenceCount) = 1 then
-                failf "cannot revive PipelineLayout"
-            
-        member x.RemoveRef() =
-            if Interlocked.Decrement(&x.ReferenceCount) = 0 then
-                for b in x.DescriptorSetLayouts do
-                    x.Device |> DescriptorSetLayout.delete b
+        override x.Destroy() =
+            for b in x.DescriptorSetLayouts do
+                b.Dispose()
 
-                VkRaw.vkDestroyPipelineLayout(x.Device.Handle, x.Handle, NativePtr.zero)
-                x.Handle <- VkPipelineLayout.Null
-                x.DescriptorSetLayouts <- Array.empty
+            VkRaw.vkDestroyPipelineLayout(x.Device.Handle, x.Handle, NativePtr.zero)
+            x.Handle <- VkPipelineLayout.Null
+            x.DescriptorSetLayouts <- Array.empty
 
         interface IFramebufferSignature with
             member x.ColorAttachments = 
@@ -94,7 +88,7 @@ type PipelineLayout =
             member x.PerLayerUniforms = x.PerLayerUniforms
 
         new(device, handle, descriptorSetLayouts, info, layerCount : int, perLayer : Set<string>) = 
-            { inherit Resource<_>(device, handle); DescriptorSetLayouts = descriptorSetLayouts; PipelineInfo = info; ReferenceCount = 1; LayerCount = layerCount; PerLayerUniforms = perLayer }
+            { inherit Resource<_>(device, handle); DescriptorSetLayouts = descriptorSetLayouts; PipelineInfo = info; LayerCount = layerCount; PerLayerUniforms = perLayer }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -249,12 +243,9 @@ module PipelineLayout =
                     pEffectLayout   = None
                 }    
                       
-            return PipelineLayout(device, !!pHandle, setLayouts, info, layers, perLayer)
+            return new PipelineLayout(device, !!pHandle, setLayouts, info, layers, perLayer)
         }
 
-    let delete (layout : PipelineLayout) (device : Device) =
-        layout.RemoveRef()
-    
     open FShade
     open FShade.Imperative
 
@@ -271,7 +262,3 @@ type ContextPipelineLayoutExtensions private() =
     [<Extension>]
     static member inline CreatePipelineLayout(this : Device, layout : FShade.EffectInputLayout, layers : int, perLayer : Set<string>) =
         this |> PipelineLayout.ofEffectInputLayout layout layers perLayer
-
-    [<Extension>]
-    static member inline Delete(this : Device, layout : PipelineLayout) =
-        this |> PipelineLayout.delete layout       

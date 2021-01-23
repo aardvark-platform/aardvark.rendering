@@ -2,13 +2,13 @@
 
 open System
 open System.Runtime.InteropServices
+open FShade
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open FSharp.Data.Adaptive
 open System.Diagnostics
 open System.Collections.Generic
-open FShade
 #nowarn "9"
 
 type DebugConfig =
@@ -210,7 +210,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         device.CreateRenderPass(attachments, layers, perLayer) :> IFramebufferSignature
 
     member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
-        device.Delete(unbox<RenderPass> signature)
+        Disposable.dispose(unbox<RenderPass> signature)
 
     member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : IFramebuffer =
         let views =
@@ -232,8 +232,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     member x.DeleteFramebuffer(fbo : IFramebuffer) =
         let fbo = unbox<Framebuffer> fbo
-        fbo.Attachments |> Map.iter (fun _ v -> device.Delete(v))
-        device.Delete(fbo)
+        fbo.Attachments |> Map.iter (fun _ v -> v.Dispose())
+        fbo.Dispose()
 
 
 
@@ -241,23 +241,23 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         device.CreateShaderProgram(surface) :> IBackendSurface
 
     member x.DeleteSurface (bs : IBackendSurface) =
-        device.Delete(unbox<ShaderProgram> bs)
+        Disposable.dispose (unbox<ShaderProgram> bs)
 
     member x.PrepareTexture (t : ITexture) =
         device.CreateImage(t) :> IBackendTexture
 
     member x.DeleteTexture(t : IBackendTexture) =
-        device.Delete(unbox<Image> t)
+        Disposable.dispose (unbox<Image> t)
 
     member x.DeletRenderbuffer(t : IRenderbuffer) =
-        device.Delete(unbox<Image> t)
+        Disposable.dispose (unbox<Image> t)
 
     member x.PrepareBuffer (t : IBuffer, usage : BufferUsage) =
         let flags = Buffer.toVkUsage usage
         device.CreateBuffer(flags, t) :> IBackendBuffer
 
     member x.DeleteBuffer(t : IBackendBuffer) =
-        device.Delete(unbox<Buffer> t)
+        Disposable.dispose(unbox<Buffer> t)
 
 
 
@@ -368,17 +368,16 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         device.CreateBuffer(flags, int64 size)
 
     member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
-        let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (int64 size)
+        use temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (int64 size)
         let dst = unbox<Buffer> dst
 
         temp.Memory.Mapped(fun ptr -> Marshal.Copy(src, ptr, size))
         device.perform {
             do! Command.Copy(temp, 0L, dst, int64 dstOffset, int64 size)
         }
-        device.Delete temp
 
     member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
-        let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
+        use temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
         let src = unbox<Buffer> src
 
         device.perform {
@@ -386,7 +385,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         }
 
         temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
-        device.Delete temp
         
     member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
         let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
@@ -397,11 +395,11 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         (fun () ->
             task.Wait()
             if task.IsFaulted then 
-                device.Delete temp
+                temp.Dispose()
                 raise task.Exception
             else
                 temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
-                device.Delete temp
+                temp.Dispose()
         )
 
 
@@ -446,7 +444,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     // upload
     member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) =
         let srgb = TextureFormat.isSrgb (unbox (int dst.Format))
-        let temp = device |> TensorImage.create<'a> size fmt srgb
+        use temp = device |> TensorImage.create<'a> size fmt srgb
 
         let src = src.SubTensor4(V4l.Zero, V4l(int64 size.X, int64 size.Y, int64 size.Z, src.SW)).MirrorY()
         temp.Write(fmt, src)
@@ -464,12 +462,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             do! Command.TransformLayout(dstImage, oldLayout)
         }
 
-        device.Delete temp
-        
     // download
     member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) =
         let srgb = TextureFormat.isSrgb (unbox (int src.Format))
-        let temp = device |> TensorImage.create<'a> size fmt srgb
+        use temp = device |> TensorImage.create<'a> size fmt srgb
 
         let srcOffset = V3i(srcOffset.X, src.Size.Y - (srcOffset.Y + size.Y), srcOffset.Z)
         let src = ImageSubresource.ofTextureSubResource src
@@ -484,7 +480,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         let dst = dst.SubTensor4(V4l.Zero, V4l(int64 size.X, int64 size.Y, int64 size.Z, dst.SW)).MirrorY()
         temp.Read(fmt, dst)
-        device.Delete temp
 
     // copy
     member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
@@ -535,7 +530,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             ComputeShader.newInputBinding (unbox c) :> IComputeShaderInputBinding
 
         member x.DeleteComputeShader (shader : IComputeShader) =
-            ComputeShader.delete (unbox shader)
+            Disposable.dispose (unbox<ComputeShader> shader)
 
         member x.Run (commands : list<ComputeCommand>, queries : IQuery) =
             ComputeCommand.run commands queries device

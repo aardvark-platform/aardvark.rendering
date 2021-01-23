@@ -1,25 +1,29 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open System.Threading
 open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
-open System.Collections.Generic
-open System.Collections.Concurrent
 open Aardvark.Base
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
+open FSharp.Data.Adaptive
 open Vulkan11
 
-#nowarn "9"
-//// #nowarn "51"
- 
+module CommandResource =
+    let compensation (f : unit -> unit) =
+        { new ICommandResource with
+            member x.AddReference() = ()
+            member x.Dispose() = f() }
+
+    let disposable (d : IDisposable) =
+        { new ICommandResource with
+            member x.AddReference() = ()
+            member x.Dispose() = d.Dispose() }
 
 [<AbstractClass>]
 type Command() =
-    static let nop = 
-        { new Command() with 
-            member x.Enqueue _ = Disposable.Empty 
+    static let nop =
+        { new Command() with
+            member x.Enqueue _ = []
             member x.Compatible = QueueFlags.All
         }
 
@@ -38,7 +42,7 @@ type Command() =
                     0u, NativePtr.zero
                 )
 
-                Disposable.Empty
+                []
         }
 
     static let resetDeviceMask =
@@ -47,34 +51,25 @@ type Command() =
             member x.Enqueue cmd =
                 cmd.AppendCommand()
                 VkRaw.vkCmdSetDeviceMask(cmd.Handle, cmd.Device.AllMask)
-                Disposable.Empty
+                []
         }
 
     abstract member Compatible : QueueFlags
-    abstract member Enqueue : CommandBuffer -> Disposable
+    abstract member Enqueue : CommandBuffer -> list<ICommandResource>
+
+    member private x.EnqueueInner(buffer) =
+        let res = x.Enqueue(buffer)
+        buffer.AddResources(res)
+
     interface ICommand with
         member x.Compatible = x.Compatible
-        member x.TryEnqueue(buffer, disp) =
-            disp <- x.Enqueue(buffer)
-            true
+        member x.Enqueue(buffer) = x.EnqueueInner(buffer)
 
     static member Nop = nop
 
-//    static member inline Custom (flags : QueueFlags, f : CommandBuffer -> unit) =
-//        { new Command() with 
-//            member x.Enqueue b = f b; null 
-//            member x.Compatible = flags
-//        }
-//
-//    static member inline Custom (flags : QueueFlags, f : CommandBuffer -> Disposable) =
-//        { new Command() with 
-//            member x.Enqueue b = f b 
-//            member x.Compatible = flags
-//        }
-
     static member Execute(cmd : seq<CommandBuffer>) =
-        let handles = 
-            cmd |> Seq.choose (fun cmd -> 
+        let handles =
+            cmd |> Seq.choose (fun cmd ->
                 if cmd.IsRecording then failf "cannot run recording CommandBuffer"
                 if cmd.Level <> CommandBufferLevel.Secondary then failf "cannot execute CommandBuffer with level %A" cmd.Level
 
@@ -94,7 +89,7 @@ type Command() =
                         let! pHandles = handles
                         VkRaw.vkCmdExecuteCommands(cmd.Handle, uint32 handles.Length, pHandles)
                     }
-                    Disposable.Empty
+                    []
             }
 
     static member Execute(cmd : CommandBuffer) =
@@ -106,16 +101,16 @@ type Command() =
             member x.Compatible = QueueFlags.All
             member x.Enqueue cmd =
                 cmd.AppendCommand()
-                cmd.Reset(e, VkPipelineStageFlags.BottomOfPipeBit)  
-                Disposable.Empty
+                cmd.Reset(e, VkPipelineStageFlags.BottomOfPipeBit)
+                []
         }
     static member Set(e : Event) =
         { new Command() with
             member x.Compatible = QueueFlags.All
             member x.Enqueue cmd =
                 cmd.AppendCommand()
-                cmd.Set(e, VkPipelineStageFlags.BottomOfPipeBit)  
-                Disposable.Empty
+                cmd.Set(e, VkPipelineStageFlags.BottomOfPipeBit)
+                []
         }
     static member Wait(e : Event) =
         { new Command() with
@@ -123,7 +118,7 @@ type Command() =
             member x.Enqueue cmd =
                 cmd.AppendCommand()
                 cmd.WaitAll [| e |]
-                Disposable.Empty
+                []
         }
     static member Wait(e : Event, dstFlags : VkPipelineStageFlags) =
         { new Command() with
@@ -131,7 +126,7 @@ type Command() =
             member x.Enqueue cmd =
                 cmd.AppendCommand()
                 cmd.WaitAll([| e |], dstFlags)
-                Disposable.Empty
+                []
         }
 
 
@@ -141,7 +136,7 @@ type Command() =
             member x.Enqueue cmd =
                 cmd.AppendCommand()
                 VkRaw.vkCmdSetDeviceMask(cmd.Handle, mask)
-                Disposable.Empty
+                []
         }
 
     static member ResetDevicemask = resetDeviceMask
@@ -153,61 +148,20 @@ type Command() =
                 if cmd.Device.AllCount = 1u then
                     command(0).Enqueue cmd
                 else
-                    let disp = System.Collections.Generic.List<Disposable>()
+                    let res = System.Collections.Generic.List<ICommandResource>()
                     for di in cmd.Device.AllIndicesArr do
                         let mask = 1u <<< int di
                         cmd.AppendCommand()
                         VkRaw.vkCmdSetDeviceMask(cmd.Handle, mask)
 
-                        let d = command(int di).Enqueue cmd
-                        if not (isNull d) then disp.Add d
-                    
+                        let r = command(int di).Enqueue cmd
+                        res.AddRange(r)
+
                     cmd.AppendCommand()
                     VkRaw.vkCmdSetDeviceMask(cmd.Handle, cmd.Device.AllMask)
 
-                    if disp.Count > 0 then
-                        Disposable.Compose (CSharpList.toList disp)
-                    else
-                        Disposable.Empty
+                    CSharpList.toList res
         }
-
-        
-
-//
-//[<AbstractClass>]
-//type QueueCommand() =
-//    abstract member Compatible : QueueFlags
-//    abstract member Enqueue : DeviceQueue * list<Semaphore> * Option<Semaphore> * Option<Fence> -> Disposable
-//    interface IQueueCommand with
-//        member x.Compatible = x.Compatible
-//        member x.TryEnqueue(queue, waitFor, disp, sem, fence) =
-//            disp <- x.Enqueue(queue, waitFor, sem, fence)
-//            true
-//
-//    static member Submit(cmds : list<CommandBuffer>) =
-//        { new IQueueCommand with
-//            member x.Compatible = QueueFlags.All
-//            member x.TryEnqueue(queue, waitFor, disp, sem, fence) =
-//                queue.Submit(cmds, waitFor, Option.toList sem, fence)
-//                true
-//        }
-//
-//    static member Submit(cmd : CommandBuffer) =
-//        QueueCommand.Submit [cmd]
-// 
-//    static member Submit(cmd : Command) =
-//        { new IQueueCommand with
-//            member x.Compatible = QueueFlags.All
-//            member x.TryEnqueue(queue, waitFor, disp, sem, fence) =
-//                let pool = queue.Family.TakeCommandPool()
-//                let cb = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
-//                let d = cmd.Enqueue(cb)
-//                disp <- Disposable.Custom (fun () -> d.Dispose(); cb.Dispose(); pool.Dispose())
-//                queue.Submit([cb], waitFor, Option.toList sem, fence)
-//                true
-//        }       
-//
-//   
 
 [<AbstractClass; Sealed; Extension>]
 type CommandBufferExtensions private() =
@@ -216,12 +170,7 @@ type CommandBufferExtensions private() =
         if not this.IsRecording then
             failf "cannot enqueue commands to non-recording CommandBuffer"
 
-        let mutable disp = null
-        if cmd.TryEnqueue(this, &disp) then
-            if not (isNull disp) then
-                this.AddCompensation disp
-        else
-            failf "could not enqueue command"
+        cmd.Enqueue(this)
 
     [<Extension>]
     static member RunSynchronously(this : DeviceQueueFamily, cmd : ICommand) =
@@ -240,12 +189,8 @@ type CommandBufferExtensions private() =
         buffer.End()
         buffer
 
-
-
-
-
 [<AutoOpen>]
-module CommandAPI = 
+module CommandAPI =
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Command =
         let nop = Command.Nop
@@ -260,7 +205,7 @@ module CommandAPI =
                 member x.Enqueue cmd =
                     let ld = m.Enqueue cmd
                     let rd = r.Enqueue cmd
-                    Disposable.Compose(ld, rd)
+                    ld @ rd
             }
 
         let inline append (l : Command) (r : Command) =
@@ -269,16 +214,16 @@ module CommandAPI =
                 member x.Enqueue s =
                     let ld = l.Enqueue s
                     let rd = r.Enqueue s
-                    Disposable.Compose(ld, rd)
+                    ld @ rd
             }
 
         let inline tryFinally (m : Command) (comp : unit -> unit) =
             { new Command() with
                 member x.Compatible = m.Compatible
-                member x.Enqueue cmd = 
+                member x.Enqueue cmd =
                     let ld = m.Enqueue cmd
-                    let rd = Disposable.Custom comp
-                    Disposable.Compose(ld, rd)
+                    let rd = CommandResource.compensation comp
+                    ld @ [rd]
             }
 
         let collect (f : 'a -> Command) (m : seq<'a>) =
@@ -315,18 +260,18 @@ module CommandAPI =
         member x.Combine(l : unit, r : unit -> 'a) = r()
 
         member x.TryFinally(m : unit -> 'a, comp : unit -> unit) =
-            buffer.AddCleanup comp
+            buffer.AddCompensation comp
             m()
 
         member x.Using(m : 'a, f : 'a -> 'b) =
-            buffer.AddCleanup (fun () -> (m :> IDisposable).Dispose())
+            buffer.AddCompensation (fun () -> (m :> IDisposable).Dispose())
             f m
 
         member x.Zero() = ()
         member x.For(elements : seq<'a>, f : 'a -> unit) =
             for a in elements do f a
 
-        member x.Run(f : unit -> 'a) = 
+        member x.Run(f : unit -> 'a) =
             try f()
             finally fin buffer
 
@@ -350,7 +295,7 @@ module CommandAPI =
 
 [<AutoOpen>]
 module ``Memory Commands`` =
-    
+
     type Command with
 
         static member ExecuteSequential (cmds : list<CommandBuffer>) =
