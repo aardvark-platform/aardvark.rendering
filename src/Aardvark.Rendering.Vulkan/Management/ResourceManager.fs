@@ -528,57 +528,29 @@ module Resources =
             }
         )
 
-    type ImageSamplerResource(owner : IResourceCache, key : list<obj>, device : Device,
-                              samplerType : FShade.GLSL.GLSLSamplerType, texture : aval<ITexture>,
-                              sampler : aval<SamplerState>) =
+    type ImageSamplerResource(owner : IResourceCache, key : list<obj>,
+                              imageView : IResourceLocation<ImageView>,
+                              sampler : IResourceLocation<Sampler>) =
         inherit AbstractResourceLocation<ImageSampler>(owner, key)
 
-        let mutable handle : Option<(ITexture * SamplerState) * (Image * ImageView * Sampler)> = None
-
-        let destroy() =
-            match handle with
-            | Some (_, (i, v, s)) ->
-                s.Dispose(); v.Dispose(); i.Dispose()
-                handle <- None
-            | _ ->
-                ()
-
-        let create (texture : ITexture, samplerDesc : SamplerState) =
-            destroy()
-
-            let i = device.CreateImage texture
-            let v = device.CreateInputImageView(i, samplerType, VkComponentMapping.Identity)
-            let s = device.CreateSampler samplerDesc
-
-            handle <- Some ((texture, samplerDesc), (i, v, s))
+        let mutable cache = None
 
         override x.Create() =
-            texture.Acquire()
+            imageView.Acquire()
             sampler.Acquire()
 
         override x.Destroy() =
-            sampler.Outputs.Remove x |> ignore
             sampler.Release()
-            texture.Outputs.Remove x |> ignore
-            texture.Release()
-            destroy()
+            imageView.Release()
 
         override x.GetHandle(token : AdaptiveToken) =
             if x.OutOfDate then
-                let n = texture.GetValue token, sampler.GetValue token
+                let v = imageView.Update(token)
+                let s = sampler.Update(token)
+                cache <- Some (v, s)
 
-                match handle with
-                | Some (o, _) when not (Unchecked.equals o n) ->
-                    owner.ReplaceLocked (Some o, Some n)
-                    create n
-                | None ->
-                    owner.ReplaceLocked (None, Some n)
-                    create n
-                | _ ->
-                    ()
-
-            match handle with
-            | Some (_, (_, v, s)) -> { handle = (v, s); version = 0 }
+            match cache with
+            | Some (v, s) -> { handle = (v.handle, s.handle); version = max v.version s.version }
             | _ -> failwith "[Resource] inconsistent state"
 
     type ImageSamplerArrayResource(owner : IResourceCache, key : list<obj>, input : amap<int, _>) =
@@ -1419,9 +1391,13 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
     member x.CreateImageSampler(samplerType : FShade.GLSL.GLSLSamplerType,
                                 texture : aval<ITexture>, samplerDesc : aval<SamplerState>) =
+        let image = x.CreateImage(texture)
+        let view = x.CreateImageView(samplerType, image)
+        let sampler = x.CreateSampler(samplerDesc)
+
         imageSamplerCache.GetOrCreate(
-            [samplerType :> obj; texture :> obj; samplerDesc :> obj],
-            fun cache key -> new ImageSamplerResource(cache, key, device, samplerType, texture, samplerDesc)
+            [view :> obj; sampler :> obj],
+            fun cache key -> new ImageSamplerResource(cache, key, view, sampler)
         )
 
     member x.CreateImageSamplerArray(input : seq<int * IResourceLocation<ImageSampler>>) =
