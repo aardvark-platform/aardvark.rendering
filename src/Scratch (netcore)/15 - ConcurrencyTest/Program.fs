@@ -7,6 +7,7 @@ open Aardvark.Application
 open Aardvark.SceneGraph.Semantics
 open Aardvark.Application.Slim
 open System
+open System.Collections.Generic
 
 // This example illustrates how to render a simple triangle using aardvark.
 
@@ -60,7 +61,26 @@ let main argv =
 
 
     let texture = cval (DefaultTextures.blackTex.GetValue())
-    let mutable preparedTextures = []
+    let preparedObjects = HashSet<IPreparedRenderObject>()
+
+    // Prepared textures that have not been deleted yet. If ROs are not prepared immediately
+    // it can be the case that prepared textures are not deleted because the
+    // activate IDisposable of a newly added RO is never disposed (as the RO is never prepared in the render task).
+    // I can't think of a way to circumvent this by design, users must be careful
+    // to dispose of their manually prepared resources. In this concurrent scenario, this
+    // is quite obscure but it probably can't be helped.
+    let textureLock = obj()
+    let preparedTextures = HashSet<IBackendTexture>()
+
+    let addTexture (t : IBackendTexture) =
+        lock textureLock (fun _ ->
+            preparedTextures.Add(t) |> ignore
+        )
+
+    let removeTexture (t : IBackendTexture) =
+        lock textureLock (fun _ ->
+            preparedTextures.Remove(t) |> ignore
+        )
 
     let createTexture (d : C4b) = 
         let checkerboardPix = 
@@ -128,51 +148,64 @@ let main argv =
 
     let things = cset []
 
-    let delayedDisposals : ref<list<IRenderObject>> = ref []
+    let cleanupLock = obj()
+    let mutable delayedDisposals = HashSet<IPreparedRenderObject>()
 
-    let cleanup () = 
-        let d = Interlocked.Exchange(delayedDisposals, [])
-        for dx in d do  
-           match dx with 
-           | :? IPreparedRenderObject as p -> p.Dispose() 
-           | _ -> ()
+    let addForCleanup (p : IPreparedRenderObject) =
+        lock cleanupLock (fun _ ->
+            delayedDisposals.Add(p) |> ignore
+        )
+
+    let cleanup () =
+        let disposals =
+            lock cleanupLock (fun _ ->
+                let mine = delayedDisposals
+                delayedDisposals <- HashSet()
+                mine
+            )
+
+        for d in disposals do
+            d.Dispose()
 
     win.AfterRender.Add(cleanup)
 
     let addThing (trafo : Trafo3d) =
-        let texture,activate = 
+        let texture, activate = 
             if perObjTexture then
                  let tex = createTexture C4b.Gray
                  if prepareTexture then 
-                    let pTex = 
-                        let lockObj = match app.Runtime :> obj with :? Aardvark.Rendering.Vulkan.Runtime -> AbstractRenderTask.ResourcesInUse | _ -> obj()
-                        let lockObj = obj()
-                        lock lockObj (fun _ -> 
-                            win.Runtime.PrepareTexture(tex) 
-                        )
-                    let activate = 
+                    let pTex = win.Runtime.PrepareTexture(tex)
+                    addTexture pTex
+
+                    let activate =
                         { new IDisposable with
-                            member x.Dispose() = 
+                            member x.Dispose() =
+                                removeTexture pTex
                                 win.Runtime.DeleteTexture pTex
                         }
 
-                    preparedTextures <- pTex :: preparedTextures
                     AVal.constant (pTex :> ITexture), fun () -> activate
-                 else 
+                 else
                     AVal.constant tex, template.Activate
             else texture :> aval<_>, template.Activate
 
-        let ro = 
+        let ro =
             { template with
                 Id = newId()
                 Uniforms = uniforms trafo texture
                 Activate = activate
             } :> IRenderObject
 
-        let prep = if prepareIt then win.Runtime.PrepareRenderObject(signature,ro) :> IRenderObject else ro
+        let ro =
+            if prepareIt then
+                let p = win.Runtime.PrepareRenderObject(signature, ro)
+                preparedObjects.Add(p) |> ignore
+                p :> IRenderObject
+            else
+                ro
 
-        transact (fun _ -> 
-            things.Add prep |> ignore
+        transact (fun _ ->
+            things.Add ro |> ignore
         )
 
     let addThings () = 
@@ -188,15 +221,17 @@ let main argv =
                 let rndIndx = rnd.Next(0,things.Count-1)
                 if rndIndx < things.Count - 1 then
                     let nth = Seq.item rndIndx things
-                    
 
                     transact (fun _ -> 
                         things.Remove nth |> ignore
-                        if not inlineDispose && prepareIt then delayedDisposals := nth :: !delayedDisposals
                     )
 
-                    if inlineDispose && prepareIt then
-                        match nth with | :? IPreparedRenderObject as p -> p.Dispose() | _ -> ()
+                    match nth with
+                    | :? IPreparedRenderObject as p ->
+                        preparedObjects.Remove(p) |> ignore
+                        if inlineDispose then p.Dispose() else addForCleanup p
+                    | _ -> ()
+
             runs <- runs + 1
             //Thread.Sleep(10)
 
@@ -236,13 +271,17 @@ let main argv =
             if jitterFrames then RenderTask.custom (fun (a,rt,ot,q) -> Thread.Sleep(rnd.Next(0,100))) else RenderTask.empty
             win.Runtime.CompileRender(signature,sg)
         ]
-    //win.Scene <- sg
     win.Run()
 
     running <- false
     threads |> List.iter (fun t -> t.Join())
 
+    for o in preparedObjects do
+        o.Dispose()
+
     for t in preparedTextures do
-        win.Runtime.DeleteTexture(t)
+       win.Runtime.DeleteTexture(t)
+
+    cleanup()
 
     0

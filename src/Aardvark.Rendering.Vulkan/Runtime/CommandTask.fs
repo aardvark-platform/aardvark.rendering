@@ -812,14 +812,14 @@ module private RuntimeCommands =
 
         override x.GroupKey =
             match prepared with
-            | Some p -> [ p.First.pipeline :> obj; p.Id :> obj ]
+            | Some p -> [ p.First.Pipeline :> obj; p.Id :> obj ]
             | None -> failwith "inconsistent state"
 
         override x.Free() =
             match prepared with
             | Some o ->
                 for o in o.Children do
-                    for r in o.resources do compiler.resources.Remove r
+                    for r in o.Resources do compiler.resources.Remove r
 
                 o.Dispose()
                 prepared <- None
@@ -831,19 +831,19 @@ module private RuntimeCommands =
 
             let o = compiler.manager.PrepareRenderObject(compiler.renderPass, hook compiler.task o)
             for o in o.Children do
-                for r in o.resources do compiler.resources.Add r
+                for r in o.Resources do compiler.resources.Add r
 
-                stream.IndirectBindPipeline(o.pipeline.Pointer) |> ignore
-                stream.IndirectBindDescriptorSets(o.descriptorSets.Pointer) |> ignore
+                stream.IndirectBindPipeline(o.Pipeline.Pointer) |> ignore
+                stream.IndirectBindDescriptorSets(o.DescriptorSets.Pointer) |> ignore
 
-                match o.indexBuffer with
+                match o.IndexBuffer with
                 | Some ib ->
                     stream.IndirectBindIndexBuffer(ib.Pointer) |> ignore
                 | None ->
                     ()
 
-                stream.IndirectBindVertexBuffers(o.vertexBuffers.Pointer) |> ignore
-                stream.IndirectDraw(compiler.stats, o.isActive.Pointer, o.drawCalls.Pointer) |> ignore
+                stream.IndirectBindVertexBuffers(o.VertexBuffers.Pointer) |> ignore
+                stream.IndirectDraw(compiler.stats, o.IsActive.Pointer, o.DrawCalls.Pointer) |> ignore
 
             prepared <- Some o
 

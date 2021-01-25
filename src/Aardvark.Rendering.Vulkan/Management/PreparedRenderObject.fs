@@ -10,43 +10,49 @@ open FSharp.Data.Adaptive
 #nowarn "9"
 // #nowarn "51"
 
+type PreparedRenderObject(device         : Device,
+                          original       : RenderObject,
+                          resources      : list<IResourceLocation>,
+                          program        : IResourceLocation<ShaderProgram>,
+                          pipelineLayout : PipelineLayout,
+                          pipeline       : INativeResourceLocation<VkPipeline>,
+                          indexBuffer    : Option<INativeResourceLocation<IndexBufferBinding>>,
+                          descriptorSets : INativeResourceLocation<DescriptorSetBinding>,
+                          vertexBuffers  : INativeResourceLocation<VertexBufferBinding>,
+                          drawCalls      : INativeResourceLocation<DrawCall>,
+                          isActive       : INativeResourceLocation<int>,
+                          activation     : IDisposable) =
 
-type PreparedRenderObject =
-    {
-        device                  : Device
-        original                : RenderObject
+    inherit Resource(device)
 
-        resources               : list<IResourceLocation>
+    member x.Original = original
+    member x.Resources = resources
+    member x.PipelineLayout = pipelineLayout
+    member x.Pipeline = pipeline
+    member x.IndexBuffer = indexBuffer
+    member x.DescriptorSets = descriptorSets
+    member x.VertexBuffers = vertexBuffers
+    member x.DrawCalls = drawCalls
+    member x.IsActive = isActive
+    member x.RenderPass = original.RenderPass
+    member x.AttributeScope = original.AttributeScope
 
-        program                 : IResourceLocation<ShaderProgram>
-        pipelineLayout          : PipelineLayout
-        pipeline                : INativeResourceLocation<VkPipeline>
-        indexBuffer             : Option<INativeResourceLocation<IndexBufferBinding>>
-        descriptorSets          : INativeResourceLocation<DescriptorSetBinding>
-        vertexBuffers           : INativeResourceLocation<VertexBufferBinding>
-        drawCalls               : INativeResourceLocation<DrawCall>
-        isActive                : INativeResourceLocation<int>
-        activation              : IDisposable
-    }
-    member x.DrawCalls = x.original.DrawCalls
-    member x.RenderPass = x.original.RenderPass
-    member x.AttributeScope = x.original.AttributeScope
-
-    member x.Dispose() =
+    override x.Destroy() =
         // TODO: Resources aren't actually acquired by preparing the render object (except the program) but only
         // when added to the compiler. Thus, we don't release them here. May wanna change that behavior.
-        x.program.Release()
+        program.Release()
+        activation.Dispose()
 
     member x.Update(caller : AdaptiveToken, token : RenderToken) =
-        for r in x.resources do r.Update(caller) |> ignore
+        for r in resources do r.Update(caller) |> ignore
 
     interface IPreparedRenderObject with
-        member x.Id = x.original.Id
-        member x.RenderPass = x.original.RenderPass
-        member x.AttributeScope = x.original.AttributeScope
+        member x.Id = original.Id
+        member x.RenderPass = original.RenderPass
+        member x.AttributeScope = original.AttributeScope
         member x.Update(caller, token) = x.Update(caller, token) |> ignore
-        member x.Original = Some x.original
-        member x.Dispose() = x.Dispose()
+        member x.Original = Some original
+
 
 type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
     let id = newId()
@@ -71,18 +77,18 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
         children |> List.iter (fun c -> c.Update(caller, token))
 
     member x.RenderPass = first.RenderPass
-    member x.Original = first.original
+    member x.Original = first.Original
 
     member x.First = first
     member x.Last = last
 
     interface IRenderObject with
-        member x.Id = first.original.Id
+        member x.Id = first.Original.Id
         member x.AttributeScope = first.AttributeScope
         member x.RenderPass = first.RenderPass
 
     interface IPreparedRenderObject with
-        member x.Original = Some first.original
+        member x.Original = Some first.Original
         member x.Update(caller, token) = x.Update(caller, token) |> ignore
 
     interface IDisposable with
@@ -268,24 +274,20 @@ type DevicePreparedRenderObjectExtensions private() =
 
         //for r in resources do r.Acquire()
 
-        let res =
-            {
-                device                      = this.Device
-                original                    = ro
-                resources                   = CSharpList.toList resources
-                descriptorSets              = descriptorBindings
-                program                     = program
-                pipelineLayout              = programLayout
-                pipeline                    = pipeline
-                vertexBuffers               = bindings
-                indexBuffer                 = indexBufferBinding
-                drawCalls                   = calls
-                isActive                    = isActive
-                activation                  = ro.Activate()
-            }
+        new PreparedRenderObject(
+            this.Device, ro,
+            CSharpList.toList resources,
+            program,
+            programLayout,
+            pipeline,
+            indexBufferBinding,
+            descriptorBindings,
+            bindings,
+            calls,
+            isActive,
+            ro.Activate()
+        )
 
-        res
-        
     [<Extension>]
     static member CreateDescriptorSets (this : ResourceManager, layout : PipelineLayout, uniforms : IUniformProvider) =
         let resources = System.Collections.Generic.List<IResourceLocation>()
@@ -368,10 +370,10 @@ type DevicePreparedRenderObjectExtensions private() =
             let result = prepareObject this renderPass ro
 
             // get all "new" resources
-            let newResources = result.resources |> List.filter (fun r -> r.ReferenceCount = 0)
+            let newResources = result.Resources |> List.filter (fun r -> r.ReferenceCount = 0)
 
             // acquire all resources (possibly causing a ref-count greater than 1 when used multiple times)
-            for r in result.resources do r.Acquire()
+            for r in result.Resources do r.Acquire()
 
             // update all "new" resources
             for r in newResources do r.Update(AdaptiveToken.Top) |> ignore
@@ -438,9 +440,11 @@ type DevicePreparedRenderObjectExtensions private() =
                 new PreparedMultiRenderObject(all)
 
             | :? PreparedRenderObject as o ->
+                o.AddReference()
                 new PreparedMultiRenderObject([o])
 
             | :? PreparedMultiRenderObject as mo ->
+                for o in mo.Children do o.AddReference()
                 mo
 
             | _ ->

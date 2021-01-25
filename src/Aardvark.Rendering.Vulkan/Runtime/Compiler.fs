@@ -86,34 +86,34 @@ module Compiler =
         match prev with
             | None ->
                 [
-                    yield Instruction.bindPipeline self.pipeline
-                    yield Instruction.bindVertexBuffers self.vertexBuffers
-                    yield Instruction.bindDescriptorSets self.descriptorSets
+                    yield Instruction.bindPipeline self.Pipeline
+                    yield Instruction.bindVertexBuffers self.VertexBuffers
+                    yield Instruction.bindDescriptorSets self.DescriptorSets
 
-                    match self.indexBuffer with
+                    match self.IndexBuffer with
                         | Some ib -> yield Instruction.bindIndexBuffer ib
                         | _ -> ()
 
-                    yield Instruction.draw scope.runtimeStats self.isActive self.drawCalls
+                    yield Instruction.draw scope.runtimeStats self.IsActive self.DrawCalls
                 ]
 
             | Some prev ->
                 [
-                    if prev.pipeline <> self.pipeline then
-                        yield Instruction.bindPipeline self.pipeline
+                    if prev.Pipeline <> self.Pipeline then
+                        yield Instruction.bindPipeline self.Pipeline
 
-                    if prev.vertexBuffers <> self.vertexBuffers then
-                        yield Instruction.bindVertexBuffers self.vertexBuffers
+                    if prev.VertexBuffers <> self.VertexBuffers then
+                        yield Instruction.bindVertexBuffers self.VertexBuffers
 
-                    if prev.descriptorSets <> self.descriptorSets || prev.pipeline <> self.pipeline then
-                        yield Instruction.bindDescriptorSets self.descriptorSets
+                    if prev.DescriptorSets <> self.DescriptorSets || prev.Pipeline <> self.Pipeline then
+                        yield Instruction.bindDescriptorSets self.DescriptorSets
 
-                    if prev.indexBuffer <> self.indexBuffer then
-                        match self.indexBuffer with
-                            | Some ib -> yield Instruction.bindIndexBuffer ib
-                            | _ -> ()
+                    if prev.IndexBuffer <> self.IndexBuffer then
+                        match self.IndexBuffer with
+                        | Some ib -> yield Instruction.bindIndexBuffer ib
+                        | _ -> ()
 
-                    yield Instruction.draw scope.runtimeStats self.isActive self.drawCalls
+                    yield Instruction.draw scope.runtimeStats self.IsActive self.DrawCalls
                 ]
 
     let compile (scope : CompilerScope) (prev : Option<PreparedMultiRenderObject>) (self : PreparedMultiRenderObject) =
