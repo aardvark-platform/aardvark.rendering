@@ -640,25 +640,23 @@ and CopyEngine(family : DeviceQueueFamily) =
             // now: latency or batch updates. how to allow both
             //trigger.Wait()
 
-            
-
-            let copies, totalSize = 
+            let copies, enq, totalSize =
                 lock lockObj (fun () ->
 
-                    if not running then 
-                        empty, 0L
+                    if not running then
+                        empty, 0L, 0L
                     else
                         while pending.Count = 0 && running do Monitor.Wait lockObj |> ignore
                         if not running then
-                            empty, 0L
+                            empty, 0L, 0L
                         elif totalSize >= 0L then
                             let mine = pending
                             let s = totalSize
                             pending <- List()
                             totalSize <- 0L
-                            mine, s
+                            mine, vEnqueue, s
                         else
-                            empty, 0L
+                            empty, 0L, 0L
                 )
 
             if copies.Count > 0 then
@@ -778,7 +776,7 @@ and CopyEngine(family : DeviceQueueFamily) =
                     )
                 )
                 lock enqueueMon (fun () -> 
-                    vDone <- vEnqueue
+                    vDone <- enq
                     Monitor.PulseAll enqueueMon
                 )
                 fence.Wait()
@@ -847,12 +845,11 @@ and CopyEngine(family : DeviceQueueFamily) =
             threads |> List.iter (fun t -> t.Join())
 
     member x.Enqueue(commands : seq<CopyCommand>) =
-        let size = 
+        let size =
             lock lockObj (fun () ->
                 pending.AddRange commands
-                        
-                //pending.AddRange commands
-                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L 
+
+                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L
                 totalSize <- totalSize + s
 
                 Monitor.PulseAll lockObj
@@ -861,23 +858,23 @@ and CopyEngine(family : DeviceQueueFamily) =
 
         if size > 0L then () // trigger.Signal()
 
+    /// Enqueues the commands and waits for them to be submitted.
     member x.EnqueueSafe(commands : seq<CopyCommand>) =
-        let v = Interlocked.Increment(&vEnqueue)
-        let size = 
+        let enq, size =
             lock lockObj (fun () ->
+                vEnqueue <- vEnqueue + 1L
                 pending.AddRange commands
-                        
-                //pending.AddRange commands
-                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L 
+
+                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L
                 totalSize <- totalSize + s
 
                 Monitor.PulseAll lockObj
 
-                s
+                vEnqueue, s
             )
 
         lock enqueueMon (fun () -> 
-            while vDone < v do
+            while vDone < enq do
                 Monitor.Wait enqueueMon |> ignore
         )
         if size > 0L then () // trigger.Signal()
@@ -937,10 +934,11 @@ and [<AbstractClass>] Resource =
             elif refs = 0 then
                 x.Destroy()
 
-        abstract member Destroy : unit -> unit
-
         abstract member IsValid : bool
-        default x.IsValid = x.Device.Handle <> 0n
+        default x.IsValid =
+            not x.Device.IsDisposed && x.RefCount > 0
+
+        abstract member Destroy : unit -> unit
 
         new(device : Device) = { Device = device; RefCount = 1 }
 
@@ -955,7 +953,7 @@ and [<AbstractClass>] Resource<'a when 'a : unmanaged and 'a : equality> =
         val mutable public Handle : 'a
 
         override x.IsValid =
-            not x.Device.IsDisposed && x.Handle <> Unchecked.defaultof<_>
+            base.IsValid && x.Handle <> Unchecked.defaultof<_>
 
         new(device : Device, handle : 'a) =
             #if DEBUG

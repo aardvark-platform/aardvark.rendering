@@ -14,24 +14,18 @@ open System
 let main argv = 
     
 
-    (* failure cases: https://github.com/aardvark-platform/aardvark.rendering/issues/69
-
-        Vk:
-            prepareTexture
-
-    *)
+    (* see: https://github.com/aardvark-platform/aardvark.rendering/issues/69 *)
 
     let mutable running = true
     let prepareIt = true       // OK
     let inlineDispose = true   // OK
-    let perObjTexture = false  // OK
-    let prepareTexture = false // GL: OK, Vk: Fail (Copy engine sync issue?, sync upload works, how does 4089ebc1 fix relate to this?)
+    let perObjTexture = true   // OK
+    let prepareTexture = true  // OK
     let addRemoveTest = true   // OK
     let textureTest = true     // OK
     let jitterFrames = false   // OK
-    
-    Aardvark.Init()
 
+    Aardvark.Init()
 
     use app = new VulkanApplication(debug = Vulkan.DebugConfig.Default)
     //GL.Config.UseNewRenderTask <- true
