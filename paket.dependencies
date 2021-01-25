@@ -47,6 +47,8 @@ nuget NUnit.Console                      ~> 3.8.0
 nuget NUnit                              ~> 3.9.0
 nuget FsUnit                             ~> 3.1.0
 nuget System.Collections.Immutable       ~> 1.7.0
+nuget NUnit3TestAdapter                  ~> 3.17.0
+nuget Microsoft.NET.Test.Sdk             ~> 16.8.3
 
 nuget SixLabors.ImageSharp               ~> 1.0.0-beta0007
 

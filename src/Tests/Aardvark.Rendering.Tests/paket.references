@@ -10,3 +10,5 @@ NUnit
 FShade.GLSL
 Unofficial.OpenTK
 Unofficial.OpenTK.GLControl
+NUnit3TestAdapter
+Microsoft.NET.Test.Sdk

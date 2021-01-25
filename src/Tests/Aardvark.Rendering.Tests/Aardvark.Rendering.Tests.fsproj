@@ -2,6 +2,7 @@
 <Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
   <PropertyGroup>
     <TargetFramework>netcoreapp3.1</TargetFramework>
+    <GenerateProgramFile>false</GenerateProgramFile>
     <OutputType>Exe</OutputType>	
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
     <UseWindowsForms>true</UseWindowsForms>
@@ -14,6 +15,7 @@
     <OutputPath>..\..\..\bin\Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="SgTest.fs" />
     <Compile Include="MultiStageAgTest.fs" />
     <Compile Include="RenderingTests.fs" />
     <Compile Include="PerformanceTest.fs" />

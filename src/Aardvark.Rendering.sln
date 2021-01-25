@@ -96,7 +96,7 @@ Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Demo", "Demo", "{C664AC25-5
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{80F74456-D82F-4D38-83FE-362EFD0C2FCB}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Rendering.GL.Tests", "Tests\Aardvark.Rendering.GL.Tests\Aardvark.Rendering.GL.Tests.fsproj", "{EBC7AF0C-DFDC-49C0-9939-630EEAB06C73}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Rendering.Tests", "Tests\Aardvark.Rendering.Tests\Aardvark.Rendering.Tests.fsproj", "{EBC7AF0C-DFDC-49C0-9939-630EEAB06C73}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Examples", "Demo\Examples\Examples.fsproj", "{6C943F93-9A9A-4A57-9A75-A235A3443C22}"
 EndProject
@@ -189,7 +189,7 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "09 - MappedBufferPerformanc
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "33 - Opc", "Examples (netcore)\33 - Opc\33 - Opc.fsproj", "{9867A2D4-E656-4971-BF58-73C53A1546DA}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CSharpInteropTest", "Tests\CSharpInteropTest\CSharpInteropTest.csproj", "{CD4017F0-1BFA-45B1-A117-22536073D5A7}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CSharpInteropTest", "Tests\CSharpInteropTest\CSharpInteropTest.csproj", "{CD4017F0-1BFA-45B1-A117-22536073D5A7}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution

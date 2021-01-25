@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Rendering.GL.Tests
+﻿namespace Aardvark.Rendering.Tests
 
 open System
 open NUnit.Framework
@@ -47,7 +47,7 @@ module ``Rendering Tests`` =
         PixTexture2d(PixImageMipMap [|checkerBoardImage :> PixImage|], true) :> ITexture |> AVal.constant
 
 
-    [<Test>]
+    [<Test; Ignore("Broken")>]
     let ``[Vulkan] textures working``() =
         Aardvark.Init()
 
@@ -321,7 +321,7 @@ module RenderingTests =
       
      
 
-    [<Test>]
+    [<Test; Ignore("Broken")>]
     let ``[GL] simple render to texture``() =
         
         let vec = Vector.zeroCreate 1000
@@ -391,7 +391,7 @@ module RenderingTests =
 
         ()
 
-    [<Test>]
+    [<Test; Ignore("Broken")>]
     let ``[GL] simple render to multiple texture``() =
 
         use runtime = new Runtime()
@@ -454,7 +454,7 @@ module RenderingTests =
 
         ()
 
-    [<Test>]
+    [<Test; Ignore("Broken")>]
     let ``[GL] nested trafos``() =
         
         let leaf = quad |> Sg.ofIndexedGeometry
@@ -570,7 +570,7 @@ module RenderingTests =
 
         ()
 
-    [<Test>]
+    [<Test; Ignore("Broken")>]
     let ``[GL] compile performance``() =
         let leaf = quad |> Sg.ofIndexedGeometry
         let screen = V2i(2048, 2048)
