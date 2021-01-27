@@ -614,12 +614,12 @@ module Resources =
         )
 
         
-    type ShaderProgramResource(owner : IResourceCache, key : list<obj>, device : Device, signature : IFramebufferSignature, input : ISurface, top : IndexedGeometryMode) =
+    type ShaderProgramResource(owner : IResourceCache, key : list<obj>, device : Device, pass : RenderPass, input : ISurface, top : IndexedGeometryMode) =
         inherit ImmutableResourceLocation<ISurface, ShaderProgram>(
             owner, key, 
             AVal.constant input,
             {
-                icreate = fun (b : ISurface) -> device.CreateShaderProgram(b)
+                icreate = fun (b : ISurface) -> device.CreateShaderProgram(pass, b)
                 idestroy = fun p -> p.Dispose()
                 ieagerDestroy = false
             }
@@ -1410,12 +1410,12 @@ type ResourceManager(user : IResourceUser, device : Device) =
             [input :> obj], fun cache key -> new ImageSamplerArrayResource(cache, key, input)
         )
 
-    member x.CreateShaderProgram(data : ISurface) =
-        let programKey = (data) :> obj
+    member x.CreateShaderProgram(pass : RenderPass, data : ISurface) =
+        let programKey = [pass :> obj; data :> obj] :> obj
 
         let program =
             simpleSurfaceCache.GetOrAdd(programKey, fun _ ->
-                device.CreateShaderProgram(data)
+                device.CreateShaderProgram(pass, data)
             )
 
         let resource =
@@ -1481,8 +1481,8 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
                 layout, x.CreateShaderProgram(layout, module_)
 
-            | Surface.Backend s -> 
-                x.CreateShaderProgram(s)
+            | Surface.Backend s ->
+                x.CreateShaderProgram(signature, s)
 
             | Surface.None -> 
                 failwith "[Vulkan] encountered empty surface"

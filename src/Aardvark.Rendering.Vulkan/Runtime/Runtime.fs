@@ -237,8 +237,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
 
-    member x.PrepareSurface (fboSignature : IFramebufferSignature, surface : ISurface) =
-        device.CreateShaderProgram(surface) :> IBackendSurface
+    member x.PrepareSurface (signature : IFramebufferSignature, surface : ISurface) =
+        device.CreateShaderProgram(unbox<RenderPass> signature, surface) :> IBackendSurface
 
     member x.DeleteSurface (bs : IBackendSurface) =
         Disposable.dispose (unbox<ShaderProgram> bs)
