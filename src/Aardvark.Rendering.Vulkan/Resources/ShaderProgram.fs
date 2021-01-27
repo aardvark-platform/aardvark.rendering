@@ -580,16 +580,6 @@ module ShaderProgram =
     let internal cache = MBrace.FsPickler.PicklerCache.FromCustomPicklerRegistry(registry)
     let internal pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer(picklerResolver = cache)
 
-    //let private shaderCachePath =
-    //    let path = 
-    //        Path.combine [
-    //            Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
-    //            "Aardvark"
-    //            "VulkanShaderCache"
-    //        ]
-    //    if not (Directory.Exists path) then Directory.CreateDirectory path |> ignore
-    //    path
-
     type private ShaderProgramData =
         {
             glsl        : string

@@ -149,9 +149,9 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
 
     static let defaultShaderCachePath = 
                         Some (Path.combine [
-                                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
-                                "Aardvark"
-                                "OpenGlShaderCache"
+                                CachingProperties.CacheDirectory
+                                "Shaders"
+                                "OpenGL"
                              ])
 
     static let nopDisposable = { new IDisposable with member x.Dispose() = () }

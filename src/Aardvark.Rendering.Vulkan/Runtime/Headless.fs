@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
+open Aardvark.Base
 
 type HeadlessVulkanApplication(debug : DebugConfig option, instanceExtensions : list<string>, deviceExtensions : PhysicalDevice -> list<string>) =
     let requestedExtensions =
@@ -60,11 +61,11 @@ type HeadlessVulkanApplication(debug : DebugConfig option, instanceExtensions : 
 
     let defaultCachePath =
         let dir =
-            System.IO.Path.Combine(
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData),
-                "Aardvark",
-                "VulkanShaderCache"
-            )
+            Path.combine [
+                CachingProperties.CacheDirectory
+                "Shaders"
+                "Vulkan"
+            ]
         runtime.ShaderCachePath <- Some dir
         dir
 

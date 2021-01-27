@@ -376,9 +376,9 @@ type VulkanApplication(debug : DebugConfig option, chooseDevice : list<PhysicalD
     let defaultCachePath =
         let dir =
             Path.combine [
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
-                "Aardvark"
-                "VulkanShaderCache"
+                CachingProperties.CacheDirectory
+                "Shaders"
+                "Vulkan"
             ]
         runtime.ShaderCachePath <- Some dir
         dir
