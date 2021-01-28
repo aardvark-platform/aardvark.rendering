@@ -651,6 +651,10 @@ type Runtime() =
             else
                 Set.singleton ClippingInputPrimitives
 
+        member x.ShaderCachePath
+            with get() = ctx.ShaderCachePath
+            and set(value) = ctx.ShaderCachePath <- value
+
     
     member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
         let src = unbox<Texture> src

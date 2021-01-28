@@ -41,6 +41,9 @@ and IRuntime =
 
     abstract member CreateGeometryPool : Map<Symbol, Type> -> IGeometryPool
 
+    /// Gets or sets the path of the shader cache.
+    abstract member ShaderCachePath : Option<string> with get, set
+
 [<Extension>]
 type RenderTaskRunExtensions() =
     // Overloads with queries

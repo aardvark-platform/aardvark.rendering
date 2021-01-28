@@ -404,6 +404,10 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.CreatePipelineQuery(statistics) = failwith ""
         member x.SupportedPipelineStatistics = Set.empty
 
+        member x.ShaderCachePath
+            with get() = None
+            and set(_) = ()
+
 type MultiApplication(apps : IApplication[]) =
     
     let runtime = new MultiRuntime(apps |> Array.map (fun a -> a.Runtime))

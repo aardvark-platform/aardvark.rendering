@@ -649,3 +649,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.SupportedPipelineStatistics =
             x.SupportedPipelineStatistics
+
+        member x.ShaderCachePath
+            with get() = x.ShaderCachePath
+            and set(value) = x.ShaderCachePath <- value
