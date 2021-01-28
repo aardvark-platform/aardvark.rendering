@@ -4,15 +4,6 @@ open System
 open Aardvark.Base
 open FSharp.Data.Adaptive
 
-type FramebufferLayout =
-    {
-        ColorAttachments : Map<int, Symbol * AttachmentSignature>
-        DepthAttachment : Option<AttachmentSignature>
-        StencilAttachment : Option<AttachmentSignature>
-        LayerCount : int
-        PerLayerUniforms : Set<string>
-    }
-
 [<AllowNullLiteral>]
 type IFramebufferSignature =
     abstract member Runtime : IFramebufferRuntime

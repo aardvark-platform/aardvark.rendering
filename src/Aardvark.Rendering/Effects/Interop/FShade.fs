@@ -333,7 +333,15 @@ module FShadeInterop =
             IndexedGeometryMode.QuadList, InputTopology.Patch 4
         ]
 
-    type FramebufferLayout with
+    // Used as part of the key in shader caches
+    type FramebufferLayout =
+        {
+            ColorAttachments : Map<int, Symbol * AttachmentSignature>
+            DepthAttachment : Option<AttachmentSignature>
+            StencilAttachment : Option<AttachmentSignature>
+            LayerCount : int
+            PerLayerUniforms : Set<string>
+        }
 
         member x.EffectConfig(depthRange : Range1d, flip : bool) =
             let outputs =
@@ -399,6 +407,15 @@ module FShadeInterop =
                     (-1, DefaultSemantic.Depth) :: colors
 
     type IFramebufferSignature with
+        member x.Layout : FramebufferLayout =
+            {
+                ColorAttachments = x.ColorAttachments
+                DepthAttachment = x.DepthAttachment
+                StencilAttachment = x.StencilAttachment
+                LayerCount = x.LayerCount
+                PerLayerUniforms = x.PerLayerUniforms
+            }
+
         member x.EffectConfig(depthRange : Range1d, flip : bool) = x.Layout.EffectConfig(depthRange, flip)
         member x.Link(effect : Effect, depthRange : Range1d, flip : bool, top : IndexedGeometryMode) = x.Layout.Link(effect, x.Runtime.DeviceCount, depthRange, flip, top)
         member x.ExtractSemantics() = x.Layout.ExtractSemantics()

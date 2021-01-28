@@ -136,18 +136,6 @@ module IFramebufferSignatureExtensions =
         | Some mine, Some other -> signatureAssignableFrom mine other
         | _ -> true
 
-    type IFramebufferSignature with
-
-        /// Gets the framebuffer layout described by the signature.
-        member x.Layout =
-            {
-                ColorAttachments = x.ColorAttachments
-                DepthAttachment = x.DepthAttachment
-                StencilAttachment = x.StencilAttachment
-                LayerCount = x.LayerCount
-                PerLayerUniforms = x.PerLayerUniforms
-            }
-
     [<AbstractClass; Sealed; Extension>]
     type IFramebufferSignatureExtensions private() =
 
