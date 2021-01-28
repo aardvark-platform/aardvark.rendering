@@ -420,11 +420,25 @@ module ProgramExtensions =
 
     open FShade.Imperative
     open FShade
+
+    type private CodeCacheKey =
+        {
+            id : string
+            layout : FramebufferLayout
+        }
+
+    type private StaticShaderCacheKey =
+        {
+            effect : Effect
+            layout : FramebufferLayout
+            topology : IndexedGeometryMode
+            deviceCount : int
+        }
   
     // NOTE: shader caches no longer depending on Context. shaders objects can be shared between contexts, even if a context is using a different GL profile
-    let private codeCache = ConcurrentDictionary<string * IFramebufferSignature, Error<Program>>()
+    let private codeCache = ConcurrentDictionary<CodeCacheKey, Error<Program>>()
     
-    let private staticShaderCache = ConcurrentDictionary<FShade.Effect * IFramebufferSignature, Error<GLSL.GLSLProgramInterface * aval<Program>>>()
+    let private staticShaderCache = ConcurrentDictionary<StaticShaderCacheKey, Error<GLSL.GLSLProgramInterface * aval<Program>>>()
     let private dynamicShaderCache = ConditionalWeakTable<(FShade.EffectConfig -> FShade.EffectInputLayout * aval<FShade.Imperative.Module>), Error<GLSL.GLSLProgramInterface * aval<Program>>>()
     let private shaderPickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
@@ -547,9 +561,15 @@ module ProgramExtensions =
                 GL.Check "could not delete program"
             )
 
-        member x.TryCompileProgram(id : string, signature : IFramebufferSignature, code : Lazy<GLSL.GLSLShader>) : Error<_> =
-            codeCache.GetOrAdd((id, signature), fun (id, signature) ->
-                
+        member x.TryCompileProgram(id : string, signature : IFramebufferSignature, code : Lazy<GLSL.GLSLShader>) =
+            x.TryCompileProgram(id, signature.Layout, code)
+
+        member x.TryCompileProgram(id : string, layout : FramebufferLayout, code : Lazy<GLSL.GLSLShader>) : Error<_> =
+
+            let key : CodeCacheKey =
+                { id = id; layout = layout }
+
+            codeCache.GetOrAdd(key, fun key ->
 
                 let fixBindings (p : Program) (iface : FShade.GLSL.GLSLProgramInterface) = 
                     if p.Context.FShadeBackend.Config.bindingMode = FShade.GLSL.BindingMode.None then
@@ -617,10 +637,10 @@ module ProgramExtensions =
                             let key = 
                                 {   // NOTE: Profile mask can be None, Core or Compatibility, shaders are not necessary compatible between those
                                     device      = driver.vendor + "_" + driver.renderer + "_" + driver.versionString + "/" + driver.profileMask.ToString() 
-                                    id          = id
-                                    outputs     = signature.ColorAttachments |> Map.toList |> List.map (fun (id,(name, s)) -> string name, (id, s.format)) |> Map.ofList
-                                    layered     = signature.PerLayerUniforms
-                                    layerCount  = signature.LayerCount
+                                    id          = key.id
+                                    outputs     = key.layout.ColorAttachments |> Map.toList |> List.map (fun (id,(name, s)) -> string name, (id, s.format)) |> Map.ofList
+                                    layered     = key.layout.PerLayerUniforms
+                                    layerCount  = key.layout.LayerCount
                                 }
 
                             let hash = shaderPickler.ComputeHash(key).Hash |> System.Guid
@@ -748,14 +768,22 @@ module ProgramExtensions =
         member x.TryCreateProgram(signature : IFramebufferSignature, surface : Surface, topology : IndexedGeometryMode) : Error<GLSL.GLSLProgramInterface * aval<Program>> =
             match surface with
                 | Surface.FShadeSimple effect ->
-                    staticShaderCache.GetOrAdd((effect, signature), fun (effect, signature) ->
+                    let key : StaticShaderCacheKey =
+                        {
+                            effect = effect
+                            layout = signature.Layout
+                            topology = topology
+                            deviceCount = signature.Runtime.DeviceCount
+                        }
+
+                    staticShaderCache.GetOrAdd(key, fun key ->
                         let glsl = 
                             lazy (
-                                let module_ = signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
+                                let module_ = key.layout.Link(key.effect, key.deviceCount, Range1d(-1.0, 1.0), false, key.topology)
                                 ModuleCompiler.compileGLSL x.FShadeBackend module_
                             )
 
-                        match x.TryCompileProgram(effect.Id, signature, glsl) with
+                        match x.TryCompileProgram(key.effect.Id, key.layout, glsl) with
                             | Success (prog) ->
                                 Success (prog.Interface, AVal.constant prog)
                             | Error e ->

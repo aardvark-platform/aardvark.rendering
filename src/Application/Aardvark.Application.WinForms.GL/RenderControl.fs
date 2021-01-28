@@ -38,25 +38,21 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
     let mutable task : Option<IRenderTask> = None
     let mutable taskSubscription : IDisposable = null
 
-    let depthStencilSignature =
+    let depthStencilFormat =
         match Config.DepthBits, Config.StencilBits with
-            | 0, 0 -> None
-            | 16, 0 -> Some { format = RenderbufferFormat.DepthComponent16; samples = samples }
-            | 24, 0 -> Some { format = RenderbufferFormat.DepthComponent24; samples = samples }
-            | 32, 0 -> Some { format = RenderbufferFormat.DepthComponent32; samples = samples }
-            | 24, 8 -> Some { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
-            | 32, 8 -> Some { format = RenderbufferFormat.Depth32fStencil8; samples = samples }
-            | _ -> failwith "invalid depth-stencil mode"
+        | 0, 0 -> None
+        | 16, 0 -> Some RenderbufferFormat.DepthComponent16
+        | 24, 0 -> Some RenderbufferFormat.DepthComponent24
+        | 32, 0 -> Some RenderbufferFormat.DepthComponent32
+        | 24, 8 -> Some RenderbufferFormat.Depth24Stencil8
+        | 32, 8 -> Some RenderbufferFormat.Depth32fStencil8
+        | _ -> failwith "invalid depth-stencil mode"
 
     let fboSignature =
-        FramebufferSignature(
-            runtime,
-            Map.ofList [0, (DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples })],
-            depthStencilSignature,
-            None,
-            1,
-            Set.empty
-        )
+        let depthStencilAtt =
+            depthStencilFormat |> Option.map (fun f -> DefaultSemantic.Depth, f) |> Option.toList
+
+        runtime.CreateFramebufferSignature(samples, [DefaultSemantic.Colors, RenderbufferFormat.Rgba8] @ depthStencilAtt)
 
     let mutable contextHandle : ContextHandle = null
     let defaultFramebuffer =
@@ -356,13 +352,13 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 //        sizes.Emit <| V2i(base.ClientSize.Width, base.ClientSize.Height)
 
     member x.Time = time :> aval<_>
-    member x.FramebufferSignature = fboSignature :> IFramebufferSignature
+    member x.FramebufferSignature = fboSignature
 
     member x.BeforeRender = beforeRender.Publish
     member x.AfterRender = afterRender.Publish
 
     interface IRenderTarget with
-        member x.FramebufferSignature = fboSignature :> IFramebufferSignature
+        member x.FramebufferSignature = fboSignature
         member x.Runtime = runtime :> IRuntime
         member x.Time = time :> aval<_>
         member x.RenderTask

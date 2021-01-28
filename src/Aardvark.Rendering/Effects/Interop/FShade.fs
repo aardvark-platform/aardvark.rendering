@@ -333,17 +333,16 @@ module FShadeInterop =
             IndexedGeometryMode.QuadList, InputTopology.Patch 4
         ]
 
-    type IFramebufferSignature with
+    type FramebufferLayout with
 
         member x.EffectConfig(depthRange : Range1d, flip : bool) =
-            let outputs = 
-                x.ColorAttachments 
-                    |> Map.toList 
+            let outputs =
+                x.ColorAttachments
+                    |> Map.toList
                     |> List.map (fun (slot, (name, att)) ->
                         match builtInTypes.TryGetValue name with
                             | (true, t) -> (string name, t, slot)
                             | _ -> (string name, formatToType att.format, slot)
-                        
                        )
             { EffectConfig.ofList outputs with
                 depthRange = depthRange
@@ -351,44 +350,40 @@ module FShadeInterop =
             }
 
 
-        member x.Link(effect : Effect, depthRange : Range1d, flip : bool, top : IndexedGeometryMode) =
-            let outputs = 
-                x.ColorAttachments 
-                    |> Map.toList 
+        member x.Link(effect : Effect, deviceCount : int, depthRange : Range1d, flip : bool, top : IndexedGeometryMode) =
+            let outputs =
+                x.ColorAttachments
+                    |> Map.toList
                     |> List.map (fun (slot, (name, att)) ->
                         match builtInTypes.TryGetValue name with
                             | (true, t) -> (string name, t, slot)
                             | _ -> (string name, formatToType att.format, slot)
-                        
                        )
 
             let top = toInputTopology top
 
-            let config = 
+            let config =
                 { EffectConfig.ofList outputs with
                     depthRange = depthRange
                     flipHandedness = flip
                 }
 
-
-            let deviceCount = x.Runtime.DeviceCount
             if deviceCount > 1 then
                 if x.LayerCount > 1 then
-                    effect 
+                    effect
                         // TODO: other topologies????
                         |> Effect.toLayeredEffect x.LayerCount (x.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq) top
                         |> withDeviceIndex deviceCount
                         |> Effect.toModule config
-                else 
-                    effect 
+                else
+                    effect
                         // TODO: other topologies????
                         |> Effect.toMultiViewportEffect deviceCount Map.empty top
                         |> withDeviceIndex deviceCount
                         |> Effect.toModule config
             else
-                
                 if x.LayerCount > 1 then
-                    effect 
+                    effect
                         // TODO: other topologies????
                         |> Effect.toLayeredEffect x.LayerCount (x.PerLayerUniforms |> Seq.map (fun n -> n, n) |> Map.ofSeq) top
                         |> Effect.toModule config
@@ -398,10 +393,15 @@ module FShadeInterop =
         member x.ExtractSemantics() =
             let colors = x.ColorAttachments |> Map.toSeq |> Seq.map (fun (k,(i,s)) -> (k,i)) |> Seq.toList
             match x.DepthAttachment with
-                | None -> 
+                | None ->
                     colors
-                | Some d -> 
-                    (-1,DefaultSemantic.Depth) :: colors
+                | Some d ->
+                    (-1, DefaultSemantic.Depth) :: colors
+
+    type IFramebufferSignature with
+        member x.EffectConfig(depthRange : Range1d, flip : bool) = x.Layout.EffectConfig(depthRange, flip)
+        member x.Link(effect : Effect, depthRange : Range1d, flip : bool, top : IndexedGeometryMode) = x.Layout.Link(effect, x.Runtime.DeviceCount, depthRange, flip, top)
+        member x.ExtractSemantics() = x.Layout.ExtractSemantics()
 
 
     type FShadeSurface private(effect : FShadeEffect) =

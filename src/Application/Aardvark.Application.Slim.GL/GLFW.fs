@@ -873,15 +873,11 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
     let mouse = Aardvark.Application.EventMouse(true)
 
     let signature =
-        Aardvark.Rendering.GL.FramebufferSignature(
-            app.Runtime,
-            Map.ofList [0, (DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples })],
-            Some { format = RenderbufferFormat.Depth24Stencil8; samples = samples },
-            None,
-            1,
-            Set.empty
-        )
-        
+        app.Runtime.CreateFramebufferSignature(samples, [
+            DefaultSemantic.Colors, RenderbufferFormat.Rgba8
+            DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+        ])
+
     let currentSize =
         let mutable s = V2i.Zero
         glfw.GetFramebufferSize(win, &s.X, &s.Y)
@@ -1074,7 +1070,7 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
 
     member x.AfterRender = afterRender.Publish
     member x.BeforeRender = beforeRender.Publish
-    member x.FramebufferSignature  = signature :> IFramebufferSignature
+    member x.FramebufferSignature  = signature
     member x.RenderTask
         with get () = renderTask
         and set (v: IRenderTask) = 

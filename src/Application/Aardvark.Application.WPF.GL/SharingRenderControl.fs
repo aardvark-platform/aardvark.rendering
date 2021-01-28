@@ -419,14 +419,10 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
     let mutable renderTask = RenderTask.empty
 
     let signature =
-        new FramebufferSignature(
-            runtime, 
-            Map.ofList [0, (DefaultSemantic.Colors, { samples = samples; format = RenderbufferFormat.Rgba8 })], 
-            Some { samples = samples; format = RenderbufferFormat.Depth24Stencil8 }, 
-            None,
-            1,
-            Set.empty
-        )
+        runtime.CreateFramebufferSignature(samples, [
+            DefaultSemantic.Colors, RenderbufferFormat.Rgba8
+            DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+        ])
 
     let startTime = DateTime.Now
     let sw = System.Diagnostics.Stopwatch.StartNew()
@@ -679,7 +675,7 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
 
     member x.ContextHandle = handle
 
-    member x.FramebufferSignature = signature :> IFramebufferSignature
+    member x.FramebufferSignature = signature
     
     member x.Keyboard = keyboard :> IKeyboard
     member x.Mouse = mouse :> IMouse

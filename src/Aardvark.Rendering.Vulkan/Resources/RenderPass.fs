@@ -19,6 +19,9 @@ type RenderPass =
         val mutable public LayerCount : int
         val mutable public PerLayerUniforms : Set<string>
 
+        member x.Runtime =
+            x.Device.Runtime
+
         // Use depth slot if either depth or combined depth-stencil attachment
         member x.DepthAttachment =
             x.DepthStencilAttachment
@@ -53,17 +56,10 @@ type RenderPass =
                 x.Handle <- VkRenderPass.Null
 
         interface IFramebufferSignature with
-            member x.Runtime = x.Device.Runtime :> IFramebufferRuntime
+            member x.Runtime = x.Runtime :> IFramebufferRuntime
             member x.ColorAttachments = x.ColorAttachments
             member x.DepthAttachment = x.DepthAttachment
             member x.StencilAttachment = x.StencilAttachment
-
-            member x.IsAssignableFrom (other : IFramebufferSignature) =
-                match other with
-                | :? RenderPass as other ->
-                    x.Handle = other.Handle
-                | _ ->
-                    false
 
             member x.LayerCount = x.LayerCount
             member x.PerLayerUniforms = x.PerLayerUniforms

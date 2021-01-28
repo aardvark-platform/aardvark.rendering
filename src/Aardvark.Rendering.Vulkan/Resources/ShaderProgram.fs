@@ -367,6 +367,14 @@ module ShaderProgram =
         new ShaderProgram(device, shaders, layout, code, iface)
 
 
+    type private EffectCacheKey =
+        {
+            effect : FShade.Effect
+            layout : FramebufferLayout
+            topology : IndexedGeometryMode
+            deviceCount : int
+        }
+
     let private effectCache = Symbol.Create "effectCache"
     let private moduleCache = Symbol.Create "moduleCache"
 
@@ -691,23 +699,31 @@ module ShaderProgram =
         )
 
     let ofEffect (effect : FShade.Effect) (mode : IndexedGeometryMode) (pass : RenderPass) (device : Device) =
-        device.GetCached(effectCache, (effect, mode, pass), fun (effect, mode, pass) ->
+        let key : EffectCacheKey =
+            {
+                effect = effect
+                layout = pass.Layout
+                topology = mode
+                deviceCount = pass.Runtime.DeviceCount
+            }
+
+        device.GetCached(effectCache, key, fun key ->
             match device.ShaderCachePath with
                 | Some shaderCachePath ->
                     let fileName = 
-                        let colors = pass.ColorAttachments |> Map.map (fun _ (a,b) -> a.ToString())
-                        let depth = pass.DepthStencilAttachment |> Option.map (fun (a,b) -> a)
-                        if pass.LayerCount > 1 then
-                            hashFileName (effect.Id, mode, colors, depth, pass.LayerCount, pass.PerLayerUniforms)
+                        let colors = key.layout.ColorAttachments |> Map.map (fun _ (a,b) -> a.ToString())
+                        let depth = key.layout.DepthAttachment
+                        if key.layout.LayerCount > 1 then
+                            hashFileName (key.effect.Id, key.topology, colors, depth, key.layout.LayerCount, key.layout.PerLayerUniforms)
                         else
-                            hashFileName (effect.Id, colors, depth)
+                            hashFileName (key.effect.Id, colors, depth)
 
                     let cacheFile = Path.Combine(shaderCachePath, fileName + ".effect")
                     match tryRead cacheFile device with
                         | Some p ->
                             if device.ValidateShaderCaches then
                                 let glsl = 
-                                    pass.Link(effect, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, mode)
+                                    key.layout.Link(key.effect, key.deviceCount, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, key.topology)
                                     |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
                                     |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
 
@@ -728,7 +744,7 @@ module ShaderProgram =
 
                         | None ->
                             let glsl = 
-                                pass.Link(effect, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, mode)
+                                key.layout.Link(key.effect, key.deviceCount, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, key.topology)
                                 |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
                                 |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
 
@@ -738,7 +754,7 @@ module ShaderProgram =
 
                 | None ->
                     let glsl = 
-                        pass.Link(effect, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, mode)
+                        key.layout.Link(key.effect, key.deviceCount, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, key.topology)
                         |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
                         |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
 

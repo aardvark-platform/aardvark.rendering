@@ -48,7 +48,6 @@ type MultiRenderTask(runtime : MultiRuntime, signature : IFramebufferSignature, 
 and MultiFramebufferSignature(runtime : IRuntime, signatures : IFramebufferSignature[]) =
     member x.Signatures = signatures
     interface IFramebufferSignature with
-        member x.IsAssignableFrom _ = true
         member x.ColorAttachments = signatures.[0].ColorAttachments
         member x.DepthAttachment = signatures.[0].DepthAttachment
         member x.StencilAttachment = signatures.[0].StencilAttachment

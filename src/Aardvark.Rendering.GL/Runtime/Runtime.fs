@@ -11,62 +11,6 @@ open Aardvark.Rendering.GL
 
 #nowarn "9"
 
-type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>, layers : int, perLayer : Set<string>) =
-   
-    let signatureAssignableFrom (mine : AttachmentSignature) (other : AttachmentSignature) =
-        let myCol = RenderbufferFormat.toColFormat mine.format
-        let otherCol = RenderbufferFormat.toColFormat other.format
-        
-        myCol = otherCol
-
-    let colorsAssignableFrom (mine : Map<int, Symbol * AttachmentSignature>) (other : Map<int, Symbol * AttachmentSignature>) =
-        mine |> Map.forall (fun id (sem, signature) ->
-            match Map.tryFind id other with
-                | Some (otherSem, otherSig) when sem = otherSem ->
-                    signatureAssignableFrom signature otherSig
-                | None -> true
-                | _ -> false
-        )
-
-    let depthAssignableFrom (mine : Option<AttachmentSignature>) (other : Option<AttachmentSignature>) =
-        match mine, other with
-            | Some mine, Some other -> signatureAssignableFrom mine other
-            | _ -> true
-
-    member x.Runtime = runtime
-    member x.ColorAttachments = colors
-    member x.DepthAttachment = depth
-    member x.StencilAttachment = stencil
-
-    member x.LayerCount = layers
-    member x.PerLayerUniforms = perLayer
-
-    member x.IsAssignableFrom (other : IFramebufferSignature) =
-        if x.Equals other then 
-            true
-        else
-            match other with
-                | :? FramebufferSignature as other ->
-                    layers = other.LayerCount &&
-                    perLayer = other.PerLayerUniforms &&
-                    runtime = other.Runtime &&
-                    colorsAssignableFrom colors other.ColorAttachments
-                    // TODO: check depth and stencil (cumbersome for combined DepthStencil attachments)
-                | _ ->
-                    false
-
-    override x.ToString() =
-        sprintf "{ ColorAttachments = %A; DepthAttachment = %A; StencilAttachment = %A }" colors depth stencil
-
-    interface IFramebufferSignature with
-        member x.Runtime = runtime :> IFramebufferRuntime
-        member x.ColorAttachments = colors
-        member x.DepthAttachment = depth
-        member x.StencilAttachment = stencil
-        member x.IsAssignableFrom other = x.IsAssignableFrom other
-        member x.LayerCount = layers
-        member x.PerLayerUniforms = perLayer
-
 module private Align =
     let next (a : int) (v : int) =
         if v % a = 0 then v
@@ -399,7 +343,7 @@ type Runtime() =
         member x.ResourceManager = manager :> IResourceManager
 
         member x.CreateFramebufferSignature(attachments : Map<Symbol, AttachmentSignature>, layers : int, perLayer : Set<string>) =
-            x.CreateFramebufferSignature(attachments, layers, perLayer) :> IFramebufferSignature
+            x.CreateFramebufferSignature(attachments, layers, perLayer)
 
             
         member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) =
@@ -703,7 +647,6 @@ type Runtime() =
         let stencil =
             Map.tryFind DefaultSemantic.Stencil attachments
 
-
         let indexedColors =
             attachments
                 |> Map.remove DefaultSemantic.Depth
@@ -717,7 +660,15 @@ type Runtime() =
                 |> List.mapi (fun i t -> (i, t))
                 |> Map.ofList
 
-        FramebufferSignature(x, indexedColors, depth, stencil, layers, perLayer)
+        { new Object() with
+            member _.ToString() = sprintf "{ ColorAttachments = %A; DepthAttachment = %A; StencilAttachment = %A }" indexedColors depth stencil
+          interface IFramebufferSignature with
+            member _.Runtime = x :> IFramebufferRuntime
+            member _.ColorAttachments = indexedColors
+            member _.DepthAttachment = depth
+            member _.StencilAttachment = stencil
+            member _.LayerCount = layers
+            member _.PerLayerUniforms = perLayer }
 
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)

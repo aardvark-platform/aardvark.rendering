@@ -116,15 +116,58 @@ type IFramebufferRuntimeExtensions private() =
         this.Clear(fbo, clearColors, None, None)
 
 
-[<AbstractClass; Sealed; Extension>]
-type IFramebufferSignatureExtensions private() =
+[<AutoOpen>]
+module IFramebufferSignatureExtensions =
 
-    /// Creates a framebuffer of the given signature and with the given attachments.
-    [<Extension>]
-    static member CreateFramebuffer (this : IFramebufferSignature, attachments : Map<Symbol, IFramebufferOutput>) =
-        this.Runtime.CreateFramebuffer(this, attachments)
+    let private signatureAssignableFrom (mine : AttachmentSignature) (other : AttachmentSignature) =
+        RenderbufferFormat.toColFormat mine.format = RenderbufferFormat.toColFormat other.format
 
-    /// Creates a framebuffer of the given signature and with the given attachments.
-    [<Extension>]
-    static member CreateFramebuffer (this : IFramebufferSignature, attachments : seq<Symbol * IFramebufferOutput>) =
-        this.Runtime.CreateFramebuffer(this, attachments)
+    let private colorsAssignableFrom (mine : Map<int, Symbol * AttachmentSignature>) (other : Map<int, Symbol * AttachmentSignature>) =
+        mine |> Map.forall (fun id (sem, signature) ->
+            match Map.tryFind id other with
+            | Some (otherSem, otherSig) when sem = otherSem ->
+                signatureAssignableFrom signature otherSig
+            | None -> true
+            | _ -> false
+        )
+
+    let private depthAssignableFrom (mine : Option<AttachmentSignature>) (other : Option<AttachmentSignature>) =
+        match mine, other with
+        | Some mine, Some other -> signatureAssignableFrom mine other
+        | _ -> true
+
+    type IFramebufferSignature with
+
+        /// Gets the framebuffer layout described by the signature.
+        member x.Layout =
+            {
+                ColorAttachments = x.ColorAttachments
+                DepthAttachment = x.DepthAttachment
+                StencilAttachment = x.StencilAttachment
+                LayerCount = x.LayerCount
+                PerLayerUniforms = x.PerLayerUniforms
+            }
+
+    [<AbstractClass; Sealed; Extension>]
+    type IFramebufferSignatureExtensions private() =
+
+        /// Checks if the signature is assignable from the other signature (i.e. it is a subset of the other signature).
+        [<Extension>]
+        static member IsAssignableFrom (this : IFramebufferSignature, other : IFramebufferSignature) =
+            if LanguagePrimitives.PhysicalEquality this other then
+                true
+            else
+                this.LayerCount = other.LayerCount &&
+                this.PerLayerUniforms = other.PerLayerUniforms &&
+                colorsAssignableFrom this.ColorAttachments other.ColorAttachments
+                // TODO: check depth and stencil (cumbersome for combined DepthStencil attachments)
+
+        /// Creates a framebuffer of the given signature and with the given attachments.
+        [<Extension>]
+        static member CreateFramebuffer (this : IFramebufferSignature, attachments : Map<Symbol, IFramebufferOutput>) =
+            this.Runtime.CreateFramebuffer(this, attachments)
+
+        /// Creates a framebuffer of the given signature and with the given attachments.
+        [<Extension>]
+        static member CreateFramebuffer (this : IFramebufferSignature, attachments : seq<Symbol * IFramebufferOutput>) =
+            this.Runtime.CreateFramebuffer(this, attachments)
