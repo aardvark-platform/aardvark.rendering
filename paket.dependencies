@@ -60,3 +60,4 @@ group Build
 framework: netstandard2.0
 source https://api.nuget.org/v3/index.json
 github aardvark-platform/aardvark.fake:v5
+nuget fake-cli ~> 5.20.4-alpha.1642
