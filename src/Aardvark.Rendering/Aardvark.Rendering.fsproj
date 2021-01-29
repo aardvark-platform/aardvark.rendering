@@ -15,6 +15,7 @@
     <OutputPath>..\..\bin\Release</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="paket.references" />
     <Compile Include="Common\FrameStatistics.fs" />
     <Compile Include="Common\DefaultSemantic.fs" />
     <Compile Include="Common\ComparisonFunction.fs" />

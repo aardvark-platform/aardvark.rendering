@@ -15,6 +15,7 @@
     <OutputPath>..\..\..\bin\Release</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <None Include="paket.references" />
     <None Include="App.config" />
     <Compile Include="Program.fs" />
   </ItemGroup>
@@ -32,6 +33,5 @@
     <ProjectReference Include="..\..\Application\Aardvark.Application.Slim\Aardvark.Application.Slim.fsproj" />
     <ProjectReference Include="..\..\Application\Aardvark.Application\Aardvark.Application.fsproj" />
   </ItemGroup>
-  <Import Project="..\..\..\packages\NETStandard.Library\build\$(__paket__NETStandard_Library_targets).targets" Condition="Exists('..\..\..\packages\NETStandard.Library\build\$(__paket__NETStandard_Library_targets).targets')" Label="Paket" />
   <Import Project="..\..\..\.paket\Paket.Restore.targets" />
 </Project>

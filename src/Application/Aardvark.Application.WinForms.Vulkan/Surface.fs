@@ -18,9 +18,9 @@ open Microsoft.FSharp.NativeInterop
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Surface =
-    module private Xcb = 
+    module internal Xcb = 
         [<DllImport("X11-xcb")>]
-        extern nativeint private XGetXCBConnection(nativeint xdisplay)
+        extern nativeint internal XGetXCBConnection(nativeint xdisplay)
 
     let private staticFlags = BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public
     let private (?) (t : Type) (name : string) =

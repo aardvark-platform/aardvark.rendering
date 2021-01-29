@@ -3,3 +3,5 @@ Aardvark.Base.Runtime
 FShade
 GLSLangSharp
 FSharp.Core
+Aardvark.Base.Tensors
+Aardvark.PixImage.DevIL

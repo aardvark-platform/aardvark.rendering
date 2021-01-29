@@ -31,6 +31,5 @@
     <None Include="FsiHelper.fsx" />
     <Compile Include="Window.fs" />
   </ItemGroup>
-  <Import Project="..\..\..\packages\NETStandard.Library\build\$(__paket__NETStandard_Library_targets).targets" Condition="Exists('..\..\..\packages\NETStandard.Library\build\$(__paket__NETStandard_Library_targets).targets')" Label="Paket" />
   <Import Project="..\..\..\.paket\Paket.Restore.targets" />
 </Project>

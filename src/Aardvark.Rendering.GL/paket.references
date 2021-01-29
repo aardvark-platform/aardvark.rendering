@@ -5,3 +5,5 @@ Aardvark.Geometry
 FShade
 FSharp.Core
 Unofficial.OpenTK
+Aardvark.Base.Tensors
+Aardvark.PixImage.DevIL

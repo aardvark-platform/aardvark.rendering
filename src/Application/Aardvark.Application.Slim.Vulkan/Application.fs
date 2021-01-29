@@ -27,7 +27,7 @@ module private VulkanHandles =
             [<DllImport("kernel32.dll")>]
             extern nativeint GetModuleHandle(string lpModuleName)
             
-        module private Xcb = 
+        module internal Xcb = 
             open System.Runtime.InteropServices
 
             [<DllImport("X11-xcb")>]

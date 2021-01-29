@@ -23,6 +23,7 @@
     <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.Vulkan\linux\AMD64\libvkvm.so" DestinationFolder="$(OutputPath)..\net471" ContinueOnError="true" />
   </Target>
   <ItemGroup>
+    <None Include="paket.references" />
     <None Include="Wrapper\vk.xml" />
     <None Include="Wrapper\Generator.fsx" />
     <Compile Include="Wrapper\Types.fs" />

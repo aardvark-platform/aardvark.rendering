@@ -145,7 +145,7 @@ module Stereo =
 
 
             let consoleTrafo = 
-                impl.Sizes |> AVal.map (fun s -> 
+                impl.Sizes |> AVal.map (fun (s : V2i) -> 
                     Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
                     Trafo3d.Translation(-0.95, 0.9, 0.0)
                 )
