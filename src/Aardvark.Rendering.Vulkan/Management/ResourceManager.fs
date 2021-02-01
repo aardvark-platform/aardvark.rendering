@@ -171,8 +171,8 @@ type ImmutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, 
             | Some(o,h) ->
                 owner.ReplaceLocked (Some o, Some n)
 
+                desc.idestroy h
                 let r = desc.icreate n
-                desc.idestroy h // destroying h before constructing n results in in zombie command in the graphics (?) queue. doing this later prevents this? gh any clue?
                 handle <- Some(n,r)
                 r
             | None ->
