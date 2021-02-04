@@ -410,6 +410,7 @@ type Image =
         val mutable public Layout : VkImageLayout
         val mutable public PeerHandles : VkImage[]
         val mutable public Version : cval<int>
+        val mutable public SamplerLayout : VkImageLayout
 
         override x.Destroy() =
             if x.Device.Handle <> 0n && x.Handle.IsValid then
@@ -459,6 +460,22 @@ type Image =
         override x.ToString() =
             sprintf "0x%08X" x.Handle.Handle
 
+        new(dev, handle, s, levels, count, samples, dim, fmt, mem, layout, samplerLayout) = 
+            {
+                inherit Resource<_>(dev, handle);
+                Size = s
+                MipMapLevels = levels
+                Count = count
+                Samples = samples
+                Dimension = dim
+                Format = fmt
+                Memory = mem
+                Layout = layout
+                PeerHandles = [||]
+                Version = AVal.init 0
+                SamplerLayout = samplerLayout
+            }
+            
         new(dev, handle, s, levels, count, samples, dim, fmt, mem, layout) = 
             {
                 inherit Resource<_>(dev, handle);
@@ -472,6 +489,7 @@ type Image =
                 Layout = layout
                 PeerHandles = [||]
                 Version = AVal.init 0
+                SamplerLayout = VkImageLayout.ShaderReadOnlyOptimal
             }
     end
 

@@ -931,7 +931,7 @@ module Resources =
                                 arr.Update(token).handle
                                 |> Array.map (fun (i, r) ->
                                     let (v, s) = r.Update(token).handle
-                                    i, VkImageLayout.ShaderReadOnlyOptimal, v, s
+                                    i, v.Image.SamplerLayout, v, s
                                 )
 
                             CombinedImageSampler(slot, arr)
