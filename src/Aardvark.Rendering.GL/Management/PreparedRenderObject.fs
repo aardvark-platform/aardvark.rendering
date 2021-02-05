@@ -1585,14 +1585,14 @@ module rec Command =
             let ops = reader.GetChanges token
 
             for i, op in IndexListDelta.toSeq ops do
-                let (l, s, r) = IndexList.neighbours i state
+                let (l, s , r)  = IndexList.neighbours i state
                 match op with
                 | Set cmd ->
                     cmd.Update(token, info)
 
                     let fragment = 
                         match s with
-                        | Some (_, (fragment, old)) ->
+                        | Some (fragment, old) ->
                             old.Free info
                             lock dirty (fun () -> dirty.Remove old |> ignore)
                             fragment.Mutate(fun s p ->
@@ -1621,7 +1621,7 @@ module rec Command =
                     
                 | Remove ->
                     match s with
-                    | Some (_, (oldFragment, oldCmd)) ->
+                    | Some (oldFragment, oldCmd) ->
                         oldCmd.Free info
                         oldFragment.Dispose()
                         lock dirty (fun () -> dirty.Remove oldCmd |> ignore)

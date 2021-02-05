@@ -20,6 +20,7 @@ type TimeMod() =
         member x.ContentType = typeof<System.DateTime>
         member x.IsConstant = false
         member x.GetValueUntyped(caller) = x.GetValue(caller) :> obj
+        member x.Accept (v : IAdaptiveValueVisitor<'R>) = v.Visit x
 
     interface aval<DateTime> with
         member x.GetValue(caller) = x.GetValue(caller)

@@ -277,6 +277,7 @@ module private ManagedBufferImplementation =
             member x.ContentType = typeof<IBuffer>
             member x.IsConstant = false
             member x.GetValueUntyped c = x.GetValue c :> obj
+            member x.Accept (v : IAdaptiveValueVisitor<'R>) = v.Visit x
 
         interface aval<IBuffer> with
             member x.GetValue c = x.GetValue c

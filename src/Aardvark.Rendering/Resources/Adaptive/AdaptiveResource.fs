@@ -73,6 +73,7 @@ type AdaptiveResource<'a>() =
         member x.IsConstant = false
         member x.ContentType = typeof<'a>
         member x.GetValueUntyped(c) = x.GetValue(c) :> obj
+        member x.Accept (v : IAdaptiveValueVisitor<'R>) = v.Visit x
 
     interface IAdaptiveValue<'a> with
         member x.GetValue(c) = x.GetValue(c)
