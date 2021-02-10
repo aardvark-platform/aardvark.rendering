@@ -1,3 +1,6 @@
+### 5.1.2
+- fixed thread abort exn on linux
+
 ### 5.1.1
 - https://hackmd.io/58CqcVmnRoGq-X5gIrNThg
 
