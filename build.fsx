@@ -11,6 +11,7 @@ open Fake.Core
 open Fake.Tools
 open Fake.IO.Globbing.Operators
 open System.Runtime.InteropServices
+open Fake.Core.TargetOperators
 
 //do MSBuildDefaults <- { MSBuildDefaults with Verbosity = Some Minimal }
 do Environment.CurrentDirectory <- __SOURCE_DIRECTORY__

@@ -38,15 +38,17 @@ module MultimediaTimer =
         extern void usleep(int usec)
 
         let start (interval : int) (callback : unit -> unit) =
+            let running = ref true
             let run () =
-                while true do
+                while Volatile.Read running do
                     usleep(interval * 1000)
                     callback()
             let thread = new Thread(ThreadStart(run), IsBackground = true)
             thread.Start()
 
             { new IDisposable with
-                member x.Dispose() = thread.Abort()
+                member x.Dispose() = 
+                    running := false
             }
 
     type Trigger(ms : int) =
