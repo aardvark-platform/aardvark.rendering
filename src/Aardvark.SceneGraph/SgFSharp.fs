@@ -887,6 +887,70 @@ module SgFSharp =
             else
                 sg
 
+        /// Creates a draw call from the given indexed geometry and instance count.
+        let ofIndexedGeometryInstanced (g : IndexedGeometry) (instanceCount : int) =
+            let attributes =
+                g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) ->
+                    let t = v.GetType().GetElementType()
+                    let view = BufferView(~~(ArrayBuffer(v) :> IBuffer), t)
+
+                    k, view
+                ) |> Map.ofSeq
+
+
+            let index, faceVertexCount =
+                if g.IsIndexed then
+                    g.IndexArray, g.IndexArray.Length
+                else
+                    null, g.IndexedAttributes.[DefaultSemantic.Positions].Length
+
+            let call =
+                DrawCallInfo(
+                    FaceVertexCount = faceVertexCount,
+                    FirstIndex = 0,
+                    InstanceCount = instanceCount,
+                    FirstInstance = 0,
+                    BaseVertex = 0
+                )
+
+            let sg = Sg.VertexAttributeApplicator(attributes, Sg.RenderNode(call, g.Mode)) :> ISg
+            if not (isNull index) then
+                Sg.VertexIndexApplicator(BufferView.ofArray index, sg) :> ISg
+            else
+                sg
+
+        /// Creates a draw call from the given indexed geometry and an adpative instance count.
+        let ofIndexedGeometryInstancedA (g : IndexedGeometry) (instanceCount : aval<int>) =
+            let attributes =
+                g.IndexedAttributes |> Seq.map (fun (KeyValue(k,v)) ->
+                    let t = v.GetType().GetElementType()
+                    let view = BufferView(~~(ArrayBuffer(v) :> IBuffer), t)
+
+                    k, view
+                ) |> Map.ofSeq
+
+
+            let index, faceVertexCount =
+                if g.IsIndexed then
+                    g.IndexArray, g.IndexArray.Length
+                else
+                    null, g.IndexedAttributes.[DefaultSemantic.Positions].Length
+
+            let call = instanceCount |> AVal.map (fun ic ->
+                                                    DrawCallInfo(
+                                                        FaceVertexCount = faceVertexCount,
+                                                        FirstIndex = 0,
+                                                        InstanceCount = ic,
+                                                        FirstInstance = 0,
+                                                        BaseVertex = 0
+                                                    ))
+
+            let sg = Sg.VertexAttributeApplicator(attributes, Sg.RenderNode(call, g.Mode)) :> ISg
+            if not (isNull index) then
+                Sg.VertexIndexApplicator(BufferView.ofArray index, sg) :> ISg
+            else
+                sg
+
         /// Creates a draw call from the given indexed geometry, using an interleaved buffer
         /// for the vertex attributes.
         let ofIndexedGeometryInterleaved (attributes : list<Symbol>) (g : IndexedGeometry) =

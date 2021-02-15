@@ -15,11 +15,19 @@ type GeometryExtensions =
     [<Extension>]
     static member ToSg(ig : IndexedGeometry) = ig |> Sg.ofIndexedGeometry
 
+    [<Extension>]
+    static member ToSg(ig : IndexedGeometry, instanceCount : int) = instanceCount |> Sg.ofIndexedGeometryInstanced ig
+
+    [<Extension>]
+    static member ToSg(ig : IndexedGeometry, instanceCount : aval<int>) = instanceCount |> Sg.ofIndexedGeometryInstancedA ig
+
+
 type QuickUniformHolder(values : SymbolDict<IAdaptiveValue>) =
     interface IUniformProvider with
         member x.TryGetUniform (scope,name) = let (success, value) = values.TryGetValue(name)
                                               if success then Some value else None
         member x.Dispose() = ()
+
 
 [<Extension>]
 [<AbstractClass>]
@@ -290,6 +298,18 @@ type SceneGraphExtensions =
 
     [<Extension>]
     static member OnOff(sg : ISg, on : aval<bool>) : ISg = Sg.OnOffNode(on, sg) :> ISg
+
+    [<Extension>]
+    static member InstanceAttribute(sg : ISg, attribute : Symbol, data : BufferView) : ISg = Sg.InstanceAttributeApplicator(attribute, data, sg) :> ISg
+
+    [<Extension>]
+    static member InstanceAttribute(sg : ISg, attribute : Symbol, data : Array) : ISg = Sg.InstanceAttributeApplicator(attribute, BufferView.ofArray data, sg) :> ISg
+
+    [<Extension>]
+    static member InstanceAttribute(sg : ISg, attribute : Symbol, data : aval<Array>) : ISg = Sg.InstanceAttributeApplicator(attribute, BufferView(AVal.map (fun x -> (ArrayBuffer(x) :> IBuffer)) data, data.GetValue().GetType().GetElementType()), sg) :> ISg
+
+    [<Extension>]
+    static member InstanceAttribute(sg : ISg, attribute : Symbol, data : aval<'a[]>) : ISg = Sg.InstanceAttributeApplicator(attribute, BufferView(AVal.map (fun x -> (ArrayBuffer(x) :> IBuffer)) data, data.GetValue().GetType().GetElementType()), sg) :> ISg
 
 
 [<Extension>]
