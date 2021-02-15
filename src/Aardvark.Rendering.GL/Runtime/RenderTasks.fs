@@ -504,9 +504,10 @@ module RenderTasks =
                 primitivesGenerated.Restart()
 
             let mutable runStats = []
-            for (_,t) in Map.toSeq subtasks do
-                let s = t.Run(token,rt, output)
-                runStats <- s::runStats
+            subtasks |> Map.iter (fun _ t ->
+                    let s = t.Run(token,rt, output)
+                    runStats <- s::runStats
+                )
 
             if RuntimeConfig.SyncUploadsAndFrames then
                 GL.Sync()
@@ -517,16 +518,16 @@ module RenderTasks =
                 rt.AddPrimitiveCount(primitivesGenerated.Value)
 
         override x.Update(token, rt) = 
-            for (_,t) in Map.toSeq subtasks do
-                t.Update(token, rt)
+            subtasks |> Map.iter (fun _ t ->
+                    t.Update(token, rt)
+                )
 
         override x.Release2() =
             for ro in preparedObjectReader.State do
                 ro.Dispose()
 
             x.Resources.Dispose() // should be 0 after disposing all RenderObjects
-            for (_,t) in Map.toSeq subtasks do
-                t.Dispose()
+            subtasks |> Map.iter (fun _ t -> t.Dispose())
 
             // UniformBufferManager should have 0 allocated blocks
             x.ResourceManager.Release()

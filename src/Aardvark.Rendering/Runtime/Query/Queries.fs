@@ -25,7 +25,7 @@ type Queries(queries : list<IQuery>) =
 
     /// Adds a single query.
     member x.Add(other : IQuery) =
-        Queries(queries :: other) // prepend ??
+        Queries(queries @ [other]) // prepend ??
 
     /// Transforms the queries.
     member x.Map(f : IQuery -> 'a) =
