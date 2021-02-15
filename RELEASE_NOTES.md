@@ -1,3 +1,7 @@
+### 5.1.3
+- [Vulkan] CommandTask no longer disposes ResourceManager
+- [Sg] Added instancing utilities for IndexedGeometry 
+
 ### 5.1.2
 - fixed thread abort exn on linux
 
