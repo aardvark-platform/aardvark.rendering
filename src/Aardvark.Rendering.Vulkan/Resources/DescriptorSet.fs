@@ -65,7 +65,7 @@ type internal DescriptorPoolBag(device : Device, perPool : int, resourcesPerPool
          )
 
     override x.Destroy() =
-        pools |> Seq.iter Disposable.dispose
+        for p in pools do p.Dispose()
         pools.Clear()
         partial <- []
 

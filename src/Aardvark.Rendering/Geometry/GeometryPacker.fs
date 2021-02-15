@@ -113,7 +113,7 @@ module GeometrySetUtilities =
         member x.Dispose() =
             let old = Interlocked.Exchange(&buffers, ConcurrentDictionary())
             if old.Count > 0 then
-                old.Values |> Seq.iter (fun b -> b.Dispose())
+                for q in old.Values do q.Dispose()
                 old.Clear()
 
         override x.Compute(token) =

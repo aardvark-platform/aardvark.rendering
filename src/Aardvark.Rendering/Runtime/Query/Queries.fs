@@ -9,15 +9,15 @@ type Queries(queries : IQuery seq) =
 
     /// Resets all queries manually.
     member x.Reset() =
-        queries |> Seq.iter (fun q -> q.Reset())
+        for q in queries do q.Reset()
 
     /// Prepares the queries to be used.
     member x.Begin() =
-        queries |> Seq.iter (fun q -> q.Begin())
+        for q in queries do q.Begin()
 
     /// Finishes the queries.
     member x.End() =
-        queries |> Seq.iter (fun q -> q.End())
+        for q in queries do q.End()
 
     /// Adds list of queries.
     member x.Add(other : IQuery seq) =

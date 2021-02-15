@@ -61,7 +61,7 @@ type MultiQuery<'Handle, 'Result when 'Handle :> IQueryHandle<'Result>>() =
     /// Resets the query so it can be reused.
     abstract member Reset : unit -> unit
     default x.Reset() =
-        handles |> Seq.iter (fun h -> h.Reset())
+        for h in handles do h.Reset()
         handles.Clear()
 
     /// Blocks to retrieve the query results.
@@ -82,7 +82,7 @@ type MultiQuery<'Handle, 'Result when 'Handle :> IQueryHandle<'Result>>() =
     /// Disposes the query and all handles.
     abstract member Dispose : unit -> unit
     default x.Dispose() =
-        handles |> Seq.iter (fun x -> x.Dispose())
+        for h in handles do h.Dispose()
 
     interface IMultiQuery<'Result> with
 

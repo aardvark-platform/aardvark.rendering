@@ -41,14 +41,13 @@ type ConcurrentQuery<'Query, 'Result when 'Query :> IMultiQuery<'Result>>() =
 
     // Creates or gets a query that is currently unused.
     member private x.GetQuery() =
-        let reused =
-            queries |> Seq.tryFind (fun q -> not q.IsUsed)
+        let reused = 
+            queries.Find(fun q -> not q.IsUsed)
 
-        match reused with
-        | Some q ->
-            q.Reset()
-            q
-        | None ->
+        if not (Object.ReferenceEquals(reused, null)) then
+            reused.Reset()
+            reused
+        else
             let q = x.CreateQuery()
             queries.Add q
             q
@@ -148,7 +147,7 @@ type ConcurrentQuery<'Query, 'Result when 'Query :> IMultiQuery<'Result>>() =
     /// Deletes the queries.
     member x.Dispose() =
         lock x (fun _ ->
-            queries |> Seq.iter (fun x -> x.Dispose())
+            for q in queries do q.Dispose()
         )
 
     interface IDisposable with

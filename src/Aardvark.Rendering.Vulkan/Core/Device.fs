@@ -1248,7 +1248,7 @@ and DeviceTemporaryCommandPool(family : DeviceQueueFamily) =
     let mutable disposeInstalled = 0
 
     let dispose() =
-        bag |> Seq.iter (fun c -> c.Destroy())
+        for c in bag do c.Destroy()
 
     member x.Take() =
         match bag.TryTake() with
@@ -1375,7 +1375,7 @@ and DeviceCommandPool internal(device : Device, index : int, queueFamily : Devic
             let all = allPools |> Seq.toArray
             allPools.Clear()
             handles.Dispose()
-            all |> Seq.iter (fun h -> 
+            all |> Array.iter (fun h -> 
                 if h.IsValid then
                     VkRaw.vkDestroyCommandPool(device.Handle, h, NativePtr.zero)
             )

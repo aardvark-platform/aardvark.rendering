@@ -63,7 +63,7 @@ type AListRenderTask(tasks : alist<IRenderTask>) as this =
     override x.Use (f : unit -> 'a) =
         lock x (fun () ->
             processDeltas(AdaptiveToken.Top)
-            let l = reader.State |> Seq.toList
+            let l = reader.State |> IndexList.toList
 
             let rec run (l : list<IRenderTask>) =
                 match l with
