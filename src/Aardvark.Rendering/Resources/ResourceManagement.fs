@@ -536,8 +536,8 @@ type ResourceInputSet() =
     inherit AdaptiveObject()
 
 
-
-    let mutable dirty = System.Collections.Generic.HashSet<IResource>()
+    let mutable updateBuffer = Array.zeroCreate<IResource> 0
+    let dirty = System.Collections.Generic.HashSet<IResource>()
     let all = ReferenceCountingSet<IResource>()
 
 
@@ -546,20 +546,25 @@ type ResourceInputSet() =
 
     let updateDirty (token : AdaptiveToken) (rt : RenderToken) =
         let rec run (level : int) (token : AdaptiveToken) (rt : RenderToken) =
-            let dirty =
+            let (buffer, cnt) =
                 lock all (fun () ->
-                    let d = dirty
-                    dirty <- System.Collections.Generic.HashSet<IResource>()
-                    d
+                    let cnt = dirty.Count
+                    if updateBuffer.Length < cnt then
+                        updateBuffer <- Array.zeroCreate<_> cnt
+                    dirty.CopyTo(updateBuffer, 0)
+                    dirty.Clear()
+                    updateBuffer, cnt
                 )
 
-            if level > 4 && dirty.Count > 0 then
+            if level > 4 && cnt > 0 then
                 Log.warn "nested shit"
 
-            if dirty.Count > 0 then
-                for d in dirty do
-                    if not d.IsDisposed then
-                        updateOne token d rt
+            if cnt > 0 then
+                for i in 0..cnt-1 do
+                    let res = buffer.[i]
+                    buffer.[i] <- Unchecked.defaultof<_>
+                    if not res.IsDisposed then
+                        updateOne token res rt
 
                 run (level + 1) token rt
 
