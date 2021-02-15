@@ -2,43 +2,43 @@
 
 /// Struct for combining multiple queries into a single one.
 [<Struct>]
-type Queries(queries : IQuery seq) =
+type Queries(queries : list<IQuery>) =
 
     new(query : IQuery) =
-        Queries(Seq.singleton query)
+        Queries([query])
 
     /// Resets all queries manually.
     member x.Reset() =
-        for q in queries do q.Reset()
+        queries |> List.iter (fun q -> q.Reset())
 
     /// Prepares the queries to be used.
     member x.Begin() =
-        for q in queries do q.Begin()
+        queries |> List.iter (fun q -> q.Begin())
 
     /// Finishes the queries.
     member x.End() =
-        for q in queries do q.End()
+        queries |> List.iter (fun q -> q.End())
 
     /// Adds list of queries.
-    member x.Add(other : IQuery seq) =
-        Queries(Seq.append queries other)
+    member x.Add(other : list<IQuery>) =
+        Queries(queries @ other)
 
     /// Adds a single query.
     member x.Add(other : IQuery) =
-        Queries(Seq.append queries (Seq.singleton other))
+        Queries(queries :: other) // prepend ??
 
     /// Transforms the queries.
     member x.Map(f : IQuery -> 'a) =
-        queries |> Seq.map f
+        queries |> List.map f
 
     /// Returns the queries as a sequence.
-    member x.AsSeq = queries
+    member x.AsSeq = queries |> Seq.ofList
 
     /// Returns the queries as a list.
-    member x.AsList = queries |> List.ofSeq
+    member x.AsList = queries
 
     /// Returns the queries as an array.
-    member x.AsArray = queries |> Array.ofSeq
+    member x.AsArray = queries |> Array.ofList
 
     interface IQuery with
 
@@ -52,13 +52,16 @@ type Queries(queries : IQuery seq) =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Queries =
 
-    let empty = Queries(Seq.empty)
+    let empty = Queries(List.empty)
 
-    let create (queries : #IQuery seq) =
-        Queries(queries |> Seq.map unbox<IQuery>)
+    let ofSeq (queries : #IQuery seq) =
+        Queries(queries |> Seq.map unbox<IQuery> |> List.ofSeq)
+
+    let ofList (queries : list<#IQuery>) =
+        Queries(queries |> List.map unbox<IQuery>)
 
     let single (query : IQuery) =
-        create <| Seq.singleton query
+        Queries(query)
 
     /// Adds a query.
     let add (x : IQuery) (queries : Queries) =
@@ -89,5 +92,9 @@ module Queries =
         queries.AsArray
 
     /// Transforms the queries.
-    let map (f : IQuery -> 'a) =
-        toSeq >> Seq.map f
+    let map (queries : Queries) (f : IQuery -> 'a) =
+        queries.Map(f)
+
+    /// Iterates the queries.
+    let iter (queries : Queries) (f : IQuery -> unit) =
+        queries.AsList |> List.iter f
