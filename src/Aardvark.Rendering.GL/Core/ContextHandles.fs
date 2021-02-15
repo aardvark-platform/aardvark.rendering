@@ -29,7 +29,7 @@ type ContextErrorEventHandler =
 /// </summary>
 [<AllowNullLiteral>]
 type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
-    static let current = new ThreadLocal<Option<ContextHandle>>(fun () -> None)
+    static let current = new ThreadLocal<ValueOption<ContextHandle>>(fun () -> ValueOption.None)
     static let contextError = new Event<ContextErrorEventHandler, ContextErrorEventArgs>()
 
     let l = obj()
@@ -40,9 +40,10 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
 
     static member Current
         with get() = 
+            let curr = current.Value
             match current.Value with
-                | Some ctx when ctx.IsCurrent -> Some ctx
-                | _ -> None
+                | ValueSome ctx when ctx.IsCurrent -> curr
+                | _ -> ValueNone
 
         and set v = current.Value <- v
         
@@ -77,7 +78,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
         Monitor.Enter l
 
         match ContextHandle.Current with
-            | Some handle -> handle.ReleaseCurrent()
+            | ValueSome handle -> handle.ReleaseCurrent()
             | _ -> ()
         
         let mutable retry = true
@@ -97,7 +98,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                     else
                         reraise()
 
-        ContextHandle.Current <- Some x
+        ContextHandle.Current <- ValueSome x
 
         GLVM.hglCleanup((unbox<IGraphicsContextInternal> handle).Context.Handle)
         let actions = Interlocked.Exchange(&onMakeCurrent, null)
@@ -110,13 +111,13 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
             handle.MakeCurrent(null)
         else
             Log.warn "cannot release context which is not current"
-        ContextHandle.Current <- None
+        ContextHandle.Current <- ValueNone
 
         Monitor.Exit l
 
     member x.Use (action : unit -> 'a) =
         match ContextHandle.Current with
-            | Some h ->
+            | ValueSome h ->
                 if h = x then 
                     action()
                 else
@@ -127,7 +128,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                     finally
                         x.ReleaseCurrent()
                         h.MakeCurrent()
-            | None ->
+            | ValueNone ->
                 try
                     x.MakeCurrent()
                     action()
@@ -233,8 +234,8 @@ module ContextHandleOpenTK =
 
             // unbind created context and optionally restore previous
             match prev with 
-            | Some old -> old.Handle.MakeCurrent(old.WindowInfo)
-            | None -> context.MakeCurrent(null)
+            | ValueSome old -> old.Handle.MakeCurrent(old.WindowInfo)
+            | ValueNone -> context.MakeCurrent(null)
 
             window, context
     

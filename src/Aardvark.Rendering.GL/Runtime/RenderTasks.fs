@@ -64,16 +64,16 @@ module RenderTasks =
         member private x.pushDebugOutput(token : AdaptiveToken) =
             let c = config.GetValue token
             match ContextHandle.Current with
-                | Some ctx -> let oldState = ctx.DebugOutputEnabled // get manually tracked state of GL.IsEnabled EnableCap.DebugOutput
-                              ctx.DebugOutputEnabled <- c.useDebugOutput
-                              oldState
-                | None -> Report.Warn("No active context handle in RenderTask.Run")
-                          false
+                | ValueSome ctx -> let oldState = ctx.DebugOutputEnabled // get manually tracked state of GL.IsEnabled EnableCap.DebugOutput
+                                   ctx.DebugOutputEnabled <- c.useDebugOutput
+                                   oldState
+                | ValueNone -> Report.Warn("No active context handle in RenderTask.Run")
+                               false
             
         member private x.popDebugOutput(token : AdaptiveToken, wasEnabled : bool) =
             match ContextHandle.Current with
-                | Some ctx -> ctx.DebugOutputEnabled <- wasEnabled
-                | None -> Report.Warn("Still no active context handle in RenderTask.Run")
+                | ValueSome ctx -> ctx.DebugOutputEnabled <- wasEnabled
+                | ValueNone -> Report.Warn("Still no active context handle in RenderTask.Run")
 
         member private x.bindFbo (desc : OutputDescription) =
             let fbo = desc.framebuffer |> unbox<Framebuffer>

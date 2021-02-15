@@ -40,8 +40,8 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool, shaderCachePath :
 
         h.ReleaseCurrent()
         match o with
-        | Some o -> o.MakeCurrent()
-        | None -> ()
+        | ValueSome o -> o.MakeCurrent()
+        | ValueNone -> ()
         glfw.RemoveExistingWindow w
         h
 

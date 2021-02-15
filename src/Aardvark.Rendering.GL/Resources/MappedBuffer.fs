@@ -47,7 +47,7 @@ module ResizeBufferImplementation =
                 status = WaitSyncStatus.AlreadySignaled
 
         static member Create() =
-            let ctx = Option.get ContextHandle.Current
+            let ctx = ValueOption.get ContextHandle.Current
             let f = GL.FenceSync(SyncCondition.SyncGpuCommandsComplete, WaitSyncFlags.None)
             GL.Check "could not enqueue fence"
             GL.Flush()
@@ -65,7 +65,7 @@ module ResizeBufferImplementation =
                 Log.warn "waiting on disposed fence"
 
         member x.WaitGPU() =
-            let ctx = Option.get ContextHandle.Current
+            let ctx = ValueOption.get ContextHandle.Current
             x.WaitGPU ctx
 
         member x.WaitCPU() =
@@ -104,7 +104,7 @@ module ManagedBufferImplementation =
             lock lockObj (fun () ->
                 if not initialized then
                     initialized <- true
-                    let handle = ContextHandle.Current |> Option.get
+                    let handle = ContextHandle.Current |> ValueOption.get
                     let ctx = handle.Handle |> unbox<IGraphicsContextInternal>
                     let ptr = ctx.GetAddress("glBufferPageCommitmentARB")
                     if ptr <> 0n then

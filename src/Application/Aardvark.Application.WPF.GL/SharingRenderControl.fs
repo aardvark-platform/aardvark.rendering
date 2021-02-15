@@ -118,7 +118,7 @@ module WGLDXExtensions =
                 if not loaded then
                     loaded <- true
                     match ContextHandle.Current with
-                        | Some handle ->
+                        | ValueSome handle ->
                             wglDXSetResourceShareHandleNV <- handle.Import "wglDXSetResourceShareHandleNV"
                             wglDXOpenDeviceNV <- handle.Import "wglDXOpenDeviceNV"
                             wglDXCloseDeviceNV <- handle.Import "wglDXCloseDeviceNV"
@@ -127,11 +127,11 @@ module WGLDXExtensions =
                             wglDXObjectAccessNV <- handle.Import "wglDXObjectAccessNV"
                             wglDXLockObjectsNV <- handle.Import "wglDXLockObjectsNV"
                             wglDXUnlockObjectsNV <- handle.Import "wglDXUnlockObjectsNV"
-                        | None ->
+                        | ValueNone ->
                             failwith "[WGL] cannot load WGL_NV_DX_interop without a context"
 
 
-                assert (Option.isSome ContextHandle.Current)
+                assert (ValueOption.isSome ContextHandle.Current)
             )
 
         static member WGL_NV_DX_interop = supported

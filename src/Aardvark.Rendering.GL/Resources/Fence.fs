@@ -14,8 +14,8 @@ type Fence private(ctx : ContextHandle, handle : nativeint) =
     
     static let getContext() =
         match ContextHandle.Current with
-            | Some ctx -> ctx
-            | None -> failwith "[GL] fence cannot be enqueued without a gc"
+            | ValueSome ctx -> ctx
+            | ValueNone -> failwith "[GL] fence cannot be enqueued without a gc"
 
     static let GL_TIMEOUT_IGNORED = 0xFFFFFFFFFFFFFFFFUL
 
