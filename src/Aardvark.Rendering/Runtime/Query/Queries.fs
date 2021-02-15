@@ -9,15 +9,18 @@ type Queries(queries : list<IQuery>) =
 
     /// Resets all queries manually.
     member x.Reset() =
-        queries |> List.iter (fun q -> q.Reset())
+        if not queries.IsEmpty then
+            queries |> List.iter (fun q -> q.Reset())
 
     /// Prepares the queries to be used.
     member x.Begin() =
-        queries |> List.iter (fun q -> q.Begin())
+        if not queries.IsEmpty then
+            queries |> List.iter (fun q -> q.Begin())
 
     /// Finishes the queries.
     member x.End() =
-        queries |> List.iter (fun q -> q.End())
+        if not queries.IsEmpty then
+            queries |> List.iter (fun q -> q.End())
 
     /// Adds list of queries.
     member x.Add(other : list<IQuery>) =
@@ -30,6 +33,11 @@ type Queries(queries : list<IQuery>) =
     /// Transforms the queries.
     member x.Map(f : IQuery -> 'a) =
         queries |> List.map f
+
+    /// Iterates the queries.
+    member x.ForEach(f : IQuery -> unit) =
+        if not queries.IsEmpty then
+            queries |> List.iter f
 
     /// Returns the queries as a sequence.
     member x.AsSeq = queries |> Seq.ofList
@@ -99,4 +107,4 @@ module Queries =
 
     /// Iterates the queries.
     let iter (queries : Queries) (f : IQuery -> unit) =
-        queries.AsList |> List.iter f
+        queries.ForEach(f)
