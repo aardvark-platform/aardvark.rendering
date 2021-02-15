@@ -222,7 +222,7 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
                 if measureGpuTime then
                     gpuQuery :> IQuery
                 else
-                    Queries.empty :> IQuery
+                    Queries.none
 
             swapchain.RenderFrame(fun framebuffer ->
                 task.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer framebuffer, queries)

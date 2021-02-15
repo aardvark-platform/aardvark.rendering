@@ -54,6 +54,8 @@ module Queries =
 
     let empty = Queries(List.empty)
 
+    let none = empty :> IQuery
+
     let ofSeq (queries : #IQuery seq) =
         Queries(queries |> Seq.map unbox<IQuery> |> List.ofSeq)
 

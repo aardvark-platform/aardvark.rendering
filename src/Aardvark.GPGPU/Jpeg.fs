@@ -1568,7 +1568,7 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         x.Download()
 
     member x.Compress(image : ITextureSubResource) =
-        x.Compress(image, Queries.empty)
+        x.Compress(image, Queries.none)
 
     member x.Dispose() =
         dctInput.Dispose()

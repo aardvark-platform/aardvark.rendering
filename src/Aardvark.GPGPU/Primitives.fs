@@ -1407,28 +1407,28 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
 
     // Overloads without queries
     member x.Scan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>) =
-        x.Scan(add, input, output, Queries.empty)
+        x.Scan(add, input, output, Queries.none)
 
     member x.Scan(add : Expr<V4d -> V4d -> V4d>, input : ITextureSubResource, output : ITextureSubResource) =
-        x.Scan(add, input, output, Queries.empty)
+        x.Scan(add, input, output, Queries.none)
 
     member x.Fold(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>) =
-        x.Fold(add, input, Queries.empty)
+        x.Fold(add, input, Queries.none)
 
     member x.MapReduce(map : Expr<int -> 'a -> 'b>, add : Expr<'b -> 'b -> 'b>, input : IBufferVector<'a>) =
-        x.MapReduce(map, add, input, Queries.empty)
+        x.MapReduce(map, add, input, Queries.none)
 
     member x.MapReduce(map : Expr<V3i -> V4f -> 'b>, add : Expr<'b -> 'b -> 'b>, input : ITextureSubResource) =
-        x.MapReduce(map, add, input, Queries.empty)
+        x.MapReduce(map, add, input, Queries.none)
 
     member x.Sum(input : ITextureSubResource) =
-        x.Sum(input, Queries.empty)
+        x.Sum(input, Queries.none)
 
     member x.Min(input : ITextureSubResource) =
-        x.Min(input, Queries.empty)
+        x.Min(input, Queries.none)
 
     member x.Map(map : Expr<int -> 'a -> 'b>, input : IBufferVector<'a>, output : IBufferVector<'b>) =
-        x.Map(map, input, output, Queries.empty)
+        x.Map(map, input, output, Queries.none)
 
     member x.Sum(b : IBufferVector<'a>) =
-        x.Sum(b, Queries.empty)
+        x.Sum(b, Queries.none)

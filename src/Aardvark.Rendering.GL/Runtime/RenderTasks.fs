@@ -418,6 +418,7 @@ module RenderTasks =
         let inputSet = InputSet(this) 
         //let resourceUpdateWatch = OpenGlStopwatch()
         let structuralChange = AVal.init ()
+        let deltaWatch = Stopwatch()
         
         let primitivesGenerated = OpenGlQuery(QueryTarget.PrimitivesGenerated)
         
@@ -456,7 +457,7 @@ module RenderTasks =
 
         let processDeltas (x : AdaptiveToken) (parent : AbstractOpenGlRenderTask) (t : RenderToken) =
             
-            let sw = Stopwatch.StartNew()
+            deltaWatch.Restart()
 
             let deltas = preparedObjectReader.GetChanges x
 
@@ -479,7 +480,7 @@ module RenderTasks =
                         v.Dispose()
                         
             if added > 0 || removed > 0 then
-                Log.line "[GL] RenderObjects: +%d/-%d (%dms)" added removed sw.ElapsedMilliseconds
+                Log.line "[GL] RenderObjects: +%d/-%d (%dms)" added removed deltaWatch.ElapsedMilliseconds
             t.RenderObjectDeltas(added, removed)
 
         let updateResources (x : AdaptiveToken) (self : RenderTask) (t : RenderToken) =

@@ -58,12 +58,12 @@ type RenderTaskRunExtensions() =
     // Overloads without queries
     [<Extension>]
     static member Run(t : IRenderTask, token : RenderToken, fbo : IFramebuffer) =
-        t.Run(AdaptiveToken.Top, token, OutputDescription.ofFramebuffer fbo, Queries.empty)
+        t.Run(AdaptiveToken.Top, token, OutputDescription.ofFramebuffer fbo, Queries.none)
 
     [<Extension>]
     static member Run(t : IRenderTask, token : RenderToken, fbo : OutputDescription) =
-        t.Run(AdaptiveToken.Top, token, fbo, Queries.empty)
+        t.Run(AdaptiveToken.Top, token, fbo, Queries.none)
 
     [<Extension>]
     static member Run(t : IRenderTask, token : AdaptiveToken, renderToken : RenderToken, fbo : OutputDescription) =
-        t.Run(token, renderToken, fbo, Queries.empty)
+        t.Run(token, renderToken, fbo, Queries.none)

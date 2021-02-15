@@ -13,7 +13,7 @@ module private AdaptiveRenderToTypes =
         inherit AdaptiveResource<IFramebuffer>()
 
         new(task : IRenderTask, target : IAdaptiveResource<IFramebuffer>, disposeTask : bool) =
-            new AdaptiveRenderingResult(task, target, Queries.empty, disposeTask)
+            new AdaptiveRenderingResult(task, target, Queries.none, disposeTask)
 
         new(task : IRenderTask, target : IAdaptiveResource<IFramebuffer>) =
             new AdaptiveRenderingResult(task, target, false)
@@ -55,7 +55,7 @@ module private AdaptiveRenderToTypes =
         inherit AdaptiveResource<CubeMap<IFramebuffer>>()
 
         new(tasks : CubeMap<IRenderTask>, targets : IAdaptiveResource<CubeMap<IFramebuffer>>, disposeTasks : bool) =
-            new AdaptiveRenderingResultCube(tasks, targets, Queries.empty, disposeTasks)
+            new AdaptiveRenderingResultCube(tasks, targets, Queries.none, disposeTasks)
 
         new(tasks : CubeMap<IRenderTask>, targets : IAdaptiveResource<CubeMap<IFramebuffer>>) =
             new AdaptiveRenderingResultCube(tasks, targets, false)

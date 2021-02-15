@@ -357,7 +357,7 @@ and BitonicSorterInstance<'a when 'a : unmanaged>(parent : BitonicSorter<'a>, el
         )
 
     member x.Run(xs : IBuffer<'a>, perm : IBuffer<int>) =
-        x.Run(xs, perm, Queries.empty)
+        x.Run(xs, perm, Queries.none)
 
     member x.Run(xs : 'a[], perm : int[], queries : IQuery) : unit =
         if xs.Length <> totalCount  || perm.Length <> totalCount then
@@ -376,7 +376,7 @@ and BitonicSorterInstance<'a when 'a : unmanaged>(parent : BitonicSorter<'a>, el
         )
 
     member x.Run(xs : 'a[], perm : int[]) =
-        x.Run(xs, perm, Queries.empty)
+        x.Run(xs, perm, Queries.none)
 
     member x.Dispose() : unit =
         if tempBuffer.IsValueCreated then tempBuffer.Value.Dispose()
