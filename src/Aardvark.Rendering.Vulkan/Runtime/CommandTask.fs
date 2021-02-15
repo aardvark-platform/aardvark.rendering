@@ -2153,7 +2153,6 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
             inner.Dispose()
             cmd.Dispose()
             pool.Dispose()
-            manager.Dispose()
         )
 
     override x.FramebufferSignature = Some (renderPass :> _)
