@@ -78,7 +78,7 @@ module RenderTasks =
         member private x.bindFbo (desc : OutputDescription) =
             let fbo = desc.framebuffer |> unbox<Framebuffer>
 
-            let handle = fbo.Handle |> unbox<int> 
+            let handle = fbo.Handle
 
             if ExecutionContext.framebuffersSupported then
                 GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
