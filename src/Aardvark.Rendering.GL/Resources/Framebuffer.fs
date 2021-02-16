@@ -18,7 +18,7 @@ module private FramebufferMemoryUsage =
         Interlocked.Decrement(&ctx.MemoryUsage.VirtualFramebufferCount) |> ignore
 
 type Framebuffer(ctx : Context, signature : IFramebufferSignature, create : Aardvark.Rendering.GL.ContextHandle -> int, destroy : int -> unit, 
-                 bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>) =
+                 bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>) as x =
     inherit UnsharedObject(ctx, (fun h -> addPhysicalFbo ctx; create h), (fun h -> removePhysicalFbo ctx; destroy h))
 
     let mutable bindings = bindings
@@ -43,6 +43,12 @@ type Framebuffer(ctx : Context, signature : IFramebufferSignature, create : Aard
         let depth = match depth with | Some d -> [DefaultSemantic.Depth, d] | _ -> []
         List.append bindings depth |> Map.ofList
 
+    let outputDesc = 
+        {
+            framebuffer = x
+            viewport = Box2i.FromMinAndSize(V2i.OO, size - V2i.II)
+        }
+
     member x.Size 
         with get() = size
         and set v = size <- v
@@ -57,6 +63,7 @@ type Framebuffer(ctx : Context, signature : IFramebufferSignature, create : Aard
 
     member x.Attachments = outputBySem
     member x.Signature = signature
+    member x.OutputDescription = outputDesc
 
     interface IFramebuffer with
         member x.Signature = signature

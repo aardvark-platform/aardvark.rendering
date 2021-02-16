@@ -419,6 +419,7 @@ module RenderTasks =
         //let resourceUpdateWatch = OpenGlStopwatch()
         let structuralChange = AVal.init ()
         let deltaWatch = Stopwatch()
+        let subTaskResults = List<Lazy<unit>>()
         
         let primitivesGenerated = OpenGlQuery(QueryTarget.PrimitivesGenerated)
         
@@ -455,15 +456,14 @@ module RenderTasks =
                     subtasks <- Map.add pass task subtasks
                     task
 
-        let processDeltas (x : AdaptiveToken) (parent : AbstractOpenGlRenderTask) (t : RenderToken) =
-            
+        override x.ProcessDeltas(token, t) =
             deltaWatch.Restart()
-
-            let deltas = preparedObjectReader.GetChanges x
-
+            
+            let deltas = preparedObjectReader.GetChanges token
+            
             if not (HashSetDelta.isEmpty deltas) then
-                parent.StructureChanged()
-
+                x.StructureChanged()
+            
             let mutable added = 0
             let mutable removed = 0
             for d in deltas do 
@@ -472,42 +472,29 @@ module RenderTasks =
                         let task = getSubTask v.Pass
                         added <- added + 1
                         task.Add v
-
+            
                     | Rem(_,v) ->
                         let task = getSubTask v.Pass
                         removed <- removed + 1
                         task.Remove v   
                         v.Dispose()
-                        
+                                    
             if added > 0 || removed > 0 then
                 Log.line "[GL] RenderObjects: +%d/-%d (%dms)" added removed deltaWatch.ElapsedMilliseconds
             t.RenderObjectDeltas(added, removed)
 
-        let updateResources (x : AdaptiveToken) (self : RenderTask) (t : RenderToken) =
-            if RenderToken.isEmpty t then
-                self.Resources.Update(x, t)
-            else
-                //resourceUpdateWatch.Restart()
-                self.Resources.Update(x, t)
-                //resourceUpdateWatch.Stop()
-
-                //t.AddResourceUpdate(resourceUpdateWatch.ElapsedCPU, resourceUpdateWatch.ElapsedGPU)
-
-
-        override x.ProcessDeltas(token, t) =
-            processDeltas token x t
 
         override x.UpdateResources(token,t) =
-            updateResources token x t
+            x.Resources.Update(token, t)
+
 
         override x.Perform(token : AdaptiveToken, rt : RenderToken, fbo : Framebuffer, output : OutputDescription) =
             if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then
                 primitivesGenerated.Restart()
 
-            let mutable runStats = []
             subtasks |> Map.iter (fun _ t ->
                     let s = t.Run(token,rt, output)
-                    runStats <- s::runStats
+                    subTaskResults.Add(s)
                 )
 
             if RuntimeConfig.SyncUploadsAndFrames then
@@ -515,8 +502,10 @@ module RenderTasks =
             
             if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then 
                 primitivesGenerated.Stop()
-                runStats |> List.iter (fun l -> l.Value)
+                for l in subTaskResults do l.Value
                 rt.AddPrimitiveCount(primitivesGenerated.Value)
+
+            subTaskResults.Clear()
 
         override x.Update(token, rt) = 
             subtasks |> Map.iter (fun _ t ->
@@ -559,7 +548,8 @@ module RenderTasks =
                 GL.GetInteger(GetPName.Viewport, old)
                 GL.GetInteger(GetPName.FramebufferBinding, &oldFbo)
 
-                let handle = fbo.GetHandle Unchecked.defaultof<_> |> unbox<int>
+                let fbo = fbo |> unbox<Framebuffer>
+                let handle = fbo.Handle
 
                 if ExecutionContext.framebuffersSupported then
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)

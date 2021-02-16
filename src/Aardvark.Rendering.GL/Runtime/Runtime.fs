@@ -463,7 +463,8 @@ type Runtime() =
         member x.Clear(fbo : IFramebuffer, clearColors : Map<Symbol, C4f>, depth : Option<float>, stencil : Option<int>) =
             use __ = ctx.ResourceLock
 
-            let handle = fbo.GetHandle(Unchecked.defaultof<_>) |> unbox<int>
+            let fbo = fbo |> unbox<Framebuffer>
+            let handle = fbo.Handle
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, handle)
             GL.Check "could not bind framebuffer"
             
