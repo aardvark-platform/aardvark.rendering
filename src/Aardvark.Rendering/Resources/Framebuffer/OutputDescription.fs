@@ -2,6 +2,7 @@
 
 open Aardvark.Base
 
+[<Struct>]
 type OutputDescription =
     {
         framebuffer : IFramebuffer
