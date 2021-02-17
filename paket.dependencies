@@ -6,6 +6,7 @@ storage: none
 
 nuget FSharp.Core                        >= 4.6.2 lowest_matching: true
 nuget Microsoft.NETFramework.ReferenceAssemblies >= 1.0.0 lowest_matching: true
+nuget System.Reactive                    >= 4.3.1 lowest_matching: true
 
 nuget FSharp.Data.Adaptive               ~> 1.1.0
 nuget CSharp.Data.Adaptive               ~> 1.1.0
