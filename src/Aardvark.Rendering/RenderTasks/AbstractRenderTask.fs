@@ -40,6 +40,8 @@ type AbstractRenderTask() =
                     None
         )
 
+    let transaction = new Transaction()
+
     //let hooks : Dictionary<string, DefaultingModTable> = Dictionary.empty
     //let hook (name : string) (m : IAdaptiveValue) : IAdaptiveValue =
         //if Set.contains name dynamicUniforms then
@@ -74,7 +76,9 @@ type AbstractRenderTask() =
 
     member private x.UseValues (token : AdaptiveToken, output : OutputDescription, f : AdaptiveToken -> 'a) =
         //let toReset = List()
-        transact (fun () ->
+
+        // simulate transact but with reusing transaction
+        useTransaction transaction (fun () ->
             currentOutput.Value <- output
 
             //output.overrides |> Map.iter (fun name value ->
@@ -86,6 +90,7 @@ type AbstractRenderTask() =
             //            ()
             //    )
         )
+        transaction.Commit() // only commit as "transact"
 
         f(token)
         //if toReset.Count = 0 then

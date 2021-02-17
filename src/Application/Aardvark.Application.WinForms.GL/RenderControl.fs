@@ -34,6 +34,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
     let ctx = runtime.Context
     let mutable loaded = false
+    let transaction = new Transaction()
 
     let mutable task : Option<IRenderTask> = None
     let mutable taskSubscription : IDisposable = null
@@ -285,10 +286,12 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                 let stopDispatcherProcessing = threadStealing.StopStealing()
 
                 frameWatch.Restart()
-                transact (fun () -> time.Value <- nextFrameTime())
+                useTransaction transaction (fun () -> time.Value <- nextFrameTime())
 
                 if fboSize <> sizes.Value then
-                    transact (fun () -> sizes.Value <- fboSize)
+                    useTransaction transaction (fun () -> sizes.Value <- fboSize)
+
+                transaction.Commit()
 
                 defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
                 //defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size - V2i.II) }
@@ -314,7 +317,8 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                 if not first then
                     frameTime.Insert frameWatch.Elapsed.TotalSeconds |> ignore
 
-                transact (fun () -> time.MarkOutdated())
+                useTransaction transaction (fun () -> time.MarkOutdated())
+                transaction.Commit()
 
                 stopDispatcherProcessing.Dispose()
                 if t.OutOfDate then
@@ -331,7 +335,8 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
             | None ->
                 if fboSize <> sizes.Value then
-                    transact (fun () -> sizes.Value <- fboSize)
+                    useTransaction transaction (fun () -> sizes.Value <- fboSize)
+                    transaction.Commit()
 
                 needsRedraw <- false
 
