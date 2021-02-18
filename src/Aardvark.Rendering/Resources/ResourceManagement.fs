@@ -546,7 +546,7 @@ type ResourceInputSet() =
 
     let updateDirty (token : AdaptiveToken) (rt : RenderToken) =
         let rec run (level : int) (token : AdaptiveToken) (rt : RenderToken) =
-            let (buffer, cnt) =
+            let struct(buffer, cnt) =
                 lock all (fun () ->
                     let cnt = dirty.Count
                     if updateBuffer.Length < cnt then
