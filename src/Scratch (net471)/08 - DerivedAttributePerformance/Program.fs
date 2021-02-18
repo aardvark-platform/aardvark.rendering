@@ -32,6 +32,15 @@ let main argv =
     use app = new OpenGlApplication()
     let win = app.CreateSimpleRenderWindow(samples = 8)
 
+    let glCtrl = win.Control.Implementation :?> OpenGlRenderControl
+
+    glCtrl.KeyDown.Add(fun e ->
+        if e.KeyCode = System.Windows.Forms.Keys.End && e.Control then 
+            glCtrl.RenderContinuously <- not glCtrl.RenderContinuously
+            glCtrl.Invalidate()
+            e.Handled <- true
+    )
+
     let initialView = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
     let frustum = 
         win.Sizes 
