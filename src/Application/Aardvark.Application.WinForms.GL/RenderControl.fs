@@ -236,16 +236,18 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
     member x.Samples
         with get() = samples
         and set s =
-            samples <- s
-            if onPaintRender then
-                x.ForceRedraw()
+            if samples <> s then
+                samples <- s
+                if onPaintRender then
+                    x.ForceRedraw()
 
     member x.SubSampling
         with get() = subsampling
         and set v =
-            subsampling <- v
-            if onPaintRender then
-                x.ForceRedraw()
+            if subsampling <> v then
+                subsampling <- v
+                if onPaintRender then
+                    x.ForceRedraw()
 
 
     override x.OnHandleCreated(e) =
