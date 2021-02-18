@@ -1,3 +1,6 @@
+### 5.1.4
+- updated packages
+
 ### 5.1.3
 - [Vulkan] CommandTask no longer disposes ResourceManager
 - [Sg] Added instancing utilities for IndexedGeometry 
