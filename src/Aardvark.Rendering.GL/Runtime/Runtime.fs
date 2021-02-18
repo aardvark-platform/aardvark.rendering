@@ -369,7 +369,7 @@ type Runtime() =
 
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
-        member x.ContextLock = ctx.ResourceLock
+        member x.ContextLock = ctx.ResourceLock :> IDisposable
         member x.CompileRender (signature, engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(signature, engine,set)
         member x.CompileClear(signature, color, depth, stencil) = x.CompileClear(signature, color, depth, stencil)
       
