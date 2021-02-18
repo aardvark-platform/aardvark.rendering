@@ -67,8 +67,8 @@ module SafeAdaptiveStack =
 
     type SafedAdaptiveStack = 
         {
-            runningTransaction : Option<Transaction>
-            currentTransaction : Option<Transaction>
+            runningTransaction : ValueOption<Transaction>
+            currentTransaction : ValueOption<Transaction>
             callbacks : list<unit -> unit>
             currentEvaluationDepth : int
         }
