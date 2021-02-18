@@ -8,7 +8,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 
 type private ContextToken(obtain : ContextToken -> ContextHandle, release : ContextToken -> unit) as this =
-    let mutable handle = None
+    let mutable handle = ValueNone
     let mutable isObtained = false
 
     do this.Obtain()
@@ -23,7 +23,7 @@ type private ContextToken(obtain : ContextToken -> ContextHandle, release : Cont
         //handle <- None
 
     member x.Obtain() = 
-        handle <- Some <| obtain x
+        handle <- ValueSome <| obtain x
         isObtained <- true
 
     member x.Dispose() =
@@ -165,7 +165,7 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
     let bagCount = new SemaphoreSlim(resourceContextCount)
     let renderingContexts = ConcurrentDictionary<ContextHandle, SemaphoreSlim>()
 
-    let currentToken = new ThreadLocal<Option<ContextToken>>(fun () -> None)
+    let currentToken = new ThreadLocal<ValueOption<ContextToken>>(fun () -> ValueNone)
     
     let mutable driverInfo = None
 
@@ -198,10 +198,10 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
         with get() =  currentToken.Value.Value.Handle
         and set ctx =
             match ctx with
-                | Some ctx ->
-                    currentToken.Value <- Some <| new ContextToken((fun _ -> ctx), ignore)
-                | None ->
-                    currentToken.Value <- None
+                | ValueSome ctx ->
+                    currentToken.Value <- ValueSome <| new ContextToken((fun _ -> ctx), ignore)
+                | ValueNone ->
+                    currentToken.Value <- ValueNone
 
     member x.Runtime = runtime
 
@@ -235,7 +235,7 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
 
         // ensure that lock is "re-entrant"
         match currentToken.Value with
-            | Some token ->
+            | ValueSome token ->
 
                 if token.Handle.Value = handle then
                     // if the current token uses the same context as requested
@@ -251,27 +251,27 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
                         ( fun x ->
                             token.Release()
                             handle.MakeCurrent()
-                            currentToken.Value <- Some x
+                            currentToken.Value <- ValueSome x
                             handle),
                         ( fun x ->
                             handle.ReleaseCurrent()
-                            currentToken.Value <- None
+                            currentToken.Value <- ValueNone
                             token.Obtain())
                     ) :> _
   
 
 
-            | None ->
+            | ValueNone ->
                 // if there is no current token we must create a new
                 // one obtaining/releasing the desired context.
                 new ContextToken (
                     ( fun x ->
                         handle.MakeCurrent()
-                        currentToken.Value <- Some x
+                        currentToken.Value <- ValueSome x
                         handle),
                     ( fun x ->
                         handle.ReleaseCurrent()
-                        currentToken.Value <- None
+                        currentToken.Value <- ValueNone
                         ())
                 ) :> _
                     
@@ -283,12 +283,12 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
 
         // ensure that lock is "re-entrant"
         match currentToken.Value with
-            | Some token ->
+            | ValueSome token ->
                 // if the calling thread already posesses the token
                 // simply return a dummy disposable and do no perform any operation
                 nopDisposable
 
-            | None -> 
+            | ValueNone -> 
                 // create a token for the obtained context
                 new ContextToken(
                     ( fun x ->
@@ -310,7 +310,7 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
                         GL.Check("Error while making current.")
 
                         // store the token as current
-                        currentToken.Value <- Some x
+                        currentToken.Value <- ValueSome x
                         handle
                     ),
                     ( fun x ->
@@ -319,7 +319,7 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
                         handle.ReleaseCurrent()
                         bag.Add(handle)
                         bagCount.Release() |> ignore
-                        currentToken.Value <- None)
+                        currentToken.Value <- ValueNone)
                 ) :> _
 
 

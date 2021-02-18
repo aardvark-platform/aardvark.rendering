@@ -630,7 +630,7 @@ module ProgramExtensions =
 
                             // NOTE: contex.Diver represent information obtained by primary context -> possible that resource context have been created differently -> use driver information from actual context
                             let driver = match x.CurrentContextHandle with
-                                            | Some ch -> ch.Driver
+                                            | ValueSome ch -> ch.Driver
                                             | _ -> Log.warn "context not current!!"
                                                    x.Driver
                             

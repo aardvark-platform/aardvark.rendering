@@ -43,7 +43,7 @@ type InternalQuery(ctx : Context, count : int) =
     inherit MultiQuery<QueryHandle, uint64>()
 
     // The handle of the context the query is being used on
-    let mutable owner = None
+    let mutable owner = ValueNone
 
     /// Gets the GL handles of the queries.
     member x.NativeHandles =
