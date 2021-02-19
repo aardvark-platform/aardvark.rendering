@@ -294,6 +294,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                     useTransaction transaction (fun () -> sizes.Value <- fboSize)
 
                 transaction.Commit()
+                transaction.Dispose()
 
                 defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
                 //defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size - V2i.II) }
@@ -321,6 +322,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
                 useTransaction transaction (fun () -> time.MarkOutdated())
                 transaction.Commit()
+                transaction.Dispose()
 
                 stopDispatcherProcessing.Dispose()
                 if t.OutOfDate then
@@ -339,6 +341,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                 if fboSize <> sizes.Value then
                     useTransaction transaction (fun () -> sizes.Value <- fboSize)
                     transaction.Commit()
+                    transaction.Dispose()
 
                 needsRedraw <- false
 

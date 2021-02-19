@@ -90,7 +90,8 @@ type AbstractRenderTask() =
             //            ()
             //    )
         )
-        transaction.Commit() // only commit as "transact"
+        transaction.Commit()
+        transaction.Dispose()
 
         f(token)
         //if toReset.Count = 0 then
