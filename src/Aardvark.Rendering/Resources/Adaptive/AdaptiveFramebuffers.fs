@@ -219,21 +219,22 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
     /// writeOnly indicates which attachments can be represented as render buffers instead of textures.
     [<Extension>]
     static member CreateFramebufferCube(this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<int>, levels : int, writeOnly : Set<Symbol>) =
-        let store = SymDict.empty
+        let textures = SymDict.empty
+        let renderBuffers = SymDict.empty
 
         let createAttachment (sem : Symbol) (face : CubeSide) (level : int) (att : AttachmentSignature) =
             if writeOnly |> Set.contains sem then
                 let rb =
-                    store.GetOrCreate(sem, fun _ ->
-                        this.CreateRenderbuffer(att.format, att.samples, size |> AVal.map V2i) :> IAdaptiveResource
-                    ) |> unbox<IAdaptiveResource<IRenderbuffer>>
+                    renderBuffers.GetOrCreate(sem, fun _ ->
+                        this.CreateRenderbuffer(att.format, att.samples, size |> AVal.map V2i)
+                    )
 
                 this.CreateRenderbufferAttachment(rb) :> aval<_>
             else
                 let tex =
-                    store.GetOrCreate(sem, fun _ ->
-                        this.CreateTextureCube(TextureFormat.ofRenderbufferFormat att.format, levels, att.samples, size) :> IAdaptiveResource
-                    ) |> unbox<IAdaptiveResource<ITexture>>
+                    textures.GetOrCreate(sem, fun _ ->
+                        this.CreateTextureCube(TextureFormat.ofRenderbufferFormat att.format, levels, att.samples, size)
+                    )
 
                 this.CreateTextureAttachment(tex, int face, level) :> aval<_>
 
