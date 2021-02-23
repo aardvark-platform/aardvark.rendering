@@ -88,7 +88,7 @@ module FShadeInterop =
 
         let filter =
             LookupTable.lookupTable [
-                Filter.Anisotropic,                  Aardvark.Rendering.TextureFilter.Anisotropic
+                Filter.Anisotropic,                  Aardvark.Rendering.TextureFilter.MinMagMipLinear
                 Filter.MinLinearMagMipPoint,         Aardvark.Rendering.TextureFilter.MinLinearMagMipPoint
                 Filter.MinLinearMagPointMipLinear,   Aardvark.Rendering.TextureFilter.MinLinearMagPointMipLinear
                 Filter.MinMagLinearMipPoint,         Aardvark.Rendering.TextureFilter.MinMagLinearMipPoint

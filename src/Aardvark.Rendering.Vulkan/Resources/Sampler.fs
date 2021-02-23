@@ -24,7 +24,7 @@ module ``Sampler Extensions`` =
     module VkSamplerMipmapMode =
         let ofTextureFilter (t : TextureFilter) =
             match TextureFilter.mipmapMode t with
-            | Some(FilterMode.Linear) ->
+            | ValueSome FilterMode.Linear ->
                 VkSamplerMipmapMode.Linear
             | _ ->
                 VkSamplerMipmapMode.Nearest

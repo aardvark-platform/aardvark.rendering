@@ -49,12 +49,12 @@ module SamplerExtensions =
             let min = TextureFilter.minification f
 
             match min, mip with
-            | FilterMode.Point, None                    -> TextureMinFilter.Nearest
-            | FilterMode.Point, Some FilterMode.Point   -> TextureMinFilter.NearestMipmapNearest
-            | FilterMode.Point, Some FilterMode.Linear  -> TextureMinFilter.NearestMipmapLinear
-            | FilterMode.Linear, None                   -> TextureMinFilter.Linear
-            | FilterMode.Linear, Some FilterMode.Point  -> TextureMinFilter.LinearMipmapNearest
-            | FilterMode.Linear, Some FilterMode.Linear -> TextureMinFilter.LinearMipmapLinear
+            | FilterMode.Point, ValueNone                    -> TextureMinFilter.Nearest
+            | FilterMode.Point, ValueSome FilterMode.Point   -> TextureMinFilter.NearestMipmapNearest
+            | FilterMode.Point, ValueSome FilterMode.Linear  -> TextureMinFilter.NearestMipmapLinear
+            | FilterMode.Linear, ValueNone                   -> TextureMinFilter.Linear
+            | FilterMode.Linear, ValueSome FilterMode.Point  -> TextureMinFilter.LinearMipmapNearest
+            | FilterMode.Linear, ValueSome FilterMode.Linear -> TextureMinFilter.LinearMipmapLinear
             | _ -> TextureMinFilter.Linear
 
         let toMagFilter (f : TextureFilter) =
@@ -117,12 +117,8 @@ module SamplerExtensions =
         GL.SamplerParameter(handle, SamplerParameterName.TextureMaxLod, d.MaxLod)
         GL.Check "could not set MinLod for sampler"
 
-        //if d.IsAnisotropic then
         GL.SamplerParameter(handle, SamplerParameterName.TextureMaxAnisotropyExt, d.MaxAnisotropy)
         GL.Check "could not set MaxAnisotropy for sampler"
-        //else
-        //    GL.SamplerParameter(handle, SamplerParameterName.TextureMaxAnisotropyExt, 1)
-        //    GL.Check "could not set MaxAnisotropy for sampler"
 
         GL.SamplerParameter(handle, SamplerParameterName.TextureMinFilter, minFilter d.Filter)
         GL.Check "could not set MinFilter for sampler"

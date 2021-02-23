@@ -25,13 +25,13 @@ type SamplerState =
         mutable MipLodBias      : float32
     }
 
-    /// Returns whether the texture filter is anisotropic
+    /// Returns whether the sampler uses anisotropic filtering, i.e. whether MaxAnisotropy is greater than 1.
     member x.IsAnisotropic =
-        x.Filter |> TextureFilter.isAnisotropic
+        x.MaxAnisotropy > 1
 
     /// Returns whether the texture filter uses mipmapping.
     member x.UseMipmap =
-        x.Filter |> TextureFilter.mipmapMode |> Option.isSome
+        x.Filter |> TextureFilter.mipmapMode |> ValueOption.isSome
 
     static member Default =
         { Filter            = TextureFilter.MinMagMipLinear
@@ -51,8 +51,9 @@ module SamplerState =
     let filter (f : TextureFilter) =
         { SamplerState.Default with Filter = f }
 
+    /// Creates a sampler state with trilinear filtering and the given maximum anisotropy.
     let anisotropic (maxAnisotropy : int) =
-        { filter TextureFilter.Anisotropic with MaxAnisotropy = maxAnisotropy }
+        { filter TextureFilter.MinMagMipLinear with MaxAnisotropy = maxAnisotropy }
 
     let withFilter (f : TextureFilter) (state : SamplerState) =
         { state with Filter = f }
