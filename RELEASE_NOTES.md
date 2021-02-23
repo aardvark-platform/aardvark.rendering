@@ -1,3 +1,7 @@
+### 5.1.5
+- fixed Silk.NET.Core depenedency
+- fixed renderToColorCube 
+
 ### 5.1.4
 - updated packages
 
