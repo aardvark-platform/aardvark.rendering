@@ -354,12 +354,13 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         token.Enqueue (Command.ResolveMultisamples(src, dst))
 
-    member x.Dispose() = 
-        onDispose.Trigger()
-        manager.Dispose()
-        device.Dispose()
-        debugSubscription.Dispose()
-        
+    member x.Dispose() =
+        if not device.IsDisposed then
+            onDispose.Trigger()
+            manager.Dispose()
+            device.Dispose()
+            debugSubscription.Dispose()
+
     interface IDisposable with
         member x.Dispose() = x.Dispose() 
 
