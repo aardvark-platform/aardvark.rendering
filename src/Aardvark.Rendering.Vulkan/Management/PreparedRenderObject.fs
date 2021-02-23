@@ -100,6 +100,13 @@ open System.Threading.Tasks
 [<AbstractClass; Sealed; Extension>]
 type DevicePreparedRenderObjectExtensions private() =
 
+    static let createSamplerState (this : ResourceManager) (name : Symbol) (uniforms : IUniformProvider) (state : FShade.SamplerState)  =
+        match uniforms.TryGetUniform(Ag.Scope.Root, DefaultSemantic.SamplerStateModifier) with
+        | Some(:? aval<Symbol -> SamplerState -> SamplerState> as modifier) ->
+            this.CreateDynamicSamplerState(name, state.SamplerState, modifier) :> aval<_>
+        | _ ->
+            AVal.constant state.SamplerState
+
     static let prepareObject (this : ResourceManager) (renderPass : RenderPass) (ro : RenderObject) =
 
         let resources = System.Collections.Generic.List<IResourceLocation>()
@@ -131,11 +138,11 @@ type DevicePreparedRenderObjectExtensions private() =
                                     descriptions
                                     |> List.choosei (fun i (textureName, samplerState) ->
                                         let textureName = Symbol.Create textureName
-                                        let samplerState = samplerState.SamplerState
 
                                         match ro.Uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
                                         | Some (:? aval<ITexture> as tex) ->
-                                            let vs = this.CreateImageSampler(sam.samplerType, tex, AVal.constant samplerState)
+                                            let s = createSamplerState this textureName ro.Uniforms samplerState
+                                            let vs = this.CreateImageSampler(sam.samplerType, tex, s)
                                             Some(i, vs)
                                         | _ ->
                                             Log.warn "[Vulkan] could not find texture: %A" textureName

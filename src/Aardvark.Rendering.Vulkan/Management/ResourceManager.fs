@@ -36,11 +36,8 @@ type MutableResourceDescription<'a, 'b> =
     }
 
 type IResourceLocation =
-    inherit IAdaptiveObject
+    inherit IAdaptiveResource
     abstract member Update : AdaptiveToken -> ResourceInfo<obj>
-    abstract member Acquire : unit -> unit
-    abstract member Release : unit -> unit
-    abstract member ReleaseAll : unit -> unit
     abstract member ReferenceCount : int
     abstract member Key : list<obj>
     abstract member Owner : IResourceCache
@@ -48,6 +45,7 @@ type IResourceLocation =
 
 and IResourceLocation<'a> =
     inherit IResourceLocation
+    inherit IAdaptiveResource<'a>
     abstract member Update : AdaptiveToken -> ResourceInfo<'a>
 
 and IResourceUser =
@@ -106,15 +104,32 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
             x.GetHandle token
         )
 
+    member x.GetValue(token : AdaptiveToken) =
+        x.Update(token).handle
+
+    interface IAdaptiveValue with
+        member x.Accept(visitor) = visitor.Visit(x)
+        member x.GetValueUntyped(token) = x.GetValue(token) :> obj
+        member x.ContentType = typeof<'a>
+
+    interface IAdaptiveValue<'a> with
+        member x.GetValue(token) = x.GetValue(token)
+
+    interface IAdaptiveResource with
+        member x.Acquire() = x.Acquire()
+        member x.Release() = x.Release()
+        member x.ReleaseAll(_) = x.ReleaseAll()
+        member x.GetValue(token, _) = x.GetValue(token) :> obj
+
+    interface IAdaptiveResource<'a> with
+        member x.GetValue(token, _) = x.GetValue(token)
+
     interface IResourceLocation with
         member x.ReferenceCount = refCount
         member x.Update t = 
             let res = x.Update t
             { handle = res :> obj; version = res.version }
 
-        member x.Acquire() = x.Acquire()
-        member x.Release() = x.Release()
-        member x.ReleaseAll() = x.ReleaseAll()
         member x.Owner = owner
         member x.Key = key
 
@@ -527,6 +542,27 @@ module Resources =
                 ieagerDestroy = true
             }
         )
+
+    type DynamicSamplerStateResource(owner : IResourceCache, key : list<obj>, name : Symbol,
+                                     state : SamplerState, modifier : aval<Symbol -> SamplerState -> SamplerState>) =
+        inherit AbstractResourceLocation<SamplerState>(owner, key)
+
+        let mutable cache = None
+
+        override x.Create() =
+            modifier.Acquire()
+
+        override x.Destroy() =
+            modifier.Release()
+
+        override x.GetHandle(token : AdaptiveToken) =
+            if x.OutOfDate then
+                let f = modifier.GetValue(token)
+                cache <- Some (state |> f name)
+
+            match cache with
+            | Some s -> { handle = s; version = 0 }
+            | _ -> failwith "[Resource] inconsistent state"
 
     type ImageSamplerResource(owner : IResourceCache, key : list<obj>,
                               imageView : IResourceLocation<ImageView>,
@@ -1299,6 +1335,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
     let imageCache              = ResourceLocationCache<Image>(user)
     let imageViewCache          = ResourceLocationCache<ImageView>(user)
     let samplerCache            = ResourceLocationCache<Sampler>(user)
+    let samplerStateCache       = ResourceLocationCache<SamplerState>(user)
     let imageSamplerCache       = ResourceLocationCache<ImageSampler>(user)
     let imageSamplerArrayCache  = ResourceLocationCache<ImageSamplerArray>(user)
     let programCache            = ResourceLocationCache<ShaderProgram>(user)
@@ -1343,6 +1380,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
         imageCache.Clear()
         imageViewCache.Clear()
         samplerCache.Clear()
+        samplerStateCache.Clear()
         imageSamplerCache.Clear()
         imageSamplerArrayCache.Clear()
         programCache.Clear()
@@ -1388,6 +1426,12 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
     member x.CreateSampler(data : aval<SamplerState>) =
         samplerCache.GetOrCreate([data :> obj], fun cache key -> new SamplerResource(cache, key, device, data))
+
+    member x.CreateDynamicSamplerState(name : Symbol, state : SamplerState, modifier : aval<Symbol -> SamplerState -> SamplerState>) =
+        samplerStateCache.GetOrCreate(
+            [name :> obj; state :> obj; modifier :> obj],
+            fun cache key -> new DynamicSamplerStateResource(cache, key, name, state, modifier)
+        )
 
     member x.CreateImageSampler(samplerType : FShade.GLSL.GLSLSamplerType,
                                 texture : aval<ITexture>, samplerDesc : aval<SamplerState>) =
