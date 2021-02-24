@@ -265,12 +265,14 @@ let main argv =
         |> Sg.viewTrafo viewTrafo
         |> Sg.projTrafo projTrafo
 
-    win.RenderTask <- 
+    use task =
         let rnd = System.Random()
         RenderTask.ofList [
             if jitterFrames then RenderTask.custom (fun (a,rt,ot,q) -> Thread.Sleep(rnd.Next(0,100))) else RenderTask.empty
             win.Runtime.CompileRender(signature,sg)
         ]
+
+    win.RenderTask <- task
     win.Run()
 
     running <- false
