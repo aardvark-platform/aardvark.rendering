@@ -118,7 +118,7 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
     interface IAdaptiveResource with
         member x.Acquire() = x.Acquire()
         member x.Release() = x.Release()
-        member x.ReleaseAll(_) = x.ReleaseAll()
+        member x.ReleaseAll() = x.ReleaseAll()
         member x.GetValue(token, _) = x.GetValue(token) :> obj
 
     interface IAdaptiveResource<'a> with

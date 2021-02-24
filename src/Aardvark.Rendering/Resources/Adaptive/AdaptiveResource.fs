@@ -17,8 +17,7 @@ type IAdaptiveResource =
     abstract member Release : unit -> unit
 
     /// Resets the reference count and destroys the resource.
-    /// If force is set to true, the resource is destroyed even if it hasn't been acquired before.
-    abstract member ReleaseAll : force : bool -> unit
+    abstract member ReleaseAll : unit -> unit
 
     /// Gets the resource handle.
     abstract member GetValue : AdaptiveToken * RenderToken -> obj
@@ -55,8 +54,8 @@ type AdaptiveResource<'a>() =
         if Interlocked.Decrement(&refCount) = 0 then
             x.Destroy()
 
-    member x.ReleaseAll(force : bool) =
-        if Interlocked.Exchange(&refCount, 0) > 0 || force then
+    member x.ReleaseAll() =
+        if Interlocked.Exchange(&refCount, 0) > 0 then
             x.Destroy()
 
     member x.GetValue(token : AdaptiveToken, rt : RenderToken) =
@@ -81,7 +80,7 @@ type AdaptiveResource<'a>() =
     interface IAdaptiveResource with
         member x.Acquire() = x.Acquire()
         member x.Release() = x.Release()
-        member x.ReleaseAll(force) = x.ReleaseAll(force)
+        member x.ReleaseAll() = x.ReleaseAll()
         member x.GetValue(c,t) = x.GetValue(c,t) :> obj
 
     interface IAdaptiveResource<'a> with
@@ -89,11 +88,6 @@ type AdaptiveResource<'a>() =
 
 [<AbstractClass; Sealed; Extension>]
 type IAdaptiveResourceExtensions() =
-
-    /// Resets the reference count and destroys the resource.
-    [<Extension>]
-    static member inline ReleaseAll(this : IAdaptiveResource) =
-        this.ReleaseAll(force = false)
 
     [<Extension>]
     static member inline GetValue(this : aval<'a>, c : AdaptiveToken, t : RenderToken) =
@@ -114,7 +108,7 @@ type IAdaptiveResourceExtensions() =
         | _ -> ()
 
     [<Extension>]
-    static member inline ReleaseAll(this : aval<'a>, [<Optional; DefaultParameterValue(false)>] force : bool) =
+    static member inline ReleaseAll(this : aval<'a>) =
         match this with
-        | :? IAdaptiveResource as o -> o.ReleaseAll(force)
+        | :? IAdaptiveResource as o -> o.ReleaseAll()
         | _ -> ()
