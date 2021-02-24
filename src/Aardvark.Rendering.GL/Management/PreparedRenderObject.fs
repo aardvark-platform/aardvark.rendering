@@ -1366,12 +1366,10 @@ module rec Command =
                 fragment <- None
             | None -> ()
 
-
-            let n = next
-            let p = prev
-            match p with
-            | Some p -> p.Next <- n
-            | None -> ()
+            match prev, next with
+            | Some p, _     -> p.Next <- next
+            | None, Some n  -> n.Prev <- None
+            | _ -> ()
 
             prev <- None
             next <- None
@@ -1553,15 +1551,18 @@ module rec Command =
 
 
         override x.Free(info : CompilerInfo) =
-            for cmd in cache.Values do
-                cmd.Free(info)
-
+            // Epilog is not visible in the linked list at the SingleObjectCommand level.
+            // Thus, disposing those does not fix the prev pointer of the epilog, leaving it
+            // invalid -> exception when trying to dispose epilog afterwards
             match epilog with
             | Some e -> 
                 e.Dispose()
                 epilog <- None
             | None ->
                 ()
+
+            for cmd in cache.Values do
+                cmd.Free(info)
 
             cache.Clear()
             trie.Clear()

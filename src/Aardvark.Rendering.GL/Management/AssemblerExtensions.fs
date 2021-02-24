@@ -1358,9 +1358,10 @@ module rec ChangeableProgram =
         member x.Dispose() =
             if not x.IsDisposed then
                 for p in pinned do p.Dispose()
-                match prev with
-                | Some p -> p.Next <- next
-                | None -> ()
+                match prev, next with
+                | Some p, _     -> p.Next <- next
+                | None, Some n  -> n.Prev <- None
+                | _ -> ()
                 prev <- None
                 next <- None
                 parent.Free block
