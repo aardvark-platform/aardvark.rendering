@@ -533,6 +533,9 @@ module SgPrimitives =
                 |> Sg.vertexAttribute DefaultSemantic.Positions positions
                 |> Sg.vertexBufferValue DefaultSemantic.Colors (color |> AVal.map C4f)
 
+        let lines' (color : C4b) (data : Line3d[]) =
+            lines (AVal.constant color) (AVal.constant data)
+
         let triangles (color : aval<C4b>) (triangles : aval<Triangle3d[]>) =
             let call = 
                 triangles |> AVal.map (fun triangles ->
