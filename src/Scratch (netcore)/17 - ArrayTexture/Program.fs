@@ -4,14 +4,10 @@ open Aardvark.Base.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
-open System.Runtime.InteropServices
 open FShade
 
-#nowarn "9"
-
-
-module Shady = 
-    let sam = 
+module Shady =
+    let sam =
         sampler2dArray {
             texture uniform?BlaBlub
             filter Filter.MinMagLinear
@@ -25,64 +21,64 @@ module Shady =
             return sam.Sample(v.tc,slice)
         }
 
-type Texy(textureCount : aval<int>, rt : IRuntime) =
+type Texy(runtime : ITextureRuntime, size : V2i, count : aval<int>) =
     inherit AbstractOutputMod<ITexture>()
-    let size = V2i(64,64)
+
+    let mutable handle : Option<IBackendTexture * int> = None
+
     let rand = RandomSystem()
-    let mkTexture() = 
+
+    let generateTexture() =
         let pimg = PixImage<float32>(Col.Format.RGBA, size)
         let mat = pimg.GetMatrix<C4f>()
         let b() = rand.UniformC3f().ToC4f()
         mat.SetByCoord(fun _ -> b()) |> ignore
         pimg
-    let createAndUpload count =
-        let t = rt.CreateTextureArray(size, TextureFormat.Rgba32f, 1, 1, count)
-        for slice in 0..count-1 do 
-            let tex : PixImage<float32> = mkTexture()
-            rt.Upload(t,0,slice,tex)
-        t
-        
-    
-    let tex = AVal.init None
 
-    let deleteTexture() =
-        Log.line "delete"
-        tex |> AVal.force |> Option.map fst |> Option.iter rt.DeleteTexture
-        transact (fun _ -> tex.Value <- None)
-        
-    let newTexture count =
-        Log.line "new texture %d" count
-        deleteTexture()
-        let t = createAndUpload count
-        transact (fun _ -> tex.Value <- Some (t,count))
+    let createAndUploadTexture (count : int) =
+        Log.warn "Create texture"
+        let t = runtime.CreateTextureArray(size, TextureFormat.Rgba32f, 1, 1, count)
+        for slice in 0.. count - 1 do
+            let tex = generateTexture()
+            runtime.Upload(t, 0, slice, tex)
 
-    override x.Create() = 
-        Log.line "Create"
-        newTexture (textureCount.GetValue())
+        handle <- Some (t, count)
+        t :> ITexture
 
-    override x.Compute(token,_) =
-        Log.line "Compute"
-        let texture = 
-            AVal.map2 (fun tex ct ->
-                match tex with
-                | Some (t, oldct) when oldct = ct -> 
-                    t :> ITexture
-                | _ -> 
-                    newTexture ct
-                    let t = tex |> Option.get |> fst
-                    t :> ITexture
-            ) tex textureCount
-        texture.GetValue(token)
+    override x.Create() =
+        x.OutOfDate <- true
 
     override x.Destroy() =
-        Log.line "Destroy" 
-        deleteTexture()
+        match handle with
+        | Some (h, _) ->
+            Log.warn "Delete texture"
+            runtime.DeleteTexture h
+            handle <- None
+        | None ->
+            ()
+
+    override x.Compute(token : AdaptiveToken, t : RenderToken) =
+
+        let count = count.GetValue(token)
+
+        match handle with
+        | Some (h, c) when count = c ->
+            h :> ITexture
+
+        | Some (h, _) ->
+            t.ReplacedResource(ResourceKind.Texture)
+            runtime.DeleteTexture h
+            createAndUploadTexture count
+
+        | None ->
+            t.CreatedResource(ResourceKind.Texture)
+            createAndUploadTexture count
 
 [<EntryPoint>]
-let main argv = 
+let main argv =
     Aardvark.Init()
 
-    let win =         
+    let win =
         window {
             backend Backend.GL
             display Display.Mono
@@ -101,9 +97,9 @@ let main argv =
                     DefaultSemantic.DiffuseColorCoordinates, [|V2d.OO; V2d.IO; V2d.II; V2d.OI|] :> Array
                 ]
         )
-    
+
     let rand = RandomSystem()
-    // GL_MAX_ARRAY_TEXTURE_LAYERS 2048 
+    // GL_MAX_ARRAY_TEXTURE_LAYERS 2048
     // GL_MAX_3D_TEXTURE_SIZE 16384
     let rt = win.Runtime
 
@@ -112,13 +108,13 @@ let main argv =
     let count = AVal.init 10
     let onoff = AVal.init true
 
-    let texy = Texy(count,rt)
+    let texy = Texy(rt, V2i(64), count)
 
     let sg =
-        onoff |> AVal.map (fun o -> 
+        onoff |> AVal.map (fun o ->
             if not o then Sg.empty
             else
-                quadGeometry 
+                quadGeometry
                     |> Sg.ofIndexedGeometry
                     |> Sg.effect [
                         DefaultSurfaces.trafo |> toEffect
@@ -126,11 +122,11 @@ let main argv =
                         Shady.frag |> toEffect
                        ]
                     |> Sg.texture (Sym.ofString "BlaBlub") texy
-                    |> Sg.uniform "choice" slice 
+                    |> Sg.uniform "choice" slice
         ) |> Sg.dynamic
-    
+
     win.Keyboard.DownWithRepeats.Values.Add (fun k ->
-        match k with 
+        match k with
         | Keys.OemPlus ->  transact(fun _ -> let nv = min (slice.Value + 1) (count.Value-1) in Log.line "slice %d (%d)" nv (count.Value-1); slice.Value <- nv)
         | Keys.OemMinus -> transact(fun _ -> let nv = max (slice.Value - 1) 0 in Log.line "slice %d (%d)" nv (count.Value-1); slice.Value <- nv)
         | Keys.Space -> transact(fun _ -> let nv = rand.UniformInt(10)+1 in Log.line "new count: %d" nv; count.Value <- nv; slice.Value <- 0)
