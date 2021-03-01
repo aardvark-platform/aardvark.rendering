@@ -46,7 +46,7 @@ type Texy(runtime : ITextureRuntime, size : V2i, count : aval<int>) =
         t :> ITexture
 
     override x.Create() =
-        x.OutOfDate <- true
+        x.OutOfDate <- true // Only needed up until Aardvark.Base.Rendering 5.0.21
 
     override x.Destroy() =
         match handle with

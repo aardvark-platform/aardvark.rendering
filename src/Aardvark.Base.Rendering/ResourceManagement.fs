@@ -34,11 +34,13 @@ type AbstractOutputMod<'a>() =
 
     member x.Acquire() =
         if Interlocked.Increment(&refCount) = 1 then
+            x.OutOfDate <- true
             x.Create()
 
     member x.Release() =
         if Interlocked.Decrement(&refCount) = 0 then
             x.Destroy()
+            cache <- Unchecked.defaultof<'a>
 
     member x.GetValue(token : AdaptiveToken, rt : RenderToken) =
         x.EvaluateAlways token (fun token ->
