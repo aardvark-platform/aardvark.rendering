@@ -92,11 +92,24 @@ module RenderTask =
             [color; depth; stencil]
             |> List.concat |> Set.ofList
 
-        let clear = runtime.CompileClear(signature, C4f.Black, 1.0, 0)
-        let fbo = runtime.CreateFramebuffer(signature, size, Set.difference attachments output)
+        // We compile a clear task here that needs to be disposed. However, we cannot
+        // dispose the whole SequentialRenderTask as this will dispose the original task
+        // as well, which is managed by the caller. The easiest safe way around this I've found is
+        // to simply downcast the IRenderTask in the destroy function.
+        let task =
+            let create() =
+                let clear = runtime.CompileClear(signature, C4f.Black, 1.0, 0)
+                new SequentialRenderTask [|clear; task|] :> IRenderTask
 
-        let task = new SequentialRenderTask([|clear; task|])
-        let res = task.RenderTo(fbo, dispose = true)
+            let destroy (t : IRenderTask) =
+                match t with
+                | :? SequentialRenderTask as s -> s.Tasks.[0].Dispose()
+                | _ -> Log.error "[renderSemantics] expected SequentialRenderTask but got %A" t
+
+            AdaptiveResource.constant create destroy
+
+        let fbo = runtime.CreateFramebuffer(signature, size, Set.difference attachments output)
+        let res = AdaptiveRenderingResult(task, fbo)
         output |> Seq.map (fun k -> k, getResult k res) |> Map.ofSeq
 
     /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Colors as texture.
@@ -149,11 +162,22 @@ module RenderTask =
             [color; depth; stencil]
             |> List.concat |> Set.ofList
 
-        let clear = runtime.CompileClear(signature, C4f.Black, 1.0, 0)
-        let fbo = runtime.CreateFramebufferCube(signature, size, tasks.Levels, Set.difference attachments output)
+        let compiled =
+            let create() =
+                let clear = runtime.CompileClear(signature, C4f.Black, 1.0, 0)
+                tasks |> CubeMap.map (fun task ->
+                    new SequentialRenderTask [|clear; task|] :> IRenderTask
+                )
 
-        let tasks = tasks |> CubeMap.map (fun task -> new SequentialRenderTask([|clear; task|]))
-        let res = tasks.RenderTo(fbo, dispose = true)
+            let destroy (t : CubeMap<IRenderTask>) =
+                match t.Data.[0] with
+                | :? SequentialRenderTask as s -> s.Tasks.[0].Dispose()
+                | _ -> Log.error "[renderSemanticsCubeMip] expected SequentialRenderTask but got %A" t
+
+            AdaptiveResource.constant create destroy
+
+        let fbo = runtime.CreateFramebufferCube(signature, size, tasks.Levels, Set.difference attachments output)
+        let res = AdaptiveRenderingResultCube(compiled, fbo)
         output |> Seq.map (fun k -> k, getResultCube k res) |> Map.ofSeq
 
     /// Runs the cube render tasks for the given adaptive size.

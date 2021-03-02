@@ -3,33 +3,39 @@
 open Aardvark.Base
 open FSharp.Data.Adaptive
 open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
 
 [<AutoOpen>]
 module private AdaptiveRenderToTypes =
 
+    let constantTask (task : IRenderTask) =
+        AdaptiveResource.constant (fun _ -> task) ignore
+
     // Regular render targets
-    type AdaptiveRenderingResult(task : IRenderTask, target : IAdaptiveResource<IFramebuffer>, queries : IQuery, disposeTask : bool) =
+    type AdaptiveRenderingResult(task : IAdaptiveResource<IRenderTask>, target : IAdaptiveResource<IFramebuffer>, queries : IQuery) =
         inherit AdaptiveResource<IFramebuffer>()
 
-        new(task : IRenderTask, target : IAdaptiveResource<IFramebuffer>, disposeTask : bool) =
-            new AdaptiveRenderingResult(task, target, Queries.none, disposeTask)
+        new(task : IAdaptiveResource<IRenderTask>, target : IAdaptiveResource<IFramebuffer>) =
+            new AdaptiveRenderingResult(task, target, Queries.none)
+
+        new(task : IRenderTask, target : IAdaptiveResource<IFramebuffer>, queries : IQuery) =
+            new AdaptiveRenderingResult(constantTask task, target, queries)
 
         new(task : IRenderTask, target : IAdaptiveResource<IFramebuffer>) =
-            new AdaptiveRenderingResult(task, target, false)
+            new AdaptiveRenderingResult(constantTask task, target, Queries.none)
 
         override x.Compute(t : AdaptiveToken, rt : RenderToken) =
             let fbo = target.GetValue(t, rt)
+            let task = task.GetValue(t, rt)
             task.Run(t, rt, OutputDescription.ofFramebuffer fbo, queries)
             fbo
 
         override x.Create() =
+            task.Acquire()
             target.Acquire()
 
         override x.Destroy() =
             target.Release()
-            if disposeTask then
-                task.Dispose()
+            task.Release()
 
     type AdaptiveOutputTexture(semantic : Symbol, res : IAdaptiveResource<IFramebuffer>) =
         inherit AdaptiveResource<IBackendTexture>()
@@ -38,10 +44,10 @@ module private AdaptiveRenderToTypes =
             let res = res.GetValue(t, rt)
 
             match Map.tryFind semantic res.Attachments with
-                | Some (:? IBackendTextureOutputView as o) ->
-                    o.texture
-                | _ ->
-                    failwithf "could not get result for semantic %A as texture" semantic
+            | Some (:? IBackendTextureOutputView as o) ->
+                o.texture
+            | _ ->
+                failwithf "could not get result for semantic %A as texture" semantic
 
         override x.Create() =
             res.Acquire()
@@ -50,18 +56,25 @@ module private AdaptiveRenderToTypes =
             res.Release()
 
 
+    let constantCubeTask (tasks : CubeMap<IRenderTask>) =
+        AdaptiveResource.constant (fun _ -> tasks) ignore
+
     // Cube render targets
-    type AdaptiveRenderingResultCube(tasks : CubeMap<IRenderTask>, targets : IAdaptiveResource<CubeMap<IFramebuffer>>, queries : IQuery, disposeTasks : bool) =
+    type AdaptiveRenderingResultCube(tasks : IAdaptiveResource<CubeMap<IRenderTask>>, targets : IAdaptiveResource<CubeMap<IFramebuffer>>, queries : IQuery) =
         inherit AdaptiveResource<CubeMap<IFramebuffer>>()
 
-        new(tasks : CubeMap<IRenderTask>, targets : IAdaptiveResource<CubeMap<IFramebuffer>>, disposeTasks : bool) =
-            new AdaptiveRenderingResultCube(tasks, targets, Queries.none, disposeTasks)
+        new(tasks : IAdaptiveResource<CubeMap<IRenderTask>>, targets : IAdaptiveResource<CubeMap<IFramebuffer>>) =
+            new AdaptiveRenderingResultCube(tasks, targets, Queries.none)
+
+        new(tasks : CubeMap<IRenderTask>, targets : IAdaptiveResource<CubeMap<IFramebuffer>>, queries : IQuery) =
+            new AdaptiveRenderingResultCube(constantCubeTask tasks, targets, queries)
 
         new(tasks : CubeMap<IRenderTask>, targets : IAdaptiveResource<CubeMap<IFramebuffer>>) =
-            new AdaptiveRenderingResultCube(tasks, targets, false)
+            new AdaptiveRenderingResultCube(constantCubeTask tasks, targets, Queries.none)
 
         override x.Compute(t : AdaptiveToken, rt : RenderToken) =
             let fbos = targets.GetValue(t, rt)
+            let tasks = tasks.GetValue(t, rt)
 
             tasks |> CubeMap.iter2 (fun fbo task ->
                 task.Run(t, rt, OutputDescription.ofFramebuffer fbo, queries)
@@ -70,12 +83,12 @@ module private AdaptiveRenderToTypes =
             fbos
 
         override x.Create() =
+            tasks.Acquire()
             targets.Acquire()
 
         override x.Destroy() =
             targets.Release()
-            if disposeTasks then
-                tasks |> CubeMap.iter Disposable.dispose
+            tasks.Release()
 
     type AdaptiveOutputTextureCube(semantic : Symbol, res : IAdaptiveResource<CubeMap<IFramebuffer>>) =
         inherit AdaptiveResource<IBackendTexture>()
@@ -84,10 +97,10 @@ module private AdaptiveRenderToTypes =
             let res = res.GetValue(t, rt) |> CubeMap.data
 
             match Map.tryFind semantic res.[0].Attachments with
-                | Some (:? IBackendTextureOutputView as o) ->
-                    o.texture
-                | _ ->
-                    failwithf "could not get result for semantic %A as texture" semantic
+            | Some (:? IBackendTextureOutputView as o) ->
+                o.texture
+            | _ ->
+                failwithf "could not get result for semantic %A as texture" semantic
 
         override x.Create() =
             res.Acquire()
@@ -103,16 +116,14 @@ type RenderToExtensions private() =
     // ================================================================================================================
 
     /// Renders the given task to the given framebuffer.
-    /// If dispose is set to true, the render task is disposed when the resulting output is released.
     [<Extension>]
-    static member RenderTo(this : IRenderTask, output : IAdaptiveResource<IFramebuffer>, [<Optional; DefaultParameterValue(false)>] dispose : bool) =
-        AdaptiveRenderingResult(this, output, dispose) :> IAdaptiveResource<_>
+    static member RenderTo(this : IRenderTask, output : IAdaptiveResource<IFramebuffer>) =
+        AdaptiveRenderingResult(this, output) :> IAdaptiveResource<_>
 
     /// Renders the given task to the given framebuffer.
-    /// If dispose is set to true, the render task is disposed when the resulting output is released.
     [<Extension>]
-    static member RenderTo(this : IRenderTask, output : IAdaptiveResource<IFramebuffer>, queries : IQuery, [<Optional; DefaultParameterValue(false)>] dispose : bool) =
-        AdaptiveRenderingResult(this, output, queries, dispose) :> IAdaptiveResource<_>
+    static member RenderTo(this : IRenderTask, output : IAdaptiveResource<IFramebuffer>, queries : IQuery) =
+        AdaptiveRenderingResult(this, output, queries) :> IAdaptiveResource<_>
 
     /// Gets the attachment of the framebuffer with the given semantic.
     [<Extension>]
@@ -125,21 +136,14 @@ type RenderToExtensions private() =
     // ================================================================================================================
 
     /// Renders the given tasks to the given framebuffers.
-    /// If dispose is set to true, the render tasks are disposed when the resulting output is released.
     [<Extension>]
-    static member RenderTo(this : CubeMap<#IRenderTask>,
-                           output : IAdaptiveResource<CubeMap<IFramebuffer>>,
-                           [<Optional; DefaultParameterValue(false)>] dispose : bool) =
-        AdaptiveRenderingResultCube(this |> CubeMap.map (fun x -> x :> IRenderTask), output, dispose) :> IAdaptiveResource<_>
+    static member RenderTo(this : CubeMap<#IRenderTask>, output : IAdaptiveResource<CubeMap<IFramebuffer>>) =
+        AdaptiveRenderingResultCube(this |> CubeMap.map (fun x -> x :> IRenderTask), output) :> IAdaptiveResource<_>
 
     /// Renders the given tasks to the given framebuffers.
-    /// If dispose is set to true, the render tasks are disposed when the resulting output is released.
     [<Extension>]
-    static member RenderTo(this : CubeMap<#IRenderTask>,
-                           output : IAdaptiveResource<CubeMap<IFramebuffer>>,
-                           queries : IQuery,
-                           [<Optional; DefaultParameterValue(false)>] dispose : bool) =
-        AdaptiveRenderingResultCube(this |> CubeMap.map (fun x -> x :> IRenderTask), output, queries, dispose) :> IAdaptiveResource<_>
+    static member RenderTo(this : CubeMap<#IRenderTask>, output : IAdaptiveResource<CubeMap<IFramebuffer>>, queries : IQuery) =
+        AdaptiveRenderingResultCube(this |> CubeMap.map (fun x -> x :> IRenderTask), output, queries) :> IAdaptiveResource<_>
 
     /// Gets the cube attachment of the framebuffer with the given semantic.
     [<Extension>]

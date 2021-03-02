@@ -1,10 +1,8 @@
 ﻿namespace Aardvark.Rendering
 
 open System.Threading
-open Aardvark.Base
 open FSharp.Data.Adaptive
 open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
 
 /// Interface for adaptive reference-counted resources.
 type IAdaptiveResource =
@@ -93,6 +91,49 @@ type AdaptiveResource<'a>() =
 
     interface IAdaptiveResource<'a> with
         member x.GetValue(c,t) = x.GetValue(c,t)
+
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module AdaptiveResource =
+
+    type private ConstantResource<'a>(create : unit -> 'a, destroy : 'a -> unit) =
+        inherit AdaptiveResource<'a>()
+
+        let mutable cache = Unchecked.defaultof<'a>
+
+        override x.Create() =
+            lock x (fun _ ->
+                cache <- create()
+            )
+
+        override x.Destroy() =
+            lock x (fun _ ->
+                destroy cache
+                cache <- Unchecked.defaultof<'a>
+            )
+
+        override x.Compute(_, _) =
+            cache
+
+    /// Increases the reference count and creates the resource if necessary.
+    let acquire (r : IAdaptiveResource) =
+        r.Acquire()
+
+    /// Decreases the reference count and destroys the resource if it is no longer used.
+    let release (r : IAdaptiveResource) =
+        r.Release()
+
+    /// Resets the reference count and destroys the resource.
+    let releaseAll (r : IAdaptiveResource) =
+        r.ReleaseAll()
+
+    /// Gets the resource handle.
+    let getValue (t : AdaptiveToken) (rt : RenderToken) (r : IAdaptiveResource<'a>) =
+        r.GetValue(t, rt)
+
+    /// Creates an adaptive resource using the given create and destroy functions.
+    let constant (create : unit -> 'a) (destroy : 'a -> unit) =
+        ConstantResource(create, destroy) :> IAdaptiveResource<'a>
 
 [<AbstractClass; Sealed; Extension>]
 type IAdaptiveResourceExtensions() =

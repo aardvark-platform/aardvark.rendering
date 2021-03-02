@@ -87,6 +87,7 @@ let main argv =
     win.Scene <- sg
     win.Run(preventDisposal = true)
 
+    tasks |> CubeMap.iter Disposable.dispose
     runtime.DeleteFramebufferSignature(signature)
 
     0
