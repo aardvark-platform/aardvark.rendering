@@ -46,12 +46,15 @@ module SgFSharp =
 
         module private AdaptiveResource =
 
+            let cheapEqual (x : 'a) (y : 'a) =
+                ShallowEqualityComparer<'a>.Instance.Equals(x, y)
+
             // Using a normal AVal.map breaks the extension methods
             // for acquiring and releasing resources.
-            type MapResource<'a, 'b>(mapping : 'a -> 'b, input : aval<'a>) =
-                inherit AdaptiveResource<'b>()
+            type MapResource<'T1, 'T2>(mapping : 'T1 -> 'T2, input : aval<'T1>) =
+                inherit AdaptiveResource<'T2>()
 
-                let output = input |> AVal.map mapping
+                let mutable cache : ValueOption<struct ('T1 * 'T2)> = ValueNone
 
                 override x.Create() =
                     input.Acquire()
@@ -60,7 +63,13 @@ module SgFSharp =
                     input.Release()
 
                 override x.Compute(t, rt) =
-                    output.GetValue(t, rt)
+                    let i = input.GetValue(t, rt)
+                    match cache with
+                    | ValueSome (struct (a, b)) when cheapEqual a i -> b
+                    | _ ->
+                        let b = mapping i
+                        cache <- ValueSome(struct (i, b))
+                        b
 
             /// Maps an adaptive value according to the given function, while
             /// maintaining resource semantics.

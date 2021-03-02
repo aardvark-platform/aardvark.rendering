@@ -53,6 +53,7 @@ type AdaptiveResource<'a>() =
     member x.Release() =
         if Interlocked.Decrement(&refCount) = 0 then
             x.Destroy()
+            transact x.MarkOutdated
 
     member x.ReleaseAll() =
         if Interlocked.Exchange(&refCount, 0) > 0 then
@@ -90,25 +91,25 @@ type AdaptiveResource<'a>() =
 type IAdaptiveResourceExtensions() =
 
     [<Extension>]
-    static member inline GetValue(this : aval<'a>, c : AdaptiveToken, t : RenderToken) =
+    static member GetValue(this : aval<'a>, c : AdaptiveToken, t : RenderToken) =
         match this with
         | :? IAdaptiveResource<'a> as x -> x.GetValue(c, t)
         | _ -> this.GetValue(c)
 
     [<Extension>]
-    static member inline Acquire(this : aval<'a>) =
+    static member Acquire(this : aval<'a>) =
         match this with
         | :? IAdaptiveResource as o -> o.Acquire()
         | _ -> ()
 
     [<Extension>]
-    static member inline Release(this : aval<'a>) =
+    static member Release(this : aval<'a>) =
         match this with
         | :? IAdaptiveResource as o -> o.Release()
         | _ -> ()
 
     [<Extension>]
-    static member inline ReleaseAll(this : aval<'a>) =
+    static member ReleaseAll(this : aval<'a>) =
         match this with
         | :? IAdaptiveResource as o -> o.ReleaseAll()
         | _ -> ()
