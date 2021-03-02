@@ -46,6 +46,12 @@ type AdaptiveResource<'a>() =
     // Computes and returns the resource handle.
     abstract member Compute : AdaptiveToken * RenderToken -> 'a
 
+    member private x.Reset() =
+        lock x (fun _ ->
+            cache <- Unchecked.defaultof<'a>
+            transact x.MarkOutdated
+        )
+
     member x.Acquire() =
         if Interlocked.Increment(&refCount) = 1 then
             x.Create()
@@ -53,11 +59,12 @@ type AdaptiveResource<'a>() =
     member x.Release() =
         if Interlocked.Decrement(&refCount) = 0 then
             x.Destroy()
-            transact x.MarkOutdated
+            x.Reset()
 
     member x.ReleaseAll() =
         if Interlocked.Exchange(&refCount, 0) > 0 then
             x.Destroy()
+            x.Reset()
 
     member x.GetValue(token : AdaptiveToken, rt : RenderToken) =
         x.EvaluateAlways token (fun token ->
