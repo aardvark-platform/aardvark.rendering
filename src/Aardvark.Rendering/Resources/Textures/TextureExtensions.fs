@@ -255,6 +255,7 @@ type ITextureRuntimeExtensions private() =
     // Download
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
@@ -264,6 +265,7 @@ type ITextureRuntimeExtensions private() =
         this.Download(texture, level, slice, V2i.Zero, target)
 
     ///<summary>Downloads color data from the given texture to a PixVolume.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
@@ -273,6 +275,7 @@ type ITextureRuntimeExtensions private() =
         this.Download(texture, level, slice, V3i.Zero, target)
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
@@ -287,6 +290,7 @@ type ITextureRuntimeExtensions private() =
         pi
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
@@ -297,6 +301,7 @@ type ITextureRuntimeExtensions private() =
         this.Download(texture, level, slice, Box2i.Infinite, format)
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="format">The format of the PixImage.</param>
@@ -306,6 +311,7 @@ type ITextureRuntimeExtensions private() =
         this.Download(texture, level, 0, Box2i.Infinite, format)
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<param name="format">The format of the PixImage.</param>
     ///<returns>A PixImage containing the downloaded data.</returns>
@@ -314,6 +320,7 @@ type ITextureRuntimeExtensions private() =
         this.Download(texture, 0, 0, Box2i.Infinite, format)
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
@@ -325,6 +332,7 @@ type ITextureRuntimeExtensions private() =
         this.Download(texture, level, slice, region, pixFormat)
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
@@ -334,6 +342,7 @@ type ITextureRuntimeExtensions private() =
         this.Download(texture, level, slice, Box2i.Infinite)
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<param name="level">The texture level to download.</param>
     ///<returns>A PixImage containing the downloaded data.</returns>
@@ -342,6 +351,7 @@ type ITextureRuntimeExtensions private() =
         this.Download(texture, level, 0, Box2i.Infinite)
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<returns>A PixImage containing the downloaded data.</returns>
     [<Extension>]
@@ -351,6 +361,7 @@ type ITextureRuntimeExtensions private() =
     // DownloadDepth
 
     ///<summary>Downloads depth data from the given texture to a float matrix.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
@@ -360,6 +371,7 @@ type ITextureRuntimeExtensions private() =
         this.DownloadDepth(texture, level, slice, V2i.Zero, target)
 
     ///<summary>Downloads depth data from the given texture to a float matrix.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
@@ -373,6 +385,7 @@ type ITextureRuntimeExtensions private() =
         matrix
 
     ///<summary>Downloads depth data from the given texture to a float matrix.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
@@ -382,6 +395,7 @@ type ITextureRuntimeExtensions private() =
         this.DownloadDepth(texture, level, slice, Box2i.Infinite)
 
     ///<summary>Downloads depth data from the given texture to a float matrix.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<param name="level">The texture level to download.</param>
     ///<returns>A matrix containing the downloaded data.</returns>
@@ -390,6 +404,7 @@ type ITextureRuntimeExtensions private() =
         this.DownloadDepth(texture, level, 0, Box2i.Infinite)
 
     ///<summary>Downloads depth data from the given texture to a float matrix.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<returns>A matrix containing the downloaded data.</returns>
     [<Extension>]
@@ -399,6 +414,7 @@ type ITextureRuntimeExtensions private() =
     // DownloadStencil
 
     ///<summary>Downloads stencil data from the given texture to an integer matrix.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
@@ -408,6 +424,7 @@ type ITextureRuntimeExtensions private() =
         this.DownloadStencil(texture, level, slice, V2i.Zero, target)
 
     ///<summary>Downloads stencil data from the given texture to an integer matrix.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
@@ -421,6 +438,7 @@ type ITextureRuntimeExtensions private() =
         matrix
 
     ///<summary>Downloads stencil data from the given texture to an integer matrix.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
@@ -430,6 +448,7 @@ type ITextureRuntimeExtensions private() =
         this.DownloadStencil(texture, level, slice, Box2i.Infinite)
 
     ///<summary>Downloads stencil data from the given texture to an integer matrix.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<param name="level">The texture level to download.</param>
     ///<returns>A matrix containing the downloaded data.</returns>
@@ -438,6 +457,7 @@ type ITextureRuntimeExtensions private() =
         this.DownloadStencil(texture, level, 0, Box2i.Infinite)
 
     ///<summary>Downloads stencil data from the given texture to an integer matrix.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to download.</param>
     ///<returns>A matrix containing the downloaded data.</returns>
     [<Extension>]
@@ -447,6 +467,7 @@ type ITextureRuntimeExtensions private() =
     // Upload
 
     ///<summary>Uploads data from a PixImage to the given texture.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to update.</param>
     ///<param name="level">The texture level to update.</param>
     ///<param name="slice">The texture slice to update.</param>
@@ -456,6 +477,7 @@ type ITextureRuntimeExtensions private() =
         this.Upload(texture, level, slice, V2i.Zero, source)
 
     ///<summary>Uploads data from a PixImage to the given texture.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to update.</param>
     ///<param name="level">The texture level to update.</param>
     ///<param name="source">The PixImage containing the data to upload.</param>
@@ -464,6 +486,7 @@ type ITextureRuntimeExtensions private() =
         this.Upload(texture, level, 0, V2i.Zero, source)
 
     ///<summary>Uploads data from a PixImage to the given texture.</summary>
+    ///<param name="this">The runtime.</param>
     ///<param name="texture">The texture to update.</param>
     ///<param name="source">The PixImage containing the data to upload.</param>
     [<Extension>]
@@ -477,6 +500,7 @@ type IBackendTextureExtensions private() =
     // Download
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
     ///<param name="offset">The minimum coordinate to update.</param>
@@ -486,6 +510,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.Download(this, level, slice, offset, target)
 
     ///<summary>Downloads color data from the given texture to a PixVolume.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
     ///<param name="offset">The minimum coordinate to update.</param>
@@ -495,6 +520,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.Download(this, level, slice, offset, target)
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
     ///<param name="target">The PixImage to copy the data to.</param>
@@ -503,6 +529,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.Download(this, level, slice, target)
 
     ///<summary>Downloads color data from the given texture to a PixVolume.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
     ///<param name="target">The PixVolume to copy the data to.</param>
@@ -511,6 +538,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.Download(this, level, slice, target)
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
     ///<param name="region">The (half-open) region of the texture to copy, or Box2i.Infinite if the whole texture is to be copied.</param>
@@ -521,6 +549,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.Download(this, level, slice, region, format)
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
     ///<param name="format">The format of the PixImage.</param>
@@ -530,6 +559,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.Download(this, level, slice, format)
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="format">The format of the PixImage.</param>
     ///<returns>A PixImage containing the downloaded data.</returns>
@@ -538,6 +568,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.Download(this, level, format)
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="format">The format of the PixImage.</param>
     ///<returns>A PixImage containing the downloaded data.</returns>
     [<Extension>]
@@ -545,6 +576,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.Download(this, format)
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
     ///<param name="region">The (half-open) region of the texture to copy, or Box2i.Infinite if the whole texture is to be copied.</param>
@@ -554,6 +586,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.Download(this, level, slice, region)
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
     ///<returns>A PixImage containing the downloaded data.</returns>
@@ -562,6 +595,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.Download(this, level, slice)
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<returns>A PixImage containing the downloaded data.</returns>
     [<Extension>]
@@ -569,6 +603,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.Download(this, level)
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
+    ///<param name="this">The texture.</param>
     ///<returns>A PixImage containing the downloaded data.</returns>
     [<Extension>]
     static member Download(this : IBackendTexture) =
@@ -577,6 +612,7 @@ type IBackendTextureExtensions private() =
     // DownloadDepth
 
     ///<summary>Downloads depth data from the given texture to a float matrix.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
     ///<param name="offset">The minimum coordinate to update.</param>
@@ -586,6 +622,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.DownloadDepth(this, level, slice, offset, target)
 
     ///<summary>Downloads depth data from the given texture to a float matrix.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
     ///<param name="target">The matrix to copy the data to.</param>
@@ -594,6 +631,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.DownloadDepth(this, level, slice, V2i.Zero, target)
 
     ///<summary>Downloads depth data from the given texture to a float matrix.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
     ///<param name="region">The (half-open) region of the texture to copy, or Box2i.Infinite if the whole texture is to be copied.</param>
@@ -603,6 +641,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.DownloadDepth(this, level, slice, region)
 
     ///<summary>Downloads depth data from the given texture to a float matrix.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
     ///<returns>A matrix containing the downloaded data.</returns>
@@ -611,6 +650,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.DownloadDepth(this, level, slice)
 
     ///<summary>Downloads depth data from the given texture to a float matrix.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<returns>A matrix containing the downloaded data.</returns>
     [<Extension>]
@@ -618,6 +658,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.DownloadDepth(this, level)
 
     ///<summary>Downloads depth data from the given texture to a float matrix.</summary>
+    ///<param name="this">The texture.</param>
     ///<returns>A matrix containing the downloaded data.</returns>
     [<Extension>]
     static member DownloadDepth(this : IBackendTexture) =
@@ -626,6 +667,7 @@ type IBackendTextureExtensions private() =
     // DownloadStencil
 
     ///<summary>Downloads stencil data from the given texture to an integer matrix.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
     ///<param name="offset">The minimum coordinate to update.</param>
@@ -635,6 +677,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.DownloadStencil(this, level, slice, offset, target)
 
     ///<summary>Downloads stencil data from the given texture to an integer matrix.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
     ///<param name="target">The matrix to copy the data to.</param>
@@ -643,6 +686,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.DownloadStencil(this, level, slice, target)
 
     ///<summary>Downloads stencil data from the given texture to an integer matrix.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
     ///<param name="region">The (half-open) region of the texture to copy, or Box2i.Infinite if the whole texture is to be copied.</param>
@@ -652,6 +696,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.DownloadStencil(this, level, slice, region)
 
     ///<summary>Downloads stencil data from the given texture to an integer matrix.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<param name="slice">The texture slice to download.</param>
     ///<returns>A matrix containing the downloaded data.</returns>
@@ -660,6 +705,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.DownloadStencil(this, level, slice)
 
     ///<summary>Downloads stencil data from the given texture to an integer matrix.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to download.</param>
     ///<returns>A matrix containing the downloaded data.</returns>
     [<Extension>]
@@ -667,6 +713,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.DownloadStencil(this, level)
 
     ///<summary>Downloads stencil data from the given texture to an integer matrix.</summary>
+    ///<param name="this">The texture.</param>
     ///<returns>A matrix containing the downloaded data.</returns>
     [<Extension>]
     static member DownloadStencil(this : IBackendTexture) =
@@ -675,6 +722,7 @@ type IBackendTextureExtensions private() =
     // Upload
 
     ///<summary>Uploads data from a PixImage to the given texture.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to update.</param>
     ///<param name="slice">The texture slice to update.</param>
     ///<param name="offset">The minimum coordinate to update.</param>
@@ -684,6 +732,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.Upload(this, level, slice, offset, source)
 
     ///<summary>Uploads data from a PixImage to the given texture.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to update.</param>
     ///<param name="slice">The texture slice to update.</param>
     ///<param name="source">The PixImage containing the data to upload.</param>
@@ -692,6 +741,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.Upload(this, level, slice, V2i.Zero, source)
 
     ///<summary>Uploads data from a PixImage to the given texture.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="level">The texture level to update.</param>
     ///<param name="source">The PixImage containing the data to upload.</param>
     [<Extension>]
@@ -699,6 +749,7 @@ type IBackendTextureExtensions private() =
         this.Runtime.Upload(this, level, 0, V2i.Zero, source)
 
     ///<summary>Uploads data from a PixImage to the given texture.</summary>
+    ///<param name="this">The texture.</param>
     ///<param name="source">The PixImage containing the data to upload.</param>
     [<Extension>]
     static member Upload(this : IBackendTexture, source : PixImage) =

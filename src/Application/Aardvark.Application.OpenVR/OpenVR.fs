@@ -663,55 +663,55 @@ type VrSystem(appType : VrApplicationType) =
             
     /// <summary>
     /// Returns true if any Shutdown/ProcessQuit event has been received
-    /// </summary
+    /// </summary>
     member x.ShutdownRequested with get() = shutdown        
 
     /// <summary>
     /// OpenVR system
-    /// </summary
+    /// </summary>
     member x.System with get() = system
 
     /// <summary>
     /// Incremental view of all connected devices
-    /// </summary
+    /// </summary>
     member x.ConnectedAll with get() = connectedAll
 
     /// <summary>
     /// Incremental set of connected devices
-    /// </summary
+    /// </summary>
     member x.ConnectedDevices with get() = connectedDevices
 
     /// <summary>
     /// Incremental set of connected Hmd devices
-    /// </summary
+    /// </summary>
     member x.ConnectedHmds with get() = connectedHmds
     
     /// <summary>
     /// Incremental set of connected controllers
-    /// </summary
+    /// </summary>
     member x.ConnectedControllers with get() = connectedControllers
 
     /// <summary>
     /// Enumeration of connected devices
-    /// </summary
+    /// </summary>
     member x.AllDevices
         with get() = Seq.init (int OpenVR.k_unMaxTrackedDeviceCount) uint32 |> Seq.choose tryGetDevice
 
     /// <summary>
     /// Enumeration of controllers
-    /// </summary
+    /// </summary>
     member x.Controllers = x.AllDevices |> Seq.filter (fun d -> d.Type = VrDeviceType.Controller)
 
     /// <summary>
     /// Try get device by index
-    /// </summary 
+    /// </summary>
     member x.TryGetDevice(deviceIndex : int) =
         tryGetDevice(uint32 deviceIndex)
         
     /// <summary>
     /// Process events: poll system events and update device states and triggers
     /// <returns>Returns new events to allow application side additional processing</returns>
-    /// </summary
+    /// </summary>
     member x.ProcessEvents() : seq<_> =
         events.Clear()
         let mutable evt : VREvent_t = Unchecked.defaultof<VREvent_t>
@@ -748,7 +748,7 @@ type VrSystem(appType : VrApplicationType) =
     /// <summary>
     /// Updates device poses
     /// NOTE: requries transaction on application side
-    /// </summary 
+    /// </summary>
     member x.UpdatePoses(renderPoses: TrackedDevicePose_t[]) =
         for i in 0 .. renderPoses.Length - 1 do
             let mutable pose = renderPoses.[i]
