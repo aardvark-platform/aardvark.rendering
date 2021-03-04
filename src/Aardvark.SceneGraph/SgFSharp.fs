@@ -233,29 +233,29 @@ module SgFSharp =
 
         /// Sets the uniform with the given name to the given value.
         /// The name can be a string, Symbol, or TypedSymbol.
-        let inline uniform (name : ^Name) (value : aval< ^a>) (sg : ISg) =
+        let inline uniform (name : ^Name) (value : aval<'Value>) (sg : ISg) =
             let sym = name |> symbol typedSym< ^Name>
             Sg.UniformApplicator(sym, value :> IAdaptiveValue, sg) :> ISg
 
         /// Sets the uniform with the given name to the given value.
         /// The name can be a string, Symbol, or TypedSymbol.
-        let inline uniform' (name : ^Name) (value : ^a) =
+        let inline uniform' (name : ^Name) (value : 'Value) =
             uniform name ~~value
 
 
-        let inline private textureAux< ^Conv, ^Name, ^a when ^a :> ITexture and (^Conv or ^Name) : (static member GetSymbol : ^Name -> Symbol)>
-                                      (name : ^Name) (value : aval< ^a>) =
+        let inline private textureAux< ^Conv, ^Name, 'Texture when 'Texture :> ITexture and (^Conv or ^Name) : (static member GetSymbol : ^Name -> Symbol)>
+                                      (name : ^Name) (value : aval<'Texture>) =
             let sym = ((^Conv or ^Name) : (static member GetSymbol : ^Name -> Symbol) (name))
 
-            if typeof< ^a> = typeof<ITexture> then
+            if typeof<'Texture> = typeof<ITexture> then
                 sym, value :?> aval<ITexture>
             else
                 sym, Caching.textureOfGeneric value
 
         /// Sets the given texture to the slot with the given name.
         /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
-        let inline texture (name : ^Name) (tex : aval< ^a>) (sg : ISg) =
-            let sym, value = textureAux<TypedNameConverter<ITexture>, ^Name, ^a> name tex
+        let inline texture (name : ^Name) (tex : aval< 'Texture>) (sg : ISg) =
+            let sym, value = textureAux<TypedNameConverter<ITexture>, ^Name, 'Texture> name tex
             Sg.TextureApplicator(sym, value, sg) :> ISg
 
         /// Sets the given texture to the slot with the given name.
@@ -265,7 +265,7 @@ module SgFSharp =
 
 
         /// Sets the given diffuse texture.
-        let inline diffuseTexture (tex : aval<#ITexture>) (sg : ISg) =
+        let diffuseTexture (tex : aval<#ITexture>) (sg : ISg) =
             texture DefaultSemantic.DiffuseColorTexture tex sg
 
         /// Sets the given diffuse texture.
@@ -301,11 +301,11 @@ module SgFSharp =
             let cache = Dictionary<IRuntime, aval<ITexture>>()
             let tex runtime =
                 match cache.TryGetValue runtime with
-                    | (true, v) -> v
-                    | _ ->
-                        let v = tex runtime
-                        cache.[runtime] <- v
-                        v
+                | (true, v) -> v
+                | _ ->
+                    let v = tex runtime
+                    cache.[runtime] <- v
+                    v
 
             scopeDependentTexture name (fun s -> s.Runtime |> tex) sg
 
@@ -453,15 +453,16 @@ module SgFSharp =
 
         /// Sets the blend constant color.
         /// The color must be compatible with C4f.
-        let inline blendConstant (color : aval< ^a>) (sg : ISg) =
-            if typeof< ^a> = typeof<C4f> then
+        let inline blendConstant (color : aval< ^Value>) (sg : ISg) =
+            if typeof< ^Value> = typeof<C4f> then
                 Sg.BlendConstantApplicator(color :?> aval<C4f>, sg) :> ISg
             else
                 Sg.BlendConstantApplicator(color |> AVal.map c4f, sg) :> ISg
 
         /// Sets the blend constant color.
         /// The color must be compatible with C4f.
-        let inline blendConstant' color = blendConstant (AVal.init color)
+        let inline blendConstant' (color : ^Value) =
+            blendConstant (AVal.init color)
 
 
         /// Sets the global color write mask for all color attachments.
@@ -708,26 +709,26 @@ module SgFSharp =
         // Attributes & Indices
         // ================================================================================================================
 
-        let inline private attributeAux< ^Conv, ^Name, ^a when ^a : struct and (^Conv or ^Name) : (static member GetSymbol : ^Name -> Symbol)>
-                                       (name : ^Name) (value : aval< ^a[]>) =
+        let inline private attributeAux< ^Conv, ^Name, 'Value when 'Value : struct and (^Conv or ^Name) : (static member GetSymbol : ^Name -> Symbol)>
+                                       (name : ^Name) (value : aval<'Value[]>) =
             let sym = ((^Conv or ^Name) : (static member GetSymbol : ^Name -> Symbol) (name))
             sym, Caching.bufferOfArray value
 
-        let inline private attributeAux'< ^Conv, ^Name, ^a when ^a : struct and (^Conv or ^Name) : (static member GetSymbol : ^Name -> Symbol)>
-                                        (name : ^Name) (value : ^a[]) =
+        let inline private attributeAux'< ^Conv, ^Name, 'Value when 'Value : struct and (^Conv or ^Name) : (static member GetSymbol : ^Name -> Symbol)>
+                                        (name : ^Name) (value : 'Value[]) =
             let sym = ((^Conv or ^Name) : (static member GetSymbol : ^Name -> Symbol) (name))
             sym, BufferView.ofArray value
 
         /// Provides a vertex attribute with the given name by supplying an array of values.
         /// The name can be a string, Symbol, or TypedSymbol.
-        let inline vertexAttribute (name : ^Name) (value : aval< ^a[]>) (sg : ISg) =
-            let name, view = attributeAux<TypedNameConverter< ^a>, ^Name, ^a> name value
+        let inline vertexAttribute (name : ^Name) (value : aval<'Value[]>) (sg : ISg) =
+            let name, view = attributeAux<TypedNameConverter<'Value>, ^Name, 'Value> name value
             Sg.VertexAttributeApplicator(Map.ofList [name, view], ~~sg) :> ISg
 
         /// Provides a vertex attribute with the given name by supplying an array of values.
         /// The name can be a string, Symbol, or TypedSymbol.
-        let inline vertexAttribute' (name : ^Name) (value : ^a[]) (sg : ISg) =
-            let name, view = attributeAux'<TypedNameConverter< ^a>, ^Name, ^a> name value
+        let inline vertexAttribute' (name : ^Name) (value : 'Value[]) (sg : ISg) =
+            let name, view = attributeAux'<TypedNameConverter<'Value>, ^Name, 'Value> name value
             Sg.VertexAttributeApplicator(Map.ofList [name, view], ~~sg) :> ISg
 
         /// Provides a vertex attribute with the given name by supplying a BufferView.
@@ -746,30 +747,30 @@ module SgFSharp =
         /// Provides a vertex attribute with the given name by supplying a single value.
         /// The name can be a string, Symbol, or TypedSymbol.
         /// The value has to be compatible with V4f.
-        let inline vertexBufferValue (name : ^Name) (value : aval< ^a>) (sg : ISg) =
-            let sym = name |> symbol typedSym< ^a>
+        let inline vertexBufferValue (name : ^Name) (value : aval< ^Value>) (sg : ISg) =
+            let sym = name |> symbol typedSym< ^Value>
             let view = value |> Caching.bufferOfValue v4f
             Sg.VertexAttributeApplicator(Map.ofList [sym, view], ~~sg) :> ISg
 
         /// Provides a vertex attribute with the given name by supplying a single value.
         /// The name can be a string, Symbol, or TypedSymbol.
         /// The value has to be compatible with V4f.
-        let inline vertexBufferValue' (name : ^Name) (value : ^a) (sg : ISg) =
-            let sym = name |> symbol typedSym< ^a>
+        let inline vertexBufferValue' (name : ^Name) (value : ^Value) (sg : ISg) =
+            let sym = name |> symbol typedSym< ^Value>
             let view = BufferView(SingleValueBuffer(~~(v4f value)), typeof<V4f>)
             Sg.VertexAttributeApplicator(sym, view, sg) :> ISg
 
 
         /// Provides an instance attribute with the given name by supplying an array of values.
         /// The name can be a string, Symbol, or TypedSymbol.
-        let inline instanceAttribute (name : ^Name) (value : aval< ^a[]>) (sg : ISg) =
-            let name, view = attributeAux< ^Name, TypedNameConverter< ^a>, ^a> name value
+        let inline instanceAttribute (name : ^Name) (value : aval<'Value[]>) (sg : ISg) =
+            let name, view = attributeAux<TypedNameConverter<'Value>, ^Name, 'Value> name value
             Sg.InstanceAttributeApplicator(Map.ofList [name, view], ~~sg) :> ISg
 
         /// Provides an instance attribute with the given name by supplying an array of values.
         /// The name can be a string, Symbol, or TypedSymbol.
-        let inline instanceAttribute' (name : ^Name) (value : ^a[]) (sg : ISg) =
-            let name, view = attributeAux'< ^Name, TypedNameConverter< ^a>, ^a> name value
+        let inline instanceAttribute' (name : ^Name) (value : 'Value[]) (sg : ISg) =
+            let name, view = attributeAux'<TypedNameConverter<'Value>, ^Name, 'Value> name value
             Sg.InstanceAttributeApplicator(Map.ofList [name, view], ~~sg) :> ISg
 
         /// Provides an index attribute with the given name by supplying a BufferView.
@@ -788,26 +789,26 @@ module SgFSharp =
         /// Provides a instance attribute with the given name by supplying a single value.
         /// The name can be a string, Symbol, or TypedSymbol.
         /// The value has to be compatible with V4f.
-        let inline instanceBufferValue (name : ^Name) (value : aval< ^a>) (sg : ISg) =
-            let sym = name |> symbol typedSym< ^a>
+        let inline instanceBufferValue (name : ^Name) (value : aval< ^Value>) (sg : ISg) =
+            let sym = name |> symbol typedSym< ^Value>
             let view = value |> Caching.bufferOfValue v4f
             Sg.InstanceAttributeApplicator(Map.ofList [sym, view], ~~sg) :> ISg
 
         /// Provides a instance attribute with the given name by supplying a single value.
         /// The name can be a string, Symbol, or TypedSymbol.
         /// The value has to be compatible with V4f.
-        let inline instanceBufferValue' (name : ^Name) (value : ^a) (sg : ISg) =
-            let sym = name |> symbol typedSym< ^a>
+        let inline instanceBufferValue' (name : ^Name) (value : ^Value) (sg : ISg) =
+            let sym = name |> symbol typedSym< ^Value>
             let view = BufferView(SingleValueBuffer(~~(v4f value)), typeof<V4f>)
             Sg.InstanceAttributeApplicator(sym, view, sg) :> ISg
 
 
         /// Provides the given vertex indices.
-        let index<'a when 'a : struct> (value : aval<'a[]>) (sg : ISg) =
+        let index<'Value when 'Value : struct> (value : aval<'Value[]>) (sg : ISg) =
             Sg.VertexIndexApplicator(Caching.bufferOfArray value, sg) :> ISg
 
         /// Provides the given vertex indices.
-        let index'<'a when 'a : struct> (value : 'a[]) (sg : ISg) =
+        let index'<'Value when 'Value : struct> (value : 'Value[]) (sg : ISg) =
             Sg.VertexIndexApplicator(BufferView.ofArray value, sg) :> ISg
 
         /// Provides vertex indices by supplying a BufferView.
@@ -1094,21 +1095,40 @@ module SgFSharp =
 
 
     module private ``F# Sg Generic Identifiers Tests`` =
-        let texture = NullTexture()
-        let someFloat = 1.0
-        let MyTexture = Sym.ofString "MyTexture"
-        let MyTextureT = TypedSymbol<ITexture>("MyTexture")
+        let working() =
+            let texture = NullTexture()
+            let backendTex : IBackendTexture = failwith ""
+            let someFloat = 1.0
+            let MyTexture = Sym.ofString "MyTexture"
+            let MyTextureT = TypedSymbol<ITexture>("MyTexture")
 
-        let MyNormals = TypedSymbol<V3f>("MyNormals")
-        let someNormals = ~~[| V3f.Zero |]
+            let MyNormals = TypedSymbol<V3f>("MyNormals")
+            let someNormals = ~~[| V3f.Zero |]
+            let someNormals' = ~~[| C3f.Zero |]
 
-        let sg : ISg =
-            Sg.empty
-            |> Sg.uniform "MyTexture" ~~texture
-            |> Sg.uniform MyTexture ~~texture
-            |> Sg.uniform' "SomeConstantTrafo" M44f.Zero
-            |> Sg.uniform' "SomeConstantVec" V3f.One
-            |> Sg.texture MyTextureT ~~texture
-            |> Sg.texture' MyTextureT texture
-            |> Sg.vertexAttribute MyNormals someNormals
-            |> Sg.vertexBufferValue' MyNormals V3f.Zero
+            let myCoolFunc tex sg =
+                sg |> Sg.texture "" tex
+
+            let myCoolAttribFunc data sg =
+                sg |> Sg.vertexAttribute "" data
+
+            let myCoolInstAttribFunc data sg =
+                sg |> Sg.instanceAttribute' "" data
+
+            let sg : ISg =
+                Sg.empty
+                |> Sg.uniform "MyTexture" ~~texture
+                |> Sg.uniform MyTexture ~~texture
+                |> Sg.uniform' "SomeConstantTrafo" M44f.Zero
+                |> Sg.uniform' "SomeConstantVec" V3f.One
+                |> Sg.texture MyTextureT ~~texture
+                |> Sg.texture' MyTextureT texture
+                |> Sg.vertexAttribute MyNormals someNormals
+                |> Sg.vertexBufferValue' MyNormals V3f.Zero
+                |> myCoolFunc ~~texture
+                |> myCoolFunc ~~backendTex
+                |> myCoolAttribFunc someNormals
+                |> myCoolAttribFunc someNormals'
+                |> myCoolInstAttribFunc [| V3d.Zero |]
+
+            ()
