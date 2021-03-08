@@ -185,13 +185,36 @@ let testTextureCubeArray() =
     texRt.DeleteTexture(cubeArrayFacesView)
     
 
+let testCopySlice() = 
+    let app = new OpenGlApplication(false, true)
+    let runtime = app.Runtime
+    let texRt = runtime :> ITextureRuntime
+    let texSrc = texRt.CreateTextureArray(V2i(222,333), TextureFormat.Rgba8, 1, 1, 2)
+    let texDst = texRt.CreateTextureArray(V2i(222,333), TextureFormat.Rgba8, 1, 1, 2)
+
+    clearTexture(runtime, texSrc, C4f.Red)
+    clearTexture(runtime, texDst, C4f.Blue)
+
+    // NOTE: can only be test when testDownloadSlice is fixed
+    runtime.Download(texSrc, 0, 0).SaveAsImage("C:\\Debug\\testCopySlice_src_slice0.bmp") // -> should be Red
+    runtime.Download(texSrc, 0, 1).SaveAsImage("C:\\Debug\\testCopySlice_src_slice1.bmp") // -> should be Red
+
+    runtime.Copy(texSrc, 0, 0, texDst, 0, 0, 1, 1)
+
+    runtime.Download(texDst, 0, 0).SaveAsImage("C:\\Debug\\testCopySlice_dst_slice0.bmp") // -> should be Red
+    runtime.Download(texDst, 0, 1).SaveAsImage("C:\\Debug\\testCopySlice_dst_slice1.bmp") // -> should be Blue
+
+    ()
 
 [<EntryPoint>]
 let main args =
     Aardvark.Init()
     //testCompile()
 
-    RadixSortTest.run()
+    //RadixSortTest.run()
+
+    testDownloadSlice()
+    testCopySlice()
 
 
     //testTextureCubeArray()
