@@ -2262,18 +2262,28 @@ module TextureExtensions =
             let alignedLineSize = (lineSize + (packAlign - 1)) &&& ~~~(packAlign - 1)
             let targetSize = alignedLineSize * image.Size.Y
 
-            // TODO: GetTextureSubImage does not work
+            // TODO: use GetTextureSubImage also for non-array case ?
+            //       PixelPackBuffer vs GetTextureSubImage performance ?
+            //
+            //       assuming GPU to GPU copy is faster than direct GPU to CPU copy
+            //       -> in async scenarios using a PixelPackBuffer (GPU to GPU) copy requires to "lock" the texture for shorter time
+            //       and would allow to the perform the actual download (GPU to CPU) independently from rendering that uses the input texture as target
+
+            // NOTE: When using PixelPackBuffer
+            //1: [GL:65538] Buffer detailed info: Buffer object 1 (bound to GL_PIXEL_PACK_BUFFER_ARB, usage hint is GL_DYNAMIC_DRAW) will use VIDEO memory as the source for buffer object operations.
+            //1: [GL:65538] Buffer performance warning: Buffer object 1 (bound to GL_PIXEL_PACK_BUFFER_ARB, usage hint is GL_DYNAMIC_DRAW) is being copied/moved from VIDEO memory to DMA CACHED memory.
+            //1: [GL:65538] Buffer detailed info: Buffer object 1 (bound to GL_PIXEL_PACK_BUFFER_ARB, usage hint is GL_DYNAMIC_DRAW) will use DMA CACHED memory as the source for buffer object operations.
+            //1: [GL:65538] Pixel-path performance warning: Pixel transfer is synchronized with 3D rendering.
+            //
+            //   -> use GetTextureSubImage
+
+            // TODO: create test for texture2d (with mip levels), texture cube, texture array
+            
             if bindTarget = TextureTarget.Texture2DArray then
 
                 let buffer = Array.zeroCreate<byte> targetSize
 
-                // GetTexImage works and there is data in the buffer...
-                //let ptr = GCHandle.Alloc(buffer, GCHandleType.Pinned)
-                //GL.GetTexImage(bindTarget, level, pixelFormat, pixelType, ptr.AddrOfPinnedObject())
-                //GL.Check "could not GetTextureSubImage"
-                //ptr.Free()
-
-                GL.GetTextureSubImage(int bindTarget, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, targetSize, buffer)
+                GL.GetTextureSubImage(t.Handle, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, targetSize, buffer)
                 GL.Check "could not GetTextureSubImage"
 
                 let dstInfo = image.VolumeInfo
