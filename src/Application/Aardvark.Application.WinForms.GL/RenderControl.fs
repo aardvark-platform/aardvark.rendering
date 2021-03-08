@@ -269,81 +269,83 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
             beforeRender.Trigger()
 
             let screenSize = V2i(base.ClientSize.Width, base.ClientSize.Height)
-            let fboSize = V2i(max 1 (int (round (float screenSize.X * subsampling))), (int (round (float screenSize.Y * subsampling))))
-            match task with
-            | Some t ->
-                use __ = ctx.RenderingLock contextHandle
-                let fbo, blit = getFramebuffer fboSize screenSize samples
+            if Vec.allGreater screenSize 0 then
 
-                if initial then
-                    GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
-                    GL.Disable(EnableCap.Multisample)
-                    //let ms = GL.IsEnabled(EnableCap.Multisample)
-                    //if ms then Log.warn "multisample enabled"
-                    //else Log.warn "multisample disabled"
-                    //let samples = Array.zeroCreate 1
-                    //GL.GetFramebufferParameter(FramebufferTarget.Framebuffer, unbox (int All.Samples), samples)
-                    //Log.warn "effective samples: %A" samples.[0]
+                let fboSize = V2i(max 1 (int (round (float screenSize.X * subsampling))), (int (round (float screenSize.Y * subsampling))))
+                match task with
+                | Some t ->
+                    use __ = ctx.RenderingLock contextHandle
+                    let fbo, blit = getFramebuffer fboSize screenSize samples
 
-                let stopDispatcherProcessing = threadStealing.StopStealing()
+                    if initial then
+                        GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+                        GL.Disable(EnableCap.Multisample)
+                        //let ms = GL.IsEnabled(EnableCap.Multisample)
+                        //if ms then Log.warn "multisample enabled"
+                        //else Log.warn "multisample disabled"
+                        //let samples = Array.zeroCreate 1
+                        //GL.GetFramebufferParameter(FramebufferTarget.Framebuffer, unbox (int All.Samples), samples)
+                        //Log.warn "effective samples: %A" samples.[0]
 
-                frameWatch.Restart()
-                useTransaction transaction (fun () -> time.Value <- nextFrameTime())
+                    let stopDispatcherProcessing = threadStealing.StopStealing()
 
-                if fboSize <> sizes.Value then
-                    useTransaction transaction (fun () -> sizes.Value <- fboSize)
+                    frameWatch.Restart()
+                    useTransaction transaction (fun () -> time.Value <- nextFrameTime())
 
-                transaction.Commit()
-                transaction.Dispose()
+                    if fboSize <> sizes.Value then
+                        useTransaction transaction (fun () -> sizes.Value <- fboSize)
 
-                defaultFramebuffer.Size <- V2i(x.ClientSize.Width, x.ClientSize.Height)
-                //defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size - V2i.II) }
-
-                GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo.Handle)
-                GL.ColorMask(true, true, true, true)
-                GL.DepthMask(true)
-                GL.StencilMask(0xFFFFFFFFu)
-                GL.Viewport(0,0,x.ClientSize.Width, x.ClientSize.Height)
-                GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
-                GL.ClearDepth(1.0)
-                GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-
-
-                GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
-                //EvaluationUtilities.evaluateTopLevel(fun () ->
-                t.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer fbo)
-                blit()
-
-                x.SwapBuffers()
-                //System.Threading.Thread.Sleep(200)
-                frameWatch.Stop()
-                if not first then
-                    frameTime.Insert frameWatch.Elapsed.TotalSeconds |> ignore
-
-                useTransaction transaction (fun () -> time.MarkOutdated())
-                transaction.Commit()
-                transaction.Dispose()
-
-                stopDispatcherProcessing.Dispose()
-                if t.OutOfDate then
-//                            let sleepTime = max 0.0 (10.0 - sw.Elapsed.TotalMilliseconds)
-//                            let t = System.Threading.Tasks.Task.Delay (int sleepTime)
-//                            t.Wait()
-                    needsRedraw <- true
-                    if autoInvalidate && x.OnPaintRender then x.Invalidate() // why not use ForceRedraw
-                    ()
-                else
-                    needsRedraw <- false
-
-                first <- false
-
-            | None ->
-                if fboSize <> sizes.Value then
-                    useTransaction transaction (fun () -> sizes.Value <- fboSize)
                     transaction.Commit()
                     transaction.Dispose()
 
-                needsRedraw <- false
+                    defaultFramebuffer.Size <- screenSize
+                    //defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size - V2i.II) }
+
+                    GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo.Handle)
+                    GL.ColorMask(true, true, true, true)
+                    GL.DepthMask(true)
+                    GL.StencilMask(0xFFFFFFFFu)
+                    GL.Viewport(0,0,screenSize.X, screenSize.Y)
+                    GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
+                    GL.ClearDepth(1.0)
+                    GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+
+
+                    GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+                    //EvaluationUtilities.evaluateTopLevel(fun () ->
+                    t.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer fbo)
+                    blit()
+
+                    x.SwapBuffers()
+                    //System.Threading.Thread.Sleep(200)
+                    frameWatch.Stop()
+                    if not first then
+                        frameTime.Insert frameWatch.Elapsed.TotalSeconds |> ignore
+
+                    useTransaction transaction (fun () -> time.MarkOutdated())
+                    transaction.Commit()
+                    transaction.Dispose()
+
+                    stopDispatcherProcessing.Dispose()
+                    if t.OutOfDate then
+    //                            let sleepTime = max 0.0 (10.0 - sw.Elapsed.TotalMilliseconds)
+    //                            let t = System.Threading.Tasks.Task.Delay (int sleepTime)
+    //                            t.Wait()
+                        needsRedraw <- true
+                        if autoInvalidate && x.OnPaintRender then x.Invalidate() // why not use ForceRedraw
+                        ()
+                    else
+                        needsRedraw <- false
+
+                    first <- false
+
+                | None ->
+                    if fboSize <> sizes.Value then
+                        useTransaction transaction (fun () -> sizes.Value <- fboSize)
+                        transaction.Commit()
+                        transaction.Dispose()
+
+                    needsRedraw <- false
 
             afterRender.Trigger()
 
