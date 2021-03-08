@@ -2537,20 +2537,34 @@ type ContextTextureExtensions =
             GL.BindTexture(bindTarget, dst.Handle)
             GL.Check "could not bind texture"
 
-            let copyTarget =
-                match dst.Dimension with
-                    | TextureDimension.TextureCube -> snd cubeSides.[dstSlice]
-                    | _ -> bindTarget
+            // NOTE: according to glCopyTexSubImage2D/3D documentation: multi-sampled texture are not supported
+            if dst.IsArray then
 
+                GL.CopyTexSubImage3D(
+                    bindTarget,
+                    dstLevel,
+                    dstOffset.X, dstOffset.Y, dstSlice,
+                    srcOffset.X, srcOffset.Y,
+                    size.X, size.Y
+                )
+                GL.Check "could not copy texture"
 
-            GL.CopyTexSubImage2D(
-                copyTarget,
-                dstLevel,
-                dstOffset.X, dstOffset.Y,
-                srcOffset.X, srcOffset.Y,
-                size.X, size.Y
-            )
-            GL.Check "could not copy texture"
+            else
+                
+                let copyTarget =
+                    match dst.Dimension with
+                        | TextureDimension.TextureCube -> snd cubeSides.[dstSlice]
+                        | _ -> TextureTarget.Texture2D
+
+                GL.CopyTexSubImage2D(
+                    copyTarget,
+                    dstLevel,
+                    dstOffset.X, dstOffset.Y,
+                    srcOffset.X, srcOffset.Y,
+                    size.X, size.Y
+                )
+                GL.Check "could not copy texture"
+
 
             GL.ReadBuffer(ReadBufferMode.None)
             GL.Check "could not unset readbuffer"

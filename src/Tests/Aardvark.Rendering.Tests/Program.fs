@@ -156,6 +156,7 @@ let testDownloadSlice() =
     ()
 
 let testTextureCubeArray() =
+    Config.CheckErrors <- true
     let app = new OpenGlApplication(false, true)
     let runtime = app.Runtime
     let texRt = runtime :> ITextureRuntime
@@ -186,6 +187,7 @@ let testTextureCubeArray() =
     
 
 let testCopySlice() = 
+    Config.CheckErrors <- true
     let app = new OpenGlApplication(false, true)
     let runtime = app.Runtime
     let texRt = runtime :> ITextureRuntime
@@ -214,9 +216,9 @@ let testCopySlice() =
 
     // alternative:
     let texDstTile0View = texRt.CreateTextureView(texDst, Range1i(0,0), Range1i(0,0), false)
-    runtime.Download(texDstTile0View).SaveAsImage("C:\\Debug\\testCopySlice_dst_slice0_asView.bmp") // -> FAIL: not Red (is Blue)
+    runtime.Download(texDstTile0View).SaveAsImage("C:\\Debug\\testCopySlice_dst_slice0_asView.bmp") // -> should be Red
     let texDstTile1View = texRt.CreateTextureView(texDst, Range1i(0,0), Range1i(1,1), false)
-    runtime.Download(texDstTile1View).SaveAsImage("C:\\Debug\\testCopySlice_dst_slice1_asView.bmp")
+    runtime.Download(texDstTile1View).SaveAsImage("C:\\Debug\\testCopySlice_dst_slice1_asView.bmp") // -> should be Blue
 
     ()
 
