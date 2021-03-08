@@ -199,10 +199,24 @@ let testCopySlice() =
     runtime.Download(texSrc, 0, 0).SaveAsImage("C:\\Debug\\testCopySlice_src_slice0.bmp") // -> should be Red
     runtime.Download(texSrc, 0, 1).SaveAsImage("C:\\Debug\\testCopySlice_src_slice1.bmp") // -> should be Red
 
+    // alternative:
+    let texSrcTile0View = texRt.CreateTextureView(texSrc, Range1i(0,0), Range1i(0,0), false)
+    runtime.Download(texSrcTile0View).SaveAsImage("C:\\Debug\\testCopySlice_src_slice0_asView.bmp")
+    let texSrcTile1View = texRt.CreateTextureView(texSrc, Range1i(0,0), Range1i(1,1), false)
+    runtime.Download(texSrcTile1View).SaveAsImage("C:\\Debug\\testCopySlice_src_slice1_asView.bmp")
+
+    // copy first slice
     runtime.Copy(texSrc, 0, 0, texDst, 0, 0, 1, 1)
 
+    // NOTE: can only be test when testDownloadSlice is fixed
     runtime.Download(texDst, 0, 0).SaveAsImage("C:\\Debug\\testCopySlice_dst_slice0.bmp") // -> should be Red
     runtime.Download(texDst, 0, 1).SaveAsImage("C:\\Debug\\testCopySlice_dst_slice1.bmp") // -> should be Blue
+
+    // alternative:
+    let texDstTile0View = texRt.CreateTextureView(texDst, Range1i(0,0), Range1i(0,0), false)
+    runtime.Download(texDstTile0View).SaveAsImage("C:\\Debug\\testCopySlice_dst_slice0_asView.bmp") // -> FAIL: not Red (is Blue)
+    let texDstTile1View = texRt.CreateTextureView(texDst, Range1i(0,0), Range1i(1,1), false)
+    runtime.Download(texDstTile1View).SaveAsImage("C:\\Debug\\testCopySlice_dst_slice1_asView.bmp")
 
     ()
 
@@ -213,7 +227,7 @@ let main args =
 
     //RadixSortTest.run()
 
-    testDownloadSlice()
+    //testDownloadSlice()
     testCopySlice()
 
 
