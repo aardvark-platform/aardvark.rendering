@@ -2279,13 +2279,46 @@ module TextureExtensions =
 
             // TODO: create test for texture2d (with mip levels), texture cube, texture array
             
-            if bindTarget = TextureTarget.Texture2DArray then
+            //if bindTarget = TextureTarget.Texture2DArray then
 
-                let buffer = Array.zeroCreate<byte> targetSize
+            //    let buffer = Array.zeroCreate<byte> targetSize
 
-                GL.GetTextureSubImage(t.Handle, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, targetSize, buffer)
-                GL.Check "could not GetTextureSubImage"
+            //    GL.GetTextureSubImage(t.Handle, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, targetSize, buffer)
+            //    GL.Check "could not GetTextureSubImage"
 
+            //    let dstInfo = image.VolumeInfo
+            //    let dy = int64(alignedLineSize / elementSize)
+            //    let srcInfo = 
+            //        VolumeInfo(
+            //            dy * (dstInfo.Size.Y - 1L), 
+            //            dstInfo.Size, 
+            //            V3l(dstInfo.SZ, -dy, 1L)
+            //        )
+            //    let handle = GCHandle.Alloc(buffer, GCHandleType.Pinned)
+            //    try
+            //        let handlePtr = handle.AddrOfPinnedObject()
+            //        NativeVolume.copyNativeToImage handlePtr srcInfo image
+            //    finally
+            //        handle.Free()
+                
+            //else
+            let b = GL.GenBuffer()
+            GL.BindBuffer(BufferTarget.PixelPackBuffer, b)
+            GL.Check "could not bind buffer"
+
+            GL.BufferStorage(BufferTarget.PixelPackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapReadBit)
+            GL.Check "could not set buffer storage"
+
+            if t.IsArray then
+                // For some reason we cannot use the bind target here? Doc says otherwise
+                GL.GetTextureSubImage(t.Handle, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, targetSize, nativeint 0)
+            else
+                GL.GetTexImage(target, level, pixelFormat, pixelType, 0n)
+            GL.Check "could not get texture image"
+
+            let src = GL.MapBufferRange(BufferTarget.PixelPackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapReadBit)
+            GL.Check "could not map buffer"
+            try
                 let dstInfo = image.VolumeInfo
                 let dy = int64(alignedLineSize / elementSize)
                 let srcInfo = 
@@ -2294,49 +2327,17 @@ module TextureExtensions =
                         dstInfo.Size, 
                         V3l(dstInfo.SZ, -dy, 1L)
                     )
-                let handle = GCHandle.Alloc(buffer, GCHandleType.Pinned)
-                try
-                    let handlePtr = handle.AddrOfPinnedObject()
-                    NativeVolume.copyNativeToImage handlePtr srcInfo image
-                finally
-                    handle.Free()
-                
-            else
-                let b = GL.GenBuffer()
-                GL.BindBuffer(BufferTarget.PixelPackBuffer, b)
-                GL.Check "could not bind buffer"
 
-                GL.BufferStorage(BufferTarget.PixelPackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapReadBit)
-                GL.Check "could not set buffer storage"
+                NativeVolume.copyNativeToImage src srcInfo image
 
-                //if t.IsArray then
-                //    GL.GetTextureSubImage(int bindTarget, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, 0, nativeint 0)
-                //else
-                GL.GetTexImage(target, level, pixelFormat, pixelType, 0n)
-                GL.Check "could not get texture image"
+            finally
+                GL.UnmapBuffer(BufferTarget.PixelPackBuffer) |> ignore
+                GL.Check "could not unmap buffer"
 
-                let src = GL.MapBufferRange(BufferTarget.PixelPackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapReadBit)
-                GL.Check "could not map buffer"
-                try
-                    let dstInfo = image.VolumeInfo
-                    let dy = int64(alignedLineSize / elementSize)
-                    let srcInfo = 
-                        VolumeInfo(
-                            dy * (dstInfo.Size.Y - 1L), 
-                            dstInfo.Size, 
-                            V3l(dstInfo.SZ, -dy, 1L)
-                        )
-
-                    NativeVolume.copyNativeToImage src srcInfo image
-
-                finally
-                    GL.UnmapBuffer(BufferTarget.PixelPackBuffer) |> ignore
-                    GL.Check "could not unmap buffer"
-
-                GL.BindBuffer(BufferTarget.PixelPackBuffer, 0)
-                GL.Check "could not unbind buffer"
-                GL.DeleteBuffer(b)
-                GL.Check "could not delete buffer"
+            GL.BindBuffer(BufferTarget.PixelPackBuffer, 0)
+            GL.Check "could not unbind buffer"
+            GL.DeleteBuffer(b)
+            GL.Check "could not delete buffer"
 
             GL.BindTexture(bindTarget, 0)
             GL.Check "could not unbind texture"
@@ -2478,7 +2479,7 @@ type ContextTextureExtensions =
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fDst)
             GL.Check "could not bind framebuffer"
 
-            if src.IsArray then GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, attachment, dst.Handle, dstLevel, dstSlice)
+            if dst.IsArray then GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, attachment, dst.Handle, dstLevel, dstSlice)
             else GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, attachment, dst.Handle, dstLevel)
             GL.Check "could not attach texture to framebuffer"
 
