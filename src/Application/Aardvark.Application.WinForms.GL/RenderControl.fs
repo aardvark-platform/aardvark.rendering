@@ -91,8 +91,8 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                 let f = 
                     ctx.CreateFramebuffer(
                         fboSignature,
-                        [ 0, DefaultSemantic.Colors, { texture = c; slice = 0; level = 0 } :> IFramebufferOutput ],
-                        Some ( { texture = d; slice = 0; level = 0 } :> IFramebufferOutput),
+                        [ 0, DefaultSemantic.Colors, c.GetOutputView() ],
+                        Some ( d.GetOutputView()),
                         None
                     )
 
@@ -102,7 +102,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
                         let f0 =
                             ctx.CreateFramebuffer(
                                 fboSignature,
-                                [ 0, DefaultSemantic.Colors, { texture = c0; slice = 0; level = 0 } :> IFramebufferOutput ],
+                                [ 0, DefaultSemantic.Colors, c0.GetOutputView() ],
                                 None,
                                 None
                             )

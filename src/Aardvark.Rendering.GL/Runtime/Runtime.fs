@@ -772,47 +772,30 @@ type Runtime() =
             let mutable srcAtt = FramebufferAttachment.ColorAttachment0
 
             match ms with
-                | :? IBackendTextureOutputView as ms ->
-                    let baseSlice = ms.slices.Min
-                    let slices = 1 + ms.slices.Max - baseSlice
-                    let tex = ms.texture |> unbox<Texture>
+            | :? Renderbuffer as ms ->
+                if TextureFormat.hasDepth (RenderbufferFormat.toTextureFormat ms.Format) then srcAtt <- FramebufferAttachment.DepthStencilAttachment
+                GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, srcAtt, RenderbufferTarget.Renderbuffer, ms.Handle)
+                GL.Check "could not set read framebuffer texture"
 
-                    if slices <> 1 then failwith "layer sub-ranges not supported atm."
-                    
-                    if TextureFormat.hasDepth tex.Format then srcAtt <- FramebufferAttachment.DepthStencilAttachment
-                    if tex.IsArray || tex.Dimension = TextureDimension.TextureCube then
-                        GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, srcAtt, tex.Handle, ms.level, baseSlice)
-                        GL.Check "could not set read framebuffer texture"
-                    else
-                        // NOTE: allow to resolve/copy singlesample textures as well
-                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, srcAtt, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.level)
-                        GL.Check "could not set read framebuffer texture"
-                    
-                | :? Renderbuffer as ms ->
-                
-                    if TextureFormat.hasDepth (RenderbufferFormat.toTextureFormat ms.Format) then srcAtt <- FramebufferAttachment.DepthStencilAttachment
-                    GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, srcAtt, RenderbufferTarget.Renderbuffer, ms.Handle)
+            | :? ITextureLevel as ms ->
+                let baseSlice = ms.Slices.Min
+                let slices = 1 + ms.Slices.Max - baseSlice
+                let tex = ms.Texture |> unbox<Texture>
+
+                if slices <> 1 then failwith "layer sub-ranges not supported atm."
+
+                if TextureFormat.hasDepth tex.Format then srcAtt <- FramebufferAttachment.DepthStencilAttachment
+                if tex.IsArray || tex.Dimension = TextureDimension.TextureCube then
+                    GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, srcAtt, tex.Handle, ms.Level, baseSlice)
+                    GL.Check "could not set read framebuffer texture"
+                else
+                    // NOTE: allow to resolve/copy singlesample textures as well
+                    GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, srcAtt, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.Level)
                     GL.Check "could not set read framebuffer texture"
 
-                | :? ITextureLevel as ms ->
-                    let baseSlice = ms.Slices.Min
-                    let slices = 1 + ms.Slices.Max - baseSlice
-                    let tex = ms.Texture |> unbox<Texture>
+            | _ ->
+                failwithf "[GL] cannot resolve %A" ms
 
-                    if slices <> 1 then failwith "layer sub-ranges not supported atm."
-                    
-                    if TextureFormat.hasDepth tex.Format then srcAtt <- FramebufferAttachment.DepthStencilAttachment
-                    if tex.IsArray || tex.Dimension = TextureDimension.TextureCube then
-                        GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, srcAtt, tex.Handle, ms.Level, baseSlice)
-                        GL.Check "could not set read framebuffer texture"
-                    else
-                        // NOTE: allow to resolve/copy singlesample textures as well
-                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, srcAtt, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.Level)
-                        GL.Check "could not set read framebuffer texture"
-
-                | _ ->
-                    failwithf "[GL] cannot resolve %A" ms
-            
             // NOTE: binding src texture with multiple slices using FramebufferTexture(..) and dst as FramebufferTexture(..) only blits first slice
             // TODO: maybe multilayer copy works using FramebufferTexture2D with TextureTarget.TextureArray
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,drawFbo)

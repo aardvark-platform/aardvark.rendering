@@ -55,10 +55,10 @@ module private AdaptiveRenderbufferTypes =
     type AdaptiveTextureAttachment<'a when 'a :> ITexture>(texture : IAdaptiveResource<'a>, slice : aval<int>, level : aval<int>) =
         inherit AbstractAdaptiveFramebufferOutput(texture)
         override x.Compute(token : AdaptiveToken, t : RenderToken) =
-            let tex = texture.GetValue(token, t)
+            let tex = unbox<IBackendTexture> <| texture.GetValue(token, t)
             let slice = slice.GetValue token
             let level = level.GetValue token
-            { texture = unbox tex; level = level; slice = slice } :> IFramebufferOutput
+            tex.GetOutputView(level, slice)
 
     type AdaptiveRenderbufferAttachment<'a when 'a :> IRenderbuffer>(renderbuffer : IAdaptiveResource<'a>) =
         inherit AbstractAdaptiveFramebufferOutput(renderbuffer)

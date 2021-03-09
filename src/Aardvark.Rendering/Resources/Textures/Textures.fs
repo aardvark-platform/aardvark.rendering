@@ -9,6 +9,15 @@ type TextureAspect =
     | Depth
     | Stencil
 
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module TextureAspect =
+
+    /// Returns the aspect corresponding to the given format.
+    let ofTextureFormat (format : TextureFormat) =
+        if TextureFormat.hasDepth format then TextureAspect.Depth
+        else TextureAspect.Color
+
+
 [<AllowNullLiteral>]
 type ITexture =
     abstract member WantMipMaps : bool
@@ -69,12 +78,6 @@ and IFramebufferOutput =
     abstract member Format : RenderbufferFormat
     abstract member Samples : int
     abstract member Size : V2i
-
-and IBackendTextureOutputView =
-    inherit IFramebufferOutput
-    abstract member texture : IBackendTexture
-    abstract member level : int
-    abstract member slices : Range1i
 
 and ITextureRange =
     abstract member Texture : IBackendTexture

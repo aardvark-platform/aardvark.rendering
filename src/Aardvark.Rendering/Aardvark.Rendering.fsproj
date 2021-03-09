@@ -47,7 +47,6 @@
     <Compile Include="Resources\Textures\PixTexture2d.fs" />
     <Compile Include="Resources\Textures\PixTexture3d.fs" />
     <Compile Include="Resources\Textures\PixTextureCube.fs" />
-    <Compile Include="Resources\Textures\BackendTextureOutputView.fs" />
     <Compile Include="Resources\Textures\TextureExtensions.fs" />
     <Compile Include="Resources\Textures\DefaultTextures.fs" />
     <Compile Include="Resources\Framebuffer\Framebuffer.fs" />

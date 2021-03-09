@@ -756,24 +756,27 @@ type IBackendTextureExtensions private() =
         this.Runtime.Upload(this, 0, 0, V2i.Zero, source)
 
     /// <summary>
-    /// Creates a FramebufferOutput of the texture with the given level and slice.
+    /// Creates an output view of the texture with the given level and slice.
     /// </summary>
     [<Extension>]
     static member GetOutputView(this : IBackendTexture, level : int, slice : int) =
-        { texture = this; level = level; slice = slice } :> IFramebufferOutput
+        let aspect = TextureAspect.ofTextureFormat this.Format
+        this.[aspect, level, slice] :> IFramebufferOutput
 
     /// <summary>
-    /// Creates a FramebufferOutput of the texture with the given level.
+    /// Creates an output view of the texture with the given level.
     /// In case the texture is an array or a cube, all items or faces are selected as texture layers.
     /// </summary>
     [<Extension>]
     static member GetOutputView(this : IBackendTexture, level : int) =
-        { texture = this; level = level; slice = -1 } :> IFramebufferOutput
+        let aspect = TextureAspect.ofTextureFormat this.Format
+        this.[aspect, level] :> IFramebufferOutput
 
     /// <summary>
-    /// Creates a FramebufferOutput of the level of the texture.
+    /// Creates an output view of the first level of the texture.
     /// In case the texture is an array or a cube, all items or faces are selected as texture layers.
     /// </summary>
     [<Extension>]
     static member GetOutputView(this : IBackendTexture) =
-        { texture = this; level = 0; slice = -1 } :> IFramebufferOutput
+        let aspect = TextureAspect.ofTextureFormat this.Format
+        this.[aspect, 0] :> IFramebufferOutput

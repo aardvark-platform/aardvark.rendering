@@ -274,7 +274,7 @@ module StartupPerformance =
 
         let fbo = 
             app.Runtime.CreateFramebuffer(fboSig, [
-                                            DefaultSemantic.Colors, { texture = colorBuffer; level = 0; slice = 0 } :> IFramebufferOutput
+                                            DefaultSemantic.Colors, colorBuffer.GetOutputView()
                                             DefaultSemantic.Depth, depthBuffer :> IFramebufferOutput
                                         ])
 
@@ -399,7 +399,7 @@ module IsActiveFlagPerformance =
 
         let fbo = 
             app.Runtime.CreateFramebuffer(fboSig, [
-                                            DefaultSemantic.Colors, { texture = colorBuffer; level = 0; slice = 0 } :> IFramebufferOutput
+                                            DefaultSemantic.Colors, colorBuffer.GetOutputView()
                                             DefaultSemantic.Depth, depthBuffer :> IFramebufferOutput
                                         ])
 

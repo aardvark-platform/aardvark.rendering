@@ -65,7 +65,7 @@ let main argv =
             runtime.CreateFramebuffer(
                 signature, 
                 Map.ofList [
-                    DefaultSemantic.Colors, ({ texture = e; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Colors, e.GetOutputView()
                     DefaultSemantic.Depth, (depth :> IFramebufferOutput)
                 ]
             )

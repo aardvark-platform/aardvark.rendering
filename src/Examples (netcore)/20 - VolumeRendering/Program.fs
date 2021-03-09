@@ -198,7 +198,7 @@ let main argv =
         win.Runtime.CreateFramebuffer(
             signature, 
             Map.ofList [
-                DefaultSemantic.Colors, ({ texture = scatterTexture; slice = 0; level = 0 } :> IFramebufferOutput)
+                DefaultSemantic.Colors, scatterTexture.GetOutputView()
             ]
         )
 

@@ -25,10 +25,6 @@ type ImageView =
                 if x.IsResolved then
                     x.Image.Dispose()
 
-        interface IBackendTextureOutputView with
-            member x.texture = x.Image :> IBackendTexture
-            member x.level = x.MipLevelRange.Min
-            member x.slices = x.ArrayRange
 
         interface IFramebufferOutput with
             member x.Runtime = x.Device.Runtime :> ITextureRuntime
@@ -46,7 +42,7 @@ type ImageView =
             member x.Aspect = 
                 if VkFormat.hasDepth x.Image.Format then TextureAspect.Depth
                 else TextureAspect.Color
-                
+
         interface ITextureLevel with
             member x.Level = x.MipLevelRange.Min
             member x.Size = 

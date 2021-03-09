@@ -44,8 +44,7 @@ module private AdaptiveRenderToTypes =
             let res = res.GetValue(t, rt)
 
             match Map.tryFind semantic res.Attachments with
-            | Some (:? IBackendTextureOutputView as o) ->
-                o.texture
+            | Some (:? ITextureRange as o) -> o.Texture
             | _ ->
                 failwithf "could not get result for semantic %A as texture" semantic
 
@@ -97,8 +96,10 @@ module private AdaptiveRenderToTypes =
             let res = res.GetValue(t, rt) |> CubeMap.data
 
             match Map.tryFind semantic res.[0].Attachments with
-            | Some (:? IBackendTextureOutputView as o) ->
-                o.texture
+            //| Some (:? IBackendTextureOutputView as o) ->
+            //    o.texture
+            | Some (:? ITextureRange as o) ->
+                o.Texture
             | _ ->
                 failwithf "could not get result for semantic %A as texture" semantic
 

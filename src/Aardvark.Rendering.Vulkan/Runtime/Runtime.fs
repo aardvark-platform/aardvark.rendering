@@ -216,16 +216,14 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let views =
             bindings |> Map.map (fun s o ->
                 match o with
-                    | :? IBackendTextureOutputView as view ->
-                        let img = unbox<Image> view.texture
-                        let slices = 1 + view.slices.Max - view.slices.Min
-                        device.CreateOutputImageView(img, view.level, 1, view.slices.Min, slices)
+                | :? Image as img ->
+                    device.CreateOutputImageView(img, 0, 1, 0, 1)
 
-                    | :? Image as img ->
-                        device.CreateOutputImageView(img, 0, 1, 0, 1)
-                    | :? ITextureLevel as a -> 
-                        device.CreateOutputImageView(a.Texture |> unbox,a.Levels)
-                    | _ -> failf "invalid framebuffer attachment %A: %A" s o
+                | :? ITextureLevel as l ->
+                    let image = unbox<Image> l.Texture
+                    device.CreateOutputImageView(image, l.Levels, l.Slices)
+
+                | _ -> failf "invalid framebuffer attachment %A: %A" s o
             )
 
         device.CreateFramebuffer(unbox signature, views) :> IFramebuffer
@@ -338,15 +336,17 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         let src =
             match source with
-                | :? IBackendTextureOutputView as view ->
-                    let image = unbox<Image> view.texture
-                    let flags = VkFormat.toAspect image.Format
-                    image.[unbox (int flags), view.level, view.slices.Min .. view.slices.Max]
-                | :? Image as img ->
-                    let flags = VkFormat.toAspect img.Format
-                    img.[unbox (int flags), 0, 0 .. 0]
-                | _ ->
-                    failf "invalid input for blit: %A" source
+            | :? Image as img ->
+                let flags = VkFormat.toAspect img.Format
+                img.[unbox (int flags), 0, 0 .. 0]
+
+            | :? ITextureLevel as l ->
+                let image = unbox<Image> l.Texture
+                let flags = VkFormat.toAspect image.Format
+                image.[unbox (int flags), l.Level, l.Slices.Min .. l.Slices.Max]
+
+            | _ ->
+                failf "invalid input for blit: %A" source
 
         let dst = 
             let img = unbox<Image> target
