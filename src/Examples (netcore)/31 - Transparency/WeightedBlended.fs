@@ -131,7 +131,7 @@ module WeightedBlended =
     module private Utility =
         let createAttachment (runtime : IRuntime) (format : RenderbufferFormat) (samples : int) (size : aval<V2i>) =
             runtime.CreateTextureAttachment(
-                runtime.CreateTexture(TextureFormat.ofRenderbufferFormat format, samples, size), 0
+                runtime.CreateTexture2D(TextureFormat.ofRenderbufferFormat format, samples, size)
             )
 
     type Technique(runtime : IRuntime, framebuffer : FramebufferInfo, scene : Scene) =

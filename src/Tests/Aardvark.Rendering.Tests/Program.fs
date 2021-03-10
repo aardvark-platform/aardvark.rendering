@@ -140,7 +140,7 @@ let testDownloadSlice() =
     let app = new OpenGlApplication(false, true)
     let runtime = app.Runtime
     let texRt = runtime :> ITextureRuntime
-    let tex = texRt.CreateTextureArray(V2i(222,333), TextureFormat.Rgba8, 1, 8, 5)
+    let tex = texRt.CreateTexture2DArray(V2i(222,333), TextureFormat.Rgba8, 1, 8, 5)
     let path = Environment.GetFolderPath(Environment.SpecialFolder.Desktop)
 
     clearTexture(runtime, tex, C4f.Red, 0)
@@ -187,8 +187,8 @@ let testCopySlice() =
     let app = new OpenGlApplication(false, true)
     let runtime = app.Runtime
     let texRt = runtime :> ITextureRuntime
-    let texSrc = texRt.CreateTextureArray(V2i(222,333), TextureFormat.Rgba8, 1, 1, 2)
-    let texDst = texRt.CreateTextureArray(V2i(222,333), TextureFormat.Rgba8, 1, 1, 2)
+    let texSrc = texRt.CreateTexture2DArray(V2i(222,333), TextureFormat.Rgba8, 1, 1, 2)
+    let texDst = texRt.CreateTexture2DArray(V2i(222,333), TextureFormat.Rgba8, 1, 1, 2)
 
     clearTexture(runtime, texSrc, C4f.Red, 0)
     clearTexture(runtime, texDst, C4f.Blue, 0)

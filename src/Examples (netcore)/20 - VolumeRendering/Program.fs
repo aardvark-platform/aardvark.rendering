@@ -192,7 +192,7 @@ let main argv =
             DefaultSemantic.Colors, RenderbufferFormat.R32f
         ]
 
-    let scatterTexture = win.Runtime.CreateTexture(V2i(256,1024), TextureFormat.R32f, 1, 1)
+    let scatterTexture = win.Runtime.CreateTexture2D(V2i(256,1024), TextureFormat.R32f, 1, 1)
 
     let fbo = 
         win.Runtime.CreateFramebuffer(

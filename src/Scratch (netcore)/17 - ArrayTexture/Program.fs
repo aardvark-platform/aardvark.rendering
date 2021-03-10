@@ -37,7 +37,7 @@ type Texy(runtime : ITextureRuntime, size : V2i, count : aval<int>) =
 
     let createAndUploadTexture (count : int) =
         Log.warn "Create texture"
-        let t = runtime.CreateTextureArray(size, TextureFormat.Rgba32f, 1, 1, count)
+        let t = runtime.CreateTexture2DArray(size, TextureFormat.Rgba32f, 1, 1, count)
         for slice in 0.. count - 1 do
             let tex = generateTexture()
             runtime.Upload(t, 0, slice, tex)

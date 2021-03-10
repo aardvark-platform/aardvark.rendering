@@ -36,7 +36,7 @@ module Render2TexturePrimitiveFloat =
     let runtime = win.Runtime // the runtime instance provides functions for creating resources (lower abstraction than sg)
 
     let size = V2i(256,256)
-    let color = runtime.CreateTexture(size, TextureFormat.Rgba32f, 1, 1)
+    let color = runtime.CreateTexture2D(size, TextureFormat.Rgba32f, 1, 1)
     let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
 
     // Signatures are required to compile render tasks. Signatures can be seen as the `type` of a framebuffer

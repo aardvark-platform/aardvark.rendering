@@ -476,13 +476,13 @@ module Utilities =
         let s = win.Sizes |> AVal.map (fun s -> s / V2i(2,1))
 
         let colors =
-            runtime.CreateTextureArray(TextureFormat.Rgba8, samples, s, ~~2)
+            runtime.CreateTexture2DArray(TextureFormat.Rgba8, samples, s, 2)
 
         let depth =
-            runtime.CreateTextureArray(TextureFormat.Depth24Stencil8, samples, s, ~~2)
+            runtime.CreateTexture2DArray(TextureFormat.Depth24Stencil8, samples, s, 2)
 
         let resolved =
-            runtime.CreateTextureArray(TextureFormat.Rgba8, 1, s, ~~2)
+            runtime.CreateTexture2DArray(TextureFormat.Rgba8, 1, s, 2)
 
         let framebuffer =
             runtime.CreateFramebuffer(signature, [

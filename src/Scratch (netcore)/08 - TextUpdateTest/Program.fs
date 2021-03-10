@@ -75,7 +75,7 @@ let main argv =
 
 
     let size = V2i(512,512)
-    let color = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1)
+    let color = runtime.CreateTexture2D(size, TextureFormat.Rgba8, 1, 1)
     let prepare = 
 
         let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)

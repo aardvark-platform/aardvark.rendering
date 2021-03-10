@@ -166,7 +166,7 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
                 let rb = this.CreateRenderbuffer(att.format, att.samples, size)
                 this.CreateRenderbufferAttachment(rb) :> aval<_>
             else
-                let tex = this.CreateTexture(TextureFormat.ofRenderbufferFormat att.format, att.samples, size)
+                let tex = this.CreateTexture2D(TextureFormat.ofRenderbufferFormat att.format, att.samples, size)
                 this.CreateTextureAttachment(tex, 0) :> aval<_>
 
         let atts = SymDict.empty

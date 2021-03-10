@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering
 
 open System
+open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Aardvark.Base
 
@@ -63,6 +64,92 @@ type ITextureRuntimeExtensions private() =
             Box2i.FromMinAndSize(V2i.Zero, texture.Size.XY |> levelSize level)
         else
             region
+
+    // Create textures
+
+    ///<summary>Creates a 1D texture.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="size">The size of the texture.</param>
+    ///<param name="format">The desired texture format.</param>
+    ///<param name="levels">The number of mip levels. Default is 1.</param>
+    [<Extension>]
+    static member CreateTexture1D(this : ITextureRuntime, size : int, format : TextureFormat,
+                                  [<Optional; DefaultParameterValue(1)>] levels : int) =
+        this.CreateTexture(V3i(size, 0, 0), TextureDimension.Texture1D, format, levels = levels, samples = 1)
+
+    ///<summary>Creates a 1D texture array.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="size">The size of the texture.</param>
+    ///<param name="format">The desired texture format.</param>
+    ///<param name="levels">The number of mip levels. Default is 1.</param>
+    ///<param name="count">The number of texture slices.</param>
+    [<Extension>]
+    static member CreateTexture1DArray(this : ITextureRuntime, size : int, format : TextureFormat,
+                                       [<Optional; DefaultParameterValue(1)>] levels : int,
+                                       count : int) =
+        this.CreateTextureArray(V3i(size, 0, 0), TextureDimension.Texture1D, format, levels = levels, samples = 1, count = count)
+
+    ///<summary>Creates a 2D texture.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="size">The size of the texture.</param>
+    ///<param name="format">The desired texture format.</param>
+    ///<param name="levels">The number of mip levels. Default is 1.</param>
+    ///<param name="samples">the number of samples. Default is 1.</param>
+    [<Extension>]
+    static member CreateTexture2D(this : ITextureRuntime, size : V2i, format : TextureFormat,
+                                  [<Optional; DefaultParameterValue(1)>] levels : int,
+                                  [<Optional; DefaultParameterValue(1)>] samples : int) =
+        this.CreateTexture(V3i(size, 0), TextureDimension.Texture2D, format, levels = levels, samples = samples)
+
+    ///<summary>Creates a 2D texture array.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="size">The size of the texture.</param>
+    ///<param name="format">The desired texture format.</param>
+    ///<param name="levels">The number of mip levels. Default is 1.</param>
+    ///<param name="samples">the number of samples. Default is 1.</param>
+    ///<param name="count">The number of texture slices.</param>
+    [<Extension>]
+    static member CreateTexture2DArray(this : ITextureRuntime, size : V2i, format : TextureFormat,
+                                       [<Optional; DefaultParameterValue(1)>] levels : int,
+                                       [<Optional; DefaultParameterValue(1)>] samples : int,
+                                       count : int) =
+        this.CreateTextureArray(V3i(size, 0), TextureDimension.Texture2D, format, levels = levels, samples = samples, count = count)
+
+    ///<summary>Creates a 3D texture.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="size">The size of the texture.</param>
+    ///<param name="format">The desired texture format.</param>
+    ///<param name="levels">The number of mip levels. Default is 1.</param>
+    [<Extension>]
+    static member CreateTexture3D(this : ITextureRuntime, size : V3i, format : TextureFormat,
+                                  [<Optional; DefaultParameterValue(1)>] levels : int) =
+        this.CreateTexture(size, TextureDimension.Texture3D, format, levels = levels, samples = 1)
+
+    ///<summary>Creates a cube texture.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="size">The size of the texture.</param>
+    ///<param name="format">The desired texture format.</param>
+    ///<param name="levels">The number of mip levels. Default is 1.</param>
+    ///<param name="samples">the number of samples. Default is 1.</param>
+    [<Extension>]
+    static member CreateTextureCube(this : ITextureRuntime, size : int, format : TextureFormat,
+                                    [<Optional; DefaultParameterValue(1)>] levels : int,
+                                    [<Optional; DefaultParameterValue(1)>] samples : int) =
+        this.CreateTexture(V3i(size, 0, 0), TextureDimension.TextureCube, format, levels = levels, samples = samples)
+
+    ///<summary>Creates a 2D texture array.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="size">The size of the texture.</param>
+    ///<param name="format">The desired texture format.</param>
+    ///<param name="levels">The number of mip levels. Default is 1.</param>
+    ///<param name="samples">the number of samples. Default is 1.</param>
+    ///<param name="count">The number of texture slices.</param>
+    [<Extension>]
+    static member CreateTextureCubeArray(this : ITextureRuntime, size : int, format : TextureFormat,
+                                       [<Optional; DefaultParameterValue(1)>] levels : int,
+                                       [<Optional; DefaultParameterValue(1)>] samples : int,
+                                       count : int) =
+        this.CreateTextureArray(V3i(size, 0, 0), TextureDimension.TextureCube, format, levels = levels, samples = samples, count = count)
 
     // PixVolume
     [<Extension>]
@@ -757,11 +844,15 @@ type IBackendTextureExtensions private() =
 
     /// <summary>
     /// Creates an output view of the texture with the given level and slice.
+    /// If slice is negative, all slices are selected.
     /// </summary>
     [<Extension>]
     static member GetOutputView(this : IBackendTexture, level : int, slice : int) =
         let aspect = TextureAspect.ofTextureFormat this.Format
-        this.[aspect, level, slice] :> IFramebufferOutput
+        if slice < 0 then
+            this.[aspect, level] :> IFramebufferOutput
+        else
+            this.[aspect, level, slice] :> IFramebufferOutput
 
     /// <summary>
     /// Creates an output view of the texture with the given level.

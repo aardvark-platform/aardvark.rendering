@@ -37,7 +37,7 @@ module Render2TexturePrimiviteChangeableSize =
     let sizeM = AVal.init size
 
     let color =
-        let tex = runtime.CreateTexture(TextureFormat.Rgba8, 1, sizeM)
+        let tex = runtime.CreateTexture2D(TextureFormat.Rgba8, 1, sizeM)
         runtime.CreateTextureAttachment(tex, 0) :> aval<_>
 
     let depth =

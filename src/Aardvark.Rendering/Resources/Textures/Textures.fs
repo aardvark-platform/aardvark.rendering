@@ -106,7 +106,23 @@ and IRenderbuffer =
 and ITextureRuntime =
     inherit IBufferRuntime
 
-    abstract member CreateTexture : size : V3i * dim : TextureDimension * format : TextureFormat * slices : int * levels : int * samples : int -> IBackendTexture
+    ///<summary>Creates a texture.</summary>
+    ///<param name="size">The size of the texture.</param>
+    ///<param name="dimension">The dimension of the texture.</param>
+    ///<param name="format">The desired texture format.</param>
+    ///<param name="levels">The number of mip levels.</param>
+    ///<param name="samples">The number of samples.</param>
+    abstract member CreateTexture : size : V3i * dimension : TextureDimension * format : TextureFormat * levels : int * samples : int -> IBackendTexture
+
+    ///<summary>Creates a texture array.</summary>
+    ///<param name="size">The size of the texture.</param>
+    ///<param name="dimension">The dimension of the texture.</param>
+    ///<param name="format">The desired texture format.</param>
+    ///<param name="levels">The number of mip levels.</param>
+    ///<param name="samples">The number of samples.</param>
+    ///<param name="count">The number of texture slices.</param>
+    abstract member CreateTextureArray : size : V3i * dimension : TextureDimension * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
+
     abstract member PrepareTexture : ITexture -> IBackendTexture
 
     abstract member Copy : src : NativeTensor4<'a> * srcFormat : Col.Format * dst : ITextureSubResource * dstOffset : V3i * size : V3i -> unit
@@ -170,10 +186,10 @@ and ITextureRuntime =
                            dst : IBackendTexture * dstBaseSlice : int * dstBaseLevel : int *
                            slices : int * levels : int -> unit
 
-    abstract member CreateTexture : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
-    abstract member CreateTextureArray : size : V2i * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
-    abstract member CreateTextureCube : size : int * format : TextureFormat * levels : int * samples : int -> IBackendTexture
-    abstract member CreateTextureCubeArray : size : int * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
+    //abstract member CreateTexture : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
+    //abstract member CreateTextureArray : size : V2i * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
+    //abstract member CreateTextureCube : size : int * format : TextureFormat * levels : int * samples : int -> IBackendTexture
+    //abstract member CreateTextureCubeArray : size : int * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
 
     abstract member ClearColor : texture : IBackendTexture * color : C4f -> unit
     abstract member ClearDepthStencil : texture : IBackendTexture * depth : Option<float> * stencil : Option<int> -> unit

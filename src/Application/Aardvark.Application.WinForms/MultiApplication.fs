@@ -354,13 +354,8 @@ and MultiRuntime(runtimes : IRuntime[]) =
 
 
         member x.CreateFramebuffer(signature, bindings) = failwith ""
-        member x.CreateTexture(size, format, levels, samples) = failwith ""
-        member x.CreateTextureArray(size, format, levels, samples, count) = failwith ""
-        member x.CreateTextureCube(size, format, levels, samples) = failwith ""
-        member x.CreateTextureCubeArray(size, format, levels, samples, count) = failwith ""
-
-        member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) =
-            failwith ""
+        member x.CreateTexture(size, dim : TextureDimension, format, levels, samples) = failwith ""
+        member x.CreateTextureArray(size, dim : TextureDimension, format, levels, samples, count) = failwith ""
 
 
         member x.CreateRenderbuffer(size, format, samples) =

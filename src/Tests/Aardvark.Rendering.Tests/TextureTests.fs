@@ -82,7 +82,7 @@ module ``Texture Tests`` =
         let data = PixImage.checkerboard C4b.BurlyWood
         let fmt = TextureFormat.ofPixFormat data.PixFormat TextureParams.empty
 
-        let t = runtime.CreateTexture(size, fmt, 1, 1)
+        let t = runtime.CreateTexture2D(size, fmt, 1, 1)
         runtime.Upload(t, data)
         let result = runtime.Download(t).ToPixImage<byte>()
         runtime.DeleteTexture(t)
@@ -101,7 +101,7 @@ module ``Texture Tests`` =
         let samples = 8
 
         let signature = runtime.CreateFramebufferSignature(samples, [DefaultSemantic.Colors, RenderbufferFormat.Rgba32f])
-        let colorTexture = runtime.CreateTexture(size, TextureFormat.Rgba32f, 1, samples)
+        let colorTexture = runtime.CreateTexture2D(size, TextureFormat.Rgba32f, 1, samples)
         let framebuffer = runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, colorTexture.GetOutputView()])
 
         let sampler =
@@ -134,19 +134,19 @@ module ``Texture Tests`` =
         let runtime = win.Runtime
 
         let create() =
-            let t = runtime.CreateTexture(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 1, 1)
+            let t = runtime.CreateTexture(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 1)
             runtime.DeleteTexture(t)
 
         let createMultisampled() =
-            let t = runtime.CreateTexture(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 1, 8)
+            let t = runtime.CreateTexture(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 8)
             runtime.DeleteTexture(t)
 
         let createMipmapped() =
-            let t = runtime.CreateTexture(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 4, 1)
+            let t = runtime.CreateTexture(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, 4, 1)
             runtime.DeleteTexture(t)
 
         let createArray() =
-            let t = runtime.CreateTexture(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, 12, 1, 1)
+            let t = runtime.CreateTextureArray(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 1, 12)
             runtime.DeleteTexture(t)
 
         create()
@@ -162,15 +162,15 @@ module ``Texture Tests`` =
         let runtime = win.Runtime
 
         let create (levels : int) (samples : int) () =
-            let t = runtime.CreateTexture(V2i(512, 512), TextureFormat.Rgba32f, levels, samples)
+            let t = runtime.CreateTexture2D(V2i(512, 512), TextureFormat.Rgba32f, levels, samples)
             runtime.DeleteTexture(t)
 
-        let create3d (slices : int) (levels : int) (samples : int) () =
-            let t = runtime.CreateTexture(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, slices, levels, samples)
+        let create3d (levels : int) () =
+            let t = runtime.CreateTexture3D(V3i(128), TextureFormat.Rgba32f, levels)
             runtime.DeleteTexture(t)
 
         let createArray (slices : int) (levels : int) (samples : int) () =
-            let t = runtime.CreateTextureArray(V2i(512, 512), TextureFormat.Rgba32f, slices, levels, samples)
+            let t = runtime.CreateTexture2DArray(V2i(512, 512), TextureFormat.Rgba32f, slices, levels, samples)
             runtime.DeleteTexture(t)
 
         let createCube (levels : int) (samples : int) () =
@@ -193,12 +193,8 @@ module ``Texture Tests`` =
         createArray  0  1  1 |> should throw typeof<ArgumentException>
         createArray -4  1  1 |> should throw typeof<ArgumentException>
 
-        create3d  1  0  1 |> should throw typeof<ArgumentException>
-        create3d  1 -3  1 |> should throw typeof<ArgumentException>
-        create3d  1  1  0 |> should throw typeof<ArgumentException>
-        create3d  1  1 -1 |> should throw typeof<ArgumentException>
-        create3d  0  1  1 |> should throw typeof<ArgumentException>
-        create3d -4  1  1 |> should throw typeof<ArgumentException>
+        create3d  0 |> should throw typeof<ArgumentException>
+        create3d -1 |> should throw typeof<ArgumentException>
 
         createCube  0  1 |> should throw typeof<ArgumentException>
         createCube -3  1 |> should throw typeof<ArgumentException>
@@ -220,11 +216,11 @@ module ``Texture Tests`` =
         let runtime = win.Runtime
 
         let create() =
-            let t = runtime.CreateTexture(V2i(512, 512), TextureFormat.Rgba32f, 2, 2)
+            let t = runtime.CreateTexture2D(V2i(512, 512), TextureFormat.Rgba32f, 2, 2)
             runtime.DeleteTexture(t)
 
         let createArray() =
-            let t = runtime.CreateTextureArray(V2i(512, 512), TextureFormat.Rgba32f, 4, 8, 16)
+            let t = runtime.CreateTexture2DArray(V2i(512, 512), TextureFormat.Rgba32f, 4, 8, 16)
             runtime.DeleteTexture(t)
 
         let createCube() =

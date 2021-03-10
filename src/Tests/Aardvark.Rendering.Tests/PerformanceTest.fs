@@ -262,7 +262,7 @@ module StartupPerformance =
         let cameraView = CameraView.LookAt(180.0 * V3d.III, V3d.OOO, V3d.OOI)
         let cameraProj = Frustum.perspective 60.0 0.1 1000.0 1.0
                 
-        let colorBuffer = app.Runtime.CreateTexture(V2i(1024, 1024), TextureFormat.Rgba8, 1, 1, 1)
+        let colorBuffer = app.Runtime.CreateTexture2D(V2i(1024, 1024), TextureFormat.Rgba8, 1, 1)
         let depthBuffer = app.Runtime.CreateRenderbuffer(V2i(1024, 1024), RenderbufferFormat.Depth24Stencil8, 1)
 
         let fboSig = 
@@ -387,7 +387,7 @@ module IsActiveFlagPerformance =
         let cameraView = CameraView.LookAt(180.0 * V3d.III, V3d.OOO, V3d.OOI)
         let cameraProj = Frustum.perspective 60.0 0.1 1000.0 1.0
                 
-        let colorBuffer = app.Runtime.CreateTexture(V2i(1024, 1024), TextureFormat.Rgba8, 1, 1, 1)
+        let colorBuffer = app.Runtime.CreateTexture2D(V2i(1024, 1024), TextureFormat.Rgba8, 1, 1)
         let depthBuffer = app.Runtime.CreateRenderbuffer(V2i(1024, 1024), RenderbufferFormat.Depth24Stencil8, 1)
 
         let fboSig = 

@@ -171,11 +171,11 @@ let computeDistanceGPU (pi : PixImage<byte>) =
     let input = 
         runtime.PrepareTexture(PixTexture2d(PixImageMipMap [| pi :> PixImage |], true))
 
-    let b = runtime.CreateTexture(pi.Size,TextureFormat.R32i,1,1)
-    let g = runtime.CreateTexture(pi.Size,TextureFormat.R32i,1,1)
-    let s = runtime.CreateTexture(pi.Size,TextureFormat.R32i,1,1)
-    let t = runtime.CreateTexture(pi.Size,TextureFormat.R32i,1,1)
-    let dt = runtime.CreateTexture(pi.Size,TextureFormat.Rgba32f,1,1)
+    let b = runtime.CreateTexture2D(pi.Size,TextureFormat.R32i,1,1)
+    let g = runtime.CreateTexture2D(pi.Size,TextureFormat.R32i,1,1)
+    let s = runtime.CreateTexture2D(pi.Size,TextureFormat.R32i,1,1)
+    let t = runtime.CreateTexture2D(pi.Size,TextureFormat.R32i,1,1)
+    let dt = runtime.CreateTexture2D(pi.Size,TextureFormat.Rgba32f,1,1)
 
     let toBinary = runtime.CreateComputeShader(Shaders.toBinary)
     use toBinaryInput = runtime.NewInputBinding(toBinary)

@@ -36,7 +36,7 @@ let main argv =
     // and may show it later.
     use win =
         window {
-            backend Backend.Vulkan
+            backend Backend.GL
             display Display.Mono
             debug true
             samples 8

@@ -257,9 +257,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.DeleteBuffer(t : IBackendBuffer) =
         Disposable.dispose(unbox<Buffer> t)
 
+    member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
+        x.CreateTextureArray(size, dim, format, levels, samples, 1)
 
-
-    member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) : IBackendTexture =
+    member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
         let layout =
             VkImageLayout.ShaderReadOnlyOptimal
 
@@ -274,38 +275,16 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             else
                 def ||| VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.StorageBit
 
-        let slices = max 1 slices
+        let slices =
+            match dim with
+            | TextureDimension.TextureCube -> 6 * (count |> max 1)
+            | _ -> count |> max 1
 
         let img = device.CreateImage(size, levels, slices, samples, dim, format, usage) 
         device.GraphicsFamily.run {
             do! Command.TransformLayout(img, layout)
         }
         img :> IBackendTexture
-
-    member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
-        x.CreateTexture(V3i(size, 1), TextureDimension.Texture2D, format, count, levels, samples)
-
-    member x.CreateTextureCube(size : int, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
-        let layout =
-            VkImageLayout.ShaderReadOnlyOptimal
-
-        let usage =
-            let def =
-                VkImageUsageFlags.TransferSrcBit |||
-                VkImageUsageFlags.TransferDstBit |||
-                VkImageUsageFlags.SampledBit
-
-            if TextureFormat.hasDepth format then
-                def ||| VkImageUsageFlags.DepthStencilAttachmentBit
-            else
-                def ||| VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.StorageBit
-
-        let img = device.CreateImage(V3i(size, size, 1), levels, 6, samples, TextureDimension.TextureCube, format, usage) 
-        device.GraphicsFamily.run {
-            do! Command.TransformLayout(img, layout)
-        }
-        img :> IBackendTexture
-
 
 
     member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
@@ -598,12 +577,17 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
         member x.CreateFramebuffer(signature, bindings) = x.CreateFramebuffer(signature, bindings)
-        member x.CreateTexture(size, format, levels, samples) = x.CreateTexture(size, format, levels, samples, 1)
-        member x.CreateTextureArray(size, format, levels, samples, count) = x.CreateTexture(size, format, levels, samples, count)
-        member x.CreateTextureCube(size, format, levels, samples) = x.CreateTextureCube(size, format, levels, samples)
-        member x.CreateTextureCubeArray(size, format, levels, samples, count) = failwith "not implemented"
 
-        member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) = x.CreateTexture(size, dim, format, slices, levels, samples)
+        member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) =
+            if levels < 1 then raise <| ArgumentException("[CreateTexture] levels must be greater than 0")
+            if samples < 1 then raise <| ArgumentException("[CreateTexture] samples must be greater than 0")
+            x.CreateTexture(size, dim, format, levels, samples)
+
+        member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) =
+            if levels < 1 then raise <| ArgumentException("[CreateTextureArray] levels must be greater than 0")
+            if samples < 1 then raise <| ArgumentException("[CreateTextureArray] samples must be greater than 0")
+            if count < 1 then raise <| ArgumentException("[CreateTextureArray] count must be greater than 0")
+            x.CreateTextureArray(size, dim, format, levels, samples, count)
 
 
         member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)

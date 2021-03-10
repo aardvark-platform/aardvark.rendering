@@ -40,7 +40,7 @@ module Screenshot =
         task.Run(AdaptiveToken.Top, RenderToken.Empty, desc) |> ignore
 
 
-        let colorTexture = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1)
+        let colorTexture = runtime.CreateTexture2D(size, TextureFormat.Rgba8, 1, 1)
         runtime.ResolveMultisamples(color, colorTexture, ImageTrafo.Identity)
 
         runtime.Download(colorTexture, PixFormat.ByteRGBA)

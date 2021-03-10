@@ -229,7 +229,7 @@ module ComputeShader =
             //PixTexture2d( [| checkerboardPix :> PixImage |], false) :> ITexture
 
         let img = runtime.PrepareTexture(checkerboard)
-        let dst = runtime.CreateTexture(img.Size, TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 1, 1)
+        let dst = runtime.CreateTexture(img.Size, TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 1)
 
         par.Scan(<@ (+) @>, img.[TextureAspect.Color, 0, 0], dst.[TextureAspect.Color, 0, 0])
 

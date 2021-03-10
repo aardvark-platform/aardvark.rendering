@@ -346,8 +346,11 @@ type Runtime() =
             x.CreateFramebufferSignature(attachments, layers, perLayer)
 
             
-        member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) =
-            x.CreateTexture(size, dim, format, slices, levels, samples) :> IBackendTexture
+        member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) =
+            x.CreateTexture(size, dim, format, levels, samples) :> IBackendTexture
+
+        member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) =
+            x.CreateTextureArray(size, dim, format, levels, samples, count) :> IBackendTexture
 
         member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
             ()
@@ -425,18 +428,6 @@ type Runtime() =
         member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : IFramebuffer =
             x.CreateFramebuffer(signature, bindings) :> _
 
-
-        member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
-            ctx.CreateTexture2D(size, levels, format, samples) :> _
-
-        member x.CreateTextureArray(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
-            ctx.CreateTexture2DArray(size, count, levels, format, samples) :> _
-            
-        member x.CreateTextureCube(size : int, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
-            x.CreateTextureCube(size, format, levels, samples) :> _
-
-        member x.CreateTextureCubeArray(size : int, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
-            x.CreateTextureCubeArray(size, format, levels, samples, count) :> _
 
         member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
             x.CreateRenderbuffer(size, format, samples) :> IRenderbuffer
@@ -921,22 +912,18 @@ type Runtime() =
 
         ctx.CreateFramebuffer(signature, colors, depth, stencil)
 
-    member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : Texture =
-        match count with
-            | 1 -> ctx.CreateTexture2D(size, levels, format, samples)
-            | _ -> ctx.CreateTexture2DArray(size, count, levels, format, samples)
 
+    member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) =
+        if levels < 1 then raise <| ArgumentException("[CreateTexture] levels must be greater than 0")
+        if samples < 1 then raise <| ArgumentException("[CreateTexture] samples must be greater than 0")
+        ctx.CreateTexture(size, dim, format, 0, levels, samples)
 
+    member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) =
+        if levels < 1 then raise <| ArgumentException("[CreateTextureArray] levels must be greater than 0")
+        if samples < 1 then raise <| ArgumentException("[CreateTextureArray] samples must be greater than 0")
+        if count < 1 then raise <| ArgumentException("[CreateTextureArray] count must be greater than 0")
+        ctx.CreateTexture(size, dim, format, count, levels, samples)
 
-    member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) =
-        ctx.CreateTexture(size, dim, format, slices, levels, samples)
-
-
-    member x.CreateTextureCube(size : int, format : TextureFormat, levels : int, samples : int) : Texture =
-        ctx.CreateTextureCube(size, levels, format, samples)
-
-    member x.CreateTextureCubeArray(size : int, format : TextureFormat, levels : int, samples : int, count : int) : Texture =
-        ctx.CreateTextureCubeArray(size, levels, format, samples, count)
 
     member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : Renderbuffer =
         ctx.CreateRenderbuffer(size, format, samples)

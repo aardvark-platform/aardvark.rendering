@@ -56,7 +56,7 @@ let main argv =
             DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
         ]
 
-    let color = [| runtime.CreateTexture(size, TextureFormat.Rgba32f, 1, 1, 1); runtime.CreateTexture(size, TextureFormat.Rgba32f, 1, 1, 1) |]
+    let color = [| runtime.CreateTexture2D(size, TextureFormat.Rgba32f, 1, 1); runtime.CreateTexture2D(size, TextureFormat.Rgba32f, 1, 1) |]
     let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
 
     // Create a framebuffer matching signature and capturing the render to texture targets
