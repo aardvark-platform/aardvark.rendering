@@ -3189,6 +3189,9 @@ module Image =
         downloadLevel src write dst.Size offset device
 
     let uploadLevel (offset : V2i) (src : PixImage) (dst : ImageSubresource) (device : Device) =
+        if dst.Image.Samples > 1 then
+            raise <| InvalidOperationException("Cannot upload to multisampled image")
+
         let format = dst.Image.Format
         let dstPixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
 

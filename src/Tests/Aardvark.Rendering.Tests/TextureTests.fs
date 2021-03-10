@@ -1,11 +1,13 @@
 ﻿namespace Aardvark.Rendering.Tests
 
+open System
 open System.Reflection
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Application
 open Aardvark.SceneGraph
 open NUnit.Framework
+open FsUnit
 
 module Window =
 
@@ -24,7 +26,6 @@ module Window =
         }
 
 module PixImage =
-    open System
 
     let toTexture (wantMipMaps : bool) (img : #PixImage) =
         PixTexture2d(PixImageMipMap [| img :> PixImage |], wantMipMaps) :> ITexture
@@ -64,7 +65,7 @@ module ``Texture Tests`` =
                         else
                             Unchecked.defaultof<'T>
 
-                    Assert.AreEqual(outputData.[x, y], ref)
+                    outputData.[x, y] |> should equal ref
 
 
     [<OneTimeSetUp>]
@@ -86,8 +87,9 @@ module ``Texture Tests`` =
         let result = runtime.Download(t).ToPixImage<byte>()
         runtime.DeleteTexture(t)
 
-        Assert.AreEqual(size, result.Size)
+        result.Size |> should equal size
         comparePixImages V2i.Zero data result
+
 
     [<Test>]
     let ``[Download] Multisampled`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
@@ -121,5 +123,131 @@ module ``Texture Tests`` =
         runtime.DeleteTexture(colorTexture)
         runtime.DeleteFramebufferSignature(signature)
 
-        Assert.AreEqual(size, result.Size)
+        result.Size |> should equal size
         comparePixImages V2i.Zero data result
+
+
+    // TODO: GL backend considers layers > 0 as arrayed? Totally sane...
+    [<Test>]
+    let ``[Create] 3D textures`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
+        use win = Window.create backend
+        let runtime = win.Runtime
+
+        let create() =
+            let t = runtime.CreateTexture(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 1, 1)
+            runtime.DeleteTexture(t)
+
+        let createMultisampled() =
+            let t = runtime.CreateTexture(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 1, 8)
+            runtime.DeleteTexture(t)
+
+        let createMipmapped() =
+            let t = runtime.CreateTexture(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 4, 1)
+            runtime.DeleteTexture(t)
+
+        let createArray() =
+            let t = runtime.CreateTexture(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, 12, 1, 1)
+            runtime.DeleteTexture(t)
+
+        create()
+        createMultisampled()
+        createMipmapped |> should throw typeof<ArgumentException>
+        createArray     |> should throw typeof<ArgumentException>
+
+
+    // TODO: Implement all the checks and raise the appropriate expceptions
+    [<Test>]
+    let ``[Create] Non-positive arguments`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
+        use win = Window.create backend
+        let runtime = win.Runtime
+
+        let create (levels : int) (samples : int) () =
+            let t = runtime.CreateTexture(V2i(512, 512), TextureFormat.Rgba32f, levels, samples)
+            runtime.DeleteTexture(t)
+
+        let create3d (slices : int) (levels : int) (samples : int) () =
+            let t = runtime.CreateTexture(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, slices, levels, samples)
+            runtime.DeleteTexture(t)
+
+        let createArray (slices : int) (levels : int) (samples : int) () =
+            let t = runtime.CreateTextureArray(V2i(512, 512), TextureFormat.Rgba32f, slices, levels, samples)
+            runtime.DeleteTexture(t)
+
+        let createCube (levels : int) (samples : int) () =
+            let t = runtime.CreateTextureCube(512, TextureFormat.Rgba32f, levels, samples)
+            runtime.DeleteTexture(t)
+
+        let createCubeArray (slices : int) (levels : int) (samples : int) () =
+            let t = runtime.CreateTextureCubeArray(512, TextureFormat.Rgba32f, slices, levels, samples)
+            runtime.DeleteTexture(t)
+
+        create  0  1 |> should throw typeof<ArgumentException>
+        create -3  1 |> should throw typeof<ArgumentException>
+        create  1  0 |> should throw typeof<ArgumentException>
+        create  1 -1 |> should throw typeof<ArgumentException>
+
+        createArray  8  0  1 |> should throw typeof<ArgumentException>
+        createArray  8 -3  1 |> should throw typeof<ArgumentException>
+        createArray  8  1  0 |> should throw typeof<ArgumentException>
+        createArray  8  1 -1 |> should throw typeof<ArgumentException>
+        createArray  0  1  1 |> should throw typeof<ArgumentException>
+        createArray -4  1  1 |> should throw typeof<ArgumentException>
+
+        create3d  1  0  1 |> should throw typeof<ArgumentException>
+        create3d  1 -3  1 |> should throw typeof<ArgumentException>
+        create3d  1  1  0 |> should throw typeof<ArgumentException>
+        create3d  1  1 -1 |> should throw typeof<ArgumentException>
+        create3d  0  1  1 |> should throw typeof<ArgumentException>
+        create3d -4  1  1 |> should throw typeof<ArgumentException>
+
+        createCube  0  1 |> should throw typeof<ArgumentException>
+        createCube -3  1 |> should throw typeof<ArgumentException>
+        createCube  1  0 |> should throw typeof<ArgumentException>
+        createCube  1 -1 |> should throw typeof<ArgumentException>
+
+        createCubeArray  8  0  1 |> should throw typeof<ArgumentException>
+        createCubeArray  8 -3  1 |> should throw typeof<ArgumentException>
+        createCubeArray  8  1  0 |> should throw typeof<ArgumentException>
+        createCubeArray  8  1 -1 |> should throw typeof<ArgumentException>
+        createCubeArray  0  1  1 |> should throw typeof<ArgumentException>
+        createCubeArray -4  1  1 |> should throw typeof<ArgumentException>
+
+
+    // TODO: Implement all the checks and raise the appropriate expceptions
+    [<Test>]
+    let ``[Create] Multisampled textures cannot have mip maps`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
+        use win = Window.create backend
+        let runtime = win.Runtime
+
+        let create() =
+            let t = runtime.CreateTexture(V2i(512, 512), TextureFormat.Rgba32f, 2, 2)
+            runtime.DeleteTexture(t)
+
+        let createArray() =
+            let t = runtime.CreateTextureArray(V2i(512, 512), TextureFormat.Rgba32f, 4, 8, 16)
+            runtime.DeleteTexture(t)
+
+        let createCube() =
+            let t = runtime.CreateTextureCube(512, TextureFormat.Rgba32f, 2, 2)
+            runtime.DeleteTexture(t)
+
+        let createCubeArray() =
+            let t = runtime.CreateTextureCubeArray(512, TextureFormat.Rgba32f, 4, 8, 16)
+            runtime.DeleteTexture(t)
+
+        create          |> should throw typeof<ArgumentException>
+        createArray     |> should throw typeof<ArgumentException>
+        createCube      |> should throw typeof<ArgumentException>
+        createCubeArray |> should throw typeof<ArgumentException>
+
+
+    // TODO: Implement all the checks and raise the appropriate expceptions
+    //[<Test>]
+    //let ``[Download] Arguments out of range`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
+    //    use win = Window.create backend
+    //    let runtime = win.Runtime
+
+    //    let t = runtime.CreateTextureArray(V2i(512, 512), TextureFormat.Rgba32f, 4, 8, 16)
+    //    (fun _() -> runtime.Download(t, -1, 0) |> ignore) |> should throw typeof<ArgumentException>
+
+    //    runtime.DeleteTexture(t)
