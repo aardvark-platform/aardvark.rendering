@@ -844,7 +844,7 @@ type IBackendTextureExtensions private() =
 
     /// <summary>
     /// Creates an output view of the texture with the given level and slice.
-    /// If slice is negative, all slices are selected.
+    /// In case the texture is an array or a cube and slice is negative, all items or faces are selected as texture layers.
     /// </summary>
     [<Extension>]
     static member GetOutputView(this : IBackendTexture, level : int, slice : int) =
