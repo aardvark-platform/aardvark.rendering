@@ -75,9 +75,15 @@ module ``IBackendTexture Slicing Extensions`` =
 
     type IBackendTexture with
 
+        member private x.Slices =
+            if x.Dimension = TextureDimension.TextureCube then
+                x.Count * 6
+            else
+                x.Count
+
         member x.GetSlice(aspect : TextureAspect, minLevel : Option<int>, maxLevel : Option<int>, minSlice : Option<int>, maxSlice : Option<int>) =
             let level = Range1i(defaultArg minLevel 0, defaultArg maxLevel (x.MipMapLevels - 1))
-            let slice = Range1i(defaultArg minSlice 0, defaultArg maxSlice (x.Count - 1))
+            let slice = Range1i(defaultArg minSlice 0, defaultArg maxSlice (x.Slices - 1))
             TextureRange(aspect, x, level, slice) :> ITextureRange
 
         member x.GetSlice(aspect : TextureAspect, minLevel : Option<int>, maxLevel : Option<int>, slice : int) =
@@ -85,17 +91,17 @@ module ``IBackendTexture Slicing Extensions`` =
             TextureSlice(aspect, x, level, slice) :> ITextureSlice
 
         member x.GetSlice(aspect : TextureAspect, level : int, minSlice : Option<int>, maxSlice : Option<int>) =
-            let slice = Range1i(defaultArg minSlice 0, defaultArg maxSlice (x.Count - 1))
+            let slice = Range1i(defaultArg minSlice 0, defaultArg maxSlice (x.Slices - 1))
             TextureLevel(aspect, x, level, slice) :> ITextureLevel
 
         member x.Item
             with get(aspect : TextureAspect, level : int, slice : int) = SubTexture(aspect, x, level, slice) :> ITextureSubResource
 
         member x.Item
-            with get(aspect : TextureAspect, level : int) = TextureLevel(aspect, x, level, Range1i(0, x.Count - 1)) :> ITextureLevel
+            with get(aspect : TextureAspect, level : int) = TextureLevel(aspect, x, level, Range1i(0, x.Slices - 1)) :> ITextureLevel
 
         member x.Item
-            with get(aspect : TextureAspect) = TextureRange(aspect, x, Range1i(0, x.MipMapLevels - 1), Range1i(0, x.Count - 1)) :> ITextureRange
+            with get(aspect : TextureAspect) = TextureRange(aspect, x, Range1i(0, x.MipMapLevels - 1), Range1i(0, x.Slices - 1)) :> ITextureRange
 
     type ITextureRange with
         member x.GetSlice(minLevel : Option<int>, maxLevel : Option<int>, minSlice : Option<int>, maxSlice : Option<int>) =
