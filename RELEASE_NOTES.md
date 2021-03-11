@@ -1,3 +1,16 @@
+### 5.1.6
+- reworked low-level texture API
+- added functions for creating (adaptive) 1D and 3D textures
+- removed IBackendTextureOutputView and BackendTextureOutputView
+- fixed management and disposal of renderTo tasks
+- proper out-of-date marking for adaptive resources
+- reworked TextureFilter and SamplerState regarding anisotropic filtering
+- [GL] fixed bug in Context.Blit()
+- [GL] fixed copy and download of texture array slices
+- [SgFSharp] removed unnecessary SRTP usage
+- [SgFSharp] added Sg.lines'
+- [Vulkan] implemented dynamic sampler states
+
 ### 5.1.5
 - fixed Silk.NET.Core depenedency
 - fixed renderToColorCube 
