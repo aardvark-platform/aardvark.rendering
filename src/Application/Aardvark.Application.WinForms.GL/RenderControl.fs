@@ -145,7 +145,11 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
     //let mutable defaultOutput = OutputDescription.ofFramebuffer defaultFramebuffer
 
-    let sizes = AVal.init (V2i(base.ClientSize.Width, base.ClientSize.Height))
+    // NOTE: previously the size was forced to > 0 in Render, but now is only updated if the ClientSize is > 0
+    //       not sure if lying about the size is ideal, but a size of 0 area might crash client the application on the client size if not handled there
+    //       earlier we seem to have followed the OnResize events and the "size" represented the true RenderControl size
+    //       as we seem to have decided at some point to implement this behavior the initial size also needs to be > 0 here:
+    let sizes = AVal.init (V2i(max 1 base.ClientSize.Width, max 1 base.ClientSize.Height)) 
 
     let frameTime = AverageWindow(10)
     let frameWatch = System.Diagnostics.Stopwatch()
