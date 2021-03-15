@@ -914,18 +914,16 @@ type Runtime() =
 
 
     member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) =
-        if levels < 1 then raise <| ArgumentException("[CreateTexture] levels must be greater than 0")
-        if samples < 1 then raise <| ArgumentException("[CreateTexture] samples must be greater than 0")
+        TextureCreationValidation.validate dim size levels samples
         ctx.CreateTexture(size, dim, format, 0, levels, samples)
 
     member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) =
-        if levels < 1 then raise <| ArgumentException("[CreateTextureArray] levels must be greater than 0")
-        if samples < 1 then raise <| ArgumentException("[CreateTextureArray] samples must be greater than 0")
-        if count < 1 then raise <| ArgumentException("[CreateTextureArray] count must be greater than 0")
+        TextureCreationValidation.validateArray dim size levels samples count
         ctx.CreateTexture(size, dim, format, count, levels, samples)
 
 
     member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : Renderbuffer =
+        if samples < 1 then raise <| ArgumentException("[Renderbuffer] samples must be greater than 0")
         ctx.CreateRenderbuffer(size, format, samples)
                 
     member x.CreateGeometryPool(types : Map<Symbol, Type>) =

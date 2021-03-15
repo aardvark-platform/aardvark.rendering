@@ -4,6 +4,7 @@ open System
 open System.Reflection
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.Rendering.Vulkan
 open Aardvark.Application
 open Aardvark.SceneGraph
 open NUnit.Framework
@@ -127,114 +128,100 @@ module ``Texture Tests`` =
         comparePixImages V2i.Zero data result
 
 
-    // TODO: GL backend considers layers > 0 as arrayed? Totally sane...
-    [<Test>]
-    let ``[Create] 3D textures`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
-        use win = Window.create backend
-        let runtime = win.Runtime
-
-        let create() =
-            let t = runtime.CreateTexture(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 1)
-            runtime.DeleteTexture(t)
-
-        let createMultisampled() =
-            let t = runtime.CreateTexture(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 8)
-            runtime.DeleteTexture(t)
-
-        let createMipmapped() =
-            let t = runtime.CreateTexture(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, 4, 1)
-            runtime.DeleteTexture(t)
-
-        let createArray() =
-            let t = runtime.CreateTextureArray(V3i(128), TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 1, 12)
-            runtime.DeleteTexture(t)
-
-        create()
-        createMultisampled()
-        createMipmapped |> should throw typeof<ArgumentException>
-        createArray     |> should throw typeof<ArgumentException>
-
-
-    // TODO: Implement all the checks and raise the appropriate expceptions
     [<Test>]
     let ``[Create] Non-positive arguments`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
         use win = Window.create backend
         let runtime = win.Runtime
 
-        let create (levels : int) (samples : int) () =
-            let t = runtime.CreateTexture2D(V2i(512, 512), TextureFormat.Rgba32f, levels, samples)
+        let create (size : V3i) (dimension : TextureDimension) (levels : int) (samples : int) () =
+            let t = runtime.CreateTexture(size, dimension, TextureFormat.Rgba32f, levels, samples)
             runtime.DeleteTexture(t)
 
-        let create3d (levels : int) () =
-            let t = runtime.CreateTexture3D(V3i(128), TextureFormat.Rgba32f, levels)
+        let createArray (size : V3i) (dimension : TextureDimension) (levels : int) (samples : int) (count : int) () =
+            let t = runtime.CreateTextureArray(size, dimension, TextureFormat.Rgba32f, levels, samples, count)
             runtime.DeleteTexture(t)
 
-        let createArray (slices : int) (levels : int) (samples : int) () =
-            let t = runtime.CreateTexture2DArray(V2i(512, 512), TextureFormat.Rgba32f, slices, levels, samples)
-            runtime.DeleteTexture(t)
+        let size = V3i(128)
+        create size TextureDimension.Texture2D  0  2 |> should throw typeof<ArgumentException>
+        create size TextureDimension.Texture2D  2  0 |> should throw typeof<ArgumentException>
+        create size TextureDimension.Texture2D -1  2 |> should throw typeof<ArgumentException>
+        create size TextureDimension.Texture2D  2 -4 |> should throw typeof<ArgumentException>
+        create (size * -1) TextureDimension.Texture2D  1  1 |> should throw typeof<ArgumentException>
 
-        let createCube (levels : int) (samples : int) () =
-            let t = runtime.CreateTextureCube(512, TextureFormat.Rgba32f, levels, samples)
-            runtime.DeleteTexture(t)
-
-        let createCubeArray (slices : int) (levels : int) (samples : int) () =
-            let t = runtime.CreateTextureCubeArray(512, TextureFormat.Rgba32f, slices, levels, samples)
-            runtime.DeleteTexture(t)
-
-        create  0  1 |> should throw typeof<ArgumentException>
-        create -3  1 |> should throw typeof<ArgumentException>
-        create  1  0 |> should throw typeof<ArgumentException>
-        create  1 -1 |> should throw typeof<ArgumentException>
-
-        createArray  8  0  1 |> should throw typeof<ArgumentException>
-        createArray  8 -3  1 |> should throw typeof<ArgumentException>
-        createArray  8  1  0 |> should throw typeof<ArgumentException>
-        createArray  8  1 -1 |> should throw typeof<ArgumentException>
-        createArray  0  1  1 |> should throw typeof<ArgumentException>
-        createArray -4  1  1 |> should throw typeof<ArgumentException>
-
-        create3d  0 |> should throw typeof<ArgumentException>
-        create3d -1 |> should throw typeof<ArgumentException>
-
-        createCube  0  1 |> should throw typeof<ArgumentException>
-        createCube -3  1 |> should throw typeof<ArgumentException>
-        createCube  1  0 |> should throw typeof<ArgumentException>
-        createCube  1 -1 |> should throw typeof<ArgumentException>
-
-        createCubeArray  8  0  1 |> should throw typeof<ArgumentException>
-        createCubeArray  8 -3  1 |> should throw typeof<ArgumentException>
-        createCubeArray  8  1  0 |> should throw typeof<ArgumentException>
-        createCubeArray  8  1 -1 |> should throw typeof<ArgumentException>
-        createCubeArray  0  1  1 |> should throw typeof<ArgumentException>
-        createCubeArray -4  1  1 |> should throw typeof<ArgumentException>
+        createArray size TextureDimension.Texture2D  3  0  1 |> should throw typeof<ArgumentException>
+        createArray size TextureDimension.Texture2D  3 -3  1 |> should throw typeof<ArgumentException>
+        createArray size TextureDimension.Texture2D  3  1  0 |> should throw typeof<ArgumentException>
+        createArray size TextureDimension.Texture2D  3  1 -1 |> should throw typeof<ArgumentException>
+        createArray size TextureDimension.Texture2D  0  1  1 |> should throw typeof<ArgumentException>
+        createArray size TextureDimension.Texture2D -4  1  1 |> should throw typeof<ArgumentException>
+        createArray (size * -1) TextureDimension.Texture2D 1  1  2 |> should throw typeof<ArgumentException>
 
 
-    // TODO: Implement all the checks and raise the appropriate expceptions
     [<Test>]
-    let ``[Create] Multisampled textures cannot have mip maps`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
+    let ``[Create] Invalid usage`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
         use win = Window.create backend
         let runtime = win.Runtime
 
-        let create() =
-            let t = runtime.CreateTexture2D(V2i(512, 512), TextureFormat.Rgba32f, 2, 2)
+        let create (dimension : TextureDimension) (levels : int) (samples : int) () =
+            let t = runtime.CreateTexture(V3i(128), dimension, TextureFormat.Rgba32f, levels, samples)
             runtime.DeleteTexture(t)
 
-        let createArray() =
-            let t = runtime.CreateTexture2DArray(V2i(512, 512), TextureFormat.Rgba32f, 4, 8, 16)
+        let createArray (dimension : TextureDimension) (levels : int) (samples : int) (count : int) () =
+            let t = runtime.CreateTextureArray(V3i(128), dimension, TextureFormat.Rgba32f, levels, samples, count)
             runtime.DeleteTexture(t)
 
-        let createCube() =
-            let t = runtime.CreateTextureCube(512, TextureFormat.Rgba32f, 2, 2)
+        create TextureDimension.Texture1D 1 8          |> should throw typeof<ArgumentException>
+        createArray TextureDimension.Texture1D 1 8 4   |> should throw typeof<ArgumentException>
+
+        create TextureDimension.Texture2D 2 8          |> should throw typeof<ArgumentException>
+        createArray TextureDimension.Texture2D 2 8 4   |> should throw typeof<ArgumentException>
+
+        create TextureDimension.Texture3D 1 4          |> should throw typeof<ArgumentException>
+        createArray TextureDimension.Texture3D 1 1 4   |> should throw typeof<ArgumentException>
+
+        create TextureDimension.TextureCube 1 8        |> should throw typeof<ArgumentException>
+        createArray TextureDimension.TextureCube 1 8 4 |> should throw typeof<ArgumentException>
+
+
+    [<Test>]
+    let ``[Create] Valid usage`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
+        use win = Window.create backend
+        let runtime = win.Runtime
+
+        let create (dimension : TextureDimension) (levels : int) (samples : int) () =
+            let t = runtime.CreateTexture(V3i(128), dimension, TextureFormat.Rgba32f, levels, samples)
             runtime.DeleteTexture(t)
 
-        let createCubeArray() =
-            let t = runtime.CreateTextureCubeArray(512, TextureFormat.Rgba32f, 4, 8, 16)
+        let createArray (dimension : TextureDimension) (levels : int) (samples : int) (count : int) () =
+            let t = runtime.CreateTextureArray(V3i(128), dimension, TextureFormat.Rgba32f, levels, samples, count)
             runtime.DeleteTexture(t)
 
-        create          |> should throw typeof<ArgumentException>
-        createArray     |> should throw typeof<ArgumentException>
-        createCube      |> should throw typeof<ArgumentException>
-        createCubeArray |> should throw typeof<ArgumentException>
+        create TextureDimension.Texture1D 1 1 ()
+        create TextureDimension.Texture1D 2 1 ()
+        createArray TextureDimension.Texture1D 1 1 1 ()
+        createArray TextureDimension.Texture1D 2 1 1 ()
+        createArray TextureDimension.Texture1D 1 1 4 ()
+        createArray TextureDimension.Texture1D 2 1 4 ()
+
+        create TextureDimension.Texture2D 1 1 ()
+        create TextureDimension.Texture2D 3 1 ()
+        create TextureDimension.Texture2D 1 8 ()
+        createArray TextureDimension.Texture2D 1 1 1 ()
+        createArray TextureDimension.Texture2D 3 1 1 ()
+        createArray TextureDimension.Texture2D 1 8 1 ()
+        createArray TextureDimension.Texture2D 1 1 4 ()
+        createArray TextureDimension.Texture2D 3 1 4 ()
+        createArray TextureDimension.Texture2D 1 8 4 ()
+
+        create TextureDimension.Texture3D 1 1 ()
+        create TextureDimension.Texture3D 2 1 ()
+
+        create TextureDimension.TextureCube 1 1 ()
+        create TextureDimension.TextureCube 3 1 ()
+        createArray TextureDimension.TextureCube 1 1 1 ()
+        createArray TextureDimension.TextureCube 3 1 1 ()
+        createArray TextureDimension.TextureCube 1 1 4 ()
+        createArray TextureDimension.TextureCube 3 1 4 ()
 
 
     // TODO: Implement all the checks and raise the appropriate expceptions

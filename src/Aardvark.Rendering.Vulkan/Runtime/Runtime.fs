@@ -76,27 +76,29 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         Aardvark.Base.HashSet.empty
 
     let debugBreak (msg : DebugMessage) =
+        if msg.severity = MessageSeverity.Error then
+            Debugger.Launch() |> ignore
+
         if Debugger.IsAttached then
             Debugger.Break()
-
 
     let debugMessage (msg : DebugMessage) =
         if device.DebugReportActive then
             if not (ignored.Contains msg.id) then
                 let str = msg.layerPrefix + ": " + msg.message
                 match msg.severity with
-                    | MessageSeverity.Error ->
-                        Report.Error("[Vulkan] {0}", str)
-                        debugBreak msg
+                | MessageSeverity.Error ->
+                    Report.Error("[Vulkan] {0}", str)
+                    debugBreak msg
 
-                    | MessageSeverity.Warning ->
-                        Report.Warn("[Vulkan] {0}", str)
+                | MessageSeverity.Warning ->
+                    Report.Warn("[Vulkan] {0}", str)
 
-                    | MessageSeverity.Information ->
-                        Report.Line("[Vulkan] {0}", str)
+                | MessageSeverity.Information ->
+                    Report.Line("[Vulkan] {0}", str)
 
-                    | _ ->
-                        Report.Line("[Vulkan] DEBUG: {0}", str)
+                | _ ->
+                    Report.Line("[Vulkan] DEBUG: {0}", str)
 
     let debugSummary() =
         if device.DebugReportActive then
@@ -257,10 +259,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.DeleteBuffer(t : IBackendBuffer) =
         Disposable.dispose(unbox<Buffer> t)
 
-    member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
-        x.CreateTextureArray(size, dim, format, levels, samples, 1)
-
-    member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
+    member private x.CreateTextureInner(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) =
         let layout =
             VkImageLayout.ShaderReadOnlyOptimal
 
@@ -286,8 +285,17 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         }
         img :> IBackendTexture
 
+    member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
+        TextureCreationValidation.validate dim size levels samples
+        x.CreateTextureInner(size, dim, format, levels, samples, 1)
+
+    member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
+        TextureCreationValidation.validateArray dim size levels samples count
+        x.CreateTextureInner(size, dim, format, levels, samples, count)
 
     member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
+        if samples < 1 then raise <| ArgumentException("[Renderbuffer] samples must be greater than 0")
+
         let isDepth =
             RenderbufferFormat.hasDepth format || RenderbufferFormat.hasStencil format
 
@@ -579,14 +587,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.CreateFramebuffer(signature, bindings) = x.CreateFramebuffer(signature, bindings)
 
         member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) =
-            if levels < 1 then raise <| ArgumentException("[CreateTexture] levels must be greater than 0")
-            if samples < 1 then raise <| ArgumentException("[CreateTexture] samples must be greater than 0")
             x.CreateTexture(size, dim, format, levels, samples)
 
         member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) =
-            if levels < 1 then raise <| ArgumentException("[CreateTextureArray] levels must be greater than 0")
-            if samples < 1 then raise <| ArgumentException("[CreateTextureArray] samples must be greater than 0")
-            if count < 1 then raise <| ArgumentException("[CreateTextureArray] count must be greater than 0")
             x.CreateTextureArray(size, dim, format, levels, samples, count)
 
 

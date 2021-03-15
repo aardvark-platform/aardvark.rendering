@@ -131,7 +131,7 @@ type ITextureRuntimeExtensions private() =
     ///<param name="format">The desired texture format.</param>
     ///<param name="levels">The number of mip levels. Default is 1.</param>
     ///<param name="samples">the number of samples. Default is 1.</param>
-    [<Extension>]
+    [<Extension; Obsolete("Use overload without samples parameter")>]
     static member CreateTextureCube(this : ITextureRuntime, size : int, format : TextureFormat,
                                     [<Optional; DefaultParameterValue(1)>] levels : int,
                                     [<Optional; DefaultParameterValue(1)>] samples : int) =
@@ -144,12 +144,34 @@ type ITextureRuntimeExtensions private() =
     ///<param name="levels">The number of mip levels. Default is 1.</param>
     ///<param name="samples">the number of samples. Default is 1.</param>
     ///<param name="count">The number of texture slices.</param>
-    [<Extension>]
+    [<Extension; Obsolete("Use overload without samples parameter")>]
     static member CreateTextureCubeArray(this : ITextureRuntime, size : int, format : TextureFormat,
                                        [<Optional; DefaultParameterValue(1)>] levels : int,
                                        [<Optional; DefaultParameterValue(1)>] samples : int,
                                        count : int) =
         this.CreateTextureArray(V3i(size, 0, 0), TextureDimension.TextureCube, format, levels = levels, samples = samples, count = count)
+
+    ///<summary>Creates a cube texture.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="size">The size of the texture.</param>
+    ///<param name="format">The desired texture format.</param>
+    ///<param name="levels">The number of mip levels. Default is 1.</param>
+    [<Extension>]
+    static member CreateTextureCube(this : ITextureRuntime, size : int, format : TextureFormat,
+                                    [<Optional; DefaultParameterValue(1)>] levels : int) =
+        this.CreateTexture(V3i(size, 0, 0), TextureDimension.TextureCube, format, levels = levels, samples = 1)
+
+    ///<summary>Creates a 2D texture array.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="size">The size of the texture.</param>
+    ///<param name="format">The desired texture format.</param>
+    ///<param name="levels">The number of mip levels. Default is 1.</param>
+    ///<param name="count">The number of texture slices.</param>
+    [<Extension>]
+    static member CreateTextureCubeArray(this : ITextureRuntime, size : int, format : TextureFormat,
+                                       [<Optional; DefaultParameterValue(1)>] levels : int,
+                                       count : int) =
+        this.CreateTextureArray(V3i(size, 0, 0), TextureDimension.TextureCube, format, levels = levels, samples = 1, count = count)
 
     // PixVolume
     [<Extension>]

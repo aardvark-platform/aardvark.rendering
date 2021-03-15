@@ -112,6 +112,7 @@ and ITextureRuntime =
     ///<param name="format">The desired texture format.</param>
     ///<param name="levels">The number of mip levels.</param>
     ///<param name="samples">The number of samples.</param>
+    ///<exception cref="ArgumentException">if the combination of parameters is invalid.</exception>
     abstract member CreateTexture : size : V3i * dimension : TextureDimension * format : TextureFormat * levels : int * samples : int -> IBackendTexture
 
     ///<summary>Creates a texture array.</summary>
@@ -121,6 +122,7 @@ and ITextureRuntime =
     ///<param name="levels">The number of mip levels.</param>
     ///<param name="samples">The number of samples.</param>
     ///<param name="count">The number of texture slices.</param>
+    ///<exception cref="ArgumentException">if the combination of parameters is invalid.</exception>
     abstract member CreateTextureArray : size : V3i * dimension : TextureDimension * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
 
     abstract member PrepareTexture : ITexture -> IBackendTexture
@@ -131,6 +133,11 @@ and ITextureRuntime =
 
     abstract member DeleteTexture : IBackendTexture -> unit
 
+    ///<summary>Creates a renderbuffer.</summary>
+    ///<param name="size">The size of the renderbuffer.</param>
+    ///<param name="format">The desired renderbuffer format.</param>
+    ///<param name="samples">The number of samples.</param>
+    ///<exception cref="ArgumentException">if <paramref name="samples"/> is less than 1.</exception>
     abstract member CreateRenderbuffer : size : V2i * format : RenderbufferFormat * samples : int -> IRenderbuffer
     abstract member DeleteRenderbuffer : IRenderbuffer -> unit
 
@@ -186,12 +193,49 @@ and ITextureRuntime =
                            dst : IBackendTexture * dstBaseSlice : int * dstBaseLevel : int *
                            slices : int * levels : int -> unit
 
-    //abstract member CreateTexture : size : V2i * format : TextureFormat * levels : int * samples : int -> IBackendTexture
-    //abstract member CreateTextureArray : size : V2i * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
-    //abstract member CreateTextureCube : size : int * format : TextureFormat * levels : int * samples : int -> IBackendTexture
-    //abstract member CreateTextureCubeArray : size : int * format : TextureFormat * levels : int * samples : int * count : int -> IBackendTexture
-
     abstract member ClearColor : texture : IBackendTexture * color : C4f -> unit
     abstract member ClearDepthStencil : texture : IBackendTexture * depth : Option<float> * stencil : Option<int> -> unit
 
     abstract member CreateTextureView : texture : IBackendTexture * levels : Range1i * slices : Range1i * isArray : bool -> IBackendTexture
+
+
+module TextureCreationValidation =
+
+    let private isValidSize (size : V3i) = function
+        | TextureDimension.Texture1D -> size.X >= 0
+        | TextureDimension.Texture2D -> Vec.allGreaterOrEqual size.XY 0
+        | TextureDimension.Texture3D -> Vec.allGreaterOrEqual size 0
+        | TextureDimension.TextureCube -> size.X >= 0
+        | _ -> true
+
+    let private fail (dimension : TextureDimension) (msg : string) =
+        let name =
+            match dimension with
+            | TextureDimension.Texture1D -> "Texture1D"
+            | TextureDimension.Texture2D -> "Texture2D"
+            | TextureDimension.Texture3D -> "Texture3D"
+            | TextureDimension.TextureCube -> "TextureCube"
+            | _ -> ""
+
+        raise <| ArgumentException(sprintf "[%s] %s" name msg)
+
+    /// Raises an ArgumentException if the combination of parameters is invalid.
+    let validate (dimension : TextureDimension) (size : V3i) (levels : int) (samples : int) =
+        let fail = fail dimension
+
+        if not (dimension |> isValidSize size) then
+            fail "size must not be negative"
+
+        if levels < 1 then fail "levels must be greater than 0"
+        if samples < 1 then fail "samples must be greater than 0"
+        if samples > 1 then
+            if levels > 1 then fail "multisampled textures cannot have mip maps"
+            if dimension <> TextureDimension.Texture2D then fail "only 2D textures can be multisampled"
+
+    /// Raises an ArgumentException if the combination of parameters is invalid.
+    let validateArray (dimension : TextureDimension) (size : V3i) (levels : int) (samples : int) (count : int) =
+        let fail = fail dimension
+
+        if count < 1 then fail "count must be greater than 0"
+        if dimension = TextureDimension.Texture3D then fail "cannot be arrayed"
+        validate dimension size levels samples
