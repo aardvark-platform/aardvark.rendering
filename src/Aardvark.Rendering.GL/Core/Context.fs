@@ -19,16 +19,17 @@ type RenderingLockDisposable =
         with get() = x.handle
 
     member x.Dispose() =
-        match x.handle with 
-        | ValueSome h -> h.ReleaseCurrent()
-                         x.restore <- ValueNone
-        | _ -> ()
+        if not (isNull x.current) then // check if nop disposable
+            match x.handle with 
+            | ValueSome h -> h.ReleaseCurrent()
+                             x.restore <- ValueNone
+            | _ -> ()
 
-        match x.restore with
-        | ValueSome h -> h.MakeCurrent()
-                         x.current.Value <- ValueSome h
-                         x.handle <- ValueNone
-        | _ -> x.current.Value <- ValueNone
+            match x.restore with
+            | ValueSome h -> h.MakeCurrent()
+                             x.current.Value <- ValueSome h
+                             x.handle <- ValueNone
+            | _ -> x.current.Value <- ValueNone
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
