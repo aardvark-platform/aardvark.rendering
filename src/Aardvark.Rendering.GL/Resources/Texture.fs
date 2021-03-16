@@ -2262,9 +2262,9 @@ module TextureExtensions =
         let downloadTexture2D (t : Texture) (level : int) (slice : int) (image : PixImage) =
             downloadTexture2DInternal TextureTarget.Texture2D true t level slice image
              
-        let downloadTextureCube (t : Texture) (level : int) (side : CubeSide) (image : PixImage) =
-            let target = cubeSides.[int side] |> snd
-            downloadTexture2DInternal target false t level 0 image
+        let downloadTextureCube (t : Texture) (level : int) (slice : int) (image : PixImage) =
+            let target = cubeSides.[slice % 6] |> snd
+            downloadTexture2DInternal target false t level slice image
 
     //let texSizeInBytes (size : V3i, t : TextureFormat, samples : int) =
     //    let pixelCount = (int64 size.X) * (int64 size.Y) * (int64 size.Z) * (int64 samples)
@@ -2554,9 +2554,12 @@ type ContextTextureExtensions =
                     GL.BindTexture(target, t.Handle)
                     GL.Check "could not bind texture"
 
-                    let target = snd cubeSides.[slice]
                     source.PinPBO(t.Context.PackAlignment, ImageTrafo.MirrorY, fun dim pixelType pixelFormat size ->
-                        GL.TexSubImage2D(target, level, 0, 0, dim.X, dim.Y, pixelFormat, pixelType, 0n)
+                        if target = TextureTarget.TextureCubeMapArray then
+                            GL.TexSubImage3D(target, level, 0, 0, slice, dim.X, dim.Y, 1, pixelFormat, pixelType, 0n)
+                        else
+                            let target = snd cubeSides.[slice % 6]
+                            GL.TexSubImage2D(target, level, 0, 0, dim.X, dim.Y, pixelFormat, pixelType, 0n)
                         GL.Check (sprintf "could not upload texture data for level %d" level)
                     )
 
@@ -2608,7 +2611,7 @@ type ContextTextureExtensions =
                     downloadTexture2D t level slice target
 
                 | TextureDimension.TextureCube ->
-                    downloadTextureCube t level (unbox slice) target
+                    downloadTextureCube t level slice target
 
                 | _ ->
                     failwithf "cannot download textures of kind: %A" t.Dimension

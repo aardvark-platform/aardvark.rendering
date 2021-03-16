@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering.Tests
 
 open System
+open System.IO
 open System.Reflection
 open Aardvark.Base
 open Aardvark.Rendering
@@ -56,7 +57,9 @@ module PixImage =
         Environment.GetFolderPath(System.Environment.SpecialFolder.Desktop)
 
     let saveToDesktop (fileName : string) (img : #PixImage) =
-        img.SaveAsImage(Path.combine [desktopPath; fileName])
+        let dir = Path.combine [desktopPath; "UnitTests"]
+        Directory.CreateDirectory(dir) |> ignore
+        img.SaveAsImage(Path.combine [dir; fileName])
 
 
 module ``Texture Tests`` =
@@ -66,6 +69,15 @@ module ``Texture Tests`` =
             C4b.Crimson
             C4b.DarkOrange
             C4b.ForestGreen
+            C4b.AliceBlue
+            C4b.Indigo
+
+            C4b.Cornsilk
+            C4b.Cyan
+            C4b.FireBrick
+            C4b.Coral
+            C4b.Chocolate
+            C4b.LawnGreen
         |]
 
     let comparePixImages (offset : V2i) (input : PixImage<'T>) (output : PixImage<'T>) =
@@ -187,6 +199,85 @@ module ``Texture Tests`` =
                 comparePixImages V2i.Zero src dst
             )
         )
+
+
+    [<Test>]
+    let ``[Download] Mipmapped cube`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
+        use win = Window.create backend
+        let runtime = win.Runtime
+
+        let levels = 3
+        let size = V2i(128)
+
+        let data =
+            CubeMap.init levels (fun side level ->
+                let data = PixImage.checkerboard colors.[int side]
+                let size = size / (1 <<< level)
+                data |> PixImage.resized size
+            )
+
+        let format = TextureFormat.ofPixFormat data.[CubeSide.PositiveX].PixFormat TextureParams.empty
+        let t = runtime.CreateTextureCube(size.X, format, levels = levels)
+
+        data |> CubeMap.iteri (fun side level img ->
+            runtime.Upload(t, level, int side, img)
+        )
+
+        let result =
+            data |> CubeMap.mapi (fun side level _ ->
+                runtime.Download(t, level, int side).ToPixImage<byte>()
+            )
+
+        (data, result) ||> CubeMap.iteri2 (fun side level src dst ->
+                dst.Size |> should equal src.Size
+                comparePixImages V2i.Zero src dst
+            )
+
+        runtime.DeleteTexture(t)
+
+
+    [<Test>]
+    let ``[Download] Mipmapped cube array`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
+        use win = Window.create backend
+        let runtime = win.Runtime
+
+        let count = 2
+        let levels = 3
+        let size = V2i(128)
+
+        let data =
+            Array.init count (fun index ->
+                CubeMap.init levels (fun side level ->
+                    let data = PixImage.checkerboard colors.[index * 6 + int side]
+                    let size = size / (1 <<< level)
+                    data |> PixImage.resized size
+                )
+            )
+
+        let format = TextureFormat.ofPixFormat data.[0].[CubeSide.PositiveX].PixFormat TextureParams.empty
+        let t = runtime.CreateTextureCubeArray(size.X, format, levels = levels, count = count)
+
+        data |> Array.iteri (fun index mipmaps ->
+            mipmaps |> CubeMap.iteri (fun side level img ->
+                runtime.Upload(t, level, index * 6 + int side, img)
+            )
+        )
+
+        let result =
+            data |> Array.mapi (fun index mipmaps ->
+                mipmaps |> CubeMap.mapi (fun side level _ ->
+                    let slice = index * 6 + int side
+                    runtime.Download(t, level, slice).ToPixImage<byte>()
+                )
+            )
+
+        (data, result) ||> Array.iter2 (CubeMap.iter2 (fun src dst ->
+                dst.Size |> should equal src.Size
+                comparePixImages V2i.Zero src dst
+            )
+        )
+
+        runtime.DeleteTexture(t)
 
 
     [<Test>]

@@ -137,11 +137,6 @@ module ``Image Format Extensions`` =
                 TextureDimension.TextureCube, VkImageType.D2d
             ]
 
-        let getSize (size : V3i) = function
-            | VkImageType.D1d -> V3i(size.X, 1, 1)
-            | VkImageType.D2d -> V3i(size.X, size.Y, 1)
-            | _ -> size
-
     type ImageKind =
         | Color = 1
         | Depth = 2
@@ -2462,16 +2457,17 @@ module Image =
                 if mayHavePeers then VkImageCreateFlags.AliasBit ||| flags
                 else flags
 
-            let imageType =
-                VkImageType.ofTextureDimension dim
-
             let size =
-                imageType |> VkImageType.getSize size
+                match dim with
+                | TextureDimension.Texture1D -> V3i(size.X, 1, 1)
+                | TextureDimension.Texture2D -> V3i(size.X, size.Y, 1)
+                | TextureDimension.TextureCube -> V3i(size.X, size.X, 1)
+                | _ -> size
 
             let info =
                 VkImageCreateInfo(
                     flags,
-                    imageType,
+                    VkImageType.ofTextureDimension dim,
                     fmt,
                     VkExtent3D(uint32 size.X, uint32 size.Y, uint32 size.Z),
                     uint32 mipMapLevels,
