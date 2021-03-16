@@ -42,6 +42,16 @@ module PixImage =
         ) |> ignore
         pi
 
+    let resized (size : V2i) (img : PixImage<byte>) =
+        let result = PixImage<byte>(img.Format, size)
+
+        for c in 0L .. img.Volume.Size.Z - 1L do
+            let src = img.Volume.SubXYMatrixWindow(c)
+            let dst = result.Volume.SubXYMatrixWindow(c)
+            dst.SetScaledCubic(src)
+
+        result
+
     let private desktopPath =
         Environment.GetFolderPath(System.Environment.SpecialFolder.Desktop)
 
@@ -50,6 +60,13 @@ module PixImage =
 
 
 module ``Texture Tests`` =
+
+    let colors = [|
+            C4b.BurlyWood
+            C4b.Crimson
+            C4b.DarkOrange
+            C4b.ForestGreen
+        |]
 
     let comparePixImages (offset : V2i) (input : PixImage<'T>) (output : PixImage<'T>) =
         for x in 0 .. output.Size.X - 1 do
@@ -126,6 +143,50 @@ module ``Texture Tests`` =
 
         result.Size |> should equal size
         comparePixImages V2i.Zero data result
+
+
+    [<Test>]
+    let ``[Download] Mipmapped array`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
+        use win = Window.create backend
+        let runtime = win.Runtime
+
+        let count = 4
+        let levels = 3
+        let size = V2i(128)
+
+        let data =
+            Array.init count (fun index ->
+                let data = PixImage.checkerboard colors.[index]
+
+                Array.init levels (fun level ->
+                    let size = size / (1 <<< level)
+                    data |> PixImage.resized size
+                )
+            )
+
+        let format = TextureFormat.ofPixFormat data.[0].[0].PixFormat TextureParams.empty
+        let t = runtime.CreateTexture2DArray(size, format, levels = levels, count = count)
+
+        data |> Array.iteri (fun index mipmaps ->
+            mipmaps |> Array.iteri (fun level img ->
+                runtime.Upload(t, level, index, img)
+            )
+        )
+
+        let result =
+            data |> Array.mapi (fun index mipmaps ->
+                mipmaps |> Array.mapi (fun level _ ->
+                    runtime.Download(t, level, index).ToPixImage<byte>()
+                )
+            )
+
+        runtime.DeleteTexture(t)
+
+        (data, result) ||> Array.iter2 (Array.iter2 (fun src dst ->
+                dst.Size |> should equal src.Size
+                comparePixImages V2i.Zero src dst
+            )
+        )
 
 
     [<Test>]
