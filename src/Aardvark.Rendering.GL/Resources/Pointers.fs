@@ -190,8 +190,8 @@ module PointerContextExtensions =
             NativePtr.free list.Infos
 
 
-        member x.ToCompareFunction(comparison : ComparisonFunction) =
-             Translations.toGLCompareFunction comparison
+        member x.ToDepthTest(test : DepthTest) =
+            Translations.toGLDepthTest test
 
         member x.ToDepthBias(state : DepthBias) =
             DepthBiasInfo(float32 state.Constant, float32 state.SlopeScale, float32 state.Clamp)

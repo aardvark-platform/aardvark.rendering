@@ -364,7 +364,7 @@ module PreparedPipelineState =
         let blendModes = x.CreateBlendModes(fboSignature, rj.BlendState.Mode, rj.BlendState.AttachmentMode)
         let colorMasks = x.CreateColorMasks(fboSignature, rj.BlendState.ColorWriteMask, rj.BlendState.AttachmentWriteMask)
 
-        let depthTest = x.CreateCompareFunction rj.DepthState.Test
+        let depthTest = x.CreateDepthTest rj.DepthState.Test
         let depthBias = x.CreateDepthBias rj.DepthState.Bias
         let depthMask = x.CreateFlag rj.DepthState.WriteMask
         let depthClamp = x.CreateFlag rj.DepthState.Clamp
@@ -436,7 +436,7 @@ module PreparedPipelineState =
         let blendModes = x.CreateBlendModes(fboSignature, rj.BlendState.Mode, rj.BlendState.AttachmentMode)
         let colorMasks = x.CreateColorMasks(fboSignature, rj.BlendState.ColorWriteMask, rj.BlendState.AttachmentWriteMask)
 
-        let depthTest= x.CreateCompareFunction rj.DepthState.Test
+        let depthTest= x.CreateDepthTest rj.DepthState.Test
         let depthBias = x.CreateDepthBias rj.DepthState.Bias
         let depthMask = x.CreateFlag rj.DepthState.WriteMask
         let depthClamp = x.CreateFlag rj.DepthState.Clamp

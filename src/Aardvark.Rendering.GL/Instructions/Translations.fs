@@ -97,6 +97,19 @@ module Translations =
             | ComparisonFunction.NotEqual -> CompareFunction.NotEqual |> int
             | _ -> failwithf "unknown comparison %A" f
 
+    let toGLDepthTest (f : DepthTest) =
+         match f with
+             | DepthTest.None -> 0
+             | DepthTest.Greater -> CompareFunction.Greater |> int
+             | DepthTest.GreaterOrEqual -> CompareFunction.GreaterEqual |> int
+             | DepthTest.Less -> CompareFunction.Less |> int
+             | DepthTest.LessOrEqual -> CompareFunction.LessEqual |> int
+             | DepthTest.Equal -> CompareFunction.Equal |> int
+             | DepthTest.NotEqual -> CompareFunction.NotEqual |> int
+             | DepthTest.Never -> CompareFunction.Never |> int
+             | DepthTest.Always -> CompareFunction.Always |> int
+             | _ -> failwithf "unknown depth test %A" f
+
     let toGLStencilOperation (o : Aardvark.Rendering.StencilOperation) =
         match o with
             | Aardvark.Rendering.StencilOperation.Decrement -> StencilOperation.Decrement |> int

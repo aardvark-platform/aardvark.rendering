@@ -221,7 +221,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let isActiveCache           = derivedCache (fun m -> m.IsActiveCache)
     let beginModeCache          = derivedCache (fun m -> m.BeginModeCache)
     let drawCallInfoCache       = derivedCache (fun m -> m.DrawCallInfoCache)
-    let compareFuncCache        = derivedCache (fun m -> m.CompareFunctionCache)
+    let depthTestCache          = derivedCache (fun m -> m.DepthTestCache)
     let depthBiasCache          = derivedCache (fun m -> m.DepthBiasCache)
     let cullModeCache           = derivedCache (fun m -> m.CullModeCache)
     let frontFaceCache          = derivedCache (fun m -> m.FrontFaceCache)
@@ -272,7 +272,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member private x.IsActiveCache            : ResourceCache<bool, int>                      = isActiveCache
     member private x.BeginModeCache           : ResourceCache<GLBeginMode, GLBeginMode>       = beginModeCache
     member private x.DrawCallInfoCache        : ResourceCache<DrawCallInfoList, DrawCallInfoList> = drawCallInfoCache
-    member private x.CompareFunctionCache     : ResourceCache<int, int>                       = compareFuncCache
+    member private x.DepthTestCache           : ResourceCache<int, int>                       = depthTestCache
     member private x.DepthBiasCache           : ResourceCache<DepthBiasInfo, DepthBiasInfo>   = depthBiasCache
     member private x.CullModeCache            : ResourceCache<int, int>                       = cullModeCache
     member private x.FrontFaceCache           : ResourceCache<int, int>                       = frontFaceCache
@@ -787,20 +787,10 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-    member x.CreateCompareFunction(value : aval<ComparisonFunction>) =
-        compareFuncCache.GetOrCreate(value, fun () -> {
-            create = fun b      -> ctx.ToCompareFunction b
-            update = fun h b    -> ctx.ToCompareFunction b
-            delete = fun h      -> ()
-            info =   fun h      -> ResourceInfo.Zero
-            view = id
-            kind = ResourceKind.Unknown
-        })
-
-    member x.CreateCompareFunction(value : aval<DepthTest>) =
-        compareFuncCache.GetOrCreate(value, fun () -> {
-            create = fun b      -> ctx.ToCompareFunction (DepthTest.toComparisonFunction b)
-            update = fun h b    -> ctx.ToCompareFunction (DepthTest.toComparisonFunction b)
+    member x.CreateDepthTest(value : aval<DepthTest>) =
+        depthTestCache.GetOrCreate(value, fun () -> {
+            create = fun b      -> ctx.ToDepthTest b
+            update = fun h b    -> ctx.ToDepthTest b
             delete = fun h      -> ()
             info =   fun h      -> ResourceInfo.Zero
             view = id

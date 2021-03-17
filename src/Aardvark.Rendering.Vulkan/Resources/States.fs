@@ -515,16 +515,15 @@ module DepthState =
             DepthTest.NotEqual, VkCompareOp.NotEqual
             DepthTest.Never, VkCompareOp.Never
             DepthTest.Always, VkCompareOp.Always
+            DepthTest.None, VkCompareOp.Always
         ]
 
     let create (write : bool) (test : DepthTest) =
-        let cmp = toVkCompareOp test
-
         {
-            testEnabled             = cmp <> VkCompareOp.Always
+            testEnabled             = test <> DepthTest.None
             writeEnabled            = write
             boundsTest              = false
-            compare                 = cmp
+            compare                 = toVkCompareOp test
             depthBounds             = Range1d(0.0, 1.0)
         }
 

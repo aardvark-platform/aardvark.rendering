@@ -322,7 +322,7 @@ module GLAssemblerExtensions =
             let e = s.NewLabel()
             let ptr = NativePtr.toNativeInt m
 
-            s.Cmp(ptr, int OpenGl.Enums.CompareFunction.Always)
+            s.Cmp(ptr, 0)
             s.Jump(JumpCondition.Equal, d)
 
             // Enable
