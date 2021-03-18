@@ -91,11 +91,12 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
 
     member x.ReleaseAll() =
         lock x (fun () ->
-            refCount <- 0
-            owner.Remove key
-            x.Destroy()
-            x.Outputs.Clear()
-            x.OutOfDate <- true
+            if refCount > 0 then
+                refCount <- 0
+                owner.Remove key
+                x.Destroy()
+                x.Outputs.Clear()
+                x.OutOfDate <- true
         )
 
     member x.Update(token : AdaptiveToken) =
