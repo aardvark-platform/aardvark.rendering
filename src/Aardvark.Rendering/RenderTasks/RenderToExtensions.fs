@@ -123,6 +123,32 @@ type RenderToExtensions private() =
     static member RenderTo(this : IRenderTask, output : IAdaptiveResource<IFramebuffer>, queries : IQuery) =
         AdaptiveRenderingResult(this, output, queries) :> IAdaptiveResource<_>
 
+    /// Renders the given task to the given framebuffer, after clearing it according to the given clear values.
+    [<Extension>]
+    static member RenderTo(this : IRenderTask, output : IAdaptiveResource<IFramebuffer>, clearValues : ClearValues, queries : IQuery) =
+        let runtime = this.Runtime.Value
+        let signature = this.FramebufferSignature.Value
+
+        let task =
+            let mutable clear = Unchecked.defaultof<IRenderTask>
+
+            let create() =
+                clear <- runtime.CompileClear(signature, clearValues)
+                new SequentialRenderTask [| clear; this |] :> IRenderTask
+
+            let destroy (_ : IRenderTask) =
+                clear.Dispose()
+                clear <- Unchecked.defaultof<IRenderTask>
+
+            AdaptiveResource.constant create destroy
+
+        AdaptiveRenderingResult(task, output, queries) :> IAdaptiveResource<_>
+
+    /// Renders the given task to the given framebuffer, after clearing it according to the given clear values.
+    [<Extension>]
+    static member RenderTo(this : IRenderTask, output : IAdaptiveResource<IFramebuffer>, clearValues : ClearValues) =
+        this.RenderTo(output, clearValues, Queries.none)
+
     /// Gets the attachment of the framebuffer with the given semantic.
     [<Extension>]
     static member GetOutputTexture(this : IAdaptiveResource<IFramebuffer>, semantic : Symbol) =
@@ -142,6 +168,47 @@ type RenderToExtensions private() =
     [<Extension>]
     static member RenderTo(this : CubeMap<#IRenderTask>, output : IAdaptiveResource<CubeMap<IFramebuffer>>, queries : IQuery) =
         AdaptiveRenderingResultCube(this |> CubeMap.map (fun x -> x :> IRenderTask), output, queries) :> IAdaptiveResource<_>
+
+    /// Renders the given tasks to the given framebuffers, after clearing them according to the given clear values.
+    [<Extension>]
+    static member RenderTo(this : CubeMap<#IRenderTask>, output : IAdaptiveResource<CubeMap<IFramebuffer>>, clearValues : CubeMap<ClearValues>, queries : IQuery) =
+        let task = this.Data.[0]
+        let runtime = task.Runtime.Value
+        let signature = task.FramebufferSignature.Value
+
+        let compiled =
+            let cache = Dict<ClearValues, IRenderTask>()
+
+            let create() =
+                (clearValues, this) ||> CubeMap.map2(fun values task ->
+                    let clear = cache.GetOrCreate(values, fun _ -> runtime.CompileClear(signature, values))
+                    new SequentialRenderTask [|clear; task|] :> IRenderTask
+                )
+
+            let destroy (_ : CubeMap<IRenderTask>) =
+                for KeyValue(_, t) in cache do
+                    t.Dispose()
+                cache.Clear()
+
+            AdaptiveResource.constant create destroy
+
+        AdaptiveRenderingResultCube(compiled, output, queries) :> IAdaptiveResource<_>
+
+    /// Renders the given tasks to the given framebuffers, after clearing them according to the given clear values.
+    [<Extension>]
+    static member RenderTo(this : CubeMap<#IRenderTask>, output : IAdaptiveResource<CubeMap<IFramebuffer>>, clearValues : ClearValues, queries : IQuery) =
+        let clear = CubeMap.single this.Levels clearValues
+        this.RenderTo(output, clear, queries)
+
+    /// Renders the given tasks to the given framebuffers, after clearing them according to the given clear values.
+    [<Extension>]
+    static member RenderTo(this : CubeMap<#IRenderTask>, output : IAdaptiveResource<CubeMap<IFramebuffer>>, clearValues : CubeMap<ClearValues>) =
+        this.RenderTo(output, clearValues, Queries.none)
+
+    /// Renders the given tasks to the given framebuffers, after clearing them according to the given clear values.
+    [<Extension>]
+    static member RenderTo(this : CubeMap<#IRenderTask>, output : IAdaptiveResource<CubeMap<IFramebuffer>>, clearValues : ClearValues) =
+        this.RenderTo(output, clearValues, Queries.none)
 
     /// Gets the cube attachment of the framebuffer with the given semantic.
     [<Extension>]

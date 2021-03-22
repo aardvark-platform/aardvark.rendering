@@ -67,6 +67,18 @@ module RenderTask =
     //  Render to texture
     // ================================================================================================================
 
+    let private defaultClearValues =
+        clear {
+            color C4f.Black
+            depth 1.0
+            stencil 0
+        }
+
+    /// Runs the given render task using the given framebuffer as output after clearing it according
+    /// to the given clear values.
+    let renderToWithClear (target : IAdaptiveResource<IFramebuffer>) (clearValues : ClearValues) (task : IRenderTask) =
+        task.RenderTo(target, clearValues)
+
     /// Runs the given render task using the given framebuffer as output.
     let renderTo (target : IAdaptiveResource<IFramebuffer>) (task : IRenderTask) =
         task.RenderTo target
@@ -75,8 +87,10 @@ module RenderTask =
     let getResult (sem : Symbol) (t : IAdaptiveResource<IFramebuffer>) =
         t.GetOutputTexture sem
 
+
     /// Runs a render task for the given adaptive size and returns a map containing the textures specified as output.
-    let renderSemantics (output : Set<Symbol>) (size : aval<V2i>) (task : IRenderTask) =
+    /// The resulting framebuffer is cleared according to the given clear values before the render task is executed.
+    let renderSemanticsWithClear (output : Set<Symbol>) (size : aval<V2i>) (clearValues : ClearValues) (task : IRenderTask) =
         let runtime = task.Runtime.Value
         let signature = task.FramebufferSignature.Value
 
@@ -92,43 +106,55 @@ module RenderTask =
             [color; depth; stencil]
             |> List.concat |> Set.ofList
 
-        // We compile a clear task here that needs to be disposed. However, we cannot
-        // dispose the whole SequentialRenderTask as this will dispose the original task
-        // as well, which is managed by the caller. The easiest safe way around this I've found is
-        // to simply downcast the IRenderTask in the destroy function.
-        let task =
-            let create() =
-                let clear = runtime.CompileClear(signature, C4f.Black, 1.0, 0)
-                new SequentialRenderTask [|clear; task|] :> IRenderTask
-
-            let destroy (t : IRenderTask) =
-                match t with
-                | :? SequentialRenderTask as s -> s.Tasks.[0].Dispose()
-                | _ -> Log.error "[renderSemantics] expected SequentialRenderTask but got %A" t
-
-            AdaptiveResource.constant create destroy
-
         let fbo = runtime.CreateFramebuffer(signature, size, Set.difference attachments output)
-        let res = AdaptiveRenderingResult(task, fbo)
+        let res = task.RenderTo(fbo, clearValues)
         output |> Seq.map (fun k -> k, getResult k res) |> Map.ofSeq
+
+    /// Runs a render task for the given adaptive size and returns a map containing the textures specified as output.
+    let renderSemantics (output : Set<Symbol>) (size : aval<V2i>) (task : IRenderTask) =
+        task |> renderSemanticsWithClear output size defaultClearValues
+
+
+    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Colors as texture.
+    /// The resulting framebuffer is cleared according to the given clear values before the render task is executed.
+    let renderToColorWithClear (size : aval<V2i>) (clearValues : ClearValues) (task : IRenderTask) =
+        task |> renderSemanticsWithClear (Set.singleton DefaultSemantic.Colors) size clearValues |> Map.find DefaultSemantic.Colors
 
     /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Colors as texture.
     let renderToColor (size : aval<V2i>) (task : IRenderTask) =
-        task |> renderSemantics (Set.singleton DefaultSemantic.Colors) size |> Map.find DefaultSemantic.Colors
+        task |> renderToColorWithClear size defaultClearValues
+
+
+    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Depth as texture.
+    /// The resulting framebuffer is cleared according to the given clear values before the render task is executed.
+    let renderToDepthWithClear (size : aval<V2i>) (clearValues : ClearValues) (task : IRenderTask) =
+        task |> renderSemanticsWithClear (Set.singleton DefaultSemantic.Depth) size clearValues |> Map.find DefaultSemantic.Depth
 
     /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Depth as texture.
     let renderToDepth (size : aval<V2i>) (task : IRenderTask) =
-        task |> renderSemantics (Set.singleton DefaultSemantic.Depth) size |> Map.find DefaultSemantic.Depth
+        task |> renderToDepthWithClear size defaultClearValues
+
+
+    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Depth and DefaultSemantic.Stencil as textures.
+    /// The resulting framebuffer is cleared according to the given clear values before the render task is executed.
+    let renderToDepthAndStencilWithClear (size : aval<V2i>) (clearValues : ClearValues) (task : IRenderTask) =
+        let map = task |> renderSemanticsWithClear (Set.singleton DefaultSemantic.Depth) size clearValues
+        (Map.find DefaultSemantic.Depth map, Map.find DefaultSemantic.Stencil map)
 
     /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Depth and DefaultSemantic.Stencil as textures.
     let renderToDepthAndStencil (size : aval<V2i>) (task : IRenderTask) =
-        let map = task |> renderSemantics (Set.singleton DefaultSemantic.Depth) size
-        (Map.find DefaultSemantic.Depth map, Map.find DefaultSemantic.Stencil map)
+        task |> renderToDepthAndStencilWithClear size defaultClearValues
+
+
+    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Colors and DefaultSemantic.Depth as textures.
+    /// The resulting framebuffer is cleared according to the given clear values before the render task is executed.
+    let renderToColorAndDepthWithClear (size : aval<V2i>) (clearValues : ClearValues) (task : IRenderTask) =
+        let map = task |> renderSemanticsWithClear (Set.ofList [DefaultSemantic.Depth; DefaultSemantic.Colors]) size clearValues
+        (Map.find DefaultSemantic.Colors map, Map.find DefaultSemantic.Depth map)
 
     /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Colors and DefaultSemantic.Depth as textures.
     let renderToColorAndDepth (size : aval<V2i>) (task : IRenderTask) =
-        let map = task |> renderSemantics (Set.ofList [DefaultSemantic.Depth; DefaultSemantic.Colors]) size
-        (Map.find DefaultSemantic.Colors map, Map.find DefaultSemantic.Depth map)
+        task |> renderToColorAndDepthWithClear size defaultClearValues
 
 
     // ================================================================================================================
@@ -139,13 +165,25 @@ module RenderTask =
     let renderToCube (target : IAdaptiveResource<CubeMap<IFramebuffer>>) (task : CubeMap<IRenderTask>) =
         task.RenderTo target
 
+    /// Runs the given render tasks using the given cube framebuffers as output after clearing them according
+    /// to the given clear values.
+    let renderToCubeWithClear (target : IAdaptiveResource<CubeMap<IFramebuffer>>) (clearValues : CubeMap<ClearValues>) (task : CubeMap<IRenderTask>) =
+        task.RenderTo(target, clearValues)
+
+    /// Runs the given render tasks using the given cube framebuffers as output after clearing them according
+    /// to the given clear values.
+    let renderToCubeWithUniformClear (target : IAdaptiveResource<CubeMap<IFramebuffer>>) (clearValues : ClearValues) (task : CubeMap<IRenderTask>) =
+        task.RenderTo(target, clearValues)
+
     /// Retrieves the cube texture attachment with the given name from the given framebuffers.
     let getResultCube (sem : Symbol) (t : IAdaptiveResource<CubeMap<IFramebuffer>>) =
         t.GetOutputTexture sem
 
+
     /// Runs the mipmap cube render tasks for the given adaptive size.
     /// Returns a map containing the textures specified as output.
-    let renderSemanticsCubeMip (output : Set<Symbol>) (size : aval<int>) (tasks : CubeMap<IRenderTask>) =
+    /// The resulting framebuffers are cleared according to the given clear values before the render tasks are executed.
+    let renderSemanticsCubeMipWithClear (output : Set<Symbol>) (size : aval<int>) (clearValues : CubeMap<ClearValues>) (tasks : CubeMap<IRenderTask>) =
         let task = tasks.Data.[0]
         let runtime = task.Runtime.Value
         let signature = task.FramebufferSignature.Value
@@ -162,48 +200,128 @@ module RenderTask =
             [color; depth; stencil]
             |> List.concat |> Set.ofList
 
-        let compiled =
-            let create() =
-                let clear = runtime.CompileClear(signature, C4f.Black, 1.0, 0)
-                tasks |> CubeMap.map (fun task ->
-                    new SequentialRenderTask [|clear; task|] :> IRenderTask
-                )
-
-            let destroy (t : CubeMap<IRenderTask>) =
-                match t.Data.[0] with
-                | :? SequentialRenderTask as s -> s.Tasks.[0].Dispose()
-                | _ -> Log.error "[renderSemanticsCubeMip] expected SequentialRenderTask but got %A" t
-
-            AdaptiveResource.constant create destroy
-
         let fbo = runtime.CreateFramebufferCube(signature, size, tasks.Levels, Set.difference attachments output)
-        let res = AdaptiveRenderingResultCube(compiled, fbo)
+        let res = tasks.RenderTo(fbo, clearValues)
         output |> Seq.map (fun k -> k, getResultCube k res) |> Map.ofSeq
+
+    /// Runs the mipmap cube render tasks for the given adaptive size.
+    /// Returns a map containing the textures specified as output.
+    /// The resulting framebuffers are cleared according to the given clear values before the render tasks are executed.
+    let renderSemanticsCubeMipWithUniformClear (output : Set<Symbol>) (size : aval<int>) (clearValues : ClearValues) (tasks : CubeMap<IRenderTask>) =
+        let clear = clearValues |> CubeMap.single tasks.Levels
+        tasks |> renderSemanticsCubeMipWithClear output size clear
+
+    /// Runs the mipmap cube render tasks for the given adaptive size.
+    /// Returns a map containing the textures specified as output.
+    let renderSemanticsCubeMip (output : Set<Symbol>) (size : aval<int>) (tasks : CubeMap<IRenderTask>) =
+        let clear = defaultClearValues |> CubeMap.single tasks.Levels
+        tasks |> renderSemanticsCubeMipWithClear output size clear
+
+
+    /// Runs the cube render tasks for the given adaptive size.
+    /// Returns a map containing the textures specified as output.
+    /// The resulting framebuffers are cleared according to the given clear values before the render tasks are executed.
+    let renderSemanticsCubeWithClear (output : Set<Symbol>) (size : aval<int>) (clearValues : CubeSide -> ClearValues) (tasks : CubeSide -> IRenderTask) =
+        let clear = CubeMap.init 1 (fun face _ -> clearValues face)
+        let tasks = CubeMap.init 1 (fun face _ -> tasks face)
+        tasks |> renderSemanticsCubeMipWithClear output size clear
+
+    /// Runs the cube render tasks for the given adaptive size.
+    /// Returns a map containing the textures specified as output.
+    /// The resulting framebuffers are cleared according to the given clear values before the render tasks are executed.
+    let renderSemanticsCubeWithUniformClear (output : Set<Symbol>) (size : aval<int>) (clearValues : ClearValues) (tasks : CubeSide -> IRenderTask) =
+        let clear = fun _ -> clearValues
+        tasks |> renderSemanticsCubeWithClear output size clear
 
     /// Runs the cube render tasks for the given adaptive size.
     /// Returns a map containing the textures specified as output.
     let renderSemanticsCube (output : Set<Symbol>) (size : aval<int>) (tasks : CubeSide -> IRenderTask) =
-        CubeMap.init 1 (fun face _ -> tasks face) |> renderSemanticsCubeMip output size
+        let clear = fun _ -> defaultClearValues
+        tasks |> renderSemanticsCubeWithClear output size clear
+
+
+    /// Runs mipmap cube render tasks for the given adaptive size.
+    /// Returns the output for DefaultSemantic.Colors as texture.
+    /// The resulting framebuffers are cleared according to the given clear values before the render tasks are executed.
+    let renderToColorCubeMipWithClear (size : aval<int>) (clearValues : CubeMap<ClearValues>) (tasks : CubeMap<IRenderTask>) =
+        tasks |> renderSemanticsCubeMipWithClear (Set.singleton DefaultSemantic.Colors) size clearValues |> Map.find DefaultSemantic.Colors
+
+    /// Runs mipmap cube render tasks for the given adaptive size.
+    /// Returns the output for DefaultSemantic.Colors as texture.
+    /// The resulting framebuffers are cleared according to the given clear values before the render tasks are executed.
+    let renderToColorCubeMipWithUniformClear (size : aval<int>) (clearValues : ClearValues) (tasks : CubeMap<IRenderTask>) =
+        let clear = CubeMap.single tasks.Levels clearValues
+        tasks |> renderToColorCubeMipWithClear size clear
 
     /// Runs mipmap cube render tasks for the given adaptive size.
     /// Returns the output for DefaultSemantic.Colors as texture.
     let renderToColorCubeMip (size : aval<int>) (tasks : CubeMap<IRenderTask>) =
-       tasks |> renderSemanticsCubeMip (Set.singleton DefaultSemantic.Colors) size |> Map.find DefaultSemantic.Colors
+        let clear = CubeMap.single tasks.Levels defaultClearValues
+        tasks |> renderToColorCubeMipWithClear size clear
+
+
+    /// Runs cube render tasks for the given adaptive size.
+    /// Returns the output for DefaultSemantic.Colors as texture.
+    /// The resulting framebuffers are cleared according to the given clear values before the render tasks are executed.
+    let renderToColorCubeWithClear (size : aval<int>) (clearValues : CubeSide -> ClearValues) (tasks : CubeSide -> IRenderTask) =
+        let clear = CubeMap.init 1 (fun face _ -> clearValues face)
+        let tasks = CubeMap.init 1 (fun face _ -> tasks face)
+        tasks |> renderToColorCubeMipWithClear size clear
+
+    /// Runs cube render tasks for the given adaptive size.
+    /// Returns the output for DefaultSemantic.Colors as texture.
+    /// The resulting framebuffers are cleared according to the given clear values before the render tasks are executed.
+    let renderToColorCubeWithUniformClear (size : aval<int>) (clearValues : ClearValues) (tasks : CubeSide -> IRenderTask) =
+        let clear = fun _ -> clearValues
+        tasks |> renderToColorCubeWithClear size clear
 
     /// Runs cube render tasks for the given adaptive size.
     /// Returns the output for DefaultSemantic.Colors as texture.
     let renderToColorCube (size : aval<int>) (tasks : CubeSide -> IRenderTask) =
-        CubeMap.init 1 (fun face _ -> tasks face) |> renderToColorCubeMip size
+        let clear = fun _ -> defaultClearValues
+        tasks |> renderToColorCubeWithClear size clear
+
+
+    /// Runs mipmap cube render tasks for the given adaptive size.
+    /// Returns the output for DefaultSemantic.Depth as texture.
+    /// The resulting framebuffers are cleared according to the given clear values before the render tasks are executed.
+    let renderToDepthCubeMipWithClear (size : aval<int>) (clearValues : CubeMap<ClearValues>) (tasks : CubeMap<IRenderTask>) =
+        tasks |> renderSemanticsCubeMipWithClear (Set.singleton DefaultSemantic.Depth) size clearValues |> Map.find DefaultSemantic.Depth
+
+    /// Runs mipmap cube render tasks for the given adaptive size.
+    /// Returns the output for DefaultSemantic.Depth as texture.
+    /// The resulting framebuffers are cleared according to the given clear values before the render tasks are executed.
+    let renderToDepthCubeMipWithUniformClear (size : aval<int>) (clearValues : ClearValues) (tasks : CubeMap<IRenderTask>) =
+        let clear = CubeMap.single tasks.Levels clearValues
+        tasks |> renderToDepthCubeMipWithClear size clear
 
     /// Runs mipmap cube render tasks for the given adaptive size.
     /// Returns the output for DefaultSemantic.Depth as texture.
     let renderToDepthCubeMip (size : aval<int>) (tasks : CubeMap<IRenderTask>) =
-        tasks |> renderSemanticsCubeMip (Set.singleton DefaultSemantic.Depth) size |> Map.find DefaultSemantic.Depth
+        let clear = CubeMap.single tasks.Levels defaultClearValues
+        tasks |> renderToDepthCubeMipWithClear size clear
+
+
+    /// Runs cube render tasks for the given adaptive size.
+    /// Returns the output for DefaultSemantic.Depth as texture.
+    /// The resulting framebuffers are cleared according to the given clear values before the render tasks are executed.
+    let renderToDepthCubeWithClear (size : aval<int>) (clearValues : CubeSide -> ClearValues) (tasks : CubeSide -> IRenderTask) =
+        let clear = CubeMap.init 1 (fun face _ -> clearValues face)
+        let tasks = CubeMap.init 1 (fun face _ -> tasks face)
+        tasks |> renderToDepthCubeMipWithClear size clear
+
+    /// Runs cube render tasks for the given adaptive size.
+    /// Returns the output for DefaultSemantic.Depth as texture.
+    /// The resulting framebuffers are cleared according to the given clear values before the render tasks are executed.
+    let renderToDepthCubeWithUniformClear (size : aval<int>) (clearValues : ClearValues) (tasks : CubeSide -> IRenderTask) =
+        let clear = fun _ -> clearValues
+        tasks |> renderToDepthCubeWithClear size clear
 
     /// Runs cube render tasks for the given adaptive size.
     /// Returns the output for DefaultSemantic.Depth as texture.
     let renderToDepthCube (size : aval<int>) (tasks : CubeSide -> IRenderTask) =
-        CubeMap.init 1 (fun face _ -> tasks face) |> renderToDepthCubeMip size
+        let clear = fun _ -> defaultClearValues
+        tasks |> renderToDepthCubeWithClear size clear
 
 
     let log fmt =

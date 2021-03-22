@@ -96,10 +96,10 @@
     <Compile Include="Runtime\Compute\Compute.fs" />
     <Compile Include="Runtime\BackendConfiguration.fs" />
     <Compile Include="Runtime\ResourceManager.fs" />
+    <Compile Include="Runtime\ClearValues.fs" />
     <Compile Include="Runtime\Runtime.fs" />
     <Compile Include="Runtime\RuntimeExtensions.fs" />
     <Compile Include="Runtime\RuntimeCommand.fs" />
-    <Compile Include="RenderTasks\RenderToExtensions.fs" />
     <Compile Include="RenderTasks\AbstractRenderTask.fs" />
     <Compile Include="RenderTasks\EmptyRenderTask.fs" />
     <Compile Include="RenderTasks\SequentialRenderTask.fs" />
@@ -108,6 +108,7 @@
     <Compile Include="RenderTasks\CustomRenderTask.fs" />
     <Compile Include="RenderTasks\FinalizerRenderTask.fs" />
     <Compile Include="RenderTasks\BeforeAfterRenderTask.fs" />
+    <Compile Include="RenderTasks\RenderToExtensions.fs" />
     <Compile Include="RenderTasks\RenderTask.fs" />
     <Compile Include="Effects\Interop\EffectDebugger.fs" />
     <Compile Include="Effects\Interop\ShaderInterface.fs" />

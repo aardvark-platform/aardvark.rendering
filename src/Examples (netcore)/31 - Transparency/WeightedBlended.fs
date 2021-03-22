@@ -185,9 +185,7 @@ module WeightedBlended =
                 |> Sg.viewTrafo scene.viewTrafo
                 |> Sg.projTrafo scene.projTrafo
 
-            let clear = runtime.CompileClear(offscreenPass, C4f.Black, 1.0)
-            let render = runtime.CompileRender(offscreenPass, sg)
-            RenderTask.ofList [clear; render]
+            runtime.CompileRender(offscreenPass, sg)
 
         // Renders the transparent scene to the dedicated framebuffer, reusing
         // the depth buffer (for testing only) from the opaque geometry pass.
@@ -207,17 +205,16 @@ module WeightedBlended =
                     do! Shaders.weightedBlend
                 }
 
-            let clearColors =
-                Map.ofList [
-                    DefaultSemantic.Accum, C4f.Zero
-                    DefaultSemantic.Revealage, C4f.White
-                ]
+            let clear =
+                clear {
+                    colors [
+                        DefaultSemantic.Accum, C4f.Zero
+                        DefaultSemantic.Revealage, C4f.White
+                    ]
+                }
 
-            let clear = runtime.CompileClear(transparentPass, clearColors)
-            let render = runtime.CompileRender(transparentPass, sg)
-            let task = RenderTask.ofList [clear; render]
-
-            let output = task |> RenderTask.renderTo transparentFbo
+            let task = runtime.CompileRender(transparentPass, sg)
+            let output = task |> RenderTask.renderToWithClear transparentFbo clear
             task, output.GetOutputTexture DefaultSemantic.Accum, output.GetOutputTexture DefaultSemantic.Revealage
 
         // Run both passes blending the result in the offscreen framebuffer.
@@ -232,10 +229,13 @@ module WeightedBlended =
                     do! Shaders.composite samples
                 }
 
+            let clear =
+                clear { color C4f.Black; depth 1.0 }
+
             let composite = runtime.CompileRender(offscreenPass, sg)
             let output =
                 RenderTask.ofList [opaqueTask; composite]
-                |> RenderTask.renderTo offscreenFbo
+                |> RenderTask.renderToWithClear offscreenFbo clear
 
             composite, output.GetOutputTexture DefaultSemantic.Colors
 

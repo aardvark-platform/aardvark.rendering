@@ -92,6 +92,10 @@ module CubeMap =
         let data = Array.init (6 * levels) (fun i -> f (unbox (i % 6)) (i / 6))
         CubeMap(data)
 
+    /// Creates a cube map given the number of levels and a single value.
+    let single (levels : int) (value : 'a) =
+        init levels (fun _ _ -> value)
+
     /// Builds a new cube map whose elements are the results of applying the given
     /// function to each of the elements of the cube.
     let mapi (f : CubeSide -> int -> 'a -> 'b) (c : CubeMap<'a>) =

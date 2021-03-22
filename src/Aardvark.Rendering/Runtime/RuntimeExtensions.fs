@@ -19,6 +19,16 @@ type IRuntimeExtensions private() =
 
 
     // ================================================================================================================
+    // CompileClear (values)
+    // ================================================================================================================
+
+    /// Clears the given color, depth and stencil attachments to the specified values.
+    [<Extension>]
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, values : ClearValues) =
+        this.CompileClear(signature, values.Colors.GetValues(signature), values.Depth.Value, values.Stencil.Value)
+
+
+    // ================================================================================================================
     // CompileClear (only color)
     // ================================================================================================================
 
