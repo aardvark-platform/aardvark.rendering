@@ -226,13 +226,15 @@ let main argv =
             DefaultSemantic.Stencil, RenderbufferFormat.StencilIndex8
         ])
 
-    let output =
+    use task =
         quadsSg
         |> Sg.colorMasks (colorMaskIndices |> AVal.map (Map.map (fun _ i -> colorMasks.[i])))
         |> Sg.compile runtime signature
-        |> RenderTask.renderSemantics Semantic.All (win.Sizes |> AVal.map (fun s -> s / 2))
 
-    let finalTask =
+    let output =
+        task |> RenderTask.renderSemantics Semantic.All (win.Sizes |> AVal.map (fun s -> s / 2))
+
+    use finalTask =
         let sg =
             Sg.fullScreenQuad
             |> Sg.texture Semantic.Color0Texture output.[Semantic.Color0]
