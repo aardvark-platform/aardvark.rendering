@@ -87,7 +87,7 @@ module RenderTasks =
                 if handle = 0 then
                     GL.DrawBuffer(DrawBufferMode.BackLeft)
                 else
-                    let drawBuffers = Array.init desc.framebuffer.Signature.ColorAttachments.Count (fun index -> DrawBuffersEnum.ColorAttachment0 + unbox index)
+                    let drawBuffers = Array.init fboSignature.ColorAttachments.Count (fun index -> DrawBuffersEnum.ColorAttachment0 + unbox index)
                     GL.DrawBuffers(drawBuffers.Length, drawBuffers);
                 GL.Check "could not set draw buffers"
 
