@@ -1,3 +1,14 @@
+### 5.1.7
+- added types to specify clear values more easily
+- added IRenderTask.RenderTo() overloads with clear values
+- added RenderTask.render* variants with clear values
+- added map and bind functions for IAdaptiveResource
+- DepthTest.None and DepthTest.Always are no longer aliases (revert to < 5.1.0 behavior)
+- fixed various bugs related to cube texture arrays
+- texture creation functions now validate parameters
+- [GL] fixed nop RenderingLock 
+- [GL] render control size is ensured to be valid now
+- [GL] fixed bug with draw buffers and prepared surfaces with signatures different from the render task
 ### 5.1.6
 - reworked low-level texture API
 - added functions for creating (adaptive) 1D and 3D textures
