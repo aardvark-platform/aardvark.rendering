@@ -862,18 +862,30 @@ type Runtime() =
                 failwithf "[GL] unsupported texture: %A" t
 
     member x.Download(t : IBackendTexture, level : int, slice : int, offset : V2i, target : PixImage) =
+        t |> ResourceValidation.Textures.validateLevel level
+        t |> ResourceValidation.Textures.validateSlice slice
+        t |> ResourceValidation.Textures.validateWindow2D level offset target.Size
         ctx.Download(unbox<Texture> t, level, slice, offset, target)
-        
+
     member x.Download(t : IBackendTexture, level : int, slice : int, offset : V3i, target : PixVolume) : unit =
        failwith "[GL] Volume download not implemented"
 
     member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<int>) =
+        t |> ResourceValidation.Textures.validateLevel level
+        t |> ResourceValidation.Textures.validateSlice slice
+        t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
         ctx.DownloadStencil(unbox<Texture> t, level, slice, offset, target)
 
     member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
+        t |> ResourceValidation.Textures.validateLevel level
+        t |> ResourceValidation.Textures.validateSlice slice
+        t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
         ctx.DownloadDepth(unbox<Texture> t, level, slice, offset, target)
 
     member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) =
+        t |> ResourceValidation.Textures.validateLevel level
+        t |> ResourceValidation.Textures.validateSlice slice
+        t |> ResourceValidation.Textures.validateWindow2D level offset (V2i source.Size)
         ctx.Upload(unbox<Texture> t, level, slice, offset, source)
 
     member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : Framebuffer =
@@ -914,11 +926,11 @@ type Runtime() =
 
 
     member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) =
-        TextureCreationValidation.validate dim size levels samples
+        ResourceValidation.Textures.validateCreationParams dim size levels samples
         ctx.CreateTexture(size, dim, format, 0, levels, samples)
 
     member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) =
-        TextureCreationValidation.validateArray dim size levels samples count
+        ResourceValidation.Textures.validateCreationParamsArray dim size levels samples count
         ctx.CreateTexture(size, dim, format, count, levels, samples)
 
 

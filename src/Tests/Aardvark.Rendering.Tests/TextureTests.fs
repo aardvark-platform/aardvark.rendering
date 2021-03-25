@@ -8,6 +8,7 @@ open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Aardvark.Application
 open Aardvark.SceneGraph
+open FSharp.Data.Adaptive
 open NUnit.Framework
 open FsUnit
 
@@ -63,6 +64,9 @@ module PixImage =
 
 
 module ``Texture Tests`` =
+
+    type UnexpectedPassException() =
+        inherit Exception("Expected an exception but none occurred")
 
     let colors = [|
             C4b.BurlyWood
@@ -281,6 +285,84 @@ module ``Texture Tests`` =
 
 
     [<Test>]
+    let ``[Download] Subwindow`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
+        use win = Window.create backend
+        let runtime = win.Runtime
+
+        let count = 2
+        let levels = 3
+        let size = V2i(128)
+
+        let data =
+            Array.init count (fun index ->
+                CubeMap.init levels (fun side level ->
+                    let data = PixImage.checkerboard colors.[index * 6 + int side]
+                    let size = size / (1 <<< level)
+                    data |> PixImage.resized size
+                )
+            )
+
+        let format = TextureFormat.ofPixFormat data.[0].[CubeSide.PositiveX].PixFormat TextureParams.empty
+        let t = runtime.CreateTextureCubeArray(size.X, format, levels = levels, count = count)
+
+        data |> Array.iteri (fun index mipmaps ->
+            mipmaps |> CubeMap.iteri (fun side level img ->
+                runtime.Upload(t, level, index * 6 + int side, img)
+            )
+        )
+
+        let side = CubeSide.NegativeZ
+        let index = 1
+        let level = 2
+        let region = Box2i.FromMinAndSize(V2i(14, 18), V2i(10, 3))
+        let result = runtime.Download(t, level, index * 6 + int side, region).ToPixImage<byte>()
+
+        let reference = data.[index].[side, level].SubImage(region)
+        result.Size |> should equal reference.Size
+        comparePixImages V2i.Zero reference result
+
+        runtime.DeleteTexture(t)
+
+
+    [<Test>]
+    let ``[Download] Arguments out of range`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
+        use win = Window.create backend
+        let runtime = win.Runtime
+
+        let createAndDownload (dimension : TextureDimension) (levels : int) (level : int) (slice : int) (region : Box2i) () =
+            let t = runtime.CreateTexture(V3i(128), dimension, TextureFormat.Rgba32f, levels, 1)
+            try
+                runtime.Download(t, level, slice, region) |> ignore
+            finally
+                runtime.DeleteTexture(t)
+
+        let shouldThrow (message : string) (f : unit -> unit) =
+            try
+                f()
+                raise <| UnexpectedPassException()
+            with
+            | :? ArgumentException as exn -> exn.Message |> should haveSubstring message
+            | :? UnexpectedPassException -> failwith "Expected ArgumentException but got none"
+            | exn -> failwithf "Expected ArgumentException but got %A" <| exn.GetType()
+
+        let full = Box2i.Infinite
+        let window m s = Box2i.FromMinAndSize(m, s)
+        let neg = window V2i.NN V2i.One
+
+        createAndDownload TextureDimension.Texture2D  4 -1  0  full   |> shouldThrow "level cannot be negative"
+        createAndDownload TextureDimension.Texture2D  4  4  0  full   |> shouldThrow "cannot access texture level"
+        createAndDownload TextureDimension.Texture2D  4  2  0  neg    |> shouldThrow "offset cannot be negative"
+        createAndDownload TextureDimension.Texture2D  4  2  0  (window (V2i(8)) (V2i(25, 1))) |> shouldThrow "exceeds size"
+
+        createAndDownload TextureDimension.TextureCube  4 -1  2  full |> shouldThrow "level cannot be negative"
+        createAndDownload TextureDimension.TextureCube  4  4  2  full |> shouldThrow "cannot access texture level"
+        createAndDownload TextureDimension.TextureCube  4  2 -1  full |> shouldThrow "slice cannot be negative"
+        createAndDownload TextureDimension.TextureCube  4  2  6  full |> shouldThrow "cannot access texture slice"
+        createAndDownload TextureDimension.TextureCube  4  2  3  neg    |> shouldThrow "offset cannot be negative"
+        createAndDownload TextureDimension.TextureCube  4  2  3  (window (V2i(8)) (V2i(25, 1))) |> shouldThrow "exceeds size"
+
+
+    [<Test>]
     let ``[Create] Non-positive arguments`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
         use win = Window.create backend
         let runtime = win.Runtime
@@ -374,15 +456,3 @@ module ``Texture Tests`` =
         createArray TextureDimension.TextureCube 3 1 1 ()
         createArray TextureDimension.TextureCube 1 1 4 ()
         createArray TextureDimension.TextureCube 3 1 4 ()
-
-
-    // TODO: Implement all the checks and raise the appropriate expceptions
-    //[<Test>]
-    //let ``[Download] Arguments out of range`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
-    //    use win = Window.create backend
-    //    let runtime = win.Runtime
-
-    //    let t = runtime.CreateTextureArray(V2i(512, 512), TextureFormat.Rgba32f, 4, 8, 16)
-    //    (fun _() -> runtime.Download(t, -1, 0) |> ignore) |> should throw typeof<ArgumentException>
-
-    //    runtime.DeleteTexture(t)

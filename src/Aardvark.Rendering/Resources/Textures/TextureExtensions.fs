@@ -56,12 +56,9 @@ module private PixVisitors =
 [<AbstractClass; Sealed; Extension>]
 type ITextureRuntimeExtensions private() =
 
-    static let levelSize (level : int) (s : V2i) =
-        V2i(max 1 (s.X / (1 <<< level)), max 1 (s.Y / (1 <<< level)))
-
     static let levelRegion (texture : IBackendTexture) (level : int) (region : Box2i) =
         if region = Box2i.Infinite then
-            Box2i.FromMinAndSize(V2i.Zero, texture.Size.XY |> levelSize level)
+            Box2i.FromMinAndSize(V2i.Zero, texture.GetSize(level).XY)
         else
             region
 

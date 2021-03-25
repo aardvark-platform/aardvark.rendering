@@ -126,7 +126,7 @@ module ImageView =
 
     let createInputView (componentMapping : VkComponentMapping) (img : Image) (samplerType : FShade.GLSL.GLSLSamplerType) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
         let levels = 1 + levelRange.Max - levelRange.Min |> min img.MipMapLevels
-        let slices = 1 + arrayRange.Max - arrayRange.Min |> min img.Count
+        let slices = 1 + arrayRange.Max - arrayRange.Min |> min img.Layers
         if levels < 1 then failf "cannot create image view with level-count: %A" levels
         if slices < 1 then failf "cannot create image view with slice-count: %A" levels
 
@@ -188,7 +188,7 @@ module ImageView =
 
     let createStorageView (componentMapping : VkComponentMapping) (img : Image) (imageType : FShade.GLSL.GLSLImageType) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
         let levels = 1 + levelRange.Max - levelRange.Min |> min img.MipMapLevels
-        let slices = 1 + arrayRange.Max - arrayRange.Min |> min img.Count
+        let slices = 1 + arrayRange.Max - arrayRange.Min |> min img.Layers
         if levels < 1 then failf "cannot create image view with level-count: %A" levels
         if slices < 1 then failf "cannot create image view with slice-count: %A" levels
 
@@ -247,7 +247,7 @@ module ImageView =
 
     let createOutputView (img : Image) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
         let levels = 1 + levelRange.Max - levelRange.Min |> min img.MipMapLevels
-        let slices = 1 + arrayRange.Max - arrayRange.Min |> min img.Count
+        let slices = 1 + arrayRange.Max - arrayRange.Min |> min img.Layers
         if levels < 1 then failf "cannot create image view with level-count: %A" levels
         if slices < 1 then failf "cannot create image view with slice-count: %A" levels
 
@@ -290,11 +290,11 @@ type ContextImageViewExtensions private() =
 
     [<Extension>]
     static member inline CreateInputImageView(this : Device, image : Image, samplerType : FShade.GLSL.GLSLSamplerType, levelRange : Range1i, comp : VkComponentMapping) =
-        this |> ImageView.createInputView comp image samplerType levelRange (Range1i(0, image.Count - 1))
+        this |> ImageView.createInputView comp image samplerType levelRange (Range1i(0, image.Layers - 1))
 
     [<Extension>]
     static member inline CreateInputImageView(this : Device, image : Image, samplerType : FShade.GLSL.GLSLSamplerType, comp : VkComponentMapping) =
-        this |> ImageView.createInputView comp image samplerType (Range1i(0, image.MipMapLevels - 1)) (Range1i(0, image.Count - 1))
+        this |> ImageView.createInputView comp image samplerType (Range1i(0, image.MipMapLevels - 1)) (Range1i(0, image.Layers - 1))
 
     [<Extension>]
     static member inline CreateInputImageView(this : Device, image : Image, samplerType : FShade.GLSL.GLSLSamplerType, level : int, slice : int, comp : VkComponentMapping) =
@@ -312,11 +312,11 @@ type ContextImageViewExtensions private() =
 
     [<Extension>]
     static member inline CreateStorageView(this : Device, image : Image, imageType : FShade.GLSL.GLSLImageType, levelRange : Range1i, comp : VkComponentMapping) =
-        this |> ImageView.createStorageView comp image imageType levelRange (Range1i(0, image.Count - 1))
+        this |> ImageView.createStorageView comp image imageType levelRange (Range1i(0, image.Layers - 1))
 
     [<Extension>]
     static member inline CreateStorageView(this : Device, image : Image, imageType : FShade.GLSL.GLSLImageType, comp : VkComponentMapping) =
-        this |> ImageView.createStorageView comp image imageType (Range1i(0, image.MipMapLevels - 1)) (Range1i(0, image.Count - 1))
+        this |> ImageView.createStorageView comp image imageType (Range1i(0, image.MipMapLevels - 1)) (Range1i(0, image.Layers - 1))
 
     [<Extension>]
     static member inline CreateStorageView(this : Device, image : Image, imageType : FShade.GLSL.GLSLImageType, level : int, slice : int, comp : VkComponentMapping) =
@@ -335,11 +335,11 @@ type ContextImageViewExtensions private() =
 
     [<Extension>]
     static member inline CreateOutputImageView(this : Device, image : Image, levelRange : Range1i) =
-        this |> ImageView.createOutputView image levelRange (Range1i(0, image.Count - 1))
+        this |> ImageView.createOutputView image levelRange (Range1i(0, image.Layers - 1))
 
     [<Extension>]
     static member inline CreateOutputImageView(this : Device, image : Image) =
-        this |> ImageView.createOutputView image (Range1i(0, image.MipMapLevels - 1)) (Range1i(0, image.Count - 1))
+        this |> ImageView.createOutputView image (Range1i(0, image.MipMapLevels - 1)) (Range1i(0, image.Layers - 1))
 
     [<Extension>]
     static member inline CreateOutputImageView(this : Device, image : Image, level : int, slice : int) =

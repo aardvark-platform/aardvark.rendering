@@ -5,6 +5,22 @@ open Aardvark.Base
 [<AutoOpen>]
 module ``IBackendTexture Slicing Extensions`` =
 
+    type IBackendTexture with
+
+        /// Returns the number of texture slices.
+        member x.Slices =
+            if x.Dimension = TextureDimension.TextureCube then
+                x.Count * 6
+            else
+                x.Count
+
+        /// <summary> Gets the size of the given texture level.
+        /// <paramref name="level"/> is clamped to [0, levels - 1].</summary>
+        member x.GetSize(level : int) =
+            let level = level |> clamp 0 (x.MipMapLevels - 1)
+            let size = x.Size / (1 <<< level)
+            size |> max 1
+
     type private TextureRange(aspect : TextureAspect, tex : IBackendTexture, levels : Range1i, slices : Range1i) =
         interface ITextureRange with
             member x.Texture = tex
@@ -13,9 +29,7 @@ module ``IBackendTexture Slicing Extensions`` =
             member x.Slices = slices
 
     type private TextureLevel(aspect : TextureAspect, tex : IBackendTexture, level : int, slices : Range1i) =
-        member x.Size =
-            let v = tex.Size / (1 <<< level)
-            V3i(max 1 v.X, max 1 v.Y, max 1 v.Z)
+        member x.Size = tex.GetSize(level)
 
         interface ITextureRange with
             member x.Texture = tex
@@ -45,9 +59,7 @@ module ``IBackendTexture Slicing Extensions`` =
 
     type private SubTexture(aspect : TextureAspect, tex : IBackendTexture, level : int, slice : int) =
 
-        member x.Size =
-            let v = tex.Size / (1 <<< level)
-            V3i(max 1 v.X, max 1 v.Y, max 1 v.Z)
+        member x.Size = tex.GetSize(level)
 
         interface ITextureRange with
             member x.Texture = tex
@@ -74,12 +86,6 @@ module ``IBackendTexture Slicing Extensions`` =
             Range1i(x.Min + min, x.Min + max)
 
     type IBackendTexture with
-
-        member private x.Slices =
-            if x.Dimension = TextureDimension.TextureCube then
-                x.Count * 6
-            else
-                x.Count
 
         member x.GetSlice(aspect : TextureAspect, minLevel : Option<int>, maxLevel : Option<int>, minSlice : Option<int>, maxSlice : Option<int>) =
             let level = Range1i(defaultArg minLevel 0, defaultArg maxLevel (x.MipMapLevels - 1))

@@ -402,7 +402,7 @@ type Image =
 
         val mutable public Size : V3i
         val mutable public MipMapLevels : int
-        val mutable public Count : int
+        val mutable public Layers : int
         val mutable public Samples : int
         val mutable public Dimension : TextureDimension
         val mutable public Format : VkFormat
@@ -419,6 +419,11 @@ type Image =
                 x.PeerHandles <- null
                 x.Memory.Dispose()
                 x.Handle <- VkImage.Null
+
+        member x.Count =
+            match x.Dimension with
+            | TextureDimension.TextureCube -> x.Layers / 6
+            | _ -> x.Layers
 
         interface ITexture with 
             member x.WantMipMaps = x.MipMapLevels > 1
@@ -442,8 +447,8 @@ type Image =
 
         member x.IsNull = x.Handle.IsNull
 
-        member x.Item with get(aspect : ImageAspect) = ImageSubresourceRange(x, aspect, 0, x.MipMapLevels, 0, x.Count)
-        member x.Item with get(aspect : ImageAspect, level : int) = ImageSubresourceLayers(x, aspect, level, 0, x.Count)
+        member x.Item with get(aspect : ImageAspect) = ImageSubresourceRange(x, aspect, 0, x.MipMapLevels, 0, x.Layers)
+        member x.Item with get(aspect : ImageAspect, level : int) = ImageSubresourceLayers(x, aspect, level, 0, x.Layers)
         member x.Item with get(aspect : ImageAspect, level : int, slice : int) = ImageSubresource(x, aspect, level, slice)
               
                 
@@ -460,12 +465,12 @@ type Image =
         override x.ToString() =
             sprintf "0x%08X" x.Handle.Handle
 
-        new(dev, handle, s, levels, count, samples, dim, fmt, mem, layout, samplerLayout) = 
+        new(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, samplerLayout) = 
             {
                 inherit Resource<_>(dev, handle);
                 Size = s
                 MipMapLevels = levels
-                Count = count
+                Layers = layers
                 Samples = samples
                 Dimension = dim
                 Format = fmt
@@ -476,12 +481,12 @@ type Image =
                 SamplerLayout = samplerLayout
             }
             
-        new(dev, handle, s, levels, count, samples, dim, fmt, mem, layout) = 
+        new(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout) = 
             {
                 inherit Resource<_>(dev, handle);
                 Size = s
                 MipMapLevels = levels
-                Count = count
+                Layers = layers
                 Samples = samples
                 Dimension = dim
                 Format = fmt
@@ -2245,7 +2250,7 @@ module ``Image Command Extensions`` =
             Command.TransformLayout(img, Range1i(level), Range1i(slice), target)
 
         static member TransformLayout(img : Image, target : VkImageLayout) =
-            Command.TransformLayout(img, Range1i(0, img.MipMapLevels - 1), Range1i(0, img.Count - 1), target)
+            Command.TransformLayout(img, Range1i(0, img.MipMapLevels - 1), Range1i(0, img.Layers - 1), target)
 
         static member SyncPeers (img : ImageSubresourceLayers, ranges : array<Range1i * Box3i>) =
             { new Command() with
@@ -2320,7 +2325,7 @@ module ``Image Command Extensions`` =
         static member SyncPeersDefault(img : Image, dstLayout : VkImageLayout) =
             if img.PeerHandles.Length > 0 then
                 let device = img.Device
-                let arrayRange = Range1i(0, img.Count - 1)
+                let arrayRange = Range1i(0, img.Layers - 1)
                 let ranges =
                     let range = 
                         { 
@@ -2457,6 +2462,11 @@ module Image =
                 if mayHavePeers then VkImageCreateFlags.AliasBit ||| flags
                 else flags
 
+            let layers =
+                match dim with
+                | TextureDimension.TextureCube -> 6 * (count |> max 1)
+                | _ -> count |> max 1
+
             let size =
                 match dim with
                 | TextureDimension.Texture1D -> V3i(size.X, 1, 1)
@@ -2471,7 +2481,7 @@ module Image =
                     fmt,
                     VkExtent3D(uint32 size.X, uint32 size.Y, uint32 size.Z),
                     uint32 mipMapLevels,
-                    uint32 count,
+                    uint32 layers,
                     unbox<VkSampleCountFlags> samples,
                     VkImageTiling.Optimal,
                     usage,
@@ -2540,12 +2550,12 @@ module Image =
                     }
                     
 
-                let result = new Image(device, handles.[0], size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
+                let result = new Image(device, handles.[0], size, mipMapLevels, layers, samples, dim, fmt, ptr, VkImageLayout.Undefined)
                 result.PeerHandles <- Array.skip 1 handles
 
                 device.perform {
                     for i in 1 .. handles.Length - 1 do
-                        let img = new Image(device, handles.[i], size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
+                        let img = new Image(device, handles.[i], size, mipMapLevels, layers, samples, dim, fmt, ptr, VkImageLayout.Undefined)
                         do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
                 }
 
@@ -2554,7 +2564,7 @@ module Image =
                 VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
                     |> check "could not bind image memory"
 
-                new Image(device, handle, size, mipMapLevels, count, samples, dim, fmt, ptr, VkImageLayout.Undefined)
+                new Image(device, handle, size, mipMapLevels, layers, samples, dim, fmt, ptr, VkImageLayout.Undefined)
 
     let create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
         alloc size mipMapLevels count samples dim fmt usage device
@@ -3147,7 +3157,7 @@ module Image =
             let srcImg = src.Image
 
             let usage = VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit
-            let resolved = create srcImg.Size srcImg.MipMapLevels srcImg.Count 1 srcImg.Dimension format usage device
+            let resolved = create srcImg.Size srcImg.MipMapLevels srcImg.Layers 1 srcImg.Dimension format usage device
 
             let cmd =
                 let layout = srcImg.Layout

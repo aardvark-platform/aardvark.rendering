@@ -157,14 +157,26 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
     member x.Download(t : IBackendTexture, level : int, slice : int, offset : V2i, target : PixImage) =
+        t |> ResourceValidation.Textures.validateLevel level
+        t |> ResourceValidation.Textures.validateSlice slice
+        t |> ResourceValidation.Textures.validateWindow2D level offset target.Size
+
         let image = unbox<Image> t
         device.DownloadLevel(image.[ImageAspect.Color, level, slice], target, offset)
 
     member x.Download(t : IBackendTexture, level : int, slice : int, offset : V3i, target : PixVolume) =
+        t |> ResourceValidation.Textures.validateLevel level
+        t |> ResourceValidation.Textures.validateSlice slice
+        t |> ResourceValidation.Textures.validateWindow level offset target.Size
+
         let image = unbox<Image> t
         device.DownloadLevel(image.[ImageAspect.Color, level, slice], target, offset)
 
     member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<int>) =
+        t |> ResourceValidation.Textures.validateLevel level
+        t |> ResourceValidation.Textures.validateSlice slice
+        t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
+
         let image = unbox<Image> t
         let pix =
             let img = PixImage<int>()
@@ -174,6 +186,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         device.DownloadLevel(image.[ImageAspect.Stencil, level, slice], pix, offset)
 
     member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
+        t |> ResourceValidation.Textures.validateLevel level
+        t |> ResourceValidation.Textures.validateSlice slice
+        t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
+
         let image = unbox<Image> t
         let pix =
             let img = PixImage<float32>()
@@ -183,6 +199,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         device.DownloadLevel(image.[ImageAspect.Depth, level, slice], pix, offset)
 
     member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) =
+        t |> ResourceValidation.Textures.validateLevel level
+        t |> ResourceValidation.Textures.validateSlice slice
+        t |> ResourceValidation.Textures.validateWindow2D level offset source.Size
+
         let image = unbox<Image> t 
         device.UploadLevel(image.[ImageAspect.Color, level, slice], source, offset)
 
@@ -274,23 +294,18 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             else
                 def ||| VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.StorageBit
 
-        let slices =
-            match dim with
-            | TextureDimension.TextureCube -> 6 * (count |> max 1)
-            | _ -> count |> max 1
-
-        let img = device.CreateImage(size, levels, slices, samples, dim, format, usage) 
+        let img = device.CreateImage(size, levels, count, samples, dim, format, usage) 
         device.GraphicsFamily.run {
             do! Command.TransformLayout(img, layout)
         }
         img :> IBackendTexture
 
     member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
-        TextureCreationValidation.validate dim size levels samples
+        ResourceValidation.Textures.validateCreationParams dim size levels samples
         x.CreateTextureInner(size, dim, format, levels, samples, 1)
 
     member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
-        TextureCreationValidation.validateArray dim size levels samples count
+        ResourceValidation.Textures.validateCreationParamsArray dim size levels samples count
         x.CreateTextureInner(size, dim, format, levels, samples, count)
 
     member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =

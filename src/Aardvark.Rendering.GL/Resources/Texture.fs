@@ -43,14 +43,6 @@ type Texture =
             member x.Format = x.Format
             member x.Samples = x.Multisamples
 
-        member x.GetSize (level : int)  =
-            if level = 0 then 
-                x.Size
-            else 
-                let level = Fun.Clamp(level, 0, x.MipMapLevels-1)
-                let factor = 1 <<< level
-                V3i(max 1 (x.Size.X / factor), max 1 (x.Size.Y / factor), max 1 (x.Size.Z / factor))
-
         new(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int, size : V3i, count : Option<int>, format : TextureFormat, sizeInBytes : int64, immutable : bool) =
             let cnt, isArray =
                 match count with
@@ -280,7 +272,7 @@ module TextureCreationExtensions =
 
                 tex.MipMapLevels <- mipMapLevels
                 tex.Dimension <- TextureDimension.Texture1D
-                tex.Size <- V3i(size, 0, 0)
+                tex.Size <- V3i(size, 1, 1)
                 tex.Format <- t
                 tex.ImmutableFormat <- true
             )
@@ -324,7 +316,7 @@ module TextureCreationExtensions =
                 tex.Dimension <- TextureDimension.Texture2D
                 tex.Multisamples <- samples
                 tex.Count <- 1
-                tex.Size <- V3i(size.X, size.Y, 0)
+                tex.Size <- V3i(size.X, size.Y, 1)
                 tex.Format <- t
                 tex.ImmutableFormat <- true
             )
@@ -385,7 +377,7 @@ module TextureCreationExtensions =
 
                 tex.MipMapLevels <- mipMapLevels
                 tex.Dimension <- TextureDimension.TextureCube
-                tex.Size <- V3i(size, size, 0)
+                tex.Size <- V3i(size, size, 1)
                 tex.Count <- 1
                 tex.Multisamples <- samples
                 tex.Format <- t
@@ -415,7 +407,7 @@ module TextureCreationExtensions =
                 tex.Dimension <- TextureDimension.Texture1D
                 tex.Count <- count
                 tex.Multisamples <- 1
-                tex.Size <- V3i(size, 0, 0)
+                tex.Size <- V3i(size, 1, 1)
                 tex.Format <- t
                 tex.ImmutableFormat <- true
             )
@@ -456,7 +448,7 @@ module TextureCreationExtensions =
                 tex.IsArray <- true
                 tex.Count <- count
                 tex.Multisamples <- samples
-                tex.Size <- V3i(size.X, size.Y, 0)
+                tex.Size <- V3i(size.X, size.Y, 1)
                 tex.Format <- t
                 tex.ImmutableFormat <- true
             )
@@ -498,7 +490,7 @@ module TextureCreationExtensions =
                 tex.IsArray <- true
                 tex.Count <- count
                 tex.Multisamples <- samples
-                tex.Size <- V3i(size, size, 0)
+                tex.Size <- V3i(size, size, 1)
                 tex.Format <- t
                 tex.ImmutableFormat <- true
             )

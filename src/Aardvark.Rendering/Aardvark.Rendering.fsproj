@@ -59,6 +59,7 @@
     <Compile Include="Resources\NullResources.fs" />
     <Compile Include="Resources\ResourceAccess.fs" />
     <Compile Include="Resources\ResourceManagement.fs" />
+    <Compile Include="Resources\ResourceValidation.fs" />
     <Compile Include="Geometry\IndexedGeometry.fs" />
     <Compile Include="Geometry\Geometry.fs" />
     <Compile Include="Geometry\GeometryPacker.fs" />
