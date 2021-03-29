@@ -183,7 +183,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             img.Volume <- target.AsVolume()
             img
 
-        device.DownloadLevel(image.[ImageAspect.Stencil, level, slice], pix, offset)
+        failwith "Not implemented in Vulkan backend"
+        //device.DownloadLevel(image.[ImageAspect.Stencil, level, slice], pix, offset)
 
     member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
         t |> ResourceValidation.Textures.validateLevel level
@@ -196,7 +197,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             img.Volume <- target.AsVolume()
             img
 
-        device.DownloadLevel(image.[ImageAspect.Depth, level, slice], pix, offset)
+        failwith "Not implemented in Vulkan backend"
+        //device.DownloadLevel(image.[ImageAspect.Depth, level, slice], pix, offset)
 
     member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) =
         t |> ResourceValidation.Textures.validateLevel level

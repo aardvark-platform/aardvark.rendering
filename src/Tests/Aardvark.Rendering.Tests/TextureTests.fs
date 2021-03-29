@@ -325,6 +325,63 @@ module ``Texture Tests`` =
 
 
     [<Test>]
+    let ``[Download] Depth and Stencil`` ([<Values("OpenGL")>] backend : string) =
+        use win = Window.create backend
+        let runtime = win.Runtime
+
+        let signature =
+            runtime.CreateFramebufferSignature([
+                DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+            ])
+
+        use task =
+            let drawCall =
+                DrawCallInfo(
+                    FaceVertexCount = 4,
+                    InstanceCount = 1
+                )
+
+            let positions = [| V3f(-0.5,-0.5,0.0); V3f(0.5,-0.5,0.0); V3f(-0.5,0.5,0.0); V3f(0.5,0.5,0.0) |]
+
+            let stencilMode =
+                { StencilMode.None with
+                    Pass = StencilOperation.Replace;
+                    Reference = 3 }
+
+            drawCall
+            |> Sg.render IndexedGeometryMode.TriangleStrip
+            |> Sg.vertexAttribute DefaultSemantic.Positions (AVal.constant positions)
+            |> Sg.stencilMode' stencilMode
+            |> Sg.shader {
+                do! DefaultSurfaces.trafo
+            }
+            |> Sg.compile runtime signature
+
+
+        let size = V2i(256)
+
+        let depthStencilBuffer =
+            let clear = clear { depth 1.0; stencil 0 }
+            task |> RenderTask.renderToDepthWithClear (AVal.constant size) clear
+
+        depthStencilBuffer.Acquire()
+
+        let depthResult = runtime.DownloadDepth(depthStencilBuffer.GetValue())
+        let stencilResult = runtime.DownloadStencil(depthStencilBuffer.GetValue())
+
+        depthResult.Size |> V2i |> should equal size
+        depthResult.Data |> Array.min |> should greaterThan 0.0
+        depthResult.Data |> Array.min |> should lessThan 1.0
+
+        stencilResult.Size |> V2i |> should equal size
+        stencilResult.Data |> Array.max |> should equal 3
+
+        depthStencilBuffer.Release()
+
+        runtime.DeleteFramebufferSignature(signature)
+
+
+    [<Test>]
     let ``[Download] Arguments out of range`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
         use win = Window.create backend
         let runtime = win.Runtime
