@@ -21,6 +21,8 @@ module Window =
             | "Vulkan" -> Backend.Vulkan
             | _ -> failwithf "Unknown backend '%s'" testBackend
 
+        GL.Config.CheckErrors <- true
+
         window {
             display Display.Mono
             samples 1
@@ -68,6 +70,15 @@ module ``Texture Tests`` =
     type UnexpectedPassException() =
         inherit Exception("Expected an exception but none occurred")
 
+    let shouldThrowArgExn (message : string) (f : unit -> unit) =
+        try
+            f()
+            raise <| UnexpectedPassException()
+        with
+        | :? ArgumentException as exn -> exn.Message |> should haveSubstring message
+        | :? UnexpectedPassException -> failwith "Expected ArgumentException but got none"
+        | exn -> failwithf "Expected ArgumentException but got %A" <| exn.GetType()
+
     let colors = [|
             C4b.BurlyWood
             C4b.Crimson
@@ -100,7 +111,6 @@ module ``Texture Tests`` =
                             Unchecked.defaultof<'T>
 
                     outputData.[x, y] |> should equal ref
-
 
     [<OneTimeSetUp>]
     let setEntryAssembly() =
@@ -393,30 +403,21 @@ module ``Texture Tests`` =
             finally
                 runtime.DeleteTexture(t)
 
-        let shouldThrow (message : string) (f : unit -> unit) =
-            try
-                f()
-                raise <| UnexpectedPassException()
-            with
-            | :? ArgumentException as exn -> exn.Message |> should haveSubstring message
-            | :? UnexpectedPassException -> failwith "Expected ArgumentException but got none"
-            | exn -> failwithf "Expected ArgumentException but got %A" <| exn.GetType()
-
         let full = Box2i.Infinite
         let window m s = Box2i.FromMinAndSize(m, s)
         let neg = window V2i.NN V2i.One
 
-        createAndDownload TextureDimension.Texture2D  4 -1  0  full   |> shouldThrow "level cannot be negative"
-        createAndDownload TextureDimension.Texture2D  4  4  0  full   |> shouldThrow "cannot access texture level"
-        createAndDownload TextureDimension.Texture2D  4  2  0  neg    |> shouldThrow "offset cannot be negative"
-        createAndDownload TextureDimension.Texture2D  4  2  0  (window (V2i(8)) (V2i(25, 1))) |> shouldThrow "exceeds size"
+        createAndDownload TextureDimension.Texture2D  4 -1  0  full   |> shouldThrowArgExn "level cannot be negative"
+        createAndDownload TextureDimension.Texture2D  4  4  0  full   |> shouldThrowArgExn "cannot access texture level"
+        createAndDownload TextureDimension.Texture2D  4  2  0  neg    |> shouldThrowArgExn "offset cannot be negative"
+        createAndDownload TextureDimension.Texture2D  4  2  0  (window (V2i(8)) (V2i(25, 1))) |> shouldThrowArgExn "exceeds size"
 
-        createAndDownload TextureDimension.TextureCube  4 -1  2  full |> shouldThrow "level cannot be negative"
-        createAndDownload TextureDimension.TextureCube  4  4  2  full |> shouldThrow "cannot access texture level"
-        createAndDownload TextureDimension.TextureCube  4  2 -1  full |> shouldThrow "slice cannot be negative"
-        createAndDownload TextureDimension.TextureCube  4  2  6  full |> shouldThrow "cannot access texture slice"
-        createAndDownload TextureDimension.TextureCube  4  2  3  neg    |> shouldThrow "offset cannot be negative"
-        createAndDownload TextureDimension.TextureCube  4  2  3  (window (V2i(8)) (V2i(25, 1))) |> shouldThrow "exceeds size"
+        createAndDownload TextureDimension.TextureCube  4 -1  2  full |> shouldThrowArgExn "level cannot be negative"
+        createAndDownload TextureDimension.TextureCube  4  4  2  full |> shouldThrowArgExn "cannot access texture level"
+        createAndDownload TextureDimension.TextureCube  4  2 -1  full |> shouldThrowArgExn "slice cannot be negative"
+        createAndDownload TextureDimension.TextureCube  4  2  6  full |> shouldThrowArgExn "cannot access texture slice"
+        createAndDownload TextureDimension.TextureCube  4  2  3  neg    |> shouldThrowArgExn "offset cannot be negative"
+        createAndDownload TextureDimension.TextureCube  4  2  3  (window (V2i(8)) (V2i(25, 1))) |> shouldThrowArgExn "exceeds size"
 
 
     [<Test>]
@@ -513,3 +514,120 @@ module ``Texture Tests`` =
         createArray TextureDimension.TextureCube 3 1 1 ()
         createArray TextureDimension.TextureCube 1 1 4 ()
         createArray TextureDimension.TextureCube 3 1 4 ()
+
+    [<Test>]
+    let ``[Copy] Arguments out of range`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
+        use win = Window.create backend
+        let runtime = win.Runtime
+
+        let copy src srcSlice srcLevel dst dstSlice dstLevel slices levels () =
+            runtime.Copy(src, srcSlice, srcLevel, dst, dstSlice, dstLevel, slices, levels)
+
+        let size = V2i(333, 666)
+        let src = runtime.CreateTexture2DArray(size, TextureFormat.Rgba8, levels = 4, count = 3)
+        let dst = runtime.CreateTexture2DArray(size, TextureFormat.Rgba8, levels = 3, count = 5)
+        let ms = runtime.CreateTexture2D(size, TextureFormat.Rgba8, levels = 1, samples = 8)
+
+        copy src -1  0 dst  0  0  1  1 |> shouldThrowArgExn "cannot be negative"
+        copy src  0 -1 dst  0  0  1  1 |> shouldThrowArgExn "cannot be negative"
+        copy src  0  0 dst -1  0  1  1 |> shouldThrowArgExn "cannot be negative"
+        copy src  0  0 dst  0 -1  1  1 |> shouldThrowArgExn "cannot be negative"
+        copy src  0  0 dst  0  0  0  1 |> shouldThrowArgExn "must be greater than zero"
+        copy src  0  0 dst  0  0  1  0 |> shouldThrowArgExn "must be greater than zero"
+
+        copy src 1 0 dst 1 1 1 1 |> shouldThrowArgExn "sizes of texture levels do not match"
+        copy src 1 2 dst 1 1 1 1 |> shouldThrowArgExn "sizes of texture levels do not match"
+
+        copy src 2 0 dst 0 0 2 1 |> shouldThrowArgExn "cannot access texture slices with index range"
+        copy src 0 0 dst 4 0 2 1 |> shouldThrowArgExn "cannot access texture slices with index range"
+        copy src 0 2 dst 0 2 1 2 |> shouldThrowArgExn "cannot access texture levels with index range"
+        copy dst 0 2 src 0 2 1 2 |> shouldThrowArgExn "cannot access texture levels with index range"
+
+        copy src 0 0 ms 0 0 1 1 |> shouldThrowArgExn "samples of textures do not match"
+
+        runtime.DeleteTexture(src)
+        runtime.DeleteTexture(dst)
+        runtime.DeleteTexture(ms)
+
+
+    [<Test>]
+    let ``[Copy] Simple`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
+        use win = Window.create backend
+        let runtime = win.Runtime
+
+        let size = V2i(333, 666)
+        let levels = 4
+        let count = 5
+
+        let data =
+            Array.init count (fun index ->
+                let data = PixImage.checkerboard colors.[index]
+
+                Array.init levels (fun level ->
+                    let size = size / (1 <<< level)
+                    data |> PixImage.resized size
+                )
+            )
+
+        let format = TextureFormat.ofPixFormat data.[0].[0].PixFormat TextureParams.empty
+        let src = runtime.CreateTexture2DArray(size, format, levels = levels, count = count)
+        let dst = runtime.CreateTexture2DArray(size, format, levels = levels, count = count)
+
+        data |> Array.iteri (fun index mipmaps ->
+            mipmaps |> Array.iteri (fun level img ->
+                runtime.Upload(src, level, index, img)
+            )
+        )
+
+        runtime.Copy(src, 2, 1, dst, 2, 1, 3, 3)
+
+        for i in 2 .. 4 do
+            for l in 1 .. 3 do
+                let result = runtime.Download(dst, level = l, slice = i).ToPixImage<byte>()
+                let levelSize = size / (1 <<< l)
+
+                result.Size |> should equal levelSize
+                comparePixImages V2i.Zero data.[i].[l] result
+
+        runtime.DeleteTexture(src)
+        runtime.DeleteTexture(dst)
+
+
+    [<Test>]
+    let ``[Copy] Multisampled`` ([<Values("OpenGL", "Vulkan")>] backend : string, [<Values(false, true)>] resolve : bool) =
+        use win = Window.create backend
+        let runtime = win.Runtime
+
+        let data = PixImage.checkerboard C4b.BurlyWood
+        let size = data.Size
+        let samples = 8
+
+        let signature = runtime.CreateFramebufferSignature(samples, [DefaultSemantic.Colors, RenderbufferFormat.Rgba8])
+        let src = runtime.CreateTexture2D(size, TextureFormat.Rgba8, levels = 1, samples = samples)
+        let dst = runtime.CreateTexture2D(size, TextureFormat.Rgba8, levels = 1, samples = if resolve then 1 else samples)
+        let framebuffer = runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, src.GetOutputView()])
+
+        let sampler =
+            Some { SamplerState.Default with Filter = TextureFilter.MinMagPoint }
+
+        use task =
+            Sg.fullScreenQuad
+            |> Sg.diffuseTexture' (data |> PixImage.toTexture false)
+            |> Sg.samplerState' DefaultSemantic.DiffuseColorTexture sampler
+            |> Sg.shader {
+                do! DefaultSurfaces.diffuseTexture
+            }
+            |> Sg.compile runtime signature
+
+        task.Run(RenderToken.Empty, framebuffer)
+
+        runtime.Copy(src, 0, 0, dst, 0, 0, 1, 1)
+        let result = runtime.Download(dst).ToPixImage<byte>()
+
+        runtime.DeleteFramebuffer(framebuffer)
+        runtime.DeleteTexture(src)
+        runtime.DeleteTexture(dst)
+        runtime.DeleteFramebufferSignature(signature)
+
+        result.Size |> should equal size
+        comparePixImages V2i.Zero data result

@@ -593,6 +593,13 @@ type Runtime() =
 
     
     member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
+        src |> ResourceValidation.Textures.validateSlices srcBaseSlice slices
+        src |> ResourceValidation.Textures.validateLevels srcBaseLevel levels
+        dst |> ResourceValidation.Textures.validateSlices dstBaseSlice slices
+        dst |> ResourceValidation.Textures.validateLevels dstBaseLevel levels
+        (src, dst) ||> ResourceValidation.Textures.validateSizes srcBaseLevel dstBaseLevel
+        (src, dst) ||> ResourceValidation.Textures.validateSamplesForCopy
+
         let src = unbox<Texture> src
         let dst = unbox<Texture> dst
         
@@ -601,10 +608,10 @@ type Runtime() =
             let srcLevel = srcBaseLevel + l
             let dstLevel = dstBaseLevel + l
             for s in 0 .. slices - 1 do
-                if src.Multisamples = dst.Multisamples then
-                    ctx.Copy(src, srcLevel, srcBaseSlice + s, V2i.Zero, dst, dstLevel, dstBaseSlice + s, V2i.Zero, size.XY)
+                if src.IsMultisampled then
+                    ctx.Blit(src, srcLevel, srcBaseSlice + s, Box2i(V2i.Zero, size.XY), dst, dstLevel, dstBaseSlice + s, Box2i(V2i.Zero, size.XY), false)
                 else
-                    ctx.Blit(src, srcLevel, srcBaseSlice + s, Box2i(V2i.Zero, size.XY - V2i.II), dst, dstLevel, dstBaseSlice + s, Box2i(V2i.Zero, size.XY - V2i.II), false)
+                    ctx.Copy(src, srcLevel, srcBaseSlice + s, V2i.Zero, dst, dstLevel, dstBaseSlice + s, V2i.Zero, size.XY)
             size <- size / 2
 
 

@@ -417,7 +417,14 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             do! Command.Copy(src, int64 srcOffset, dst, int64 dstOffset, int64 size)
         }
 
-    member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = 
+    member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
+        src |> ResourceValidation.Textures.validateSlices srcBaseSlice slices
+        src |> ResourceValidation.Textures.validateLevels srcBaseLevel levels
+        dst |> ResourceValidation.Textures.validateSlices dstBaseSlice slices
+        dst |> ResourceValidation.Textures.validateLevels dstBaseLevel levels
+        (src, dst) ||> ResourceValidation.Textures.validateSizes srcBaseLevel dstBaseLevel
+        (src, dst) ||> ResourceValidation.Textures.validateSamplesForCopy
+
         let src = unbox<Image> src
         let dst = unbox<Image> dst
 

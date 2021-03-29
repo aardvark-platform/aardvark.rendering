@@ -36,13 +36,43 @@ module ResourceValidation =
             if index < 0 then failf dimension "%s cannot be negative" name
             if index >= count then failf dimension "cannot access texture %s with index %d (texture has only %d)" name index count
 
+        let private validateIndexRange (dimension : TextureDimension) (name : string) (baseIndex : int) (rangeCount : int) (count : int) =
+
+            if baseIndex < 0 then failf dimension "base %s cannot be negative" name
+            if rangeCount < 1 then failf dimension "%s count must be greater than zero" name
+            if baseIndex + rangeCount - 1 >= count then
+                failf dimension "cannot access texture %ss with index range [%d, %d] (texture has only %d)" name baseIndex (baseIndex + rangeCount - 1) count
+
         /// Raises an ArgumentException if the given slice of the texture is invalid.
         let validateSlice (slice : int) (texture : IBackendTexture) =
             validateIndex texture.Dimension "slice" slice texture.Slices
 
+        /// Raises an ArgumentException if the given slice range of the texture is invalid.
+        let validateSlices (baseSlice : int) (count : int) (texture : IBackendTexture) =
+            validateIndexRange texture.Dimension "slice" baseSlice count texture.Slices
+
         /// Raises an ArgumentException if the given level of the texture is invalid.
         let validateLevel (level : int) (texture : IBackendTexture) =
             validateIndex texture.Dimension "level" level texture.MipMapLevels
+
+        /// Raises an ArgumentException if the given level range of the texture is invalid.
+        let validateLevels (baseLevel : int) (count : int) (texture : IBackendTexture) =
+            validateIndexRange texture.Dimension "level" baseLevel count texture.MipMapLevels
+
+        /// Raises an ArgumentException if the given levels of the textures do not match.
+        let validateSizes (srcLevel : int) (dstLevel : int) (src : IBackendTexture) (dst : IBackendTexture) =
+            let srcSize = src.GetSize(srcLevel)
+            let dstSize = dst.GetSize(dstLevel)
+
+            if srcSize <> dstSize then
+                failf src.Dimension "sizes of texture levels do not match (%A, %A)" srcSize dstSize
+
+        /// Raises an ArgumentException if neither of the following conditions apply:
+        /// (1) both textures have the same number of samples,
+        /// (2) dst is not multisampled.
+        let validateSamplesForCopy (src : IBackendTexture) (dst : IBackendTexture) =
+            if src.Samples <> dst.Samples && dst.Samples <> 1 then
+                failf src.Dimension "samples of textures do not match and destination is multisampled (src = %d, dst = %d)" src.Samples dst.Samples
 
         /// Raises an ArgumentException if the window for the given texture is invalid.
         let validateWindow (level : int) (offset : V3i) (windowSize : V3i) (texture : IBackendTexture) =

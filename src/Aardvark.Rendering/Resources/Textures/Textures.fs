@@ -127,6 +127,10 @@ and ITextureRuntime =
 
     abstract member PrepareTexture : ITexture -> IBackendTexture
 
+    abstract member Copy : src : IBackendTexture * srcBaseSlice : int * srcBaseLevel : int *
+                           dst : IBackendTexture * dstBaseSlice : int * dstBaseLevel : int *
+                           slices : int * levels : int -> unit
+
     abstract member Copy : src : NativeTensor4<'a> * srcFormat : Col.Format * dst : ITextureSubResource * dstOffset : V3i * size : V3i -> unit
     abstract member Copy : src : ITextureSubResource * srcOffset : V3i * dst : NativeTensor4<'a> * dstFormat : Col.Format * size : V3i -> unit
     abstract member Copy : src : IFramebufferOutput * srcOffset : V3i * dst : IFramebufferOutput * dstOffset : V3i * size : V3i -> unit
@@ -188,10 +192,6 @@ and ITextureRuntime =
     ///<param name="offset">The minimum coordinate to update.</param>
     ///<param name="target">The matrix to copy the data to.</param>
     abstract member DownloadDepth : texture : IBackendTexture * level : int * slice : int * offset : V2i * target : Matrix<float32> -> unit
-
-    abstract member Copy : src : IBackendTexture * srcBaseSlice : int * srcBaseLevel : int *
-                           dst : IBackendTexture * dstBaseSlice : int * dstBaseLevel : int *
-                           slices : int * levels : int -> unit
 
     abstract member ClearColor : texture : IBackendTexture * color : C4f -> unit
     abstract member ClearDepthStencil : texture : IBackendTexture * depth : Option<float> * stencil : Option<int> -> unit
