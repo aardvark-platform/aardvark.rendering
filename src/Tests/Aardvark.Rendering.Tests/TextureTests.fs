@@ -335,7 +335,7 @@ module ``Texture Tests`` =
 
 
     [<Test>]
-    let ``[Download] Depth and Stencil`` ([<Values("OpenGL")>] backend : string) =
+    let ``[Download] Depth and stencil`` ([<Values("OpenGL")>] backend : string) =
         use win = Window.create backend
         let runtime = win.Runtime
 
@@ -631,3 +631,88 @@ module ``Texture Tests`` =
 
         result.Size |> should equal size
         comparePixImages V2i.Zero data result
+
+
+    [<Test>]
+    let ``[Copy] Mipmapped cube`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
+        use win = Window.create backend
+        let runtime = win.Runtime
+
+        let levels = 3
+        let size = V2i(128)
+
+        let data =
+            CubeMap.init levels (fun side level ->
+                let data = PixImage.checkerboard colors.[int side]
+                let size = size / (1 <<< level)
+                data |> PixImage.resized size
+            )
+
+        let format = TextureFormat.ofPixFormat data.[CubeSide.PositiveX].PixFormat TextureParams.empty
+        let src = runtime.CreateTextureCube(size.X, format, levels = levels)
+        let dst = runtime.CreateTextureCube(size.X, format, levels = levels)
+
+        data |> CubeMap.iteri (fun side level img ->
+            runtime.Upload(src, level, int side, img)
+        )
+
+        runtime.Copy(src, 3, 1, dst, 3, 1, 3, 2)
+
+        for slice in 3 .. 5 do
+            for level in 1 .. 2 do
+                let result = runtime.Download(dst, level = level, slice = slice).ToPixImage<byte>()
+                let levelSize = size / (1 <<< level)
+                let side = unbox<CubeSide> (slice % 6)
+
+                result.Size |> should equal levelSize
+                comparePixImages V2i.Zero data.[side, level] result
+
+        runtime.DeleteTexture(src)
+        runtime.DeleteTexture(dst)
+
+
+    [<Test>]
+    let ``[Copy] Mipmapped cube array`` ([<Values("OpenGL", "Vulkan")>] backend : string) =
+        use win = Window.create backend
+        let runtime = win.Runtime
+
+        let count = 2
+        let levels = 3
+        let size = V2i(128)
+
+        let data =
+            Array.init count (fun index ->
+                CubeMap.init levels (fun side level ->
+                    let data = PixImage.checkerboard colors.[index * 6 + int side]
+                    let size = size / (1 <<< level)
+                    data |> PixImage.resized size
+                )
+            )
+
+        let format = TextureFormat.ofPixFormat data.[0].[CubeSide.PositiveX].PixFormat TextureParams.empty
+        let src = runtime.CreateTextureCubeArray(size.X, format, levels = levels, count = count)
+        let dst = runtime.CreateTextureCubeArray(size.X, format, levels = levels, count = count)
+
+        data |> Array.iteri (fun index mipmaps ->
+            mipmaps |> CubeMap.iteri (fun side level img ->
+                runtime.Upload(src, level, index * 6 + int side, img)
+            )
+        )
+
+        runtime.Copy(src, 2, 1, dst, 2, 1, 7, 2)
+
+        for slice in 2 .. 8 do
+            for level in 1 .. 2 do
+                let result = runtime.Download(dst, level = level, slice = slice).ToPixImage<byte>()
+                let levelSize = size / (1 <<< level)
+                let index = slice / 6
+                let side = unbox<CubeSide> (slice % 6)
+
+                data.[index].[side, level] |> PixImage.saveToDesktop (sprintf "slice%d_lvl%d_src.png" slice level)
+                result |> PixImage.saveToDesktop (sprintf "slice%d_lvl%d_dst.png" slice level)
+
+                result.Size |> should equal levelSize
+                comparePixImages V2i.Zero data.[index].[side, level] result
+
+        runtime.DeleteTexture(src)
+        runtime.DeleteTexture(dst)

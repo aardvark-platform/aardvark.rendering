@@ -2377,7 +2377,7 @@ type ContextTextureExtensions =
                 else
                     FramebufferAttachment.ColorAttachment0, ClearBufferMask.ColorBufferBit, linear
 
-            if src.IsArray then GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, attachment, src.Handle, srcLevel, srcSlice)
+            if src.Slices > 1 then GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, attachment, src.Handle, srcLevel, srcSlice)
             else GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, attachment, src.Handle, srcLevel)
             GL.Check "could not attach texture to framebuffer"
 
@@ -2388,7 +2388,7 @@ type ContextTextureExtensions =
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fDst)
             GL.Check "could not bind framebuffer"
 
-            if dst.IsArray then GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, attachment, dst.Handle, dstLevel, dstSlice)
+            if dst.Slices > 1 then GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, attachment, dst.Handle, dstLevel, dstSlice)
             else GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, attachment, dst.Handle, dstLevel)
             GL.Check "could not attach texture to framebuffer"
 
@@ -2439,7 +2439,7 @@ type ContextTextureExtensions =
                 else
                     FramebufferAttachment.ColorAttachment0, ReadBufferMode.ColorAttachment0
 
-            if src.IsArray then
+            if src.Slices > 1 then
                 GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, attachment, src.Handle, srcLevel, srcSlice)
             else
                 GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, attachment, src.Handle, srcLevel)
