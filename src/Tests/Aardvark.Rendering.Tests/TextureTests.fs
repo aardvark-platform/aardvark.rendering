@@ -708,9 +708,6 @@ module ``Texture Tests`` =
                 let index = slice / 6
                 let side = unbox<CubeSide> (slice % 6)
 
-                data.[index].[side, level] |> PixImage.saveToDesktop (sprintf "slice%d_lvl%d_src.png" slice level)
-                result |> PixImage.saveToDesktop (sprintf "slice%d_lvl%d_dst.png" slice level)
-
                 result.Size |> should equal levelSize
                 comparePixImages V2i.Zero data.[index].[side, level] result
 

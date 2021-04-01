@@ -205,7 +205,9 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
     let bagCount = new SemaphoreSlim(resourceContextCount)
 
     let currentHandle = new ThreadLocal<ValueOption<ContextHandle>>(fun () -> ValueNone)
-    
+
+    let shaderCache = ShaderCache()
+
     let mutable driverInfo = None
 
     let mutable packAlignment = None
@@ -213,6 +215,8 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
     let mutable shaderCachePath : Option<string> = None
     
     member x.CreateContext() = createContext()
+
+    member internal x.ShaderCache = shaderCache
 
     static member DefaultShaderCachePath = defaultShaderCachePath
 
