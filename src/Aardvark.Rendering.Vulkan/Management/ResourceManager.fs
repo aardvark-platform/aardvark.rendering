@@ -674,11 +674,8 @@ module Resources =
             program.Release()
 
         override x.Compute(token) =
-            let m = input
             let p = program.Update token
-            let res = 
-                if p.handle.HasTessellation then { topology = VkPrimitiveTopology.PatchList; restartEnable = false }
-                else InputAssemblyState.ofIndexedGeometryMode m
+            let res = input |> InputAssemblyState.ofIndexedGeometryMode p.handle.HasTessellation
 
             VkPipelineInputAssemblyStateCreateInfo(
                 VkPipelineInputAssemblyStateCreateFlags.None,

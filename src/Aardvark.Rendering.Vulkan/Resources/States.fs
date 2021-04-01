@@ -86,19 +86,23 @@ type StencilState =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module InputAssemblyState =
-    let ofIndexedGeometryMode =
-        LookupTable.lookupTable [
-            IndexedGeometryMode.LineAdjacencyList,      { topology = VkPrimitiveTopology.LineListWithAdjacency; restartEnable = false }
-            IndexedGeometryMode.LineList,               { topology = VkPrimitiveTopology.LineList; restartEnable = false }
-            IndexedGeometryMode.LineStrip,              { topology = VkPrimitiveTopology.LineStrip; restartEnable = true }
-            IndexedGeometryMode.PointList,              { topology = VkPrimitiveTopology.PointList; restartEnable = false }
-            IndexedGeometryMode.QuadList,               { topology = VkPrimitiveTopology.PatchList; restartEnable = false }
-            IndexedGeometryMode.TriangleAdjacencyList,  { topology = VkPrimitiveTopology.TriangleListWithAdjacency; restartEnable = false }
-            IndexedGeometryMode.TriangleList,           { topology = VkPrimitiveTopology.TriangleList; restartEnable = false }
-            IndexedGeometryMode.TriangleStrip,          { topology = VkPrimitiveTopology.TriangleStrip; restartEnable = true }
-        ]
-        
-    
+    let ofIndexedGeometryMode (hasTessellation : bool) (mode : IndexedGeometryMode) =
+        if hasTessellation then
+            { topology = VkPrimitiveTopology.PatchList; restartEnable = false }
+        else
+            match mode with
+            | IndexedGeometryMode.LineAdjacencyList ->      { topology = VkPrimitiveTopology.LineListWithAdjacency; restartEnable = false }
+            | IndexedGeometryMode.LineList ->               { topology = VkPrimitiveTopology.LineList; restartEnable = false }
+            | IndexedGeometryMode.LineStrip ->              { topology = VkPrimitiveTopology.LineStrip; restartEnable = true }
+            | IndexedGeometryMode.PointList ->              { topology = VkPrimitiveTopology.PointList; restartEnable = false }
+            | IndexedGeometryMode.TriangleAdjacencyList ->  { topology = VkPrimitiveTopology.TriangleListWithAdjacency; restartEnable = false }
+            | IndexedGeometryMode.TriangleList ->           { topology = VkPrimitiveTopology.TriangleList; restartEnable = false }
+            | IndexedGeometryMode.TriangleStrip ->          { topology = VkPrimitiveTopology.TriangleStrip; restartEnable = true }
+            | IndexedGeometryMode.QuadList ->
+                failwith "Vulkan backend does not support quad geometry"
+            | _ ->
+                failwithf "Unknown indexed geometry mode %A" mode
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VertexInputState =
 
