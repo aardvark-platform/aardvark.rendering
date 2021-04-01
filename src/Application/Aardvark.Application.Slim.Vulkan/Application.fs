@@ -303,27 +303,13 @@ type VulkanApplication(debug : DebugConfig option, chooseDevice : list<PhysicalD
             if debug.IsSome then
                 yield Instance.Extensions.DebugReport
                 yield Instance.Extensions.DebugUtils
-
         ]
 
     let requestedLayers =
         [
             if debug.IsSome then
                 yield Instance.Layers.Validation
-                yield Instance.Layers.StandardValidation
                 yield Instance.Layers.AssistantLayer
-                //yield Instance.Layers.ApiDump
-                //yield Instance.Layers.Nsight
-                //yield Instance.Layers.SwapChain
-                //yield Instance.Layers.DrawState
-                //yield Instance.Layers.ParamChecker
-                //yield Instance.Layers.DeviceLimits
-                //yield Instance.Layers.CoreValidation
-                //yield Instance.Layers.ParameterValidation
-                //yield Instance.Layers.ObjectTracker
-                //yield Instance.Layers.Threading
-                //yield Instance.Layers.UniqueObjects
-                //yield Instance.Layers.Image
         ]
 
     let instance = 

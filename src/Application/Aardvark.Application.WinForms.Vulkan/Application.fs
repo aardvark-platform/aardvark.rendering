@@ -108,7 +108,7 @@ type VulkanApplication(debug : DebugConfig option, chooseDevice : list<PhysicalD
     let requestedLayers =
         [
             if debug.IsSome then
-                yield Instance.Layers.StandardValidation
+                yield Instance.Layers.Validation
                 yield Instance.Layers.AssistantLayer
         ]
 

@@ -11,6 +11,7 @@ type HeadlessVulkanApplication(debug : DebugConfig option, instanceExtensions : 
             yield Instance.Extensions.ShaderSubgroupVote
             yield Instance.Extensions.ShaderSubgroupBallot
             yield Instance.Extensions.GetPhysicalDeviceProperties2
+
             if debug.IsSome then
                 yield Instance.Extensions.DebugReport
                 yield Instance.Extensions.DebugUtils
@@ -19,7 +20,7 @@ type HeadlessVulkanApplication(debug : DebugConfig option, instanceExtensions : 
     let requestedLayers =
         [
             if debug.IsSome then
-                yield Instance.Layers.StandardValidation
+                yield Instance.Layers.Validation
                 yield Instance.Layers.AssistantLayer
         ]
 
