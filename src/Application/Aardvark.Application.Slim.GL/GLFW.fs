@@ -946,6 +946,7 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
     let inputCallback =
         glfw.SetCharCallback(win, GlfwCallbacks.CharCallback (fun w c ->
             let str = System.Text.Encoding.UTF32.GetString(System.BitConverter.GetBytes(c))
+            for c in str do keyboard.KeyPress c
             keyInput.Trigger(str)
         ))
 
