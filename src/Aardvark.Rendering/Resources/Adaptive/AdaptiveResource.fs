@@ -197,17 +197,24 @@ module private AdaptiveResourceImplementations =
     type ConstantResource<'T>(create : unit -> 'T, destroy : 'T -> unit) =
         inherit AdaptiveResource<'T>()
 
-        let mutable cache = Unchecked.defaultof<'T>
+        let mutable handle = ValueNone
 
-        override x.Create() =
-            cache <- create()
-
+        override x.Create() = ()
         override x.Destroy() =
-            destroy cache
-            cache <- Unchecked.defaultof<'T>
+            match handle with
+            | ValueSome h ->
+                destroy h
+                handle <- ValueNone
+            | _ ->
+                ()
 
         override x.Compute(_, _) =
-            cache
+            match handle with
+            | ValueSome h -> h
+            | _ ->
+                let h = create()
+                handle <- ValueSome h
+                h
 
 
     [<AbstractClass; StructuredFormatDisplay("{AsString}")>]
