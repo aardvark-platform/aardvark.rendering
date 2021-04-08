@@ -2,6 +2,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.29609.76
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "35 - BrowserTexture", "Examples (netcore)\35 - BrowserTexture\35 - BrowserTexture.fsproj", "{43F063C0-1BE0-4478-BCD3-9F9C83F97172}"
+EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "18 - AdaptiveResourceSemantics", "Scratch (netcore)\18 - AdaptiveResourceSemantics\18 - AdaptiveResourceSemantics.fsproj", "{9F213324-00AB-4DDA-97BE-455DBF3F9406}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "34 - StorageBuffers", "Examples (netcore)\34 - StorageBuffers\34 - StorageBuffers.fsproj", "{7F4EDFB3-674B-4745-A1AB-95A99FC9FD71}"
@@ -199,12 +201,18 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "33 - Opc", "Examples (netco
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CSharpInteropTest", "Tests\CSharpInteropTest\CSharpInteropTest.csproj", "{CD4017F0-1BFA-45B1-A117-22536073D5A7}"
 EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.SceneGraph.Browser", "Aardvark.SceneGraph.Browser\Aardvark.SceneGraph.Browser.fsproj", "{007A06EE-AC86-4446-BEE8-75CD27BD52FA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{43F063C0-1BE0-4478-BCD3-9F9C83F97172}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{43F063C0-1BE0-4478-BCD3-9F9C83F97172}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{43F063C0-1BE0-4478-BCD3-9F9C83F97172}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{43F063C0-1BE0-4478-BCD3-9F9C83F97172}.Release|Any CPU.Build.0 = Release|Any CPU
 		{9F213324-00AB-4DDA-97BE-455DBF3F9406}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{9F213324-00AB-4DDA-97BE-455DBF3F9406}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{9F213324-00AB-4DDA-97BE-455DBF3F9406}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -533,11 +541,16 @@ Global
 		{CD4017F0-1BFA-45B1-A117-22536073D5A7}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{CD4017F0-1BFA-45B1-A117-22536073D5A7}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{CD4017F0-1BFA-45B1-A117-22536073D5A7}.Release|Any CPU.Build.0 = Release|Any CPU
+		{007A06EE-AC86-4446-BEE8-75CD27BD52FA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{007A06EE-AC86-4446-BEE8-75CD27BD52FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{007A06EE-AC86-4446-BEE8-75CD27BD52FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{007A06EE-AC86-4446-BEE8-75CD27BD52FA}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{43F063C0-1BE0-4478-BCD3-9F9C83F97172} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{9F213324-00AB-4DDA-97BE-455DBF3F9406} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{7F4EDFB3-674B-4745-A1AB-95A99FC9FD71} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{6F6A352A-604B-4600-AF1C-589AA205B85E} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
