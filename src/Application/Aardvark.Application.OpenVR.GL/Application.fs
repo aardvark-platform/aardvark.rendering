@@ -268,6 +268,10 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
         member x.AfterRender = afterRender.Publish
 
     interface IRenderControl with
+        member x.Cursor
+            with get() = Cursor.Default
+            and set c = ()
+
         member x.Keyboard = keyboard :> IKeyboard
         member x.Mouse = mouse :> IMouse
 

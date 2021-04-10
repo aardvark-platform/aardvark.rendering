@@ -112,6 +112,7 @@ module Utilities =
         
         abstract member IsVR : bool
         abstract member Controllers : list<VrDevice> 
+        abstract member Cursor : Cursor with get, set
         abstract member Keyboard : IKeyboard
         abstract member Mouse : IMouse
 
@@ -151,6 +152,9 @@ module Utilities =
         member x.Time = win.Time
         member x.Keyboard = win.Keyboard
         member x.Mouse = win.Mouse
+        member x.Cursor
+            with get() = win.Cursor
+            and set c = win.Cursor <- c
 
         member x.Run(preventDisposal) = 
             win.Run()
@@ -174,6 +178,9 @@ module Utilities =
                         win.RenderTask <- task
         
         interface ISimpleRenderWindow with
+            member x.Cursor
+                with get() = x.Cursor
+                and set c = x.Cursor <- c
             member x.Runtime = x.Runtime
             member x.Sizes = x.Sizes
             member x.Samples = x.Samples

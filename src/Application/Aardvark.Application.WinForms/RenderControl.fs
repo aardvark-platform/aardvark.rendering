@@ -125,6 +125,25 @@ type RenderControl() as this =
 
     let locationAndSub = lazy ( getScreenLocation this )
 
+    let mutable cursor = Cursor.Default
+
+    
+    member x.Cursor
+        with get() = cursor
+        and set c =
+            if cursor <> c then
+                cursor <- c
+                match c with
+                | Cursor.None -> base.Cursor <- null
+                | Cursor.Default -> base.Cursor <- System.Windows.Forms.Cursors.Default
+                | Cursor.Arrow -> base.Cursor <- System.Windows.Forms.Cursors.Arrow
+                | Cursor.Crosshair -> base.Cursor <- System.Windows.Forms.Cursors.Cross
+                | Cursor.Hand -> base.Cursor <- System.Windows.Forms.Cursors.Hand
+                | Cursor.Text -> base.Cursor <- System.Windows.Forms.Cursors.IBeam
+                | Cursor.HorizontalResize -> base.Cursor <- System.Windows.Forms.Cursors.SizeWE
+                | Cursor.VerticalResize -> base.Cursor <- System.Windows.Forms.Cursors.SizeNS
+                | Cursor.Custom _ -> Log.error "custom cursors are not supported by WinForms atm."
+
     member x.Location =
         locationAndSub.Value |> snd
 
@@ -177,8 +196,13 @@ type RenderControl() as this =
     [<CLIEvent>]
     member x.AfterRender = afterRender.Publish
 
+
     interface IRenderControl with
         
+        member x.Cursor
+            with get() = x.Cursor
+            and set c = x.Cursor <- c
+
         member x.SubSampling
             with get() = x.SubSampling
             and set v = x.SubSampling <- v

@@ -417,6 +417,7 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
     let size = AVal.init V2i.II
 
     let mutable renderTask = RenderTask.empty
+    let mutable cursor = Cursor.Default
 
     let signature =
         runtime.CreateFramebufferSignature(samples, [
@@ -693,6 +694,22 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
         with get() = 1.0
         and set v = if v <> 1.0 then failwith "[OpenGLSharing] SubSampling not implemented"
 
+    member x.Cursor
+        with get() = cursor
+        and set c =
+            if c <> cursor then
+                cursor <- c
+                match c with
+                | Cursor.Default -> base.Cursor <- null
+                | Cursor.None -> base.Cursor <- Input.Cursors.None
+                | Cursor.Arrow -> base.Cursor <- Input.Cursors.Arrow
+                | Cursor.Hand -> base.Cursor <- Input.Cursors.Hand
+                | Cursor.Crosshair -> base.Cursor <- Input.Cursors.Cross
+                | Cursor.HorizontalResize -> base.Cursor <- Input.Cursors.SizeWE
+                | Cursor.VerticalResize -> base.Cursor <- Input.Cursors.SizeNS
+                | Cursor.Text -> base.Cursor <- Input.Cursors.IBeam
+                | Cursor.Custom _ -> Log.error "[WPF] custom cursors not supported atm."
+
     interface IRenderTarget with
         member x.FramebufferSignature = x.FramebufferSignature
         member x.Samples = 1
@@ -709,5 +726,8 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
         member x.AfterRender = afterRender.Publish
 
     interface IRenderControl with
+        member this.Cursor
+            with get() = this.Cursor
+            and set c = this.Cursor <- c
         member x.Mouse = mouse :> IMouse
         member x.Keyboard = keyboard :> IKeyboard
