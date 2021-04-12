@@ -352,6 +352,7 @@ type SimpleWindow(position : V2i, initialSize : V2i)  =
     let mutable fullscreen = false
     let mutable oldBorder = WindowBorder.Resizable
     let mutable oldState = WindowState.Normal
+    let mutable cursor = Cursor.Default
 
     member x.Load() =
         lock handle (fun () ->
@@ -446,6 +447,20 @@ type SimpleWindow(position : V2i, initialSize : V2i)  =
                     handle.WindowBorder <- oldBorder
                     handle.WindowState <- oldState
                 fullscreen <- false
+                    
+    member x.Cursor
+        with get() = cursor
+        and set c =
+            if c <> cursor then
+                if cursor = Cursor.None then handle.CursorVisible <- true
+                match c with
+                | Cursor.None -> handle.CursorVisible <- false
+                | Cursor.Default -> handle.Cursor <- MouseCursor.Default
+                | Cursor.Custom(img, hot) ->
+                    let img = img.ToPixImage<byte>(Col.Format.BGRA).ToCanonicalDenseLayout() |> unbox<PixImage<byte>>
+                    handle.Cursor <- MouseCursor(hot.X, hot.Y, img.Size.X, img.Size.Y, img.Volume.Data)
+                | _ ->
+                    Log.error "OpenTK cannot set cursor %A" c
                     
 
 

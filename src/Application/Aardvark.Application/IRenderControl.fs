@@ -40,6 +40,7 @@ type IRenderTarget =
 type IRenderControl =
     inherit IRenderTarget
 
+    abstract member Cursor : Cursor with get, set
     abstract member Keyboard : IKeyboard
     abstract member Mouse : IMouse
     

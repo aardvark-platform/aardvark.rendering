@@ -280,6 +280,9 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
         member this.Time = time
 
     interface IRenderControl with
+        member this.Cursor
+            with get() = this.Cursor
+            and set c = this.Cursor <- c
         member this.Keyboard = this.Keyboard
         member this.Mouse = this.Mouse
 

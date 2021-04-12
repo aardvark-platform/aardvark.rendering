@@ -49,9 +49,15 @@ type SimpleRenderWindow() as this =
         let app = Application()
         app.Run(x) |> ignore
         
+    member x.Cursor
+        with get() = ctrl.Cursor
+        and set c = ctrl.Cursor <- c
     member x.BeforeRender = ctrl.BeforeRender
     member x.AfterRender = ctrl.AfterRender
     interface IRenderWindow with
+        member x.Cursor
+            with get() = ctrl.Cursor
+            and set c = ctrl.Cursor <- c
         member x.FramebufferSignature = ctrl.FramebufferSignature
         member x.Runtime = ctrl.Runtime
         member x.Time = ctrl.Time

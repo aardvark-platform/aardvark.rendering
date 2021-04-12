@@ -241,6 +241,10 @@ and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
     
     member x.BeforeRender = beforeRender.Publish
     member x.AfterRender = afterRender.Publish
+    
+    member x.Cursor
+        with get() = controls.[0].Cursor
+        and set v = for c in controls do c.Cursor <- v
 
     interface IRenderTarget with
         member x.FramebufferSignature = signature.Value :> IFramebufferSignature
@@ -261,6 +265,9 @@ and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
         member x.AfterRender = afterRender.Publish
 
     interface IRenderControl with
+        member x.Cursor
+            with get() = x.Cursor
+            and set c = x.Cursor <- c
         member x.Mouse = mouse :> IMouse
         member x.Keyboard = keyboard :> IKeyboard
 

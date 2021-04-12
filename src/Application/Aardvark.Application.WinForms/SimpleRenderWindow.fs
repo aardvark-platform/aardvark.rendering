@@ -126,6 +126,9 @@ type SimpleRenderWindow() as this =
         and set v = ctrl.SubSampling <- v
 
     interface IRenderWindow with
+        member x.Cursor
+            with get() = Cursor.Default
+            and set c = ()
         member x.FramebufferSignature = ctrl.FramebufferSignature
         member x.Runtime = ctrl.Runtime
         member x.Time = ctrl.Time

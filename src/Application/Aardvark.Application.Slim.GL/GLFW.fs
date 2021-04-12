@@ -10,6 +10,8 @@ open System.Runtime.InteropServices
 open FSharp.Control
 open FSharp.Data.Adaptive
 
+type Cursor = Aardvark.Application.Cursor
+
 #nowarn "9"
 
 module private Translations =
@@ -946,6 +948,7 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
     let inputCallback =
         glfw.SetCharCallback(win, GlfwCallbacks.CharCallback (fun w c ->
             let str = System.Text.Encoding.UTF32.GetString(System.BitConverter.GetBytes(c))
+            for c in str do keyboard.KeyPress c
             keyInput.Trigger(str)
         ))
 
@@ -1068,6 +1071,57 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
 
     let mutable queryObjects : option<struct(int * int)> = None
 
+    let mutable glfwCursor = NativePtr.zero<Silk.NET.GLFW.Cursor>
+    let mutable cursor = Cursor.Default
+
+    member x.Cursor
+        with get() = cursor
+        and set c =
+            x.Invoke (fun () ->
+                if c = Cursor.None then
+                    if cursor <> Cursor.None then
+                        glfw.SetInputMode(win, CursorStateAttribute.Cursor, CursorModeValue.CursorHidden)
+                        if glfwCursor <> NativePtr.zero then glfw.DestroyCursor glfwCursor
+                        glfwCursor <- NativePtr.zero
+                        cursor <- c
+                else
+                    if cursor = Cursor.None then glfw.SetInputMode(win, CursorStateAttribute.Cursor, CursorModeValue.CursorNormal)
+                    let handle = 
+                        match c with
+                        | Cursor.None -> NativePtr.zero // unreachable
+                        | Cursor.Default -> NativePtr.zero
+                        | Cursor.Arrow -> glfw.CreateStandardCursor(CursorShape.Arrow)
+                        | Cursor.Hand -> glfw.CreateStandardCursor(CursorShape.Hand)
+                        | Cursor.HorizontalResize -> glfw.CreateStandardCursor(CursorShape.HResize)
+                        | Cursor.VerticalResize -> glfw.CreateStandardCursor(CursorShape.VResize)
+                        | Cursor.Text -> glfw.CreateStandardCursor(CursorShape.IBeam)
+                        | Cursor.Crosshair -> glfw.CreateStandardCursor(CursorShape.Crosshair)
+                        | Cursor.Custom(img, hot) ->
+                            let img = img.ToPixImage<byte>(Col.Format.RGBA)
+                            NativeVolume.using img.Volume (fun pSrc ->
+                                use dst = fixed (Array.zeroCreate<byte> (img.Size.X * img.Size.Y * 4))
+                                let pDst = NativeVolume<byte>(dst, VolumeInfo(0L, V3l(img.Size, 4), V3l(4, img.Size.X * 4, 1)))
+                                NativeVolume.copy pSrc pDst
+
+                                use pImg = 
+                                    fixed [| 
+                                        Image(
+                                            Width = img.Size.X,
+                                            Height = img.Size.Y,
+                                            Pixels = dst
+                                        )
+                                    |]
+
+                                glfw.CreateCursor(pImg, hot.X, hot.Y)
+                            )
+
+                    glfw.SetCursor(win, handle)
+                    if glfwCursor <> NativePtr.zero then glfw.DestroyCursor glfwCursor
+                    glfwCursor <- handle
+                    cursor <- c
+            )
+
+
     member x.AfterRender = afterRender.Publish
     member x.BeforeRender = beforeRender.Publish
     member x.FramebufferSignature  = signature
@@ -1115,6 +1169,9 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
             and set v = x.SubSampling <- v
 
     interface Aardvark.Application.IRenderControl with
+        member x.Cursor
+            with get() = x.Cursor
+            and set c = x.Cursor <- c
         member x.Keyboard = x.Keyboard
         member x.Mouse = x.Mouse
        

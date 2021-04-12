@@ -19,6 +19,8 @@ type RenderControl() as self =
     let mutable impl : Option<IRenderTarget> = None
     let mutable ctrl : Option<FrameworkElement> = None
 
+    let mutable currentCursor = Cursor.Default
+
     let keyboard = new Aardvark.Application.WinForms.Keyboard()
     let mouse = new Aardvark.Application.WinForms.Mouse()
     let sizes = AVal.init (V2i(base.ActualWidth, base.ActualHeight))
@@ -57,6 +59,21 @@ type RenderControl() as self =
         self.DragOver.RemoveHandler dragHandler
         self.Drop.RemoveHandler dragHandler
 
+
+    static let setCursor (ctrl : FrameworkElement) (c : Cursor) =
+        match c with
+        | Cursor.Default -> ctrl.Cursor <- Input.Cursors.Arrow
+        | Cursor.None -> ctrl.Cursor <- Input.Cursors.None
+        | Cursor.Arrow -> ctrl.Cursor <- Input.Cursors.Arrow
+        | Cursor.Hand -> ctrl.Cursor <- Input.Cursors.Hand
+        | Cursor.Crosshair -> ctrl.Cursor <- Input.Cursors.Cross
+        | Cursor.HorizontalResize -> ctrl.Cursor <- Input.Cursors.SizeWE
+        | Cursor.VerticalResize -> ctrl.Cursor <- Input.Cursors.SizeNS
+        | Cursor.Text -> ctrl.Cursor <- Input.Cursors.IBeam
+        | Cursor.Custom _ -> 
+            Log.error "[WPF] custom cursors not supported atm."
+        
+
     member x.SetControl (self : RenderControl) (c : FrameworkElement) (cr : IRenderTarget) =
         match impl with
             | Some i -> failwith "implementation can only be set once per control"
@@ -64,7 +81,6 @@ type RenderControl() as self =
 
         self.Child <- c
         runtime <- cr.Runtime
-
         match c :> obj with
             | :? WindowsFormsHost as host ->
                 keyboard.SetControl(host.Child)
@@ -76,6 +92,8 @@ type RenderControl() as self =
             | _ ->
                 failwith "impossible to create WPF mouse"
 
+        c.ForceCursor <- true
+        setCursor c currentCursor
         match renderTask with
             | Some task -> cr.RenderTask <- task
             | None -> ()
@@ -139,7 +157,29 @@ type RenderControl() as self =
     member x.BeforeRender = beforeRender.Publish
     member x.AfterRender = afterRender.Publish
 
+    
+    member x.Cursor
+        with get() = currentCursor
+        and set c =
+            if c <> currentCursor then
+                currentCursor <- c
+                match ctrl with
+                | Some ctrl -> setCursor ctrl c
+                | None -> ()
+
+    //member x.Cursor 
+    //    with get() = currentCursor
+    //    and set c = 
+    //        currentCursor <- c
+    //        match impl with 
+    //        | Some (:? WindowsFormsHost as impl) -> impl.Cursor <- c
+    //        | Some (:? IRenderControl as impl) -> impl.Cursor <- c
+    //        | _ -> ()
+
     interface IRenderControl with
+        member this.Cursor
+            with get() = this.Cursor
+            and set c = this.Cursor <- c
         member x.FramebufferSignature = x.FramebufferSignature
         member x.Runtime = x.Runtime
         member x.Sizes = x.Sizes
