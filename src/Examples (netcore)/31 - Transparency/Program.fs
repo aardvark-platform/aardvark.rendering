@@ -47,10 +47,10 @@ module Program =
 
     let windowsSg =
         let colors = [
-                C4f(C3f.DodgerBlue, 0.5f)
-                C4f(C3f.Salmon, 0.5f)
-                C4f(C3f.SpringGreen, 0.5f)
-                C4f(C3f.Plum, 0.5f)
+                C4f(C3f.DodgerBlue, 0.25f)
+                C4f(C3f.Salmon, 0.25f)
+                C4f(C3f.SpringGreen, 0.25f)
+                C4f(C3f.Plum, 0.25f)
             ]
 
         colors

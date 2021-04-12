@@ -9,13 +9,19 @@ module WeightedBlended =
     open Aardvark.Rendering
     open Aardvark.SceneGraph
     open FSharp.Data.Adaptive
-    open FSharp.Data.Adaptive.Operators
 
     module private DefaultSemantic =
         let Accum = Symbol.Create "Accum"
         let Revealage = Symbol.Create "Revealage"
         let AccumBuffer = TypedSymbol<ITexture>("AccumBuffer")
         let RevealageBuffer = TypedSymbol<ITexture>("RevealageBuffer")
+
+    module private BlendMode =
+        let Revealage =
+            { BlendMode.Blend with
+                SourceColorFactor = BlendFactor.Zero
+                DestinationColorFactor = BlendFactor.InvSourceColor
+            }
 
     module private Shaders =
         open FShade
@@ -195,7 +201,7 @@ module WeightedBlended =
                 |> Sg.depthWrite' false
                 |> Sg.blendModes' (Map.ofList [
                     DefaultSemantic.Accum, BlendMode.Add
-                    DefaultSemantic.Revealage, BlendMode.Multiply
+                    DefaultSemantic.Revealage, BlendMode.Revealage
                 ])
                 |> Sg.viewTrafo scene.viewTrafo
                 |> Sg.projTrafo scene.projTrafo
