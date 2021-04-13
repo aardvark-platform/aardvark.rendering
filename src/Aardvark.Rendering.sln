@@ -203,6 +203,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CSharpInteropTest", "Tests\
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.SceneGraph.Browser", "Aardvark.SceneGraph.Browser\Aardvark.SceneGraph.Browser.fsproj", "{007A06EE-AC86-4446-BEE8-75CD27BD52FA}"
 EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "18 - UniformUpdates", "Scratch (netcore)\18 - UniformUpdates\18 - UniformUpdates.fsproj", "{AC7FAC1C-A488-453C-838C-1D9D7E4514FA}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -545,6 +547,10 @@ Global
 		{007A06EE-AC86-4446-BEE8-75CD27BD52FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{007A06EE-AC86-4446-BEE8-75CD27BD52FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{007A06EE-AC86-4446-BEE8-75CD27BD52FA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AC7FAC1C-A488-453C-838C-1D9D7E4514FA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AC7FAC1C-A488-453C-838C-1D9D7E4514FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AC7FAC1C-A488-453C-838C-1D9D7E4514FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AC7FAC1C-A488-453C-838C-1D9D7E4514FA}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -624,6 +630,7 @@ Global
 		{FEB14F7F-7746-444B-A0F1-E5DE9992F7ED} = {ACAD9454-10F3-4673-BC50-BD1B50A04D3B}
 		{9867A2D4-E656-4971-BF58-73C53A1546DA} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{CD4017F0-1BFA-45B1-A117-22536073D5A7} = {80F74456-D82F-4D38-83FE-362EFD0C2FCB}
+		{AC7FAC1C-A488-453C-838C-1D9D7E4514FA} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}
