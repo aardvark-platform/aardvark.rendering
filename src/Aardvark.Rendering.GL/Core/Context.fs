@@ -22,13 +22,13 @@ type RenderingLockDisposable =
         if not (isNull x.current) then // check if nop disposable
             match x.handle with 
             | ValueSome h -> h.ReleaseCurrent()
-                             x.restore <- ValueNone
+                             x.handle <- ValueNone
             | _ -> ()
 
             match x.restore with
             | ValueSome h -> h.MakeCurrent()
                              x.current.Value <- ValueSome h
-                             x.handle <- ValueNone
+                             x.restore <- ValueNone
             | _ -> x.current.Value <- ValueNone
 
     interface IDisposable with
