@@ -205,6 +205,8 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.SceneGraph.Browser
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "18 - UniformUpdates", "Scratch (netcore)\18 - UniformUpdates\18 - UniformUpdates.fsproj", "{AC7FAC1C-A488-453C-838C-1D9D7E4514FA}"
 EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "35 - Points", "Examples (netcore)\35 - Points\35 - Points.fsproj", "{D362070A-E74D-47D5-A029-12E1987DC4A2}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -551,6 +553,10 @@ Global
 		{AC7FAC1C-A488-453C-838C-1D9D7E4514FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{AC7FAC1C-A488-453C-838C-1D9D7E4514FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{AC7FAC1C-A488-453C-838C-1D9D7E4514FA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{D362070A-E74D-47D5-A029-12E1987DC4A2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{D362070A-E74D-47D5-A029-12E1987DC4A2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{D362070A-E74D-47D5-A029-12E1987DC4A2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{D362070A-E74D-47D5-A029-12E1987DC4A2}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -631,6 +637,7 @@ Global
 		{9867A2D4-E656-4971-BF58-73C53A1546DA} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{CD4017F0-1BFA-45B1-A117-22536073D5A7} = {80F74456-D82F-4D38-83FE-362EFD0C2FCB}
 		{AC7FAC1C-A488-453C-838C-1D9D7E4514FA} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
+		{D362070A-E74D-47D5-A029-12E1987DC4A2} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}
