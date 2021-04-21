@@ -33,12 +33,25 @@ type BlendFactor =
 [<Struct; CustomEquality; NoComparison>]
 type BlendMode =
     {
+        /// Specifies whether blending is enabled.
         mutable Enabled                 : bool
+
+        /// The factor multiplied with the source RGB values.
         mutable SourceColorFactor       : BlendFactor
+
+        /// The factor multiplied with the source alpha value.
         mutable SourceAlphaFactor       : BlendFactor
+
+        /// The factor multiplied with the destination RGB values.
         mutable DestinationColorFactor  : BlendFactor
+
+        /// The factor multiplied with the destination alpha value.
         mutable DestinationAlphaFactor  : BlendFactor
+
+        /// The blend operation performed on the source and destination RGB values.
         mutable ColorOperation          : BlendOperation
+
+        /// The blend operation performed on the source and destination alpha values.
         mutable AlphaOperation          : BlendOperation
     }
 
