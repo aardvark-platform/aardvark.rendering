@@ -407,7 +407,7 @@ module SgFSharp =
             Sg.BlendModeApplicator(mode, sg) :> ISg
 
         /// Sets the global blend mode for all color attachments.
-        let blendMode' mode = blendMode (AVal.init mode)
+        let blendMode' mode = blendMode (AVal.constant mode)
 
 
         /// Sets the blend modes for the given color attachments (overriding the global blend mode).
@@ -415,7 +415,7 @@ module SgFSharp =
             Sg.AttachmentBlendModeApplicator(modes, sg) :> ISg
 
         /// Sets the blend modes for the given color attachments (overriding the global blend mode).
-        let blendModes' modes = blendModes (AVal.init modes)
+        let blendModes' modes = blendModes (AVal.constant modes)
 
 
         /// Sets the blend constant color.
@@ -429,7 +429,7 @@ module SgFSharp =
         /// Sets the blend constant color.
         /// The color must be compatible with C4f.
         let inline blendConstant' (color : ^Value) =
-            blendConstant (AVal.init color)
+            blendConstant (AVal.constant color)
 
 
         /// Sets the global color write mask for all color attachments.
@@ -437,7 +437,7 @@ module SgFSharp =
             Sg.ColorWriteMaskApplicator(mask, sg) :> ISg
 
         /// Sets the global color write mask for all color attachments.
-        let colorMask' mask = colorMask (AVal.init mask)
+        let colorMask' mask = colorMask (AVal.constant mask)
 
 
         /// Sets the color write masks for the given color attachments (overriding the global mask).
@@ -445,7 +445,7 @@ module SgFSharp =
             Sg.AttachmentColorWriteMaskApplicator(masks, sg) :> ISg
 
         /// Sets the color write masks for the given color attachments (overriding the global mask).
-        let colorMasks' masks = colorMasks (AVal.init masks)
+        let colorMasks' masks = colorMasks (AVal.constant masks)
 
 
         /// Sets the color write mask for all color attachments to either ColorMask.None or ColorMask.All.
@@ -453,7 +453,7 @@ module SgFSharp =
             Sg.ColorWriteMaskApplicator(enabled, sg) :> ISg
 
         /// Sets the color write mask for all color attachments to either ColorMask.None or ColorMask.All.
-        let colorWrite' enabled = colorWrite (AVal.init enabled)
+        let colorWrite' enabled = colorWrite (AVal.constant enabled)
 
 
         /// Sets the color write masks for the given color attachments to either
@@ -463,7 +463,7 @@ module SgFSharp =
 
         /// Sets the color write masks for the given color attachments to either
         /// ColorMask.None or ColorMask.All (overriding the global mask).
-        let colorWrites' enabled = colorWrites (AVal.init enabled)
+        let colorWrites' enabled = colorWrites (AVal.constant enabled)
 
 
         /// Restricts color output to the given attachments.
@@ -472,7 +472,7 @@ module SgFSharp =
             >> colorMasks (enabled |> AVal.map ColorMask.ofWriteSet)
 
         /// Restricts color output to the given attachments.
-        let colorOutput' enabled = colorOutput (AVal.init enabled)
+        let colorOutput' enabled = colorOutput (AVal.constant enabled)
 
         // ================================================================================================================
         // Depth
@@ -483,7 +483,7 @@ module SgFSharp =
             Sg.DepthTestApplicator(test, sg) :> ISg
 
         /// Sets the depth test.
-        let depthTest' test = depthTest (AVal.init test)
+        let depthTest' test = depthTest (AVal.constant test)
 
 
         /// Enables or disables depth writing.
@@ -491,7 +491,7 @@ module SgFSharp =
             Sg.DepthWriteMaskApplicator(depthWriteEnabled, sg) :> ISg
 
         /// Enables or disables depth writing.
-        let depthWrite' depthWriteEnabled = depthWrite (AVal.init depthWriteEnabled)
+        let depthWrite' depthWriteEnabled = depthWrite (AVal.constant depthWriteEnabled)
 
 
         /// Sets the depth bias.
@@ -499,7 +499,7 @@ module SgFSharp =
             Sg.DepthBiasApplicator(bias, sg) :> ISg
 
         /// Sets the depth bias.
-        let depthBias' bias = depthBias (AVal.init bias)
+        let depthBias' bias = depthBias (AVal.constant bias)
 
 
         /// Enables or disables depth clamping.
@@ -507,7 +507,7 @@ module SgFSharp =
             Sg.DepthClampApplicator(clamp, sg) :> ISg
 
         /// Enables or disables depth clamping.
-        let depthClamp' clamp = depthClamp (AVal.init clamp)
+        let depthClamp' clamp = depthClamp (AVal.constant clamp)
 
         // ================================================================================================================
         // Stencil
@@ -518,7 +518,7 @@ module SgFSharp =
             Sg.StencilModeFrontApplicator(mode, sg) :> ISg
 
         /// Sets the stencil mode for front-facing polygons.
-        let stencilModeFront' mode = stencilModeFront (AVal.init mode)
+        let stencilModeFront' mode = stencilModeFront (AVal.constant mode)
 
 
         /// Sets the stencil write mask for front-facing polygons.
@@ -526,7 +526,7 @@ module SgFSharp =
             Sg.StencilWriteMaskFrontApplicator(mask, sg) :> ISg
 
         /// Sets the stencil write mask for front-facing polygons.
-        let stencilWriteMaskFront' mask = stencilWriteMaskFront (AVal.init mask)
+        let stencilWriteMaskFront' mask = stencilWriteMaskFront (AVal.constant mask)
 
 
         /// Enables or disables stencil write for front-facing polygons.
@@ -534,7 +534,7 @@ module SgFSharp =
             Sg.StencilWriteMaskFrontApplicator(enabled, sg) :> ISg
 
         /// Enables or disables stencil write for front-facing polygons.
-        let stencilWriteFront' enabled = stencilWriteFront (AVal.init enabled)
+        let stencilWriteFront' enabled = stencilWriteFront (AVal.constant enabled)
 
 
         /// Sets the stencil mode for back-facing polygons.
@@ -542,7 +542,7 @@ module SgFSharp =
             Sg.StencilModeBackApplicator(mode, sg) :> ISg
 
         /// Sets the stencil mode for back-facing polygons.
-        let stencilModeBack' mode = stencilModeBack (AVal.init mode)
+        let stencilModeBack' mode = stencilModeBack (AVal.constant mode)
 
 
         /// Sets the stencil write mask for back-facing polygons.
@@ -550,7 +550,7 @@ module SgFSharp =
             Sg.StencilWriteMaskBackApplicator(mask, sg) :> ISg
 
         /// Sets the stencil write mask for back-facing polygons.
-        let stencilWriteMaskBack' mask = stencilWriteMaskBack (AVal.init mask)
+        let stencilWriteMaskBack' mask = stencilWriteMaskBack (AVal.constant mask)
 
 
         /// Enables or disables stencil write for back-facing polygons.
@@ -558,7 +558,7 @@ module SgFSharp =
             Sg.StencilWriteMaskBackApplicator(enabled, sg) :> ISg
 
         /// Enables or disables stencil write for back-facing polygons.
-        let stencilWriteBack' enabled = stencilWriteBack (AVal.init enabled)
+        let stencilWriteBack' enabled = stencilWriteBack (AVal.constant enabled)
 
 
         /// Sets separate stencil modes for front- and back-facing polygons.
@@ -566,7 +566,7 @@ module SgFSharp =
             stencilModeFront front >> stencilModeBack back
 
         /// Sets separate stencil modes for front- and back-facing polygons.
-        let stencilModes' front back = stencilModes (AVal.init front) (AVal.init back)
+        let stencilModes' front back = stencilModes (AVal.constant front) (AVal.constant back)
 
 
         /// Sets separate stencil write masks for front- and back-facing polygons.
@@ -574,7 +574,7 @@ module SgFSharp =
             stencilWriteMaskFront front >> stencilWriteMaskBack back
 
         /// Sets separate stencil write masks for front- and back-facing polygons.
-        let stencilWriteMasks' front back = stencilWriteMasks (AVal.init front) (AVal.init back)
+        let stencilWriteMasks' front back = stencilWriteMasks (AVal.constant front) (AVal.constant back)
 
 
         /// Enables or disables stencil write for front- and back-facing polygons.
@@ -582,7 +582,7 @@ module SgFSharp =
             stencilWriteFront front >> stencilWriteBack back
 
         /// Enables or disables stencil write for front- and back-facing polygons.
-        let stencilWrites' front back = stencilWrites (AVal.init front) (AVal.init back)
+        let stencilWrites' front back = stencilWrites (AVal.constant front) (AVal.constant back)
 
 
         /// Sets the stencil mode.
@@ -590,7 +590,7 @@ module SgFSharp =
             stencilModes mode mode
 
         /// Sets the stencil mode.
-        let stencilMode' mode = stencilMode (AVal.init mode)
+        let stencilMode' mode = stencilMode (AVal.constant mode)
 
 
         /// Sets the stencil write mask.
@@ -598,7 +598,7 @@ module SgFSharp =
             stencilWriteMasks mask mask
 
         /// Sets the stencil write mask.
-        let stencilWriteMask' mask = stencilWriteMask (AVal.init mask)
+        let stencilWriteMask' mask = stencilWriteMask (AVal.constant mask)
 
 
         /// Enables or disables stencil write.
@@ -606,7 +606,7 @@ module SgFSharp =
             stencilWrites enabled enabled
 
         /// Enables or disables stencil write.
-        let stencilWrite' enabled = stencilWrite (AVal.init enabled)
+        let stencilWrite' enabled = stencilWrite (AVal.constant enabled)
 
         // ================================================================================================================
         // Write buffers
@@ -638,7 +638,7 @@ module SgFSharp =
             Sg.CullModeApplicator(mode, sg) :> ISg
 
         /// Sets the cull mode.
-        let cullMode' mode = cullMode (AVal.init mode)
+        let cullMode' mode = cullMode (AVal.constant mode)
 
 
         /// Sets the winding order of front faces.
@@ -646,7 +646,7 @@ module SgFSharp =
             Sg.FrontFaceApplicator(order, sg) :> ISg
 
         /// Sets the winding order of front faces.
-        let frontFace' order = frontFace (AVal.init order)
+        let frontFace' order = frontFace (AVal.constant order)
 
 
         /// Sets the fill mode.
@@ -654,7 +654,7 @@ module SgFSharp =
             Sg.FillModeApplicator(mode, sg) :> ISg
 
         /// Sets the fill mode.
-        let fillMode' mode = fillMode (AVal.init mode)
+        let fillMode' mode = fillMode (AVal.constant mode)
 
 
         /// Toggles multisampling for the scene.
@@ -662,7 +662,7 @@ module SgFSharp =
             Sg.MultisampleApplicator(mode, sg) :> ISg
 
         /// Toggles multisampling for the scene.
-        let multisample' mode = multisample (AVal.init mode)
+        let multisample' mode = multisample (AVal.constant mode)
 
 
         /// Toggles conservative rasterization for the scene.
@@ -670,7 +670,7 @@ module SgFSharp =
             Sg.ConservativeRasterApplicator(mode, sg) :> ISg
 
         /// Toggles conservative rasterization for the scene.
-        let conservativeRaster' mode = conservativeRaster (AVal.init mode)
+        let conservativeRaster' mode = conservativeRaster (AVal.constant mode)
 
         // ================================================================================================================
         // Attributes & Indices
