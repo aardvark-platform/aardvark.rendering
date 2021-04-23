@@ -1,3 +1,10 @@
+### 5.1.8
+- added argument validation for texture copying
+- added argument validation for texture download and upload
+- [GL] changed Shader caches to depend on context / runtime
+- [GL] fixed copy of cubemaps
+- [GL] fixed RenderingLock
+
 ### 5.1.7
 - added types to specify clear values more easily
 - added IRenderTask.RenderTo() overloads with clear values
