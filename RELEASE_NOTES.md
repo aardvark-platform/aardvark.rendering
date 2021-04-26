@@ -1,3 +1,8 @@
+### 5.1.9
+- updated FSharp.Core >= 4.7.0
+- updated to newest Base/FShade/Adaptive packages
+- removed System.Reactive
+
 ### 5.1.8
 - added argument validation for texture copying
 - added argument validation for texture download and upload

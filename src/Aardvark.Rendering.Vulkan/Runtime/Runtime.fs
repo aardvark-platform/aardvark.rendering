@@ -118,7 +118,13 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     let debugSubscription =
         match debug with
         | Some debug ->
-            let res = instance.DebugMessages.Subscribe(debugMessage, debugSummary)
+            let res = 
+                instance.DebugMessages.Subscribe {
+                    new IObserver<_> with
+                        member x.OnNext(msg) = debugMessage msg
+                        member x.OnCompleted() = debugSummary()
+                        member x.OnError _ = ()
+                }
             instance.SetDebugTracingEnabled(debug.traceHandles)
             instance.RaiseDebugMessage(MessageSeverity.Information, "Enabled debug report")
             res

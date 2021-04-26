@@ -8,7 +8,6 @@ open OpenTK
 open OpenTK.Graphics
 open OpenTK.Platform
 open System.Threading
-open System.Reactive.Linq
 
 [<AutoOpen>]
 module private GameWindowIO =

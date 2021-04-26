@@ -50,13 +50,13 @@ module RenderTasks =
                 tags = Map.empty
             }
             
-        let beforeRender = new System.Reactive.Subjects.Subject<unit>()
-        let afterRender = new System.Reactive.Subjects.Subject<unit>()
+        let beforeRender = new Event<unit>()
+        let afterRender = new Event<unit>()
         
         member x.Resources = resources
 
-        member x.BeforeRender = beforeRender
-        member x.AfterRender = afterRender
+        member x.BeforeRender = beforeRender.Publish :> IObservable<_>
+        member x.AfterRender = afterRender.Publish :> IObservable<_>
 
         member x.StructureChanged() =
             transact (fun () -> structureChanged.MarkOutdated())
@@ -155,7 +155,7 @@ module RenderTasks =
             x.bindFbo desc
 
             renderTaskLock.Run (fun () ->
-                beforeRender.OnNext()
+                beforeRender.Trigger()
                 NativePtr.write runtimeStats V2i.Zero
 
                 queries.Begin()
@@ -165,7 +165,7 @@ module RenderTasks =
 
                 queries.End()
    
-                afterRender.OnNext()
+                afterRender.Trigger()
                 let rt = NativePtr.read runtimeStats
                 t.AddDrawCalls(rt.X, rt.Y)
             )

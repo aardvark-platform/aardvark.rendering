@@ -110,7 +110,7 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
     let pointer : nativeptr<'v> = NativePtr.alloc 1
 
     let mutable refCount = 0
-    let onDispose = new System.Reactive.Subjects.Subject<unit>()
+    let onDispose = new Event<unit>()
 
     let mutable info = ResourceInfo.Zero
     let lockObj = obj()
@@ -120,7 +120,7 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
         let alreadyDisposed = Interlocked.CompareExchange(&wasDisposed,1,0)
         if alreadyDisposed = 1 then failwithf "doubleFree"
 
-        onDispose.OnNext()
+        onDispose.Trigger()
         x.Destroy handle.Value
         current <- None
         info <- ResourceInfo.Zero
@@ -154,7 +154,7 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
 
     member x.Kind = kind
 
-    member internal x.OnDispose = onDispose :> IObservable<_>
+    member internal x.OnDispose = onDispose.Publish :> IObservable<_>
 
     member private x.PerformUpdate(token : AdaptiveToken, t : RenderToken) =
         if refCount <= 0 then

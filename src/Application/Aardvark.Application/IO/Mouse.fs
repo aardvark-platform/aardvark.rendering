@@ -4,8 +4,6 @@
 open System
 open Aardvark.Base
 open FSharp.Data.Adaptive
-open System.Reactive
-open System.Reactive.Linq
 open System.Runtime.CompilerServices
 open System.Collections.Concurrent
 
