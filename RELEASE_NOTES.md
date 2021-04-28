@@ -1,3 +1,6 @@
+### 5.1.10
+- fix for segfaults on GL without direct state access
+
 ### 5.1.9
 - updated FSharp.Core >= 4.7.0
 - updated to newest Base/FShade/Adaptive packages
