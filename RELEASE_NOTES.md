@@ -1,3 +1,6 @@
+### 5.1.11
+- fixed osx64 glvm build
+
 ### 5.1.10
 - fix for segfaults on GL without direct state access
 
