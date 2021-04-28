@@ -1,27 +1,60 @@
 ﻿namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
-open Aardvark.Base.Rendering
 
+module BlendState =
+    let ofScope (scope : Ag.Scope) =
+        {
+            Mode                = scope.BlendMode
+            ColorWriteMask      = scope.ColorWriteMask
+            ConstantColor       = scope.BlendConstant
+            AttachmentMode      = scope.AttachmentBlendMode
+            AttachmentWriteMask = scope.AttachmentColorWriteMask
+        }
+
+module DepthState =
+    let ofScope (scope : Ag.Scope) =
+        {
+            Test       = scope.DepthTest
+            Bias       = scope.DepthBias
+            WriteMask  = scope.DepthWriteMask
+            Clamp      = scope.DepthClamp
+        }
+
+module StencilState =
+    let ofScope (scope : Ag.Scope) =
+        {
+            ModeFront      = scope.StencilModeFront
+            WriteMaskFront = scope.StencilWriteMaskFront
+            ModeBack       = scope.StencilModeBack
+            WriteMaskBack  = scope.StencilWriteMaskBack
+        }
+
+module RasterizerState =
+    let ofScope (scope : Ag.Scope) =
+        {
+            CullMode           = scope.CullMode
+            FrontFace          = scope.FrontFace
+            FillMode           = scope.FillMode
+            Multisample        = scope.Multisample
+            ConservativeRaster = scope.ConservativeRaster
+        }
 
 module RenderObject =
-    
+
     let ofScope (scope : Ag.Scope) =
         let rj = RenderObject.Create()
-            
-        let indexBufferView = scope?VertexIndexBuffer
-        let isActive = scope?IsActive
-        let renderPass = scope?RenderPass
 
-        rj.AttributeScope <- scope 
-        rj.Indices <- indexBufferView
-         
-        rj.IsActive <- isActive
-        rj.RenderPass <- renderPass
-            
+        rj.AttributeScope <- scope
+        rj.Indices <- scope.VertexIndexBuffer
+
+        rj.IsActive <- scope.IsActive
+        rj.RenderPass <- scope.RenderPass
+
         let attributes =
             { new IAttributeProvider with
                 member x.TryGetAttribute(sem) =
@@ -34,27 +67,20 @@ module RenderObject =
                 member x.Dispose() = ()
             }
 
-        rj.Uniforms <- new Providers.UniformProvider(scope, scope?Uniforms, [attributes])
-
+        rj.Uniforms <- new Providers.UniformProvider(scope, scope.Uniforms, [attributes])
 
         let vertexAttributes = new Providers.AttributeProvider(scope, "VertexAttributes")
         let instanceAttributes =  new Providers.AttributeProvider(scope, "InstanceAttributes")
 
         rj.VertexAttributes <- vertexAttributes
         rj.InstanceAttributes <- instanceAttributes
-            
-        rj.WriteBuffers <- scope?WriteBuffers
 
-        rj.DepthTest <- scope?DepthTestMode
-        rj.DepthBias <- scope?DepthBias
-        rj.CullMode <- scope?CullMode
-        rj.FrontFace <- scope?FrontFace
-        rj.FillMode <- scope?FillMode
-        rj.StencilMode <- scope?StencilMode
-        rj.BlendMode <- scope?BlendMode
-        rj.Surface <- scope?Surface
-        rj.ConservativeRaster <- scope?ConservativeRaster
-        rj.Multisample <- scope?Multisample
+        rj.Surface <- scope.Surface
+
+        rj.BlendState <- BlendState.ofScope scope
+        rj.DepthState <- DepthState.ofScope scope
+        rj.StencilState <- StencilState.ofScope scope
+        rj.RasterizerState <- RasterizerState.ofScope scope
 
         rj
 
@@ -63,7 +89,7 @@ module PipelineState =
     let ofScope (scope : Ag.Scope) =
         let vertexAttributes = new Providers.AttributeProvider(scope, "VertexAttributes") :> IAttributeProvider
         let instanceAttributes =  new Providers.AttributeProvider(scope, "InstanceAttributes") :> IAttributeProvider
-        
+
         let attributes =
             { new IAttributeProvider with
                 member x.TryGetAttribute(sem) =
@@ -75,21 +101,18 @@ module PipelineState =
 
                 member x.Dispose() = ()
             }
+
         {
-            depthTest           = scope?DepthTestMode
-            depthBias           = scope?DepthBias
-            cullMode            = scope?CullMode
-            frontFace           = scope?FrontFace
-            blendMode           = scope?BlendMode
-            fillMode            = scope?FillMode
-            stencilMode         = scope?StencilMode
-            multisample         = scope?Multisample
-            writeBuffers        = scope?WriteBuffers
-            globalUniforms      = new Providers.UniformProvider(scope, scope?Uniforms, [attributes])
-                         
-            geometryMode        = IndexedGeometryMode.PointList
-            vertexInputTypes    = Map.empty
-            perGeometryUniforms = Map.empty
+            Mode                = IndexedGeometryMode.PointList
+            VertexInputTypes    = Map.empty
+
+            BlendState          = BlendState.ofScope scope
+            DepthState          = DepthState.ofScope scope
+            StencilState        = StencilState.ofScope scope
+            RasterizerState     = RasterizerState.ofScope scope
+
+            GlobalUniforms      = new Providers.UniformProvider(scope, scope.Uniforms, [attributes])
+            PerGeometryUniforms = Map.empty
         }
 
 [<AutoOpen>]
@@ -97,11 +120,9 @@ module RenderObjectSemantics =
 
     type ISg with
         member x.RenderObjects(scope : Ag.Scope) : aset<IRenderObject> = x?RenderObjects(scope)
-        member x.OverlayTasks(scope : Ag.Scope) : aset<RenderPass * IRenderTask> = x?OverlayTasks(scope)
 
     module Semantic =
         let renderObjects (scope : Ag.Scope) (s : ISg) : aset<IRenderObject> = s?RenderObjects(scope)
-        let overlayTasks (scope : Ag.Scope) (s : ISg) : aset<RenderPass * IRenderTask> = s?OverlayTasks(scope)
 
 
     [<Rule>]
@@ -136,7 +157,7 @@ module RenderObjectSemantics =
                     let! info = r.DrawCallInfo
                     if info.FaceVertexCount < 0 then
                         let! (count : int) = scope?FaceVertexCount
-                        return 
+                        return
                             [ DrawCallInfo(
                                 FirstIndex = info.FirstIndex,
                                 FirstInstance = info.FirstInstance,
@@ -169,7 +190,7 @@ module RenderObjectSemantics =
                     member x.All = Seq.empty
 
                     member x.Dispose() = ()
-                
+
                 }
 
             let indirect =
@@ -202,7 +223,7 @@ module RenderObjectSemantics =
                                 | Rem(_,g) -> packer.Remove g |> ignore
 
                             ()
-                        
+
                     }
 
 
@@ -224,27 +245,3 @@ module RenderObjectSemantics =
             rj.Activate <- activate
 
             ASet.single (rj :> IRenderObject)
-
-        member x.RenderObjects(r : Sg.OverlayNode, scope : Ag.Scope) : aset<IRenderObject> =
-            ASet.empty
-
-    [<Rule>]
-    type SubTaskSem() =
-        member x.OverlayTasks(r : ISg, scope : Ag.Scope) : aset<RenderPass * IRenderTask> =
-            ASet.empty
-
-        member x.OverlayTasks(app : IApplicator, scope : Ag.Scope) =
-            aset {
-                let! c = app.Child
-                yield! c.OverlayTasks(scope)
-            }
-
-
-        member x.OverlayTasks(g : IGroup, scope : Ag.Scope) =
-            aset {
-                for c in g.Children do
-                    yield! c.OverlayTasks(scope)
-            }
-
-        member x.OverlayTasks(r : Sg.OverlayNode, scope : Ag.Scope) =
-            ASet.single (scope.RenderPass, r.RenderTask)

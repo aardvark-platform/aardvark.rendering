@@ -3,8 +3,8 @@ namespace Aardvark.Application.Slim
 #nowarn "9"
 
 open System
-open System.IO
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.Application
 open Aardvark.Rendering.Vulkan
@@ -76,15 +76,22 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
     let mutable swapchain : Option<Swapchain> = None
     let mutable rafap = false
 
-    let startTime = DateTime.Now
-    let sw = System.Diagnostics.Stopwatch.StartNew()
-    let time = AVal.custom (fun _ -> startTime + sw.Elapsed) 
+    let time =
+        let start = System.DateTime.Now
+        let sw = System.Diagnostics.Stopwatch.StartNew()
+        AVal.custom (fun _ ->
+            start + sw.Elapsed
+        )
     
-    let frameWatch = System.Diagnostics.Stopwatch()
     let mutable frameCount = 0
     let mutable totalTime = MicroTime.Zero
-    let mutable baseTitle = ""
+    let mutable totalGpuTime = MicroTime.Zero
+    let mutable averageFrameTime = MicroTime.Zero
+    let mutable averageGpuTime = MicroTime.Zero
+    let mutable measureGpuTime = true
+    let sw = System.Diagnostics.Stopwatch()
 
+    let mutable gpuQuery = Unchecked.defaultof<_>
 
     let eBeforeRender = FSharp.Control.Event<unit>()
     let eAfterRender =  FSharp.Control.Event<unit>()
@@ -97,14 +104,23 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
                 Log.error "[Vulkan] cannot create device for window: %A" info
                 failwithf "[Vulkan] cannot create device for window: %A" info
     
-    member x.NewFrame (t : MicroTime) = 
+    member x.NewFrame (t : MicroTime, gpu : MicroTime) = 
         frameCount <- frameCount + 1
         totalTime <- totalTime + t
+        totalGpuTime <- totalGpuTime + gpu
         if frameCount > 50 then
-            let fps = float frameCount / totalTime.TotalSeconds
-            base.Title <- DefaultText.baseText + sprintf " (%.3f fps)" fps
+            averageFrameTime <- totalTime / frameCount
+            averageGpuTime <- totalGpuTime / frameCount
+
+            if measureGpuTime then
+                let r = 100.0 * (averageGpuTime / averageFrameTime)
+                base.Title <- sprintf "%s (%A/%.1f%%)" DefaultText.baseText averageFrameTime r
+            else
+                base.Title <- sprintf "%s (%A)" DefaultText.baseText averageFrameTime
+
             frameCount <- 0
             totalTime <- MicroTime.Zero
+            totalGpuTime <- MicroTime.Zero
         ()
     member x.RenderTask
         with get() = 
@@ -133,6 +149,7 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
         let info = unbox<OpenTK.Platform.IWindowInfo> x.WindowInfo
         surface <- createSurface info
         swapchainDesc <- device.CreateSwapchainDescription(surface, mode)
+        gpuQuery <- runtime.CreateTimeQuery()
 
         let k = x.Keyboard
         k.KeyDown(Keys.End).Values.Add (fun () ->
@@ -156,21 +173,16 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
 
             invalidSize <- newInvalidSize
         )
-        
-        let sw = System.Diagnostics.Stopwatch()
-        eBeforeRender.Publish.Add sw.Restart
-        eAfterRender.Publish.Add (fun () -> sw.Stop(); x.NewFrame sw.MicroTime)
-        
 
     override x.OnUnload() =
         match swapchain with
             | Some c -> 
-                device.Delete c
+                c.Dispose()
                 swapchain <- None
             | None -> ()
 
-        device.Delete swapchainDesc
-        device.Delete surface
+        swapchainDesc.Dispose()
+        surface.Dispose()
         surface <- Unchecked.defaultof<_>
         swapchainDesc <- Unchecked.defaultof<_>
 
@@ -180,9 +192,13 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
         resizeSub.Dispose()
         resizeSub <- noDispose
 
+        gpuQuery.Dispose()
+
         ()
 
     override x.OnRender() =
+        sw.Restart()
+
         transact time.MarkOutdated
         eBeforeRender.Trigger()
         let s = surface.Size
@@ -202,11 +218,27 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
                         swapchain <- Some c
                         c
 
+            let queries =
+                if measureGpuTime then
+                    gpuQuery :> IQuery
+                else
+                    Queries.none
+
             swapchain.RenderFrame(fun framebuffer ->
-                task.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer framebuffer)
+                task.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer framebuffer, queries)
             )
 
         eAfterRender.Trigger()
+
+        let gpuTime =
+            if measureGpuTime && s.AllGreater 0 then
+                gpuQuery.TryGetResult(true) |> Option.defaultValue MicroTime.Zero
+            else
+                MicroTime.Zero
+
+        sw.Stop()
+        x.NewFrame(sw.MicroTime, gpuTime)
+
         AdaptiveObject.RunAfterEvaluate time.MarkOutdated
         if rafap then x.Invalidate()
 
@@ -221,7 +253,12 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
         swapchainDesc.samples
     member this.Time = time
     
-    member x.AverageFrameTime = totalTime / float frameCount
+    member x.AverageFrameTime = averageFrameTime
+    member x.AverageGPUFrameTime = averageGpuTime
+
+    member x.MeasureGpuTime
+        with get() = measureGpuTime
+        and set v = measureGpuTime <- v
 
     member x.SubSampling
         with get() =  1.0
@@ -243,6 +280,9 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
         member this.Time = time
 
     interface IRenderControl with
+        member this.Cursor
+            with get() = this.Cursor
+            and set c = this.Cursor <- c
         member this.Keyboard = this.Keyboard
         member this.Mouse = this.Mouse
 
@@ -250,7 +290,7 @@ type VulkanRenderWindow(instance : Instance, runtime : Runtime, position : V2i, 
         member x.Run() = x.Run()
 
 
-type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
+type VulkanApplication(debug : DebugConfig option, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
     let requestedExtensions =
         [
             yield Instance.Extensions.Surface
@@ -259,44 +299,43 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
             yield Instance.Extensions.XcbSurface
             yield Instance.Extensions.XlibSurface
 
-            yield "VK_EXT_shader_subgroup_ballot"
-            yield "VK_EXT_shader_subgroup_vote"
+            yield Instance.Extensions.ShaderSubgroupVote
+            yield Instance.Extensions.ShaderSubgroupBallot
             yield Instance.Extensions.GetPhysicalDeviceProperties2
 
-            if debug then
+            if debug.IsSome then
                 yield Instance.Extensions.DebugReport
                 yield Instance.Extensions.DebugUtils
-
         ]
 
     let requestedLayers =
         [
-            if debug then
-                yield Instance.Layers.StandardValidation
-                yield "VK_LAYER_LUNARG_assistant_layer"
-                //yield Instance.Layers.Nsight
-                //yield Instance.Layers.SwapChain
-                //yield Instance.Layers.DrawState
-                //yield Instance.Layers.ParamChecker
-                //yield Instance.Layers.DeviceLimits
-                //yield Instance.Layers.CoreValidation
-                //yield Instance.Layers.ParameterValidation
-                //yield Instance.Layers.ObjectTracker
-                //yield Instance.Layers.Threading
-                //yield Instance.Layers.UniqueObjects
-                //yield Instance.Layers.Image
+            if debug.IsSome then
+                yield Instance.Layers.Validation
+                yield Instance.Layers.AssistantLayer
         ]
 
     let instance = 
-        let availableExtensions =
-            Instance.GlobalExtensions |> Seq.map (fun e -> e.name) |> Set.ofSeq
+        let isExtensionAvailable ext =
+            Instance.GlobalExtensions |> Seq.exists (fun e -> e.name = ext)
 
-        let availableLayers =
-            Instance.AvailableLayers |> Seq.map (fun l -> l.name) |> Set.ofSeq
+        let isLayerAvailable layer =
+            Instance.AvailableLayers |> Seq.exists (fun l -> l.name = layer)
+
+        // Report missing extensions and layers
+        let reportMissing (name : string) (available : string -> bool) (objects : string list) =
+            objects
+            |> List.filter (available >> not)
+            |> List.iter (fun x ->
+                Log.warn "Requested Vulkan %s not available: %s" name x
+            )
+
+        requestedExtensions |> reportMissing "extension" isExtensionAvailable
+        requestedLayers |> reportMissing "validation layer" isLayerAvailable
 
         // create an instance
-        let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
-        let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers)
+        let enabledExtensions = requestedExtensions |> List.filter isExtensionAvailable
+        let enabledLayers = requestedLayers |> List.filter isLayerAvailable
     
         new Instance(Version(1,1,0), enabledLayers, enabledExtensions)
 
@@ -326,9 +365,9 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
     let defaultCachePath =
         let dir =
             Path.combine [
-                Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData)
-                "Aardvark"
-                "VulkanShaderCache"
+                CachingProperties.CacheDirectory
+                "Shaders"
+                "Vulkan"
             ]
         runtime.ShaderCachePath <- Some dir
         dir
@@ -358,6 +397,10 @@ type VulkanApplication(debug : bool, chooseDevice : list<PhysicalDevice> -> Phys
         member x.Initialize(ctrl : IRenderControl, samples : int) = failwithf "[Vulkan] unsupported RenderControl: %A" ctrl
            
            
+    new(debug : bool, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
+        new VulkanApplication((if debug then Some DebugConfig.Default else None), chooseDevice)
+
     new(debug : bool) = new VulkanApplication(debug, ConsoleDeviceChooser.run)
-    new(choose : list<PhysicalDevice> -> PhysicalDevice) = new VulkanApplication(false, choose)
-    new() = new VulkanApplication(false, ConsoleDeviceChooser.run)
+    new(debug : DebugConfig) = new VulkanApplication(Some debug, ConsoleDeviceChooser.run)
+    new(choose : list<PhysicalDevice> -> PhysicalDevice) = new VulkanApplication(None, choose)
+    new() = new VulkanApplication(None, ConsoleDeviceChooser.run)

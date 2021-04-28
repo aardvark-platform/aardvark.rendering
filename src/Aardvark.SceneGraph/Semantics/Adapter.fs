@@ -1,11 +1,10 @@
 ﻿namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
-open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
+open Aardvark.Rendering
 open Aardvark.SceneGraph
-open Aardvark.Base.Rendering
-
+open FSharp.Data.Adaptive
 
 [<AutoOpen>]
 module AdapterSemantics =

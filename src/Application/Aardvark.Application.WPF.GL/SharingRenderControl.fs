@@ -3,13 +3,13 @@
 open System
 open System.Runtime.InteropServices
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open System.Windows
 open System.Windows.Controls
-open System.Windows.Forms.Integration
 open Aardvark.Application
 open System.Windows.Threading
 open System.Security
@@ -118,7 +118,7 @@ module WGLDXExtensions =
                 if not loaded then
                     loaded <- true
                     match ContextHandle.Current with
-                        | Some handle ->
+                        | ValueSome handle ->
                             wglDXSetResourceShareHandleNV <- handle.Import "wglDXSetResourceShareHandleNV"
                             wglDXOpenDeviceNV <- handle.Import "wglDXOpenDeviceNV"
                             wglDXCloseDeviceNV <- handle.Import "wglDXCloseDeviceNV"
@@ -127,11 +127,11 @@ module WGLDXExtensions =
                             wglDXObjectAccessNV <- handle.Import "wglDXObjectAccessNV"
                             wglDXLockObjectsNV <- handle.Import "wglDXLockObjectsNV"
                             wglDXUnlockObjectsNV <- handle.Import "wglDXUnlockObjectsNV"
-                        | None ->
+                        | ValueNone ->
                             failwith "[WGL] cannot load WGL_NV_DX_interop without a context"
 
 
-                assert (Option.isSome ContextHandle.Current)
+                assert (ValueOption.isSome ContextHandle.Current)
             )
 
         static member WGL_NV_DX_interop = supported
@@ -417,17 +417,13 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
     let size = AVal.init V2i.II
 
     let mutable renderTask = RenderTask.empty
+    let mutable cursor = Cursor.Default
 
     let signature =
-        new FramebufferSignature(
-            runtime, 
-            Map.ofList [0, (DefaultSemantic.Colors, { samples = samples; format = RenderbufferFormat.Rgba8 })], 
-            Map.empty, 
-            Some { samples = samples; format = RenderbufferFormat.Depth24Stencil8 }, 
-            None,
-            1,
-            Set.empty
-        )
+        runtime.CreateFramebufferSignature(samples, [
+            DefaultSemantic.Colors, RenderbufferFormat.Rgba8
+            DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+        ])
 
     let startTime = DateTime.Now
     let sw = System.Diagnostics.Stopwatch.StartNew()
@@ -680,7 +676,7 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
 
     member x.ContextHandle = handle
 
-    member x.FramebufferSignature = signature :> IFramebufferSignature
+    member x.FramebufferSignature = signature
     
     member x.Keyboard = keyboard :> IKeyboard
     member x.Mouse = mouse :> IMouse
@@ -698,6 +694,22 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
         with get() = 1.0
         and set v = if v <> 1.0 then failwith "[OpenGLSharing] SubSampling not implemented"
 
+    member x.Cursor
+        with get() = cursor
+        and set c =
+            if c <> cursor then
+                cursor <- c
+                match c with
+                | Cursor.Default -> base.Cursor <- null
+                | Cursor.None -> base.Cursor <- Input.Cursors.None
+                | Cursor.Arrow -> base.Cursor <- Input.Cursors.Arrow
+                | Cursor.Hand -> base.Cursor <- Input.Cursors.Hand
+                | Cursor.Crosshair -> base.Cursor <- Input.Cursors.Cross
+                | Cursor.HorizontalResize -> base.Cursor <- Input.Cursors.SizeWE
+                | Cursor.VerticalResize -> base.Cursor <- Input.Cursors.SizeNS
+                | Cursor.Text -> base.Cursor <- Input.Cursors.IBeam
+                | Cursor.Custom _ -> Log.error "[WPF] custom cursors not supported atm."
+
     interface IRenderTarget with
         member x.FramebufferSignature = x.FramebufferSignature
         member x.Samples = 1
@@ -714,5 +726,8 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
         member x.AfterRender = afterRender.Publish
 
     interface IRenderControl with
+        member this.Cursor
+            with get() = this.Cursor
+            and set c = this.Cursor <- c
         member x.Mouse = mouse :> IMouse
         member x.Keyboard = keyboard :> IKeyboard

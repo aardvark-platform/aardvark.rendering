@@ -1,5 +1,6 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.GPGPU
 
+open Aardvark.Base
 
 [<AutoOpen>]
 module GPGPUHelpers =

@@ -2,18 +2,13 @@
 
 open System
 open System.Security
-open System.Collections.Generic
-open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
-open Aardvark.Rendering
-open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open FSharp.Data.Adaptive
 open FShade
-open Microsoft.FSharp.NativeInterop
-open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering
+open Aardvark.Rendering.ShaderReflection
 open Aardvark.Rendering.GL
 
 #nowarn "9"
@@ -252,7 +247,7 @@ and ComputeShader(prog : Program, localSize : V3i) =
         iface.samplers |> MapExt.toList |> List.map (fun (_,u) ->
             match u.samplerTextures with
                 | [(name, state)] ->
-                    u.samplerBinding, name, ctx.CreateSampler state.SamplerStateDescription
+                    u.samplerBinding, name, ctx.CreateSampler state.SamplerState
                 | _ ->
                     failwith "not implemented"
             //match u.Type with
@@ -337,7 +332,7 @@ type private GLCompute(ctx : Context) =
 
 
 
-    member private x.Run(i : ComputeCommand, boundThings : System.Collections.Generic.HashSet<Bound>) =
+    member private x.Run(i : ComputeCommand, boundThings : System.Collections.Generic.HashSet<Bound>, queries : IQuery) =
         match i with
             | ComputeCommand.BindCmd shader ->
                 let shader = unbox<ComputeShader> shader
@@ -386,7 +381,7 @@ type private GLCompute(ctx : Context) =
             | ComputeCommand.SetBufferCmd(dst, value) ->
                 let dstBuffer = unbox<GL.Buffer> dst.Buffer
                 let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
-                GL.NamedClearBufferSubData(dstBuffer.Handle, PixelInternalFormat.R32ui, dst.Offset, dst.Size, PixelFormat.Red, PixelType.UnsignedInt, gc.AddrOfPinnedObject())
+                GL.ClearNamedBufferSubData(dstBuffer.Handle, PixelInternalFormat.R32ui, dst.Offset, dst.Size, PixelFormat.Red, PixelType.UnsignedInt, gc.AddrOfPinnedObject())
                 gc.Free()
                 GL.Sync()
                 GL.Check()
@@ -405,12 +400,15 @@ type private GLCompute(ctx : Context) =
                     | HostMemory.Unmanaged ptr ->   
                         GL.GetNamedBufferSubData(srcBuffer.Handle, src.Offset, src.Size, ptr)
             | ComputeCommand.ExecuteCmd other ->
-                other.Run()
+                other.Run(queries)
     
-    member x.Run(i : list<ComputeCommand>) =
+    member x.Run(i : list<ComputeCommand>, queries : IQuery) =
         use __ = ctx.ResourceLock
+
+        queries.Begin()
+
         let boundThings = System.Collections.Generic.HashSet<_>()
-        for i in i do x.Run(i, boundThings)
+        for i in i do x.Run(i, boundThings, queries)
         for b in boundThings do
             match b with
                 | Bound.Buffer(slot,target) -> 
@@ -421,6 +419,9 @@ type private GLCompute(ctx : Context) =
                     GL.ActiveTexture(TextureUnit.Texture0 + unbox slot)
                     GL.BindTexture(target,0)
                     GL.BindSampler(slot,0)
+
+        queries.End()
+
         GL.Sync()
 
 [<AutoOpen>]
@@ -470,15 +471,6 @@ module GLComputeExtensions =
 
             printfn "%s" glsl.code
 
-            let samplerDescriptions =
-                shader.csTextureNames |> Map.map (fun (name, index) texName ->
-                    let samplerState =
-                        match Map.tryFind (name, index) shader.csSamplerStates with
-                            | Some sam -> sam
-                            | _ -> SamplerState.empty
-                    { textureName = Symbol.Create texName; samplerState = samplerState.SamplerStateDescription }
-                )
-
             let adjust (s : GLSL.GLSLSampler) =
                 let textures =
                     List.init s.samplerCount (fun i -> 
@@ -509,6 +501,6 @@ module GLComputeExtensions =
         member x.Delete(k : ComputeShader) =
             k.Dispose()
 
-        member x.Run(i : list<ComputeCommand>) =
+        member x.Run(i : list<ComputeCommand>, queries : IQuery) =
             let c = getGLCompute x
-            c.Run i
+            c.Run(i, queries)

@@ -1,14 +1,11 @@
 ﻿namespace Aardvark.Rendering.Interactive
 
-open System
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
 open Aardvark.SceneGraph
-open Aardvark.SceneGraph.Semantics
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open Aardvark.Application.WinForms.Vulkan
 
 type RendererConfiguration =
     Vulkan | GL

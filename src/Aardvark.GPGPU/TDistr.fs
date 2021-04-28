@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.GPGPU
 module TDistribution =
     let Data =
         [|

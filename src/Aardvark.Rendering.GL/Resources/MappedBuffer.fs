@@ -2,17 +2,14 @@
 
 open System
 open System.Threading
-open System.Collections.Concurrent
 open System.Runtime.InteropServices
 open Aardvark.Base
+open Aardvark.Rendering
+open Aardvark.Rendering.Management
 open FSharp.Data.Adaptive
-open OpenTK
-open OpenTK.Platform
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
-open Microsoft.FSharp.NativeInterop
 open Aardvark.Rendering.GL
-open Management
 
 #nowarn "9"
 #nowarn "51"
@@ -50,7 +47,7 @@ module ResizeBufferImplementation =
                 status = WaitSyncStatus.AlreadySignaled
 
         static member Create() =
-            let ctx = Option.get ContextHandle.Current
+            let ctx = ValueOption.get ContextHandle.Current
             let f = GL.FenceSync(SyncCondition.SyncGpuCommandsComplete, WaitSyncFlags.None)
             GL.Check "could not enqueue fence"
             GL.Flush()
@@ -68,7 +65,7 @@ module ResizeBufferImplementation =
                 Log.warn "waiting on disposed fence"
 
         member x.WaitGPU() =
-            let ctx = Option.get ContextHandle.Current
+            let ctx = ValueOption.get ContextHandle.Current
             x.WaitGPU ctx
 
         member x.WaitCPU() =
@@ -107,7 +104,7 @@ module ManagedBufferImplementation =
             lock lockObj (fun () ->
                 if not initialized then
                     initialized <- true
-                    let handle = ContextHandle.Current |> Option.get
+                    let handle = ContextHandle.Current |> ValueOption.get
                     let ctx = handle.Handle |> unbox<IGraphicsContextInternal>
                     let ptr = ctx.GetAddress("glBufferPageCommitmentARB")
                     if ptr <> 0n then
@@ -576,7 +573,7 @@ module ManagedBufferImplementation =
                     GL.Check "could not allocate temp-buffer"
 
                     // copy data to temp
-                    GL.NamedCopyBufferSubData(handle, temp, 0n, 0n, copySize)
+                    GL.CopyNamedBufferSubData(handle, temp, 0n, 0n, copySize)
                     GL.Check (sprintf "could not copy buffer (size: %A)" copySize)
                     
                     // resize the original buffer
@@ -584,7 +581,7 @@ module ManagedBufferImplementation =
                     GL.Check "could not reallocate buffer"
                     
                     // copy data back
-                    GL.NamedCopyBufferSubData(temp, handle, 0n, 0n, copySize)
+                    GL.CopyNamedBufferSubData(temp, handle, 0n, 0n, copySize)
                     GL.Check "could not copy buffer"
 
                     // delete the temp buffer

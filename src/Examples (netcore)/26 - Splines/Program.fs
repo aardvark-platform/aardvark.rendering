@@ -1,5 +1,6 @@
 ﻿open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
+open Aardvark.GPGPU
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
@@ -290,7 +291,7 @@ module Sg =
                 res, total
 
             let overall =
-                { new AbstractOutputMod<IBuffer<V4f> * int>() with
+                { new AdaptiveResource<IBuffer<V4f> * int>() with
                     member x.Create() = 
                         Log.warn "create"
                         cps <- runtime.CreateBuffer<V4f>(cpsArray.Length)
@@ -310,9 +311,9 @@ module Sg =
                 }
             
 
-            overall :> IOutputMod<_>
+            overall :> IAdaptiveResource<_>
             //let buffer =
-            //    { new AbstractOutputMod<IBuffer>() with
+            //    { new AdaptiveResource<IBuffer>() with
             //        member x.Create() = overall.Acquire()
             //        member x.Destroy() = overall.Release()
         
@@ -321,7 +322,7 @@ module Sg =
             //            b.Buffer :> IBuffer
             //    }
             //let count =
-            //    { new AbstractOutputMod<int>() with
+            //    { new AdaptiveResource<int>() with
             //        member x.Create() = overall.Acquire()
             //        member x.Destroy() = overall.Release()
         
@@ -329,7 +330,7 @@ module Sg =
             //            let (_,c) = overall.GetValue(t)
             //            2 * c
             //    }
-            //buffer :> IOutputMod<_>, count :> IOutputMod<_>
+            //buffer :> IAdaptiveResource<_>, count :> IAdaptiveResource<_>
             
         member x.GlobalBoundingBox(s : SplineNode, scope : Ag.Scope) =
             let t = scope.ModelTrafo
@@ -346,11 +347,11 @@ module Sg =
             //let mm = s.ControlPoints |> AVal.map (subdiv runtime s.Threshold s.ViewportSize mvp)
             let cps = s.ControlPoints
 
-            let mutable last : Option<IOutputMod<_>> = None
+            let mutable last : Option<IAdaptiveResource<_>> = None
             let mutable cpsChanged = false
 
             let bind (view : IBuffer<V4f> * int -> 'a) =
-                { new AbstractOutputMod<'a>() with
+                { new AdaptiveResource<'a>() with
                     override x.InputChangedObject(o,i) =
                         if i = (cps :> IAdaptiveObject) then cpsChanged <- true
 

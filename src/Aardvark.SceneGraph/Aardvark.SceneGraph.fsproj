@@ -1,10 +1,11 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>Aardvark.SceneGraph</AssemblyName>
     <OutputType>Library</OutputType>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <OutputPath>..\..\bin\Debug\</OutputPath>
@@ -41,7 +42,6 @@
     <Compile Include="IndexedGeometryPrimitives.fs" />
     <Compile Include="PointCloud.fs" />
     <Compile Include="ManagedPool.fs" />
-    <Compile Include="FShadeSceneGraph.fs" />
     <Compile Include="ShaderCompositions.fs" />
     <Compile Include="Imperative.fs" />
     <Compile Include="SgCSharp.fs" />
@@ -49,7 +49,7 @@
     <Compile Include="RenderTaskExtensions.fs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj" />
+    <ProjectReference Include="..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

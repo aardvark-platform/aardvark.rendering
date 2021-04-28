@@ -4,16 +4,13 @@ open System
 open System.Threading
 open System.Collections.Generic
 open System.Threading.Tasks
-open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop
 open FShade
 open FShade.GLSL
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
-open Aardvark.Base.Management
-open Aardvark.Base.Runtime
+open Aardvark.Rendering
 open Aardvark.Rendering.GL
 
 #nowarn "9"
@@ -1379,9 +1376,9 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
 
   
     let loadTimes = System.Collections.Concurrent.ConcurrentDictionary<Symbol, Regression>()
-    let expandTime = RunningMean(5)
-    let maxQualityTime = RunningMean(5)
-    let updateTime = RunningMean(4)
+    let expandTime = AverageWindow(5)
+    let maxQualityTime = AverageWindow(5)
+    let updateTime = AverageWindow(4)
 
     let addLoadTime (kind : Symbol) (size : int) (t : MicroTime) =
         let mean = loadTimes.GetOrAdd(kind, fun _ -> Regression(1, 100))
@@ -1705,7 +1702,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
 
             if mem || time then
                 if state.nodeSize > 0 && state.count > 0 then
-                    updateTime.Add(sw.MicroTime.TotalMilliseconds)
+                    updateTime.Insert(sw.MicroTime.TotalMilliseconds) |> ignore
 
                 //Log.line "rerun: %d (%d)" cnt renderDelta.Value.Count
                 config.time.GetValue token |> ignore
@@ -1725,7 +1722,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                 match dequeued with
                 | None -> 
                     if state.nodeSize > 0 && state.count > 0 then
-                        updateTime.Add(sw.MicroTime.TotalMilliseconds)
+                        updateTime.Insert(sw.MicroTime.TotalMilliseconds) |> ignore
   
                     //Log.line "done: %d (%d)" cnt renderDelta.Value.Count
 
@@ -1871,9 +1868,9 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                             |> String.concat "; "
                             |> sprintf "[%s]"
                                 
-                        let e = expandTime.Average |> MicroTime.FromMilliseconds
-                        let u = updateTime.Average |> MicroTime.FromMilliseconds
-                        let q = maxQualityTime.Average |> MicroTime.FromMilliseconds
+                        let e = expandTime.Value |> MicroTime.FromMilliseconds
+                        let u = updateTime.Value |> MicroTime.FromMilliseconds
+                        let q = maxQualityTime.Value |> MicroTime.FromMilliseconds
                         ()
 
                         //let roots = readers |> HashMap.keys |> Seq.map string |> String.concat ", "
@@ -2132,7 +2129,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                                 else fst (TreeHelpers.getMaxQuality budget splitfactor (Seq.map fst roots) modelView proj)
 
                             let dt = time() - start
-                            maxQualityTime.Add(dt.TotalMilliseconds)
+                            maxQualityTime.Insert(dt.TotalMilliseconds) |> ignore
 
 
                             
@@ -2145,7 +2142,7 @@ type LodRenderer(ctx : Context, manager : ResourceManager, state : PreparedPipel
                             let q, fin = TaskTree<_>.ProcessQueue(state, queue, maxQ, splitfactor, modelView, proj, maxSplits)
                             lastQ <- q
                             let dt = time() - start
-                            expandTime.Add dt.TotalMilliseconds
+                            expandTime.Insert dt.TotalMilliseconds |> ignore
 
                             transact (fun () -> 
                                 config.stats.Value <-

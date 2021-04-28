@@ -8,7 +8,9 @@ open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
+open Aardvark.Rendering
 open KHRSwapchain
+open Vulkan11
 
 #nowarn "9"
 //// #nowarn "51"
@@ -194,7 +196,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
                 |> Dictionary.toArray 
                 |> Array.map (fun (familyIndex, count) ->
                     VkDeviceQueueCreateInfo(
-                        VkDeviceQueueCreateFlags.MinValue,
+                        VkDeviceQueueCreateFlags.None,
                         uint32 familyIndex,
                         uint32 count,
                         queuePriorities
@@ -206,34 +208,31 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
             let extensions = List.toArray extensions
             let! pExtensions = extensions
 
-            let features = 
-                temporary<VkPhysicalDeviceFeatures, VkPhysicalDeviceFeatures> (fun pFeatures ->
-                    VkRaw.vkGetPhysicalDeviceFeatures(physical.Handle, pFeatures)
-                    NativePtr.read pFeatures
-                )
-
-
             let deviceHandles = deviceGroup |> Array.map (fun d -> d.Handle)
             let! pDevices = deviceHandles
-            let! pGroupInfo =
+            let groupInfo =
                 VkDeviceGroupDeviceCreateInfo(
                     uint32 deviceGroup.Length,
                     pDevices
                 )
-                
-            let next = if isGroup then NativePtr.toNativeInt pGroupInfo else 0n
-            let! pFeatures = features
+
+            // TODO: Do we really want to enable all available features?
+            // Does this have real performance implications?
+            use pNext =
+                DeviceFeatures.toNativeChain dev.Features
+                |> if isGroup then VkStructChain.add groupInfo else id
+
             let! pInfo =
                 VkDeviceCreateInfo(
-                    next,
-                    VkDeviceCreateFlags.MinValue,
+                    pNext.Handle,
+                    VkDeviceCreateFlags.None,
                     uint32 queueInfos.Length, ptr,
                     0u, NativePtr.zero,
                     uint32 extensions.Length, pExtensions,
-                    pFeatures
+                    NativePtr.zero
                 )
             let! pDevice = VkDevice.Zero
-            
+
             VkRaw.vkCreateDevice(physical.Handle,pInfo, NativePtr.zero, pDevice)
                 |> check "could not create device"
 
@@ -354,20 +353,28 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     member x.GetCache(name : Symbol) =
         let res =
             caches.GetOrAdd(name, fun name ->
-                DeviceCache<'a, 'b>(x) :> obj
+                DeviceCache<'a, 'b>(x, name) :> obj
             )
 
         res |> unbox<DeviceCache<'a, 'b>>
 
+    /// Gets or creates a cached resource for the cache with the given name.
+    /// Cached resources are kept alive until they are removed from the cache (see Device.RemoveCached()) and
+    /// all references to it have been disposed.
     member x.GetCached(cacheName : Symbol, value : 'a, create : 'a -> 'b) : 'b =
         let cache : DeviceCache<'a, 'b> = x.GetCache(cacheName)
         cache.Invoke(value, create)
 
-    member x.RemoveCached(cacheName : Symbol, value : 'b) : unit =
-        match caches.TryGetValue cacheName with
+    /// Removes the given resource from its cache (if it was cached).
+    /// The resource is destroyed once all references have been disposed.
+    member x.RemoveCached(value : #CachedResource) : unit =
+        match value.Cache with
+        | Some name ->
+            match caches.TryGetValue(name) with
             | (true, (:? IDeviceCache<'b> as c)) -> c.Revoke value
-            | _ -> ()
-                
+            | (true, _) -> Log.warn "[Vulkan] Cannot remove from device cache '%A' since it is not compatible" name
+            | _ -> Log.warn "[Vulkan] Cannot remove from device cache '%A' since it does not exist" name
+        | _ -> ()
 
     member x.ComputeToken =
         let ref = currentResourceToken.Value
@@ -485,53 +492,58 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
 and IDeviceCache<'b> =
     abstract member Revoke : 'b -> unit
 
-and DeviceCache<'a, 'b when 'b :> RefCountedResource>(device : Device) =
+and DeviceCache<'a, 'b when 'b :> CachedResource>(device : Device, name : Symbol) =
     let store = Dict<'a, 'b>()
     let back = Dict<'b, 'a>()
 
-    do  device.OnDispose.Add(fun _ ->
+    do device.OnDispose.Add(fun _ ->
             for k in back.Keys do
-                k.Destroy()
+                if k.RefCount > 1 then
+                    Log.warn "[Vulkan] Cached resource %A still has %d references" k (k.RefCount - 1)
+                k.Dispose()
             store.Clear()
             back.Clear()
         )
 
     member x.Invoke(value : 'a, create : 'a -> 'b) : 'b =
-        lock store (fun () -> 
+        lock store (fun () ->
             let create (value : 'a) =
                 let res = create value
+                res.Cache <- Some name
                 back.[res] <- value
                 res
             let res = store.GetOrCreate(value, Func<'a, 'b>(create))
-            Interlocked.Increment(&res.RefCount) |> ignore
+            res.AddReference()
             res
         )
 
-    member x.Revoke(thing : 'b) : unit =
+    member x.Revoke(res : 'b) : unit =
         lock store (fun () ->
-            if Interlocked.Decrement(&thing.RefCount) = 0 then
-                match back.TryRemove thing with
-                    | (true, key) -> 
-                        store.Remove key |> ignore
-                        thing.Destroy()
-                    | _ ->
-                        failf "asdasds"
+            match back.TryRemove res with
+            | (true, key) ->
+                store.Remove key |> ignore
+                res.Dispose()
+            | _ ->
+                Log.warn "[Vulkan] Cached resource to be removed not found"
         )
 
     interface IDeviceCache<'b> with
         member x.Revoke b = x.Revoke b
 
+// TODO: The copy engine currently does not acquire references to resource handles,
+// risking that resources are freed while still in use. This may lead to problems
+// in some scenarios.
 and [<RequireQualifiedAccess>] CopyCommand =
     internal
-        | BufferToBufferCmd of src : VkBuffer * dst : VkBuffer * info : VkBufferCopy
-        | BufferToImageCmd of src : VkBuffer * dst : VkImage * dstLayout : VkImageLayout * info : VkBufferImageCopy * size : int64
-        | ImageToBufferCmd of src : VkImage * srcLayout : VkImageLayout * dst : VkBuffer * info : VkBufferImageCopy * size : int64
-        | ImageToImageCmd of src : VkImage * srcLayout : VkImageLayout * dst : VkImage * dstLayout : VkImageLayout * info : VkImageCopy * size : int64
-        | CallbackCmd of (unit -> unit)
-        | ReleaseBufferCmd of buffer : VkBuffer * offset : int64 * size : int64 * dstQueueFamily : uint32
-        | ReleaseImageCmd of image : VkImage * range : VkImageSubresourceRange * srcLayout : VkImageLayout * dstLayout : VkImageLayout * dstQueueFamily : uint32
+        | BufferToBufferCmd  of src : VkBuffer * dst : VkBuffer * info : VkBufferCopy
+        | BufferToImageCmd   of src : VkBuffer * dst : VkImage * dstLayout : VkImageLayout * info : VkBufferImageCopy * size : int64
+        | ImageToBufferCmd   of src : VkImage * srcLayout : VkImageLayout * dst : VkBuffer * info : VkBufferImageCopy * size : int64
+        | ImageToImageCmd    of src : VkImage * srcLayout : VkImageLayout * dst : VkImage * dstLayout : VkImageLayout * info : VkImageCopy * size : int64
+        | CallbackCmd        of (unit -> unit)
+        | ReleaseBufferCmd   of buffer : VkBuffer * offset : int64 * size : int64 * dstQueueFamily : uint32
+        | ReleaseImageCmd    of image : VkImage * range : VkImageSubresourceRange * srcLayout : VkImageLayout * dstLayout : VkImageLayout * dstQueueFamily : uint32
         | TransformLayoutCmd of image : VkImage * range : VkImageSubresourceRange * srcLayout : VkImageLayout * dstLayout : VkImageLayout
-        | SyncImageCmd of image : VkImage * range : VkImageSubresourceRange * layout : VkImageLayout * srcAccess : VkAccessFlags
+        | SyncImageCmd       of image : VkImage * range : VkImageSubresourceRange * layout : VkImageLayout * srcAccess : VkAccessFlags
 
     static member TransformLayout(image : VkImage, range : VkImageSubresourceRange, srcLayout : VkImageLayout, dstLayout : VkImageLayout) =
         CopyCommand.TransformLayoutCmd(image, range, srcLayout, dstLayout)
@@ -628,25 +640,23 @@ and CopyEngine(family : DeviceQueueFamily) =
             // now: latency or batch updates. how to allow both
             //trigger.Wait()
 
-            
-
-            let copies, totalSize = 
+            let copies, enq, totalSize =
                 lock lockObj (fun () ->
 
-                    if not running then 
-                        empty, 0L
+                    if not running then
+                        empty, 0L, 0L
                     else
                         while pending.Count = 0 && running do Monitor.Wait lockObj |> ignore
                         if not running then
-                            empty, 0L
+                            empty, 0L, 0L
                         elif totalSize >= 0L then
                             let mine = pending
                             let s = totalSize
                             pending <- List()
                             totalSize <- 0L
-                            mine, s
+                            mine, vEnqueue, s
                         else
-                            empty, 0L
+                            empty, 0L, 0L
                 )
 
             if copies.Count > 0 then
@@ -655,6 +665,8 @@ and CopyEngine(family : DeviceQueueFamily) =
                 stream.Clear()
 
                 let conts = System.Collections.Generic.List<unit -> unit>()
+
+                pool.Reset()
                 cmd.Begin(CommandBufferUsage.OneTimeSubmit)
                 cmd.AppendCommand()
 
@@ -764,7 +776,7 @@ and CopyEngine(family : DeviceQueueFamily) =
                     )
                 )
                 lock enqueueMon (fun () -> 
-                    vDone <- vEnqueue
+                    vDone <- enq
                     Monitor.PulseAll enqueueMon
                 )
                 fence.Wait()
@@ -833,12 +845,11 @@ and CopyEngine(family : DeviceQueueFamily) =
             threads |> List.iter (fun t -> t.Join())
 
     member x.Enqueue(commands : seq<CopyCommand>) =
-        let size = 
+        let size =
             lock lockObj (fun () ->
                 pending.AddRange commands
-                        
-                //pending.AddRange commands
-                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L 
+
+                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L
                 totalSize <- totalSize + s
 
                 Monitor.PulseAll lockObj
@@ -847,23 +858,23 @@ and CopyEngine(family : DeviceQueueFamily) =
 
         if size > 0L then () // trigger.Signal()
 
+    /// Enqueues the commands and waits for them to be submitted.
     member x.EnqueueSafe(commands : seq<CopyCommand>) =
-        let v = Interlocked.Increment(&vEnqueue)
-        let size = 
+        let enq, size =
             lock lockObj (fun () ->
+                vEnqueue <- vEnqueue + 1L
                 pending.AddRange commands
-                        
-                //pending.AddRange commands
-                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L 
+
+                let s = commands |> Seq.fold (fun s c -> s + c.SizeInBytes) 0L
                 totalSize <- totalSize + s
 
                 Monitor.PulseAll lockObj
 
-                s
+                vEnqueue, s
             )
 
         lock enqueueMon (fun () -> 
-            while vDone < v do
+            while vDone < enq do
                 Monitor.Wait enqueueMon |> ignore
         )
         if size > 0L then () // trigger.Signal()
@@ -899,24 +910,41 @@ and CopyEngine(family : DeviceQueueFamily) =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-and RefCountedResource =
+and [<AbstractClass>] CachedResource =
     class
-        val mutable public RefCount : int
+        inherit Resource
+        val mutable public Cache : Symbol option
 
-        abstract member Destroy : unit -> unit
-        default x.Destroy() = ()
-
-        new() = { RefCount = 0}
+        new(device : Device) = { inherit Resource(device); Cache = None }
+        new(device : Device, cache : Symbol) = { inherit Resource(device); Cache = Some cache }
     end
 
 and [<AbstractClass>] Resource =
     class
         val mutable public Device : Device
+        val mutable public RefCount : int
+
+        member x.AddReference() =
+            Interlocked.Increment(&x.RefCount) |> ignore
+
+        member x.Dispose() =
+            let refs = Interlocked.Decrement(&x.RefCount)
+            if refs < 0 then
+                Log.warn "[Vulkan] Resource has negative reference count"
+            elif refs = 0 then
+                x.Destroy()
 
         abstract member IsValid : bool
-        default x.IsValid = x.Device.Handle <> 0n
+        default x.IsValid =
+            not x.Device.IsDisposed && x.RefCount > 0
 
-        new(device : Device) = { Device = device }
+        abstract member Destroy : unit -> unit
+
+        new(device : Device) = { Device = device; RefCount = 1 }
+
+        interface ICommandResource with
+            member x.AddReference() = x.AddReference()
+            member x.Dispose() = x.Dispose()
     end
 
 and [<AbstractClass>] Resource<'a when 'a : unmanaged and 'a : equality> =
@@ -925,9 +953,12 @@ and [<AbstractClass>] Resource<'a when 'a : unmanaged and 'a : equality> =
         val mutable public Handle : 'a
 
         override x.IsValid =
-            not x.Device.IsDisposed && x.Handle <> Unchecked.defaultof<_>
+            base.IsValid && x.Handle <> Unchecked.defaultof<_>
 
-        new(device : Device, handle : 'a) = 
+        new(device : Device, handle : 'a) =
+            #if DEBUG
+            handle |> pin device.Instance.RegisterDebugTrace
+            #endif
             { inherit Resource(device); Handle = handle }
     end
 
@@ -938,7 +969,6 @@ and DeviceQueue internal(device : Device, deviceHandle : VkDevice, familyInfo : 
             VkRaw.vkGetDeviceQueue(deviceHandle, uint32 familyInfo.index, uint32 index, pQueue)
             NativePtr.read pQueue
         )
-
 
     let transfer = QueueFlags.transfer familyInfo.flags
     let compute = QueueFlags.compute familyInfo.flags
@@ -1218,7 +1248,7 @@ and DeviceTemporaryCommandPool(family : DeviceQueueFamily) =
     let mutable disposeInstalled = 0
 
     let dispose() =
-        bag |> Seq.iter (fun c -> c.Destroy())
+        for c in bag do c.Destroy()
 
     member x.Take() =
         match bag.TryTake() with
@@ -1227,7 +1257,7 @@ and DeviceTemporaryCommandPool(family : DeviceQueueFamily) =
             | _ ->
                 if Interlocked.Exchange(&disposeInstalled, 1) = 0 then
                     family.Device.OnDispose.Add dispose
-                { new CommandPool(family.Device, family.Index, family) with
+                { new CommandPool(family.Device, family.Index, family, CommandPoolFlags.ResetBuffer) with
                     override x.Dispose() =
                         bag.Add x
                 }
@@ -1255,7 +1285,12 @@ and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues :
 
     [<Obsolete>]
     member x.DefaultCommandPool = defaultPool
-    member x.CreateCommandPool() = new CommandPool(device, info.index, x)
+
+    member x.CreateCommandPool () =
+        new CommandPool(device, info.index, x)
+
+    member x.CreateCommandPool (flags : CommandPoolFlags) =
+        new CommandPool(device, info.index, x, flags)
 
     member x.Start (cmd : QueueCommand) : DeviceTask =
         thread.Value.Enqueue cmd
@@ -1340,7 +1375,7 @@ and DeviceCommandPool internal(device : Device, index : int, queueFamily : Devic
             let all = allPools |> Seq.toArray
             allPools.Clear()
             handles.Dispose()
-            all |> Seq.iter (fun h -> 
+            all |> Array.iter (fun h -> 
                 if h.IsValid then
                     VkRaw.vkDestroyCommandPool(device.Handle, h, NativePtr.zero)
             )
@@ -1348,11 +1383,17 @@ and DeviceCommandPool internal(device : Device, index : int, queueFamily : Devic
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-and CommandPool internal(device : Device, familyIndex : int, queueFamily : DeviceQueueFamily) =
+and [<Flags>] CommandPoolFlags =
+    | None          = 0
+    | Transient     = 1
+    | ResetBuffer   = 2
+    | Protected     = 4
+
+and CommandPool internal(device : Device, familyIndex : int, queueFamily : DeviceQueueFamily, flags : CommandPoolFlags) =
     let mutable handle =
         let createInfo =
             VkCommandPoolCreateInfo(
-                VkCommandPoolCreateFlags.ResetCommandBufferBit,
+                flags |> int |> unbox,
                 uint32 familyIndex
             )
         createInfo |> pin (fun pCreate ->
@@ -1363,14 +1404,25 @@ and CommandPool internal(device : Device, familyIndex : int, queueFamily : Devic
             )
         )
 
+    #if DEBUG
+    do device.Instance.RegisterDebugTrace(handle.Handle)
+    #endif
+
+    internal new(device : Device, familyIndex : int, queueFamily : DeviceQueueFamily) =
+        new CommandPool(device, familyIndex, queueFamily, CommandPoolFlags.None)
+
     member x.Device = device
     member x.QueueFamily = queueFamily
     member x.Handle = handle
 
+    member x.Reset() =
+        VkRaw.vkResetCommandPool(device.Handle, handle, VkCommandPoolResetFlags.None)
+            |> check "failed to reset command pool"
+
     member x.Destroy() =
         if handle.IsValid && device.Handle <> 0n then
             VkRaw.vkDestroyCommandPool(device.Handle, handle, NativePtr.zero)
-        
+            handle <- VkCommandPool.Null
 
     abstract member Dispose : unit -> unit
     default x.Dispose() = x.Destroy()
@@ -1380,9 +1432,16 @@ and CommandPool internal(device : Device, familyIndex : int, queueFamily : Devic
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : DeviceQueueFamily, level : CommandBufferLevel) =   
+/// Interface for resources that are used by commands recorded in
+/// command buffers. As long as a command buffer has commands recorded, it keeps references
+/// to their resources to prevent their premature disposal.
+and ICommandResource =
+    inherit IDisposable
+    abstract member AddReference : unit -> unit
 
-    let mutable handle = 
+and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : DeviceQueueFamily, level : CommandBufferLevel) =
+
+    let mutable handle =
         native {
             let! pInfo =
                 VkCommandBufferAllocateInfo(
@@ -1397,107 +1456,89 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
             return !!pHandle
         }
 
+    #if DEBUG
+    do device.Instance.RegisterDebugTrace(handle)
+    #endif
+
     let mutable commands = 0
     let mutable recording = false
-    let cleanupTasks = List<IDisposable>()
-    
-    let cleanup() =
-        for c in cleanupTasks do c.Dispose()
-        cleanupTasks.Clear()
+
+    // Set of resources used by recorded commands. Need to be disposed whenever
+    // the command buffer is reset to allow them to be freed.
+    let resources = HashSet<ICommandResource>()
+
+    let releaseResources() =
+        for r in resources do r.Dispose()
+        resources.Clear()
+
+    let beginPrimary (usage : CommandBufferUsage) =
+        native {
+            let! pInfo =
+                VkCommandBufferBeginInfo(
+                    unbox (int usage),
+                    NativePtr.zero
+                )
+
+            VkRaw.vkBeginCommandBuffer(handle, pInfo)
+                |> check "could not begin command buffer"
+        }
+
+    let beginSecondary (pass : VkRenderPass) (framebuffer : VkFramebuffer) (inheritQueries : bool) (usage : CommandBufferUsage) =
+        native {
+            let occlusion, control, statistics =
+                match inheritQueries with
+                | true -> 1u, VkQueryControlFlags.All, VkQueryPipelineStatisticFlags.All
+                | _ -> 0u, VkQueryControlFlags.None, VkQueryPipelineStatisticFlags.None
+
+            let! pInheritanceInfo =
+                VkCommandBufferInheritanceInfo(
+                    pass, 0u, framebuffer,
+                    occlusion, control, statistics
+                )
+
+            let! pInfo =
+                VkCommandBufferBeginInfo(
+                    unbox (int usage),
+                    pInheritanceInfo
+                )
+
+            VkRaw.vkBeginCommandBuffer(handle, pInfo)
+                |> check "could not begin command buffer"
+        }
+
+    let beginBuffer (pass : VkRenderPass) (framebuffer : VkFramebuffer) (inheritQueries : bool) (usage : CommandBufferUsage) =
+        releaseResources()
+
+        match level with
+        | CommandBufferLevel.Primary -> beginPrimary usage
+        | CommandBufferLevel.Secondary -> beginSecondary pass framebuffer inheritQueries usage
+        | _ -> failwith "unknown command buffer level"
+
+        commands <- 0
+        recording <- true
 
     member x.Reset() =
-        cleanup()
+        releaseResources()
 
         VkRaw.vkResetCommandBuffer(handle, VkCommandBufferResetFlags.ReleaseResourcesBit)
             |> check "could not reset command buffer"
         commands <- 0
         recording <- false
 
+    member x.Begin(pass : Resource<VkRenderPass>, framebuffer : Resource<VkFramebuffer>, usage : CommandBufferUsage, inheritQueries : bool) =
+        beginBuffer pass.Handle framebuffer.Handle inheritQueries usage
+
     member x.Begin(usage : CommandBufferUsage) =
-        native {
-            cleanup()
-            let! pInh =
-                VkCommandBufferInheritanceInfo(
-                    VkRenderPass.Null, 0u,
-                    VkFramebuffer.Null, 
-                    0u,
-                    VkQueryControlFlags.None,
-                    VkQueryPipelineStatisticFlags.None
-                )
-            let! pNext =
-                if device.AllCount > 1u then
-                    VkDeviceGroupCommandBufferBeginInfo(
-                        device.AllMask
-                    ) |> Some
-                else 
-                    None
+        beginBuffer VkRenderPass.Null VkFramebuffer.Null false usage
 
-            let! pInfo =
-                VkCommandBufferBeginInfo(
-                    NativePtr.toNativeInt pNext,
-                    unbox (int usage),
-                    pInh
-                )
-            VkRaw.vkBeginCommandBuffer(handle, pInfo)
-                |> check "could not begin command buffer"
-        }
-
-        commands <- 0
-        recording <- true
+    member x.Begin(usage : CommandBufferUsage, inheritQueries : bool) =
+        beginBuffer VkRenderPass.Null VkFramebuffer.Null inheritQueries usage
 
     member x.Begin(pass : Resource<VkRenderPass>, usage : CommandBufferUsage) =
-        cleanup()
-        let inh =
-            VkCommandBufferInheritanceInfo(
-                pass.Handle, 0u,
-                VkFramebuffer.Null, 
-                0u,
-                VkQueryControlFlags.None,
-                VkQueryPipelineStatisticFlags.None
-            )
-
-        inh |> pin (fun pInh ->
-            let info =
-                VkCommandBufferBeginInfo(
-                    unbox (int usage),
-                    pInh
-                )
-            info |> pin (fun pInfo ->
-                VkRaw.vkBeginCommandBuffer(handle, pInfo)
-                    |> check "could not begin command buffer"
-            )
-        )
-
-        commands <- 0
-        recording <- true
+        beginBuffer pass.Handle VkFramebuffer.Null false usage
 
     member x.Begin(pass : Resource<VkRenderPass>, framebuffer : Resource<VkFramebuffer>, usage : CommandBufferUsage) =
-        cleanup()
-        let inh =
-            VkCommandBufferInheritanceInfo(
-                pass.Handle, 0u,
-                framebuffer.Handle, 
-                0u,
-                VkQueryControlFlags.None,
-                VkQueryPipelineStatisticFlags.None
-            )
-            
-        inh |> pin (fun pInh ->
-            let info =
-                VkCommandBufferBeginInfo(
-                    unbox (int usage),
-                    pInh
-                )
-            
-            info |> pin (fun pInfo ->
-                VkRaw.vkBeginCommandBuffer(handle, pInfo)
-                    |> check "could not begin command buffer"
-            )
-        )
-
-        commands <- 0
-        recording <- true
-
+        beginBuffer pass.Handle framebuffer.Handle false usage
 
     member x.End() =
         VkRaw.vkEndCommandBuffer(handle)
@@ -1552,32 +1593,32 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
     member x.QueueFamily = queueFamily
     member x.Pool = pool
 
-    member x.AddCompensation (d : IDisposable) =
-        cleanupTasks.Add d
+    member x.AddResource(r : ICommandResource) =
+        if resources.Add(r) then r.AddReference()
 
-    member x.Cleanup() =
-        cleanup()
+    member x.AddResources(r : seq<ICommandResource>) =
+        r |> Seq.iter x.AddResource
 
-    member x.ClearCompensation() =
-        cleanupTasks.Clear()
+    member x.AddCompensation(f : unit -> unit) =
+        x.AddResource(
+            { new ICommandResource with
+                member x.AddReference() = ()
+                member x.Dispose() = f() }
+        )
 
+    member x.AddCompensation(d : IDisposable) =
+        x.AddResource(
+            { new ICommandResource with
+                member x.AddReference() = ()
+                member x.Dispose() = d.Dispose() }
+        )
 
-
-    //abstract member Dispose : unit -> unit
-    member private x.Dispose(disposing : bool) =
+    member x.Dispose() =
         if handle <> 0n && device.Handle <> 0n then
-            cleanup()
-            
+            releaseResources()
+
             handle |> pin (fun pHandle -> VkRaw.vkFreeCommandBuffers(device.Handle, pool, 1u, pHandle))
             handle <- 0n
-
-        if disposing then 
-            GC.SuppressFinalize(x)
-        else 
-            Log.warn "GC found leaking commandbuffer"
-
-    member x.Dispose() = x.Dispose(true)
-    override x.Finalize() = x.Dispose(false)
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -1596,6 +1637,10 @@ and Fence internal(device : Device, signaled : bool) =
             VkRaw.vkCreateFence(device.Handle, pInfo, NativePtr.zero, pFence)
                 |> check "could not create fence"
         }
+
+    #if DEBUG
+    do device.Instance.RegisterDebugTrace(pFence)
+    #endif
 
     member x.Device = device
     member x.Handle = NativePtr.read pFence
@@ -1623,14 +1668,14 @@ and Fence internal(device : Device, signaled : bool) =
     member x.Signaled =
         let handle = NativePtr.read pFence
         if handle.IsValid then
-            VkRaw.vkGetFenceStatus(device.Handle, handle) = VkResult.VkSuccess
+            VkRaw.vkGetFenceStatus(device.Handle, handle) = VkResult.Success
         else
             true
 
     member x.Completed =
         let handle = NativePtr.read pFence
         if handle.IsValid then
-            VkRaw.vkGetFenceStatus(device.Handle, handle) <> VkResult.VkNotReady
+            VkRaw.vkGetFenceStatus(device.Handle, handle) <> VkResult.NotReady
         else
             true
 
@@ -1646,9 +1691,9 @@ and Fence internal(device : Device, signaled : bool) =
     member x.TryWait(timeoutInNanoseconds : int64) =
         let waitResult = VkRaw.vkWaitForFences(device.Handle, 1u, pFence, 1u, uint64 timeoutInNanoseconds)
         match waitResult with
-            | VkResult.VkTimeout -> 
+            | VkResult.Timeout -> 
                 false
-            | VkResult.VkSuccess -> 
+            | VkResult.Success -> 
                 true
             | err -> 
                 failf "could not wait for fences: %A" err
@@ -1688,6 +1733,10 @@ and Semaphore internal(device : Device) =
             )
         )
 
+    #if DEBUG
+    do device.Instance.RegisterDebugTrace(handle.Handle)
+    #endif
+
     member x.Device = device
     member x.Handle = handle
 
@@ -1718,14 +1767,18 @@ and Event internal(device : Device) =
             )
         )
 
+    #if DEBUG
+    do device.Instance.RegisterDebugTrace(handle.Handle)
+    #endif
+
     member x.Device = device
     member x.Handle = handle
 
     member x.IsSet =
         if handle.IsValid then
             let res = VkRaw.vkGetEventStatus(device.Handle, handle)
-            if res = VkResult.VkEventSet then true
-            elif res = VkResult.VkEventReset then false
+            if res = VkResult.EventSet then true
+            elif res = VkResult.EventReset then false
             else failf "could not get event status"
         else
             failf "could not get event status"
@@ -1774,7 +1827,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
         let hostPtr = 
             if hostVisible then
                 temporary<nativeint, nativeint> (fun pPtr ->
-                    VkRaw.vkMapMemory(device.Handle, mem, 0UL, 16UL, VkMemoryMapFlags.MinValue, pPtr)
+                    VkRaw.vkMapMemory(device.Handle, mem, 0UL, 16UL, VkMemoryMapFlags.None, pPtr)
                         |> check "could not map memory"
                     NativePtr.read pPtr
                 )
@@ -1837,7 +1890,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                 let hostPtr = 
                     if hostVisible then
                         temporary<nativeint, nativeint> (fun pPtr ->
-                            VkRaw.vkMapMemory(device.Handle, mem, 0UL, uint64 size, VkMemoryMapFlags.MinValue, pPtr)
+                            VkRaw.vkMapMemory(device.Handle, mem, 0UL, uint64 size, VkMemoryMapFlags.None, pPtr)
                                 |> check "could not map memory"
                             NativePtr.read pPtr
                         )
@@ -2116,6 +2169,10 @@ and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int
     let mutable handle = handle
     let mutable size = size
 
+    #if DEBUG
+    do if handle <> VkDeviceMemory.Null then heap.Device.Instance.RegisterDebugTrace(handle.Handle)
+    #endif
+
     static member Null = nullptr
 
     member x.Heap = heap
@@ -2207,15 +2264,9 @@ and [<AllowNullLiteral>] DevicePtr internal(memory : DeviceMemory, offset : int6
         else
             failf "cannot map host-invisible memory"
 
-
-
 and ICommand =
     abstract member Compatible : QueueFlags
-    abstract member TryEnqueue : CommandBuffer * byref<Disposable> -> bool
-
-and [<Obsolete>] IQueueCommand =
-    abstract member Compatible : QueueFlags
-    abstract member TryEnqueue : queue : DeviceQueue * waitFor : list<Semaphore> * disp : byref<Disposable> * Option<Semaphore> * Option<Fence> -> bool
+    abstract member Enqueue : CommandBuffer -> unit
 
 and ImageBind =
     {
@@ -2236,14 +2287,13 @@ and BufferBind =
     }
 
 and QueueCommand =
-    | Submit of waitFor : list<Semaphore> * signal : list<Semaphore> * cmds : list<CommandBuffer>
-    | BindSparse of imageBinds : list<ImageBind> * bufferBinds : list<BufferBind>
-    | AcquireNextImage of swapchain : VkSwapchainKHR * buffer : ref<uint32>
-    | Present of swapchain : VkSwapchainKHR * buffer : ref<uint32>
-        
-    | ExecuteCommand of waitFor : list<Semaphore> * signal : list<Semaphore> * cmd : ICommand
-    | Atomically of children : list<QueueCommand>
-    | Custom of (DeviceQueue -> Fence -> unit)
+    | Submit            of waitFor : list<Semaphore> * signal : list<Semaphore> * cmds : list<CommandBuffer>
+    | BindSparse        of imageBinds : list<ImageBind> * bufferBinds : list<BufferBind>
+    | AcquireNextImage  of swapchain : VkSwapchainKHR * buffer : ref<uint32>
+    | Present           of swapchain : VkSwapchainKHR * buffer : ref<uint32>
+    | ExecuteCommand    of waitFor : list<Semaphore> * signal : list<Semaphore> * cmd : ICommand
+    | Atomically        of children : list<QueueCommand>
+    | Custom            of (DeviceQueue -> Fence -> unit)
 
 and DeviceTask(parent : DeviceQueueThread, priority : int) =
     let lockObj = obj()
@@ -2553,7 +2603,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                 buffer := arr.[0]
                 return res
             }
-        if res <> VkResult.VkSuccess then
+        if res <> VkResult.Success then
             System.Diagnostics.Debugger.Launch() |> ignore
             acquireNextImage queue swapchain buffer fence
             //|> check "could not acquire Swapchain Image"
@@ -2563,7 +2613,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
             let arr = [| !buffer |]
             let! pHandle = [| swapchain |]
             let! pArr = arr
-            let! pResult = [| VkResult.VkSuccess |]
+            let! pResult = [| VkResult.Success |]
 
             let! pInfo =
                 [|
@@ -2610,23 +2660,18 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                 present queue chain buffer
 
             | QueueCommand.ExecuteCommand(waitFor, signal, cmd) ->
-                let buffer = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
+                use buffer = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
                 buffer.Begin(CommandBufferUsage.OneTimeSubmit)
+                cmd.Enqueue(buffer)
+                buffer.End()
 
-                let mutable disp = Disposable.Empty
-                if cmd.TryEnqueue(buffer, &disp) then
-                    buffer.End()
-                    fence.Reset()
-                    submit queue waitFor signal [buffer] fence
-                    fence.Wait()
-
-                if not (isNull disp) then disp.Dispose()
-                buffer.Dispose()
+                fence.Reset()
+                submit queue waitFor signal [buffer] fence
+                fence.Wait()
 
             | QueueCommand.Atomically many ->
                 Log.warn "atomic"
                 for m in many do perform queue pool m fence
-                    
 
         ()
 
@@ -2642,7 +2687,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
 
     let run (queue : DeviceQueue) () =
         let device = queue.Device
-        let pool = queue.Family.CreateCommandPool()
+        let pool = queue.Family.CreateCommandPool(CommandPoolFlags.Transient)
         let fence = device.CreateFence()
         try
             while running do
@@ -2670,8 +2715,9 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
         pool.Dispose()
 
     let threads = 
-        family.Queues |> List.map (fun q -> 
-            let thread = Thread(ThreadStart(run q), IsBackground = true)
+        family.Queues |> List.map (fun q ->
+            let name = sprintf "DeviceQueueThread(%d, %d)" q.FamilyIndex q.Index
+            let thread = Thread(ThreadStart(run q), Name = name, IsBackground = true)
             thread.Start()
             thread
         )
@@ -2704,8 +2750,6 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
 and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
     let mutable pool                : Option<CommandPool>   = None
     let mutable current             : Option<CommandBuffer> = None
-    let disposables                 : List<Disposable>      = List()
-
 
     //let mutable isEmpty = true
     let mutable refCount = 1
@@ -2724,32 +2768,42 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
 
     let check () = ()
 
-    let cleanup() =
-        for d in disposables do d.Dispose()
-        disposables.Clear()
+    let getCurrent() =
         match current with
-            | Some b -> 
-                b.Dispose()
-                current <- None
-            | _ -> ()
+        | Some buffer -> buffer
+        | None ->
+            let pool =
+                match pool with
+                | Some p -> p
+                | None ->
+                    let p = family.TakeCommandPool()
+                    pool <- Some p
+                    p
+
+            let buffer = pool.CreateCommandBuffer CommandBufferLevel.Primary
+            buffer.Begin CommandBufferUsage.OneTimeSubmit
+            current <- Some buffer
+            buffer
+
+    let cleanup() =
+        match current with
+        | Some b ->
+            b.Dispose()
+            current <- None
+        | _ -> ()
 
         match pool with
-            | Some p ->
-                p.Dispose()
-                pool <- None
-            | _ -> ()
+        | Some p ->
+            p.Dispose()
+            pool <- None
+        | _ -> ()
 
         refCount <- 1
         //isEmpty <- true
         ref := None
 
     let enqueue (buffer : CommandBuffer) (cmd : ICommand) =
-        let mutable disp = Disposable.Empty
-        if cmd.TryEnqueue(buffer, &disp) then
-            if not (isNull disp) then disposables.Add disp
-        else
-            cleanup()
-            failf "could not enqueue command: %A" cmd
+        cmd.Enqueue(buffer)
 
     let flush(priority : int) =
         match current with
@@ -2777,7 +2831,6 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
                     DeviceTask.Finished
             | None ->
                 DeviceTask.Finished
-        
 
     member x.Flush() =
         check()
@@ -2793,31 +2846,15 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
         check()
         syncTask priority
 
-
-    member x.AddCleanup(f : unit -> unit) =
+    member x.AddCompensation(f : unit -> unit) =
         check()
-        disposables.Add { new Disposable() with member x.Dispose() = f() }
+        let buffer = getCurrent()
+        buffer.AddCompensation(f)
 
     member x.Enqueue (cmd : ICommand) =
         check()
-        match current with
-            | Some buffer -> 
-                enqueue buffer cmd
-                
-            | None ->
-                
-                let pool =
-                    match pool with
-                        | Some p -> p
-                        | None ->
-                            let p = family.TakeCommandPool()
-                            pool <- Some p
-                            p
-
-                let buffer = pool.CreateCommandBuffer CommandBufferLevel.Primary
-                buffer.Begin CommandBufferUsage.OneTimeSubmit
-                current <- Some buffer
-                enqueue buffer cmd
+        let buffer = getCurrent()
+        enqueue buffer cmd
 
     member x.Enqueue (cmd : QueueCommand) =
         check()
@@ -2839,11 +2876,11 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
     member internal x.RemoveRef(priority : int) = 
         check()
         refCount <- refCount - 1
-        if refCount = 0 then 
+        if refCount = 0 then
             ref := None
             x.Sync(priority)
             cleanup()
-            
+
     member x.Dispose(priority : int) =
         check()
         x.RemoveRef(priority)

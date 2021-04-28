@@ -1,5 +1,5 @@
 ﻿open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
@@ -17,8 +17,8 @@ let main argv =
         window {
             display Display.Mono
             samples 8
-            backend Backend.GL
-            debug false
+            backend Backend.Vulkan
+            debug true
         }
     let runtime = win.Runtime
 
@@ -41,7 +41,7 @@ let main argv =
     let size = V2i(1024,1024) |> AVal.init 
 
     // create a scenegraph for the offscreen render passt
-    let offscreenTask = 
+    use offscreenTask = 
         Sg.box' C4b.Red Box3d.Unit
             |> Sg.translate -0.5 -0.5 0.0
             |> Sg.trafo dynamicTrafo
@@ -91,5 +91,8 @@ let main argv =
                 } 
             )
     
-    win.Run()
+    win.Run(preventDisposal = true)
+
+    runtime.DeleteFramebufferSignature(signature)
+
     0

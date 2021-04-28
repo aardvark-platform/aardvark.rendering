@@ -1,10 +1,11 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>Aardvark.Rendering.GL</AssemblyName>
     <OutputType>Library</OutputType>	
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <OutputPath>..\..\bin\Debug\</OutputPath>
@@ -27,11 +28,11 @@
   <ItemGroup>
     <None Include="Wrapper\gl.xml" />
     <None Include="Wrapper\Generator.fsx" />
-    <Compile Include="Core\Trie.fs" />
     <Compile Include="Core\Utilities.fs" />
     <Compile Include="Core\Config.fs" />
     <Compile Include="Core\GLVM.fs" />
     <Compile Include="Core\ContextHandles.fs" />
+    <Compile Include="Core\ShaderCache.fs" />
     <Compile Include="Core\Context.fs" />
     <Compile Include="Core\UnsharedObject.fs" />
     <Compile Include="Core\InternalFormat.fs" />
@@ -41,6 +42,7 @@
     <Compile Include="Core\Extensions\ARB_buffer_storage.fs" />
     <Compile Include="Core\Extensions\ARB_direct_state_access.fs" />
     <Compile Include="Core\Extensions\ARB_sparse_buffer.fs" />
+    <Compile Include="Core\Extensions\ARB_pipeline_statistics_query.fs" />
     <Compile Include="Instructions\OpenGL.fs" />
     <Compile Include="Instructions\CompileContext.fs" />
     <Compile Include="Instructions\Translations.fs" />
@@ -64,6 +66,11 @@
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\AssemblerExtensions.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
+    <Compile Include="Runtime\Query\Query.fs" />
+    <Compile Include="Runtime\Query\TimeQuery.fs" />
+    <Compile Include="Runtime\Query\OcclusionQuery.fs" />
+    <Compile Include="Runtime\Query\GeometryQuery.fs" />
+    <Compile Include="Runtime\Query\PipelineQuery.fs" />
     <Compile Include="Runtime\Statistics.fs" />
     <Compile Include="Runtime\RenderTasks.fs" />
     <Compile Include="Runtime\Compute.fs" />
@@ -74,7 +81,7 @@
     <None Include="paket.template" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj" />
+    <ProjectReference Include="..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />
 </Project>

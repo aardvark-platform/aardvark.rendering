@@ -5,7 +5,7 @@ open System.Threading
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
@@ -31,6 +31,11 @@ type Pipeline =
     class
         inherit Resource<VkPipeline>
         val mutable public Description : PipelineDescription
+
+        override x.Destroy() =
+            if x.Handle.IsValid then
+                VkRaw.vkDestroyPipeline(x.Device.Handle, x.Handle, NativePtr.zero)
+                x.Handle <- VkPipeline.Null
 
         new(device : Device, handle : VkPipeline, description : PipelineDescription) = { inherit Resource<_>(device, handle); Description = description }
     end
@@ -87,7 +92,7 @@ module Pipeline =
 
             let! pVertexInputState =
                 VkPipelineVertexInputStateCreateInfo(
-                    VkPipelineVertexInputStateCreateFlags.MinValue,
+                    VkPipelineVertexInputStateCreateFlags.None,
 
                     uint32 inputBindings.Length,
                     pInputBindings,
@@ -98,7 +103,7 @@ module Pipeline =
 
             let! pInputAssemblyState =
                 VkPipelineInputAssemblyStateCreateInfo(
-                    VkPipelineInputAssemblyStateCreateFlags.MinValue,
+                    VkPipelineInputAssemblyStateCreateFlags.None,
 
                     desc.inputAssembly.topology,
                     vkbool desc.inputAssembly.restartEnable
@@ -107,7 +112,7 @@ module Pipeline =
             let! pRasterizerState =
                 let rs = desc.rasterizerState
                 VkPipelineRasterizationStateCreateInfo(
-                    VkPipelineRasterizationStateCreateFlags.MinValue,
+                    VkPipelineRasterizationStateCreateFlags.None,
                 
                     vkbool rs.depthClampEnable,
                     0u, //vkbool rs.rasterizerDiscardEnable, //breaks if true
@@ -135,13 +140,13 @@ module Pipeline =
             let! pColorBlendState =
                 let cb = desc.colorBlendState
                 VkPipelineColorBlendStateCreateInfo(
-                    VkPipelineColorBlendStateCreateFlags.MinValue,
+                    VkPipelineColorBlendStateCreateFlags.None,
 
                     vkbool cb.logicOpEnable,
                     cb.logicOp,
                     uint32 cb.attachmentStates.Length,
                     pAttachmentBlendStates,
-                    cb.constants
+                    cb.constant
                 )
 
 
@@ -154,7 +159,7 @@ module Pipeline =
                     else 1u
 
                 VkPipelineViewportStateCreateInfo(
-                    VkPipelineViewportStateCreateFlags.MinValue,
+                    VkPipelineViewportStateCreateFlags.None,
                 
                     uint32 vp,
                     NativePtr.zero,
@@ -167,7 +172,7 @@ module Pipeline =
             let! pMultisampleState =
                 let ms = desc.multisampleState
                 VkPipelineMultisampleStateCreateInfo(
-                    VkPipelineMultisampleStateCreateFlags.MinValue,
+                    VkPipelineMultisampleStateCreateFlags.None,
                 
                     unbox ms.samples,
                     vkbool ms.sampleShadingEnable,
@@ -182,7 +187,7 @@ module Pipeline =
                 let d = desc.depthState
                 let s = desc.stencilState
                 VkPipelineDepthStencilStateCreateInfo(
-                    VkPipelineDepthStencilStateCreateFlags.MinValue,
+                    VkPipelineDepthStencilStateCreateFlags.None,
                 
                     vkbool d.testEnabled,
                     vkbool d.writeEnabled,
@@ -202,7 +207,7 @@ module Pipeline =
 
             let! pDynamicStates =
                 VkPipelineDynamicStateCreateInfo(
-                    VkPipelineDynamicStateCreateFlags.MinValue, 
+                    VkPipelineDynamicStateCreateFlags.None, 
 
                     uint32 desc.dynamicStates.Length,
                     NativePtr.cast pDynamicStates
@@ -210,7 +215,7 @@ module Pipeline =
 
             let! pTess =
                 VkPipelineTessellationStateCreateInfo(
-                    VkPipelineTessellationStateCreateFlags.MinValue,
+                    VkPipelineTessellationStateCreateFlags.None,
                     10u
                 )
 
@@ -239,12 +244,8 @@ module Pipeline =
             VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, pPipelineCreateInfo, NativePtr.zero, pPipeline) 
                 |> check "vkCreateGraphicsPipelines"
                 
-            return Pipeline(device, !!pPipeline, desc)
+            return new Pipeline(device, !!pPipeline, desc)
         }
-    let delete (p : Pipeline) (device : Device) =
-        if p.Handle.IsValid then
-            VkRaw.vkDestroyPipeline(device.Handle, p.Handle, NativePtr.zero)
-            p.Handle <- VkPipeline.Null
 
 
 [<AbstractClass; Sealed; Extension>]
@@ -252,7 +253,3 @@ type ContextPipelineExtensions private() =
     [<Extension>]
     static member inline CreateGraphicsPipeline(this : Device, description : PipelineDescription) =
         this |> Pipeline.createGraphics description
-
-    [<Extension>]
-    static member inline Delete(this : Device, pipeline : Pipeline) =
-        this |> Pipeline.delete pipeline

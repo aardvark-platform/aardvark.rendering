@@ -2,7 +2,7 @@
 
 open Microsoft.FSharp.Quotations
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open System.Collections.Concurrent
@@ -316,7 +316,7 @@ type TensorTools<'a when 'a : unmanaged> private(runtime : IRuntime) =
         )
 
     let withImage (img : PixImage) (action : IBackendTexture -> 'r) =
-        let tex = runtime.CreateTexture (img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.empty, 1, 1)
+        let tex = runtime.CreateTexture2D (img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.empty, 1, 1)
         runtime.Upload(tex, 0, 0, img)
         try action tex
         finally runtime.DeleteTexture tex

@@ -9,8 +9,7 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open FSharp.Data.Adaptive.Operators
-open Aardvark.Base.Rendering
-open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Text
 
@@ -146,7 +145,7 @@ module Stereo =
 
 
             let consoleTrafo = 
-                impl.Sizes |> AVal.map (fun s -> 
+                impl.Sizes |> AVal.map (fun (s : V2i) -> 
                     Trafo3d.Scale(float s.Y / float s.X, 1.0, 1.0) *
                     Trafo3d.Translation(-0.95, 0.9, 0.0)
                 )
@@ -225,65 +224,6 @@ module Stereo =
         
         ()
 
-    [<AbstractClass>]
-    type OutputMod<'a, 'b>(inputs : list<IOutputMod>) =
-        inherit AbstractOutputMod<'b>()
-
-        let mutable handle : Option<'a> = None
-
-        abstract member View : 'a -> 'b
-        default x.View a = unbox a
-        
-        abstract member TryUpdate : AdaptiveToken * 'a -> bool
-        default x.TryUpdate(_,_) = false
-
-        abstract member Create : AdaptiveToken -> 'a
-        abstract member Destroy : 'a -> unit
-
-        override x.Create() =
-            for i in inputs do i.Acquire()
-
-        override x.Destroy() =
-            for i in inputs do i.Release()
-            match handle with
-                | Some h -> 
-                    x.Destroy h
-                    handle <- None
-                | _ ->
-                    ()
-
-        override x.Compute(t, rt) =
-            let handle = 
-                match handle with
-                    | Some h ->
-                        if not (x.TryUpdate(t, h)) then
-                            x.Destroy(h)
-                            let h = x.Create(t)
-                            handle <- Some h
-                            h
-                        else
-                            h
-                    | None ->
-                        let h = x.Create t
-                        handle <- Some h
-                        h
-            x.View handle
-                    
-    module OutputMod =
-        let custom (dependent : list<IOutputMod>) (create : AdaptiveToken -> 'a) (tryUpdate : AdaptiveToken -> 'a -> bool) (destroy : 'a -> unit) (view : 'a -> 'b) =
-            { new OutputMod<'a, 'b>(dependent) with
-                override x.Create t = create t
-                override x.TryUpdate(t,h) = tryUpdate t h
-                override x.Destroy h = destroy h
-                override x.View h = view h
-            } :> IOutputMod<_> 
-            
-        let simple (create : AdaptiveToken -> 'a) (destroy : 'a -> unit) =
-            { new OutputMod<'a, 'a>([]) with
-                override x.Create t = create t
-                override x.Destroy h = destroy h
-            } :> IOutputMod<_>
-
     let runNew() =
         let font = Font "Consolas"
 
@@ -344,7 +284,6 @@ module Stereo =
                     DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples }
                     DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
                 ],
-                Set.empty,
                 2, 
                 Set.ofList [
                     "ProjTrafo"; 
@@ -366,38 +305,19 @@ module Stereo =
         let s = win.Sizes |> AVal.map (fun s -> s / V2i(2,1))
 
         let colors =
-            OutputMod.custom 
-                []
-                (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Rgba8, 1, samples, 2))
-                (fun t h -> h.Size.XY = s.GetValue t)
-                (fun h -> runtime.DeleteTexture h)
-                id
-                
+            runtime.CreateTexture2DArray(TextureFormat.Rgba8, samples, s, 2)
+
         let depth =
-            OutputMod.custom 
-                []
-                (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Depth24Stencil8, 1, samples, 2))
-                (fun t h -> h.Size.XY = s.GetValue t)
-                (fun h -> runtime.DeleteTexture h)
-                id
+            runtime.CreateTexture2DArray(TextureFormat.Depth24Stencil8, samples, s, 2)
 
         let resolved =
-            OutputMod.custom 
-                []
-                (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Rgba8, 1, 1, 2))
-                (fun t h -> h.Size.XY = s.GetValue t)
-                (fun h -> runtime.DeleteTexture h)
-                id
-                
-        let framebuffer =
-            OutputMod.custom
-                [colors; depth]
-                (fun t -> runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, colors.GetValue(t).[TextureAspect.Color, 0] :> IFramebufferOutput; DefaultSemantic.Depth, depth.GetValue(t).[TextureAspect.Depth, 0] :> IFramebufferOutput]))
-                (fun t h -> false)
-                (fun h -> runtime.DeleteFramebuffer h)
-                id
+            runtime.CreateTexture2DArray(TextureFormat.Rgba8, 1, s, 2)
 
-        
+        let framebuffer =
+            runtime.CreateFramebuffer(signature, [
+                DefaultSemantic.Colors, runtime.CreateTextureAttachment(colors)
+                DefaultSemantic.Depth, runtime.CreateTextureAttachment(depth)
+            ])
 
         let cameraView = 
             CameraView.lookAt (V3d(6.0, 6.0, 6.0)) V3d.Zero V3d.OOI
@@ -440,7 +360,7 @@ module Stereo =
                     |> Sg.translate 0.0 0.0 2.0
 
                 Sg.text font C4b.White ~~"test"
-                    |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, 3.0 * V3d.OOI))
+                    |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, -V3d.OIO, 3.0 * V3d.OOI))
             ]
             |> Sg.shader {
                 do! DefaultSurfaces.trafo
@@ -459,8 +379,8 @@ module Stereo =
         let margin =
             AVal.custom (fun t ->
                 let fbo = framebuffer.GetValue(t)
-                let colors = colors.GetValue t
-                let final = resolved.GetValue t
+                let colors = colors.GetValue t |> unbox<IBackendTexture>
+                let final = resolved.GetValue t |> unbox<IBackendTexture>
 
                 let o = OutputDescription.ofFramebuffer fbo
                 clear.Run(t, RenderToken.Empty, o)
@@ -477,7 +397,7 @@ module Stereo =
                     do! StereoShader.sample
                 }
                 |> Sg.uniform "Margin" margin
-                |> Sg.uniform "InputTexture" (resolved |> AVal.map (fun t -> t :> ITexture)) //(AVal.constant (colors :> ITexture))
+                |> Sg.uniform "InputTexture" resolved //(AVal.constant (colors :> ITexture))
                 |> Sg.compile runtime win.FramebufferSignature
 
 

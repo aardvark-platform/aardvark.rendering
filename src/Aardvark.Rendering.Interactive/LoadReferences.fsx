@@ -4,7 +4,7 @@
 #r "Aardvark.Base.FSharp.dll"
 #r "Aardvark.Base.Incremental.dll"
 #r "Aardvark.Base.Runtime.dll"
-#r "Aardvark.Base.Rendering.dll"
+#r "Aardvark.Rendering.dll"
 #r "FShade.dll"
 #r "FShade.Compiler.dll"
 #r "Aardvark.SceneGraph.dll"

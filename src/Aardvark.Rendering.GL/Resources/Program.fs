@@ -4,18 +4,13 @@
 
 open System
 open System.Threading
-open System.Collections.Generic
 open System.Collections.Concurrent
-open System.Runtime.InteropServices
 open Aardvark.Base
+open Aardvark.Rendering
+
+open Aardvark.Rendering.ShaderReflection
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
-open Aardvark.Base.ShaderReflection
-open OpenTK
-open OpenTK.Platform
-open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
-open Microsoft.FSharp.Quotations
 open Aardvark.Rendering.GL
 open System.Runtime.CompilerServices
 
@@ -28,7 +23,7 @@ module private ShaderProgramCounters =
         Interlocked.Decrement(&ctx.MemoryUsage.ShaderProgramCount) |> ignore
 
 
-type ActiveUniform = { slot : int; index : int; location : int; name : string; semantic : string; samplerState : Option<SamplerStateDescription>; size : int; uniformType : ActiveUniformType; offset : int; arrayStride : int; isRowMajor : bool } with
+type ActiveUniform = { slot : int; index : int; location : int; name : string; semantic : string; samplerState : Option<SamplerState>; size : int; uniformType : ActiveUniformType; offset : int; arrayStride : int; isRowMajor : bool } with
     member x.Interface =
 
         let name =
@@ -425,22 +420,8 @@ module ProgramExtensions =
 
     open FShade.Imperative
     open FShade
-  
-    // NOTE: shader caches no longer depending on Context. shaders objects can be shared between contexts, even if a context is using a different GL profile
-    let private codeCache = ConcurrentDictionary<string * IFramebufferSignature, Error<Program>>()
-    
-    let private staticShaderCache = ConcurrentDictionary<FShade.Effect * IFramebufferSignature, Error<GLSL.GLSLProgramInterface * aval<Program>>>()
-    let private dynamicShaderCache = ConditionalWeakTable<(FShade.EffectConfig -> FShade.EffectInputLayout * aval<FShade.Imperative.Module>), Error<GLSL.GLSLProgramInterface * aval<Program>>>()
-    let private shaderPickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
-//    let private useDiskCache = true
-//    let private cachePath =
-//        if useDiskCache then
-//            let temp = Path.combine [System.IO.Path.GetTempPath(); "aardvark-gl-shadercache"]
-//            if not (System.IO.Directory.Exists temp) then System.IO.Directory.CreateDirectory temp |> ignore
-//            temp
-//        else
-//            ""
+    let private shaderPickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
     type private OutputSignature =
         {
@@ -466,7 +447,7 @@ module ProgramExtensions =
     type Aardvark.Rendering.GL.Context with
 
 
-        member x.TryCompileShader(stage : Aardvark.Base.ShaderStage, code : string, entryPoint : string) =
+        member x.TryCompileShader(stage : Aardvark.Rendering.ShaderStage, code : string, entryPoint : string) =
             x |> ShaderCompiler.tryCompileShader stage code entryPoint
 
 
@@ -552,9 +533,15 @@ module ProgramExtensions =
                 GL.Check "could not delete program"
             )
 
-        member x.TryCompileProgram(id : string, signature : IFramebufferSignature, code : Lazy<GLSL.GLSLShader>) : Error<_> =
-            codeCache.GetOrAdd((id, signature), fun (id, signature) ->
-                
+        member x.TryCompileProgram(id : string, signature : IFramebufferSignature, code : Lazy<GLSL.GLSLShader>) =
+            x.TryCompileProgram(id, signature.Layout, code)
+
+        member x.TryCompileProgram(id : string, layout : FramebufferLayout, code : Lazy<GLSL.GLSLShader>) : Error<_> =
+
+            let key : CodeCacheKey =
+                { id = id; layout = layout }
+
+            x.ShaderCache.GetOrAdd(key, fun key ->
 
                 let fixBindings (p : Program) (iface : FShade.GLSL.GLSLProgramInterface) = 
                     if p.Context.FShadeBackend.Config.bindingMode = FShade.GLSL.BindingMode.None then
@@ -615,17 +602,17 @@ module ProgramExtensions =
 
                             // NOTE: contex.Diver represent information obtained by primary context -> possible that resource context have been created differently -> use driver information from actual context
                             let driver = match x.CurrentContextHandle with
-                                            | Some ch -> ch.Driver
+                                            | ValueSome ch -> ch.Driver
                                             | _ -> Log.warn "context not current!!"
                                                    x.Driver
                             
                             let key = 
                                 {   // NOTE: Profile mask can be None, Core or Compatibility, shaders are not necessary compatible between those
                                     device      = driver.vendor + "_" + driver.renderer + "_" + driver.versionString + "/" + driver.profileMask.ToString() 
-                                    id          = id
-                                    outputs     = signature.ColorAttachments |> Map.toList |> List.map (fun (id,(name, s)) -> string name, (id, s.format)) |> Map.ofList
-                                    layered     = signature.PerLayerUniforms
-                                    layerCount  = signature.LayerCount
+                                    id          = key.id
+                                    outputs     = key.layout.ColorAttachments |> Map.toList |> List.map (fun (id,(name, s)) -> string name, (id, s.format)) |> Map.ofList
+                                    layered     = key.layout.PerLayerUniforms
+                                    layerCount  = key.layout.LayerCount
                                 }
 
                             let hash = shaderPickler.ComputeHash(key).Hash |> System.Guid
@@ -753,14 +740,22 @@ module ProgramExtensions =
         member x.TryCreateProgram(signature : IFramebufferSignature, surface : Surface, topology : IndexedGeometryMode) : Error<GLSL.GLSLProgramInterface * aval<Program>> =
             match surface with
                 | Surface.FShadeSimple effect ->
-                    staticShaderCache.GetOrAdd((effect, signature), fun (effect, signature) ->
+                    let key : StaticShaderCacheKey =
+                        {
+                            effect = effect
+                            layout = signature.Layout
+                            topology = topology
+                            deviceCount = signature.Runtime.DeviceCount
+                        }
+
+                    x.ShaderCache.GetOrAdd(key, fun key ->
                         let glsl = 
                             lazy (
-                                let module_ = signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
+                                let module_ = key.layout.Link(key.effect, key.deviceCount, Range1d(-1.0, 1.0), false, key.topology)
                                 ModuleCompiler.compileGLSL x.FShadeBackend module_
                             )
 
-                        match x.TryCompileProgram(effect.Id, signature, glsl) with
+                        match x.TryCompileProgram(key.effect.Id, key.layout, glsl) with
                             | Success (prog) ->
                                 Success (prog.Interface, AVal.constant prog)
                             | Error e ->
@@ -768,44 +763,38 @@ module ProgramExtensions =
                         )
 
                 | Surface.FShade create ->
-                    lock dynamicShaderCache (fun () ->
-                        
-                        match dynamicShaderCache.TryGetValue(create) with
-                        | (true, b) -> b
-                        | _ ->
-                            let (inputLayout,b) = create (signature.EffectConfig(Range1d(-1.0, 1.0), false))
-                    
-                            let initial = AVal.force b
-                            let effect = initial.userData |> unbox<Effect>
-                            let layoutHash = shaderPickler.ComputeHash(inputLayout).Hash |> Convert.ToBase64String
-                            
-                            let iface =
-                                match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend initial)) with  
-                                    | Success prog -> 
-                                        let iface = prog.Interface
-                                        { iface with
-                                            samplers = iface.samplers |> MapExt.map (fun _ sam ->
-                                                match MapExt.tryFind sam.samplerName inputLayout.eTextures with
-                                                    | Some infos -> { sam with samplerTextures = infos }
-                                                    | None -> sam
-                                            )
-                                        }
-                                    | Error e ->
-                                        failwithf "[GL] shader compiler returned errors: %s" e
+                    x.ShaderCache.GetOrAdd(create, fun _ ->
+                        let (inputLayout,b) = create (signature.EffectConfig(Range1d(-1.0, 1.0), false))
 
-                            let changeableProgram = 
-                                b |> AVal.map (fun m ->
-                                    let effect = m.userData |> unbox<Effect>
-                                    match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend m)) with
-                                        | Success p -> p
-                                        | Error e ->
-                                            Log.error "[GL] shader compiler returned errors: %A" e
-                                            failwithf "[GL] shader compiler returned errors: %A" e
-                                )
+                        let initial = AVal.force b
+                        let effect = initial.userData |> unbox<Effect>
+                        let layoutHash = shaderPickler.ComputeHash(inputLayout).Hash |> Convert.ToBase64String
 
-                            let res = Success (iface, changeableProgram)
-                            dynamicShaderCache.Add(create, res)
-                            res
+                        let iface =
+                            match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend initial)) with
+                            | Success prog ->
+                                let iface = prog.Interface
+                                { iface with
+                                    samplers = iface.samplers |> MapExt.map (fun _ sam ->
+                                        match MapExt.tryFind sam.samplerName inputLayout.eTextures with
+                                        | Some infos -> { sam with samplerTextures = infos }
+                                        | None -> sam
+                                    )
+                                }
+                            | Error e ->
+                                failwithf "[GL] shader compiler returned errors: %s" e
+
+                        let changeableProgram =
+                            b |> AVal.map (fun m ->
+                                let effect = m.userData |> unbox<Effect>
+                                match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend m)) with
+                                | Success p -> p
+                                | Error e ->
+                                    Log.error "[GL] shader compiler returned errors: %A" e
+                                    failwithf "[GL] shader compiler returned errors: %A" e
+                            )
+
+                        Success (iface, changeableProgram)
                     )
 
                 | Surface.None ->

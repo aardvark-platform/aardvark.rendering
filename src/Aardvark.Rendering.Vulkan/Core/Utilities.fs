@@ -6,6 +6,7 @@ open System.Collections.Generic
 open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
+open Aardvark.Rendering
 
 #nowarn "9"
 
@@ -109,6 +110,12 @@ module private Utilities =
             while guard() do
                 body()
 
+        member inline x.Using<'a, 'r when 'a :> IDisposable>(v : 'a, f : 'a -> 'r) =
+            try
+                f v
+            finally
+                v.Dispose()
+
     let native = NativeBuilder()
 
 
@@ -137,13 +144,13 @@ module private Utilities =
         }
 
     let check (str : string) (err : VkResult) =
-        if err <> VkResult.VkSuccess then 
+        if err <> VkResult.Success then 
             Log.error "[Vulkan] %s (%A)" str err
             failwithf "[Vulkan] %s (%A)" str err
 
     let checkf (fmt : Printf.StringFormat<'a, VkResult -> unit>) =
         Printf.kprintf (fun (str : string) (res : VkResult) ->
-            if res <> VkResult.VkSuccess then 
+            if res <> VkResult.Success then 
                 Log.error "[Vulkan] %s (%A)" str res
                 failwithf "[Vulkan] %s (%A)" str res
         ) fmt
@@ -454,35 +461,96 @@ type FlagPool<'k, 'v when 'k : enum<int> >(initial : seq<'v>, flags : 'v -> 'k) 
                 changed.Set() |> ignore
         )
 
+[<Struct>]
+type nativeptr =
+    {
+        Type : Type
+        Handle : nativeint
+    }
 
-[<AllowNullLiteral; AbstractClass>]
-type Disposable() =
-    abstract member Dispose : unit -> unit
+[<AutoOpen>]
+module UntypedNativePtrExtensions =
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module NativePtr =
+
+        /// Converts the given untyped nativeptr to a nativeptr<'T>
+        /// Fails if the wrapped pointer is not of the expected type.
+        let typed<'T when 'T : unmanaged> (ptr : nativeptr) : nativeptr<'T> =
+            if ptr.Type = typeof<'T> then
+                NativePtr.ofNativeInt ptr.Handle
+            else
+                failwithf "cannot cast nativeptr, expected type %A but has type %A" typeof<'T> ptr.Type
+
+        /// Creates an untyped nativeptr from a nativeptr<'T>
+        let untyped (ptr : nativeptr<'T>) =
+            { Type = typeof<'T>; Handle = NativePtr.toNativeInt ptr }
+
+
+/// Utility struct to build chains of Vulkan structs connected via their pNext fields.
+type VkStructChain =
+    val mutable Chain : list<nativeptr>
+
+    new() = { Chain = [] }
+
+    /// Returns the handle of the chain head.
+    member x.Handle =
+        match x.Chain with
+        | [] -> 0n
+        | ptr::_ -> ptr.Handle
+
+    /// Returns the length of the chain.
+    member x.Length =
+        List.length x.Chain
+
+    /// Clears the chain, freeing all handles.
+    member x.Clear() =
+        x.Chain |> List.iter (fun ptr -> Marshal.FreeHGlobal ptr.Handle )
+        x.Chain <- []
+
+    /// Adds a struct to the beginning of the chain.
+    /// Returns a pointer to the passed struct, which is valid until the chain is cleared or disposed.
+    member inline x.Add< ^T when ^T : unmanaged and ^T : (member set_pNext : nativeint -> unit)>(obj : ^T) =
+        let ptr = NativePtr.alloc 1
+
+        let mutable tmp = obj
+        (^T : (member set_pNext : nativeint -> unit) (tmp, x.Handle))
+        x.Chain <- NativePtr.untyped ptr :: x.Chain
+
+        NativePtr.write ptr tmp
+        ptr
+
+    /// Adds an empty struct to the beginning of the chain.
+    /// Returns a pointer to the new struct, which is valid until the chain is cleared or disposed.
+    member inline x.Add< ^T when ^T : unmanaged and ^T : (member set_pNext : nativeint -> unit) and ^T : (static member Empty : ^T)>() =
+        let empty = (^T : (static member Empty : ^T) ())
+        x.Add(empty)
+
     interface IDisposable with
-        member x.Dispose() = x.Dispose()
+        member x.Dispose() = x.Clear()
 
-    static member inline Empty : Disposable = null
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module VkStructChain =
 
-    static member Compose(l : Disposable, r : Disposable) =
-        if isNull l then r
-        elif isNull r then l
-        else new Composite([l; r]) :> Disposable
+    /// Creats an empty struct chain.
+    let empty() =
+        new VkStructChain()
 
-    static member Compose(l : list<Disposable>) =
-        match List.filter (isNull >> not) l with
-            | [] -> null
-            | l -> new Composite(l) :> Disposable
+    /// Casts the chain to a nativeptr. Fails if type of the head does not match.
+    let toNativePtr (chain : VkStructChain) : nativeptr<'T> =
+        match chain.Chain with
+        | [] -> NativePtr.zero
+        | ptr::_ -> NativePtr.typed ptr
 
-    static member inline Custom (f : unit -> unit) =
-        { new Disposable() with member x.Dispose() = f() }
+    /// Adds a struct to the beginning of the chain.
+    let inline add (value : ^T) (chain : VkStructChain) =
+        chain.Add(value) |> ignore
+        chain
 
-    static member inline Dispose (d : Disposable) = d.Dispose()
-
-and private Composite(l : list<Disposable>) =
-    inherit Disposable()
-    override x.Dispose() = l |> List.iter Disposable.Dispose
-
-
+    /// Adds an empty struct to the beginning of the chain.
+    let inline addEmpty< ^T when ^T : unmanaged and ^T : (member set_pNext : nativeint -> unit) and ^T : (static member Empty : ^T)> (chain : VkStructChain) =
+        chain.Add< ^T>() |> ignore
+        chain
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VkFormat =
@@ -643,7 +711,16 @@ module VkFormat =
         ]
 
     let ofRenderbufferFormat (fmt : RenderbufferFormat) =
-        fmt |> int |> unbox<TextureFormat> |> ofTextureFormat
+        let stencilFormats =
+            LookupTable.lookupTable' [
+                RenderbufferFormat.StencilIndex1, VkFormat.S8Uint
+                RenderbufferFormat.StencilIndex4, VkFormat.S8Uint
+                RenderbufferFormat.StencilIndex8, VkFormat.S8Uint
+            ]
+
+        fmt |> stencilFormats |> Option.defaultWith (fun _ ->
+            fmt |> RenderbufferFormat.toTextureFormat |> ofTextureFormat
+        )
 
     let toTextureFormat =
         let unknown = unbox<TextureFormat> 0
@@ -1029,19 +1106,25 @@ module VkFormat =
 
 
     let private depthFormats = HashSet.ofList [ VkFormat.D16Unorm; VkFormat.D32Sfloat; VkFormat.X8D24UnormPack32 ]
+    let private stencilFormats = HashSet.ofList [ VkFormat.S8Uint ]
     let private depthStencilFormats = HashSet.ofList [VkFormat.D16UnormS8Uint; VkFormat.D24UnormS8Uint; VkFormat.D32SfloatS8Uint ]
 
     let hasDepth (fmt : VkFormat) =
         depthFormats.Contains fmt || depthStencilFormats.Contains fmt
 
+    let hasStencil (fmt : VkFormat) =
+        stencilFormats.Contains fmt || depthStencilFormats.Contains fmt
+
     let toAspect (fmt : VkFormat) =
         if depthStencilFormats.Contains fmt then VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit
         elif depthFormats.Contains fmt then VkImageAspectFlags.DepthBit
+        elif stencilFormats.Contains fmt then VkImageAspectFlags.StencilBit
         else VkImageAspectFlags.ColorBit
 
     let toShaderAspect (fmt : VkFormat) =
         if depthStencilFormats.Contains fmt then VkImageAspectFlags.DepthBit 
         elif depthFormats.Contains fmt then VkImageAspectFlags.DepthBit
+        elif stencilFormats.Contains fmt then VkImageAspectFlags.StencilBit
         else VkImageAspectFlags.ColorBit
 
     let toColFormat =
@@ -1821,6 +1904,22 @@ module VkFormat =
 module VkImageLayout =
     open KHRSwapchain
 
+    let ofTextureLayout =
+        LookupTable.lookupTable [
+            TextureLayout.Undefined, VkImageLayout.Undefined
+            TextureLayout.Sample, VkImageLayout.ShaderReadOnlyOptimal
+            TextureLayout.ShaderRead, VkImageLayout.ShaderReadOnlyOptimal
+            TextureLayout.ShaderReadWrite, VkImageLayout.General
+            TextureLayout.ShaderWrite, VkImageLayout.General
+            TextureLayout.TransferRead, VkImageLayout.TransferSrcOptimal
+            TextureLayout.TransferWrite, VkImageLayout.TransferDstOptimal
+            TextureLayout.ColorAttachment, VkImageLayout.ColorAttachmentOptimal
+            TextureLayout.DepthStencil, VkImageLayout.DepthStencilAttachmentOptimal
+            TextureLayout.DepthStencilRead, VkImageLayout.DepthStencilReadOnlyOptimal
+            TextureLayout.General, VkImageLayout.General
+            TextureLayout.Present, VkImageLayout.PresentSrcKhr
+        ]
+
     let toAccessFlags =
         LookupTable.lookupTable [
             VkImageLayout.Undefined,                        VkAccessFlags.None
@@ -1834,7 +1933,7 @@ module VkImageLayout =
             VkImageLayout.Preinitialized,                   VkAccessFlags.HostWriteBit
             VkImageLayout.PresentSrcKhr,                    VkAccessFlags.MemoryReadBit
         ]
-        
+
     let toSrcStageFlags =
         LookupTable.lookupTable [
             VkImageLayout.Undefined,                        VkPipelineStageFlags.HostBit
@@ -1848,7 +1947,7 @@ module VkImageLayout =
             VkImageLayout.Preinitialized,                   VkPipelineStageFlags.HostBit
             VkImageLayout.PresentSrcKhr,                    VkPipelineStageFlags.TransferBit
         ]
-        
+
     let toDstStageFlags =
         LookupTable.lookupTable [
             VkImageLayout.Undefined,                        VkPipelineStageFlags.HostBit
@@ -1863,11 +1962,33 @@ module VkImageLayout =
             VkImageLayout.PresentSrcKhr,                    VkPipelineStageFlags.TransferBit
         ]
 
-  
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VkAccessFlags =
+
+    let ofResourceAccess flags =
+        let lookup =
+            LookupTable.lookupTable [
+                ResourceAccess.ShaderRead, VkAccessFlags.ShaderReadBit
+                ResourceAccess.ShaderWrite, VkAccessFlags.ShaderWriteBit
+                ResourceAccess.TransferRead, VkAccessFlags.TransferReadBit
+                ResourceAccess.TransferWrite, VkAccessFlags.TransferWriteBit
+                ResourceAccess.IndirectCommandRead, VkAccessFlags.IndirectCommandReadBit
+                ResourceAccess.IndexRead, VkAccessFlags.IndexReadBit
+                ResourceAccess.VertexAttributeRead, VkAccessFlags.VertexAttributeReadBit
+                ResourceAccess.UniformRead, VkAccessFlags.UniformReadBit
+                ResourceAccess.InputRead, VkAccessFlags.InputAttachmentReadBit
+                ResourceAccess.ColorRead, VkAccessFlags.ColorAttachmentReadBit
+                ResourceAccess.ColorWrite, VkAccessFlags.ColorAttachmentWriteBit
+                ResourceAccess.DepthStencilRead, VkAccessFlags.DepthStencilAttachmentReadBit
+                ResourceAccess.DepthStencilWrite, VkAccessFlags.DepthStencilAttachmentWriteBit
+            ]
+
+        flags |> Seq.fold (fun x flag ->
+            x ||| (lookup flag)
+        ) VkAccessFlags.None
+
     let toVkPipelineStageFlags =
-        
         LookupTable.lookupTable [
             VkAccessFlags.IndirectCommandReadBit, VkPipelineStageFlags.DrawIndirectBit
             VkAccessFlags.IndexReadBit, VkPipelineStageFlags.VertexInputBit
@@ -1882,6 +2003,4 @@ module VkAccessFlags =
             VkAccessFlags.DepthStencilAttachmentWriteBit, VkPipelineStageFlags.FragmentShaderBit
             VkAccessFlags.TransferReadBit, VkPipelineStageFlags.TransferBit
             VkAccessFlags.TransferWriteBit, VkPipelineStageFlags.TransferBit
-
-
         ]

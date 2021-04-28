@@ -2,8 +2,9 @@
 
 open System
 open Aardvark.Base
+
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
 
 [<AutoOpen>]
 module ExtendedDefaultSemantics =
@@ -55,7 +56,7 @@ module RenderTask =
                 member x.Dispose() = ()
             }
 
-        let private uniformProvider (color : aval<ITexture>) (depth : aval<ITexture>) =
+        let private uniformProvider (color : aval<#ITexture>) (depth : aval<#ITexture>) =
             { new IUniformProvider with
                 member x.TryGetUniform(scope : Ag.Scope, semantic : Symbol) =
                     if semantic = DefaultSemantic.ColorTexture then Some (color :> IAdaptiveValue)
@@ -102,18 +103,17 @@ module RenderTask =
                 DrawCalls = Direct (AVal.constant [DrawCallInfo(InstanceCount = 1, FaceVertexCount = 6)])
                 Mode = IndexedGeometryMode.TriangleList
                 Surface = Shaders.fs |> toEffect |> Surface.FShadeSimple
-                DepthTest = AVal.constant DepthTestMode.LessOrEqual
-                CullMode = AVal.constant CullMode.None
-                BlendMode = AVal.constant BlendMode.Blend
-                FillMode = AVal.constant FillMode.Fill
-                StencilMode = AVal.constant StencilMode.Disabled
+                DepthState = DepthState.Default
+                BlendState = BlendState.Default
+                StencilState = StencilState.Default
+                RasterizerState = RasterizerState.Default
                 Indices = BufferView(AVal.constant (ArrayBuffer [|0;1;2; 0;2;3|] :> IBuffer), typeof<int>) |> Some
                 InstanceAttributes = emptyAttributes
                 VertexAttributes = attributeProvider
                 Uniforms = emptyUniforms
             }
 
-        let create (color : aval<ITexture>) (depth : aval<ITexture>) =
+        let create (color : aval<#ITexture>) (depth : aval<#ITexture>) =
             { RenderObject.Clone(baseObject) with
                 Uniforms = uniformProvider color depth
             }
@@ -137,7 +137,7 @@ module RenderTask =
 
 
                 RenderTask.ofList [
-                    RenderTask.custom (fun (self, token, target) ->
+                    RenderTask.custom (fun (self, token, target, queries) ->
                         if target.framebuffer.Size <> size.Value then
                             transact (fun () -> size.Value <- target.framebuffer.Size)
 
@@ -169,7 +169,7 @@ module RenderTask =
 
 
                 RenderTask.ofList [
-                    RenderTask.custom (fun (self, token, target) ->
+                    RenderTask.custom (fun (self, token, target, queries) ->
                         if target.framebuffer.Size <> size.Value then
                             transact (fun () -> size.Value <- target.framebuffer.Size)
 

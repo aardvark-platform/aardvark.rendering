@@ -1,5 +1,5 @@
 ﻿open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
@@ -12,7 +12,7 @@ open System
 module Shader =
     open FShade 
     
-    let samplerArray = 
+    let samplerArray =
         sampler2d {
             textureArray uniform?TextureArray 28
             filter Filter.MinMagMipLinear
@@ -130,7 +130,7 @@ let main argv =
     let textureBar = rndTex()
     let textureFoobar = rndTex()
 
-    let tetureSingleMod = AVal.init (rndTex())
+    let textureSingleMod = AVal.init (rndTex())
 
     let scene = cset()
     let count = AVal.init 1
@@ -153,23 +153,25 @@ let main argv =
 
     win.Keyboard.DownWithRepeats.Values.Add (fun k ->
         match k with
-            | Keys.Add -> let cnt = count.GetValue()
-                          if cnt < textures.Length - 1 then
-                                transact(fun _ -> count.Value <- cnt + 1)
-                                printfn "TextureCount=%d" (cnt + 1)
-            | Keys.Subtract -> let cnt = count.GetValue()
-                               if cnt > 1 then
-                                 transact(fun _ -> count.Value <- cnt - 1)
-                                 printfn "TextureCount=%d" (cnt - 1)
-            | Keys.T -> 
+        | Keys.OemPlus ->
+            let cnt = count.GetValue()
+            if cnt < textures.Length - 1 then
+                transact(fun _ -> count.Value <- cnt + 1)
+                printfn "TextureCount=%d" (cnt + 1)
+        | Keys.OemMinus -> 
+            let cnt = count.GetValue()
+            if cnt > 1 then
+                transact(fun _ -> count.Value <- cnt - 1)
+                printfn "TextureCount=%d" (cnt - 1)
+        | Keys.T -> 
 
-                let cur = case.GetValue();
-                transact(fun _ -> case.Value <- (cur + 1) % 5)
-                () 
-            | Keys.Z ->
-                transact(fun _ -> tetureSingleMod.Value <- (rndTex()))
-            | _ ->
-                ()
+            let cur = case.GetValue();
+            transact(fun _ -> case.Value <- (cur + 1) % 5)
+            () 
+        | Keys.Z ->
+            transact(fun _ -> textureSingleMod.Value <- (rndTex()))
+        | _ ->
+            ()
     )
 
 
@@ -180,14 +182,14 @@ let main argv =
                             let drawGeos = Sg.set (scene |> ASet.map (fun (ig, trafo) ->
                                         Sg.ofIndexedGeometry ig
                                             |> Sg.trafo (AVal.constant trafo)
-                                            |> Sg.vertexBufferValue DefaultSemantic.DiffuseColorCoordinates (AVal.init V4f.Zero)
-                                            |> Sg.uniform "CoordOff" (AVal.init (rand.UniformV2d()))))
+                                            |> Sg.vertexBufferValue' DefaultSemantic.DiffuseColorCoordinates V4f.Zero
+                                            |> Sg.uniform' "CoordOff" (rand.UniformV2d())))
 
                             let mutable sg = drawGeos
                                             |> Sg.uniform "TextureCount" count
 
                             for i in 0..textures.Length-1 do
-                                sg <- sg |> Sg.uniform ("TextureArray" + i.ToString()) (AVal.init textures.[i]) 
+                                sg <- sg |> Sg.uniform' ("TextureArray" + i.ToString()) textures.[i]
 
                             //sg <- sg |> Sg.uniform "TextureArray" (AVal.constant textures)
 
@@ -198,8 +200,8 @@ let main argv =
                             let drawGeos = Sg.set (scene |> ASet.map (fun (ig, trafo) ->
                                                 Sg.ofIndexedGeometry ig
                                                             |> Sg.trafo (AVal.constant trafo)
-                                                            |> Sg.vertexBufferValue DefaultSemantic.DiffuseColorCoordinates (AVal.init V4f.Zero)
-                                                            |> Sg.uniform "CoordOff" (AVal.init (rand.UniformV2d()))
+                                                            |> Sg.vertexBufferValue' DefaultSemantic.DiffuseColorCoordinates V4f.Zero
+                                                            |> Sg.uniform' "CoordOff" (rand.UniformV2d())
                                                             |> Sg.uniform "TextureCount" count
                                         ))
 
@@ -207,7 +209,7 @@ let main argv =
                             let mutable map = Map.empty<Symbol, IAdaptiveValue>
                                         
                             for i in 0..textures.Length-1 do
-                                map <- map.Add(Symbol.Create ("TextureArray" + i.ToString()), AVal.init textures.[rand.UniformInt(textures.Length)])
+                                map <- map.Add(Symbol.Create ("TextureArray" + i.ToString()), AVal.constant textures.[rand.UniformInt(textures.Length)])
 
                             let sg = Sg.UniformApplicator(map, drawGeos)
 
@@ -219,12 +221,12 @@ let main argv =
 
                                         let mutable sg = Sg.ofIndexedGeometry ig
                                                             |> Sg.trafo (AVal.constant trafo)
-                                                            |> Sg.vertexBufferValue DefaultSemantic.DiffuseColorCoordinates (AVal.init V4f.Zero)
-                                                            |> Sg.uniform "CoordOff" (AVal.init (rand.UniformV2d()))
+                                                            |> Sg.vertexBufferValue' DefaultSemantic.DiffuseColorCoordinates V4f.Zero
+                                                            |> Sg.uniform' "CoordOff" (rand.UniformV2d())
                                                             |> Sg.uniform "TextureCount" count
                                             
                                         for i in 0..textures.Length-1 do
-                                            sg <- sg |> Sg.uniform ("TextureArray" + i.ToString()) (AVal.init textures.[rand.UniformInt(textures.Length)]) 
+                                            sg <- sg |> Sg.uniform' ("TextureArray" + i.ToString()) textures.[rand.UniformInt(textures.Length)]
 
                                         sg 
                                         ))
@@ -236,14 +238,14 @@ let main argv =
 
                                         let sg = Sg.ofIndexedGeometry ig
                                                             |> Sg.trafo (AVal.constant trafo)
-                                                            |> Sg.vertexBufferValue DefaultSemantic.DiffuseColorCoordinates (AVal.init V4f.Zero)
-                                                            |> Sg.uniform "CoordOff" (AVal.init (rand.UniformV2d()))
+                                                            |> Sg.vertexBufferValue' DefaultSemantic.DiffuseColorCoordinates V4f.Zero
+                                                            |> Sg.uniform' "CoordOff" (rand.UniformV2d())
                                                             |> Sg.uniform "TextureCount" count
                                                             
                                         let mutable map = Map.empty<Symbol, IAdaptiveValue>
                                         
                                         for i in 0..textures.Length-1 do
-                                            map <- map.Add(Symbol.Create ("TextureArray" + i.ToString()), AVal.init textures.[rand.UniformInt(textures.Length)])
+                                            map <- map.Add(Symbol.Create ("TextureArray" + i.ToString()), AVal.constant textures.[rand.UniformInt(textures.Length)])
 
                                         let sg = Sg.UniformApplicator(map, sg)
                                         
@@ -270,7 +272,7 @@ let main argv =
                 |> Sg.texture (Symbol.Create "TextureFoo") (AVal.constant textureFoo)
                 |> Sg.texture (Symbol.Create "TextureBar") (AVal.constant textureBar)
                 |> Sg.texture (Symbol.Create "TextureFoobar") (AVal.constant textureFoobar)
-                |> Sg.texture (Symbol.Create "SingleTexture") tetureSingleMod
+                |> Sg.texture (Symbol.Create "SingleTexture") textureSingleMod
 
 
     let rt = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Native, sg)
@@ -282,12 +284,12 @@ let main argv =
             member x.FramebufferSignature = rt.FramebufferSignature
             member x.Runtime = rt.Runtime
             member x.PerformUpdate (a,b) = rt.Update(a,b)
-            member x.Perform (t,a,b) = 
+            member x.Perform (t,a,b,q) = 
                 sw.Restart()
                 let stats = RenderToken.Zero
                 use __ = app.Runtime.Context.ResourceLock
                 OpenTK.Graphics.OpenGL4.GL.Enable(OpenTK.Graphics.OpenGL4.EnableCap.ClipDistance0)
-                rt.Run(t,stats,b)
+                rt.Run(t,stats,b,q)
                 sw.Stop()
                 if sw.Elapsed.TotalSeconds > 0.1 then 
                     Log.warn "long frame: %A" sw.MicroTime

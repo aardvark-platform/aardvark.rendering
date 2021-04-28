@@ -3,18 +3,15 @@
 
 open System
 open Aardvark.Base
+
 open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
-open Aardvark.SceneGraph.Semantics
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open Aardvark.Rendering.Vulkan
-open FSharp.Data.Adaptive.Operators
-open Aardvark.Base.Rendering
-open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering
 open FShade
-open FShade.Imperative
 
 module CommandTest =
 
@@ -53,7 +50,7 @@ module CommandTest =
                 | null ->
                     None, pos.Length
                 | index -> 
-                    let idx = Aardvark.Base.BufferView(AVal.constant (ArrayBuffer index :> IBuffer), typeof<int>)
+                    let idx = Aardvark.Rendering.BufferView(AVal.constant (ArrayBuffer index :> IBuffer), typeof<int>)
                     Some idx, index.Length
 
         let rand = RandomSystem()
@@ -80,16 +77,12 @@ module CommandTest =
 
         let state =
             {
-                depthTest           = AVal.constant DepthTestMode.LessOrEqual
-                depthBias           = AVal.constant (DepthBiasState(0.0, 0.0, 0.0))
-                cullMode            = AVal.constant CullMode.None
-                frontFace           = AVal.constant WindingOrder.CounterClockwise
-                blendMode           = AVal.constant BlendMode.None
-                fillMode            = AVal.constant FillMode.Fill
-                stencilMode         = AVal.constant StencilMode.Disabled
-                multisample         = AVal.constant true
-                writeBuffers        = None
-                globalUniforms      = 
+                DepthState      = DepthState.Default
+                BlendState      = BlendState.Default
+                StencilState    = StencilState.Default
+                RasterizerState = { RasterizerState.Default with FrontFace = AVal.constant WindingOrder.CounterClockwise }
+
+                GlobalUniforms      =
                     UniformProvider.ofList [
                         "ModelTrafo", AVal.constant Trafo3d.Identity :> IAdaptiveValue
                         "ViewTrafo", viewTrafo :> IAdaptiveValue
@@ -98,9 +91,9 @@ module CommandTest =
                         "CameraLocation", viewTrafo |> AVal.map (fun v -> v.Backward.C3.XYZ) :> IAdaptiveValue
                     ]
 
-                geometryMode        = IndexedGeometryMode.TriangleList
-                vertexInputTypes    = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f> ]
-                perGeometryUniforms = Map.ofList [ "NodeColor", typeof<V4d> ]
+                Mode                = IndexedGeometryMode.TriangleList
+                VertexInputTypes    = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f> ]
+                PerGeometryUniforms = Map.ofList [ "NodeColor", typeof<V4d> ]
             }
 
 
@@ -182,7 +175,7 @@ module CommandTest =
 //            )
 
 
-        win.RenderTask <- new Temp.CommandTask(device, unbox win.FramebufferSignature, cmd)
+        win.RenderTask <- runtime.CompileRender(unbox win.FramebufferSignature, cmd)
         win.Run()
 
         win.Dispose()

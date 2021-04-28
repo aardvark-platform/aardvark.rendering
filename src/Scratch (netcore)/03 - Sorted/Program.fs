@@ -1,5 +1,6 @@
 ﻿open Aardvark.Base
-open Aardvark.Base.Rendering
+
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
@@ -765,21 +766,15 @@ let main argv =
 
     let buffer = BufferView(sorted,typeof<V4f>)
 
-    let mutable blendMode = BlendMode(true)
-    blendMode.AlphaOperation <- BlendOperation.Add
-    blendMode.Operation <- BlendOperation.Add
-    blendMode.SourceFactor <- BlendFactor.InvDestinationAlpha
-    blendMode.SourceAlphaFactor <- BlendFactor.InvDestinationAlpha
-    blendMode.DestinationFactor <- BlendFactor.One
-    blendMode.DestinationAlphaFactor <- BlendFactor.One
-
+    let blendMode =
+        BlendMode.simple BlendFactor.InvDestinationAlpha BlendFactor.One
 
     let clear =
         Sg.fullScreenQuad
             |> Sg.shader {
                 do! DefaultSurfaces.constantColor (C4f(0.0,0.0,0.0,0.0))
             }
-            |> Sg.depthTest (AVal.constant DepthTestMode.None)
+            |> Sg.depthTest (AVal.constant DepthTest.None)
           
     let pa = RenderPass.after "a" RenderPassOrder.Arbitrary RenderPass.main
     let pb = RenderPass.after "b" RenderPassOrder.Arbitrary pa
@@ -800,7 +795,7 @@ let main argv =
             }
             |> Sg.blendMode (AVal.constant blendMode)
             |> Sg.cullMode (AVal.constant CullMode.Back)
-            |> Sg.depthTest (AVal.constant DepthTestMode.None)
+            |> Sg.depthTest (AVal.constant DepthTest.None)
             |> Sg.pass pa
             |> Sg.transform trafo
             |> Sg.uniform "GridSize" (AVal.constant cells)

@@ -8,10 +8,11 @@ open System.Threading
 open System.Collections.Concurrent
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
+
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
 open OpenTK.Graphics.OpenGL4
-open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering.ShaderReflection
 open Aardvark.Rendering.GL
 
 
@@ -135,66 +136,6 @@ type UniformBufferManager(ctx : Context) =
     member x.Dispose() =
         manager.Dispose()
 
-type DrawBufferConfig =
-    class
-        val mutable public Key : list<bool>
-        val mutable public Parent : DrawBufferManager
-        val mutable public Signature : IFramebufferSignature
-        val mutable public Count : int
-        val mutable public Buffers : nativeptr<int>
-        val mutable public RefCount : int
-
-        member x.Write(fbo : Framebuffer) =
-            x.Signature.ColorAttachments |> Map.iter (fun i (s,_) ->
-                if x.Key.[i] then
-                    if fbo.Handle = 0 && i = 0 && s = DefaultSemantic.Colors then
-                        NativePtr.set x.Buffers i (int OpenTK.Graphics.OpenGL4.FramebufferAttachment.BackLeft)
-                    else
-                        NativePtr.set x.Buffers i (int OpenTK.Graphics.OpenGL4.FramebufferAttachment.ColorAttachment0 + i)
-                else
-                    NativePtr.set x.Buffers i 0
-            )
-
-        member x.AddRef() = 
-            if Interlocked.Increment &x.RefCount = 1 then
-                x.Buffers <- NativePtr.alloc x.Count
-
-        member x.RemoveRef() = 
-            if Interlocked.Decrement &x.RefCount = 0 then
-                NativePtr.free x.Buffers
-                x.Buffers <- NativePtr.zero
-                x.Parent.DeleteConfig(x)
-
-        new(p, key, s, c) = { Parent = p; Key = key; Signature = s; Count = c; Buffers = NativePtr.zero; RefCount = 0 }
-
-    end
-
-and DrawBufferManager (signature : IFramebufferSignature) =
-    let count = signature.ColorAttachments.Count
-    let ptrs = ConcurrentDictionary<list<bool>, DrawBufferConfig>()
-
-    member x.Write(fbo : Framebuffer) =
-        for (KeyValue(_,dbc)) in ptrs do
-            if dbc.RefCount > 0 then
-                dbc.Write(fbo)
-
-    member x.CreateConfig(set : Set<Symbol>) =
-        let set = signature.ColorAttachments |> Map.toSeq |> Seq.map (fun (i,(s,_)) -> Set.contains s set) |> Seq.toList
-        let config = 
-            ptrs.GetOrAdd(set, fun set ->
-                DrawBufferConfig(x, set, signature, count)
-            )
-
-        config.AddRef()
-        config
-
-    member internal x.DeleteConfig(c : DrawBufferConfig) =
-        ptrs.TryRemove c.Key |> ignore
-
-
-
-
-
 
 type CastResource<'a, 'b when 'a : equality and 'b : equality>(inner : IResource<'a>) =
     inherit AdaptiveObject()
@@ -229,6 +170,14 @@ type CastResource<'a, 'b when 'a : equality and 'b : equality>(inner : IResource
         member x.Handle = handle
 
 [<Struct>]
+type private AttachmentConfig<'a> =
+    {
+        signature    : IFramebufferSignature
+        defaultValue : aval<'a>
+        attachments  : aval<Map<Symbol, 'a>>
+    }
+
+[<Struct>]
 type TextureBinding =
     {
         offset : int
@@ -248,11 +197,6 @@ type InterfaceSlots =
 
 [<AllowNullLiteral>]
 type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskInfo : Option<IFramebufferSignature * RenderTaskLock>, shareTextures : bool, shareBuffers : bool) =
-    
-    let drawBufferManager = // ISSUE: leak? nobody frees those DrawBufferConfigs
-        match renderTaskInfo with
-            | Some (signature, _) -> DrawBufferManager(signature) |> Some
-            | _ -> None
 
     let derivedCache (f : ResourceManager -> ResourceCache<'a, 'b>) =
         ResourceCache<'a, 'b>(Option.map f parent, Option.map snd renderTaskInfo)
@@ -283,13 +227,21 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let frontFaceCache          = derivedCache (fun m -> m.FrontFaceCache)
     let polygonModeCache        = derivedCache (fun m -> m.PolygonModeCache)
     let blendModeCache          = derivedCache (fun m -> m.BlendModeCache)
+    let colorMaskCache          = derivedCache (fun m -> m.ColorMaskCache)
     let stencilModeCache        = derivedCache (fun m -> m.StencilModeCache)
+    let stencilMaskCache        = derivedCache (fun m -> m.StencilMaskCache)
     let flagCache               = derivedCache (fun m -> m.FlagCache)
-
+    let colorCache              = derivedCache (fun m -> m.ColorCache)
     
     let textureBindingCache     = derivedCache (fun m -> m.TextureBindingCache)
 
     let uniformBufferManager = UniformBufferManager ctx
+
+    let blendModeConfigCache =
+        ConcurrentDictionary<AttachmentConfig<BlendMode>, aval<GLBlendMode[]>>()
+
+    let colorMaskConfigCache =
+        ConcurrentDictionary<AttachmentConfig<ColorMask>, aval<GLColorMask[]>>()
 
     let hasTessDrawModeCache = 
         ConcurrentDictionary<IndexedGeometryMode, UnaryCache<aval<Program>, aval<GLBeginMode>>>()
@@ -303,32 +255,35 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     let textureArrayCache = UnaryCache<aval<ITexture[]>, ConcurrentDictionary<int, List<IResource<Texture,V2i>>>>(fun ta -> ConcurrentDictionary<int, List<IResource<Texture,V2i>>>())
 
-    let staticSamplerStateCache = ConcurrentDictionary<FShade.SamplerState, aval<SamplerStateDescription>>()
-    let dynamicSamplerStateCache = ConcurrentDictionary<Symbol * SamplerStateDescription, UnaryCache<aval<(Symbol -> SamplerStateDescription -> SamplerStateDescription)>, aval<SamplerStateDescription>>>()
-    let samplerDescriptionCache = ConcurrentDictionary<FShade.SamplerState, SamplerStateDescription>() 
+    let staticSamplerStateCache = ConcurrentDictionary<FShade.SamplerState, aval<SamplerState>>()
+    let dynamicSamplerStateCache = ConcurrentDictionary<Symbol * SamplerState, UnaryCache<aval<(Symbol -> SamplerState -> SamplerState)>, aval<SamplerState>>>()
+    let samplerDescriptionCache = ConcurrentDictionary<FShade.SamplerState, SamplerState>() 
     
     member private x.BufferManager = bufferManager
     member private x.TextureManager = textureManager
 
-    member private x.BufferCache            : ResourceCache<Buffer, int>                    = bufferCache
-    member private x.TextureCache           : ResourceCache<Texture, V2i>                   = textureCache
-    member private x.IndirectBufferCache    : ResourceCache<GLIndirectBuffer, IndirectDrawArgs> = indirectBufferCache
-    member private x.SamplerCache           : ResourceCache<Sampler, int>                   = samplerCache
-    member private x.VertexInputCache       : ResourceCache<VertexInputBindingHandle, int>  = vertexInputCache
-    member private x.UniformLocationCache   : ResourceCache<UniformLocation, nativeint>     = uniformLocationCache
-                                                                                    
-    member private x.IsActiveCache          : ResourceCache<bool, int>                      = isActiveCache
-    member private x.BeginModeCache         : ResourceCache<GLBeginMode, GLBeginMode>       = beginModeCache
-    member private x.DrawCallInfoCache      : ResourceCache<DrawCallInfoList, DrawCallInfoList> = drawCallInfoCache
-    member private x.DepthTestCache         : ResourceCache<DepthTestInfo, DepthTestInfo>   = depthTestCache
-    member private x.DepthBiasCache         : ResourceCache<DepthBiasInfo, DepthBiasInfo>   = depthBiasCache
-    member private x.CullModeCache          : ResourceCache<int, int>                       = cullModeCache
-    member private x.FrontFaceCache         : ResourceCache<int, int>                       = frontFaceCache
-    member private x.PolygonModeCache       : ResourceCache<int, int>                       = polygonModeCache
-    member private x.BlendModeCache         : ResourceCache<GLBlendMode, GLBlendMode>       = blendModeCache
-    member private x.StencilModeCache       : ResourceCache<GLStencilMode, GLStencilMode>   = stencilModeCache
-    member private x.FlagCache              : ResourceCache<bool, int>                      = flagCache
-    member private x.TextureBindingCache    : ResourceCache<TextureBinding, TextureBinding> = textureBindingCache
+    member private x.BufferCache              : ResourceCache<Buffer, int>                    = bufferCache
+    member private x.TextureCache             : ResourceCache<Texture, V2i>                   = textureCache
+    member private x.IndirectBufferCache      : ResourceCache<GLIndirectBuffer, IndirectDrawArgs> = indirectBufferCache
+    member private x.SamplerCache             : ResourceCache<Sampler, int>                   = samplerCache
+    member private x.VertexInputCache         : ResourceCache<VertexInputBindingHandle, int>  = vertexInputCache
+    member private x.UniformLocationCache     : ResourceCache<UniformLocation, nativeint>     = uniformLocationCache
+                                                                                      
+    member private x.IsActiveCache            : ResourceCache<bool, int>                      = isActiveCache
+    member private x.BeginModeCache           : ResourceCache<GLBeginMode, GLBeginMode>       = beginModeCache
+    member private x.DrawCallInfoCache        : ResourceCache<DrawCallInfoList, DrawCallInfoList> = drawCallInfoCache
+    member private x.DepthTestCache           : ResourceCache<int, int>                       = depthTestCache
+    member private x.DepthBiasCache           : ResourceCache<DepthBiasInfo, DepthBiasInfo>   = depthBiasCache
+    member private x.CullModeCache            : ResourceCache<int, int>                       = cullModeCache
+    member private x.FrontFaceCache           : ResourceCache<int, int>                       = frontFaceCache
+    member private x.PolygonModeCache         : ResourceCache<int, int>                       = polygonModeCache
+    member private x.BlendModeCache           : ResourceCache<nativeptr<GLBlendMode>, nativeint> = blendModeCache
+    member private x.ColorMaskCache           : ResourceCache<nativeptr<GLColorMask>, nativeint> = colorMaskCache
+    member private x.StencilModeCache         : ResourceCache<GLStencilMode, GLStencilMode>   = stencilModeCache
+    member private x.StencilMaskCache         : ResourceCache<uint32, uint32>                 = stencilMaskCache
+    member private x.FlagCache                : ResourceCache<bool, int>                      = flagCache
+    member private x.ColorCache               : ResourceCache<C4f, C4f>                       = colorCache
+    member private x.TextureBindingCache      : ResourceCache<TextureBinding, TextureBinding> = textureBindingCache
 
     member x.RenderTaskLock = renderTaskInfo
 
@@ -351,7 +306,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
 
 
-    member x.DrawBufferManager = drawBufferManager.Value
     member x.Context = ctx
         
     member x.CreateBuffer(data : aval<IBuffer>) =
@@ -486,15 +440,15 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.GetSamplerStateDescription(samplerState : FShade.SamplerState) =
-        samplerDescriptionCache.GetOrAdd(samplerState, fun sam -> sam.SamplerStateDescription)
+        samplerDescriptionCache.GetOrAdd(samplerState, fun sam -> sam.SamplerState)
 
-    member x.GetDynamicSamplerState(texName : Symbol, samplerState : SamplerStateDescription, modifier : aval<(Symbol -> SamplerStateDescription -> SamplerStateDescription)>) : aval<SamplerStateDescription> =
+    member x.GetDynamicSamplerState(texName : Symbol, samplerState : SamplerState, modifier : aval<(Symbol -> SamplerState -> SamplerState)>) : aval<SamplerState> =
         dynamicSamplerStateCache.GetOrAdd((texName, samplerState), fun (sym, sam) ->
             UnaryCache(fun modi -> modi |> AVal.map (fun f -> f sym sam))
         ).Invoke(modifier)
 
     member x.GetStaticSamplerState(samplerState : FShade.SamplerState) =
-        staticSamplerStateCache.GetOrAdd(samplerState, fun sam -> AVal.constant (sam.SamplerStateDescription))
+        staticSamplerStateCache.GetOrAdd(samplerState, fun sam -> AVal.constant (sam.SamplerState))
 
     member x.GetInterfaceSlots(iface : FShade.GLSL.GLSLProgramInterface) = 
         ifaceSlotCache.GetOrAdd(iface, (fun iface ->
@@ -503,7 +457,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                   storageBuffers = iface.storageBuffers |> MapExt.toSeq |> Seq.sortBy (fun (_, sb) -> sb.ssbBinding) |> Seq.toArray }
             ))
 
-    member x.CreateSurface(signature : IFramebufferSignature, surface : Aardvark.Base.Surface, topology : IndexedGeometryMode) =
+    member x.CreateSurface(signature : IFramebufferSignature, surface : Aardvark.Rendering.Surface, topology : IndexedGeometryMode) =
 
         let (iface, result) = ctx.CreateProgram(signature, surface, topology)
 
@@ -527,8 +481,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                         x.CreateTexture(texArr |> AVal.map (fun (t : ITexture[]) -> if i < t.Length then t.[i] else NullTexture() :> _)))
             )
 
-    member x.CreateSampler (sam : aval<SamplerStateDescription>) =
-        samplerCache.GetOrCreate<SamplerStateDescription>(sam, fun () -> {
+    member x.CreateSampler (sam : aval<SamplerState>) =
+        samplerCache.GetOrCreate<SamplerState>(sam, fun () -> {
             create = fun b      -> ctx.CreateSampler b
             update = fun h b    -> ctx.Update(h,b); h
             delete = fun h      -> ctx.Delete h
@@ -833,7 +787,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-    member x.CreateDepthTest(value : aval<DepthTestMode>) =
+    member x.CreateDepthTest(value : aval<DepthTest>) =
         depthTestCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.ToDepthTest b
             update = fun h b    -> ctx.ToDepthTest b
@@ -843,7 +797,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-    member x.CreateDepthBias(value : aval<DepthBiasState>) =
+    member x.CreateDepthBias(value : aval<DepthBias>) =
         depthBiasCache.GetOrCreate(value, fun () -> {
             create = fun b      -> ctx.ToDepthBias b
             update = fun h b    -> ctx.ToDepthBias b
@@ -883,13 +837,51 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-    member x.CreateBlendMode(value : aval<BlendMode>) =
+    member x.CreateBlendModes(signature : IFramebufferSignature, mode : aval<BlendMode>, attachments : aval<Map<Symbol, BlendMode>>) =
+        let config = { signature = signature; defaultValue = mode; attachments = attachments }
+
+        let value =
+            blendModeConfigCache.GetOrAdd(config, fun cfg ->
+                let attachments = cfg.signature.ColorAttachments
+                let arr = Array.zeroCreate attachments.Count
+
+                AVal.map2 (fun def att ->
+                    for (i, (s, _)) in Map.toSeq attachments do
+                        arr.[i] <- att |> Map.tryFind s |> Option.defaultValue def |> ctx.ToBlendMode
+                    arr
+                ) cfg.defaultValue cfg.attachments
+            )
+
         blendModeCache.GetOrCreate(value, fun () -> {
-            create = fun b      -> ctx.ToBlendMode b
-            update = fun h b    -> ctx.ToBlendMode b
-            delete = fun h      -> ()
+            create = fun b      -> NativePtr.allocArray b
+            update = fun h b    -> h |> NativePtr.setArray b; h
+            delete = fun h      -> NativePtr.free h
             info =   fun h      -> ResourceInfo.Zero
-            view = id
+            view = NativePtr.toNativeInt
+            kind = ResourceKind.Unknown
+        })
+
+    member x.CreateColorMasks(signature : IFramebufferSignature, mask : aval<ColorMask>, attachments : aval<Map<Symbol, ColorMask>>) =
+        let config = { signature = signature; defaultValue = mask; attachments = attachments }
+
+        let value =
+            colorMaskConfigCache.GetOrAdd(config, fun cfg ->
+                let attachments = cfg.signature.ColorAttachments
+                let arr = Array.zeroCreate attachments.Count
+
+                AVal.map2 (fun def att ->
+                    for (i, (s, _)) in Map.toSeq attachments do
+                        arr.[i] <- att |> Map.tryFind s |> Option.defaultValue def |> ctx.ToColorMask
+                    arr
+                ) cfg.defaultValue cfg.attachments
+            )
+
+        colorMaskCache.GetOrCreate(value, fun () -> {
+            create = fun b      -> NativePtr.allocArray b
+            update = fun h b    -> h |> NativePtr.setArray b; h
+            delete = fun h      -> NativePtr.free h
+            info =   fun h      -> ResourceInfo.Zero
+            view = NativePtr.toNativeInt
             kind = ResourceKind.Unknown
         })
 
@@ -903,6 +895,16 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
+    member x.CreateStencilMask(value : aval<StencilMask>) =
+        stencilMaskCache.GetOrCreate(value, fun () -> {
+            create = fun b      -> uint32 b
+            update = fun h b    -> uint32 b
+            delete = fun h      -> ()
+            info =   fun h      -> ResourceInfo.Zero
+            view = id
+            kind = ResourceKind.Unknown
+        })
+
     member x.CreateFlag (value : aval<bool>) =
         flagCache.GetOrCreate(value, fun () -> {
             create = fun b      -> b
@@ -910,6 +912,16 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             delete = fun h      -> ()
             info =   fun h      -> ResourceInfo.Zero
             view =   fun v -> if v then 1 else 0
+            kind = ResourceKind.Unknown
+        })
+
+    member x.CreateColor (value : aval<C4f>) =
+        colorCache.GetOrCreate(value, fun () -> {
+            create = fun b      -> b
+            update = fun h b    -> b
+            delete = fun h      -> ()
+            info =   fun h      -> ResourceInfo.Zero
+            view =   id
             kind = ResourceKind.Unknown
         })
 

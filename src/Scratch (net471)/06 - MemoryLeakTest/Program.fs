@@ -1,6 +1,6 @@
 ﻿open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
@@ -63,7 +63,7 @@ let main argv =
 
     
     let renderTask =
-        RenderTask.custom (fun (self,token,outputDesc) -> 
+        RenderTask.custom (fun (self,token,outputDesc,queries) -> 
             win.Time.GetValue self |> ignore
 
             transact (fun () -> 
@@ -83,7 +83,7 @@ let main argv =
                     stuff.Add(sg) |> ignore
                 )
             
-            renderTask.Run(token,outputDesc)
+            renderTask.Run(token,outputDesc,queries)
         )
         
     win.RenderTask <- renderTask

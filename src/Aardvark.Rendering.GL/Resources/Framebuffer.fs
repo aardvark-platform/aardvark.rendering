@@ -1,15 +1,9 @@
 ﻿namespace Aardvark.Rendering.GL
 
-open System
 open System.Threading
-open System.Collections.Concurrent
-open System.Runtime.InteropServices
 open Aardvark.Base
-open OpenTK
-open OpenTK.Platform
-open OpenTK.Graphics
+open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
-open Microsoft.FSharp.Quotations
 open Aardvark.Rendering.GL
 
 [<AutoOpen>]
@@ -104,76 +98,42 @@ module FramebufferExtensions =
         let attach (o : IFramebufferOutput) (attachment) =
             match o with
 
-                | :? Renderbuffer as o ->
-                    GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, attachment, RenderbufferTarget.Renderbuffer, o.Handle)
-                    GL.Check "could not attach renderbuffer"
+            | :? Renderbuffer as o ->
+                GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, attachment, RenderbufferTarget.Renderbuffer, o.Handle)
+                GL.Check "could not attach renderbuffer"
 
+            | :? ITextureLevel as r ->
+                let o = unbox<Texture> r.Texture
 
-                | :? IBackendTextureOutputView as r ->
-                    let o = unbox<Texture> r.texture
+                let baseSlice = r.Slices.Min
+                let slices = 1 + r.Slices.Max - baseSlice
+                let level = r.Level
 
-                    let baseSlice = r.slices.Min
-                    let slices = 1 + r.slices.Max - baseSlice
-                    let level = r.level
-
-                    if slices > 1 then
-                        if baseSlice <> 0 || slices <> (if o.Dimension = TextureDimension.TextureCube then 6 * o.Count else o.Count) then // TODO: Is it possible to bind a cubemap array as texture layers?
-                            failwith "sub-layers not supported atm."
+                if slices > 1 then
+                    if baseSlice <> 0 || slices <> (if o.Dimension = TextureDimension.TextureCube then 6 * o.Count else o.Count) then // TODO: Is it possible to bind a cubemap array as texture layers?
+                        failwith "sub-layers not supported atm."
   
-                        GL.FramebufferTexture(FramebufferTarget.Framebuffer, attachment, o.Handle, level)
+                    GL.FramebufferTexture(FramebufferTarget.Framebuffer, attachment, o.Handle, level)
+                    GL.Check "could not attach texture"
+
+                else
+                    match o.Dimension with
+                    | TextureDimension.TextureCube ->
+                        let (_,target) = TextureCubeExtensions.cubeSides.[baseSlice]
+                        if o.IsArray then
+                            failwith "cubemaparray currently not implemented"
+                        else
+                            GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, target, o.Handle, level)
+                        GL.Check "could not attach texture"
+                    | _ ->
+                        if o.IsArray then
+                            GL.FramebufferTextureLayer(FramebufferTarget.Framebuffer, attachment, o.Handle, level, baseSlice)
+                        else
+                            GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, (if o.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), o.Handle, level)
                         GL.Check "could not attach texture"
 
-                    else
-
-                        match o.Dimension with
-                            | TextureDimension.TextureCube ->
-                                let (_,target) = TextureCubeExtensions.cubeSides.[baseSlice]
-                                if o.IsArray then
-                                    failwith "cubemaparray currently not implemented"
-                                else
-                                    GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, target, o.Handle, level)
-                                GL.Check "could not attach texture"
-                            | _ ->
-                                if o.IsArray then
-                                    GL.FramebufferTextureLayer(FramebufferTarget.Framebuffer, attachment, o.Handle, level, baseSlice)
-                                else
-                                    GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, (if o.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), o.Handle, level)
-                                GL.Check "could not attach texture"
-
-                | :? ITextureLevel as r ->
-                    let o = unbox<Texture> r.Texture
-
-                    let baseSlice = r.Slices.Min
-                    let slices = 1 + r.Slices.Max - baseSlice
-                    let level = r.Level
-
-                    if slices > 1 then
-                        if baseSlice <> 0 || slices <> (if o.Dimension = TextureDimension.TextureCube then 6 * o.Count else o.Count) then // TODO: Is it possible to bind a cubemap array as texture layers?
-                            failwith "sub-layers not supported atm."
-  
-                        GL.FramebufferTexture(FramebufferTarget.Framebuffer, attachment, o.Handle, level)
-                        GL.Check "could not attach texture"
-
-                    else
-
-                        match o.Dimension with
-                            | TextureDimension.TextureCube ->
-                                let (_,target) = TextureCubeExtensions.cubeSides.[baseSlice]
-                                if o.IsArray then
-                                    failwith "cubemaparray currently not implemented"
-                                else
-                                    GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, target, o.Handle, level)
-                                GL.Check "could not attach texture"
-                            | _ ->
-                                if o.IsArray then
-                                    GL.FramebufferTextureLayer(FramebufferTarget.Framebuffer, attachment, o.Handle, level, baseSlice)
-                                else
-                                    GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, (if o.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), o.Handle, level)
-                                GL.Check "could not attach texture"
-                    
-        
-                | v ->
-                    failwithf "unsupported view: %A" v
+            | v ->
+                failwithf "unsupported view: %A" v
 
         // attach all colors
         for (i,s,o) in bindings do

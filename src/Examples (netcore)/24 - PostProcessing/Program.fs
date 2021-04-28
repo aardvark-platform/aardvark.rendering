@@ -1,7 +1,8 @@
 ﻿open System
 
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
@@ -112,7 +113,7 @@ let main argv =
         Sg.draw IndexedGeometryMode.TriangleStrip
             |> Sg.vertexAttribute DefaultSemantic.Positions (AVal.constant [|V3f(-1.0,-1.0,0.0); V3f(1.0,-1.0,0.0); V3f(-1.0,1.0,0.0);V3f(1.0,1.0,0.0) |])
             |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (AVal.constant [|V2f.OO; V2f.IO; V2f.OI; V2f.II|])
-            |> Sg.depthTest ~~DepthTestMode.None
+            |> Sg.depthTest' DepthTest.None
 
 
 

@@ -13,6 +13,7 @@ open System.IO
 open System.Runtime.InteropServices
 
 open Aardvark.Base
+open Aardvark.Rendering
 open Aardvark.Prinziple
 open FSharp.Data.Adaptive
 

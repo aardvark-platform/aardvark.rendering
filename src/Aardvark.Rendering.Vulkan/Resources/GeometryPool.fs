@@ -5,12 +5,12 @@ open System.Threading
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open System.Collections.Generic
-open System.Collections.Concurrent
 open Aardvark.Base
+open Aardvark.Rendering
+open Aardvark.Rendering.Management
 open FSharp.Data.Adaptive
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
-open Management
 
 #nowarn "9"
 // #nowarn "51"
@@ -312,7 +312,7 @@ module GeometryPoolUtilities =
                     |> check "could not bind host memory"
 
                 let! pPtr = 0n
-                VkRaw.vkMapMemory(device.Handle, hm.Handle, 0UL, uint64 hm.Size, VkMemoryMapFlags.MinValue, pPtr)
+                VkRaw.vkMapMemory(device.Handle, hm.Handle, 0UL, uint64 hm.Size, VkMemoryMapFlags.None, pPtr)
                     |> check "could not map memory"
                     
                 return pPtr.Value, hm, new Buffer(device, handle, hm, size, VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit)
@@ -410,20 +410,17 @@ module GeometryPoolUtilities =
         member x.Realloc(newCapacity : int64) =
             x.Realloc(newCapacity, transfer.RunSynchronously)
 
-        member x.Dispose() =
+        override x.Destroy() =
             if hostBuffer.Handle.IsValid then
                 //VkRaw.vkUnmapMemory(device.Handle, hm.Handle)
-                device.Delete hostBuffer
+                hostBuffer.Dispose()
                 ptr <- 0n
-                device.Delete(x)
+                base.Destroy()
 
         interface ILockedResource with
             member x.Lock = lock.Lock
             member x.OnLock c = lock.OnLock c
             member x.OnUnlock c = lock.OnUnlock c
-
-        interface IDisposable with
-            member x.Dispose() = x.Dispose()
 
     type StreamingBufferOld(device : Device, rlock : ResourceLock2, usage : VkBufferUsageFlags, handle : VkBuffer, devPtr : DevicePtr, size : int64) =
         inherit Buffer(device, handle, devPtr, size, usage)
@@ -462,7 +459,7 @@ module GeometryPoolUtilities =
                         |> check "could not bind buffer memory"
 
                     let! pMemPtr = 0n
-                    VkRaw.vkMapMemory(device.Handle, bufferMem.Handle, 0UL, uint64 bufferMem.Size, VkMemoryMapFlags.MinValue, pMemPtr)
+                    VkRaw.vkMapMemory(device.Handle, bufferMem.Handle, 0UL, uint64 bufferMem.Size, VkMemoryMapFlags.None, pMemPtr)
                         |> check "could not map memory"
 
                     return buffer, bufferMem, !!pMemPtr
@@ -499,12 +496,12 @@ module GeometryPoolUtilities =
                         VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, uint32 todoCount, NativePtr.ofNativeInt (gc.AddrOfPinnedObject()))
                         gc.Free()
 
-                    Disposable.Empty
+                    []
             }
 
-        member x.Dispose() =
+        override x.Destroy() =
             if scratchBuffer.IsValid then
-                device.Delete x
+                base.Destroy()
                 VkRaw.vkDestroyBuffer(device.Handle, scratchBuffer, NativePtr.zero)
                 scratchMem.Dispose()
                 scratchBuffer <- VkBuffer.Null
@@ -564,7 +561,7 @@ module GeometryPoolUtilities =
                                         let! pCopyInfo = VkBufferCopy(uint64 scratchOffset, uint64 offset, uint64 size)
                                         cmd.AppendCommand()
                                         VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, pCopyInfo)
-                                        return Disposable.Empty
+                                        return []
                                     }
                             }
 
@@ -621,9 +618,9 @@ module GeometryPoolUtilities =
 
         let mutable isEmpty = true
 
-        member x.Dispose() =
+        override x.Destroy() =
             if scratchBuffer.IsValid then
-                device.Delete x
+                base.Destroy()
                 VkRaw.vkDestroyBuffer(device.Handle, scratchBuffer, NativePtr.zero)
                 scratchMem.Dispose()
                 scratchBuffer <- VkBuffer.Null
@@ -655,7 +652,7 @@ module GeometryPoolUtilities =
                                         native {
                                             let! pCopyInfo = VkBufferCopy(uint64 offset, uint64 offset, uint64 size)
                                             VkRaw.vkCmdCopyBuffer(cmd.Handle, scratchBuffer, handle, 1u, pCopyInfo)
-                                            return Disposable.Empty
+                                            return []
                                         }
                                 }
                             )
@@ -672,9 +669,6 @@ module GeometryPoolUtilities =
             member x.Lock = rlock.Lock
             member x.OnLock c = rlock.OnLock c
             member x.OnUnlock c = rlock.OnUnlock c
-
-        interface IDisposable with
-            member x.Dispose() = x.Dispose()
 
     [<AbstractClass; Sealed; Extension>]
     type DeviceMappedBufferExts private() =
@@ -722,7 +716,7 @@ module GeometryPoolUtilities =
 
         let views =
             buffers |> Map.map (fun _ (_,t,b) ->
-                Aardvark.Base.BufferView(b, t)
+                Aardvark.Rendering.BufferView(b, t)
             )
 
         let vertexSize = types |> Map.toSeq |> Seq.sumBy (fun (_,t) -> Marshal.SizeOf t |> int64)
@@ -806,17 +800,18 @@ module GeometryPoolUtilities =
                     let offset = elemSize * int64 ptr.Offset
                     let size = elemSize * int64 fvc
 
-                    match geometry.IndexedAttributes.TryGetValue sem with
-                        | (true, arr) ->
-                            assert(arr.GetType().GetElementType() = elemType)
-                            let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
-                            try buffer.Write(offset, size, gc.AddrOfPinnedObject())
-                            finally gc.Free()
+                    if size > 0L then
+                        match geometry.IndexedAttributes.TryGetValue sem with
+                            | (true, arr) ->
+                                assert(arr.GetType().GetElementType() = elemType)
+                                let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
+                                try buffer.Write(offset, size, gc.AddrOfPinnedObject())
+                                finally gc.Free()
 
-                            //t.Enqueue buffer.Flush
+                                //t.Enqueue buffer.Flush
 
-                        | _ ->
-                            ()
+                            | _ ->
+                                ()
 
                 Interlocked.Increment(&count) |> ignore
                 ptr

@@ -2,14 +2,13 @@
 
 open System.Diagnostics
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
 open Valve.VR
 open Aardvark.Application
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
-open Valve.VR
 
 
 module StereoShader =
@@ -59,7 +58,7 @@ module StereoShader =
 type private DummyObject() =
     inherit AdaptiveObject()
 
-type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i -> V2i) as this  =
+type VulkanVRApplicationLayered(samples : int, debug : DebugConfig option, adjustSize : V2i -> V2i) as this  =
     inherit VrRenderer(adjustSize)
     
     let app = new HeadlessVulkanApplication(debug, this.GetVulkanInstanceExtensions(), fun d -> this.GetVulkanDeviceExtensions d.Handle)
@@ -112,25 +111,19 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
 
     let compileHidden (m : IndexedGeometry) =
         let writeStencil =
-            StencilMode(
-                StencilOperation(
-                    StencilOperationFunction.Replace,
-                    StencilOperationFunction.Replace,
-                    StencilOperationFunction.Replace
-                ),
-                StencilFunction(
-                    StencilCompareFunction.Always,
-                    1,
-                    0xFFFFFFFFu
-                )
-            )
+            { StencilMode.None with
+                Pass = StencilOperation.Replace
+                Fail = StencilOperation.Replace
+                DepthFail = StencilOperation.Replace
+                Comparison = ComparisonFunction.Always
+                Reference = 1 }
 
         let sg =
             Sg.ofIndexedGeometry m
                 |> Sg.shader {
                     do! StereoShader.hiddenAreaFragment
                 }
-                |> Sg.stencilMode (AVal.constant writeStencil)
+                |> Sg.stencilMode' writeStencil
                 |> Sg.writeBuffers' (Set.ofList [DefaultSemantic.Stencil])
 
         hiddenTask <- RuntimeCommand.Render(sg.RenderObjects(Ag.Scope.Root))
@@ -142,14 +135,19 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
     
     let queue = device.GraphicsFamily.Queues |> List.head
     
-    new(samples, adjustSize) = new VulkanVRApplicationLayered(samples, false, adjustSize)
-    new(debug, adjustSize) = new VulkanVRApplicationLayered(1, debug, adjustSize)
-    new(adjustSize) = new VulkanVRApplicationLayered(1, false, adjustSize)
+    new(samples, debug, adjustSize) = new VulkanVRApplicationLayered(samples, (if debug then Some DebugConfig.Default else None), adjustSize)
+
+    new(samples, adjustSize) = new VulkanVRApplicationLayered(samples, None, adjustSize)
+    new(debug : DebugConfig, adjustSize) = new VulkanVRApplicationLayered(1, Some debug, adjustSize)
+    new(debug : bool, adjustSize) = new VulkanVRApplicationLayered(1, debug, adjustSize)
+    new(adjustSize) = new VulkanVRApplicationLayered(1, None, adjustSize)
     
-    new(samples, debug) = new VulkanVRApplicationLayered(samples, debug, id)
-    new(samples) = new VulkanVRApplicationLayered(samples, false, id)
-    new(debug) = new VulkanVRApplicationLayered(1, debug, id)
-    new() = new VulkanVRApplicationLayered(1, false, id)
+    new(samples, debug : bool) = new VulkanVRApplicationLayered(samples, debug, id)
+    new(samples, debug : DebugConfig) = new VulkanVRApplicationLayered(samples, Some debug, id)
+    new(samples) = new VulkanVRApplicationLayered(samples, None, id)
+    new(debug : DebugConfig) = new VulkanVRApplicationLayered(1, Some debug, id)
+    new(debug : bool) = new VulkanVRApplicationLayered(1, debug, id)
+    new() = new VulkanVRApplicationLayered(1, None, id)
 
     member x.Version = version
     member x.Texture = tex
@@ -167,16 +165,16 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
             userCmd <- t
             if loaded then
                 let list = AList.ofList [ hiddenTask; t ]
-                task <- new Aardvark.Rendering.Vulkan.Temp.CommandTask(app.Device, renderPass, RuntimeCommand.Ordered list)
+                task <- app.Runtime.CompileRender(renderPass, RuntimeCommand.Ordered list)
                 
     override x.OnLoad(i : VrRenderInfo) : VrTexture * VrTexture =
         info <- i
 
         if loaded then
-            device.Delete fbo
-            device.Delete cImg
-            device.Delete dImg
-            device.Delete fImg
+            fbo.Dispose()
+            cImg.Dispose()
+            dImg.Dispose()
+            fImg.Dispose()
         else
             compileHidden x.HiddenAreaMesh
 
@@ -252,7 +250,7 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
         
         
         let list = AList.ofList [ hiddenTask; userCmd ]
-        task <- new Aardvark.Rendering.Vulkan.Temp.CommandTask(app.Device, renderPass, RuntimeCommand.Ordered list)
+        task <- app.Runtime.CompileRender(renderPass, RuntimeCommand.Ordered list)
         loaded <- true
 
         VrTexture.Vulkan(fTex, Box2d(V2d(0.0, 1.0), V2d(0.5, 0.0))), VrTexture.Vulkan(fTex, Box2d(V2d(0.5, 1.0), V2d(1.0, 0.0)))
@@ -357,16 +355,16 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
 
     override x.Release() = 
         // delete views
-        device.Delete fbo.Attachments.[DefaultSemantic.Colors]
-        device.Delete fbo.Attachments.[DefaultSemantic.Depth]
+        fbo.Attachments.[DefaultSemantic.Colors].Dispose()
+        fbo.Attachments.[DefaultSemantic.Depth].Dispose()
 
         // delete FBOs
-        device.Delete fbo
+        fbo.Dispose()
 
         // delete images
-        device.Delete cImg
-        device.Delete dImg
-        device.Delete fImg
+        cImg.Dispose()
+        dImg.Dispose()
+        fImg.Dispose()
 
         // dispose the app
         app.Dispose()
@@ -398,6 +396,9 @@ type VulkanVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
         member x.AfterRender = afterRender.Publish
 
     interface IRenderControl with
+        member x.Cursor
+            with get() = Cursor.Default
+            and set c = ()
         member x.Keyboard = keyboard :> IKeyboard
         member x.Mouse = mouse :> IMouse
 

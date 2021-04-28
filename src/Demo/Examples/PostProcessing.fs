@@ -20,14 +20,14 @@ namespace Examples
 
 open System
 open Aardvark.Base
+
 open FSharp.Data.Adaptive
 
 open Aardvark.Rendering.Interactive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open FSharp.Data.Adaptive.Operators
-open Aardvark.Base.Rendering
-open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering
 
 module PostProcessing = 
 
@@ -139,7 +139,7 @@ module PostProcessing =
         Sg.draw IndexedGeometryMode.TriangleStrip
             |> Sg.vertexAttribute DefaultSemantic.Positions (AVal.constant [|V3f(-1.0,-1.0,0.0); V3f(1.0,-1.0,0.0); V3f(-1.0,1.0,0.0);V3f(1.0,1.0,0.0) |])
             |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (AVal.constant [|V2f.OO; V2f.IO; V2f.OI; V2f.II|])
-            |> Sg.depthTest ~~DepthTestMode.None
+            |> Sg.depthTest' DepthTest.None
 
     // so in a first pass we need to render our pointScene to a color texture which
     // is quite simple using the RenderTask utilities provided in Base.Rendering.

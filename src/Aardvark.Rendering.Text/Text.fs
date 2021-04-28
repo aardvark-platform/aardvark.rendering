@@ -6,7 +6,7 @@ open System.Linq
 open System.Collections.Generic
 open System.Runtime.CompilerServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 
 
 [<Struct>]

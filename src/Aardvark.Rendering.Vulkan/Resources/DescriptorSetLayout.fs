@@ -5,7 +5,7 @@ open System.Threading
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
@@ -43,7 +43,7 @@ module DescriptorSetLayoutBinding =
                 stages,
                 NativePtr.zero
             )
-            
+
         DescriptorSetLayoutBinding(device, handle, parameter)
 
 
@@ -51,21 +51,32 @@ type DescriptorSetLayout =
     class
         inherit Resource<VkDescriptorSetLayout>
         val mutable public Bindings : array<DescriptorSetLayoutBinding>
-        new(device : Device, handle : VkDescriptorSetLayout, bindings) = { inherit Resource<_>(device, handle); Bindings = bindings }
+
+        override x.Destroy() =
+            if x.Handle.IsValid then
+                VkRaw.vkDestroyDescriptorSetLayout(x.Device.Handle, x.Handle, NativePtr.zero)
+                x.Handle <- VkDescriptorSetLayout.Null
+
+        new(device : Device, handle : VkDescriptorSetLayout, bindings) =
+            { inherit Resource<_>(device, handle); Bindings = bindings }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DescriptorSetLayout =
 
-    let empty (d : Device) = DescriptorSetLayout(d, VkDescriptorSetLayout.Null, Array.empty)
+    let empty (d : Device) = new DescriptorSetLayout(d, VkDescriptorSetLayout.Null, Array.empty)
 
     let create (bindings : array<DescriptorSetLayoutBinding>) (device : Device) =
-        assert (bindings |> Seq.mapi (fun i b -> b.Binding = i) |> Seq.forall id)
+        assert (
+            let offsets = (0, bindings) ||> Array.scan (fun o b -> o + b.DescriptorCount) |> Array.take bindings.Length
+            (bindings, offsets) ||> Array.map2 (fun b o -> b.Binding = o) |> Array.forall id
+        )
+
         native {
             let! pArr = bindings |> Array.map (fun b -> b.Handle)
             let! pInfo =
                 VkDescriptorSetLayoutCreateInfo(
-                    VkDescriptorSetLayoutCreateFlags.MinValue,
+                    VkDescriptorSetLayoutCreateFlags.None,
                     uint32 bindings.Length,
                     pArr
                 )
@@ -74,12 +85,5 @@ module DescriptorSetLayout =
                 |> check "could not create DescriptorSetLayout"
 
             let handle = NativePtr.read pHandle
-            return DescriptorSetLayout(device, handle, bindings)
+            return new DescriptorSetLayout(device, handle, bindings)
         }
-
-
-    let delete (layout : DescriptorSetLayout) (device : Device) =
-        if layout.Handle.IsValid then
-            VkRaw.vkDestroyDescriptorSetLayout(device.Handle, layout.Handle, NativePtr.zero)
-            layout.Handle <- VkDescriptorSetLayout.Null
-

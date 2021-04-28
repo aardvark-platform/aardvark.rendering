@@ -8,14 +8,14 @@ and efficient instancing.
 *)
 
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
 module Shader =
     open FShade
-    open Aardvark.Base.Rendering.Effects
+    open Aardvark.Rendering.Effects
 
     type InstanceVertex = { 
         [<Position>]            pos   : V4d 

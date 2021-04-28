@@ -2,13 +2,10 @@
 
 open System
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
 open Aardvark.Rendering.Vulkan
-open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
-open System.Reflection
-open Microsoft.FSharp.NativeInterop
 open KHRSurface
 
 #nowarn "9"
@@ -154,6 +151,12 @@ type SwapchainDescription =
         samples         : int
     }
 
+    member x.Dispose() =
+        x.renderPass.Dispose()
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -219,16 +222,9 @@ module SwapchainDescription =
             samples = samples
         }
 
-    let delete (desc : SwapchainDescription) (device : Device) =
-        device.Delete(desc.renderPass)
-
 [<AbstractClass; Sealed; Extension>]
 type DeviceSwapchainDescriptionExtensions private() =
 
     [<Extension>]
     static member CreateSwapchainDescription(this : Device, surface : Surface, mode : AbstractGraphicsMode) =
         this |> SwapchainDescription.create surface mode
-
-    [<Extension>]
-    static member Delete(this : Device, desc : SwapchainDescription) =
-        this |> SwapchainDescription.delete desc

@@ -1,5 +1,5 @@
 ﻿open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
@@ -56,7 +56,7 @@ let main argv =
             DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
         ]
 
-    let color = [| runtime.CreateTexture(size, TextureFormat.Rgba32f, 1, 1, 1); runtime.CreateTexture(size, TextureFormat.Rgba32f, 1, 1, 1) |]
+    let color = [| runtime.CreateTexture2D(size, TextureFormat.Rgba32f, 1, 1); runtime.CreateTexture2D(size, TextureFormat.Rgba32f, 1, 1) |]
     let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
 
     // Create a framebuffer matching signature and capturing the render to texture targets
@@ -65,7 +65,7 @@ let main argv =
             runtime.CreateFramebuffer(
                 signature, 
                 Map.ofList [
-                    DefaultSemantic.Colors, ({ texture = e; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Colors, e.GetOutputView()
                     DefaultSemantic.Depth, (depth :> IFramebufferOutput)
                 ]
             )
@@ -105,13 +105,15 @@ let main argv =
     // this a custom render task which call others and can be chained with outer render tasks
     // we need this to control where to render to
     let renderToTarget =
-        RenderTask.custom (fun (self,token,outputDesc) -> 
+        RenderTask.custom (fun (self,token,outputDesc,queries) -> 
             // choose where to render to
             let target = fbos.[(currentTexture.Value+1)%2]
             // manually clear and render to target
             let output = OutputDescription.ofFramebuffer target
-            clear.Run(self, token, output)
-            task.Run(self, token,output)
+            queries.Begin()
+            clear.Run(self, token, output, queries)
+            task.Run(self, token, output, queries)
+            queries.End()
         )
 
     // just visualize using fullscreen quad

@@ -25,7 +25,7 @@ open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
 open Microsoft.FSharp.Linq
 open FSharp.Data.Adaptive
-open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering.ShaderReflection
 open Aardvark.Rendering.GL
 
 

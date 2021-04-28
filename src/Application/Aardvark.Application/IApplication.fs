@@ -1,7 +1,7 @@
 ﻿namespace Aardvark.Application
 
 open System
-open Aardvark.Base
+open Aardvark.Rendering
 open System.Runtime.CompilerServices
 
 type IApplication =

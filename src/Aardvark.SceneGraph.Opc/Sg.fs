@@ -1,7 +1,7 @@
 namespace Aardvark.SceneGraph.Opc
 
-open System.IO
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive  
 open Aardvark.SceneGraph
 

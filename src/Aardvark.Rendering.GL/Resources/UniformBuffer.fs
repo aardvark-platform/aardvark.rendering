@@ -26,7 +26,7 @@ open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
 open FSharp.Data.Adaptive
 open System.Reflection
-open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering.ShaderReflection
 open Aardvark.Rendering.GL
 
 #nowarn "9"

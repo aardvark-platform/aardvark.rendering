@@ -1,11 +1,11 @@
 ﻿namespace Aardvark.SceneGraph
 
-open System.Runtime.InteropServices
 open System.Collections.Generic
 
 open Aardvark.Base
-open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
+open Aardvark.Rendering
+open FSharp.Data.Adaptive
 
 type ISg = 
     interface end
@@ -18,7 +18,15 @@ type IGroup =
     inherit ISg
     abstract member Children : aset<ISg>
 
-module private Providers =
+module Providers =
+
+    type SingleUniformHolder(name : Symbol, value : IAdaptiveValue) =
+        
+        let value = Some value
+
+        interface IUniformProvider with
+            member x.TryGetUniform (s,n) = if n = name then value else None
+            member x.Dispose() = ()
 
     type SimpleUniformHolder(values : Map<Symbol, IAdaptiveValue>) =
         interface IUniformProvider with

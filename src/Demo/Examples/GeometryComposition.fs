@@ -9,8 +9,8 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open FSharp.Data.Adaptive.Operators
-open Aardvark.Base.Rendering
-open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering
+
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Text
 
@@ -269,14 +269,6 @@ module GeometryComposition =
                                 Sg.text font C4b.White (AVal.constant name)
                                     |> Sg.transform (Trafo3d.FromBasis(V3d.IOO, V3d.OOI, V3d.OIO, V3d.Zero) * Trafo3d.Scale(0.1))
                                     |> Sg.translate 0.0 0.0 1.0
-
-                            let mutable blend = BlendMode(true)
-                            blend.SourceFactor <- BlendFactor.One
-                            blend.DestinationFactor <- BlendFactor.One
-                            blend.Operation <- BlendOperation.Add
-                            blend.SourceAlphaFactor <- BlendFactor.One
-                            blend.DestinationAlphaFactor <- BlendFactor.One
-                            blend.AlphaOperation <- BlendOperation.Add
 
                             let inner = 
                                 Sg.ofList [

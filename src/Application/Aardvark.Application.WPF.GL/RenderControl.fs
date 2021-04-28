@@ -1,13 +1,7 @@
 ﻿namespace Aardvark.Application.WPF
 
-
-open System
-open System.Runtime.InteropServices
-open Aardvark.Base
+open Aardvark.Rendering
 open Aardvark.Rendering.GL
-open OpenTK.Graphics.OpenGL4
-open System.Windows
-open System.Windows.Controls
 open System.Windows.Forms.Integration
 open Aardvark.Application
 open System.Windows.Threading

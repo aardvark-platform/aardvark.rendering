@@ -73,7 +73,7 @@ type PatchFileInfo =
 module PatchFileInfo =
     open XmlHelpers
     open Aardvark.Prinziple
-    open Aardvark.Base.Rendering
+    
 
     [<AutoOpen>]
     module Parsers =

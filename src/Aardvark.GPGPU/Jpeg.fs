@@ -1,10 +1,10 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.GPGPU
 
 open System
-open Microsoft.FSharp.Quotations
-open System.Collections.Generic
 open System.Runtime.InteropServices
 open Microsoft.FSharp.NativeInterop
+open Aardvark.Base
+open Aardvark.Rendering
 
 #nowarn "9"
 #nowarn "51"
@@ -1173,7 +1173,7 @@ module Tools =
             handle.Free()
 
 
-type JpegCompressor(runtime : IRuntime) =
+type JpegCompressor(runtime : IComputeRuntime) =
     let dct         = runtime.CreateComputeShader JpegKernels.dct
     let codewords   = runtime.CreateComputeShader JpegKernels.codewordsKernelBallot
     let assemble    = runtime.CreateComputeShader JpegKernels.assembleKernel
@@ -1557,15 +1557,18 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         result
 
 
-    member x.Compress(image : ITextureSubResource) =
+    member x.Compress(image : ITextureSubResource, queries : IQuery) =
         assert (image.Size.XY = size)
         dctInput.["InputImage"] <- image.Texture
         dctInput.["ImageLevel"] <- image.Level
         dctInput.Flush()
 
-        overallCommand.Run()
+        overallCommand.Run(queries)
 
         x.Download()
+
+    member x.Compress(image : ITextureSubResource) =
+        x.Compress(image, Queries.none)
 
     member x.Dispose() =
         dctInput.Dispose()

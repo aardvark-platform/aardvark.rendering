@@ -1,13 +1,10 @@
 ﻿namespace Aardvark.SceneGraph.Semantics
 
 open Aardvark.Base
-open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
+open Aardvark.Rendering
 open Aardvark.SceneGraph
-
-open Aardvark.SceneGraph.Internal
-open System.Collections.Generic
-
+open FSharp.Data.Adaptive
 
 [<AutoOpen>]
 module BoundingBoxExtensions =
@@ -149,12 +146,6 @@ module BoundingBoxes =
 
         member x.LocalBoundingBox(r : Sg.IndirectRenderNode, scope : Ag.Scope) : aval<Box3d> =
             AVal.constant Box3d.Infinite
-
-        member x.LocalBoundingBox(p : Sg.OverlayNode, scope : Ag.Scope) : aval<Box3d> =
-            AVal.constant Box3d.Invalid
-
-        member x.GlobalBoundingBox(p : Sg.OverlayNode, scope : Ag.Scope) : aval<Box3d> =
-            AVal.constant Box3d.Invalid
 
         member x.GlobalBoundingBox(node : Sg.RenderNode, scope : Ag.Scope) : aval<Box3d> =
             let va = scope.VertexAttributes

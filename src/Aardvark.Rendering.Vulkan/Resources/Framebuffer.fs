@@ -1,11 +1,9 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open System.Threading
 open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
@@ -20,9 +18,13 @@ type Framebuffer =
         val mutable public ImageViews : ImageView[]
         val mutable public Attachments : Map<Symbol, ImageView>
 
+        override x.Destroy() =
+            if x.Device.Handle <> 0n && x.Handle.IsValid then
+                VkRaw.vkDestroyFramebuffer(x.Device.Handle, x.Handle, NativePtr.zero)
+                x.Handle <- VkFramebuffer.Null
+
         interface IFramebuffer with
             member x.Signature = x.RenderPass :> IFramebufferSignature
-            member x.Dispose() = ()
             member x.GetHandle _ = x.Handle :> obj
             member x.Size = x.Size
             member x.Attachments = x.Attachments |> Map.map (fun _ v -> v :> IFramebufferOutput)
@@ -33,19 +35,23 @@ type Framebuffer =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Framebuffer =
-    
+
     let create (pass : RenderPass) (views : Map<Symbol, ImageView>) (device : Device) =
         if Map.isEmpty views then
             failf "cannot create empty framebuffer"
 
 
         let attachmentSems =
-            let colors = pass.ColorAttachments |> Map.map (fun k (sem,_) -> sem)
-            match pass.DepthStencilAttachment with
-                | Some att ->
-                    colors |> Map.add pass.ColorAttachmentCount DefaultSemantic.Depth
-                | None ->
-                    colors
+            let add sym att map =
+                if Option.isSome att then
+                    let idx = Map.count map
+                    map |> Map.add idx sym
+                else
+                    map
+
+            pass.ColorAttachments |> Map.map (fun _ (sem, _) -> sem)
+            |> add DefaultSemantic.Depth pass.DepthAttachment
+            |> add DefaultSemantic.Stencil pass.StencilAttachment
 
         let mutable minSize = V2i(Int32.MaxValue, Int32.MaxValue)
         let mutable minLayers = Int32.MaxValue
@@ -55,18 +61,18 @@ module Framebuffer =
                 |> Array.map (fun (idx, sem) ->
                     match Map.tryFind sem views with
                         | Some view -> 
-                            let s = view.Image.Size.XY
+                            let s = view.Image.Size.XY / (1 <<< view.MipLevelRange.Max)
                             minSize <- V2i(min minSize.X s.X, min minSize.Y s.Y)
                             minLayers <- min minLayers (1 + view.ArrayRange.Max - view.ArrayRange.Min)
                             view
                         | _ -> failf "missing framebuffer attachment %A/%A" idx sem
                 )
-                
+
         native {
             let! pAttachments = attachments |> Array.map (fun a -> a.Handle)
             let! pInfo =
                 VkFramebufferCreateInfo(
-                    VkFramebufferCreateFlags.MinValue,
+                    VkFramebufferCreateFlags.None,
                     pass.Handle,
                     uint32 attachments.Length, pAttachments,
                     uint32 minSize.X,
@@ -86,19 +92,8 @@ module Framebuffer =
             return new Framebuffer(device, handle, pass, minSize, real, attachments)
         }
 
-    let delete (fbo : Framebuffer) (device : Device) =
-        if device.Handle <> 0n && fbo.Handle.IsValid then
-            VkRaw.vkDestroyFramebuffer(device.Handle, fbo.Handle, NativePtr.zero)
-            fbo.Handle <- VkFramebuffer.Null
-
-
 [<AbstractClass; Sealed; Extension>]
 type ContextFramebufferExtensions private() =
     [<Extension>]
     static member inline CreateFramebuffer(this : Device, pass : RenderPass, attachments : Map<Symbol, ImageView>) =
         this |> Framebuffer.create pass attachments
-        
-    [<Extension>]
-    static member inline Delete(this : Device, framebuffer : Framebuffer) =
-        this |> Framebuffer.delete framebuffer
-        

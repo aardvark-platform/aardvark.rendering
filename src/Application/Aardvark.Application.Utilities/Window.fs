@@ -10,8 +10,8 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.Slim
 open FSharp.Data.Adaptive.Operators
-open Aardvark.Base.Rendering
-open Aardvark.Base.ShaderReflection
+
+open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Text
 open Aardvark.Application.OpenVR
@@ -77,66 +77,6 @@ module ``FShade Extensions`` =
 
 module Utilities =
 
-
-    [<AbstractClass>]
-    type OutputMod<'a, 'b>(inputs : list<IOutputMod>) =
-        inherit AbstractOutputMod<'b>()
-
-        let mutable handle : Option<'a> = None
-
-        abstract member View : 'a -> 'b
-        default x.View a = unbox a
-        
-        abstract member TryUpdate : AdaptiveToken * 'a -> bool
-        default x.TryUpdate(_,_) = false
-
-        abstract member Create : AdaptiveToken -> 'a
-        abstract member Destroy : 'a -> unit
-
-        override x.Create() =
-            for i in inputs do i.Acquire()
-
-        override x.Destroy() =
-            for i in inputs do i.Release()
-            match handle with
-                | Some h -> 
-                    x.Destroy h
-                    handle <- None
-                | _ ->
-                    ()
-
-        override x.Compute(t, rt) =
-            let handle = 
-                match handle with
-                    | Some h ->
-                        if not (x.TryUpdate(t, h)) then
-                            x.Destroy(h)
-                            let h = x.Create(t)
-                            handle <- Some h
-                            h
-                        else
-                            h
-                    | None ->
-                        let h = x.Create t
-                        handle <- Some h
-                        h
-            x.View handle
-                    
-    module OutputMod =
-        let custom (dependent : list<IOutputMod>) (create : AdaptiveToken -> 'a) (tryUpdate : AdaptiveToken -> 'a -> bool) (destroy : 'a -> unit) (view : 'a -> 'b) =
-            { new OutputMod<'a, 'b>(dependent) with
-                override x.Create t = create t
-                override x.TryUpdate(t,h) = tryUpdate t h
-                override x.Destroy h = destroy h
-                override x.View h = view h
-            } :> IOutputMod<_> 
-            
-        let simple (create : AdaptiveToken -> 'a) (destroy : 'a -> unit) =
-            { new OutputMod<'a, 'a>([]) with
-                override x.Create t = create t
-                override x.Destroy h = destroy h
-            } :> IOutputMod<_>
-
     module private Shader =
         open FShade
 
@@ -172,6 +112,7 @@ module Utilities =
         
         abstract member IsVR : bool
         abstract member Controllers : list<VrDevice> 
+        abstract member Cursor : Cursor with get, set
         abstract member Keyboard : IKeyboard
         abstract member Mouse : IMouse
 
@@ -211,6 +152,9 @@ module Utilities =
         member x.Time = win.Time
         member x.Keyboard = win.Keyboard
         member x.Mouse = win.Mouse
+        member x.Cursor
+            with get() = win.Cursor
+            and set c = win.Cursor <- c
 
         member x.Run(preventDisposal) = 
             win.Run()
@@ -234,6 +178,9 @@ module Utilities =
                         win.RenderTask <- task
         
         interface ISimpleRenderWindow with
+            member x.Cursor
+                with get() = x.Cursor
+                and set c = x.Cursor <- c
             member x.Runtime = x.Runtime
             member x.Sizes = x.Sizes
             member x.Samples = x.Samples
@@ -507,7 +454,6 @@ module Utilities =
                     DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples }
                     DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
                 ],
-                Set.empty,
                 1, 
                 Set.empty
             )  
@@ -518,7 +464,6 @@ module Utilities =
                     DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples }
                     DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
                 ],
-                Set.empty,
                 2, 
                 Set.ofList [
                     "ProjTrafo"; 
@@ -538,36 +483,19 @@ module Utilities =
         let s = win.Sizes |> AVal.map (fun s -> s / V2i(2,1))
 
         let colors =
-            OutputMod.custom 
-                []
-                (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Rgba8, 1, samples, 2))
-                (fun t h -> h.Size.XY = s.GetValue t)
-                (fun h -> runtime.DeleteTexture h)
-                id
-                
+            runtime.CreateTexture2DArray(TextureFormat.Rgba8, samples, s, 2)
+
         let depth =
-            OutputMod.custom 
-                []
-                (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Depth24Stencil8, 1, samples, 2))
-                (fun t h -> h.Size.XY = s.GetValue t)
-                (fun h -> runtime.DeleteTexture h)
-                id
+            runtime.CreateTexture2DArray(TextureFormat.Depth24Stencil8, samples, s, 2)
 
         let resolved =
-            OutputMod.custom 
-                []
-                (fun t -> runtime.CreateTextureArray(s.GetValue t, TextureFormat.Rgba8, 1, 1, 2))
-                (fun t h -> h.Size.XY = s.GetValue t)
-                (fun h -> runtime.DeleteTexture h)
-                id
-                
+            runtime.CreateTexture2DArray(TextureFormat.Rgba8, 1, s, 2)
+
         let framebuffer =
-            OutputMod.custom
-                [colors; depth]
-                (fun t -> runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, colors.GetValue(t).[TextureAspect.Color, 0] :> IFramebufferOutput; DefaultSemantic.Depth, depth.GetValue(t).[TextureAspect.Depth, 0] :> IFramebufferOutput]))
-                (fun t h -> false)
-                (fun h -> runtime.DeleteFramebuffer h)
-                id
+            runtime.CreateFramebuffer(signature, [
+                DefaultSemantic.Colors, runtime.CreateTextureAttachment(colors)
+                DefaultSemantic.Depth, runtime.CreateTextureAttachment(depth)
+            ])
 
         let initialView = 
             match cfg.initialCamera with
@@ -629,7 +557,7 @@ module Utilities =
             let task =
                 Sg.fullScreenQuad
                     |> Sg.uniform "Dependent" (AVal.constant 0.0)
-                    |> Sg.diffuseTexture (resolved |> AVal.map (fun a -> a :> ITexture))
+                    |> Sg.diffuseTexture resolved
                     |> Sg.shader {
                         do! Shader.renderStereo
                     }
@@ -641,15 +569,19 @@ module Utilities =
                     member x.FramebufferSignature = Some win.FramebufferSignature
                     member x.Runtime = Some win.Runtime
                     member x.PerformUpdate (_,_) = ()
-                    member x.Perform (t,_,_) = 
+                    member x.Perform (t,_,_,q) = 
                         let fbo = framebuffer.GetValue t
                         let output = OutputDescription.ofFramebuffer fbo
 
-                        let r = resolved.GetValue(t)
+                        let c = colors.GetValue t |> unbox<IBackendTexture>
+                        let r = resolved.GetValue t |> unbox<IBackendTexture>
 
-                        clearTask.Run(t, RenderToken.Empty, output)
-                        stereoTask.Run(t, RenderToken.Empty, output)
-                        runtime.Copy(colors.GetValue(t), 0, 0, r, 0, 0, 2, 1)
+                        q.Begin()
+                        clearTask.Run(t, RenderToken.Empty, output, q)
+                        stereoTask.Run(t, RenderToken.Empty, output, q)
+                        q.End()
+
+                        runtime.Copy(c, 0, 0, r, 0, 0, 2, 1)
 
                     member x.Release() =
                         stereoTask.Dispose()
@@ -690,24 +622,14 @@ module Utilities =
 
 
                 let stencilTest =
-                    StencilMode(
-                        StencilOperation(
-                            StencilOperationFunction.Keep,
-                            StencilOperationFunction.Keep,
-                            StencilOperationFunction.Keep
-                        ),
-                        StencilFunction(
-                            StencilCompareFunction.Equal,
-                            0,
-                            0xFFFFFFFFu
-                        )
-                    )
+                    { StencilMode.None with
+                        Comparison = ComparisonFunction.Equal }
 
                 { new SimpleRenderWindow(app, app.Info.viewTrafos, app.Info.projTrafos) with
 
                     override x.WrapSg(win, sg) =
                         sg
-                        |> Sg.stencilMode (AVal.constant stencilTest)
+                        |> Sg.stencilMode' stencilTest
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                         |> Sg.uniform "CameraLocation" hmdLocation
@@ -715,7 +637,7 @@ module Utilities =
 
                     override x.Compile(win, sg) =
                         sg
-                        |> Sg.stencilMode (AVal.constant stencilTest)
+                        |> Sg.stencilMode' stencilTest
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                         |> Sg.uniform "CameraLocation" hmdLocation
@@ -731,24 +653,14 @@ module Utilities =
 
 
                 let stencilTest =
-                    StencilMode(
-                        StencilOperation(
-                            StencilOperationFunction.Keep,
-                            StencilOperationFunction.Keep,
-                            StencilOperationFunction.Keep
-                        ),
-                        StencilFunction(
-                            StencilCompareFunction.Equal,
-                            0,
-                            0xFFFFFFFFu
-                        )
-                    )
+                    { StencilMode.None with
+                        Comparison = ComparisonFunction.Equal }
 
                 { new SimpleRenderWindow(app, app.Info.viewTrafos, app.Info.projTrafos) with
 
                     override x.WrapSg(win, sg) =
                         sg
-                        |> Sg.stencilMode (AVal.constant stencilTest)
+                        |> Sg.stencilMode' stencilTest
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                         |> Sg.uniform "CameraLocation" hmdLocation
@@ -756,7 +668,7 @@ module Utilities =
 
                     override x.Compile(win, sg) =
                         sg
-                        |> Sg.stencilMode (AVal.constant stencilTest)
+                        |> Sg.stencilMode' stencilTest
                         |> Sg.uniform "ViewTrafo" app.Info.viewTrafos
                         |> Sg.uniform "ProjTrafo" app.Info.projTrafos
                         |> Sg.uniform "CameraLocation" hmdLocation

@@ -1,20 +1,16 @@
 ﻿namespace Aardvark.Application.OpenVR
 
-open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
+
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
 open Aardvark.Rendering.GL
-open Valve.VR
 open Aardvark.Application
-open Aardvark.Application.Slim
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
-open Valve.VR
 
 module StereoShader =
     open FShade
-    open FShade.Imperative
 
     type Vertex = 
         {
@@ -82,7 +78,6 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
                 DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples }
                 DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
             ],
-            Set.empty,
             2,
             Set.ofList [
                 "ViewTrafo"; "ProjTrafo"; 
@@ -116,25 +111,19 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
 
     let compileHidden (m : IndexedGeometry) =
         let writeStencil =
-            StencilMode(
-                StencilOperation(
-                    StencilOperationFunction.Replace,
-                    StencilOperationFunction.Replace,
-                    StencilOperationFunction.Replace
-                ),
-                StencilFunction(
-                    StencilCompareFunction.Always,
-                    1,
-                    0xFFFFFFFFu
-                )
-            )
+            { StencilMode.None with
+                Pass = StencilOperation.Replace
+                Fail = StencilOperation.Replace
+                DepthFail = StencilOperation.Replace
+                Comparison = ComparisonFunction.Always
+                Reference = 1 }
 
         let sg =
             Sg.ofIndexedGeometry m
                 |> Sg.shader {
                     do! StereoShader.hiddenAreaFragment
                 }
-                |> Sg.stencilMode (AVal.constant writeStencil)
+                |> Sg.stencilMode' writeStencil
                 |> Sg.writeBuffers' (Set.ofList [DefaultSemantic.Stencil])
 
         hiddenTask <- runtime.CompileRender(framebufferSignature, sg.RenderObjects(Ag.Scope.Root))
@@ -145,7 +134,7 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
     member x.Version = version :> aval<_>
     member x.Texture = tex
     
-    member x.FramebufferSignature = framebufferSignature :> IFramebufferSignature
+    member x.FramebufferSignature = framebufferSignature
     member x.Runtime = app.Runtime
     member x.Sizes = AVal.constant x.DesiredSize
     member x.Samples = samples
@@ -279,6 +268,10 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
         member x.AfterRender = afterRender.Publish
 
     interface IRenderControl with
+        member x.Cursor
+            with get() = Cursor.Default
+            and set c = ()
+
         member x.Keyboard = keyboard :> IKeyboard
         member x.Mouse = mouse :> IMouse
 

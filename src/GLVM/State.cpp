@@ -72,8 +72,8 @@ void State::Reset()
 	hDepthTest = nullptr;
 	hCullFace = nullptr;
 	hPolygonMode = nullptr;
-	hBlendMode = nullptr;
-	hStencilMode = nullptr;
+	hStencilModeFront = nullptr;
+	hStencilModeBack = nullptr;
 	hConservativeRaster = nullptr;
 	hMultisample = nullptr;
 }
@@ -108,9 +108,9 @@ bool State::HShouldSetMultisample(int* enabled)
 	}
 }
 
-bool State::HShouldSetDepthTest(DepthTestMode* test)
+bool State::HShouldSetDepthTest(int* test)
 {
-	if (hDepthTest == nullptr || memcmp(hDepthTest, test, sizeof(DepthTestMode)) != 0)
+	if (hDepthTest == nullptr || memcmp(hDepthTest, test, sizeof(int)) != 0)
 	{
 		hDepthTest = test;
 		return true;
@@ -150,25 +150,19 @@ bool State::HShouldSetPolygonMode(GLenum* test)
 	}
 }
 
-bool State::HShouldSetBlendMode(BlendMode* test)
+bool State::HShouldSetBlendModes(int count, BlendMode** test)
 {
-	if (hBlendMode == nullptr || memcmp(hBlendMode, test, sizeof(BlendMode)) != 0)
-	{
-		hBlendMode = test;
-		return true;
-	}
-	else
-	{
-		removedInstructions++;
-		return false;
-	}
+	// TODO: Implement or remove because interpreter is dead?
+	return true;
 }
 
-bool State::HShouldSetStencilMode(StencilMode* test)
+bool State::HShouldSetStencilMode(StencilMode* front, StencilMode* back)
 {
-	if (hStencilMode == nullptr || memcmp(hStencilMode, test, sizeof(StencilMode)) != 0)
+	if (hStencilModeFront == nullptr || memcmp(hStencilModeFront, front, sizeof(StencilMode)) != 0 ||
+		hStencilModeBack == nullptr || memcmp(hStencilModeBack, back, sizeof(StencilMode)) != 0)
 	{
-		hStencilMode = test;
+		hStencilModeFront = front;
+		hStencilModeBack = back;
 		return true;
 	}
 	else

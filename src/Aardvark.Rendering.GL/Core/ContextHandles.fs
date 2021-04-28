@@ -29,7 +29,7 @@ type ContextErrorEventHandler =
 /// </summary>
 [<AllowNullLiteral>]
 type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
-    static let current = new ThreadLocal<Option<ContextHandle>>(fun () -> None)
+    static let current = new ThreadLocal<ValueOption<ContextHandle>>(fun () -> ValueOption.None)
     static let contextError = new Event<ContextErrorEventHandler, ContextErrorEventArgs>()
 
     let l = obj()
@@ -40,9 +40,10 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
 
     static member Current
         with get() = 
+            let curr = current.Value
             match current.Value with
-                | Some ctx when ctx.IsCurrent -> Some ctx
-                | _ -> None
+                | ValueSome ctx when ctx.IsCurrent -> curr
+                | _ -> ValueNone
 
         and set v = current.Value <- v
         
@@ -74,8 +75,10 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
         handle.IsCurrent
 
     member x.MakeCurrent() =
+        Monitor.Enter l
+
         match ContextHandle.Current with
-            | Some handle -> handle.ReleaseCurrent()
+            | ValueSome handle -> handle.ReleaseCurrent()
             | _ -> ()
         
         let mutable retry = true
@@ -95,7 +98,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                     else
                         reraise()
 
-        ContextHandle.Current <- Some x
+        ContextHandle.Current <- ValueSome x
 
         GLVM.hglCleanup((unbox<IGraphicsContextInternal> handle).Context.Handle)
         let actions = Interlocked.Exchange(&onMakeCurrent, null)
@@ -108,11 +111,13 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
             handle.MakeCurrent(null)
         else
             Log.warn "cannot release context which is not current"
-        ContextHandle.Current <- None
+        ContextHandle.Current <- ValueNone
+
+        Monitor.Exit l
 
     member x.Use (action : unit -> 'a) =
         match ContextHandle.Current with
-            | Some h ->
+            | ValueSome h ->
                 if h = x then 
                     action()
                 else
@@ -123,7 +128,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                     finally
                         x.ReleaseCurrent()
                         h.MakeCurrent()
-            | None ->
+            | ValueNone ->
                 try
                     x.MakeCurrent()
                     action()
@@ -149,7 +154,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
             )
 
     member x.AttachDebugOutputIfNeeded() =
-        x.AttachDebugOutputIfNeeded false
+        x.AttachDebugOutputIfNeeded true
 
     member x.DebugOutputEnabled
         with get() = debugOutputEnabled
@@ -168,71 +173,6 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
 /// </summary>
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ContextHandle =
-    
-    //let private windows = ConcurrentDictionary<ContextHandle, NativeWindow>()
-
-    //let mutable primaryContext : ContextHandle = null
-
-    ///// <summary>
-    ///// creates a new context using the default configuration
-    ///// </summary>
-    //let create (enableDebug : bool) =
-    //    let window, context =
-    //        if not (isNull primaryContext) then 
-    //            primaryContext.MakeCurrent()
-            
-    //        let mode = Graphics.GraphicsMode(ColorFormat(Config.BitsPerPixel), Config.DepthBits, Config.StencilBits, 1, ColorFormat.Empty, Config.Buffers, false)
-    //        let window = new NativeWindow(16, 16, "background", GameWindowFlags.Default, mode, DisplayDevice.Default)
-    //        let context = new GraphicsContext(GraphicsMode.Default, window.WindowInfo, Config.MajorVersion, Config.MinorVersion, Config.ContextFlags);
-    //        context.MakeCurrent(window.WindowInfo)
-    //        let ctx = context |> unbox<IGraphicsContextInternal>
-    //        ctx.LoadAll()
-
-    //        GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
-    //        GL.Enable(EnableCap.TextureCubeMapSeamless)
-    //        GL.Disable(EnableCap.PolygonSmooth)
-    //        GL.Hint(HintTarget.FragmentShaderDerivativeHint, HintMode.Nicest)
-
-    //        context.MakeCurrent(null)
-    //        window, context
-    
-        
-    //    let handle = new ContextHandle(context, window.WindowInfo)
-
-    //    if enableDebug then
-    //        handle.AttachDebugOutputIfNeeded(true)
-
-    //    if isNull primaryContext then
-    //        primaryContext <- handle
-
-    //    // add the window to the windows-table to save it from being
-    //    // garbage collected.
-    //    if not <| windows.TryAdd(handle, window) then failwith "failed to add new context to live-set"
-    
-    
-    //    handle
-
-    //let createContexts enableDebug resourceContextCount  =
-    //    // if there is a current context release it before creating
-    //    // the GameWindow since the GameWindow makes itself current
-    //    GraphicsContext.ShareContexts <- true;
-
-    //    let current = ContextHandle.Current
-    //    match current with
-    //        | Some handle -> handle.ReleaseCurrent()
-    //        | None -> ()
-
-    //    let contexts =
-    //        [ for i in 1..resourceContextCount do
-    //            yield create (enableDebug)
-    //        ]
-
-    //    // make the old context current again
-    //    match current with
-    //        | Some handle -> handle.MakeCurrent()
-    //        | None -> ()
-
-    //    contexts
 
     /// <summary>
     /// deletes the given context also destroying its associated window-info
@@ -261,22 +201,28 @@ module ContextHandle =
     /// </summary>
     let releaseCurrent (ctx : ContextHandle) = ctx.ReleaseCurrent()
 
+    /// Initialize global GL config state
+    let initGlConfig() =
+        GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
+        GL.Enable(EnableCap.TextureCubeMapSeamless)
+        GL.Disable(EnableCap.PolygonSmooth)
+        GL.Hint(HintTarget.FragmentShaderDerivativeHint, HintMode.Nicest)
+        if Config.DepthRange = DepthRange.ZeroToOne then
+            GL.ClipControl(ClipOrigin.LowerLeft, ClipDepthMode.ZeroToOne)
+
 
 
 module ContextHandleOpenTK =
     
     let private windows = System.Collections.Concurrent.ConcurrentDictionary<ContextHandle, NativeWindow>()
 
-    let mutable primaryContext : ContextHandle = null
-
     /// <summary>
     /// creates a new context using the default configuration
     /// </summary>
     let create (enableDebug : bool) =
         let window, context =
-            if not (isNull primaryContext) then 
-                primaryContext.MakeCurrent()
-            
+            let prev = ContextHandle.Current
+
             let mode = Graphics.GraphicsMode(ColorFormat(Config.BitsPerPixel), Config.DepthBits, Config.StencilBits, 1, ColorFormat.Empty, Config.Buffers, false)
             let window = new NativeWindow(16, 16, "background", GameWindowFlags.Default, mode, DisplayDevice.Default)
             let context = new GraphicsContext(GraphicsMode.Default, window.WindowInfo, Config.MajorVersion, Config.MinorVersion, Config.ContextFlags);
@@ -284,12 +230,13 @@ module ContextHandleOpenTK =
             let ctx = context |> unbox<IGraphicsContextInternal>
             ctx.LoadAll()
 
-            GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
-            GL.Enable(EnableCap.TextureCubeMapSeamless)
-            GL.Disable(EnableCap.PolygonSmooth)
-            GL.Hint(HintTarget.FragmentShaderDerivativeHint, HintMode.Nicest)
+            ContextHandle.initGlConfig()
 
-            context.MakeCurrent(null)
+            // unbind created context and optionally restore previous
+            match prev with 
+            | ValueSome old -> old.Handle.MakeCurrent(old.WindowInfo)
+            | ValueNone -> context.MakeCurrent(null)
+
             window, context
     
         
@@ -297,9 +244,6 @@ module ContextHandleOpenTK =
 
         if enableDebug then
             handle.AttachDebugOutputIfNeeded(true)
-
-        if isNull primaryContext then
-            primaryContext <- handle
 
         // add the window to the windows-table to save it from being
         // garbage collected.

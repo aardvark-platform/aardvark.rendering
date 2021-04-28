@@ -6,7 +6,7 @@ open Aardvark.Application.WinForms
 open System.Windows.Forms
 open Aardvark.Base
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Aardvark.Application.WinForms.Vulkan
 
@@ -21,18 +21,18 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
     let mutable loaded = false
     let mutable isInvalid = true
 
-    member x.SwapChainDescription = 
+    member x.SwapChainDescription =
         if not x.IsHandleCreated then x.CreateHandle()
         swapchainDescription
 
-    member x.RenderPass = 
+    member x.RenderPass =
         if not x.IsHandleCreated then x.CreateHandle()
         swapchainDescription.renderPass
 
     abstract member OnLoad : SwapchainDescription -> unit
     abstract member OnUnload : unit -> unit
     abstract member OnRenderFrame : RenderPass * Framebuffer -> bool
-    
+
     member x.IsInvalid = isInvalid
 
     interface IInvalidateControl with
@@ -49,7 +49,7 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
         x.Padding <- Padding(0,0,0,0)
         x.Margin <- Padding(0,0,0,0)
         x.BorderStyle <- BorderStyle.None
-        
+
 
 
         surface <- device.CreateSurface(x)
@@ -63,29 +63,29 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
         base.OnPaint(e)
 
         if loaded then
-            let invalidate = 
+            let invalidate =
                 swapchain.RenderFrame(fun framebuffer ->
                     //FSharp.Data.Adaptive.EvaluationUtilities.evaluateTopLevel (fun () ->
                     x.OnRenderFrame(swapchainDescription.renderPass, framebuffer)
                     //)
                 )
             isInvalid <- invalidate
-            if invalidate then 
+            if invalidate then
                 x.Invalidate()
 
     override x.Dispose(d) =
         if loaded then
             loaded <- false
             x.OnUnload()
-            device.Delete swapchain
-            device.Delete swapchainDescription
-            device.Delete surface
+            swapchain.Dispose()
+            swapchainDescription.Dispose()
+            surface.Dispose()
 
         base.Dispose(d)
 
 type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode) as this =
     inherit VulkanControl(runtime.Device, graphicsMode)
-    
+
 //    static let messageLoop = MessageLoop()
 //    static do messageLoop.Start()
 
@@ -95,23 +95,21 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
     let mutable needsRedraw = false
     let mutable renderContiuously = false
 
-    let frameTime = RunningMean(10)
+    let frameTime = AverageWindow(10)
     let frameWatch = System.Diagnostics.Stopwatch()
 
     let timeWatch = System.Diagnostics.Stopwatch()
     let baseTime = DateTime.Now.Ticks
     do timeWatch.Start()
 
-
-
     let now() = DateTime(timeWatch.Elapsed.Ticks + baseTime)
-    let nextFrameTime() = 
+    let nextFrameTime() =
         if frameTime.Count >= 10 then
-            now() + TimeSpan.FromSeconds frameTime.Average
+            now() + TimeSpan.FromSeconds frameTime.Value
         else
             now()
 
-//    do Async.Start <| 
+//    do Async.Start <|
 //        async {
 //            while true do
 //                do! Async.Sleep 500
@@ -153,7 +151,7 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
         frameWatch.Stop()
 
         if not first then
-            frameTime.Add frameWatch.Elapsed.TotalSeconds
+            frameTime.Insert frameWatch.Elapsed.TotalSeconds |> ignore
 
         //x.Invalidate()
         transact (fun () -> time.MarkOutdated())
@@ -183,8 +181,8 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
 
     member x.RenderTask
         with get() = renderTask
-        and set t = 
-            if not (isNull taskSubscription) then 
+        and set t =
+            if not (isNull taskSubscription) then
                 taskSubscription.Dispose()
                 renderTask.Dispose()
 

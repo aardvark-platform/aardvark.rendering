@@ -5,8 +5,8 @@ open Aardvark.Application
 open System.Drawing
 open System.Windows.Forms
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
 open System.Threading
 
 type MultiFramebuffer(signature : IFramebufferSignature, framebuffers : IFramebuffer[]) =
@@ -38,24 +38,22 @@ type MultiRenderTask(runtime : MultiRuntime, signature : IFramebufferSignature, 
         member x.FrameId = tasks |> Seq.map (fun t -> t.FrameId) |> Seq.max
         member x.FramebufferSignature = Some signature
         member x.Runtime = Some (runtime :> IRuntime)
-        member x.Run(t,rt,o) =
+        member x.Run(t,rt,o,q) =
             x.EvaluateAlways t (fun t ->
                 let current = o.framebuffer.Signature.Runtime
-                let index = runtime.Runtimes.IndexOf current
-                tasks.[index].Run(t, rt, o)
+                let index = runtime.Runtimes.IndexOf (current :?> IRuntime)
+                tasks.[index].Run(t, rt, o, q)
             )
 
 and MultiFramebufferSignature(runtime : IRuntime, signatures : IFramebufferSignature[]) =
     member x.Signatures = signatures
     interface IFramebufferSignature with
-        member x.IsAssignableFrom _ = true
         member x.ColorAttachments = signatures.[0].ColorAttachments
         member x.DepthAttachment = signatures.[0].DepthAttachment
         member x.StencilAttachment = signatures.[0].StencilAttachment
-        member x.Images = signatures.[0].Images
         member x.LayerCount = signatures.[0].LayerCount
         member x.PerLayerUniforms = signatures.[0].PerLayerUniforms
-        member x.Runtime = runtime
+        member x.Runtime = runtime :> IFramebufferRuntime
 
 //type MultiBlock<'a>(blocks : Management.Block<'a>[]) =
 //    inherit Management.Block<'a>(blocks.[0].Parent, blocks.[0].Offset, blocks.[0].Size, blocks.[1].IsFree, null, null)
@@ -243,6 +241,10 @@ and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
     
     member x.BeforeRender = beforeRender.Publish
     member x.AfterRender = afterRender.Publish
+    
+    member x.Cursor
+        with get() = controls.[0].Cursor
+        and set v = for c in controls do c.Cursor <- v
 
     interface IRenderTarget with
         member x.FramebufferSignature = signature.Value :> IFramebufferSignature
@@ -263,6 +265,9 @@ and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
         member x.AfterRender = afterRender.Publish
 
     interface IRenderControl with
+        member x.Cursor
+            with get() = x.Cursor
+            and set c = x.Cursor <- c
         member x.Mouse = mouse :> IMouse
         member x.Keyboard = keyboard :> IKeyboard
 
@@ -281,10 +286,6 @@ and MultiRuntime(runtimes : IRuntime[]) =
     interface IRuntime with
         member x.DeviceCount = runtimes |> Seq.map (fun r -> r.DeviceCount) |> Seq.min
 
-        member x.CreateLodRenderer(config : LodRendererConfig, data : aset<LodTreeInstance>) =
-            failwithf "not implemented"
-
-
         member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) : unit =
             failwith "not implemented"
 
@@ -296,16 +297,13 @@ and MultiRuntime(runtimes : IRuntime[]) =
 
         member x.OnDispose = disp.Publish
 
-        member x.AssembleEffect (effect : FShade.Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
-            failwith ""
-
         member x.AssembleModule (effect : FShade.Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
             failwith ""
 
         member x.ResourceManager = failwith "not implemented"
 
-        member x.CreateFramebufferSignature(a,b,c,d) = 
-            let res = runtimes |> Array.map (fun r -> r.CreateFramebufferSignature(a,b,c,d))
+        member x.CreateFramebufferSignature(a,b,c) = 
+            let res = runtimes |> Array.map (fun r -> r.CreateFramebufferSignature(a,b,c))
             MultiFramebufferSignature(x, res) :> IFramebufferSignature
 
         member x.DeleteFramebufferSignature(s) =
@@ -316,11 +314,11 @@ and MultiRuntime(runtimes : IRuntime[]) =
                 | _ ->
                     ()
 
-        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) : unit = failwith ""
-        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) : unit = failwith ""
-        member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = failwith ""
-        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = failwith ""
-        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = failwith ""
+        member x.Download(t : IBackendTexture, level : int, slice : int, offset : V2i, target : PixImage) : unit = failwith ""
+        member x.Download(t : IBackendTexture, level : int, slice : int, offset : V3i, target : PixVolume) : unit = failwith ""
+        member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) = failwith ""
+        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) = failwith ""
+        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<int>) = failwith ""
 
         member x.ResolveMultisamples(source, target, trafo) = failwith ""
         member x.GenerateMipMaps(t) = failwith ""
@@ -333,10 +331,10 @@ and MultiRuntime(runtimes : IRuntime[]) =
                 | _ ->
                     failwith ""
 
-        member x.CompileClear(signature, color, depth) = 
+        member x.CompileClear(signature, color, depth, stencil) = 
             match signature with
                 | :? MultiFramebufferSignature as signature ->
-                    let tasks = Array.map2 (fun (r : IRuntime) (s : IFramebufferSignature) -> r.CompileClear(s, color, depth)) runtimes signature.Signatures
+                    let tasks = Array.map2 (fun (r : IRuntime) (s : IFramebufferSignature) -> r.CompileClear(s, color, depth, stencil)) runtimes signature.Signatures
                     new MultiRenderTask(x, signature, tasks) :> IRenderTask
                 | _ ->
                     failwith ""
@@ -363,13 +361,8 @@ and MultiRuntime(runtimes : IRuntime[]) =
 
 
         member x.CreateFramebuffer(signature, bindings) = failwith ""
-        member x.CreateTexture(size, format, levels, samples) = failwith ""
-        member x.CreateTextureArray(size, format, levels, samples, count) = failwith ""
-        member x.CreateTextureCube(size, format, levels, samples) = failwith ""
-        member x.CreateTextureCubeArray(size, format, levels, samples, count) = failwith ""
-
-        member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) =
-            failwith ""
+        member x.CreateTexture(size, dim : TextureDimension, format, levels, samples) = failwith ""
+        member x.CreateTextureArray(size, dim : TextureDimension, format, levels, samples, count) = failwith ""
 
 
         member x.CreateRenderbuffer(size, format, samples) =
@@ -397,7 +390,7 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.CreateComputeShader (c : FShade.ComputeShader) = failwith ""
         member x.NewInputBinding(c : IComputeShader) = failwith ""
         member x.DeleteComputeShader (shader : IComputeShader) = failwith ""
-        member x.Run (commands : list<ComputeCommand>) = failwith ""
+        member x.Run (commands : list<ComputeCommand>, queries : IQuery) = failwith ""
         member x.Compile (commands : list<ComputeCommand>) = failwith ""
 
         member x.Clear(fbo : IFramebuffer, clearColors : Map<Symbol,C4f>, depth : Option<float>, stencil : Option<int>) = failwith "not implemented"
@@ -406,6 +399,15 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<float>, stencil : Option<int>) = failwith "not implemented"
 
         member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture = failwith "not implemented"
+
+        member x.CreateTimeQuery() = failwith ""
+        member x.CreateOcclusionQuery(precise) = failwith ""
+        member x.CreatePipelineQuery(statistics) = failwith ""
+        member x.SupportedPipelineStatistics = Set.empty
+
+        member x.ShaderCachePath
+            with get() = None
+            and set(_) = ()
 
 type MultiApplication(apps : IApplication[]) =
     

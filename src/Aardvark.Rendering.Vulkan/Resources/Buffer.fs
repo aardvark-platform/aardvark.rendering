@@ -4,9 +4,9 @@ open System
 open System.Threading
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
-open System.Collections.Generic
 open System.Collections.Concurrent
 open Aardvark.Base
+open Aardvark.Rendering
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
@@ -20,18 +20,21 @@ type Buffer =
         inherit Resource<VkBuffer>
         val mutable public Memory : DevicePtr
         val mutable public Size : int64
-        val mutable public RefCount : int
         val mutable public Usage : VkBufferUsageFlags
+
+        override x.Destroy() =
+            if x.Handle.IsValid && x.Size > 0L then
+                VkRaw.vkDestroyBuffer(x.Device.Handle, x.Handle, NativePtr.zero)
+                x.Handle <- VkBuffer.Null
+                x.Memory.Dispose()
 
         interface IBackendBuffer with
             member x.Runtime = x.Device.Runtime :> IBufferRuntime
             member x.Handle = x.Handle :> obj
             member x.SizeInBytes = nativeint x.Size // NOTE: return size as specified by user. memory might have larger size as it is an aligned block
-            member x.Dispose() = x.Device.Runtime.DeleteBuffer x
 
-        member x.AddReference() = Interlocked.Increment(&x.RefCount) |> ignore
-
-        new(device, handle, memory, size, usage) = { inherit Resource<_>(device, handle); Memory = memory; Size = size; RefCount = 1; Usage = usage }
+        new(device, handle, memory, size, usage) =
+            { inherit Resource<_>(device, handle); Memory = memory; Size = size; Usage = usage }
     end
 
 type BufferView =
@@ -42,7 +45,13 @@ type BufferView =
         val mutable public Offset : uint64
         val mutable public Size : uint64
 
-        new(device, handle, buffer, fmt, offset, size) = { inherit Resource<_>(device, handle); Buffer = buffer; Format = fmt; Offset = offset; Size = size }
+        override x.Destroy() =
+            if x.Handle.IsValid then
+                VkRaw.vkDestroyBufferView(x.Device.Handle, x.Handle, NativePtr.zero)
+                x.Handle <- VkBufferView.Null
+
+        new(device, handle, buffer, fmt, offset, size) =
+            { inherit Resource<_>(device, handle); Buffer = buffer; Format = fmt; Offset = offset; Size = size }
     end
 
 
@@ -52,7 +61,7 @@ type BufferView =
 [<AutoOpen>]
 module BufferCommands =
     type Command with
-       
+
         // buffer to buffer
         static member Copy(src : Buffer, srcOffset : int64, dst : Buffer, dstOffset : int64, size : int64) =
             if size < 0L || srcOffset < 0L || srcOffset + size > src.Size || dstOffset < 0L || dstOffset + size > dst.Size then
@@ -64,7 +73,7 @@ module BufferCommands =
                     let copyInfo = VkBufferCopy(uint64 srcOffset, uint64 dstOffset, uint64 size)
                     cmd.AppendCommand()
                     copyInfo |> pin (fun pInfo -> VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dst.Handle, 1u, pInfo))
-                    Disposable.Empty
+                    [src]
             }
 
         static member Copy(src : Buffer, dst : Buffer, ranges : Range1l[]) =
@@ -83,7 +92,7 @@ module BufferCommands =
 
                         cmd.AppendCommand()
                         VkRaw.vkCmdCopyBuffer(cmd.Handle, src.Handle, dst.Handle, uint32 ranges.Length, pCopyInfos)
-                        Disposable.Empty
+                        [src; dst]
                 }
 
 
@@ -101,7 +110,6 @@ module BufferCommands =
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
 
-
                     let access, stage =
                         if buffer.Usage.HasFlag VkBufferUsageFlags.IndexBufferBit then 
                             VkAccessFlags.IndexReadBit, VkPipelineStageFlags.VertexInputBit
@@ -117,12 +125,8 @@ module BufferCommands =
                                 VkAccessFlags.ShaderReadBit, VkPipelineStageFlags.VertexShaderBit
                             else
                                 VkAccessFlags.ShaderReadBit, VkPipelineStageFlags.ComputeShaderBit
-                                
                         else
                             failwithf "[Vulkan] bad buffer usage in Acquire: %A" buffer.Usage
-
-                            
-                            
 
                     let mutable barrier =
                         VkBufferMemoryBarrier(
@@ -145,11 +149,9 @@ module BufferCommands =
                         0u, NativePtr.zero
                     )
 
-                    Disposable.Empty
-
-
+                    [buffer]
             }
-            
+
         static member Acquire(buffer : Buffer) =
             Command.Acquire(buffer, 0L, buffer.Size)
 
@@ -181,7 +183,7 @@ module BufferCommands =
                             | VkAccessFlags.UniformReadBit -> VkPipelineStageFlags.ComputeShaderBit
                             | VkAccessFlags.VertexAttributeReadBit -> VkPipelineStageFlags.VertexInputBit
                             | _ -> VkPipelineStageFlags.None
-                            
+
                     let dstStage =
                         match dst with
                             | VkAccessFlags.HostReadBit -> VkPipelineStageFlags.HostBit
@@ -195,6 +197,7 @@ module BufferCommands =
                             | VkAccessFlags.UniformReadBit -> VkPipelineStageFlags.VertexShaderBit
                             | VkAccessFlags.VertexAttributeReadBit -> VkPipelineStageFlags.VertexInputBit
                             | _ -> VkPipelineStageFlags.None
+
                     barrier |> pin (fun pBarrier ->
                         VkRaw.vkCmdPipelineBarrier(
                             cmd.Handle, 
@@ -207,7 +210,7 @@ module BufferCommands =
                         )
                     )
 
-                    Disposable.Empty
+                    [b]
             }
 
         static member SyncWrite(b : Buffer) =
@@ -236,8 +239,7 @@ module BufferCommands =
                         )
                     )
 
-
-                    Disposable.Empty
+                    [b]
             }
 
         static member ZeroBuffer(b : Buffer) =
@@ -246,7 +248,7 @@ module BufferCommands =
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
                     VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, 0UL, uint64 b.Size, 0u)
-                    Disposable.Empty
+                    [b]
             }
         static member SetBuffer(b : Buffer, offset : int64, size : int64, value : byte[]) =
             { new Command() with
@@ -256,7 +258,7 @@ module BufferCommands =
                     if value.Length <> 4 then failf "[Vulkan] pattern too long"
                     let v = BitConverter.ToUInt32(value, 0)
                     VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, uint64 offset, uint64 size, v)
-                    Disposable.Empty
+                    [b]
             }
 
     type CopyCommand with
@@ -395,13 +397,6 @@ module Buffer =
 
     let inline alloc (flags : VkBufferUsageFlags) (size : int64) (device : Device) =
         allocConcurrent false flags size device
-        
-    let delete (buffer : Buffer) (device : Device) =
-        if Interlocked.Decrement(&buffer.RefCount) = 0 then
-            if buffer.Handle.IsValid && buffer.Size > 0L then
-                VkRaw.vkDestroyBuffer(device.Handle, buffer.Handle, NativePtr.zero)
-                buffer.Handle <- VkBuffer.Null
-                buffer.Memory.Dispose()
 
     let internal ofWriter (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (device : Device) =
         if size > 0n then
@@ -422,7 +417,7 @@ module Buffer =
                     
                     device.eventually {
                         try do! Command.Copy(hostBuffer, buffer)
-                        finally delete hostBuffer device
+                        finally hostBuffer.Dispose()
                     }
 
                 | UploadMode.Async -> 
@@ -432,7 +427,7 @@ module Buffer =
                     device.CopyEngine.EnqueueSafe [
                         CopyCommand.Copy(hostBuffer, buffer, int64 size)
                         CopyCommand.Release(buffer, device.GraphicsFamily)
-                        CopyCommand.Callback (fun () -> delete hostBuffer device)
+                        CopyCommand.Callback (fun () -> hostBuffer.Dispose())
                     ]
 
                     device.eventually {
@@ -449,14 +444,13 @@ module Buffer =
 
         let deviceAlignedSize = Alignment.next align (int64 buffer.Size)
         let deviceMem = buffer.Memory
-        
 
         let tmp = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit buffer.Size
         tmp.Memory.Mapped (fun dst -> writer dst)
 
         device.eventually {
             try do! Command.Copy(tmp, 0L, buffer, 0L, buffer.Size)
-            finally delete tmp device
+            finally tmp.Dispose()
         }
 
     let rec tryUpdate (data : IBuffer) (buffer : Buffer) =
@@ -525,12 +519,12 @@ module Buffer =
 module BufferView =
     let create (fmt : VkFormat) (b : Buffer) (offset : uint64) (size : uint64) (device : Device) =
         if b.Size = 0L then
-            BufferView(device, VkBufferView.Null, b, fmt, offset, size)
+            new BufferView(device, VkBufferView.Null, b, fmt, offset, size)
         else
-            let info = 
+            let info =
                 VkBufferViewCreateInfo(
-                    VkBufferViewCreateFlags.MinValue,
-                    b.Handle, 
+                    VkBufferViewCreateFlags.None,
+                    b.Handle,
                     fmt,
                     offset,
                     size
@@ -544,13 +538,7 @@ module BufferView =
                         NativePtr.read pHandle
                     )
                 )
-            BufferView(device, handle, b, fmt, offset, size)
-
-    let delete (view : BufferView) (device : Device) =
-        if view.Handle.IsValid then
-            VkRaw.vkDestroyBufferView(device.Handle, view.Handle, NativePtr.zero)
-            view.Handle <- VkBufferView.Null
-
+            new BufferView(device, handle, b, fmt, offset, size)
 
 // =======================================================================
 // Device Extensions
@@ -563,13 +551,9 @@ type ContextBufferExtensions private() =
         device |> Buffer.alloc flags size
 
     [<Extension>]
-    static member inline Delete(device : Device, buffer : Buffer) =
-        device |> Buffer.delete buffer
-
-    [<Extension>]
     static member inline CreateBuffer(device : Device, flags : VkBufferUsageFlags, b : IBuffer) =
         device |> Buffer.ofBuffer flags b
-        
+
     [<Extension>]
     static member inline TryUpdate(buffer : Buffer, b : IBuffer) =
         buffer |> Buffer.tryUpdate b
@@ -577,10 +561,6 @@ type ContextBufferExtensions private() =
     [<Extension>]
     static member inline CreateBufferView(device : Device, buffer : Buffer, format : VkFormat, offset : int64, size : int64) =
         device |> BufferView.create format buffer (uint64 offset) (uint64 size)
-
-    [<Extension>]
-    static member inline Delete(device : Device, view : BufferView) =
-        device |> BufferView.delete view
 
 [<AutoOpen>]
 module ``Buffer Format Extensions`` = 

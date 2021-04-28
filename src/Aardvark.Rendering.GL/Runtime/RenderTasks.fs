@@ -5,12 +5,10 @@ open FSharp.Data.Traceable
 #nowarn "9"
 
 open System
-open System.Linq
 open System.Diagnostics
-open System.Threading
 open System.Collections.Generic
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Base.Runtime
 open FSharp.Data.Adaptive
 open OpenTK.Graphics.OpenGL4
@@ -28,10 +26,9 @@ module RenderTasks =
         let ctx = manager.Context
         let renderTaskLock = RenderTaskLock()
         let manager = ResourceManager(manager, Some (fboSignature, renderTaskLock), shareTextures, shareBuffers)
-        let allBuffers = manager.DrawBufferManager.CreateConfig(fboSignature.ColorAttachments |> Map.toSeq |> Seq.map (snd >> fst) |> Set.ofSeq)
         let structureChanged = AVal.custom ignore
         let runtimeStats = NativePtr.alloc 1
-        let resources = new Aardvark.Base.Rendering.ResourceInputSet()
+        let resources = new Aardvark.Rendering.ResourceInputSet()
 
         let mutable isDisposed = false
         let currentContext = AVal.init Unchecked.defaultof<ContextHandle>
@@ -45,8 +42,7 @@ module RenderTasks =
                 runtimeStats = runtimeStats
                 currentContext = currentContext
                 contextHandle = contextHandle
-                drawBuffers = NativePtr.toNativeInt allBuffers.Buffers
-                drawBufferCount = allBuffers.Count 
+                drawBufferCount = fboSignature.ColorAttachments.Count
                 usedTextureSlots = RefRef CountingHashSet.empty
                 usedUniformBufferSlots = RefRef CountingHashSet.empty
                 structuralChange = structureChanged
@@ -54,13 +50,13 @@ module RenderTasks =
                 tags = Map.empty
             }
             
-        let beforeRender = new System.Reactive.Subjects.Subject<unit>()
-        let afterRender = new System.Reactive.Subjects.Subject<unit>()
+        let beforeRender = new Event<unit>()
+        let afterRender = new Event<unit>()
         
         member x.Resources = resources
 
-        member x.BeforeRender = beforeRender
-        member x.AfterRender = afterRender
+        member x.BeforeRender = beforeRender.Publish :> IObservable<_>
+        member x.AfterRender = afterRender.Publish :> IObservable<_>
 
         member x.StructureChanged() =
             transact (fun () -> structureChanged.MarkOutdated())
@@ -68,58 +64,38 @@ module RenderTasks =
         member private x.pushDebugOutput(token : AdaptiveToken) =
             let c = config.GetValue token
             match ContextHandle.Current with
-                | Some ctx -> let oldState = ctx.DebugOutputEnabled // get manually tracked state of GL.IsEnabled EnableCap.DebugOutput
-                              ctx.DebugOutputEnabled <- c.useDebugOutput
-                              oldState
-                | None -> Report.Warn("No active context handle in RenderTask.Run")
-                          false
+                | ValueSome ctx -> let oldState = ctx.DebugOutputEnabled // get manually tracked state of GL.IsEnabled EnableCap.DebugOutput
+                                   ctx.DebugOutputEnabled <- c.useDebugOutput
+                                   oldState
+                | ValueNone -> Report.Warn("No active context handle in RenderTask.Run")
+                               false
             
         member private x.popDebugOutput(token : AdaptiveToken, wasEnabled : bool) =
             match ContextHandle.Current with
-                | Some ctx -> ctx.DebugOutputEnabled <- wasEnabled
-                | None -> Report.Warn("Still no active context handle in RenderTask.Run")
+                | ValueSome ctx -> ctx.DebugOutputEnabled <- wasEnabled
+                | ValueNone -> Report.Warn("Still no active context handle in RenderTask.Run")
 
-        member private x.pushFbo (desc : OutputDescription) =
+        member private x.bindFbo (desc : OutputDescription) =
             let fbo = desc.framebuffer |> unbox<Framebuffer>
 
-            let handle = fbo.Handle |> unbox<int> 
+            let handle = fbo.Handle
 
             if ExecutionContext.framebuffersSupported then
                 GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
                 GL.Check "could not bind framebuffer"
-        
-                // DepthMask, ColorMask, StencilMask are by default writing everything when creating an FBO
-                
-                fbo.Signature.Images |> Map.iter (fun index sem ->
-                    match Map.tryFind sem desc.images with
-                        | Some img ->
-                            let tex = img.texture |> unbox<Texture>
-                            GL.BindImageTexture(index, tex.Handle, img.level, false, img.slice, TextureAccess.ReadWrite, unbox (int tex.Format))
-                        | None -> 
-                            GL.ActiveTexture(int TextureUnit.Texture0 + index |> unbox)
-                            GL.BindTexture(TextureTarget.Texture2D, 0)
-                    )
+
+                if handle = 0 then
+                    GL.DrawBuffer(DrawBufferMode.BackLeft)
+                else
+                    let drawBuffers = Array.init fboSignature.ColorAttachments.Count (fun index -> DrawBuffersEnum.ColorAttachment0 + unbox index)
+                    GL.DrawBuffers(drawBuffers.Length, drawBuffers);
+                GL.Check "could not set draw buffers"
 
             elif handle <> 0 then
                 failwithf "cannot render to texture on this OpenGL driver"
 
             GL.Viewport(desc.viewport.Min.X, desc.viewport.Min.Y, desc.viewport.SizeX + 1, desc.viewport.SizeY + 1)
             GL.Check "could not set viewport"
-            
-
-        member private x.popFbo (desc : OutputDescription) =
-            if ExecutionContext.framebuffersSupported then
-                // execution of RenderObjects might change Color/Depth/StencilMask or DrawBuffers
-                // Color/Depth/StencilMask are reset by epilog RenderObject
-                // Reset of DrawBuffers is not possible as this is dependent on the FBO?
-                // -> Reset DrawBuffers in popFbo
-              
-                let fbo = desc.framebuffer |> unbox<Framebuffer>
-                if fbo.Handle = 0 then
-                    GL.DrawBuffer(DrawBufferMode.BackLeft);
-                else
-                    let drawBuffers = Array.init desc.framebuffer.Signature.ColorAttachments.Count (fun index -> DrawBuffersEnum.ColorAttachment0 + unbox index)
-                    GL.DrawBuffers(drawBuffers.Length, drawBuffers);
 
 
         abstract member ProcessDeltas : AdaptiveToken * RenderToken -> unit
@@ -153,7 +129,7 @@ module RenderTasks =
                 x.Release2()
         override x.FramebufferSignature = Some fboSignature
         override x.Runtime = Some ctx.Runtime
-        override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription) =
+        override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription, queries : IQuery) =
 
             let fbo = desc.framebuffer // TODO: fix outputdesc
             if not <| fboSignature.IsAssignableFrom fbo.Signature then
@@ -176,19 +152,24 @@ module RenderTasks =
             x.UpdateResources(token, t)
 
             let debugState = x.pushDebugOutput(token)
-            x.pushFbo desc
+            x.bindFbo desc
 
             renderTaskLock.Run (fun () ->
-                beforeRender.OnNext()
+                beforeRender.Trigger()
                 NativePtr.write runtimeStats V2i.Zero
-                let stats = x.Perform(token, t, fbo, desc)
+
+                queries.Begin()
+
+                x.Perform(token, t, fbo, desc)
                 GL.Check "[RenderTask.Run] Perform"
-                afterRender.OnNext()
+
+                queries.End()
+   
+                afterRender.Trigger()
                 let rt = NativePtr.read runtimeStats
                 t.AddDrawCalls(rt.X, rt.Y)
             )
 
-            x.popFbo desc
             x.popDebugOutput(token, debugState)
                             
             GL.BindVertexArray 0
@@ -201,8 +182,6 @@ module RenderTasks =
         let programUpdateWatch  = Stopwatch()
         let sortWatch           = Stopwatch()
         //let runWatch            = OpenGlStopwatch()
-
-        let fragments = System.Collections.Generic.HashSet<RenderFragment>()
 
         member x.ProgramUpdate (t : RenderToken, f : unit -> 'a) =
             if RenderToken.isEmpty t then
@@ -231,17 +210,7 @@ module RenderTasks =
         abstract member Add : PreparedCommand -> unit
         abstract member Remove : PreparedCommand -> unit
 
-        member x.Add(t : RenderFragment) = 
-            fragments.Add t |> ignore
-
-        member x.Remove(t : RenderFragment) = 
-            fragments.Remove t |> ignore
-
-
         member x.Run(token : AdaptiveToken, t : RenderToken, output : OutputDescription) =
-
-            for task in fragments do
-                task.Run(token, t, output)
 
             x.Perform(token, t)
             if RenderToken.isEmpty t then
@@ -427,8 +396,6 @@ module RenderTasks =
             mainCommand.Free(x.Scope)
 
         override x.Perform(token : AdaptiveToken, rt : RenderToken, fbo : Framebuffer, output : OutputDescription) =
-            x.ResourceManager.DrawBufferManager.Write(fbo)
-
             if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then
                 primitivesGenerated.Restart()
 
@@ -451,6 +418,8 @@ module RenderTasks =
         let inputSet = InputSet(this) 
         //let resourceUpdateWatch = OpenGlStopwatch()
         let structuralChange = AVal.init ()
+        let deltaWatch = Stopwatch()
+        let subTaskResults = List<Lazy<unit>>()
         
         let primitivesGenerated = OpenGlQuery(QueryTarget.PrimitivesGenerated)
         
@@ -487,15 +456,14 @@ module RenderTasks =
                     subtasks <- Map.add pass task subtasks
                     task
 
-        let processDeltas (x : AdaptiveToken) (parent : AbstractOpenGlRenderTask) (t : RenderToken) =
+        override x.ProcessDeltas(token, t) =
+            deltaWatch.Restart()
             
-            let sw = Stopwatch.StartNew()
-
-            let deltas = preparedObjectReader.GetChanges x
-
+            let deltas = preparedObjectReader.GetChanges token
+            
             if not (HashSetDelta.isEmpty deltas) then
-                parent.StructureChanged()
-
+                x.StructureChanged()
+            
             let mutable added = 0
             let mutable removed = 0
             for d in deltas do 
@@ -504,64 +472,52 @@ module RenderTasks =
                         let task = getSubTask v.Pass
                         added <- added + 1
                         task.Add v
-
+            
                     | Rem(_,v) ->
                         let task = getSubTask v.Pass
                         removed <- removed + 1
                         task.Remove v   
                         v.Dispose()
-                        
+                                    
             if added > 0 || removed > 0 then
-                Log.line "[GL] RenderObjects: +%d/-%d (%dms)" added removed sw.ElapsedMilliseconds
+                Log.line "[GL] RenderObjects: +%d/-%d (%dms)" added removed deltaWatch.ElapsedMilliseconds
             t.RenderObjectDeltas(added, removed)
 
-        let updateResources (x : AdaptiveToken) (self : RenderTask) (t : RenderToken) =
-            if RenderToken.isEmpty t then
-                self.Resources.Update(x, t)
-            else
-                //resourceUpdateWatch.Restart()
-                self.Resources.Update(x, t)
-                //resourceUpdateWatch.Stop()
-
-                //t.AddResourceUpdate(resourceUpdateWatch.ElapsedCPU, resourceUpdateWatch.ElapsedGPU)
-
-
-        override x.ProcessDeltas(token, t) =
-            processDeltas token x t
 
         override x.UpdateResources(token,t) =
-            updateResources token x t
+            x.Resources.Update(token, t)
+
 
         override x.Perform(token : AdaptiveToken, rt : RenderToken, fbo : Framebuffer, output : OutputDescription) =
-            x.ResourceManager.DrawBufferManager.Write(fbo)
-
             if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then
                 primitivesGenerated.Restart()
 
-            let mutable runStats = []
-            for (_,t) in Map.toSeq subtasks do
-                let s = t.Run(token,rt, output)
-                runStats <- s::runStats
+            subtasks |> Map.iter (fun _ t ->
+                    let s = t.Run(token,rt, output)
+                    subTaskResults.Add(s)
+                )
 
             if RuntimeConfig.SyncUploadsAndFrames then
                 GL.Sync()
             
             if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then 
                 primitivesGenerated.Stop()
-                runStats |> List.iter (fun l -> l.Value)
+                for l in subTaskResults do l.Value
                 rt.AddPrimitiveCount(primitivesGenerated.Value)
 
+            subTaskResults.Clear()
+
         override x.Update(token, rt) = 
-            for (_,t) in Map.toSeq subtasks do
-                t.Update(token, rt)
+            subtasks |> Map.iter (fun _ t ->
+                    t.Update(token, rt)
+                )
 
         override x.Release2() =
             for ro in preparedObjectReader.State do
                 ro.Dispose()
 
             x.Resources.Dispose() // should be 0 after disposing all RenderObjects
-            for (_,t) in Map.toSeq subtasks do
-                t.Dispose()
+            subtasks |> Map.iter (fun _ t -> t.Dispose())
 
             // UniformBufferManager should have 0 allocated blocks
             x.ResourceManager.Release()
@@ -577,20 +533,23 @@ module RenderTasks =
                 )
             )
 
-    type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : aval<list<Option<C4f>>>, depth : aval<Option<float>>, ctx : Context) =
+    type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : aval<list<int * C4f>>(*color : aval<list<C4f option>>*), depth : aval<float option>, stencil : aval<int option>, ctx : Context) =
         inherit AbstractRenderTask()
 
         override x.PerformUpdate(token, t) = ()
-        override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription) =
+        override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription, queries : IQuery) =
             let fbo = desc.framebuffer
             Operators.using ctx.ResourceLock (fun _ ->
+
+                queries.Begin()
 
                 let old = Array.create 4 0
                 let mutable oldFbo = 0
                 GL.GetInteger(GetPName.Viewport, old)
                 GL.GetInteger(GetPName.FramebufferBinding, &oldFbo)
 
-                let handle = fbo.GetHandle Unchecked.defaultof<_> |> unbox<int>
+                let fbo = fbo |> unbox<Framebuffer>
+                let handle = fbo.Handle
 
                 if ExecutionContext.framebuffersSupported then
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
@@ -601,56 +560,71 @@ module RenderTasks =
                 GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
                 GL.Check "could not bind framebuffer"
 
-                
-
                 let depthValue = depth.GetValue token
+                let stencilValue = stencil.GetValue token
                 let colorValues = color.GetValue token
-                    
-                colorValues |> List.iteri (fun i _ ->
+
+                // Set masks
+                colorValues |> List.iter (fun (i, _) ->
                     GL.ColorMask(i, true, true, true, true)
                 )
                 GL.DepthMask(true)
                 GL.StencilMask(0xFFFFFFFFu)
 
-                match colorValues, depthValue with
-                    | [Some c], Some depth ->
+                // Sets clear colors and returns mask
+                let clearDepthStencil() =
+                    match depthValue, stencilValue with
+                    | Some d, Some s ->
+                        GL.ClearDepth(d)
+                        GL.ClearStencil(s)
+                        ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit
+
+                    | Some d, None ->
+                        GL.ClearDepth(d)
+                        ClearBufferMask.DepthBufferBit
+
+                    | None, Some s ->
+                        GL.ClearStencil(s)
+                        ClearBufferMask.StencilBufferBit
+
+                    | _ ->
+                        ClearBufferMask.None
+
+                // Minimizing the number of clears is a bit tricky
+                let rec clear (colors : list<int * C4f>) =
+                    match colors with
+                    | [(0, c)] ->
+                        let mask = clearDepthStencil()
                         GL.ClearColor(c.R, c.G, c.B, c.A)
-                        GL.ClearDepth(depth)
-                        GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-                        
-                    | [Some c], None ->
+                        GL.Clear(mask ||| ClearBufferMask.ColorBufferBit)
+
+                    | [(i, c)] ->
+                        let mask = clearDepthStencil()
+                        GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 + i |> unbox)
+                        GL.ClearColor(c.R, c.G, c.B, c.A)
+                        GL.Clear(mask ||| ClearBufferMask.ColorBufferBit)
+
+                    | (i, c)::xs ->
+                        GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 + i |> unbox)
                         GL.ClearColor(c.R, c.G, c.B, c.A)
                         GL.Clear(ClearBufferMask.ColorBufferBit)
+                        clear xs
 
-                    | l, Some depth when List.forall Option.isNone l ->
-                        GL.ClearDepth(depth)
-                        GL.Clear(ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-                    | l, d ->
-                            
-                        let mutable i = 0
-                        for c in l do
-                            match c with
-                                | Some c ->
-                                    GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 + i |> unbox)
-                                    GL.ClearColor(c.R, c.G, c.B, c.A)
-                                    GL.Clear(ClearBufferMask.ColorBufferBit)
-                                | None ->
-                                    ()
-                            i <- i + 1
+                    | [] when depthValue.IsSome || stencilValue.IsSome ->
+                        let mask = clearDepthStencil()
+                        GL.Clear(mask)
 
-                        match d with
-                            | Some depth -> 
-                                GL.ClearDepth(depth)
-                                GL.Clear(ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-                            | None ->
-                                ()
+                    | [] -> ()
 
+                clear colorValues
 
                 if ExecutionContext.framebuffersSupported then
                     GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
 
                 GL.Viewport(old.[0], old.[1], old.[2], old.[3])
                 GL.Check "could not bind framebuffer"
+
+                queries.End()
             )
 
         override x.Release() =

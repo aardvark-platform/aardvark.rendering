@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <AssemblyName>Aardvark.Rendering</AssemblyName>
+    <OutputType>Library</OutputType>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <OutputPath>..\..\bin\Debug\</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <OutputPath>..\..\bin\Release</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="paket.references" />
+    <Compile Include="Common\FrameStatistics.fs" />
+    <Compile Include="Common\DefaultSemantic.fs" />
+    <Compile Include="Common\ComparisonFunction.fs" />
+    <Compile Include="Utilities\Locks\ColoredLock.fs" />
+    <Compile Include="Utilities\Locks\LockedResource.fs" />
+    <Compile Include="Utilities\Locks\RenderTaskLock.fs" />
+    <Compile Include="Utilities\TaskUtilities.fs" />
+    <Compile Include="Utilities\ConstantVal.fs" />
+    <Compile Include="Utilities\IdGenerator.fs" />
+    <Compile Include="Utilities\PrimitiveValueConverter.fs" />
+    <Compile Include="Utilities\GPUVendor.fs" />
+    <Compile Include="Utilities\ArrayVisitor.fs" />
+    <Compile Include="Utilities\Timer.fs" />
+    <Compile Include="Utilities\Memory.fs" />
+    <Compile Include="Utilities\Trie.fs" />
+    <Compile Include="Utilities\CubeMap.fs" />
+    <Compile Include="Resources\Buffers\Buffers.fs" />
+    <Compile Include="Resources\Buffers\ArrayBuffer.fs" />
+    <Compile Include="Resources\Buffers\SingleValueBuffer.fs" />
+    <Compile Include="Resources\Buffers\NativeMemoryBuffer.fs" />
+    <Compile Include="Resources\Buffers\IndirectBuffer.fs" />
+    <Compile Include="Resources\Buffers\ChangeableBuffer.fs" />
+    <Compile Include="Resources\Buffers\BufferView.fs" />
+    <Compile Include="Resources\Textures\Formats.fs" />
+    <Compile Include="Resources\Textures\Layouts.fs" />
+    <Compile Include="Resources\Textures\Textures.fs" />
+    <Compile Include="Resources\Textures\TextureSlicing.fs" />
+    <Compile Include="Resources\Textures\FileTexture.fs" />
+    <Compile Include="Resources\Textures\PixTexture2d.fs" />
+    <Compile Include="Resources\Textures\PixTexture3d.fs" />
+    <Compile Include="Resources\Textures\PixTextureCube.fs" />
+    <Compile Include="Resources\Textures\TextureExtensions.fs" />
+    <Compile Include="Resources\Textures\DefaultTextures.fs" />
+    <Compile Include="Resources\Framebuffer\Framebuffer.fs" />
+    <Compile Include="Resources\Framebuffer\FramebufferExtensions.fs" />
+    <Compile Include="Resources\Framebuffer\OutputDescription.fs" />
+    <Compile Include="Resources\Adaptive\AdaptiveResource.fs" />
+    <Compile Include="Resources\Adaptive\AdaptiveTextures.fs" />
+    <Compile Include="Resources\Adaptive\AdaptiveRenderbuffers.fs" />
+    <Compile Include="Resources\Adaptive\AdaptiveFramebuffers.fs" />
+    <Compile Include="Resources\NullResources.fs" />
+    <Compile Include="Resources\ResourceAccess.fs" />
+    <Compile Include="Resources\ResourceManagement.fs" />
+    <Compile Include="Resources\ResourceValidation.fs" />
+    <Compile Include="Geometry\IndexedGeometry.fs" />
+    <Compile Include="Geometry\Geometry.fs" />
+    <Compile Include="Geometry\GeometryPacker.fs" />
+    <Compile Include="Geometry\GeometryPool.fs" />
+    <Compile Include="Uniforms\UniformWriters.fs" />
+    <Compile Include="Uniforms\UniformProvider.fs" />
+    <Compile Include="Uniforms\Uniforms.fs" />
+    <Compile Include="Attributes\AttributeProvider.fs" />
+    <Compile Include="Surfaces\Surface.fs" />
+    <Compile Include="Surfaces\ShaderStage.fs" />
+    <Compile Include="Sampler\TextureFilter.fs" />
+    <Compile Include="Sampler\SamplerState.fs" />
+    <Compile Include="Pipeline\Modes\FillMode.fs" />
+    <Compile Include="Pipeline\Modes\CullMode.fs" />
+    <Compile Include="Pipeline\Modes\WindingOrder.fs" />
+    <Compile Include="Pipeline\Modes\BlendMode.fs" />
+    <Compile Include="Pipeline\Modes\StencilMode.fs" />
+    <Compile Include="Pipeline\Modes\DepthTest.fs" />
+    <Compile Include="Pipeline\Modes\DepthBias.fs" />
+    <Compile Include="Pipeline\Modes\ColorMask.fs" />
+    <Compile Include="Pipeline\Camera.fs" />
+    <Compile Include="Pipeline\RenderPass.fs" />
+    <Compile Include="Pipeline\DrawCalls.fs" />
+    <Compile Include="Pipeline\PipelineState.fs" />
+    <Compile Include="Pipeline\RenderObject.fs" />
+    <Compile Include="Runtime\Lod\Lod.fs" />
+    <Compile Include="Runtime\Lod\LodTree.fs" />
+    <Compile Include="Runtime\Lod\LodRuntime.fs" />
+    <Compile Include="Runtime\Query\QueryTypes.fs" />
+    <Compile Include="Runtime\Query\QueryRuntime.fs" />
+    <Compile Include="Runtime\Query\Queries.fs" />
+    <Compile Include="Runtime\Query\QueryHandle.fs" />
+    <Compile Include="Runtime\Query\MultiQuery.fs" />
+    <Compile Include="Runtime\Query\ConcurrentQuery.fs" />
+    <Compile Include="Runtime\Compute\Compute.fs" />
+    <Compile Include="Runtime\BackendConfiguration.fs" />
+    <Compile Include="Runtime\ResourceManager.fs" />
+    <Compile Include="Runtime\ClearValues.fs" />
+    <Compile Include="Runtime\Runtime.fs" />
+    <Compile Include="Runtime\RuntimeExtensions.fs" />
+    <Compile Include="Runtime\RuntimeCommand.fs" />
+    <Compile Include="RenderTasks\AbstractRenderTask.fs" />
+    <Compile Include="RenderTasks\EmptyRenderTask.fs" />
+    <Compile Include="RenderTasks\SequentialRenderTask.fs" />
+    <Compile Include="RenderTasks\ModRenderTask.fs" />
+    <Compile Include="RenderTasks\AListRenderTask.fs" />
+    <Compile Include="RenderTasks\CustomRenderTask.fs" />
+    <Compile Include="RenderTasks\FinalizerRenderTask.fs" />
+    <Compile Include="RenderTasks\BeforeAfterRenderTask.fs" />
+    <Compile Include="RenderTasks\RenderToExtensions.fs" />
+    <Compile Include="RenderTasks\RenderTask.fs" />
+    <Compile Include="Effects\Interop\EffectDebugger.fs" />
+    <Compile Include="Effects\Interop\ShaderInterface.fs" />
+    <Compile Include="Effects\Interop\FShade.fs" />
+    <Compile Include="Effects\Default\Impl\Vertex.fs" />
+    <Compile Include="Effects\Default\Impl\PointSurface.fs" />
+    <Compile Include="Effects\Default\Impl\Trafo.fs" />
+    <Compile Include="Effects\Default\Impl\ThickLine.fs" />
+    <Compile Include="Effects\Default\Impl\ThickLineWithCulling.fs" />
+    <Compile Include="Effects\Default\Impl\ThickLineRoundCaps.fs" />
+    <Compile Include="Effects\Default\Impl\ThickLineSparePointSizeCaps.fs" />
+    <Compile Include="Effects\Default\Impl\PointSprite.fs" />
+    <Compile Include="Effects\Default\Impl\ViewSizedPointSprites.fs" />
+    <Compile Include="Effects\Default\Impl\PointSpriteFragment.fs" />
+    <Compile Include="Effects\Default\Impl\ConstantColor.fs" />
+    <Compile Include="Effects\Default\Impl\SgColor.fs" />
+    <Compile Include="Effects\Default\Impl\VertexColor.fs" />
+    <Compile Include="Effects\Default\Impl\SimpleLighting.fs" />
+    <Compile Include="Effects\Default\Impl\Lighting.fs" />
+    <Compile Include="Effects\Default\Impl\DiffuseTexture.fs" />
+    <Compile Include="Effects\Default\Impl\NormalMap.fs" />
+    <Compile Include="Effects\Default\Impl\TransformColor.fs" />
+    <Compile Include="Effects\Default\Impl\InstanceTrafo.fs" />
+    <Compile Include="Effects\Default\DefaultSurfaces.fs" />
+    <Compile Include="Effects\Effect.fs" />
+  </ItemGroup>
+  <Import Project="..\..\.paket\Paket.Restore.targets" />
+</Project>

@@ -12,6 +12,7 @@ Currently the following techniques are implemented:
 namespace Transparency
 
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 open Aardvark.SceneGraph
@@ -46,10 +47,10 @@ module Program =
 
     let windowsSg =
         let colors = [
-                C4f(C3f.DodgerBlue, 0.5f)
-                C4f(C3f.Salmon, 0.5f)
-                C4f(C3f.SpringGreen, 0.5f)
-                C4f(C3f.Plum, 0.5f)
+                C4f(C3f.DodgerBlue, 0.25f)
+                C4f(C3f.Salmon, 0.25f)
+                C4f(C3f.SpringGreen, 0.25f)
+                C4f(C3f.Plum, 0.25f)
             ]
 
         colors
@@ -69,8 +70,8 @@ module Program =
         Aardvark.Init()
 
         // uncomment/comment to switch between the backends
-        //use app = new VulkanApplication(debug = true)
-        use app = new OpenGlApplication()
+        use app = new VulkanApplication(debug = true)
+        //use app = new OpenGlApplication()
         let runtime = app.Runtime :> IRuntime
         let samples = 8
 
@@ -142,8 +143,8 @@ module Program =
         )
 
         use task =
-            RenderTask.custom (fun (t, rt, desc) ->
-                techniques.[technique.Value].Task.Run(t, rt, desc)
+            RenderTask.custom (fun (t, rt, desc, q) ->
+                techniques.[technique.Value].Task.Run(t, rt, desc, q)
             )
 
         let puller =
@@ -179,5 +180,8 @@ module Program =
 
         win.RenderTask <- RenderTask.ofList [ task; overlayTask ]
         win.Run()
+
+        for t in techniques do
+            t.Dispose()
 
         0

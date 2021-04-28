@@ -41,7 +41,9 @@ static PFNGLBINDBUFFERBASEPROC							glBindBufferBase;
 static PFNGLBINDBUFFERRANGEPROC							glBindBufferRange;
 static PFNGLBINDFRAMEBUFFERPROC							glBindFramebuffer;
 static PFNGLBLENDFUNCSEPARATEPROC						glBlendFuncSeparate;
+static PFNGLBLENDFUNCSEPARATEIPROC						glBlendFuncSeparatei;
 static PFNGLBLENDEQUATIONSEPARATEPROC					glBlendEquationSeparate;
+static PFNGLBLENDEQUATIONSEPARATEIPROC					glBlendEquationSeparatei;
 static PFNGLSTENCILFUNCSEPARATEPROC						glStencilFuncSeparate;
 static PFNGLSTENCILOPSEPARATEPROC						glStencilOpSeparate;
 static PFNGLPATCHPARAMETERIPROC							glPatchParameteri;
@@ -166,7 +168,7 @@ typedef enum {
 	HSetDepthTest = 104,
 	HSetCullFace = 105,
 	HSetPolygonMode = 106,
-	HSetBlendMode = 107,
+	HSetBlendModes = 107,
 	HSetStencilMode = 108,
 	HBindVertexAttributes = 109,
 	HSetConservativeRaster = 110,
@@ -241,12 +243,13 @@ DllExport(void) hglDrawElements(RuntimeStats* stats, int* isActive, BeginMode* m
 
 DllExport(void) hglDrawArraysIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, IndirctDrawArgsStruct* handleAndCount);
 DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, BeginMode* mode, GLenum indexType, IndirctDrawArgsStruct* handleAndCount);
-DllExport(void) hglSetDepthTest(DepthTestMode* mode);
+DllExport(void) hglSetDepthTest(int* mode);
 DllExport(void) hglSetDepthBias(DepthBiasInfo* state);
 DllExport(void) hglSetCullFace(GLenum* face);
 DllExport(void) hglSetPolygonMode(GLenum* mode);
-DllExport(void) hglSetBlendMode(BlendMode* mode);
-DllExport(void) hglSetStencilMode(StencilMode* mode);
+DllExport(void) hglSetBlendModes(int count, BlendMode** ptr);
+DllExport(void) hglSetColorMasks(int count, int** ptr);
+DllExport(void) hglSetStencilMode(StencilMode* front, StencilMode* back);
 DllExport(void) hglBindVertexArray(int* vao);
 DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding* binding);
 DllExport(void) hglSetConservativeRaster(int* enable);

@@ -9,8 +9,8 @@ open FShade.GLSL
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
-open Aardvark.Base.Management
+open Aardvark.Rendering
+open Aardvark.Rendering.Management
 open Aardvark.Base.Runtime
 open Aardvark.Rendering.GL
 
@@ -163,7 +163,7 @@ type GeometryPoolSignature =
         indexType       : Option<Type>
         uniformTypes    : InstanceSignature
         attributeTypes  : VertexSignature
-        textureTypes    : MapExt<int, string * TextureFormat * SamplerStateDescription>
+        textureTypes    : MapExt<int, string * TextureFormat * SamplerState>
     }
 
 
@@ -222,7 +222,7 @@ module GeometryPoolSignature =
                 (
                     name,
                     fmt,
-                    state.SamplerStateDescription
+                    state.SamplerState
                 )
             )
 
@@ -358,7 +358,7 @@ type InstanceBuffer(ctx : Context, semantics : MapExt<string, GLSLType * Type>, 
             let srcOff = nativeint srcOffset * nativeint elemSize
             let dstOff = nativeint dstOffset * nativeint elemSize
             let s = nativeint elemSize * nativeint count
-            GL.NamedCopyBufferSubData(srcBuffer.Handle, dstBuffer.Handle, srcOff, dstOff, s)
+            GL.CopyNamedBufferSubData(srcBuffer.Handle, dstBuffer.Handle, srcOff, dstOff, s)
         )
 
     member x.Dispose() =
@@ -419,7 +419,7 @@ type VertexBuffer(ctx : Context, semantics : MapExt<string, Type>, count : int) 
             let srcOff = nativeint srcOffset * nativeint elemSize
             let dstOff = nativeint dstOffset * nativeint elemSize
             let s = nativeint elemSize * nativeint count
-            GL.NamedCopyBufferSubData(srcBuffer.Handle, dstBuffer.Handle, srcOff, dstOff, s)
+            GL.CopyNamedBufferSubData(srcBuffer.Handle, dstBuffer.Handle, srcOff, dstOff, s)
         )
 
     member x.Dispose() =
@@ -772,7 +772,7 @@ module AtlasTextureUpload =
             //        offset <- offset / 2
             //        size <- size / 2
 
-type TextureManager(ctx : Context, semantic : string, format : TextureFormat, samplerState : SamplerStateDescription) as this =
+type TextureManager(ctx : Context, semantic : string, format : TextureFormat, samplerState : SamplerState) =
     static let tileSize = V2i(8192, 8192)
 
     static let levels = 3
@@ -1177,7 +1177,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
 
 
     member x.Buffer =
-        Aardvark.Base.IndirectBuffer(buffer :> IBuffer, count, sizeof<DrawCallInfo>, false)
+        Aardvark.Rendering.IndirectBuffer(buffer :> IBuffer, count, sizeof<DrawCallInfo>, false)
 
     member x.BoundsBuffer =
         bbuffer
@@ -1379,11 +1379,11 @@ type GeometryPool private(ctx : Context) =
     let totalMemory = ref 0L
     let instanceManagers = System.Collections.Concurrent.ConcurrentDictionary<InstanceSignature, InstanceManager>()
     let vertexManagers = System.Collections.Concurrent.ConcurrentDictionary<VertexSignature, VertexManager>()
-    let textureManagers = System.Collections.Concurrent.ConcurrentDictionary<string * TextureFormat * SamplerStateDescription, TextureManager>()
+    let textureManagers = System.Collections.Concurrent.ConcurrentDictionary<string * TextureFormat * SamplerState, TextureManager>()
 
     let getVertexManager (signature : VertexSignature) = vertexManagers.GetOrAdd(signature, fun signature -> new VertexManager(ctx, signature, vertexChunkSize, usedMemory, totalMemory))
     let getInstanceManager (signature : InstanceSignature) = instanceManagers.GetOrAdd(signature, fun signature -> new InstanceManager(ctx, signature, instanceChunkSize, usedMemory, totalMemory))
-    let getTextureManager (semantic : string) (fmt : TextureFormat) (sam : SamplerStateDescription) = textureManagers.GetOrAdd((semantic, fmt, sam), fun (semantic, fmt, sam) -> new TextureManager(ctx, semantic, fmt, sam))
+    let getTextureManager (semantic : string) (fmt : TextureFormat) (sam : SamplerState) = textureManagers.GetOrAdd((semantic, fmt, sam), fun (semantic, fmt, sam) -> new TextureManager(ctx, semantic, fmt, sam))
 
     
     let indexManager = new IndexManager(ctx, vertexChunkSize, usedMemory, totalMemory)
@@ -1523,7 +1523,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
 
     let usedMemory = ref 0L
     let totalMemory = ref 0L
-    let avgRenderTime = RunningMean(10)
+    let avgRenderTime = AverageWindow(10)
 
     let compile (indexType : Option<DrawElementsType>, mode : nativeptr<GLBeginMode>, a : VertexInputBindingHandle, textures : array<int * int * int>, ib : IndirectBuffer) (s : ICommandStream) : NativeStats =
         let stats = NativeStats(InstructionCount = 1)
@@ -1618,7 +1618,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     abstract member BeforeRender : ICommandStream -> unit
     default x.BeforeRender(_) = ()
 
-    member x.AverageRenderTime = MicroTime(int64 (1000000.0 * avgRenderTime.Average))
+    member x.AverageRenderTime = MicroTime(int64 (1000000.0 * avgRenderTime.Value))
 
     member x.Update() =
         puller.EvaluateAlways AdaptiveToken.Top (fun token ->   
@@ -1629,7 +1629,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                 
             let rawResult = NativePtr.read endTime - NativePtr.read startTime
             let ms = float rawResult / 1000000.0
-            avgRenderTime.Add ms
+            avgRenderTime.Insert ms |> ignore
 
 
 

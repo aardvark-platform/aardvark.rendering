@@ -2,7 +2,7 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 
 module DefaultCameraController =
@@ -91,6 +91,7 @@ module DefaultCameraController =
     /// <summary> Gives a camera look controls, orbiting around a point. 
     /// Left mouse button controls the functionality.</summary>
     /// <param name="mouse"> the mouse inputs (this is often pulled from the parent window)</param>
+    /// <param name="center"> the point to orbit around</param>
     /// <returns>An incremental function that takes a CameraView</returns>
     let controlOrbitAround (mouse : IMouse) (center : aval<V3d>) =
         let down = mouse.IsDown(MouseButtons.Left)
@@ -283,8 +284,9 @@ module DefaultCameraController =
 
     /// <summary> Gives a camera the ability to reset to it's initial state.
     /// F9 is the default button for resetting.</summary>
+    /// <param name="initial"> the initial camera state</param>
     /// <param name="keyboard"> the keyboard inputs (this is often pulled from the parent window)</param>
-    /// <returns>An incremental function that takes a CameraView</returns>    
+    /// <returns>An incremental function that takes a CameraView</returns>
     let controlReset (initial : CameraView) (keyboard : IKeyboard) =
         adaptive {
             let! t = keyboard.IsDown Keys.F9
@@ -357,14 +359,14 @@ module DefaultCameraController =
         
     /// <summary> Implement common control functions for movement, looking, panning, and zooming 
     /// for a given camera.</summary>
-    /// <param name="moveSpeed"> the rate at which all movement occurs</param>
+    /// <param name="speed"> the rate at which all movement occurs</param>
     /// <param name="mouse"> the mouse inputs (this is often pulled from the parent window)</param>
     /// <param name="keyboard"> the keyboard inputs (this is often pulled from the parent window)</param>
     /// <param name="time"> the relative time (this is often pulled from the parent window)</param>
     /// <param name="camera"> the initial state of the camera</param>
     /// <returns>An incremental function that takes a CameraView</returns>
-    let controlWithSpeed (speed : cval<float>) (mouse : IMouse) (keyboard : IKeyboard) (time : aval<DateTime>) (cam : CameraView) : aval<CameraView> =
-         AVal.integrate cam time [
+    let controlWithSpeed (speed : cval<float>) (mouse : IMouse) (keyboard : IKeyboard) (time : aval<DateTime>) (camera : CameraView) : aval<CameraView> =
+         AVal.integrate camera time [
             controlWSADwithSpeed speed keyboard time
             controlLookAround mouse
             controlPanWithSpeed speed mouse
@@ -381,7 +383,7 @@ module DefaultCameraController =
     /// <param name="time"> the relative time (this is often pulled from the parent window)</param>
     /// <param name="camera"> the initial state of the camera</param>
     /// <returns>An incremental function that takes a CameraView</returns>
-    let controlExt (initialSpeed : float ) (mouse : IMouse) (keyboard : IKeyboard) (time : aval<DateTime>) (cam : CameraView) : aval<CameraView> =
+    let controlExt (initialSpeed : float ) (mouse : IMouse) (keyboard : IKeyboard) (time : aval<DateTime>) (camera : CameraView) : aval<CameraView> =
         let speed = AVal.init initialSpeed
 
         let ctrl = keyboard.IsDown Keys.LeftCtrl
@@ -397,10 +399,10 @@ module DefaultCameraController =
             | _ -> ()
         )
 
-        AVal.integrate cam time [
+        AVal.integrate camera time [
            controlWSADwithSpeed speed keyboard time
            controlLookAround mouse
-           controlReset cam keyboard
+           controlReset camera keyboard
            controlPanWithSpeed speed mouse
            controlZoomWithSpeed speed mouse
            controllScrollWithSpeed speed mouse time

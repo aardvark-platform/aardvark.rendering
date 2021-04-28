@@ -1,12 +1,9 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
-open System
-open System.Threading
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
-open System.Collections.Generic
-open System.Collections.Concurrent
 open Aardvark.Base
+open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 
 
@@ -79,10 +76,6 @@ module IndirectBuffer =
                 failf "unsupported indirect buffer type %A" b.Buffer
 
         new VkIndirectBuffer(device, buffer.Handle, buffer.Memory, b.Count)
-            
-
-    let delete (b : VkIndirectBuffer) (device : Device) =
-        Buffer.delete b device
 
 [<AbstractClass; Sealed; Extension>]
 type ContextIndirectBufferExtensions private() =
@@ -90,7 +83,3 @@ type ContextIndirectBufferExtensions private() =
     [<Extension>]
     static member inline CreateIndirectBuffer(device : Device, indexed : bool, data : IndirectBuffer) =
         device |> IndirectBuffer.create indexed data
-
-    [<Extension>]
-    static member inline Delete(device : Device, buffer : VkIndirectBuffer) =
-        device |> IndirectBuffer.delete buffer

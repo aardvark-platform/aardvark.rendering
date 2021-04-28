@@ -1,12 +1,10 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.GPGPU
 
 open System
-open Microsoft.FSharp.Quotations
-open System.Collections.Generic
-open System.Runtime.InteropServices
-open Microsoft.FSharp.NativeInterop
-open Aardvark.Base.Rendering
 open System.Runtime.CompilerServices
+open Microsoft.FSharp.Quotations
+open Aardvark.Base
+open Aardvark.Rendering
 
 #nowarn "9"
 #nowarn "51"
@@ -207,7 +205,7 @@ module private BitonicKernels =
 
 
 
-type BitonicSorter<'a when 'a : unmanaged>(runtime : IRuntime, isGoodOrder : Expr<'a -> 'a -> bool>) =
+type BitonicSorter<'a when 'a : unmanaged>(runtime : IComputeRuntime, isGoodOrder : Expr<'a -> 'a -> bool>) =
 
     let initPerm    = runtime.CreateComputeShader BitonicKernels.initPermKernel
     let simple      = runtime.CreateComputeShader (BitonicKernels.bitonicKernel isGoodOrder)
@@ -344,21 +342,24 @@ and BitonicSorterInstance<'a when 'a : unmanaged>(parent : BitonicSorter<'a>, el
             yield ComputeCommand.Sync permBuffer.Buffer
         ]
 
-    member x.Run(xs : IBuffer<'a>, perm : IBuffer<int>) : unit =
+    member x.Run(xs : IBuffer<'a>, perm : IBuffer<int>, queries : IQuery) : unit =
         if xs.Count <> totalCount || perm.Count <> totalCount then
             failwithf "[BitonicSorter] invalid buffer length: { values: %A, perm: %A, sort: %A }" xs.Count perm.Count totalCount
 
         setInput xs
 
         lock x (fun () ->
-            runtime.Run [
+            runtime.Run([
                 //ComputeCommand.Copy(xs, tempBuffer)
                 ComputeCommand.Execute prog
                 ComputeCommand.Copy(permBuffer, perm)
-            ]
+            ], queries)
         )
-        
-    member x.Run(xs : 'a[], perm : int[]) : unit =
+
+    member x.Run(xs : IBuffer<'a>, perm : IBuffer<int>) =
+        x.Run(xs, perm, Queries.none)
+
+    member x.Run(xs : 'a[], perm : int[], queries : IQuery) : unit =
         if xs.Length <> totalCount  || perm.Length <> totalCount then
             failwithf "[BitonicSorter] invalid buffer length: { values: %A, perm: %A, sort: %A }" xs.Length perm.Length totalCount
 
@@ -366,13 +367,16 @@ and BitonicSorterInstance<'a when 'a : unmanaged>(parent : BitonicSorter<'a>, el
         setInput tempBuffer
 
         lock x (fun () ->
-            runtime.Run [
+            runtime.Run([
                 ComputeCommand.Copy(xs, tempBuffer)
                 ComputeCommand.Sync(tempBuffer.Buffer)
                 ComputeCommand.Execute prog
                 ComputeCommand.Copy(permBuffer, perm)
-            ]
+            ], queries)
         )
+
+    member x.Run(xs : 'a[], perm : int[]) =
+        x.Run(xs, perm, Queries.none)
 
     member x.Dispose() : unit =
         if tempBuffer.IsValueCreated then tempBuffer.Value.Dispose()

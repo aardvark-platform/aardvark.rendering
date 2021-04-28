@@ -1,15 +1,10 @@
 ﻿namespace Aardvark.Rendering.GL
 
 open System
-open System.Threading
-open System.Collections.Concurrent
-open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
+open Aardvark.Rendering
 open Microsoft.FSharp.NativeInterop
-open OpenTK
-open OpenTK.Platform
-open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
 
@@ -41,31 +36,31 @@ module PointerContextExtensions =
         let inline toGLBlendMode (mode : BlendMode) =
             GLBlendMode(
                 Enabled = (if mode.Enabled then 1 else 0),
-                SourceFactor = Translations.toGLFactor mode.SourceFactor,
-                DestFactor = Translations.toGLFactor mode.DestinationFactor,
-                Operation = Translations.toGLOperation mode.Operation,
+                SourceFactor = Translations.toGLFactor mode.SourceColorFactor,
+                DestFactor = Translations.toGLFactor mode.DestinationColorFactor,
+                Operation = Translations.toGLOperation mode.ColorOperation,
                 SourceFactorAlpha = Translations.toGLFactor mode.SourceAlphaFactor,
                 DestFactorAlpha = Translations.toGLFactor mode.DestinationAlphaFactor,
                 OperationAlpha = Translations.toGLOperation mode.AlphaOperation
             )
 
+        let inline toGLColorMask (mask : ColorMask) =
+            GLColorMask(
+                R = (if mask &&& ColorMask.Red   <> ColorMask.None then 1 else 0),
+                G = (if mask &&& ColorMask.Green <> ColorMask.None then 1 else 0),
+                B = (if mask &&& ColorMask.Blue  <> ColorMask.None then 1 else 0),
+                A = (if mask &&& ColorMask.Alpha <> ColorMask.None then 1 else 0)
+            )
+
         let inline toGLStencilMode (mode : StencilMode) =
             GLStencilMode(
-                Enabled = (if mode.IsEnabled then 1 else 0),
-                CmpFront = Translations.toGLFunction mode.CompareFront.Function,
-                MaskFront = mode.CompareFront.Mask,
-                ReferenceFront = mode.CompareFront.Reference,
-                CmpBack = Translations.toGLFunction mode.CompareBack.Function,
-                MaskBack = mode.CompareBack.Mask,
-                ReferenceBack = mode.CompareBack.Reference,
-
-                OpFrontSF = Translations.toGLStencilOperation mode.OperationFront.StencilFail,
-                OpFrontDF = Translations.toGLStencilOperation mode.OperationFront.DepthFail,
-                OpFrontPass = Translations.toGLStencilOperation mode.OperationFront.DepthPass,
-
-                OpBackSF = Translations.toGLStencilOperation mode.OperationBack.StencilFail,
-                OpBackDF = Translations.toGLStencilOperation mode.OperationBack.DepthFail,
-                OpBackPass = Translations.toGLStencilOperation mode.OperationBack.DepthPass
+                Enabled = (if mode.Enabled then 1 else 0),
+                Cmp = Translations.toGLCompareFunction mode.Comparison,
+                Mask = uint32 mode.CompareMask,
+                Reference = mode.Reference,
+                OpStencilFail = Translations.toGLStencilOperation mode.Fail,
+                OpDepthFail = Translations.toGLStencilOperation mode.DepthFail,
+                OpPass = Translations.toGLStencilOperation mode.Pass
             )
 
         module Attribute =
@@ -152,9 +147,12 @@ module PointerContextExtensions =
                 buffers.ToArray(), values.ToArray()
 
     module NativePtr =
+        let setArray (a : 'a[]) (ptr : nativeptr<'a>) =
+            for i in 0 .. a.Length-1 do NativePtr.set ptr i a.[i]
+
         let allocArray (a :'a[]) =
             let ptr = NativePtr.alloc a.Length
-            for i in 0 .. a.Length-1 do NativePtr.set ptr i a.[i]
+            setArray a ptr
             ptr
 
     type Context with
@@ -192,18 +190,16 @@ module PointerContextExtensions =
             NativePtr.free list.Infos
 
 
-        member x.ToDepthTest(mode : DepthTestMode) =
-            let value = Translations.toGLComparison mode.Comparison
-            let clamp = if mode.Clamp then 1 else 0
-            DepthTestInfo(value, clamp)
+        member x.ToDepthTest(test : DepthTest) =
+            Translations.toGLDepthTest test
 
-        member x.ToDepthBias(state : DepthBiasState) =
+        member x.ToDepthBias(state : DepthBias) =
             DepthBiasInfo(float32 state.Constant, float32 state.SlopeScale, float32 state.Clamp)
 
         member x.ToCullMode(mode : CullMode) =
             Translations.toGLCullMode mode
 
-        member x.ToFrontFace(frontFace : Aardvark.Base.Rendering.WindingOrder) =
+        member x.ToFrontFace(frontFace : Aardvark.Rendering.WindingOrder) =
             Translations.toGLFrontFace frontFace
 
         member x.ToPolygonMode(mode : FillMode) =
@@ -211,6 +207,9 @@ module PointerContextExtensions =
 
         member x.ToBlendMode(mode : BlendMode) =
             toGLBlendMode mode
+
+        member x.ToColorMask(mask : ColorMask) =
+            toGLColorMask mask
 
         member x.ToStencilMode(mode : StencilMode) =
             toGLStencilMode mode

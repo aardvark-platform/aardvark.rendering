@@ -1,13 +1,10 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open System.Threading
-open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
+open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
-open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
 // #nowarn "51"
@@ -30,6 +27,7 @@ type RasterizerState =
         depthBiasClamp          : float
         depthBiasSlopeFactor    : float
         lineWidth               : float
+        conservativeRaster      : bool
     }
 
 type ColorBlendAttachmentState =
@@ -49,7 +47,7 @@ type ColorBlendState =
         logicOpEnable           : bool
         logicOp                 : VkLogicOp
         attachmentStates        : ColorBlendAttachmentState[]
-        constants               : V4f
+        constant                : V4f
     }
 
 type MultisampleState =
@@ -88,19 +86,23 @@ type StencilState =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module InputAssemblyState =
-    let ofIndexedGeometryMode =
-        LookupTable.lookupTable [
-            IndexedGeometryMode.LineAdjacencyList,      { topology = VkPrimitiveTopology.LineListWithAdjacency; restartEnable = false }
-            IndexedGeometryMode.LineList,               { topology = VkPrimitiveTopology.LineList; restartEnable = false }
-            IndexedGeometryMode.LineStrip,              { topology = VkPrimitiveTopology.LineStrip; restartEnable = true }
-            IndexedGeometryMode.PointList,              { topology = VkPrimitiveTopology.PointList; restartEnable = false }
-            IndexedGeometryMode.QuadList,               { topology = VkPrimitiveTopology.PatchList; restartEnable = false }
-            IndexedGeometryMode.TriangleAdjacencyList,  { topology = VkPrimitiveTopology.TriangleListWithAdjacency; restartEnable = false }
-            IndexedGeometryMode.TriangleList,           { topology = VkPrimitiveTopology.TriangleList; restartEnable = false }
-            IndexedGeometryMode.TriangleStrip,          { topology = VkPrimitiveTopology.TriangleStrip; restartEnable = true }
-        ]
-        
-    
+    let ofIndexedGeometryMode (hasTessellation : bool) (mode : IndexedGeometryMode) =
+        if hasTessellation then
+            { topology = VkPrimitiveTopology.PatchList; restartEnable = false }
+        else
+            match mode with
+            | IndexedGeometryMode.LineAdjacencyList ->      { topology = VkPrimitiveTopology.LineListWithAdjacency; restartEnable = false }
+            | IndexedGeometryMode.LineList ->               { topology = VkPrimitiveTopology.LineList; restartEnable = false }
+            | IndexedGeometryMode.LineStrip ->              { topology = VkPrimitiveTopology.LineStrip; restartEnable = true }
+            | IndexedGeometryMode.PointList ->              { topology = VkPrimitiveTopology.PointList; restartEnable = false }
+            | IndexedGeometryMode.TriangleAdjacencyList ->  { topology = VkPrimitiveTopology.TriangleListWithAdjacency; restartEnable = false }
+            | IndexedGeometryMode.TriangleList ->           { topology = VkPrimitiveTopology.TriangleList; restartEnable = false }
+            | IndexedGeometryMode.TriangleStrip ->          { topology = VkPrimitiveTopology.TriangleStrip; restartEnable = true }
+            | IndexedGeometryMode.QuadList ->
+                failwith "Vulkan backend does not support quad geometry"
+            | _ ->
+                failwithf "Unknown indexed geometry mode %A" mode
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VertexInputState =
 
@@ -326,7 +328,7 @@ module VertexInputState =
 
         ]
 
-    let create (o : Map<Symbol, bool * Aardvark.Base.BufferView>) =
+    let create (o : Map<Symbol, bool * Aardvark.Rendering.BufferView>) =
         o |> Map.map (fun k (perInstance, view) ->
             match view.ElementType with
                 | TypeInfo.Patterns.MatrixOf(s, et) ->
@@ -408,18 +410,20 @@ module RasterizerState =
         ]
 
    
-    let create (usesDiscard : bool) (depth : DepthTestMode) (bias : DepthBiasState) (cull : CullMode) (frontFace : WindingOrder) (fill : FillMode) =
+    let create (conservativeRaster : bool) (depthClamp : bool)
+               (bias : DepthBias) (cull : CullMode) (frontFace : WindingOrder) (fill : FillMode) =
         {
-            depthClampEnable        = depth.Clamp
-            rasterizerDiscardEnable = usesDiscard
+            depthClampEnable        = depthClamp
+            rasterizerDiscardEnable = false
             polygonMode             = toVkPolygonMode fill
             cullMode                = toVkCullMode cull
             frontFace               = toVkFrontFace frontFace
-            depthBiasEnable         = bias.BiasEnabled
+            depthBiasEnable         = bias.Enabled
             depthBiasConstantFactor = bias.Constant
             depthBiasClamp          = bias.Clamp
             depthBiasSlopeFactor    = bias.SlopeScale
             lineWidth               = 1.0
+            conservativeRaster      = conservativeRaster
         }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -445,10 +449,12 @@ module ColorBlendState =
 
             BlendFactor.Zero, VkBlendFactor.Zero
             BlendFactor.One, VkBlendFactor.One
-            BlendFactor.SourceAlphaSat, VkBlendFactor.SrcAlphaSaturate
+            BlendFactor.SourceAlphaSaturate, VkBlendFactor.SrcAlphaSaturate
 
-            BlendFactor.BlendFactor, VkBlendFactor.ConstantColor
-            BlendFactor.InvBlendFactor, VkBlendFactor.OneMinusConstantColor
+            BlendFactor.ConstantColor, VkBlendFactor.ConstantColor
+            BlendFactor.InvConstantColor, VkBlendFactor.OneMinusConstantColor
+            BlendFactor.ConstantAlpha, VkBlendFactor.ConstantAlpha
+            BlendFactor.InvConstantAlpha, VkBlendFactor.OneMinusConstantAlpha
         ]
 
     let private toVkBlendOp =
@@ -460,27 +466,33 @@ module ColorBlendState =
             BlendOperation.Subtract, VkBlendOp.Subtract
         ]
 
-    let private rgba = VkColorComponentFlags.RBit ||| VkColorComponentFlags.GBit ||| VkColorComponentFlags.BBit ||| VkColorComponentFlags.ABit
-    let private disable = VkColorComponentFlags.None
+    let private toVkColorComponentFlags (mask : ColorMask) =
+        [
+            if (mask &&& ColorMask.Red) <> ColorMask.None then VkColorComponentFlags.RBit
+            if (mask &&& ColorMask.Blue) <> ColorMask.None then VkColorComponentFlags.GBit
+            if (mask &&& ColorMask.Green) <> ColorMask.None then VkColorComponentFlags.BBit
+            if (mask &&& ColorMask.Alpha) <> ColorMask.None then VkColorComponentFlags.ABit
+        ]
+        |> List.fold (|||) VkColorComponentFlags.None
 
-    let private toAttachmentState (writeMask : bool) (blend : BlendMode) =
+    let private toAttachmentState (writeMask : ColorMask) (blend : BlendMode) =
         {
             enabled                 = blend.Enabled
-            srcFactor               = toVkBlendFactor blend.SourceFactor
-            dstFactor               = toVkBlendFactor blend.DestinationFactor
-            operation               = toVkBlendOp blend.Operation
+            srcFactor               = toVkBlendFactor blend.SourceColorFactor
+            dstFactor               = toVkBlendFactor blend.DestinationColorFactor
+            operation               = toVkBlendOp blend.ColorOperation
             srcFactorAlpha          = toVkBlendFactor blend.SourceAlphaFactor
             dstFactorAlpha          = toVkBlendFactor blend.DestinationAlphaFactor
             operationAlpha          = toVkBlendOp blend.AlphaOperation
-            colorWriteMask          = if writeMask then rgba else disable
+            colorWriteMask          = toVkColorComponentFlags writeMask
         }
     
-    let create (writeMasks : array<bool>) (count : int) (blend : BlendMode) =
+    let create (writeMasks : ColorMask[]) (blendModes : BlendMode[]) (blendConstant : C4f) =
         {
             logicOpEnable           = false
             logicOp                 = VkLogicOp.NoOp
-            attachmentStates        = Array.init count (fun i -> toAttachmentState writeMasks.[i] blend)
-            constants               = V4f.IIII
+            attachmentStates        = Array.map2 toAttachmentState writeMasks blendModes
+            constant                = V4f blendConstant
         }
  
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -499,66 +511,67 @@ module MultisampleState =
 module DepthState =
     let private toVkCompareOp =
         LookupTable.lookupTable [
-            DepthTestComparison.None, VkCompareOp.Always
-            DepthTestComparison.Greater, VkCompareOp.Greater
-            DepthTestComparison.GreaterOrEqual, VkCompareOp.GreaterOrEqual
-            DepthTestComparison.Less, VkCompareOp.Less
-            DepthTestComparison.LessOrEqual, VkCompareOp.LessOrEqual
-            DepthTestComparison.Equal, VkCompareOp.Equal
-            DepthTestComparison.NotEqual, VkCompareOp.NotEqual
-            DepthTestComparison.Never, VkCompareOp.Never
-            DepthTestComparison.Always, VkCompareOp.Always
+            DepthTest.Greater, VkCompareOp.Greater
+            DepthTest.GreaterOrEqual, VkCompareOp.GreaterOrEqual
+            DepthTest.Less, VkCompareOp.Less
+            DepthTest.LessOrEqual, VkCompareOp.LessOrEqual
+            DepthTest.Equal, VkCompareOp.Equal
+            DepthTest.NotEqual, VkCompareOp.NotEqual
+            DepthTest.Never, VkCompareOp.Never
+            DepthTest.Always, VkCompareOp.Always
+            DepthTest.None, VkCompareOp.Always
         ]
 
-    let create (write : bool) (mode : DepthTestMode) =
+    let create (write : bool) (test : DepthTest) =
         {
-            testEnabled             = mode.IsEnabled
+            testEnabled             = test <> DepthTest.None
             writeEnabled            = write
             boundsTest              = false
-            compare                 = toVkCompareOp mode.Comparison
-            depthBounds             = if mode.Clamp then mode.Bounds else Range1d(0.0, 1.0)
+            compare                 = toVkCompareOp test
+            depthBounds             = Range1d(0.0, 1.0)
         }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module StencilState =
     let private toVkStencilOp =
         LookupTable.lookupTable [
-            StencilOperationFunction.Increment, VkStencilOp.IncrementAndClamp
-            StencilOperationFunction.IncrementWrap, VkStencilOp.IncrementAndWrap
-            StencilOperationFunction.Decrement, VkStencilOp.DecrementAndClamp
-            StencilOperationFunction.DecrementWrap, VkStencilOp.DecrementAndWrap
-            StencilOperationFunction.Keep, VkStencilOp.Keep
-            StencilOperationFunction.Replace, VkStencilOp.Replace
-            StencilOperationFunction.Zero, VkStencilOp.Zero
-            StencilOperationFunction.Invert, VkStencilOp.Invert
+            StencilOperation.Increment, VkStencilOp.IncrementAndClamp
+            StencilOperation.IncrementWrap, VkStencilOp.IncrementAndWrap
+            StencilOperation.Decrement, VkStencilOp.DecrementAndClamp
+            StencilOperation.DecrementWrap, VkStencilOp.DecrementAndWrap
+            StencilOperation.Keep, VkStencilOp.Keep
+            StencilOperation.Replace, VkStencilOp.Replace
+            StencilOperation.Zero, VkStencilOp.Zero
+            StencilOperation.Invert, VkStencilOp.Invert
         ]
 
     let private toVkStencilCompareOp  =
         LookupTable.lookupTable [
-            StencilCompareFunction.Always, VkCompareOp.Always
-            StencilCompareFunction.Equal, VkCompareOp.Equal
-            StencilCompareFunction.Greater, VkCompareOp.Greater
-            StencilCompareFunction.GreaterOrEqual, VkCompareOp.GreaterOrEqual
-            StencilCompareFunction.Less, VkCompareOp.Less
-            StencilCompareFunction.LessOrEqual, VkCompareOp.LessOrEqual
-            StencilCompareFunction.Never, VkCompareOp.Never
-            StencilCompareFunction.NotEqual, VkCompareOp.NotEqual
+            ComparisonFunction.Always, VkCompareOp.Always
+            ComparisonFunction.Equal, VkCompareOp.Equal
+            ComparisonFunction.Greater, VkCompareOp.Greater
+            ComparisonFunction.GreaterOrEqual, VkCompareOp.GreaterOrEqual
+            ComparisonFunction.Less, VkCompareOp.Less
+            ComparisonFunction.LessOrEqual, VkCompareOp.LessOrEqual
+            ComparisonFunction.Never, VkCompareOp.Never
+            ComparisonFunction.NotEqual, VkCompareOp.NotEqual
         ]
 
-    let private toVkStencilOpState (op : StencilOperation) (cmp : StencilFunction) =
+    let private toVkStencilOpState (writeMask : StencilMask) (mode : StencilMode) = //()(state : Aardvark.Rendering.StencilState) =
         VkStencilOpState(
-            toVkStencilOp op.StencilFail, 
-            toVkStencilOp op.DepthPass, 
-            toVkStencilOp op.DepthFail, 
-            toVkStencilCompareOp cmp.Function, 
-            cmp.Mask, 
-            0xFFFFFFFFu, 
-            uint32 cmp.Reference
+            toVkStencilOp mode.Fail,
+            toVkStencilOp mode.Pass,
+            toVkStencilOp mode.DepthFail,
+            toVkStencilCompareOp mode.Comparison,
+            uint32 mode.CompareMask,
+            uint32 writeMask,
+            uint32 mode.Reference
         )
-    
-    let create (mode : StencilMode) =
+
+    let create (writeMaskFront : StencilMask) (writeMaskBack : StencilMask)
+               (modeFront : StencilMode) (modeBack : StencilMode) =
         {
-            enabled                 = mode.IsEnabled
-            front                   = toVkStencilOpState mode.OperationFront mode.CompareFront
-            back                    = toVkStencilOpState mode.OperationBack mode.CompareBack
+            enabled = modeFront.Enabled || modeBack.Enabled
+            front   = toVkStencilOpState writeMaskFront modeFront
+            back    = toVkStencilOpState writeMaskBack modeBack
         }

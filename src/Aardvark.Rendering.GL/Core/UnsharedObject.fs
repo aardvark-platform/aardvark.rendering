@@ -35,7 +35,7 @@ type UnsharedObject(context : Context, createHandle : ContextHandle -> int, dest
             0
         else
             match ContextHandle.Current with
-                | Some ctx -> 
+                | ValueSome ctx -> 
                     match handleCache.Value with
                         | Some (c,h) when c = ctx ->
                             h
@@ -44,7 +44,7 @@ type UnsharedObject(context : Context, createHandle : ContextHandle -> int, dest
                             handleCache.Value <- Some(ctx, handle)
                             handle
                         
-                | None -> 0
+                | ValueNone -> 0
 
     /// <summary>
     /// destroys all handles created and prevents new
@@ -64,11 +64,11 @@ type UnsharedObject(context : Context, createHandle : ContextHandle -> int, dest
                 )
 
             match ContextHandle.Current with
-                | Some h -> 
+                | ValueSome h -> 
                     match handles.TryRemove h with
                         | (true, real) -> destroyHandle real
                         | _ -> ()
-                | None -> ()
+                | ValueNone -> ()
 
             let handles = handles.Keys |> Seq.toList
             handles |> List.iter register
@@ -94,11 +94,11 @@ type UnsharedObject(context : Context, createHandle : ContextHandle -> int, dest
             handleList |> List.iter register
 
             match ContextHandle.Current with
-                | Some h -> 
+                | ValueSome h -> 
                     let created = create h
                     handles.[h] <- created
                     handleCache.Value <- Some (h, created)
-                | None -> ()
+                | ValueNone -> ()
 
 
     member x.Context = context

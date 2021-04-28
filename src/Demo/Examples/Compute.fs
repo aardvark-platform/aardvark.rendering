@@ -8,8 +8,8 @@ open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open FSharp.Data.Adaptive.Operators
-open Aardvark.Base.Rendering
-open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering
+open Aardvark.Rendering.ShaderReflection
 
 module ComputeTest =
     open OpenTK.Graphics.OpenGL4
@@ -184,18 +184,18 @@ module ComputeTest =
                                     
                 for (loc, binding, name, valueType, dim, isMS, isArray) in images do
                     match get name with
-                        | Some (:? BackendTextureOutputView as view) ->
-                            match view.texture with 
+                        | Some (:? ITextureSubResource as view) ->
+                            match view.Texture with 
                                 | :? Texture as t ->
                                     let fmt = t.Format |> int |> unbox<SizedInternalFormat>
 //                                                    GL.ActiveTexture(TextureUnit.Texture0 + unbox loc)
 //                                                    GL.Check "active"
                                     //GL.Enable(EnableCap.Texture
                                     //GL.BindImageTextures(loc, 1, [|t.Handle|])
-                                    GL.BindImageTexture(binding, t.Handle, view.level, false, view.slice, TextureAccess.ReadWrite, fmt)
+                                    GL.BindImageTexture(binding, t.Handle, view.Level, false, view.Slice, TextureAccess.ReadWrite, fmt)
                                     GL.Check "image"
                                 | _ ->
-                                    failwithf "[GL] incompatible compute shader image: %A" view.texture
+                                    failwithf "[GL] incompatible compute shader image: %A" view.Texture
                         | Some t ->
                             failwithf "[GL] incompatible compute shader image: %A" t
                         | None ->
@@ -443,7 +443,7 @@ module ComputeTest =
                 "input", ba :> obj
                 "ret", bb :> obj
                 "f", 3.0 :> obj
-                "c", { texture = myImg; slice = 0; level = 0 } :> obj
+                "c", myImg.[TextureAspect.Color, 0, 0] :> obj
             ]
         )
                 

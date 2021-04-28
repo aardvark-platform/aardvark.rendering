@@ -432,6 +432,7 @@ module OpenGl =
     let getProcAddress (name : string) =
          let address = getProcAddressProbing [""; "ARB"; "EXT"] name
          if address = 0n then
+              Aardvark.Base.Report.Line(2, "[GL] Could not get \"{0}\" procedure address", name)
               0n
          else
               address
@@ -664,15 +665,20 @@ module OpenGl =
         let DepthMask = getProcAddress "glDepthMask"
 
         /// <summary>
-        /// https://www.opengl.org/sdk/docs/man/html/glDepthMask.xhtml
+        /// https://www.opengl.org/sdk/docs/man/html/glStencilMask.xhtml
         /// </summary>
         let StencilMask = getProcAddress "glStencilMask"
+
+        /// <summary>
+        /// https://www.opengl.org/sdk/docs/man/html/glStencilMaskSeparate.xhtml
+        /// </summary>
+        let StencilMaskSeparate = getProcAddress "glStencilMaskSeparate"
 
 
         /// <summary>
         /// https://www.opengl.org/sdk/docs/man/html/glColorMask.xhtml
         /// </summary>
-        let ColorMask = getProcAddress "glColorMaski"
+        let ColorMask = getProcAddress "glColorMask"
 
         /// <summary>
         /// https://www.opengl.org/sdk/docs/man/html/glDrawBuffers.xhtml
@@ -720,15 +726,11 @@ module OpenGl =
         let HDrawElements = getGLVMProcAddress "hglDrawElements"
         let HDrawArraysIndirect = getGLVMProcAddress "hglDrawArraysIndirect"
         let HDrawElementsIndirect = getGLVMProcAddress "hglDrawElementsIndirect"
-        let HSetDepthTest = getGLVMProcAddress "hglSetDepthTest"
         let HSetDepthBias = getGLVMProcAddress "hglSetDepthBias"
-        let HSetCullFace = getGLVMProcAddress "hglSetCullFace"
-        let HSetPolygonMode = getGLVMProcAddress "hglSetPolygonMode"
-        let HSetBlendMode = getGLVMProcAddress "hglSetBlendMode"
+        let HSetBlendModes = getGLVMProcAddress "hglSetBlendModes"
+        let HSetColorMasks = getGLVMProcAddress "hglSetColorMasks"
         let HSetStencilMode = getGLVMProcAddress "hglSetStencilMode"
         let HBindVertexAttributes = getGLVMProcAddress "hglBindVertexAttributes"
-        let HSetConservativeRaster = getGLVMProcAddress "hglSetConservativeRaster"
-        let HSetMultisample = getGLVMProcAddress "hglSetMultisample"
 
         let HBindTextures = getGLVMProcAddress "hglBindTextures"
         let HBindSamplers = getGLVMProcAddress "hglBindSamplers"
@@ -802,14 +804,9 @@ module OpenGl =
               HDrawElements, "hglDrawElements"
               HDrawArraysIndirect, "hglDrawArraysIndirect"
               HDrawElementsIndirect, "hglDrawElementsIndirect"
-              HSetDepthTest, "hglSetDepthTest"
-              HSetCullFace, "hglSetCullFace"
-              HSetPolygonMode, "hglSetPolygonMode"
-              HSetBlendMode, "hglSetBlendMode"
+              HSetBlendModes, "hglSetBlendModes"
               HSetStencilMode, "hglSetStencilMode"
               HBindVertexAttributes, "hglBindVertexAttributes"
-              HSetConservativeRaster, "hglSetConservativeRaster"
-              HSetMultisample, "hglSetMultisample"
               HBindTextures, "hglBindTextures"
               HBindSamplers, "hglBindSamplers"
 
@@ -895,13 +892,8 @@ module OpenGl =
         let HDrawElements : nativeint -> nativeint -> nativeint -> int -> nativeint -> unit = wrap Pointers.HDrawElements
         let HDrawArraysIndirect : nativeint -> nativeint -> nativeint -> nativeint -> int -> unit = wrap Pointers.HDrawArraysIndirect
         let HDrawElementsIndirect : nativeint -> nativeint -> nativeint -> int -> nativeint -> unit = wrap Pointers.HDrawElementsIndirect
-        let HSetDepthTest : nativeint -> unit = wrap Pointers.HSetDepthTest
-        let HSetCullFace : nativeint -> unit = wrap Pointers.HSetCullFace
-        let HSetPolygonMode : nativeint -> unit = wrap Pointers.HSetPolygonMode
-        let HSetBlendMode : nativeint -> unit = wrap Pointers.HSetBlendMode
+        let HSetBlendModes : int -> nativeint -> unit = wrap Pointers.HSetBlendModes
         let HSetStencilMode : nativeint -> unit = wrap Pointers.HSetStencilMode
         let HBindVertexAttributes : nativeint -> nativeint -> unit = wrap Pointers.HBindVertexAttributes
-        let HSetConservativeRaster : nativeint -> unit = wrap Pointers.HSetConservativeRaster
-        let HSetMultisample : nativeint -> unit = wrap Pointers.HSetMultisample
         let HBindTextures : int -> int -> nativeint -> nativeint -> unit = wrap Pointers.HBindTextures
         let HBindSamplers : int -> int -> nativeint -> unit = wrap Pointers.HBindSamplers

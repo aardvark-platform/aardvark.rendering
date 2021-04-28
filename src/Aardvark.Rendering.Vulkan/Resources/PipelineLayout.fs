@@ -1,12 +1,10 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
-open System
 open System.Threading
 open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Base.Sorting
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
@@ -64,23 +62,17 @@ type PipelineLayout =
 
         val mutable public DescriptorSetLayouts : array<DescriptorSetLayout>
         val mutable public PipelineInfo : PipelineInfo
-        
-        val mutable public ReferenceCount : int
+
         val mutable public LayerCount : int
         val mutable public PerLayerUniforms : Set<string>
 
-        member x.AddRef() =
-            if Interlocked.Increment(&x.ReferenceCount) = 1 then
-                failf "cannot revive PipelineLayout"
-            
-        member x.RemoveRef() =
-            if Interlocked.Decrement(&x.ReferenceCount) = 0 then
-                for b in x.DescriptorSetLayouts do
-                    x.Device |> DescriptorSetLayout.delete b
+        override x.Destroy() =
+            for b in x.DescriptorSetLayouts do
+                b.Dispose()
 
-                VkRaw.vkDestroyPipelineLayout(x.Device.Handle, x.Handle, NativePtr.zero)
-                x.Handle <- VkPipelineLayout.Null
-                x.DescriptorSetLayouts <- Array.empty
+            VkRaw.vkDestroyPipelineLayout(x.Device.Handle, x.Handle, NativePtr.zero)
+            x.Handle <- VkPipelineLayout.Null
+            x.DescriptorSetLayouts <- Array.empty
 
         interface IFramebufferSignature with
             member x.ColorAttachments = 
@@ -88,8 +80,6 @@ type PipelineLayout =
                 x.PipelineInfo.pOutputs 
                     |> List.map (fun p -> p.paramLocation, (Symbol.Create p.paramSemantic, { samples = 1; format = RenderbufferFormat.ofGLSLType p.paramType })) 
                     |> Map.ofList
-            member x.IsAssignableFrom _ = false
-            member x.Images = Map.empty
             member x.Runtime = Unchecked.defaultof<_>
             member x.StencilAttachment = None
             member x.DepthAttachment = None
@@ -97,7 +87,7 @@ type PipelineLayout =
             member x.PerLayerUniforms = x.PerLayerUniforms
 
         new(device, handle, descriptorSetLayouts, info, layerCount : int, perLayer : Set<string>) = 
-            { inherit Resource<_>(device, handle); DescriptorSetLayouts = descriptorSetLayouts; PipelineInfo = info; ReferenceCount = 1; LayerCount = layerCount; PerLayerUniforms = perLayer }
+            { inherit Resource<_>(device, handle); DescriptorSetLayouts = descriptorSetLayouts; PipelineInfo = info; LayerCount = layerCount; PerLayerUniforms = perLayer }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -233,7 +223,7 @@ module PipelineLayout =
             let! pHandles = handles
             let! pInfo =
                 VkPipelineLayoutCreateInfo(
-                    VkPipelineLayoutCreateFlags.MinValue,
+                    VkPipelineLayoutCreateFlags.None,
                     uint32 handles.Length, pHandles,
                     0u, NativePtr.zero
                 )
@@ -252,12 +242,9 @@ module PipelineLayout =
                     pEffectLayout   = None
                 }    
                       
-            return PipelineLayout(device, !!pHandle, setLayouts, info, layers, perLayer)
+            return new PipelineLayout(device, !!pHandle, setLayouts, info, layers, perLayer)
         }
 
-    let delete (layout : PipelineLayout) (device : Device) =
-        layout.RemoveRef()
-    
     open FShade
     open FShade.Imperative
 
@@ -274,7 +261,3 @@ type ContextPipelineLayoutExtensions private() =
     [<Extension>]
     static member inline CreatePipelineLayout(this : Device, layout : FShade.EffectInputLayout, layers : int, perLayer : Set<string>) =
         this |> PipelineLayout.ofEffectInputLayout layout layers perLayer
-
-    [<Extension>]
-    static member inline Delete(this : Device, layout : PipelineLayout) =
-        this |> PipelineLayout.delete layout       

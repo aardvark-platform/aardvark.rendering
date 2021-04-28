@@ -9,8 +9,9 @@ open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
 open FSharp.Data.Adaptive.Operators
-open Aardvark.Base.Rendering
-open Aardvark.Base.ShaderReflection
+open Aardvark.GPGPU
+open Aardvark.Rendering
+open Aardvark.Rendering.ShaderReflection
 open Aardvark.Rendering.Text
 open System.Runtime.InteropServices
 open Aardvark.SceneGraph
@@ -228,7 +229,7 @@ module ComputeShader =
             //PixTexture2d( [| checkerboardPix :> PixImage |], false) :> ITexture
 
         let img = runtime.PrepareTexture(checkerboard)
-        let dst = runtime.CreateTexture(img.Size, TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 1, 1)
+        let dst = runtime.CreateTexture(img.Size, TextureDimension.Texture3D, TextureFormat.Rgba32f, 1, 1)
 
         par.Scan(<@ (+) @>, img.[TextureAspect.Color, 0, 0], dst.[TextureAspect.Color, 0, 0])
 

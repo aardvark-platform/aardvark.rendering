@@ -7,7 +7,7 @@ open System.Windows.Forms
 open System.Threading
 open System.Collections.Concurrent
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Application
 open FSharp.Data.Adaptive
 
@@ -19,7 +19,7 @@ type IControl =
 
 //
 //type Periodic(interval : int, f : float -> unit) =
-//    let times = RunningMean(100)
+//    let times = AverageWindow(100)
 //    let sw = Stopwatch()
 //
 //    member x.RunIfNeeded() =
@@ -27,7 +27,7 @@ type IControl =
 //            sw.Start()
 //        else
 //            let dt = sw.Elapsed.TotalMilliseconds
-//               
+//
 //            if interval = 0 || dt >= float interval then
 //                times.Add dt
 //                sw.Restart()
@@ -36,7 +36,7 @@ type IControl =
 //
 //[<AllowNullLiteral>]
 //type MyTimer(f : unit -> unit, due : int64, interval : int64) =
-//    
+//
 //    let sw = Stopwatch()
 //    let cancel = new CancellationTokenSource()
 //
@@ -86,7 +86,7 @@ type IControl =
 //        let mine = Interlocked.Exchange(&q, HashSet.empty)
 //        let mine = mine |> HashSet.toList
 //        for ctrl in mine do
-//            try 
+//            try
 //                if not ctrl.IsInvalid then
 //                    ctrl.Invoke (fun () -> ctrl.Invalidate())
 //            with e ->
@@ -102,7 +102,7 @@ type IControl =
 //        if timer <> null then
 //            timer.Dispose()
 //
-//    
+//
 //        timer <- new MyTimer((fun _ -> this.Process()), 0L, 2L)
 //
 //    member x.Draw(c : IControl) =
@@ -116,7 +116,7 @@ type IControl =
 //            member x.Dispose() =
 //                periodic.Remove p |> ignore
 //        }
-//            
+//
 //    member x.EnqueuePeriodic (f : float -> unit) =
 //        x.EnqueuePeriodic(f, 1)
 //
@@ -127,9 +127,9 @@ type IInvalidateControl =
 type private MessageLoopImpl() =
     let mutable running = true
     let trigger = new MultimediaTimer.Trigger(1)
-    
+
     let stopwatch = System.Diagnostics.Stopwatch()
-    let mean = RunningMean(10)
+    let mean = AverageWindow(10)
 
     [<VolatileField>]
     let mutable dirty : ref<HashSet<Control>> = ref HashSet.empty
@@ -144,14 +144,14 @@ type private MessageLoopImpl() =
                     | h :: _ ->
                         stopwatch.Restart()
                         h.Invoke(new System.Action(fun () ->
-                            for ctrl in controls do 
+                            for ctrl in controls do
                                 let ic = unbox<IInvalidateControl> ctrl
                                 if not ic.IsInvalid then
                                     ctrl.Refresh()
                         )) |> ignore
                         stopwatch.Stop()
 
-                        mean.Add stopwatch.Elapsed.TotalSeconds
+                        mean.Insert stopwatch.Elapsed.TotalSeconds |> ignore
 
                     | [] ->
                         ()
@@ -159,7 +159,7 @@ type private MessageLoopImpl() =
     let thread = Thread(ThreadStart(run), IsBackground = true)
     do thread.Start()
 
-    member x.FrameTime = MicroTime(int64 (1000000000.0 * mean.Average))
+    member x.FrameTime = MicroTime(int64 (1000000000.0 * mean.Value))
 
     member x.Invalidate(ctrl : Control) =
         let mutable contained = false

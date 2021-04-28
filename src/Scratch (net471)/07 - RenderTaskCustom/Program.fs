@@ -1,6 +1,6 @@
 ﻿open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
@@ -42,9 +42,9 @@ let main argv =
 
     
     let renderTask =
-        RenderTask.custom (fun (self,token,outputDesc) -> 
+        RenderTask.custom (fun (self,token,outputDesc,queries) -> 
             let sw = Stopwatch.StartNew()
-            renderTask.Run(self, token, outputDesc)
+            renderTask.Run(self, token, outputDesc,queries)
             Log.line "RenderTime: %dms" sw.ElapsedMilliseconds
         )
         

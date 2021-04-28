@@ -1,5 +1,5 @@
 ﻿open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Base.Incremental
 open Aardvark.Base.Incremental.Operators
 open Aardvark.SceneGraph

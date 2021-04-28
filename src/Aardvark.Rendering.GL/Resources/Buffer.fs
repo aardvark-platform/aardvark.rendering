@@ -2,12 +2,9 @@
 
 open System
 open System.Threading
-open System.Collections.Concurrent
 open System.Runtime.InteropServices
 open Aardvark.Base
-open OpenTK
-open OpenTK.Platform
-open OpenTK.Graphics
+open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Rendering.GL
@@ -120,7 +117,7 @@ module BufferExtensions =
                 using x.ResourceLock (fun _ ->
                     let handle = GL.CreateBuffer()
                     GL.Check "failed to create buffer"
-
+                    // crucial here to call into dispatching function
                     GL.NamedBufferData(handle, (nativeint sizeInBytes), data, glUsageHint usage)
                     GL.Check "failed to upload buffer"
 
@@ -588,7 +585,7 @@ module IndirectBufferExtensions =
             if targetOffset + size > target.SizeInBytes || sourceOffset + size > source.SizeInBytes then
                 failwith "[GL] insufficient buffer size"
                 
-            GL.NamedCopyBufferSubData(source.Handle, target.Handle, sourceOffset, targetOffset, size)
+            GL.CopyNamedBufferSubData(source.Handle, target.Handle, sourceOffset, targetOffset, size)
             GL.Check "could not copy buffer"
 
         member x.Clone(b : Buffer, offset : nativeint, size : nativeint) =

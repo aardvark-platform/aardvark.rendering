@@ -1,58 +1,58 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open System.Threading
 open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
-open Microsoft.FSharp.NativeInterop
 open FSharp.Data.Adaptive
 
 #nowarn "9"
 // #nowarn "51"
 
+type PreparedRenderObject(device         : Device,
+                          original       : RenderObject,
+                          resources      : list<IResourceLocation>,
+                          program        : IResourceLocation<ShaderProgram>,
+                          pipelineLayout : PipelineLayout,
+                          pipeline       : INativeResourceLocation<VkPipeline>,
+                          indexBuffer    : Option<INativeResourceLocation<IndexBufferBinding>>,
+                          descriptorSets : INativeResourceLocation<DescriptorSetBinding>,
+                          vertexBuffers  : INativeResourceLocation<VertexBufferBinding>,
+                          drawCalls      : INativeResourceLocation<DrawCall>,
+                          isActive       : INativeResourceLocation<int>,
+                          activation     : IDisposable) =
 
-type PreparedRenderObject =
-    {
-        device                  : Device
-        original                : RenderObject
-        
-        resources               : list<IResourceLocation>
+    inherit Resource(device)
 
-        pipelineLayout          : PipelineLayout
-        pipeline                : INativeResourceLocation<VkPipeline>
-        indexBuffer             : Option<INativeResourceLocation<IndexBufferBinding>>
-        descriptorSets          : INativeResourceLocation<DescriptorSetBinding>
-        vertexBuffers           : INativeResourceLocation<VertexBufferBinding>
-        drawCalls               : INativeResourceLocation<DrawCall>
-        isActive                : INativeResourceLocation<int>
-        activation              : IDisposable
-    }
-    member x.DrawCalls = x.original.DrawCalls
-    member x.RenderPass = x.original.RenderPass
-    member x.AttributeScope = x.original.AttributeScope
+    member x.Original = original
+    member x.Resources = resources
+    member x.PipelineLayout = pipelineLayout
+    member x.Pipeline = pipeline
+    member x.IndexBuffer = indexBuffer
+    member x.DescriptorSets = descriptorSets
+    member x.VertexBuffers = vertexBuffers
+    member x.DrawCalls = drawCalls
+    member x.IsActive = isActive
+    member x.RenderPass = original.RenderPass
+    member x.AttributeScope = original.AttributeScope
 
-    member x.Dispose() =
-        lock AbstractRenderTask.ResourcesInUse (fun _ -> 
-            for r in x.resources do r.Release()
-        )
+    override x.Destroy() =
+        // TODO: Resources aren't actually acquired by preparing the render object (except the program) but only
+        // when added to the compiler. Thus, we don't release them here. May wanna change that behavior.
+        program.Release()
+        activation.Dispose()
 
     member x.Update(caller : AdaptiveToken, token : RenderToken) =
-        for r in x.resources do r.Update(caller) |> ignore
-
-    member x.IncrementReferenceCount() =
-        for r in x.resources do r.Acquire()
-
+        for r in resources do r.Update(caller) |> ignore
 
     interface IPreparedRenderObject with
-        member x.Id = x.original.Id
-        member x.RenderPass = x.original.RenderPass
-        member x.AttributeScope = x.original.AttributeScope
+        member x.Id = original.Id
+        member x.RenderPass = original.RenderPass
+        member x.AttributeScope = original.AttributeScope
         member x.Update(caller, token) = x.Update(caller, token) |> ignore
-        member x.Original = Some x.original
-        member x.Dispose() = x.Dispose()
+        member x.Original = Some original
+
 
 type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
     let id = newId()
@@ -75,21 +75,20 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
 
     member x.Update(caller : AdaptiveToken, token : RenderToken) =
         children |> List.iter (fun c -> c.Update(caller, token))
-        
 
     member x.RenderPass = first.RenderPass
-    member x.Original = first.original
+    member x.Original = first.Original
 
     member x.First = first
     member x.Last = last
 
     interface IRenderObject with
-        member x.Id = first.original.Id
+        member x.Id = first.Original.Id
         member x.AttributeScope = first.AttributeScope
         member x.RenderPass = first.RenderPass
 
     interface IPreparedRenderObject with
-        member x.Original = Some first.original
+        member x.Original = Some first.Original
         member x.Update(caller, token) = x.Update(caller, token) |> ignore
 
     interface IDisposable with
@@ -101,72 +100,73 @@ open System.Threading.Tasks
 [<AbstractClass; Sealed; Extension>]
 type DevicePreparedRenderObjectExtensions private() =
 
+    static let createSamplerState (this : ResourceManager) (name : Symbol) (uniforms : IUniformProvider) (state : FShade.SamplerState)  =
+        match uniforms.TryGetUniform(Ag.Scope.Root, DefaultSemantic.SamplerStateModifier) with
+        | Some(:? aval<Symbol -> SamplerState -> SamplerState> as modifier) ->
+            this.CreateDynamicSamplerState(name, state.SamplerState, modifier) :> aval<_>
+        | _ ->
+            AVal.constant state.SamplerState
+
     static let prepareObject (this : ResourceManager) (renderPass : RenderPass) (ro : RenderObject) =
-        
+
         let resources = System.Collections.Generic.List<IResourceLocation>()
 
         let programLayout, program = this.CreateShaderProgram(renderPass, ro.Surface, ro.Mode)
 
-        let descriptorSets = 
+        let descriptorSets =
             programLayout.DescriptorSetLayouts |> Array.map (fun ds ->
-                let descriptors = 
-                    ds.Bindings |> Array.choosei (fun i b ->
+                let descriptors =
+                    ds.Bindings |> Array.choose (fun b ->
                         match b.Parameter with
-                            | UniformBlockParameter block ->
-                                let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, ro.Uniforms, SymDict.empty)
-                                resources.Add buffer
-                                AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
+                        | UniformBlockParameter block ->
+                            let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, ro.Uniforms, SymDict.empty)
+                            resources.Add buffer
+                            AdaptiveDescriptor.AdaptiveUniformBuffer (b.Binding, buffer) |> Some
 
-                            | StorageBufferParameter block ->
-                                let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, ro.Uniforms, SymDict.empty)
-                                AdaptiveDescriptor.AdaptiveStorageBuffer (i, buffer) |> Some
+                        | StorageBufferParameter block ->
+                            let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, ro.Uniforms, SymDict.empty)
+                            AdaptiveDescriptor.AdaptiveStorageBuffer (b.Binding, buffer) |> Some
 
-                            | SamplerParameter sam ->
-                                match sam.samplerTextures with
-                                    | [] ->
-                                        Log.warn "could not get sampler information for: %A" sam
-                                        None
+                        | SamplerParameter sam ->
+                            match sam.samplerTextures with
+                            | [] ->
+                                Log.warn "could not get sampler information for: %A" sam
+                                None
 
-                                    | descriptions ->
-                                        let viewSam = 
-                                            descriptions |> List.map (fun (textureName, samplerState) -> 
-                                                let textureName = Symbol.Create textureName
-                                                let samplerState = samplerState.SamplerStateDescription
+                            | descriptions ->
+                                let list =
+                                    descriptions
+                                    |> List.choosei (fun i (textureName, samplerState) ->
+                                        let textureName = Symbol.Create textureName
 
-                                                match ro.Uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                                                | Some (:? aval<ITexture> as tex) ->
+                                        match ro.Uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                                        | Some (:? aval<ITexture> as tex) ->
+                                            let s = createSamplerState this textureName ro.Uniforms samplerState
+                                            let vs = this.CreateImageSampler(sam.samplerType, tex, s)
+                                            Some(i, vs)
+                                        | _ ->
+                                            Log.warn "[Vulkan] could not find texture: %A" textureName
+                                            None
+                                    )
 
-                                                    let tex = this.CreateImage(tex)
-                                                    let view = this.CreateImageView(sam.samplerType, tex)
-                                                    let sam = this.CreateSampler(AVal.constant samplerState)
+                                let viewSam = this.CreateImageSamplerArray(list)
+                                AdaptiveDescriptor.AdaptiveCombinedImageSampler(b.Binding, viewSam) |> Some
 
-                                                    Some(view, sam)
+                        | ImageParameter img ->
+                            let viewSam =
+                                let textureName = Symbol.Create img.imageName
+                                match ro.Uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                                | Some (:? aval<ITexture> as tex) ->
 
-                                                | _ ->
-                                                    Log.warn "[Vulkan] could not find texture: %A" textureName
-                                                    None
-                                            )
+                                    let tex = this.CreateImage(tex)
+                                    let view = this.CreateImageView(img.imageType, tex)
 
-                                        AdaptiveDescriptor.AdaptiveCombinedImageSampler(i, List.toArray viewSam) |> Some
-                                
+                                    view
 
-                            | ImageParameter img ->
-                                let viewSam = 
-                                    let textureName = Symbol.Create img.imageName
-                                    match ro.Uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                                    | Some (:? aval<ITexture> as tex) ->
+                                | _ ->
+                                    failf "could not find texture: %A" textureName
 
-                                        let tex = this.CreateImage(tex)
-                                        let view = this.CreateImageView(img.imageType, tex)
-
-                                        view
-
-                                    | _ ->
-                                        failf "could not find texture: %A" textureName
-
-                                AdaptiveDescriptor.AdaptiveStorageImage(i, viewSam) |> Some
-                                
-                                
+                            AdaptiveDescriptor.AdaptiveStorageImage(b.Binding, viewSam) |> Some
                     )
 
                 let res = this.CreateDescriptorSet(ds, descriptors)
@@ -205,18 +205,31 @@ type DevicePreparedRenderObjectExtensions private() =
         let bufferFormats = 
             bufferViews |> List.map (fun (name,location, perInstance, view) -> name, (perInstance, view)) |> Map.ofSeq
 
-        let writeDepth =
-            match ro.WriteBuffers with
-                | Some set -> Set.contains DefaultSemantic.Depth set
-                | None -> true
-
-
-
         let inputAssembly = this.CreateInputAssemblyState(ro.Mode, program)
         let inputState = this.CreateVertexInputState(programLayout.PipelineInfo, AVal.constant (VertexInputState.create bufferFormats))
-        let rasterizerState = this.CreateRasterizerState(ro.DepthTest, ro.DepthBias, ro.CullMode, ro.FrontFace, ro.FillMode)
-        let colorBlendState = this.CreateColorBlendState(renderPass, ro.WriteBuffers, ro.BlendMode)
-        let depthStencilState = this.CreateDepthStencilState(writeDepth, ro.DepthTest, ro.StencilMode)
+
+        let rasterizerState =
+            this.CreateRasterizerState(
+                ro.DepthState.Clamp, ro.DepthState.Bias,
+                ro.RasterizerState.CullMode, ro.RasterizerState.FrontFace, ro.RasterizerState.FillMode,
+                ro.RasterizerState.ConservativeRaster
+            )
+
+        let colorBlendState =
+            this.CreateColorBlendState(
+                renderPass, ro.BlendState.ColorWriteMask, ro.BlendState.AttachmentWriteMask,
+                ro.BlendState.Mode, ro.BlendState.AttachmentMode, ro.BlendState.ConstantColor
+            )
+
+        let depthStencilState =
+            this.CreateDepthStencilState(
+                ro.DepthState.Test, ro.DepthState.WriteMask,
+                ro.StencilState.ModeFront, ro.StencilState.WriteMaskFront,
+                ro.StencilState.ModeBack, ro.StencilState.WriteMaskBack
+            )
+
+        let multisampleState =
+            this.CreateMultisampleState(renderPass, ro.RasterizerState.Multisample)
 
         let pipeline =
             this.CreatePipeline(
@@ -227,7 +240,7 @@ type DevicePreparedRenderObjectExtensions private() =
                 rasterizerState,
                 colorBlendState,
                 depthStencilState,
-                ro.WriteBuffers
+                multisampleState
             )
 
         resources.Add pipeline
@@ -268,85 +281,77 @@ type DevicePreparedRenderObjectExtensions private() =
 
         //for r in resources do r.Acquire()
 
-        let res = 
-            {
-                device                      = this.Device
-                original                    = ro
-                resources                   = CSharpList.toList resources
-                descriptorSets              = descriptorBindings
-                pipelineLayout              = programLayout
-                pipeline                    = pipeline
-                vertexBuffers               = bindings
-                indexBuffer                 = indexBufferBinding
-                drawCalls                   = calls
-                isActive                    = isActive
-                activation                  = ro.Activate()
-            }
+        new PreparedRenderObject(
+            this.Device, ro,
+            CSharpList.toList resources,
+            program,
+            programLayout,
+            pipeline,
+            indexBufferBinding,
+            descriptorBindings,
+            bindings,
+            calls,
+            isActive,
+            ro.Activate()
+        )
 
-        res
-        
     [<Extension>]
     static member CreateDescriptorSets (this : ResourceManager, layout : PipelineLayout, uniforms : IUniformProvider) =
         let resources = System.Collections.Generic.List<IResourceLocation>()
         let sets = 
             layout.DescriptorSetLayouts |> Array.map (fun ds ->
                 let descriptors = 
-                    ds.Bindings |> Array.choosei (fun i b ->
+                    ds.Bindings |> Array.choose (fun b ->
                         match b.Parameter with
-                            | UniformBlockParameter block ->
-                                let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
-                                resources.Add buffer
-                                AdaptiveDescriptor.AdaptiveUniformBuffer (i, buffer) |> Some
+                        | UniformBlockParameter block ->
+                            let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
+                            resources.Add buffer
+                            AdaptiveDescriptor.AdaptiveUniformBuffer (b.Binding, buffer) |> Some
 
-                            | StorageBufferParameter block ->
-                                let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
-                                AdaptiveDescriptor.AdaptiveStorageBuffer (i, buffer) |> Some
+                        | StorageBufferParameter block ->
+                            let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
+                            AdaptiveDescriptor.AdaptiveStorageBuffer (b.Binding, buffer) |> Some
 
-                            | SamplerParameter sam ->
-                                match sam.samplerTextures with
-                                    | [] ->
-                                        Log.warn "could not get sampler information for: %A" sam
-                                        None
+                        | SamplerParameter sam ->
+                            match sam.samplerTextures with
+                            | [] ->
+                                Log.warn "could not get sampler information for: %A" sam
+                                None
 
-                                    | descriptions ->
-                                        let viewSam = 
-                                            descriptions |> List.map (fun (textureName, samplerState) -> 
-                                                let textureName = Symbol.Create textureName
-                                                let samplerState = samplerState.SamplerStateDescription
+                            | descriptions ->
+                                let list =
+                                    descriptions
+                                    |> List.choosei (fun i (textureName, samplerState) ->
+                                        let textureName = Symbol.Create textureName
+                                        let samplerState = samplerState.SamplerState
 
-                                                match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                                                | Some (:? aval<ITexture> as tex) ->
+                                        match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                                        | Some (:? aval<ITexture> as tex) ->
+                                            let vs = this.CreateImageSampler(sam.samplerType, tex, AVal.constant samplerState)
+                                            Some(i, vs)
+                                        | _ ->
+                                            Log.warn "[Vulkan] could not find texture: %A" textureName
+                                            None
+                                    )
 
-                                                    let tex = this.CreateImage(tex)
-                                                    let view = this.CreateImageView(sam.samplerType, tex)
-                                                    let sam = this.CreateSampler(AVal.constant samplerState)
+                                let viewSam = this.CreateImageSamplerArray(list)
+                                AdaptiveDescriptor.AdaptiveCombinedImageSampler(b.Binding, viewSam) |> Some
 
-                                                    Some(view, sam)
+                        | ImageParameter img ->
+                            let viewSam = 
+                                let textureName = Symbol.Create img.imageName
+                                match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                                | Some (:? aval<ITexture> as tex) ->
 
-                                                | _ ->
-                                                    Log.warn "[Vulkan] could not find texture: %A" textureName
-                                                    None
-                                            )
+                                    let tex = this.CreateImage(tex)
+                                    let view = this.CreateImageView(img.imageType, tex)
 
-                                        AdaptiveDescriptor.AdaptiveCombinedImageSampler(i, List.toArray viewSam) |> Some
-                                
+                                    view
 
-                            | ImageParameter img ->
-                                let viewSam = 
-                                    let textureName = Symbol.Create img.imageName
-                                    match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                                    | Some (:? aval<ITexture> as tex) ->
+                                | _ ->
+                                    failf "could not find texture: %A" textureName
 
-                                        let tex = this.CreateImage(tex)
-                                        let view = this.CreateImageView(img.imageType, tex)
-
-                                        view
-
-                                    | _ ->
-                                        failf "could not find texture: %A" textureName
-
-                                AdaptiveDescriptor.AdaptiveStorageImage(i, viewSam) |> Some
-                                
+                            AdaptiveDescriptor.AdaptiveStorageImage(b.Binding, viewSam) |> Some
                     )
 
                 let res = this.CreateDescriptorSet(ds, descriptors)
@@ -372,10 +377,10 @@ type DevicePreparedRenderObjectExtensions private() =
             let result = prepareObject this renderPass ro
 
             // get all "new" resources
-            let newResources = result.resources |> List.filter (fun r -> r.ReferenceCount = 0)
+            let newResources = result.Resources |> List.filter (fun r -> r.ReferenceCount = 0)
 
             // acquire all resources (possibly causing a ref-count greater than 1 when used multiple times)
-            for r in result.resources do r.Acquire()
+            for r in result.Resources do r.Acquire()
 
             // update all "new" resources
             for r in newResources do r.Update(AdaptiveToken.Top) |> ignore
@@ -442,9 +447,11 @@ type DevicePreparedRenderObjectExtensions private() =
                 new PreparedMultiRenderObject(all)
 
             | :? PreparedRenderObject as o ->
+                o.AddReference()
                 new PreparedMultiRenderObject([o])
 
             | :? PreparedMultiRenderObject as mo ->
+                for o in mo.Children do o.AddReference()
                 mo
 
             | _ ->

@@ -89,7 +89,9 @@ DllExport(void) vmInit()
 	glBindBufferRange = (PFNGLBINDBUFFERRANGEPROC)getProc("glBindBufferRange");
 	glBindFramebuffer = (PFNGLBINDFRAMEBUFFERPROC)getProc("glBindFramebuffer");
 	glBlendFuncSeparate = (PFNGLBLENDFUNCSEPARATEPROC)getProc("glBlendFuncSeparate");
+	glBlendFuncSeparatei = (PFNGLBLENDFUNCSEPARATEIPROC)getProc("glBlendFuncSeparatei");
 	glBlendEquationSeparate = (PFNGLBLENDEQUATIONSEPARATEPROC)getProc("glBlendEquationSeparate");
+	glBlendEquationSeparatei = (PFNGLBLENDEQUATIONSEPARATEIPROC)getProc("glBlendEquationSeparatei");
 	glStencilFuncSeparate = (PFNGLSTENCILFUNCSEPARATEPROC)getProc("glStencilFuncSeparate");
 	glStencilOpSeparate = (PFNGLSTENCILOPSEPARATEPROC)getProc("glStencilOpSeparate");
 	glPatchParameteri = (PFNGLPATCHPARAMETERIPROC)getProc("glPatchParameteri");
@@ -401,7 +403,7 @@ void runInstruction(Instruction* i)
 		hglDrawElementsIndirect((RuntimeStats*)i->Arg0, (int*)i->Arg1, (BeginMode*)i->Arg2, (GLenum)i->Arg3, (IndirctDrawArgsStruct*)i->Arg4);
 		break;
 	case HSetDepthTest:
-		hglSetDepthTest((DepthTestMode*)i->Arg0);
+		hglSetDepthTest((int*)i->Arg0);
 		break;
 	case HSetDepthBias:
 		hglSetDepthBias((DepthBiasInfo*)i->Arg0);
@@ -412,11 +414,11 @@ void runInstruction(Instruction* i)
 	case HSetPolygonMode:
 		hglSetPolygonMode((GLenum*)i->Arg0);
 		break;
-	case HSetBlendMode:
-		hglSetBlendMode((BlendMode*)i->Arg0);
+	case HSetBlendModes:
+		hglSetBlendModes((int)i->Arg0, (BlendMode**)i->Arg1);
 		break;
 	case HSetStencilMode:
-		hglSetStencilMode((StencilMode*)i->Arg0);
+		hglSetStencilMode((StencilMode*)i->Arg0, (StencilMode*)i->Arg1);
 		break;
 	case HBindVertexAttributes:
 		hglBindVertexAttributes((void**)i->Arg0, (VertexInputBinding*)i->Arg1);
@@ -717,9 +719,9 @@ Statistics runRedundancyChecks(Fragment* frag)
 					break;
 
 				case HSetDepthTest:
-					if (state.HShouldSetDepthTest((DepthTestMode*)i->Arg0))
+					if (state.HShouldSetDepthTest((int*)i->Arg0))
 					{
-						hglSetDepthTest((DepthTestMode*)i->Arg0);
+						hglSetDepthTest((int*)i->Arg0);
 					}
 					break;
 				case HSetCullFace:
@@ -734,16 +736,16 @@ Statistics runRedundancyChecks(Fragment* frag)
 						hglSetPolygonMode((GLenum*)i->Arg0);
 					}
 					break;
-				case HSetBlendMode:
-					if (state.HShouldSetBlendMode((BlendMode*)i->Arg0))
+				case HSetBlendModes:
+					if (state.HShouldSetBlendModes((int)i->Arg0, (BlendMode**)i->Arg1))
 					{
-						hglSetBlendMode((BlendMode*)i->Arg0);
+						hglSetBlendModes((int)i->Arg0, (BlendMode**)i->Arg1);
 					}
 					break;
 				case HSetStencilMode:
-					if (state.HShouldSetStencilMode((StencilMode*)i->Arg0))
+					if (state.HShouldSetStencilMode((StencilMode*)i->Arg0, (StencilMode*)i->Arg1))
 					{
-						hglSetStencilMode((StencilMode*)i->Arg0);
+						hglSetStencilMode((StencilMode*)i->Arg0, (StencilMode*)i->Arg1);
 					}
 					break;
 
@@ -1046,22 +1048,18 @@ DllExport(void) hglDrawElementsIndirect(RuntimeStats* stats, int* isActive, Begi
 }
 
 
-DllExport(void) hglSetDepthTest(DepthTestMode* mode)
+DllExport(void) hglSetDepthTest(int* mode)
 {
 	trace("hglSetDepthTest\n");
 	auto m = *mode;
-	if (m.Comparison == 0)
+	if (m == GL_ALWAYS)
 	{
 		glDisable(GL_DEPTH_TEST);
-		glDisable(GL_DEPTH_CLAMP);
 	}
 	else
 	{
 		glEnable(GL_DEPTH_TEST);
-		glDepthFunc(m.Comparison);
-		if (m.Clamp) glEnable(GL_DEPTH_CLAMP);
-		else glDisable(GL_DEPTH_CLAMP);
-		
+		glDepthFunc(m);
 	}
 	endtrace("a")
 }
@@ -1112,27 +1110,58 @@ DllExport(void) hglSetPolygonMode(GLenum* mode)
 	endtrace("a")
 }
 
-DllExport(void) hglSetBlendMode(BlendMode* mode)
+DllExport(void) hglSetBlendModes(int count, BlendMode** ptr)
 {
 	trace("hglSetBlendMode\n");
-	if (!mode->Enabled)
+
+	bool enabled = false;
+	BlendMode* modes = *ptr;
+
+	for (int i = 0; i < count; i++)
+	{
+		if (modes[i].Enabled) 
+		{
+			enabled = true;
+			break;
+		}
+	}
+
+	if (!enabled)
 	{
 		glDisable(GL_BLEND);
 	}
 	else
 	{
 		glEnable(GL_BLEND);
-		glBlendFuncSeparate(mode->SourceFactor, mode->DestFactor, mode->SourceFactorAlpha, mode->DestFactorAlpha);
-		glBlendEquationSeparate(mode->Operation, mode->OperationAlpha);
+
+		for (int i = 0; i < count; i++)
+		{
+			glBlendFuncSeparatei(i, modes[i].SourceFactor, modes[i].DestFactor, modes[i].SourceFactorAlpha, modes[i].DestFactorAlpha);
+			glBlendEquationSeparatei(i, modes[i].Operation, modes[i].OperationAlpha);
+		}
 	}
 	endtrace("a")
 
 }
 
-DllExport(void) hglSetStencilMode(StencilMode* mode)
+DllExport(void) hglSetColorMasks(int count, int** ptr)
+{
+	trace("hglSetColorMasks\n");
+
+	int* masks = *ptr;
+
+	for (int i = 0; i < count; i++)
+	{
+		glColorMaski(i, masks[i * 4], masks[i * 4 + 1], masks[i * 4 + 2], masks[i * 4 + 3]);
+	}
+	endtrace("a")
+
+}
+
+DllExport(void) hglSetStencilMode(StencilMode* front, StencilMode* back)
 {
 	trace("hglSetStencilMode\n");
-	if (!mode->Enabled)
+	if (!front->Enabled && !back->Enabled)
 	{
 		glDisable(GL_STENCIL_TEST);
 	}
@@ -1140,11 +1169,11 @@ DllExport(void) hglSetStencilMode(StencilMode* mode)
 	{
 		glEnable(GL_STENCIL_TEST);
 
-		glStencilFuncSeparate(GL_FRONT, mode->CmpFront, mode->ReferenceFront, mode->MaskFront);
-		glStencilOpSeparate(GL_FRONT, mode->OpFrontSF, mode->OpFrontDF, mode->OpFrontPass);
+		glStencilFuncSeparate(GL_FRONT, front->Cmp, front->Reference, front->Mask);
+		glStencilOpSeparate(GL_FRONT, front->OpStencilFail, front->OpDepthFail, front->OpPass);
 
-		glStencilFuncSeparate(GL_BACK, mode->CmpBack, mode->ReferenceBack, mode->MaskBack);
-		glStencilOpSeparate(GL_BACK, mode->OpBackSF, mode->OpBackDF, mode->OpBackPass);
+		glStencilFuncSeparate(GL_BACK, back->Cmp, back->Reference, back->Mask);
+		glStencilOpSeparate(GL_BACK, back->OpStencilFail, back->OpDepthFail, back->OpPass);
 	}
 	endtrace("a")
 }

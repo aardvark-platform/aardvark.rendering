@@ -1,5 +1,5 @@
 ﻿open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
@@ -68,8 +68,8 @@ module Shader =
 
 [<ReflectedDefinition>]
 module Scatter =
-    open Aardvark.Base.Rendering
-    open Aardvark.Base.Rendering.Effects
+    open Aardvark.Rendering
+    open Aardvark.Rendering.Effects
     open FShade
     
     let volumeTexture =
@@ -187,29 +187,18 @@ let main argv =
 
     let drawCall = DrawCallInfo(FaceVertexCount = (fvc / factor |> int), InstanceCount = 1)
 
-    let blendMode = 
-        BlendMode(
-           Operation = BlendOperation.Add,
-           AlphaOperation = BlendOperation.Add,
-           SourceFactor = BlendFactor.One,
-           DestinationFactor = BlendFactor.One,
-           SourceAlphaFactor =BlendFactor.One,
-           DestinationAlphaFactor = BlendFactor.One,
-           Enabled = true
-        )
-
     let signature =
         win.Runtime.CreateFramebufferSignature [
             DefaultSemantic.Colors, RenderbufferFormat.R32f
         ]
 
-    let scatterTexture = win.Runtime.CreateTexture(V2i(256,1024), TextureFormat.R32f, 1, 1)
+    let scatterTexture = win.Runtime.CreateTexture2D(V2i(256,1024), TextureFormat.R32f, 1, 1)
 
     let fbo = 
         win.Runtime.CreateFramebuffer(
             signature, 
             Map.ofList [
-                DefaultSemantic.Colors, ({ texture = scatterTexture; slice = 0; level = 0 } :> IFramebufferOutput)
+                DefaultSemantic.Colors, scatterTexture.GetOutputView()
             ]
         )
 

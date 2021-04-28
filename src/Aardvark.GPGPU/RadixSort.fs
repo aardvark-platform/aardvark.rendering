@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Base
 
 open Aardvark.Base
+open Aardvark.Rendering
 
 type private RadixSortMode =
     | UInt = 0

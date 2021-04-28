@@ -2,6 +2,7 @@
 
 open System
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 
 type TimeMod() =
@@ -19,6 +20,7 @@ type TimeMod() =
         member x.ContentType = typeof<System.DateTime>
         member x.IsConstant = false
         member x.GetValueUntyped(caller) = x.GetValue(caller) :> obj
+        member x.Accept (v : IAdaptiveValueVisitor<'R>) = v.Visit x
 
     interface aval<DateTime> with
         member x.GetValue(caller) = x.GetValue(caller)
@@ -38,6 +40,7 @@ type IRenderTarget =
 type IRenderControl =
     inherit IRenderTarget
 
+    abstract member Cursor : Cursor with get, set
     abstract member Keyboard : IKeyboard
     abstract member Mouse : IMouse
     

@@ -3,10 +3,9 @@
 open System
 open System.Threading
 open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
 open System.Collections.Generic
-open System.Collections.Concurrent
 open Aardvark.Base
+open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
@@ -329,12 +328,9 @@ type SparseImage(device : Device, handle : VkImage, size : V3i, levels : int, sl
     member x.Unbind(level : int, slice : int, offset : V3i, size : V3i) =
         x.Update [| { level = level; slice = slice; offset = offset; size = size; pointer = None } |]
 
-    member x.Dispose() =
-        device.Delete x
+    override x.Destroy() =
+        base.Destroy()
         tailPtr.Dispose()
-
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
 
 [<AbstractClass; Sealed; Extension>]
 type SparseImageDeviceExtensions private() =
@@ -555,7 +551,7 @@ module SparseTextureImplemetation =
                 let totalSize = int64 cnt * brickSizeInBytes
 
                 let binds = ranges |> Array.map toSparseImageBind
-                let tempBuffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit totalSize
+                use tempBuffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit totalSize
             
                 let copies = List<VkBufferImageCopy>()
 
@@ -670,7 +666,7 @@ module SparseTextureImplemetation =
                                 )
                             }
 
-                            Disposable.Empty
+                            [tempBuffer; back]
                     }
 
 
@@ -690,8 +686,6 @@ module SparseTextureImplemetation =
                     sw.Stop()
                     Log.warn "copy: %A" sw.MicroTime
                 )
-
-                device.Delete tempBuffer
 
                 binds
             else
@@ -720,7 +714,7 @@ module SparseTextureImplemetation =
             if level >= back.SparseLevels then
                 let levelSize = size / (1 <<< level)
                 let sizeInBytes = int64 levelSize.X * int64 levelSize.Y * int64 levelSize.Z * int64 sizeof<'a>
-                let tempBuffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit sizeInBytes
+                use tempBuffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit sizeInBytes
 
                 tempBuffer.Memory.MappedTensor4<'a>(
                     V4i(levelSize.X, levelSize.Y, levelSize.Z, channels),
@@ -732,8 +726,6 @@ module SparseTextureImplemetation =
                         do! Command.Copy(tempBuffer, 0L, V2i.OO, back.[ImageAspect.Color, level, slice], V3i.Zero, levelSize)
                     }
                 )
-
-                device.Delete tempBuffer
 
                 { new IDisposable with
                     member __.Dispose() = ()
@@ -749,7 +741,7 @@ module SparseTextureImplemetation =
                 let mem = memory.Alloc(align, brickSizeInBytes)
             
                 let sizeInBytes = int64 brickSize.X * int64 brickSize.Y * int64 brickSize.Z * int64 sizeof<'a>
-                let tempBuffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit sizeInBytes
+                use tempBuffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit sizeInBytes
                 
                 tempBuffer.Memory.MappedTensor4<'a>(
                     V4i(brickSize.X, brickSize.Y, brickSize.Z, channels),
@@ -770,8 +762,6 @@ module SparseTextureImplemetation =
 
                 if flushAfterUpload then
                     invalidate()
-
-                device.Delete tempBuffer
 
                 { new IDisposable with
                     member __.Dispose() = x.Revoke bind
@@ -882,7 +872,7 @@ module SparseTextureImplemetation =
                 let tensor = Tensor4<uint16>(V4i(brickSize, 1))
 
                 let sizeInBytes = int64 brickSize.X * int64 brickSize.Y * int64 brickSize.Z * int64 sizeof<uint16>
-                let tempBuffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit sizeInBytes
+                use tempBuffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit sizeInBytes
                 
 
                 device.perform {
@@ -918,8 +908,7 @@ module SparseTextureImplemetation =
 
 
                     ]
-                
-                device.Delete tempBuffer
+
                 result
             )
 

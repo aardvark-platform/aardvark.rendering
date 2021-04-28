@@ -17,7 +17,7 @@ namespace Examples
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open Aardvark.Rendering.Interactive
 
 open FSharp.Data.Adaptive
@@ -35,7 +35,7 @@ module Render2TexturePrimitive =
     let runtime = win.Runtime // the runtime instance provides functions for creating resources (lower abstraction than sg)
 
     let size = V2i(1024,768)
-    let color = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1)
+    let color = runtime.CreateTexture2D(size, TextureFormat.Rgba8, 1, 1)
     let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
 
     // Signatures are required to compile render tasks. Signatures can be seen as the `type` of a framebuffer
@@ -52,7 +52,7 @@ module Render2TexturePrimitive =
         runtime.CreateFramebuffer(
             signature, 
             Map.ofList [
-                DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                DefaultSemantic.Colors, color.GetOutputView()
                 DefaultSemantic.Depth, (depth :> IFramebufferOutput)
             ]
         )

@@ -2,20 +2,15 @@
 
 
 open System
-open System.IO
 open Aardvark.Base
+
 open FSharp.Data.Adaptive
 
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.WinForms
-open FSharp.Data.Adaptive.Operators
-open Aardvark.Base.Rendering
-open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering
 open Aardvark.Rendering.Text
-open System.Runtime.InteropServices
-open Aardvark.SceneGraph
-open Aardvark.SceneGraph.IO
 open System.Threading
 open System.Threading.Tasks
 
@@ -514,7 +509,7 @@ module LevelOfDetail =
             do! Command.Copy(hostVisible.[ImageAspect.Color, 0, 0], V3i.Zero, img.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(size, 1))
         }
 
-        device.Delete hostVisible
+        hostVisible.Dispose()
 
         let tex = AVal.constant (img :> ITexture)
 
@@ -551,21 +546,17 @@ module LevelOfDetail =
             ]
 
 
-        let surface = Aardvark.Base.Surface.FShadeSimple effect
+        let surface = Aardvark.Rendering.Surface.FShadeSimple effect
 
 
         let state =
             {
-                depthTest           = AVal.constant DepthTestMode.LessOrEqual
-                depthBias           = AVal.constant (DepthBiasState(0.0, 0.0, 0.0))
-                cullMode            = AVal.constant CullMode.None
-                frontFace           = AVal.constant WindingOrder.CounterClockwise
-                blendMode           = AVal.constant BlendMode.None
-                fillMode            = AVal.constant FillMode.Fill
-                stencilMode         = AVal.constant StencilMode.Disabled
-                multisample         = AVal.constant true
-                writeBuffers        = None
-                globalUniforms      = 
+                DepthState      = DepthState.Default
+                BlendState      = BlendState.Default
+                StencilState    = StencilState.Default
+                RasterizerState = { RasterizerState.Default with FrontFace = AVal.constant WindingOrder.CounterClockwise }
+
+                GlobalUniforms      = 
                     UniformProvider.ofList [
                         "DiffuseColorTexture", tex :> IAdaptiveValue
                         "ViewTrafo", view :> IAdaptiveValue
@@ -574,15 +565,12 @@ module LevelOfDetail =
                         "CameraLocation", view |> AVal.map (fun v -> v.Backward.C3.XYZ) :> IAdaptiveValue
                     ]
 
-                geometryMode        = IndexedGeometryMode.TriangleList
-                vertexInputTypes    = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f>; DefaultSemantic.DiffuseColorCoordinates, typeof<V2f> ]
-                perGeometryUniforms = Map.ofList [ "ModelTrafo", typeof<Trafo3d>; "NodeColor", typeof<V4d> ]
+                Mode                = IndexedGeometryMode.TriangleList
+                VertexInputTypes    = Map.ofList [ DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Normals, typeof<V3f>; DefaultSemantic.DiffuseColorCoordinates, typeof<V2f> ]
+                PerGeometryUniforms = Map.ofList [ "ModelTrafo", typeof<Trafo3d>; "NodeColor", typeof<V4d> ]
             }
 
-        let task = new Temp.CommandTask(device, unbox win.FramebufferSignature, RuntimeCommand.LodTree(surface, state, loader))
-
-
-        win.RenderTask <- task
+        win.RenderTask <- runtime.CompileRender(unbox win.FramebufferSignature, RuntimeCommand.LodTree(surface, state, loader))
 
 
 

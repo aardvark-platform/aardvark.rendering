@@ -1,11 +1,10 @@
-﻿namespace Aardvark.Base
+﻿namespace Aardvark.SceneGraph
 
 open System
 open System.Collections.Generic
-open System.Linq
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
-open Aardvark.SceneGraph
 
 module IndexedGeometryPrimitives =
 

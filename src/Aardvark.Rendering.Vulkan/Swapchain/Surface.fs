@@ -2,7 +2,7 @@ namespace Aardvark.Rendering.Vulkan
 open System
 open Aardvark.Base
 open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering.Vulkan
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
@@ -12,7 +12,6 @@ open Microsoft.FSharp.NativeInterop
 open KHRSurface
 open KHRWin32Surface
 open KHRXlibSurface
-open KHRMirSurface
 open KHRAndroidSurface
 open KHRXcbSurface
 open KHRWaylandSurface
@@ -59,8 +58,8 @@ module VkSurfaceTransformFlagsKHR =
             ImageTrafo.Transverse,      VkSurfaceTransformFlagsKHR.HorizontalMirrorRotate270Bit
         ]
 
-    let toImageTrafo =
-        LookupTable.lookupTable [
+    let toImageTrafo' =
+        LookupTable.lookupTable' [
            VkSurfaceTransformFlagsKHR.IdentityBit,                      ImageTrafo.Identity
            VkSurfaceTransformFlagsKHR.Rotate90Bit,                      ImageTrafo.Rot90
            VkSurfaceTransformFlagsKHR.Rotate180Bit,                     ImageTrafo.Rot180
@@ -71,11 +70,14 @@ module VkSurfaceTransformFlagsKHR =
            VkSurfaceTransformFlagsKHR.HorizontalMirrorRotate270Bit,     ImageTrafo.Transverse
         ]
 
+    let toImageTrafo =
+        toImageTrafo' >> Option.get
+
     let toImageTrafos (flags : VkSurfaceTransformFlagsKHR) =
         let values = Enum.GetValues(typeof<VkSurfaceTransformFlagsKHR>) |> unbox<VkSurfaceTransformFlagsKHR[]>
         values 
             |> Seq.filter (fun v -> (flags &&& v) <> VkSurfaceTransformFlagsKHR.None)
-            |> Seq.map toImageTrafo
+            |> Seq.choose toImageTrafo'
             |> Set.ofSeq
 
 type Surface(device : Device, handle : VkSurfaceKHR) =
@@ -199,6 +201,11 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
     member x.HasCompositeAlpha (t : VkCompositeAlphaFlagsKHR) = (t &&& supportedCompositeAlpha) = t
     member x.HasUsage (t : VkImageUsageFlags) = (t &&& supportedUsage) = t
 
+    override x.Destroy() =
+        if x.Handle.IsValid then
+            VkRaw.vkDestroySurfaceKHR(x.Device.Instance.Handle, x.Handle, NativePtr.zero)
+            x.Handle <- VkSurfaceKHR.Null
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Surface =
@@ -211,7 +218,7 @@ module Surface =
                 | XLib info ->
                     let! pInfo = 
                         VkXlibSurfaceCreateInfoKHR(
-                            VkXlibSurfaceCreateFlagsKHR.MinValue,
+                            VkXlibSurfaceCreateFlagsKHR.None,
                             info.dpy,
                             info.window
                         )
@@ -222,7 +229,7 @@ module Surface =
                 | Xcb info ->
                     let! pInfo =
                         VkXcbSurfaceCreateInfoKHR(
-                            VkXcbSurfaceCreateFlagsKHR.MinValue,
+                            VkXcbSurfaceCreateFlagsKHR.None,
                             info.connection,
                             info.window
                         )
@@ -232,7 +239,7 @@ module Surface =
                 | Wayland info ->
                     let! pInfo =
                         VkWaylandSurfaceCreateInfoKHR(
-                            VkWaylandSurfaceCreateFlagsKHR.MinValue,
+                            VkWaylandSurfaceCreateFlagsKHR.None,
                             info.display,
                             info.surface
                         )
@@ -244,7 +251,7 @@ module Surface =
                     (*let! pInfo =
                         VkMirSurfaceCreateInfoKHR(
                             VkStructureType.MirSurfaceCreateInfoKhr, 0n,
-                            VkMirSurfaceCreateFlagsKHR.MinValue,
+                            VkMirSurfaceCreateFlagsKHR.None,
                             info.connection,
                             info.mirSurface
                         )
@@ -254,7 +261,7 @@ module Surface =
                 | Android info ->
                     let! pInfo =
                         VkAndroidSurfaceCreateInfoKHR(
-                            VkAndroidSurfaceCreateFlagsKHR.MinValue,
+                            VkAndroidSurfaceCreateFlagsKHR.None,
                             info.window
                         )
                     VkRaw.vkCreateAndroidSurfaceKHR(instance.Handle, pInfo, NativePtr.zero, pHandle)
@@ -263,27 +270,18 @@ module Surface =
                 | Win32 info ->
                     let! pInfo =
                         VkWin32SurfaceCreateInfoKHR( 
-                            VkWin32SurfaceCreateFlagsKHR.MinValue,
+                            VkWin32SurfaceCreateFlagsKHR.None,
                             info.hinstance,
                             info.hwnd
                         )
                     VkRaw.vkCreateWin32SurfaceKHR(instance.Handle, pInfo, NativePtr.zero, pHandle)
                         |> check "could not create win32 surface"
 
-            return Surface(device, !!pHandle)
+            return new Surface(device, !!pHandle)
         }
-
-    let delete (s : Surface) (device : Device) =
-        if s.Handle.IsValid then
-            VkRaw.vkDestroySurfaceKHR(device.Instance.Handle, s.Handle, NativePtr.zero)
-            s.Handle <- VkSurfaceKHR.Null
 
 [<AbstractClass; Sealed; Extension>]
 type DeviceSurfaceExtensions private() =
     [<Extension>]
     static member inline CreateSurface(this : Device, info : SurfaceInfo) =
         this |> Surface.create info
-
-    [<Extension>]
-    static member inline Delete(this : Device, s : Surface) =
-        this |> Surface.delete s

@@ -3,16 +3,12 @@
 #nowarn "9"
 #nowarn "51"
 
-open System
 open System.Threading
 open System.Collections.Concurrent
-open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
-open FSharp.Data.Adaptive
-open Aardvark.Base.Rendering
-open OpenTK.Graphics.OpenGL4
-open Aardvark.Base.ShaderReflection
+open Aardvark.Rendering
 open Aardvark.Rendering.GL
+open FSharp.Data.Adaptive
 
 module Sharing =
     

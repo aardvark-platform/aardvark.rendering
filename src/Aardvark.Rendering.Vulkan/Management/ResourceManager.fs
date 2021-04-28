@@ -3,10 +3,14 @@
 open System
 open System.Threading
 open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Microsoft.FSharp.NativeInterop
+
+open EXTConservativeRasterization
 
 #nowarn "9"
 // #nowarn "51"
@@ -32,11 +36,8 @@ type MutableResourceDescription<'a, 'b> =
     }
 
 type IResourceLocation =
-    inherit IAdaptiveObject
+    inherit IAdaptiveResource
     abstract member Update : AdaptiveToken -> ResourceInfo<obj>
-    abstract member Acquire : unit -> unit
-    abstract member Release : unit -> unit
-    abstract member ReleaseAll : unit -> unit
     abstract member ReferenceCount : int
     abstract member Key : list<obj>
     abstract member Owner : IResourceCache
@@ -44,6 +45,7 @@ type IResourceLocation =
 
 and IResourceLocation<'a> =
     inherit IResourceLocation
+    inherit IAdaptiveResource<'a>
     abstract member Update : AdaptiveToken -> ResourceInfo<'a>
 
 and IResourceUser =
@@ -58,11 +60,10 @@ type INativeResourceLocation<'a when 'a : unmanaged> =
     inherit IResourceLocation<'a>
     abstract member Pointer : nativeptr<'a>
 
-
 [<AbstractClass>]
 type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
     inherit AdaptiveObject()
-    
+
     let mutable refCount = 0
 
     abstract member Create : unit -> unit
@@ -87,14 +88,15 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
                 x.Outputs.Clear()
                 x.OutOfDate <- true
         )
-  
+
     member x.ReleaseAll() =
         lock x (fun () ->
-            refCount <- 0
-            owner.Remove key
-            x.Destroy()
-            x.Outputs.Clear()
-            x.OutOfDate <- true
+            if refCount > 0 then
+                refCount <- 0
+                owner.Remove key
+                x.Destroy()
+                x.Outputs.Clear()
+                x.OutOfDate <- true
         )
 
     member x.Update(token : AdaptiveToken) =
@@ -102,45 +104,51 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
             if refCount <= 0 then failwithf "[Resource] no ref count"
             x.GetHandle token
         )
-        
+
+    member x.GetValue(token : AdaptiveToken) =
+        x.Update(token).handle
+
+    interface IAdaptiveValue with
+        member x.Accept(visitor) = visitor.Visit(x)
+        member x.GetValueUntyped(token) = x.GetValue(token) :> obj
+        member x.ContentType = typeof<'a>
+
+    interface IAdaptiveValue<'a> with
+        member x.GetValue(token) = x.GetValue(token)
+
+    interface IAdaptiveResource with
+        member x.Acquire() = x.Acquire()
+        member x.Release() = x.Release()
+        member x.ReleaseAll() = x.ReleaseAll()
+        member x.GetValue(token, _) = x.GetValue(token) :> obj
+
+    interface IAdaptiveResource<'a> with
+        member x.GetValue(token, _) = x.GetValue(token)
+
     interface IResourceLocation with
         member x.ReferenceCount = refCount
         member x.Update t = 
             let res = x.Update t
             { handle = res :> obj; version = res.version }
 
-        member x.Acquire() = x.Acquire()
-        member x.Release() = x.Release()
-        member x.ReleaseAll() = x.ReleaseAll()
         member x.Owner = owner
         member x.Key = key
 
     interface IResourceLocation<'a> with
         member x.Update t = x.Update t
-//   
-//[<AbstractClass>]
-//type AbstractNativeResourceLocation<'a when 'a : unmanaged>(owner : IResourceCache, key : list<obj>) =
-//    inherit AbstractResourceLocation<'a>(owner, key)
-//    abstract member Pointer : nativeptr<'a>
-//
-//    interface INativeResourceLocation<'a> with
-//        member x.Pointer = x.Pointer
-//
+
+type private DummyResourceCache() =
+    interface IResourceCache with
+        member x.AddLocked l = ()
+        member x.RemoveLocked l = ()
+        member x.Remove key = ()
+
+[<AbstractClass>]
+type UncachedResourceLocation<'a>() =
+    inherit AbstractResourceLocation<'a>(DummyResourceCache(), [])
 
 [<AbstractClass; Sealed; Extension>]
 type ModResourceExtensionStuff() =
-    [<Extension>]
-    static member inline Acquire(m : aval<'a>) =
-        match m with
-            | :? IOutputMod<'a> as o -> o.Acquire()
-            | _ -> ()
-
-    [<Extension>]
-    static member inline Release(m : aval<'a>) =
-        match m with
-            | :? IOutputMod<'a> as o -> o.Release()
-            | _ -> ()
-            
     [<Extension>]
     static member inline GetLocked(a : 'a) =
         match a :> obj with
@@ -179,8 +187,8 @@ type ImmutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, 
             | Some(o,h) ->
                 owner.ReplaceLocked (Some o, Some n)
 
+                desc.idestroy h
                 let r = desc.icreate n
-                desc.idestroy h // destroying h before constructing n results in in zombie command in the graphics (?) queue. doing this later prevents this? gh any clue?
                 handle <- Some(n,r)
                 r
             | None ->
@@ -444,11 +452,15 @@ open Aardvark.Rendering.Vulkan
 
 module Resources =
 
+    type ImageSampler = ImageView * Sampler
+
+    type ImageSamplerArray = array<int * IResourceLocation<ImageSampler>>
+
     type AdaptiveDescriptor =
-        | AdaptiveUniformBuffer of int * IResourceLocation<UniformBuffer>
-        | AdaptiveCombinedImageSampler of int * array<Option<IResourceLocation<ImageView> * IResourceLocation<Sampler>>>
-        | AdaptiveStorageBuffer of int * IResourceLocation<Buffer>
-        | AdaptiveStorageImage of int * IResourceLocation<ImageView>
+        | AdaptiveUniformBuffer         of slot: int * buffer: IResourceLocation<UniformBuffer>
+        | AdaptiveCombinedImageSampler  of slot: int * images: IResourceLocation<ImageSamplerArray>
+        | AdaptiveStorageBuffer         of slot: int * buffer: IResourceLocation<Buffer>
+        | AdaptiveStorageImage          of slot: int * view: IResourceLocation<ImageView>
 
     type BufferResource(owner : IResourceCache, key : list<obj>, device : Device, usage : VkBufferUsageFlags, input : aval<IBuffer>) =
         inherit MutableResourceLocation<IBuffer, Buffer>(
@@ -456,7 +468,7 @@ module Resources =
             input,
             {
                 mcreate          = fun (b : IBuffer) -> device.CreateBuffer(usage, b)
-                mdestroy         = fun b -> device.Delete b
+                mdestroy         = fun b -> b.Dispose()
                 mtryUpdate       = fun (b : Buffer) (v : IBuffer) -> Buffer.tryUpdate v b
             }
         )
@@ -477,7 +489,7 @@ module Resources =
             input,
             {
                 icreate = fun (b : IndirectBuffer) -> device.CreateIndirectBuffer(indexed, b)
-                idestroy = fun b -> device.Delete b
+                idestroy = fun b -> b.Dispose()
                 ieagerDestroy = true
             }
         )
@@ -494,9 +506,10 @@ module Resources =
             handle <- device.CreateUniformBuffer(layout)
 
         override x.Destroy() =
-            device.Delete handle
-            handle <- Unchecked.defaultof<_>
-                
+            if handle <> Unchecked.defaultof<_> then
+                handle.Dispose()
+                handle <- Unchecked.defaultof<_>
+
         override x.GetHandle(token : AdaptiveToken) =
             if x.OutOfDate then
                 for (m,w) in writers do
@@ -514,23 +527,117 @@ module Resources =
             owner, key, 
             input,
             {
-                icreate = fun (b : ITexture) -> device.CreateImage(b)
-                idestroy = fun b -> device.Delete b
+                icreate = fun (t : ITexture) -> device.CreateImage(t)
+                idestroy = fun t -> t.Dispose()
                 ieagerDestroy = true
             }
         )
 
-    type SamplerResource(owner : IResourceCache, key : list<obj>, device : Device, input : aval<SamplerStateDescription>) =
-        inherit ImmutableResourceLocation<SamplerStateDescription, Sampler>(
+    type SamplerResource(owner : IResourceCache, key : list<obj>, device : Device, input : aval<SamplerState>) =
+        inherit ImmutableResourceLocation<SamplerState, Sampler>(
             owner, key, 
             input,
             {
-                icreate = fun (b : SamplerStateDescription) -> device.CreateSampler(b)
-                idestroy = fun b -> device.Delete b
+                icreate = fun (s : SamplerState) -> device.CreateSampler(s)
+                idestroy = fun s -> s.Dispose()
                 ieagerDestroy = true
             }
         )
-        
+
+    type DynamicSamplerStateResource(owner : IResourceCache, key : list<obj>, name : Symbol,
+                                     state : SamplerState, modifier : aval<Symbol -> SamplerState -> SamplerState>) =
+        inherit AbstractResourceLocation<SamplerState>(owner, key)
+
+        let mutable cache = None
+
+        override x.Create() =
+            modifier.Acquire()
+
+        override x.Destroy() =
+            modifier.Release()
+
+        override x.GetHandle(token : AdaptiveToken) =
+            if x.OutOfDate then
+                let f = modifier.GetValue(token)
+                cache <- Some (state |> f name)
+
+            match cache with
+            | Some s -> { handle = s; version = 0 }
+            | _ -> failwith "[Resource] inconsistent state"
+
+    type ImageSamplerResource(owner : IResourceCache, key : list<obj>,
+                              imageView : IResourceLocation<ImageView>,
+                              sampler : IResourceLocation<Sampler>) =
+        inherit AbstractResourceLocation<ImageSampler>(owner, key)
+
+        let mutable cache = None
+
+        override x.Create() =
+            imageView.Acquire()
+            sampler.Acquire()
+
+        override x.Destroy() =
+            sampler.Release()
+            imageView.Release()
+
+        override x.GetHandle(token : AdaptiveToken) =
+            if x.OutOfDate then
+                let v = imageView.Update(token)
+                let s = sampler.Update(token)
+                cache <- Some (v, s)
+
+            match cache with
+            | Some (v, s) -> { handle = (v.handle, s.handle); version = max v.version s.version }
+            | _ -> failwith "[Resource] inconsistent state"
+
+    type ImageSamplerArrayResource(owner : IResourceCache, key : list<obj>, input : amap<int, _>) =
+        inherit AbstractResourceLocation<ImageSamplerArray>(owner, key)
+
+        let mutable reader = input.GetReader()
+
+        let mutable handle : ImageSamplerArray = [||]
+        let mutable version = 0
+
+        // Sparsely maps resources to a binding slot
+        let slots = Dict<int, IResourceLocation<_>>()
+
+        // Remove a resource from the given dictionary if it exists
+        let remove (i : int) =
+            match slots.TryGetValue i with
+            | true, x ->
+                slots.Remove i |> ignore
+                x.Release()
+            | _ -> ()
+
+        // Add a resource to the given dictionary
+        let set (i : int) (r : IResourceLocation<_>) =
+            r.Acquire()
+            remove i
+            slots.[i] <- r
+
+        override x.Create() = ()
+
+        override x.Destroy() =
+            for (_, r) in handle do
+                r.Release()
+
+            reader <- Unchecked.defaultof<_>
+
+        override x.GetHandle(token : AdaptiveToken) =
+            if x.OutOfDate then
+
+                let deltas = reader.GetChanges token
+
+                for (i, op) in deltas do
+                    match op with
+                    | Set r -> set i r
+                    | Remove -> remove i
+
+                if not deltas.IsEmpty then
+                    handle <- Dict.toArray slots
+                    inc &version
+
+            { handle = handle; version = version }
 
     type ShaderProgramEffectResource(owner : IResourceCache, key : list<obj>, device : Device, layout : PipelineLayout, input : aval<FShade.Imperative.Module>) =
         inherit ImmutableResourceLocation<FShade.Imperative.Module, ShaderProgram>(
@@ -538,19 +645,19 @@ module Resources =
             input,
             {
                 icreate = fun (e : FShade.Imperative.Module) -> ShaderProgram.ofModule e device
-                idestroy = fun b -> device.Delete b
+                idestroy = fun p -> p.Dispose()
                 ieagerDestroy = false
             }
         )
 
         
-    type ShaderProgramResource(owner : IResourceCache, key : list<obj>, device : Device, signature : IFramebufferSignature, input : ISurface, top : IndexedGeometryMode) =
+    type ShaderProgramResource(owner : IResourceCache, key : list<obj>, device : Device, pass : RenderPass, input : ISurface, top : IndexedGeometryMode) =
         inherit ImmutableResourceLocation<ISurface, ShaderProgram>(
             owner, key, 
             AVal.constant input,
             {
-                icreate = fun (b : ISurface) -> device.CreateShaderProgram(b)
-                idestroy = fun b -> device.Delete b
+                icreate = fun (b : ISurface) -> device.CreateShaderProgram(pass, b)
+                idestroy = fun p -> p.Dispose()
                 ieagerDestroy = false
             }
         )
@@ -567,14 +674,11 @@ module Resources =
             program.Release()
 
         override x.Compute(token) =
-            let m = input
             let p = program.Update token
-            let res = 
-                if p.handle.HasTessellation then { topology = VkPrimitiveTopology.PatchList; restartEnable = false }
-                else InputAssemblyState.ofIndexedGeometryMode m
+            let res = input |> InputAssemblyState.ofIndexedGeometryMode p.handle.HasTessellation
 
             VkPipelineInputAssemblyStateCreateInfo(
-                VkPipelineInputAssemblyStateCreateFlags.MinValue,
+                VkPipelineInputAssemblyStateCreateFlags.None,
                 res.topology,
                 (if res.restartEnable then 1u else 0u)
             )
@@ -634,7 +738,7 @@ module Resources =
                 NativePtr.set pInputAttributes i inputAttributes.[i]
 
             VkPipelineVertexInputStateCreateInfo(
-                VkPipelineVertexInputStateCreateFlags.MinValue,
+                VkPipelineVertexInputStateCreateFlags.None,
 
                 uint32 inputBindings.Length,
                 pInputBindings,
@@ -644,18 +748,26 @@ module Resources =
             )
 
 
-    type DepthStencilStateResource(owner : IResourceCache, key : list<obj>, depthWrite : bool, depth : aval<DepthTestMode>, stencil : aval<StencilMode>) =
+    type DepthStencilStateResource(owner : IResourceCache, key : list<obj>,
+                                   depthTest : aval<DepthTest>, depthWrite : aval<bool>,
+                                   stencilModeF : aval<StencilMode>, stencilMaskF : aval<StencilMask>,
+                                   stencilModeB : aval<StencilMode>, stencilMaskB : aval<StencilMask>) =
         inherit AbstractPointerResourceWithEquality<VkPipelineDepthStencilStateCreateInfo>(owner, key)
 
         override x.Compute(token) =
-            let depth = depth.GetValue token
-            let stencil = stencil.GetValue token
+            let depthTest = depthTest.GetValue token
+            let depthWrite = depthWrite.GetValue token
 
-            let depth = DepthState.create depthWrite depth
-            let stencil = StencilState.create stencil
+            let stencilMaskF = stencilMaskF.GetValue token
+            let stencilModeF = stencilModeF.GetValue token
+            let stencilMaskB = stencilMaskB.GetValue token
+            let stencilModeB = stencilModeB.GetValue token
+
+            let depth = DepthState.create depthWrite depthTest
+            let stencil = StencilState.create stencilMaskF stencilMaskB stencilModeF stencilModeB
 
             VkPipelineDepthStencilStateCreateInfo(
-                VkPipelineDepthStencilStateCreateFlags.MinValue,
+                VkPipelineDepthStencilStateCreateFlags.None,
                 (if depth.testEnabled then 1u else 0u),
                 (if depth.writeEnabled then 1u else 0u),
                 depth.compare,
@@ -667,21 +779,39 @@ module Resources =
                 float32 depth.depthBounds.Max
             )
             
-    type RasterizerStateResource(owner : IResourceCache, key : list<obj>, depth : aval<DepthTestMode>, bias : aval<DepthBiasState>, cull : aval<CullMode>, frontFace : aval<WindingOrder>, fill : aval<FillMode>) =
+    type RasterizerStateResource(owner : IResourceCache, key : list<obj>,
+                                 depthClamp : aval<bool>, depthBias : aval<DepthBias>,
+                                 cull : aval<CullMode>, frontFace : aval<WindingOrder>, fill : aval<FillMode>,
+                                 conservativeRaster : aval<bool>) =
         inherit AbstractPointerResourceWithEquality<VkPipelineRasterizationStateCreateInfo>(owner, key)
 
+        override x.Free(info : VkPipelineRasterizationStateCreateInfo) =
+            Marshal.FreeHGlobal info.pNext
+
         override x.Compute(token) =
-            let depth = depth.GetValue token
-            let bias = bias.GetValue token
+            let depthClamp = depthClamp.GetValue token
+            let bias = depthBias.GetValue token
             let cull = cull.GetValue token
             let front = frontFace.GetValue token
             let fill = fill.GetValue token
-            let state = RasterizerState.create false depth bias cull front fill
+            let conservativeRaster = conservativeRaster.GetValue token
+            let state = RasterizerState.create conservativeRaster depthClamp bias cull front fill
+
+            let conservativeRaster =
+                VkPipelineRasterizationConservativeStateCreateInfoEXT(
+                    VkPipelineRasterizationConservativeStateCreateFlagsEXT.None,
+                    (if conservativeRaster then VkConservativeRasterizationModeEXT.Overestimate else VkConservativeRasterizationModeEXT.Disabled),
+                    0.0f
+                )
+
+            let pConservativeRaster = NativePtr.alloc<VkPipelineRasterizationConservativeStateCreateInfoEXT> 1
+            conservativeRaster |> NativePtr.write pConservativeRaster
 
             VkPipelineRasterizationStateCreateInfo(
-                VkPipelineRasterizationStateCreateFlags.MinValue,
+                NativePtr.toNativeInt pConservativeRaster,
+                VkPipelineRasterizationStateCreateFlags.None,
                 (if state.depthClampEnable then 1u else 0u),
-                0u,
+                (if state.rasterizerDiscardEnable then 1u else 0u),
                 state.polygonMode,
                 state.cullMode,
                 state.frontFace,
@@ -692,20 +822,24 @@ module Resources =
                 float32 state.lineWidth
             )
     
-    type ColorBlendStateResource(owner : IResourceCache, key : list<obj>, writeMasks : bool[], blend : aval<BlendMode>) =
+    type ColorBlendStateResource(owner : IResourceCache, key : list<obj>,
+                                 writeMasks : aval<ColorMask[]>, blendModes : aval<BlendMode[]>, blendConstant : aval<C4f>) =
         inherit AbstractPointerResourceWithEquality<VkPipelineColorBlendStateCreateInfo>(owner, key)
 
         override x.Free(h : VkPipelineColorBlendStateCreateInfo) =
             NativePtr.free h.pAttachments
-            
+
         override x.Compute(token) =
-            let blend = blend.GetValue token
-            let state = ColorBlendState.create writeMasks writeMasks.Length blend
+            let writeMasks = writeMasks.GetValue token
+            let blendModes = blendModes.GetValue token
+            let blendConstant = blendConstant.GetValue token
+
+            let state = ColorBlendState.create writeMasks blendModes blendConstant
             let pAttStates = NativePtr.alloc writeMasks.Length
 
             for i in 0 .. state.attachmentStates.Length - 1 do
                 let s = state.attachmentStates.[i]
-                let att = 
+                let att =
                     VkPipelineColorBlendAttachmentState(
                         (if s.enabled then 1u else 0u),
                         s.srcFactor,
@@ -720,14 +854,35 @@ module Resources =
 
 
             VkPipelineColorBlendStateCreateInfo(
-                VkPipelineColorBlendStateCreateFlags.MinValue,
+                VkPipelineColorBlendStateCreateFlags.None,
                 (if state.logicOpEnable then 1u else 0u),
                 state.logicOp,
                 uint32 writeMasks.Length,
                 pAttStates,
-                state.constants
+                state.constant
             )
-    
+
+    // TODO: Sample shading
+    type MultisampleStateResource(owner : IResourceCache, key : list<obj>, samples : int, enable : aval<bool>) =
+        inherit AbstractPointerResourceWithEquality<VkPipelineMultisampleStateCreateInfo>(owner, key)
+
+        override x.Compute(token) =
+            //let enable = enable.GetValue token
+
+            // TODO: Cannot disable MSAA here...
+            //let samples = if enable then samples else 1
+            let state = MultisampleState.create false samples
+
+            VkPipelineMultisampleStateCreateInfo(
+                VkPipelineMultisampleStateCreateFlags.None,
+                unbox state.samples,
+                (if state.sampleShadingEnable then 1u else 0u),
+                float32 state.minSampleShading,
+                NativePtr.zero,
+                (if state.alphaToCoverageEnable then 1u else 0u),
+                (if state.alphaToOneEnable then 1u else 0u)
+            )
+
     type DirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : aval<list<DrawCallInfo>>) =
         inherit AbstractPointerResourceWithEquality<DrawCall>(owner, key)
         
@@ -747,81 +902,73 @@ module Resources =
 
         let mutable state = [||]
         let device = layout.Device
+
         override x.Create() =
             for b in bindings do
                 match b with
-                    | AdaptiveCombinedImageSampler(_,arr) ->
-                        for a in arr do
-                            match a with
-                                | Some (i,s) -> i.Acquire(); s.Acquire()
-                                | None -> ()
+                | AdaptiveCombinedImageSampler(_,arr) ->
+                    arr.Acquire()
 
-                    | AdaptiveStorageBuffer(_,b) ->
-                        b.Acquire()
+                | AdaptiveStorageBuffer(_,b) ->
+                    b.Acquire()
 
-                    | AdaptiveStorageImage(_,v) ->
-                        v.Acquire()
+                | AdaptiveStorageImage(_,v) ->
+                    v.Acquire()
 
-                    | AdaptiveUniformBuffer(_,b) ->
-                        b.Acquire()
+                | AdaptiveUniformBuffer(_,b) ->
+                    b.Acquire()
 
             ()
 
         override x.Destroy() =
             for b in bindings do
                 match b with
-                    | AdaptiveCombinedImageSampler(_,arr) ->
-                        for a in arr do
-                            match a with
-                                | Some (i,s) -> i.Release(); s.Release()
-                                | None -> ()
-                                
-                    | AdaptiveStorageImage(_,v) ->
-                        v.Release()
-                    | AdaptiveStorageBuffer(_,b) ->
-                        b.Release()
-                    | AdaptiveUniformBuffer(_,b) ->
-                        b.Release()
+                | AdaptiveCombinedImageSampler(_,arr) ->
+                    arr.Release()
+                | AdaptiveStorageImage(_,v) ->
+                    v.Release()
+                | AdaptiveStorageBuffer(_,b) ->
+                    b.Release()
+                | AdaptiveUniformBuffer(_,b) ->
+                    b.Release()
 
             match handle with
-                | Some set -> 
-                    device.Delete set
-                    handle <- None
-                | _ -> ()
+            | Some set -> 
+                set.Dispose()
+                handle <- None
+            | _ -> ()
 
         override x.GetHandle(token : AdaptiveToken) =
             if x.OutOfDate then
-                
+
                 let bindings =
                     bindings |> Array.map (fun b ->
                         match b with
-                            | AdaptiveUniformBuffer(slot, b) ->
-                                let handle =
-                                    match b with
-                                        | :? UniformBufferResource as b -> b.Handle
-                                        | b -> b.Update(AdaptiveToken.Top).handle
+                        | AdaptiveUniformBuffer(slot, b) ->
+                            let handle =
+                                match b with
+                                    | :? UniformBufferResource as b -> b.Handle
+                                    | b -> b.Update(AdaptiveToken.Top).handle
 
-                                UniformBuffer(slot,  handle)
-                                
-                            | AdaptiveStorageImage(slot,v) ->
-                                let image = v.Update(token).handle
-                                StorageImage(slot, image)
+                            UniformBuffer(slot,  handle)
 
-                            | AdaptiveStorageBuffer(slot, b) ->
-                                let buffer = b.Update(token).handle
-                                StorageBuffer(slot, buffer, 0L, buffer.Size)
+                        | AdaptiveStorageImage(slot,v) ->
+                            let image = v.Update(token).handle
+                            StorageImage(slot, image)
 
-                            | AdaptiveCombinedImageSampler(slot, arr) ->
-                                let arr =
-                                    arr |> Array.map (fun o ->
-                                        match o with
-                                            | Some(s,i) ->
-                                                Some(VkImageLayout.ShaderReadOnlyOptimal, s.Update(token).handle, i.Update(token).handle)
-                                            | None ->
-                                                None
-                                    )
+                        | AdaptiveStorageBuffer(slot, b) ->
+                            let buffer = b.Update(token).handle
+                            StorageBuffer(slot, buffer, 0L, buffer.Size)
 
-                                CombinedImageSampler(slot, arr)
+                        | AdaptiveCombinedImageSampler(slot, arr) ->
+                            let arr =
+                                arr.Update(token).handle
+                                |> Array.map (fun (i, r) ->
+                                    let (v, s) = r.Update(token).handle
+                                    i, v.Image.SamplerLayout, v, s
+                                )
+
+                            CombinedImageSampler(slot, arr)
                     )
 
 
@@ -851,13 +998,12 @@ module Resources =
                           inputAssembly : INativeResourceLocation<VkPipelineInputAssemblyStateCreateInfo>,
                           rasterizerState : INativeResourceLocation<VkPipelineRasterizationStateCreateInfo>,
                           colorBlendState : INativeResourceLocation<VkPipelineColorBlendStateCreateInfo>,
-                          multisample : MultisampleState,
-                          depthStencil : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>
-                         ) =
+                          depthStencil : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>,
+                          multisample : INativeResourceLocation<VkPipelineMultisampleStateCreateInfo>) =
         inherit AbstractPointerResource<VkPipeline>(owner, key)
 
         static let check str err =
-            if err <> VkResult.VkSuccess then failwithf "[Vulkan] %s" str
+            if err <> VkResult.Success then failwithf "[Vulkan] %s" str
 
         override x.Create() =
             base.Create()
@@ -867,6 +1013,7 @@ module Resources =
             rasterizerState.Acquire()
             colorBlendState.Acquire()
             depthStencil.Acquire()
+            multisample.Acquire()
 
         override x.Destroy() =
             base.Destroy()
@@ -876,18 +1023,18 @@ module Resources =
             rasterizerState.Release()
             colorBlendState.Release()
             depthStencil.Release()
-            
+            multisample.Release()
 
         override x.Compute(token : AdaptiveToken) =
             let program = program.Update token
-                
+
             let prog = program.handle
             let device = prog.Device
 
             let pipeline = 
                 native {
                     let! pShaderCreateInfos = prog.ShaderCreateInfos
-                    
+
                     let! pViewportState =
                         let vp  =
                             if device.AllCount > 1u then
@@ -895,8 +1042,8 @@ module Resources =
                                 else device.AllCount
                             else 1u
                         VkPipelineViewportStateCreateInfo(
-                            VkPipelineViewportStateCreateFlags.MinValue,
-                
+                            VkPipelineViewportStateCreateFlags.None,
+
                             uint32 vp,
                             NativePtr.zero,
 
@@ -904,26 +1051,12 @@ module Resources =
                             NativePtr.zero
                         )
 
-                    let! pSampleMasks = multisample.sampleMask
-                    let! pMultisampleState =
-                        let ms = multisample
-                        VkPipelineMultisampleStateCreateInfo(
-                            VkPipelineMultisampleStateCreateFlags.MinValue,
-                
-                            unbox ms.samples,
-                            (if ms.sampleShadingEnable then 1u else 0u),
-                            float32 ms.minSampleShading,
-                            pSampleMasks,
-                            (if ms.alphaToCoverageEnable then 1u else 0u),
-                            (if ms.alphaToOneEnable then 1u else 0u)
-                        )
-            
                     let dynamicStates = [| VkDynamicState.Viewport; VkDynamicState.Scissor |]
                     let! pDynamicStates = Array.map uint32 dynamicStates
         
                     let! pTessStateInfo = 
                         VkPipelineTessellationStateCreateInfo(
-                            VkPipelineTessellationStateCreateFlags.MinValue,
+                            VkPipelineTessellationStateCreateFlags.None,
                             uint32 prog.TessellationPatchSize
                         )
 
@@ -933,7 +1066,7 @@ module Resources =
 
                     let! pDynamicStates =
                         VkPipelineDynamicStateCreateInfo(
-                            VkPipelineDynamicStateCreateFlags.MinValue, 
+                            VkPipelineDynamicStateCreateFlags.None, 
 
                             uint32 dynamicStates.Length,
                             NativePtr.cast pDynamicStates
@@ -946,6 +1079,7 @@ module Resources =
                     let rasterizerState = rasterizerState.Update(token) |> ignore; rasterizerState.Pointer
                     let depthStencil = depthStencil.Update(token) |> ignore; depthStencil.Pointer
                     let colorBlendState = colorBlendState.Update(token) |> ignore; colorBlendState.Pointer
+                    let multisample = multisample.Update(token) |> ignore; multisample.Pointer
 
                     let basePipeline, derivativeFlag =
                         if not x.HasHandle then
@@ -964,7 +1098,7 @@ module Resources =
                             pTessState,
                             pViewportState,
                             rasterizerState,
-                            pMultisampleState,
+                            multisample,
                             depthStencil,
                             colorBlendState,
                             pDynamicStates, //dynamic
@@ -972,17 +1106,17 @@ module Resources =
                             renderPass.Handle,
                             0u,
                             basePipeline,
-                            0
+                            -1
                         )
 
                     VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, pDesc, NativePtr.zero, pHandle)
                         |> check "could not create pipeline"
 
-                    return Pipeline(device, !!pHandle, Unchecked.defaultof<_>)
+                    return !!pHandle
                 }
 
-            pipeline.Handle
-    
+            pipeline
+
         override x.Free(p : VkPipeline) =
             VkRaw.vkDestroyPipeline(renderPass.Device.Handle, p, NativePtr.zero)
 
@@ -1102,11 +1236,11 @@ module Resources =
             image.Acquire()
 
         override x.Destroy() =
-            match handle with   
-                | Some h -> 
-                    device.Delete h
-                    handle <- None
-                | None -> ()
+            match handle with
+            | Some h ->
+                h.Dispose()
+                handle <- None
+            | None -> ()
             image.Release()
 
         override x.GetHandle(token : AdaptiveToken) =
@@ -1124,8 +1258,8 @@ module Resources =
                     { handle = handle.Value; version = 0 }
                 else
                     match handle with
-                        | Some h -> device.Delete h
-                        | None -> ()
+                    | Some h -> h.Dispose()
+                    | None -> ()
 
                     let h = device.CreateInputImageView(image.handle, samplerType, VkComponentMapping.Identity)
                     handle <- Some h
@@ -1147,9 +1281,9 @@ module Resources =
             image.Acquire()
 
         override x.Destroy() =
-            match handle with   
-                | Some h -> 
-                    device.Delete h
+            match handle with
+                | Some h ->
+                    h.Dispose()
                     handle <- None
                 | None -> ()
             image.Release()
@@ -1168,8 +1302,8 @@ module Resources =
                     { handle = handle.Value; version = 0 }
                 else
                     match handle with
-                        | Some h -> device.Delete h
-                        | None -> ()
+                    | Some h -> h.Dispose()
+                    | None -> ()
 
                     let h = device.CreateStorageView(image.handle, imageType, VkComponentMapping.Identity)
                     handle <- Some h
@@ -1199,6 +1333,9 @@ type ResourceManager(user : IResourceUser, device : Device) =
     let imageCache              = ResourceLocationCache<Image>(user)
     let imageViewCache          = ResourceLocationCache<ImageView>(user)
     let samplerCache            = ResourceLocationCache<Sampler>(user)
+    let samplerStateCache       = ResourceLocationCache<SamplerState>(user)
+    let imageSamplerCache       = ResourceLocationCache<ImageSampler>(user)
+    let imageSamplerArrayCache  = ResourceLocationCache<ImageSamplerArray>(user)
     let programCache            = ResourceLocationCache<ShaderProgram>(user)
     let simpleSurfaceCache      = System.Collections.Concurrent.ConcurrentDictionary<obj, ShaderProgram>()
     let fshadeThingCache        = System.Collections.Concurrent.ConcurrentDictionary<obj, PipelineLayout * aval<FShade.Imperative.Module>>()
@@ -1208,6 +1345,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
     let depthStencilCache       = NativeResourceLocationCache<VkPipelineDepthStencilStateCreateInfo>(user)
     let rasterizerStateCache    = NativeResourceLocationCache<VkPipelineRasterizationStateCreateInfo>(user)
     let colorBlendStateCache    = NativeResourceLocationCache<VkPipelineColorBlendStateCreateInfo>(user)
+    let multisampleCache        = NativeResourceLocationCache<VkPipelineMultisampleStateCreateInfo>(user)
     let pipelineCache           = NativeResourceLocationCache<VkPipeline>(user)
 
     let drawCallCache           = NativeResourceLocationCache<DrawCall>(user)
@@ -1240,6 +1378,9 @@ type ResourceManager(user : IResourceUser, device : Device) =
         imageCache.Clear()
         imageViewCache.Clear()
         samplerCache.Clear()
+        samplerStateCache.Clear()
+        imageSamplerCache.Clear()
+        imageSamplerArrayCache.Clear()
         programCache.Clear()
 
         vertexInputCache.Clear()
@@ -1247,6 +1388,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
         depthStencilCache.Clear()
         rasterizerStateCache.Clear()
         colorBlendStateCache.Clear()
+        multisampleCache.Clear()
         pipelineCache.Clear()
 
         drawCallCache.Clear()
@@ -1264,58 +1406,85 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
     member x.CreateBuffer(input : aval<IBuffer>) =
         bufferCache.GetOrCreate([input :> obj], fun cache key -> new BufferResource(cache, key, device, VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit, input))
-        
+
     member x.CreateIndexBuffer(input : aval<IBuffer>) =
         bufferCache.GetOrCreate([input :> obj], fun cache key -> new BufferResource(cache, key, device, VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.IndexBufferBit, input))
-        
+
     member x.CreateIndirectBuffer(indexed : bool, input : aval<IndirectBuffer>) =
         indirectBufferCache.GetOrCreate([indexed :> obj; input :> obj], fun cache key -> new IndirectBufferResource(cache, key, device, indexed, input))
 
     member x.CreateImage(input : aval<ITexture>) =
         imageCache.GetOrCreate([input :> obj], fun cache key -> new ImageResource(cache, key, device, input))
-        
+
     member x.CreateImageView(samplerType : FShade.GLSL.GLSLSamplerType, input : IResourceLocation<Image>) =
         imageViewCache.GetOrCreate([samplerType :> obj; input :> obj], fun cache key -> new ImageViewResource(cache, key, device, samplerType, input))
-        
+
     member x.CreateImageView(imageType : FShade.GLSL.GLSLImageType, input : IResourceLocation<Image>) =
         imageViewCache.GetOrCreate([imageType :> obj; input :> obj], fun cache key -> new StorageImageViewResource(cache, key, device, imageType, input))
-        
-    member x.CreateSampler(data : aval<SamplerStateDescription>) =
+
+    member x.CreateSampler(data : aval<SamplerState>) =
         samplerCache.GetOrCreate([data :> obj], fun cache key -> new SamplerResource(cache, key, device, data))
-        
-    member x.CreateShaderProgram(data : ISurface) =
-        let programKey = (data) :> obj
 
-        let program = 
+    member x.CreateDynamicSamplerState(name : Symbol, state : SamplerState, modifier : aval<Symbol -> SamplerState -> SamplerState>) =
+        samplerStateCache.GetOrCreate(
+            [name :> obj; state :> obj; modifier :> obj],
+            fun cache key -> new DynamicSamplerStateResource(cache, key, name, state, modifier)
+        )
+
+    member x.CreateImageSampler(samplerType : FShade.GLSL.GLSLSamplerType,
+                                texture : aval<ITexture>, samplerDesc : aval<SamplerState>) =
+        let image = x.CreateImage(texture)
+        let view = x.CreateImageView(samplerType, image)
+        let sampler = x.CreateSampler(samplerDesc)
+
+        imageSamplerCache.GetOrCreate(
+            [view :> obj; sampler :> obj],
+            fun cache key -> new ImageSamplerResource(cache, key, view, sampler)
+        )
+
+    member x.CreateImageSamplerArray(input : seq<int * IResourceLocation<ImageSampler>>) =
+        imageSamplerArrayCache.GetOrCreate(
+            [input :> obj], fun cache key -> new ImageSamplerArrayResource(cache, key, AMap.ofSeq input)
+        )
+
+    member x.CreateImageSamplerArray(input : amap<int, IResourceLocation<ImageSampler>>) =
+        imageSamplerArrayCache.GetOrCreate(
+            [input :> obj], fun cache key -> new ImageSamplerArrayResource(cache, key, input)
+        )
+
+    member x.CreateShaderProgram(pass : RenderPass, data : ISurface) =
+        let programKey = [pass :> obj; data :> obj] :> obj
+
+        let program =
             simpleSurfaceCache.GetOrAdd(programKey, fun _ ->
-                device.CreateShaderProgram(data)
+                device.CreateShaderProgram(pass, data)
             )
 
-        let resource = 
-            programCache.GetOrCreate([program :> obj], fun cache key -> 
-                { new AbstractResourceLocation<ShaderProgram>(cache, key) with
-                    override x.Create () = ()
-                    override x.Destroy () = ()
-                    override x.GetHandle t = { handle = program; version = 0 }
-                }
-            )
+        let resource =
+            { new UncachedResourceLocation<ShaderProgram>() with
+                override x.Create () = ()
+                override x.Destroy () = program.Dispose()
+                override x.GetHandle t = { handle = program; version = 0 }
+            } :> IResourceLocation<_>
+        resource.Acquire()
+
         program.PipelineLayout, resource
 
     member x.CreateShaderProgram(signature : RenderPass, data : FShade.Effect, top : IndexedGeometryMode) =
 
         let program = device.CreateShaderProgram(signature, data, top)
-         
+
         if FShade.EffectDebugger.isAttached then
             FShade.EffectDebugger.saveCode data program.Surface
 
-        let resource = 
-            programCache.GetOrCreate([program :> obj], fun cache key -> 
-                { new AbstractResourceLocation<ShaderProgram>(cache, key) with
-                    override x.Create () = ()
-                    override x.Destroy () = ()
-                    override x.GetHandle t = { handle = program; version = 0 }
-                }
-            )
+        let resource =
+            { new UncachedResourceLocation<ShaderProgram>() with
+                override x.Create () = ()
+                override x.Destroy () = program.Dispose()
+                override x.GetHandle t = { handle = program; version = 0 }
+            } :> IResourceLocation<_>
+        resource.Acquire()
+
         program.PipelineLayout, resource
 
     member x.CreateShaderProgram(layout : PipelineLayout, data : aval<FShade.Imperative.Module>) =
@@ -1325,7 +1494,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
             prog
         )
 
-    member x.CreateShaderProgram(signature : RenderPass, data : Aardvark.Base.Surface, top : IndexedGeometryMode) =
+    member x.CreateShaderProgram(signature : RenderPass, data : Aardvark.Rendering.Surface, top : IndexedGeometryMode) =
         match data with
             | Surface.FShadeSimple effect ->
                 x.CreateShaderProgram(signature, effect, top)
@@ -1354,8 +1523,8 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
                 layout, x.CreateShaderProgram(layout, module_)
 
-            | Surface.Backend s -> 
-                x.CreateShaderProgram(s)
+            | Surface.Backend s ->
+                x.CreateShaderProgram(signature, s)
 
             | Surface.None -> 
                 failwith "[Vulkan] encountered empty surface"
@@ -1426,30 +1595,66 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateInputAssemblyState(mode : IndexedGeometryMode, program : IResourceLocation<ShaderProgram>) =
         inputAssemblyCache.GetOrCreate([mode :> obj; program :> obj], fun cache key -> new InputAssemblyStateResource(cache, key, mode, program))
 
-    member x.CreateDepthStencilState(depthWrite : bool, depth : aval<DepthTestMode>, stencil : aval<StencilMode>) =
-        depthStencilCache.GetOrCreate([depthWrite :> obj; depth :> obj; stencil :> obj], fun cache key -> new DepthStencilStateResource(cache, key, depthWrite, depth, stencil))
+    member x.CreateDepthStencilState(depthTest : aval<DepthTest>, depthWrite : aval<bool>,
+                                     stencilModeF : aval<StencilMode>, stencilMaskF : aval<StencilMask>,
+                                     stencilModeB : aval<StencilMode>, stencilMaskB : aval<StencilMask>) =
+        depthStencilCache.GetOrCreate(
+            [depthTest :> obj; depthWrite :> obj;
+             stencilModeF :> obj; stencilMaskF :> obj;
+             stencilModeB :> obj; stencilMaskB :> obj],
+            fun cache key -> new DepthStencilStateResource(cache, key,
+                                                           depthTest, depthWrite,
+                                                           stencilModeF, stencilMaskF,
+                                                           stencilModeB, stencilMaskB)
+        )
         
-    member x.CreateRasterizerState(depth : aval<DepthTestMode>, bias : aval<DepthBiasState>, cull : aval<CullMode>, front : aval<WindingOrder>, fill : aval<FillMode>) =
-        rasterizerStateCache.GetOrCreate([depth :> obj; bias :> obj; cull :> obj; front :> obj, fill :> obj], fun cache key -> new RasterizerStateResource(cache, key, depth, bias, cull, front, fill))
+    member x.CreateRasterizerState(depthClamp : aval<bool>, depthBias : aval<DepthBias>,
+                                   cull : aval<CullMode>, front : aval<WindingOrder>, fill : aval<FillMode>,
+                                   conservativeRaster : aval<bool>) =
+        rasterizerStateCache.GetOrCreate(
+            [depthClamp :> obj; depthBias :> obj; cull :> obj; front :> obj, fill :> obj; conservativeRaster :> obj],
+            fun cache key -> new RasterizerStateResource(cache, key, depthClamp, depthBias, cull, front, fill, conservativeRaster)
+        )
 
-    member x.CreateColorBlendState(pass : RenderPass, writeBuffers : Option<Set<Symbol>>, blend : aval<BlendMode>) =
+    member x.CreateColorBlendState(pass : RenderPass,
+                                   globalMask : aval<ColorMask>, attachmentMask : aval<Map<Symbol, ColorMask>>,
+                                   globalBlend : aval<BlendMode>, attachmentBlend : aval<Map<Symbol, BlendMode>>,
+                                   blendConstant : aval<C4f>) =
+
+        let getAttachmentStates fallback values =
+            adaptive {
+                let! values = values
+                let! fallback = fallback
+
+                let arr = Array.zeroCreate pass.ColorAttachmentCount
+
+                pass.ColorAttachments
+                |> Seq.iter (fun (KeyValue(i, (s, _))) ->
+                    arr.[i] <- values |> Map.tryFind s |> Option.defaultValue fallback
+                )
+
+                return arr
+            }
+
         colorBlendStateCache.GetOrCreate(
-            [pass :> obj; writeBuffers :> obj; blend :> obj], 
-            fun cache key -> 
-                let writeBuffers =
-                    match writeBuffers with
-                        | Some set -> 
-                            if Set.isSuperset set pass.Semantics then pass.Semantics
-                            else set
-                        | None ->
-                            pass.Semantics
+            [pass :> obj; globalMask :> obj; attachmentMask :> obj; globalBlend :> obj; attachmentBlend :> obj; blendConstant :> obj],
+            fun cache key ->
+                let writeMasks = getAttachmentStates globalMask attachmentMask
+                let blendModes = getAttachmentStates globalBlend attachmentBlend
 
-                let writeMasks = Array.zeroCreate pass.ColorAttachmentCount
-                for (i, (sem,_)) in Map.toSeq pass.ColorAttachments do 
-                    if Set.contains sem writeBuffers then writeMasks.[i] <- true
-                    else writeMasks.[i] <- false
+                new ColorBlendStateResource(cache, key, writeMasks, blendModes, blendConstant)
+        )
 
-                new ColorBlendStateResource(cache, key, writeMasks, blend)
+    member x.CreateMultisampleState(pass : RenderPass, multisample : aval<bool>) =
+        let anyAttachment =
+            match pass.ColorAttachments |> Map.toSeq |> Seq.tryHead with
+            | Some (_,(_,a)) -> a
+            | None -> pass.DepthStencilAttachment |> Option.map snd |> Option.get
+
+        multisampleCache.GetOrCreate(
+            [pass :> obj; multisample :> obj],
+            fun cache key ->
+                new MultisampleStateResource(cache, key, anyAttachment.samples, multisample)
         )
 
     member x.CreatePipeline(program         : IResourceLocation<ShaderProgram>, 
@@ -1459,22 +1664,10 @@ type ResourceManager(user : IResourceUser, device : Device) =
                             rasterizerState : INativeResourceLocation<VkPipelineRasterizationStateCreateInfo>,
                             colorBlendState : INativeResourceLocation<VkPipelineColorBlendStateCreateInfo>,
                             depthStencil    : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>,
-                            writeBuffers    : Option<Set<Symbol>>
-                        ) =
+                            multisample     : INativeResourceLocation<VkPipelineMultisampleStateCreateInfo>) =
 
-        //let programHandle = program.Update(AdaptiveToken.Top).handle
-
-        let anyAttachment = 
-            match pass.ColorAttachments |> Map.toSeq |> Seq.tryHead with
-                | Some (_,(_,a)) -> a
-                | None -> pass.DepthStencilAttachment |> Option.map snd |> Option.get
-
-        //let inputs = VertexInputState.create inputs
-        // TODO: sampleShading
-        let ms = MultisampleState.create false anyAttachment.samples
-        let key = [ program :> obj; inputState :> obj; inputAssembly :> obj; rasterizerState :> obj; colorBlendState :> obj; ms :> obj; depthStencil :> obj ]
         pipelineCache.GetOrCreate(
-            key,
+            [ program :> obj; pass :> obj; inputState :> obj; inputAssembly :> obj; rasterizerState :> obj; colorBlendState :> obj; depthStencil :> obj; multisample :> obj ],
             fun cache key ->
                 new PipelineResource(
                     cache, key,
@@ -1484,8 +1677,8 @@ type ResourceManager(user : IResourceUser, device : Device) =
                     inputAssembly,
                     rasterizerState,
                     colorBlendState,
-                    ms,
-                    depthStencil
+                    depthStencil,
+                    multisample
                 )
 
         )
@@ -1521,19 +1714,18 @@ type ResourceLocationReader(resource : IResourceLocation) =
     inherit AdaptiveObject()
 
     let mutable lastVersion = 0
-    
+
     let changable =
         match resource with
-            | :? IResourceLocation<UniformBuffer> -> false
-            | _ -> true
+        | :? IResourceLocation<UniformBuffer> -> false
+        | _ -> true
 
     let priority =
         match resource with
-            | :? INativeResourceLocation<DrawCall> -> 1
-            | _ -> 0
+        | :? INativeResourceLocation<DrawCall> -> 0
+        | _ -> 1
 
     member x.Priority = priority
-                
 
     member x.Dispose() =
         lock resource (fun () ->
@@ -1558,28 +1750,25 @@ module ``Resource Reader Extensions`` =
     type IResourceLocation with
         member x.GetReader() = new ResourceLocationReader(x)
 
+
 type ResourceLocationSet(user : IResourceUser) =
     inherit AdaptiveObject()
 
     let all = ReferenceCountingSet<IResourceLocation>()
     let readers = Dict<IResourceLocation, ResourceLocationReader>()
-    let dirtyCalls = List<ResourceLocationReader>()
-    let dirty = List<HashSet<ResourceLocationReader>>()
+    let dirty = Dict<int, HashSet<ResourceLocationReader>>()
 
     let addDirty (r : ResourceLocationReader) =
-        let priority = r.Priority
-
         lock dirty (fun () ->
-            while dirty.Count <= priority do
-                dirty.Add(HashSet())
-                        
-            dirty.[priority].Add(r) |> ignore
+            let set = dirty.GetOrCreate(r.Priority, fun _ -> HashSet())
+            set.Add(r) |> ignore
         )
 
     let remDirty (r : ResourceLocationReader) =
-        lock dirty (fun () -> 
-            if dirty.Count > r.Priority then
-                dirty.[r.Priority].Remove r |> ignore
+        lock dirty (fun () ->
+            match dirty.TryGetValue(r.Priority) with
+            | (true, set) -> set.Remove(r) |> ignore
+            | _ -> ()
         )
 
     member private x.AddInput(r : IResourceLocation) =
@@ -1590,18 +1779,19 @@ type ResourceLocationSet(user : IResourceUser) =
 
     member private x.RemoveInput(r : IResourceLocation) =
         match lock readers (fun () -> readers.TryRemove r) with
-            | (true, reader) ->
-                remDirty reader
-                reader.Dispose()
-            | _ ->
-                ()
+        | (true, reader) ->
+            reader.Outputs.Remove(x) |> ignore
+            remDirty reader
+            reader.Dispose()
+        | _ ->
+            ()
 
     override x.InputChangedObject(t,i) =
         match i with
-            | :? ResourceLocationReader as r ->
-                addDirty r
-            | _ ->
-                ()
+        | :? ResourceLocationReader as r ->
+            addDirty r
+        | _ ->
+            ()
 
     member x.Add(r : IResourceLocation) =
         if lock all (fun () -> all.Add r) then
@@ -1613,31 +1803,25 @@ type ResourceLocationSet(user : IResourceUser) =
             lock r r.Release
             x.RemoveInput r
 
-
-
     member x.Update(token : AdaptiveToken) =
         x.EvaluateAlways token (fun t ->
             x.OutOfDate <- true
 
             let rec run (changed : bool) =
-                let mine = 
-                    lock dirty (fun () ->
-                        if dirty.Count > 0 then
-                            let last = dirty.[dirty.Count - 1]
-                            dirty.RemoveAt (dirty.Count - 1)
-                            last
-                        else
-                            null
+                let mine =
+                    lock dirty (fun _ ->
+                        dirty.Keys |> Seq.tryHead |> Option.map dirty.GetAndRemove
                     )
 
-                if not (isNull mine) then
+                match mine with
+                | Some set ->
                     let mutable changed = changed
-                    for r in mine do
+                    for r in set do
                         let c = r.Update(t)
                         changed <- changed || c
 
                     run changed
-                else
+                | _ ->
                     changed
 
             run false
@@ -1646,99 +1830,3 @@ type ResourceLocationSet(user : IResourceUser) =
     interface IResourceUser with
         member x.AddLocked l = user.AddLocked l
         member x.RemoveLocked l = user.RemoveLocked l
-//
-//
-//type ResourceSet() =
-//    inherit AdaptiveObject()
-//    
-//    let all = ReferenceCountingSet<IResourceLocation>()
-//    let locked = ReferenceCountingSet<ILockedResource>()
-//    let dirty = System.Collections.Generic.HashSet<IResourceLocation>()
-//    let dirtyCalls = System.Collections.Generic.HashSet<IResourceLocation>()
-//
-//    member x.AddLocked(l : ILockedResource) =
-//        lock locked (fun () -> locked.Add l |> ignore)
-//        
-//    member x.RemoveLocked(l : ILockedResource) =
-//        lock locked (fun () -> locked.Remove l |> ignore)
-//
-//    interface IResourceUser with
-//        member x.AddLocked l = x.AddLocked l
-//        member x.RemoveLocked l = x.RemoveLocked l
-//
-//    override x.InputChanged(_,i) =
-//        match i with
-//            | :? INativeResourceLocation<DrawCall> as c -> lock dirty (fun () -> dirtyCalls.Add c |> ignore)
-//            | :? IResourceLocation as r -> lock dirty (fun () -> dirty.Add r |> ignore)
-//            | _ -> ()
-//
-//    member x.Add(r : IResourceLocation) =
-//        if all.Add r then
-//            lock r (fun () ->
-//                r.Acquire()
-//                if r.OutOfDate then
-//                    x.InputChanged(null, r)
-//                else
-//                    r.Outputs.Add x |> ignore
-//            )
-//
-//    member x.AddAndUpdate(r : IResourceLocation) =
-//        x.EvaluateAlways AdaptiveToken.Top (fun t ->
-//            if all.Add r then
-//                lock r (fun () ->
-//                    r.Acquire()
-//                )
-//            r.Update(t) |> ignore
-//        )   
-//
-//    member x.Remove(r : IResourceLocation) =
-//        if all.Remove r then
-//            lock r (fun () ->
-//                r.Release()
-//                r.RemoveOutput x
-//                lock dirty (fun () ->
-//                    match r with
-//                        | :? INativeResourceLocation<DrawCall> as r -> dirtyCalls.Remove r |> ignore
-//                        | _ -> dirty.Remove r |> ignore
-//                )
-//            )
-//
-//    member x.Update(token : AdaptiveToken) =
-//        x.EvaluateAlways token (fun token ->
-//            let rec update () =
-//                x.OutOfDate <- true
-//                let arr = 
-//                    lock dirty (fun () -> 
-//                        if dirtyCalls.Count = 0 then
-//                            let arr = HashSet.toArray dirty
-//                            dirty.Clear()
-//                            arr
-//                        else
-//                            let arr = HashSet.toArray dirtyCalls
-//                            dirtyCalls.Clear()
-//                            arr
-//                    )
-//
-//                if arr.Length > 0 then
-//                    let mutable changed = false
-//                    for r in arr do
-//                        let info = r.Update(token)
-//                        changed <- changed || info.version <> -100
-//
-//                    let rest = update()
-//                    changed || rest
-//
-//                else
-//                    false
-//
-//            update()
-//        )
-//
-//    member x.Use(action : unit -> 'r) =
-//        let list = lock locked (fun () -> Seq.toArray locked)
-//        for l in list do l.Lock.Enter(ResourceUsage.Render, l.OnLock)
-//        try 
-//            action()
-//        finally 
-//            for l in list do l.Lock.Exit(l.OnUnlock)
-//

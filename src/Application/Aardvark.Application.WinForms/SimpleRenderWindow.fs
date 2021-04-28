@@ -5,6 +5,7 @@ open System.Runtime.CompilerServices
 open System.Windows.Forms
 open Aardvark.Application
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 
 type SimpleRenderWindow() as this =
@@ -125,6 +126,9 @@ type SimpleRenderWindow() as this =
         and set v = ctrl.SubSampling <- v
 
     interface IRenderWindow with
+        member x.Cursor
+            with get() = Cursor.Default
+            and set c = ()
         member x.FramebufferSignature = ctrl.FramebufferSignature
         member x.Runtime = ctrl.Runtime
         member x.Time = ctrl.Time

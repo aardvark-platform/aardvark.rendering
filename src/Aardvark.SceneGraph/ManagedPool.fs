@@ -7,7 +7,7 @@ open System.Collections.Generic
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Base.Monads.State
@@ -277,6 +277,7 @@ module private ManagedBufferImplementation =
             member x.ContentType = typeof<IBuffer>
             member x.IsConstant = false
             member x.GetValueUntyped c = x.GetValue c :> obj
+            member x.Accept (v : IAdaptiveValueVisitor<'R>) = v.Visit x
 
         interface aval<IBuffer> with
             member x.GetValue c = x.GetValue c

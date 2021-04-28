@@ -1,13 +1,11 @@
 ﻿namespace Aardvark.SceneGraph
 
 open System
-open System.Runtime.InteropServices
-open System.Collections.Generic
-
 open Aardvark.Base
-open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
-open Aardvark.Base.Rendering
+
+open Aardvark.Rendering
+open FSharp.Data.Adaptive
 
 module Sg =
 
@@ -34,8 +32,8 @@ module Sg =
         member x.DrawCallInfo = call
 
         new(call : DrawCallInfo, mode : IndexedGeometryMode) = RenderNode(AVal.constant call, mode)
-        new(count : int, mode : IndexedGeometryMode) = 
-            let call = 
+        new(count : int, mode : IndexedGeometryMode) =
+            let call =
                 DrawCallInfo(
                     FaceVertexCount = count,
                     InstanceCount = 1,
@@ -45,7 +43,7 @@ module Sg =
                 )
             RenderNode(AVal.constant call, mode)
 
-        new(count : aval<int>, mode : IndexedGeometryMode) = 
+        new(count : aval<int>, mode : IndexedGeometryMode) =
             let call =
                 count |> AVal.map (fun x ->
                     DrawCallInfo(
@@ -57,7 +55,7 @@ module Sg =
                     )
                 )
             RenderNode(call, mode)
-    
+
     type RenderObjectNode(objects : aset<IRenderObject>) =
         interface ISg
         member x.Objects = objects
@@ -94,7 +92,7 @@ module Sg =
         new(semantic : Symbol, value : BufferView, child : aval<ISg>) = InstanceAttributeApplicator(Map.ofList [semantic, value], child)
         new(semantic : Symbol, value : BufferView, child : ISg)       = InstanceAttributeApplicator(Map.ofList [semantic, value], AVal.constant child)
         new(values : SymbolDict<BufferView>, child : ISg)             = InstanceAttributeApplicator(values |> Seq.map (fun (KeyValue(k,v)) -> k,v) |> Map.ofSeq, AVal.constant child)
- 
+
 
     type OnOffNode(on : aval<bool>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
@@ -114,15 +112,15 @@ module Sg =
         inherit AbstractApplicator(child)
 
         member internal x.Uniforms = uniformHolder
-        
+
         member x.TryFindUniform (scope : Scope) (name : Symbol) =
             uniformHolder.TryGetUniform (scope,name)
 
         new(value : IUniformProvider, child : ISg) = UniformApplicator( value, AVal.constant child)
-        new(name : string, value : IAdaptiveValue, child : ISg) = UniformApplicator( (new Providers.SimpleUniformHolder ([Symbol.Create name,value]) :> IUniformProvider), AVal.constant child)
-        new(name : Symbol, value : IAdaptiveValue, child : ISg) = UniformApplicator( (new Providers.SimpleUniformHolder( [name,value]) :> IUniformProvider), AVal.constant child)
-        new(name : Symbol, value : IAdaptiveValue, child : aval<ISg>) = UniformApplicator( (new Providers.SimpleUniformHolder( [name,value]) :> IUniformProvider), child)
-        new(map : Map<Symbol,IAdaptiveValue>, child : ISg) = UniformApplicator( (new Providers.SimpleUniformHolder( map) :> IUniformProvider), AVal.constant child)
+        new(name : string, value : IAdaptiveValue, child : ISg) = UniformApplicator( (new Providers.SingleUniformHolder(Symbol.Create name, value) :> IUniformProvider), AVal.constant child)
+        new(name : Symbol, value : IAdaptiveValue, child : ISg) = UniformApplicator( (new Providers.SingleUniformHolder(name, value) :> IUniformProvider), AVal.constant child)
+        new(name : Symbol, value : IAdaptiveValue, child : aval<ISg>) = UniformApplicator( (new Providers.SingleUniformHolder(name, value) :> IUniformProvider), child)
+        new(map : Map<Symbol,IAdaptiveValue>, child : ISg) = UniformApplicator( (new Providers.SimpleUniformHolder(map) :> IUniformProvider), AVal.constant child)
 
 
     type SurfaceApplicator(surface : Surface, child : aval<ISg>) =
@@ -152,7 +150,7 @@ module Sg =
 
         new(value : aval<Trafo3d>, child : ISg) = TrafoApplicator(value, AVal.constant child)
         new(value : Trafo3d, child : ISg) = TrafoApplicator(AVal.constant value, AVal.constant child)
-    
+
     type ViewTrafoApplicator(trafo : aval<Trafo3d>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
@@ -167,21 +165,113 @@ module Sg =
 
         new(value : aval<Trafo3d>, child : ISg) = ProjectionTrafoApplicator(value, AVal.constant child)
 
-
-    type DepthTestModeApplicator(mode : aval<DepthTestMode>, child : aval<ISg>) =
+    // Blending
+    type BlendModeApplicator(mode : aval<BlendMode>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.Mode = mode
 
-        new(mode : aval<DepthTestMode>, child : ISg) = DepthTestModeApplicator(mode, AVal.constant child)
+        new(value : aval<BlendMode>, child : ISg) = BlendModeApplicator(value, AVal.constant child)
 
-     type DepthBiasApplicator(bias : aval<DepthBiasState>, child : aval<ISg>) =
+    type BlendConstantApplicator(color : aval<C4f>, child : aval<ISg>) =
+        inherit AbstractApplicator(child)
+
+        member x.Color = color
+
+        new(color : aval<C4f>, child : ISg) = BlendConstantApplicator(color, AVal.constant child)
+
+    type ColorWriteMaskApplicator(mask : aval<ColorMask>, child : aval<ISg>) =
+        inherit AbstractApplicator(child)
+
+        member x.Mask = mask
+
+        new(enabled : aval<bool>, child : aval<ISg>) = ColorWriteMaskApplicator(enabled |> AVal.map ColorMask.enable, child)
+        new(enabled : aval<bool>, child : ISg) = ColorWriteMaskApplicator(enabled, AVal.constant child)
+        new(mask : aval<ColorMask>, child : ISg) = ColorWriteMaskApplicator(mask, AVal.constant child)
+
+    type AttachmentBlendModeApplicator(value : aval<Map<Symbol, BlendMode>>, child : aval<ISg>) =
+        inherit AbstractApplicator(child)
+
+        member x.Modes = value
+
+        new(value : aval<Map<Symbol, BlendMode>>, child : ISg) = AttachmentBlendModeApplicator(value, AVal.constant child)
+
+    type AttachmentColorWriteMaskApplicator(value : aval<Map<Symbol, ColorMask>>, child : aval<ISg>) =
+        inherit AbstractApplicator(child)
+
+        member x.Masks = value
+
+        new(value : aval<Map<Symbol, bool>>, child : aval<ISg>) = AttachmentColorWriteMaskApplicator(value |> AVal.map (Map.map (fun _ x -> ColorMask.enable x)), child)
+        new(value : aval<Map<Symbol, ColorMask>>, child : ISg) = AttachmentColorWriteMaskApplicator(value, AVal.constant child)
+        new(value : aval<Map<Symbol, bool>>, child : ISg) = AttachmentColorWriteMaskApplicator(value, AVal.constant child)
+
+    // Depth
+    type DepthTestApplicator(test : aval<DepthTest>, child : aval<ISg>) =
+        inherit AbstractApplicator(child)
+
+        member x.Test = test
+
+        new(test : aval<DepthTest>, child : ISg) = DepthTestApplicator(test, AVal.constant child)
+
+     type DepthBiasApplicator(bias : aval<DepthBias>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
         member x.State = bias
 
-        new(state : aval<DepthBiasState>, child : ISg) = DepthBiasApplicator(state, AVal.constant child)
+        new(state : aval<DepthBias>, child : ISg) = DepthBiasApplicator(state, AVal.constant child)
 
+    type DepthWriteMaskApplicator(writeEnabled : aval<bool>, child : aval<ISg>) =
+        inherit AbstractApplicator(child)
+
+        member x.WriteEnabled = writeEnabled
+
+        new(writeEnabled : aval<bool>, child : ISg) = DepthWriteMaskApplicator(writeEnabled, AVal.constant child)
+
+    type DepthClampApplicator(clamp : aval<bool>, child : aval<ISg>) =
+        inherit AbstractApplicator(child)
+
+        member x.Clamp = clamp
+
+        new(clamp : aval<bool>, child : ISg) = DepthClampApplicator(clamp, AVal.constant child)
+
+    // Stencil
+    type StencilModeFrontApplicator(mode : aval<StencilMode>, child : aval<ISg>) =
+        inherit AbstractApplicator(child)
+
+        member x.Mode = mode
+
+        new(mode : aval<StencilMode>, child : ISg) = StencilModeFrontApplicator(mode, AVal.constant child)
+
+    type StencilWriteMaskFrontApplicator(mask : aval<StencilMask>, child : aval<ISg>) =
+        inherit AbstractApplicator(child)
+
+        member x.Mask = mask
+
+        new(enabled : aval<bool>, child : aval<ISg>) = StencilWriteMaskFrontApplicator(enabled |> AVal.map StencilMask, child)
+        new(enabled : aval<bool>, child : ISg) = StencilWriteMaskFrontApplicator(enabled, AVal.constant child)
+        new(mask : aval<uint32>, child : aval<ISg>) = StencilWriteMaskFrontApplicator(mask |> AVal.map StencilMask, child)
+        new(mask : aval<uint32>, child : ISg) = StencilWriteMaskFrontApplicator(mask, AVal.constant child)
+        new(mask : aval<StencilMask>, child : ISg) = StencilWriteMaskFrontApplicator(mask, AVal.constant child)
+
+    type StencilModeBackApplicator(mode : aval<StencilMode>, child : aval<ISg>) =
+        inherit AbstractApplicator(child)
+
+        member x.Mode = mode
+
+        new(mode : aval<StencilMode>, child : ISg) = StencilModeBackApplicator(mode, AVal.constant child)
+
+    type StencilWriteMaskBackApplicator(mask : aval<StencilMask>, child : aval<ISg>) =
+        inherit AbstractApplicator(child)
+
+        member x.Mask = mask
+
+        new(enabled : aval<bool>, child : aval<ISg>) = StencilWriteMaskBackApplicator(enabled |> AVal.map StencilMask, child)
+        new(enabled : aval<bool>, child : ISg) = StencilWriteMaskBackApplicator(enabled, AVal.constant child)
+        new(mask : aval<uint32>, child : aval<ISg>) = StencilWriteMaskBackApplicator(mask |> AVal.map StencilMask, child)
+        new(mask : aval<uint32>, child : ISg) = StencilWriteMaskBackApplicator(mask, AVal.constant child)
+        new(mask : aval<StencilMask>, child : ISg) = StencilWriteMaskBackApplicator(mask, AVal.constant child)
+
+    // Rasterizer
     type CullModeApplicator(mode : aval<CullMode>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
@@ -204,63 +294,20 @@ module Sg =
         new(value : aval<FillMode>, child : ISg) = FillModeApplicator(value, AVal.constant child)
         new(value : FillMode, child : ISg) = FillModeApplicator(AVal.constant value, AVal.constant child)
 
-    type StencilModeApplicator(mode : aval<StencilMode>, child : aval<ISg>) =
-        inherit AbstractApplicator(child)
-
-        member x.Mode = mode
-
-        new(value : aval<StencilMode>, child : ISg) = StencilModeApplicator(value, AVal.constant child)
-
-    type BlendModeApplicator(mode : aval<BlendMode>, child : aval<ISg>) =
-        inherit AbstractApplicator(child)
-
-        member x.Mode = mode
-
-        new(value : aval<BlendMode>, child : ISg) = BlendModeApplicator(value, AVal.constant child)
-
-    type RasterizerStateApplicator(state : aval<RasterizerState>, child : aval<ISg>) =
-        inherit AbstractApplicator(child)
-
-        let depth = state |> AVal.map (fun s -> s.DepthTest)
-        let bias = state |> AVal.map (fun s -> s.DepthBias)
-        let cull = state |> AVal.map (fun s -> s.CullMode)
-        let front = state |> AVal.map (fun s -> s.FrontFace)
-        let fill = state |> AVal.map (fun s -> s.FillMode)
-        let stencil = state |> AVal.map (fun s -> s.StencilMode)
-        let blend = state |> AVal.map (fun s -> s.BlendMode)
-
-        member x.RasterizerState = state
-        member x.DepthTestMode = depth
-        member x.DepthBias = bias
-        member x.CullMode = cull
-        member x.FrontFace = front
-        member x.FillMode = fill
-        member x.StencilMode = stencil
-        member x.BlendMode = blend
-
-        new(value : aval<RasterizerState>, child : ISg) = RasterizerStateApplicator(value, AVal.constant child)
-
-    type WriteBuffersApplicator(buffers : Option<Set<Symbol>>, child : aval<ISg>) =
-        inherit AbstractApplicator(child)
-        member x.WriteBuffers = buffers
-        new(buffers : Option<Set<Symbol>>, child : ISg) = WriteBuffersApplicator(buffers, AVal.constant child)
-        
-    type ConservativeRasterApplicator(state : aval<bool>, child : aval<ISg>) =
-        inherit AbstractApplicator(child)
-        member x.ConservativeRaster = state
-
     type MultisampleApplicator(state : aval<bool>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
+
         member x.Multisample = state
 
+        new(state : aval<bool>, child : ISg) = MultisampleApplicator(state, AVal.constant child)
 
-    type ColorWriteMaskApplicator(maskRgba : aval<bool*bool*bool*bool>, child : aval<ISg>) =
+    type ConservativeRasterApplicator(state : aval<bool>, child : aval<ISg>) =
         inherit AbstractApplicator(child)
-        member x.MaskRgba = maskRgba
 
-    type DepthWriteMaskApplicator(writeEnabled : aval<bool>, child : aval<ISg>) =
-        inherit AbstractApplicator(child)
-        member x.WriteEnabled = writeEnabled
+        member x.ConservativeRaster = state
+
+        new(state : aval<bool>, child : ISg) = ConservativeRasterApplicator(state, AVal.constant child)
+
 
     type Set(content : aset<ISg>) =
 
@@ -273,70 +320,8 @@ module Sg =
 
         new(items : seq<ISg>) = Set(items |> ASet.ofSeq)
 
-    type OverlayNode(task : IRenderTask) =
-        interface ISg
-        member x.RenderTask = task
-
     type GeometrySet(geometries : aset<IndexedGeometry>, mode : IndexedGeometryMode, attributeTypes : Map<Symbol,Type>) =
         interface ISg
         member x.Geometries = geometries
         member x.Mode = mode
         member x.AttributeTypes = attributeTypes
-
-
-module SceneGraphCompletenessCheck =
-    open System.Text.RegularExpressions
-
-    let semantics =
-        [
-            "RenderObjects",        typeof<aset<IRenderObject>>
-            "GlobalBoundingBox",    typeof<aval<Box3d>>
-            "LocalBoundingBox",     typeof<aval<Box3d>>
-        ]
-
-    let genericNameRx = Regex @"(?<name>.*?)´[0-9]+"
-    let cleanName (name : string) =
-        let m = genericNameRx.Match name
-        if m.Success then m.Groups.["name"].Value
-        else name
-
-    let intrisicNames =
-        Dict.ofList [
-            typeof<byte>, "byte"
-            typeof<int8>, "int8"
-            typeof<uint16>, "uint16"
-            typeof<int16>, "int16"
-            typeof<int>, "int"
-            typeof<uint32>, "uint32"
-            typeof<int64>, "int64"
-            typeof<uint64>, "uint64"
-            typeof<obj>, "obj"
-        ]
-
-    let rec prettyName (t : Type) =
-        match intrisicNames.TryGetValue t with
-            | (true, n) -> n
-            | _ -> 
-                if t.IsArray then 
-                    sprintf "%s[]" (t.GetElementType() |> prettyName)
-                elif t.IsGenericType then
-                    let args = t.GetGenericArguments() |> Seq.map prettyName |> String.concat ","
-                    sprintf "%s<%s>" (cleanName t.Name) args
-                else
-                    cleanName t.Name
-
-    [<OnAardvarkInit>]
-    let checkSemanticCompleteness() =
-        let sgTypes = Introspection.GetAllClassesImplementingInterface(typeof<ISg>)
-
-        let sgModule = typeof<Sg.Set>.DeclaringType
-
-        for (att, expected) in semantics do
-            for t in sgTypes do
-                if t.DeclaringType = sgModule then
-                    match Ag.hasSynRule t expected att with
-                    | true -> ()
-                    | false -> Log.warn "no semantic %A for type %s" att (prettyName t)
-
-        ()
-

@@ -3,15 +3,12 @@
 open System
 open System.Threading
 open System.Runtime.InteropServices
-open System.Collections.Generic
-open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
+open Aardvark.Rendering
+open Aardvark.Rendering.Management
 open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
-
-open Aardvark.Base.Management
-
 
 [<AbstractClass>]
 type SparseBuffer(ctx : Context, size : nativeint, handle : int, beforeRender : unit -> unit, afterRender : unit -> unit) =
@@ -192,7 +189,7 @@ module private SparseBufferImplementation =
                         GL.NamedBufferData(temp, copySize, 0n, BufferUsageHint.StaticDraw)
                         GL.Check "could not allocate temp buffer"
 
-                        GL.NamedCopyBufferSubData(handle, temp, 0n, 0n, copySize)
+                        GL.CopyNamedBufferSubData(handle, temp, 0n, 0n, copySize)
                         GL.Check "could not copy to temp buffer"
 
                         //GL.InvalidateBufferData(handle) // bad on intel and not necessary.
@@ -201,7 +198,7 @@ module private SparseBufferImplementation =
                         GL.NamedBufferData(handle, c, 0n, BufferUsageHint.StaticDraw)
                         GL.Check "could not resize buffer"
                     
-                        GL.NamedCopyBufferSubData(temp, handle, 0n, 0n, copySize)
+                        GL.CopyNamedBufferSubData(temp, handle, 0n, 0n, copySize)
                         GL.Check "could not copy from temp buffer"
 
                         GL.DeleteBuffer(temp)

@@ -1,5 +1,5 @@
 ﻿open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Rendering.Text
@@ -75,7 +75,7 @@ let main argv =
 
 
     let size = V2i(512,512)
-    let color = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1)
+    let color = runtime.CreateTexture2D(size, TextureFormat.Rgba8, 1, 1)
     let prepare = 
 
         let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
@@ -90,7 +90,7 @@ let main argv =
             runtime.CreateFramebuffer(
                 signature, 
                 Map.ofList [
-                    DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                    DefaultSemantic.Colors, color.GetOutputView()
                     DefaultSemantic.Depth, (depth :> IFramebufferOutput)
                 ]
             )

@@ -2,12 +2,11 @@
 
 open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 
 open System.Threading
 open System.Collections.Concurrent
-open System.Collections.Generic
 
 module StepwiseProgress =
     
@@ -381,20 +380,14 @@ module CancellationUtilities =
                 
 
 namespace Aardvark.SceneGraph.Semantics
-open System.Collections.Generic
 
 module Helper =
 
     open System
-    open System.Threading
-    open System.Threading.Tasks
     open Aardvark.Base
-    open Aardvark.Base.Ag
-    open Aardvark.Base.Rendering
+    open Aardvark.Rendering
     open FSharp.Data.Adaptive
     open Aardvark.SceneGraph
-    open Aardvark.SceneGraph.Semantics
-    open LodProgress
 
     let ig ( box : Box3d ) : IndexedGeometry =
         
@@ -429,14 +422,14 @@ module Helper =
 module PointCloudRenderObjectSemantics = 
 
     module PointCloudRenderer = 
-        open Aardvark.Base.Rendering
         open System
         open System.Threading
         open Aardvark.Base
+        open Aardvark.Base.Ag
+        open Aardvark.Rendering
         open FSharp.Data.Adaptive
         open Aardvark.SceneGraph
         open Aardvark.SceneGraph.Semantics
-        open Aardvark.Base.Ag
 
         type private LoadedGeometry(pool : IGeometryPool, ptr : Management.Block<unit>, geometry : Option<IndexedGeometry>) =
             let range =

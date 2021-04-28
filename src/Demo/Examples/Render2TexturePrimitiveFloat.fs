@@ -19,13 +19,14 @@ namespace Examples
 
 open System
 open Aardvark.Base
+
 open Aardvark.Rendering.Interactive
 
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 open FSharp.Data.Adaptive.Operators 
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 
 module Render2TexturePrimitiveFloat = 
 
@@ -35,7 +36,7 @@ module Render2TexturePrimitiveFloat =
     let runtime = win.Runtime // the runtime instance provides functions for creating resources (lower abstraction than sg)
 
     let size = V2i(256,256)
-    let color = runtime.CreateTexture(size, TextureFormat.Rgba32f, 1, 1)
+    let color = runtime.CreateTexture2D(size, TextureFormat.Rgba32f, 1, 1)
     let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
 
     // Signatures are required to compile render tasks. Signatures can be seen as the `type` of a framebuffer
@@ -52,21 +53,17 @@ module Render2TexturePrimitiveFloat =
         runtime.CreateFramebuffer(
             signature, 
             Map.ofList [
-                DefaultSemantic.Colors, ({ texture = color; slice = 0; level = 0 } :> IFramebufferOutput)
+                DefaultSemantic.Colors, color.GetOutputView()
                 DefaultSemantic.Depth, (depth :> IFramebufferOutput)
             ]
         )
   
-    let blendMode = 
-        BlendMode(
-            Enabled = true,
-            AlphaOperation = BlendOperation.Add,
-            DestinationAlphaFactor = BlendFactor.Zero,
-            SourceAlphaFactor = BlendFactor.Zero,
-            DestinationFactor = BlendFactor.One,
-            SourceFactor = BlendFactor.One,
-            Operation = BlendOperation.Add
-        ) |> AVal.constant
+    let blendMode =
+        { BlendMode.Blend with
+            SourceColorFactor       = BlendFactor.One
+            DestinationColorFactor  = BlendFactor.One
+            SourceAlphaFactor       = BlendFactor.Zero
+            DestinationAlphaFactor  = BlendFactor.Zero }
 
     let cnt = AVal.init 300
 
@@ -81,8 +78,8 @@ module Render2TexturePrimitiveFloat =
             |> Sg.viewTrafo ~~(CameraView.lookAt (V3d(3,3,3)) V3d.OOO V3d.OOI                   |> CameraView.viewTrafo )
             |> Sg.projTrafo ~~(Frustum.perspective 60.0 0.01 10.0 (float size.X / float size.Y) |> Frustum.projTrafo    )
             |> Sg.effect [DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor C4f.White |> toEffect]
-            |> Sg.blendMode blendMode
-            |> Sg.depthTest (AVal.constant DepthTestMode.None)
+            |> Sg.blendMode (AVal.constant blendMode)
+            |> Sg.depthTest (AVal.constant DepthTest.None)
 
     // Create render tasks given the signature and concrete buffers        
     let task = runtime.CompileRender(signature, render2TextureSg)

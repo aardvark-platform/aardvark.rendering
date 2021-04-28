@@ -5,13 +5,13 @@ open System.Threading
 open System.Collections.Concurrent
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
 open OpenTK
 open OpenTK.Platform
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.Quotations
 open Microsoft.FSharp.Linq
+open Aardvark.Rendering
 open Aardvark.Rendering.GL
 
 [<AutoOpen>]
@@ -26,9 +26,9 @@ type Sampler =
     class
         val mutable public Context : Context
         val mutable public Handle : int
-        val mutable public Description : SamplerStateDescription
+        val mutable public Description : SamplerState
 
-        new(ctx : Context, handle : int, desc : SamplerStateDescription) =
+        new(ctx : Context, handle : int, desc : SamplerState) =
             { Context = ctx; Handle = handle; Description = desc }
     end
 
@@ -43,33 +43,35 @@ module SamplerExtensions =
             WrapMode.Mirror, TextureWrapMode.MirroredRepeat
         ]
 
-    let private minFilters =
-        Dict.ofList [
-            (TextureFilterMode.Linear, TextureFilterMode.Linear), TextureMinFilter.LinearMipmapLinear
-            (TextureFilterMode.Linear, TextureFilterMode.Point), TextureMinFilter.LinearMipmapNearest
-            (TextureFilterMode.Linear, TextureFilterMode.None), TextureMinFilter.Linear
+    module private TextureFilter =
+        let toMinFilter (f : TextureFilter) =
+            let mip = TextureFilter.mipmapMode f
+            let min = TextureFilter.minification f
 
-            (TextureFilterMode.Point, TextureFilterMode.Linear), TextureMinFilter.NearestMipmapLinear
-            (TextureFilterMode.Point, TextureFilterMode.Point), TextureMinFilter.NearestMipmapNearest
-            (TextureFilterMode.Point, TextureFilterMode.None), TextureMinFilter.Nearest
-        ]
+            match min, mip with
+            | FilterMode.Point, ValueNone                    -> TextureMinFilter.Nearest
+            | FilterMode.Point, ValueSome FilterMode.Point   -> TextureMinFilter.NearestMipmapNearest
+            | FilterMode.Point, ValueSome FilterMode.Linear  -> TextureMinFilter.NearestMipmapLinear
+            | FilterMode.Linear, ValueNone                   -> TextureMinFilter.Linear
+            | FilterMode.Linear, ValueSome FilterMode.Point  -> TextureMinFilter.LinearMipmapNearest
+            | FilterMode.Linear, ValueSome FilterMode.Linear -> TextureMinFilter.LinearMipmapLinear
+            | _ -> TextureMinFilter.Linear
 
-    let private magFilters =
-        Dict.ofList [
-            TextureFilterMode.Linear, TextureMagFilter.Linear
-            TextureFilterMode.Point, TextureMagFilter.Nearest
-        ]
+        let toMagFilter (f : TextureFilter) =
+            match TextureFilter.magnification f with
+            | FilterMode.Point -> TextureMagFilter.Nearest
+            | _ -> TextureMagFilter.Linear
 
     let private compareFuncs =
         Dict.ofList [
-            SamplerComparisonFunction.Always, All.Always
-            SamplerComparisonFunction.Equal, All.Equal
-            SamplerComparisonFunction.Greater, All.Greater
-            SamplerComparisonFunction.GreaterOrEqual, All.Gequal
-            SamplerComparisonFunction.Never, All.Never
-            SamplerComparisonFunction.NotEqual, All.Notequal
-            SamplerComparisonFunction.Less, All.Less
-            SamplerComparisonFunction.LessOrEqual, All.Lequal
+            ComparisonFunction.Always, All.Always
+            ComparisonFunction.Equal, All.Equal
+            ComparisonFunction.Greater, All.Greater
+            ComparisonFunction.GreaterOrEqual, All.Gequal
+            ComparisonFunction.Never, All.Never
+            ComparisonFunction.NotEqual, All.Notequal
+            ComparisonFunction.Less, All.Less
+            ComparisonFunction.LessOrEqual, All.Lequal
         ]
 
     module SamplerStateHelpers =
@@ -79,15 +81,11 @@ module SamplerExtensions =
                 | (true, r) -> int r
                 | _ -> int TextureWrapMode.Repeat //failwithf "unsupported WrapMode: %A"  m
 
-        let minFilter min mip =
-            match minFilters.TryGetValue ((min, mip)) with
-                | (true, f) -> int f
-                | _ -> int TextureMinFilter.Linear //failwithf "unsupported filter combination min: %A mip: %A" min mip
+        let minFilter f =
+            f |> TextureFilter.toMinFilter |> int
 
-        let magFilter mag =
-            match magFilters.TryGetValue (mag) with
-                | (true, f) -> int f
-                | _ -> int TextureMagFilter.Linear //failwithf "unsupported mag filter: %A" mag
+        let magFilter f =
+            f |> TextureFilter.toMagFilter |> int
 
         let compareFunc f =
             match compareFuncs.TryGetValue f with
@@ -96,7 +94,7 @@ module SamplerExtensions =
 
     open SamplerStateHelpers
 
-    let private setSamplerParameters (handle : int) (d : SamplerStateDescription) =
+    let private setSamplerParameters (handle : int) (d : SamplerState) =
         GL.SamplerParameter(handle, SamplerParameterName.TextureBorderColor, [|d.BorderColor.R; d.BorderColor.G; d.BorderColor.B; d.BorderColor.A|])
         GL.Check "could not set BorderColor for sampler"
 
@@ -119,32 +117,28 @@ module SamplerExtensions =
         GL.SamplerParameter(handle, SamplerParameterName.TextureMaxLod, d.MaxLod)
         GL.Check "could not set MinLod for sampler"
 
-        //if d.Filter.IsAnisotropic then
         GL.SamplerParameter(handle, SamplerParameterName.TextureMaxAnisotropyExt, d.MaxAnisotropy)
         GL.Check "could not set MaxAnisotropy for sampler"
-        //else
-        //    GL.SamplerParameter(handle, SamplerParameterName.TextureMaxAnisotropyExt, 1)
-        //    GL.Check "could not set MaxAnisotropy for sampler"
 
-        GL.SamplerParameter(handle, SamplerParameterName.TextureMinFilter, minFilter d.Filter.Min d.Filter.Mip)
+        GL.SamplerParameter(handle, SamplerParameterName.TextureMinFilter, minFilter d.Filter)
         GL.Check "could not set MinFilter for sampler"
 
-        GL.SamplerParameter(handle, SamplerParameterName.TextureMagFilter, magFilter d.Filter.Mag)
+        GL.SamplerParameter(handle, SamplerParameterName.TextureMagFilter, magFilter d.Filter)
         GL.Check "could not set MagFilter for sampler"
 
-        
+        let cmpFunc = compareFunc d.Comparison
 
-        if d.ComparisonFunction <> SamplerComparisonFunction.None then
+        if cmpFunc <> int All.Always then
             GL.SamplerParameter(handle, SamplerParameterName.TextureCompareMode, OpenTK.Graphics.OpenGL4.TextureCompareMode.CompareRefToTexture |> int)
             GL.Check "could not set comparison mode for sampler"
 
-            GL.SamplerParameter(handle, SamplerParameterName.TextureCompareFunc, compareFunc d.ComparisonFunction)
+            GL.SamplerParameter(handle, SamplerParameterName.TextureCompareFunc, cmpFunc)
             GL.Check "could not set CompareFunc for sampler"
 
 
     type Context with
 
-        member x.CreateSampler(description : SamplerStateDescription) =
+        member x.CreateSampler(description : SamplerState) =
             if ExecutionContext.samplersSupported then
                 addSampler x
                 using x.ResourceLock (fun _ ->
@@ -158,7 +152,7 @@ module SamplerExtensions =
             else
                 Sampler(x, -1, description)
 
-        member x.Update(s : Sampler, description : SamplerStateDescription) =
+        member x.Update(s : Sampler, description : SamplerState) =
             if ExecutionContext.samplersSupported then
                 using x.ResourceLock (fun _ ->
                     setSamplerParameters s.Handle description

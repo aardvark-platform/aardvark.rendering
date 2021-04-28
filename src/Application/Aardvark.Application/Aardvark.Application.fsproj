@@ -1,10 +1,11 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netstandard2.0</TargetFramework>
     <AssemblyName>Aardvark.Application</AssemblyName>
     <OutputType>Library</OutputType>	
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <OutputPath>..\..\..\bin\Debug\</OutputPath>
@@ -17,6 +18,7 @@
     <Compile Include="IO\Keys.fs" />
     <Compile Include="IO\Keyboard.fs" />
     <Compile Include="IO\Mouse.fs" />
+    <Compile Include="Cursor.fs" />
     <Compile Include="IMessageLoop.fs" />
     <Compile Include="IRenderControl.fs" />
     <Compile Include="IApplication.fs" />
@@ -26,7 +28,7 @@
     <Compile Include="Screenshots.fs" />
   </ItemGroup>
   <ItemGroup>
-    <ProjectReference Include="..\..\Aardvark.Base.Rendering\Aardvark.Base.Rendering.fsproj" />
+    <ProjectReference Include="..\..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />
   </ItemGroup>
   <Import Project="..\..\..\.paket\Paket.Restore.targets" />
  </Project>

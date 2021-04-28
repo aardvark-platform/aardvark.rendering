@@ -1,6 +1,6 @@
 ﻿open System
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
@@ -22,7 +22,7 @@ module Shady =
         }
 
 type Texy(runtime : ITextureRuntime, size : V2i, count : aval<int>) =
-    inherit AbstractOutputMod<ITexture>()
+    inherit AdaptiveResource<IBackendTexture>()
 
     let mutable handle : Option<IBackendTexture * int> = None
 
@@ -37,13 +37,13 @@ type Texy(runtime : ITextureRuntime, size : V2i, count : aval<int>) =
 
     let createAndUploadTexture (count : int) =
         Log.warn "Create texture"
-        let t = runtime.CreateTextureArray(size, TextureFormat.Rgba32f, 1, 1, count)
+        let t = runtime.CreateTexture2DArray(size, TextureFormat.Rgba32f, 1, 1, count)
         for slice in 0.. count - 1 do
             let tex = generateTexture()
             runtime.Upload(t, 0, slice, tex)
 
         handle <- Some (t, count)
-        t :> ITexture
+        t
 
     override x.Create() =
         ()
@@ -57,15 +57,13 @@ type Texy(runtime : ITextureRuntime, size : V2i, count : aval<int>) =
         | None ->
             ()
 
-        transact x.MarkOutdated // Only needed up until Aardvark.Base.Rendering 5.0.21
-
     override x.Compute(token : AdaptiveToken, t : RenderToken) =
 
         let count = count.GetValue(token)
 
         match handle with
         | Some (h, c) when count = c ->
-            h :> ITexture
+            h
 
         | Some (h, _) ->
             t.ReplacedResource(ResourceKind.Texture)

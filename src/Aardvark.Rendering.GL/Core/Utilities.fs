@@ -3,9 +3,8 @@
 open System
 open OpenTK.Graphics.OpenGL4
 open System.Text.RegularExpressions
-open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Rendering.GL
+open Aardvark.Rendering
 
 [<AutoOpen>]
 module TypeSizeExtensions =
@@ -19,7 +18,7 @@ module TypeSizeExtensions =
             System.Runtime.InteropServices.Marshal.SizeOf(x)
 
 
-// profileMask: 
+// profileMask:
 // GL_CONTEXT_CORE_PROFILE_BIT          1
 // GL_CONTEXT_COMPATIBILITY_PROFILE_BIT 2
 // contextFlags:
@@ -54,6 +53,9 @@ module Driver =
         else
             failwithf "could not read version from: %A" str
 
+    let tryParseGLVersion (str : string) =
+        try Some (parseGLVersion str) with _ -> None
+
     let parseGLSLVersion (str : string) =
         let m = versionRx.Match str
         if m.Success then
@@ -75,45 +77,37 @@ module Driver =
         else
             failwithf "could not read version from: %A" str
 
+    let tryParseGLSLVersion (str : string) =
+        try Some (parseGLSLVersion str) with _ -> None
+
 
     let readInfo() =
         let vendor = GL.GetString(StringName.Vendor)  
-        Report.Line(4, "[GL] vendor: {0}", vendor)
         let renderer = GL.GetString(StringName.Renderer)  
-        Report.Line(4, "[GL] renderer: {0}", renderer)
         let versionStr = GL.GetString(StringName.Version)
-        Report.Line(4, "[GL] version: {0}", versionStr)
         let version = 
-            parseGLVersion versionStr
+            versionStr |> tryParseGLVersion |> Option.defaultValue (Version())
 
         let glslVersion = 
             let str = GL.GetString(StringName.ShadingLanguageVersion)
-            Report.Line(4, "[GL] glsl: {0}", str)
-            parseGLSLVersion str
+            str |> tryParseGLSLVersion |> Option.defaultValue (Version())
         let profileMask =  GL.GetInteger(unbox<_> OpenTK.Graphics.OpenGL4.All.ContextProfileMask)
-        Report.Line(4, "[GL] profileMask: {0}", profileMask)
         let contextFlags = GL.GetInteger(GetPName.ContextFlags)
-        Report.Line(4, "[GL] contextFlags: {0}", contextFlags)
+        
+        let pat = (vendor + "_" + renderer).ToLower()
+        let gpu =
+            if pat.Contains "nvidia" then GPUVendor.nVidia
+            elif pat.Contains "ati" || pat.Contains "amd" then GPUVendor.AMD
+            elif pat.Contains "intel" then GPUVendor.Intel
+            else GPUVendor.Unknown
 
         let mutable extensions = Set.empty
         let extensionCount = GL.GetInteger(0x821d |> unbox<GetPName>) // GL_NUM_EXTENSIONS
-        Report.Begin(4, "[GL] extensions")
         for i in 0..extensionCount-1 do
             let name = GL.GetString(StringNameIndexed.Extensions, i)
-            Report.Line(4, "{0}", name)
             extensions <- Set.add name extensions
-        Report.End(4) |> ignore
 
-        let pat = (vendor + "_" + renderer).ToLower()
-        let gpu = 
-            if pat.Contains "nvidia" then Aardvark.Base.GPUVendor.nVidia
-            elif pat.Contains "ati" || pat.Contains "amd" then Aardvark.Base.GPUVendor.AMD
-            elif pat.Contains "intel" then Aardvark.Base.GPUVendor.Intel
-            else Aardvark.Base.GPUVendor.Unknown
-
-
-
-        { 
+        {
             device = gpu
             vendor = vendor
             renderer = renderer
@@ -122,11 +116,25 @@ module Driver =
             versionString = versionStr
             profileMask = profileMask
             contextFlags = contextFlags
-            extensions = extensions 
+            extensions = extensions
         }
 
+    let printDriverInfo(verbosity : int) = 
+        Report.Line(verbosity, "[GL] vendor: {0}", GL.GetString(StringName.Vendor))
+        Report.Line(verbosity, "[GL] renderer: {0}",  GL.GetString(StringName.Renderer))
+        Report.Line(verbosity, "[GL] version: {0}", GL.GetString(StringName.Version))
+        Report.Line(verbosity, "[GL] profileMask: {0}", GL.GetInteger(unbox<_> OpenTK.Graphics.OpenGL4.All.ContextProfileMask))
+        Report.Line(verbosity, "[GL] contextFlags: {0}", GL.GetInteger(GetPName.ContextFlags))
 
-module MemoryManagementUtilities = 
+        let extensionCount = GL.GetInteger(0x821d |> unbox<GetPName>) // GL_NUM_EXTENSIONS
+        Report.Begin(verbosity, "[GL] extensions")
+        for i in 0..extensionCount-1 do
+            Report.Line(verbosity, "{0}", GL.GetString(StringNameIndexed.Extensions, i))
+        Report.End(verbosity) |> ignore
+
+
+
+module MemoryManagementUtilities =
     open System.Collections.Generic
 
     type FreeList<'k, 'v when 'k : comparison>() =
@@ -136,14 +144,14 @@ module MemoryManagementUtilities =
 
         let tryGet (minimal : 'k) =
             let _, self, right = sortedSet.FindNeighbours((minimal, Unchecked.defaultof<_>))
-    
+
             let fitting =
                 if self.HasValue then Some self.Value
                 elif right.HasValue then Some right.Value
                 else None
-        
+
             match fitting with
-                | Some (k,container) -> 
+                | Some (k,container) ->
 
                     if container.Count <= 0 then
                         raise <| ArgumentException "invalid memory manager state"
@@ -172,7 +180,7 @@ module MemoryManagementUtilities =
 
         let remove (k : 'k) (v : 'v) =
             let _, self, _ = sortedSet.FindNeighbours((k, Unchecked.defaultof<_>))
-   
+
             if self.HasValue then
                 let (_,container) = self.Value
 
@@ -188,16 +196,16 @@ module MemoryManagementUtilities =
                     sets.Remove(k) |> ignore
 
                 res
-            else 
+            else
                 false
 
         let contains (k : 'k) (v : 'v) =
             let _, self, _ = sortedSet.FindNeighbours((k, Unchecked.defaultof<_>))
-   
+
             if self.HasValue then
                 let (_,container) = self.Value
                 container.Contains v
-            else 
+            else
                 false
 
 

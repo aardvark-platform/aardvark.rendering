@@ -5,7 +5,7 @@ open System.Threading
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
@@ -17,6 +17,11 @@ type DescriptorPool =
         inherit Resource<VkDescriptorPool>
         val mutable public SetCount : int
         val mutable public Counts : int[]
+
+        override x.Destroy() =
+            if x.Handle.IsValid then
+                VkRaw.vkDestroyDescriptorPool(x.Device.Handle, x.Handle, NativePtr.zero)
+                x.Handle <- VkDescriptorPool.Null
 
         new(device : Device, handle : VkDescriptorPool, total : int, counts : Map<VkDescriptorType, int>) = 
             let arr = Array.init 11 (fun i -> match Map.tryFind (unbox i) counts with | Some v -> v | None -> 0)
@@ -45,17 +50,10 @@ module DescriptorPool =
             let! pHandle = VkDescriptorPool.Null
             VkRaw.vkCreateDescriptorPool(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create DescriptorPool"
-        
-            return DescriptorPool(device, !!pHandle, setCount, counts)
+
+            return new DescriptorPool(device, !!pHandle, setCount, counts)
 
         }
-
-
-    let delete (pool : DescriptorPool) (device : Device) =
-        if pool.Handle.IsValid then 
-            VkRaw.vkDestroyDescriptorPool(device.Handle, pool.Handle, NativePtr.zero)
-            pool.Handle <- VkDescriptorPool.Null
-
 
 [<AbstractClass; Sealed; Extension>]
 type ContextDescriptorPoolExtensions private() =
@@ -70,7 +68,3 @@ type ContextDescriptorPoolExtensions private() =
             ]
 
         this |> DescriptorPool.create setCount counts
-
-    [<Extension>]
-    static member inline Delete(this : Device, pool : DescriptorPool) =
-        this |> DescriptorPool.delete pool

@@ -1,11 +1,8 @@
 ﻿namespace Aardvark.Rendering.GL
 
 open System
-open System.Collections.Generic
 open Aardvark.Base
-open Aardvark.Base.Rendering
 open Aardvark.Rendering
-open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open FSharp.Data.Adaptive
 open FShade
@@ -13,64 +10,6 @@ open Microsoft.FSharp.NativeInterop
 open Aardvark.Rendering.GL
 
 #nowarn "9"
-
-type FramebufferSignature(runtime : IRuntime, colors : Map<int, Symbol * AttachmentSignature>, images : Map<int, Symbol>, depth : Option<AttachmentSignature>, stencil : Option<AttachmentSignature>, layers : int, perLayer : Set<string>) =
-   
-    let signatureAssignableFrom (mine : AttachmentSignature) (other : AttachmentSignature) =
-        let myCol = RenderbufferFormat.toColFormat mine.format
-        let otherCol = RenderbufferFormat.toColFormat other.format
-        
-        myCol = otherCol
-
-    let colorsAssignableFrom (mine : Map<int, Symbol * AttachmentSignature>) (other : Map<int, Symbol * AttachmentSignature>) =
-        mine |> Map.forall (fun id (sem, signature) ->
-            match Map.tryFind id other with
-                | Some (otherSem, otherSig) when sem = otherSem ->
-                    signatureAssignableFrom signature otherSig
-                | None -> true
-                | _ -> false
-        )
-
-    let depthAssignableFrom (mine : Option<AttachmentSignature>) (other : Option<AttachmentSignature>) =
-        match mine, other with
-            | Some mine, Some other -> signatureAssignableFrom mine other
-            | _ -> true
-
-    member x.Runtime = runtime
-    member x.ColorAttachments = colors
-    member x.DepthAttachment = depth
-    member x.StencilAttachment = stencil
-    member x.Images = images
-
-    member x.LayerCount = layers
-    member x.PerLayerUniforms = perLayer
-
-    member x.IsAssignableFrom (other : IFramebufferSignature) =
-        if x.Equals other then 
-            true
-        else
-            match other with
-                | :? FramebufferSignature as other ->
-                    layers = other.LayerCount &&
-                    perLayer = other.PerLayerUniforms &&
-                    runtime = other.Runtime &&
-                    colorsAssignableFrom colors other.ColorAttachments
-                    // TODO: check depth and stencil (cumbersome for combined DepthStencil attachments)
-                | _ ->
-                    false
-
-    override x.ToString() =
-        sprintf "{ ColorAttachments = %A; DepthAttachment = %A; StencilAttachment = %A }" colors depth stencil
-
-    interface IFramebufferSignature with
-        member x.Runtime = runtime
-        member x.ColorAttachments = colors
-        member x.DepthAttachment = depth
-        member x.StencilAttachment = stencil
-        member x.IsAssignableFrom other = x.IsAssignableFrom other
-        member x.Images = images
-        member x.LayerCount = layers
-        member x.PerLayerUniforms = perLayer
 
 module private Align =
     let next (a : int) (v : int) =
@@ -80,34 +19,62 @@ module private Align =
     let next2 (a : int) (v : V2i) =
         V2i(next a v.X, next a v.Y)
 
-type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
+type Runtime() =
 
     static let versionRx = System.Text.RegularExpressions.Regex @"([0-9]+\.)*[0-9]+"
+    
+    let mutable ctx : Context = Unchecked.defaultof<_>
+    let mutable manager : ResourceManager = Unchecked.defaultof<_>
 
-    let mutable ctx = ctx
-    let mutable manager = if ctx <> null then ResourceManager(ctx, None, shareTextures, shareBuffers) else null
-
-    let shaderCache = System.Collections.Concurrent.ConcurrentDictionary<string*list<int*Symbol>,BackendSurface>()
     let onDispose = Event<unit>()    
-    do if not (isNull ctx) then Operators.using ctx.ResourceLock (fun _ -> GLVM.vmInit())
 
     let compute = lazy ( new GLCompute(ctx) )
 
-    new(ctx) = new Runtime(ctx, true, true)
+    member x.Context = ctx
 
-    //member x.SupportsUniformBuffers =
-    //    ExecutionContext.uniformBuffersSupported
+    member x.Initialize(context : Context, shareTextures : bool, shareBuffers : bool) = 
+           if ctx <> null then
+               Log.warn "Runtime already initialized"
 
-    member x.Context
-        with get() = ctx
-        and set c = 
-            ctx <- c
-            manager <- ResourceManager(ctx, None, shareTextures, shareBuffers)
-            Operators.using ctx.ResourceLock (fun _ -> GLVM.vmInit())
+           ctx <- context
+           manager <- ResourceManager(context, None, shareTextures, shareBuffers)
 
-            //compiler <- Compiler.Compiler(x, c)
-            //currentRuntime <- Some (x :> IRuntime)
+           Operators.using context.ResourceLock (fun _ ->
+           
+               try
+                   Log.startTimed "initializing OpenGL runtime"
+           
+                   Driver.printDriverInfo 4
 
+                   let driver = context.Driver
+
+                   // GL_CONTEXT_CORE_PROFILE_BIT 1
+                   // GL_CONTEXT_COMPATIBILITY_PROFILE_BIT 2
+                   let profileType = if driver.profileMask = 1 then " Core" elif driver.profileMask = 2 then " Compatibility" else ""
+           
+                   Log.line "vendor:   %A" driver.vendor
+                   Log.line "renderer: %A" driver.renderer 
+                   Log.line "version:  OpenGL %A / GLSL %A %s" driver.version driver.glsl profileType
+                                                           
+                   let major = driver.version.Major
+                   let minor = driver.version.Minor
+                   if major < 3 || major = 3 && minor < 3 then
+                       failwith "OpenGL driver version less than 3.3"
+           
+                   GLVM.vmInit()
+           
+                   // perform test OpenGL call
+                   if OpenGl.Pointers.ActiveTexture = 0n then
+                       failwith "Essentinal OpenGL procedure missing"
+                               
+                   OpenGl.Unsafe.ActiveTexture (int OpenTK.Graphics.OpenGL4.TextureUnit.Texture0)
+                   OpenTK.Graphics.OpenGL4.GL.Check "first GL call failed"
+           
+               finally
+                   Log.stop()
+           )
+
+    member x.Initialize(context : Context) = x.Initialize(context, true, true)
 
     member x.Dispose() = 
         if ctx <> null then
@@ -116,12 +83,9 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             ctx <- null
 
     interface IDisposable with
-        member x.Dispose() = x.Dispose() 
+        member x.Dispose() = x.Dispose()
 
-    interface IRuntime with
-    
-        member x.DeviceCount = 1
-
+    interface ILodRuntime with
 
         member x.CreateLodRenderer(config : LodRendererConfig, data : aset<LodTreeInstance>) =
 
@@ -134,8 +98,11 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             //        LodRenderingInfo.renderBounds = renderBounds
             //    }
                             
-            new LodRenderer(x.Context, x.ResourceManager, preparedState, config, data) :> IPreparedRenderObject
+            new LodRenderer(ctx, x.ResourceManager, preparedState, config, data) :> IPreparedRenderObject
 
+    interface IRuntime with
+    
+        member x.DeviceCount = 1
 
         member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) : unit =
             use __ = ctx.ResourceLock
@@ -373,66 +340,41 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.AssembleModule (effect : Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
             signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
 
-        member x.AssembleEffect (effect : Effect, signature : IFramebufferSignature, topology : IndexedGeometryMode) =
-            let key = effect.Id, signature.ExtractSemantics()
-            shaderCache.GetOrAdd(key,fun _ -> 
-                let glsl = 
-                    signature.Link(effect, Range1d(-1.0, 1.0), false, topology)
-                        |> ModuleCompiler.compileGLSL ctx.FShadeBackend
-
-                let entries =
-                    effect.Shaders 
-                        |> Map.toSeq
-                        |> Seq.map (fun (stage,_) -> ShaderStage.ofFShade stage, "main") 
-                        |> Dictionary.ofSeq
-
-                let builtIns =
-                    glsl.iface.shaders
-                        |> MapExt.toSeq 
-                        |> Seq.map (fun (k,v) -> ShaderStage.ofFShade k, v.shaderBuiltIns |> MapExt.toSeq |> Seq.map (fun (k,v) -> k, v |> MapExt.toSeq |> Seq.map fst |> Set.ofSeq) |> Map.ofSeq)
-                        |> Map.ofSeq
-
-                    
-                let samplers = Dictionary.empty
-
-                for KeyValue(k,v) in effect.Uniforms do
-                    match v.uniformValue with
-                        | UniformValue.Sampler(texName,sam) ->
-                            samplers.[(k, 0)] <- { textureName = Symbol.Create texName; samplerState = sam.SamplerStateDescription }
-                        | UniformValue.SamplerArray semSams ->
-                            for i in 0 .. semSams.Length - 1 do
-                                let (sem, sam) = semSams.[i]
-                                samplers.[(k, i)] <- { textureName = Symbol.Create sem; samplerState = sam.SamplerStateDescription }
-                        | _ ->
-                            ()
-
-                BackendSurface(glsl.code, entries, builtIns, SymDict.empty, samplers, true, null)
-
-            )
-
         member x.ResourceManager = manager :> IResourceManager
 
-        member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>, layers : int, perLayer : Set<string>) =
-            x.CreateFramebufferSignature(attachments, images, layers, perLayer) :> IFramebufferSignature
+        member x.CreateFramebufferSignature(attachments : Map<Symbol, AttachmentSignature>, layers : int, perLayer : Set<string>) =
+            x.CreateFramebufferSignature(attachments, layers, perLayer)
 
             
-        member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) =
-            x.CreateTexture(size, dim, format, slices, levels, samples) :> IBackendTexture
+        member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) =
+            x.CreateTexture(size, dim, format, levels, samples) :> IBackendTexture
+
+        member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) =
+            x.CreateTextureArray(size, dim, format, levels, samples, count) :> IBackendTexture
 
         member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
             ()
 
-        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) = x.Download(t, level, slice, target)
-        member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) = x.Download(t, level, slice, target)
-        member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) = x.Upload(t, level, slice, source)
-        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) = x.DownloadStencil(t, level, slice, target)
-        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) = x.DownloadDepth(t, level, slice, target)
+        member x.Download(t : IBackendTexture, level : int, slice : int, offset : V2i, target : PixImage) =
+            x.Download(t, level, slice, offset, target)
+
+        member x.Download(t : IBackendTexture, level : int, slice : int, offset : V3i, target : PixVolume) =
+            x.Download(t, level, slice, offset, target)
+
+        member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) =
+            x.Upload(t, level, slice, offset, source)
+
+        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<int>) =
+            x.DownloadStencil(t, level, slice, offset, target)
+
+        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
+            x.DownloadDepth(t, level, slice, offset, target)
 
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
-        member x.ContextLock = ctx.ResourceLock
+        member x.ContextLock = ctx.ResourceLock :> IDisposable
         member x.CompileRender (signature, engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(signature, engine,set)
-        member x.CompileClear(signature, color, depth) = x.CompileClear(signature, color, depth)
+        member x.CompileClear(signature, color, depth, stencil) = x.CompileClear(signature, color, depth, stencil)
       
         ///NOTE: OpenGL does not care about 
         member x.CreateBuffer(size : nativeint, usage : BufferUsage) = x.CreateBuffer(size) :> IBackendBuffer
@@ -487,18 +429,6 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             x.CreateFramebuffer(signature, bindings) :> _
 
 
-        member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
-            ctx.CreateTexture2D(size, levels, format, samples) :> _
-
-        member x.CreateTextureArray(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
-            ctx.CreateTexture2DArray(size, count, levels, format, samples) :> _
-            
-        member x.CreateTextureCube(size : int, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
-            x.CreateTextureCube(size, format, levels, samples) :> _
-
-        member x.CreateTextureCubeArray(size : int, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
-            x.CreateTextureCubeArray(size, format, levels, samples, count) :> _
-
         member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
             x.CreateRenderbuffer(size, format, samples) :> IRenderbuffer
             
@@ -511,12 +441,12 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateComputeShader (c : FShade.ComputeShader) = ctx.CompileKernel c :> IComputeShader
         member x.NewInputBinding(c : IComputeShader) = new ComputeShaderInputBinding(unbox c) :> IComputeShaderInputBinding
         member x.DeleteComputeShader (shader : IComputeShader) = ctx.Delete(unbox<GL.ComputeShader> shader)
-        member x.Run (commands : list<ComputeCommand>) = ctx.Run commands
+        member x.Run (commands : list<ComputeCommand>, queries : IQuery) = ctx.Run(commands, queries)
         member x.Compile (commands : list<ComputeCommand>) =
             let x = x :> IComputeRuntime
             { new ComputeProgram<unit>() with
-                member __.RunUnit() =
-                    x.Run(commands)
+                member __.RunUnit(queries) =
+                    x.Run(commands, queries)
                 member x.Release() =
                     ()
             }
@@ -524,7 +454,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.Clear(fbo : IFramebuffer, clearColors : Map<Symbol, C4f>, depth : Option<float>, stencil : Option<int>) =
             use __ = ctx.ResourceLock
 
-            let handle = fbo.GetHandle(Unchecked.defaultof<_>) |> unbox<int>
+            let fbo = fbo |> unbox<Framebuffer>
+            let handle = fbo.Handle
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, handle)
             GL.Check "could not bind framebuffer"
             
@@ -634,8 +565,41 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture =
             ctx.CreateTextureView(unbox<Texture> texture, levels, slices, isArray) :> IBackendTexture
 
+        member x.CreateTimeQuery() =
+            new TimeQuery(ctx) :> ITimeQuery
+
+        member x.CreateOcclusionQuery(precise) =
+            new OcclusionQuery(ctx, precise) :> IOcclusionQuery
+
+        member x.CreatePipelineQuery(statistics) =
+            use __ = ctx.ResourceLock
+
+            if GL.ARB_pipeline_statistics_query then
+                new PipelineQuery(ctx, statistics) :> IPipelineQuery
+            else
+                new GeometryQuery(ctx) :> IPipelineQuery
+
+        member x.SupportedPipelineStatistics =
+            use __ = ctx.ResourceLock
+
+            if GL.ARB_pipeline_statistics_query then
+                PipelineStatistics.All
+            else
+                Set.singleton ClippingInputPrimitives
+
+        member x.ShaderCachePath
+            with get() = ctx.ShaderCachePath
+            and set(value) = ctx.ShaderCachePath <- value
+
     
     member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
+        src |> ResourceValidation.Textures.validateSlices srcBaseSlice slices
+        src |> ResourceValidation.Textures.validateLevels srcBaseLevel levels
+        dst |> ResourceValidation.Textures.validateSlices dstBaseSlice slices
+        dst |> ResourceValidation.Textures.validateLevels dstBaseLevel levels
+        (src, dst) ||> ResourceValidation.Textures.validateSizes srcBaseLevel dstBaseLevel
+        (src, dst) ||> ResourceValidation.Textures.validateSamplesForCopy
+
         let src = unbox<Texture> src
         let dst = unbox<Texture> dst
         
@@ -644,10 +608,10 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             let srcLevel = srcBaseLevel + l
             let dstLevel = dstBaseLevel + l
             for s in 0 .. slices - 1 do
-                if src.Multisamples = dst.Multisamples then
-                    ctx.Copy(src, srcLevel, srcBaseSlice + s, V2i.Zero, dst, dstLevel, dstBaseSlice + s, V2i.Zero, size.XY)
+                if src.IsMultisampled then
+                    ctx.Blit(src, srcLevel, srcBaseSlice + s, Box2i(V2i.Zero, size.XY), dst, dstLevel, dstBaseSlice + s, Box2i(V2i.Zero, size.XY), false)
                 else
-                    ctx.Blit(src, srcLevel, srcBaseSlice + s, Box2i(V2i.Zero, size.XY - V2i.II), dst, dstLevel, dstBaseSlice + s, Box2i(V2i.Zero, size.XY - V2i.II), false)
+                    ctx.Copy(src, srcLevel, srcBaseSlice + s, V2i.Zero, dst, dstLevel, dstBaseSlice + s, V2i.Zero, size.XY)
             size <- size / 2
 
 
@@ -670,20 +634,17 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         use __ = ctx.ResourceLock
-        GL.CopyNamedBufferSubData(unbox<int> src.Handle, srcOffset, unbox<int> dst.Handle, dstOffset, size)
+        GL.CopyNamedBufferSubData(unbox<int> src.Handle, unbox<int> dst.Handle, srcOffset, dstOffset, size)
         GL.Check "could not copy buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
 
-    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>, layers : int, perLayer : Set<string>) =
-        let attachments = Map.ofSeq (SymDict.toSeq attachments)
-
+    member x.CreateFramebufferSignature(attachments : Map<Symbol, AttachmentSignature>, layers : int, perLayer : Set<string>) =
         let depth =
             Map.tryFind DefaultSemantic.Depth attachments
 
         let stencil =
             Map.tryFind DefaultSemantic.Stencil attachments
-
 
         let indexedColors =
             attachments
@@ -698,12 +659,15 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
                 |> List.mapi (fun i t -> (i, t))
                 |> Map.ofList
 
-        let images = images |> Seq.mapi (fun i s -> (i,s)) |> Map.ofSeq
-
-        FramebufferSignature(x, indexedColors, images, depth, stencil, layers, perLayer)
-        
-    member x.CreateFramebufferSignature(attachments : SymbolDict<AttachmentSignature>, images : Set<Symbol>) =
-        x.CreateFramebufferSignature(attachments, images, 1, Set.empty)
+        { new Object() with
+            member _.ToString() = sprintf "{ ColorAttachments = %A; DepthAttachment = %A; StencilAttachment = %A }" indexedColors depth stencil
+          interface IFramebufferSignature with
+            member _.Runtime = x :> IFramebufferRuntime
+            member _.ColorAttachments = indexedColors
+            member _.DepthAttachment = depth
+            member _.StencilAttachment = stencil
+            member _.LayerCount = layers
+            member _.PerLayerUniforms = perLayer }
 
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
@@ -711,8 +675,8 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
         Operators.using ctx.ResourceLock (fun d -> 
             let surface =
                 match s with
-                    | :? FShadeSurface as f -> Aardvark.Base.Surface.FShadeSimple f.Effect
-                    | _ -> Aardvark.Base.Surface.Backend s
+                    | :? FShadeSurface as f -> Aardvark.Rendering.Surface.FShadeSimple f.Effect
+                    | _ -> Aardvark.Rendering.Surface.Backend s
 
             if signature.LayerCount > 1 then
                 Log.warn("[PrepareSurface] Using Triangle topology.")
@@ -780,20 +744,17 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
     member x.CompileRender(fboSignature : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) : IRenderTask =
         x.CompileRenderInternal(fboSignature, AVal.constant engine, set)
-        
-    member x.Compile (signature : IFramebufferSignature, commands : alist<RenderCommand>) =
-        failwith "[GL] no commands"
-        //new CommandRenderTask(manager, signature, commands, AVal.constant BackendConfiguration.Default, true, true) :> ICommandRenderTask
 
-    member x.CompileClear(fboSignature : IFramebufferSignature, color : aval<Map<Symbol, C4f>>, depth : aval<Option<float>>) : IRenderTask =
+    member x.CompileClear(signature : IFramebufferSignature, color : aval<Map<Symbol, C4f>>, depth : aval<float option>, stencil : aval<int option>) : IRenderTask =
         let clearValues =
-            color |> AVal.map (fun clearColors ->
-                fboSignature.ColorAttachments
-                    |> Map.toList
-                    |> List.map (fun (_,(s,_)) -> Map.tryFind s clearColors)
+            color |> AVal.map (fun colors ->
+                signature.ColorAttachments |> Map.choose (fun _ (sem, _) ->
+                    colors |> Map.tryFind sem
+                )
+                |> Map.toList
             )
-        
-        new RenderTasks.ClearTask(x, fboSignature, clearValues, depth, ctx) :> IRenderTask
+
+        new RenderTasks.ClearTask(x, signature, clearValues, depth, stencil, ctx) :> IRenderTask
 
     member x.ResolveMultisamples(ms : IFramebufferOutput, srcOffset : V2i, ss : IBackendTexture, dstOffset : V2i, dstLayer : int, size : V2i, trafo : ImageTrafo) =
         Operators.using ctx.ResourceLock (fun _ ->
@@ -809,47 +770,30 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             let mutable srcAtt = FramebufferAttachment.ColorAttachment0
 
             match ms with
-                | :? IBackendTextureOutputView as ms ->
-                    let baseSlice = ms.slices.Min
-                    let slices = 1 + ms.slices.Max - baseSlice
-                    let tex = ms.texture |> unbox<Texture>
+            | :? Renderbuffer as ms ->
+                if TextureFormat.hasDepth (RenderbufferFormat.toTextureFormat ms.Format) then srcAtt <- FramebufferAttachment.DepthStencilAttachment
+                GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, srcAtt, RenderbufferTarget.Renderbuffer, ms.Handle)
+                GL.Check "could not set read framebuffer texture"
 
-                    if slices <> 1 then failwith "layer sub-ranges not supported atm."
-                    
-                    if TextureFormat.hasDepth tex.Format then srcAtt <- FramebufferAttachment.DepthStencilAttachment
-                    if tex.IsArray || tex.Dimension = TextureDimension.TextureCube then
-                        GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, srcAtt, tex.Handle, ms.level, baseSlice)
-                        GL.Check "could not set read framebuffer texture"
-                    else
-                        // NOTE: allow to resolve/copy singlesample textures as well
-                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, srcAtt, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.level)
-                        GL.Check "could not set read framebuffer texture"
-                    
-                | :? Renderbuffer as ms ->
-                
-                    if TextureFormat.hasDepth (RenderbufferFormat.toTextureFormat ms.Format) then srcAtt <- FramebufferAttachment.DepthStencilAttachment
-                    GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, srcAtt, RenderbufferTarget.Renderbuffer, ms.Handle)
+            | :? ITextureLevel as ms ->
+                let baseSlice = ms.Slices.Min
+                let slices = 1 + ms.Slices.Max - baseSlice
+                let tex = ms.Texture |> unbox<Texture>
+
+                if slices <> 1 then failwith "layer sub-ranges not supported atm."
+
+                if TextureFormat.hasDepth tex.Format then srcAtt <- FramebufferAttachment.DepthStencilAttachment
+                if tex.IsArray || tex.Dimension = TextureDimension.TextureCube then
+                    GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, srcAtt, tex.Handle, ms.Level, baseSlice)
+                    GL.Check "could not set read framebuffer texture"
+                else
+                    // NOTE: allow to resolve/copy singlesample textures as well
+                    GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, srcAtt, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.Level)
                     GL.Check "could not set read framebuffer texture"
 
-                | :? ITextureLevel as ms ->
-                    let baseSlice = ms.Slices.Min
-                    let slices = 1 + ms.Slices.Max - baseSlice
-                    let tex = ms.Texture |> unbox<Texture>
+            | _ ->
+                failwithf "[GL] cannot resolve %A" ms
 
-                    if slices <> 1 then failwith "layer sub-ranges not supported atm."
-                    
-                    if TextureFormat.hasDepth tex.Format then srcAtt <- FramebufferAttachment.DepthStencilAttachment
-                    if tex.IsArray || tex.Dimension = TextureDimension.TextureCube then
-                        GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, srcAtt, tex.Handle, ms.Level, baseSlice)
-                        GL.Check "could not set read framebuffer texture"
-                    else
-                        // NOTE: allow to resolve/copy singlesample textures as well
-                        GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, srcAtt, (if tex.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), tex.Handle, ms.Level)
-                        GL.Check "could not set read framebuffer texture"
-
-                | _ ->
-                    failwithf "[GL] cannot resolve %A" ms
-            
             // NOTE: binding src texture with multiple slices using FramebufferTexture(..) and dst as FramebufferTexture(..) only blits first slice
             // TODO: maybe multilayer copy works using FramebufferTexture2D with TextureTarget.TextureArray
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer,drawFbo)
@@ -924,20 +868,32 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
             | _ ->
                 failwithf "[GL] unsupported texture: %A" t
 
-    member x.Download(t : IBackendTexture, level : int, slice : int, target : PixImage) =
-        ctx.Download(unbox<Texture> t, level, slice, target)
-        
-    member x.Download(t : IBackendTexture, level : int, slice : int, target : PixVolume) : unit =
+    member x.Download(t : IBackendTexture, level : int, slice : int, offset : V2i, target : PixImage) =
+        t |> ResourceValidation.Textures.validateLevel level
+        t |> ResourceValidation.Textures.validateSlice slice
+        t |> ResourceValidation.Textures.validateWindow2D level offset target.Size
+        ctx.Download(unbox<Texture> t, level, slice, offset, target)
+
+    member x.Download(t : IBackendTexture, level : int, slice : int, offset : V3i, target : PixVolume) : unit =
        failwith "[GL] Volume download not implemented"
 
-    member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, target : Matrix<int>) =
-        ctx.DownloadStencil(unbox<Texture> t, level, slice, target)
+    member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<int>) =
+        t |> ResourceValidation.Textures.validateLevel level
+        t |> ResourceValidation.Textures.validateSlice slice
+        t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
+        ctx.DownloadStencil(unbox<Texture> t, level, slice, offset, target)
 
-    member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, target : Matrix<float32>) =
-        ctx.DownloadDepth(unbox<Texture> t, level, slice, target)
+    member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
+        t |> ResourceValidation.Textures.validateLevel level
+        t |> ResourceValidation.Textures.validateSlice slice
+        t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
+        ctx.DownloadDepth(unbox<Texture> t, level, slice, offset, target)
 
-    member x.Upload(t : IBackendTexture, level : int, slice : int, source : PixImage) =
-        ctx.Upload(unbox<Texture> t, level, slice, source)
+    member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) =
+        t |> ResourceValidation.Textures.validateLevel level
+        t |> ResourceValidation.Textures.validateSlice slice
+        t |> ResourceValidation.Textures.validateWindow2D level offset (V2i source.Size)
+        ctx.Upload(unbox<Texture> t, level, slice, offset, source)
 
     member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : Framebuffer =
 
@@ -975,27 +931,19 @@ type Runtime(ctx : Context, shareTextures : bool, shareBuffers : bool) =
 
         ctx.CreateFramebuffer(signature, colors, depth, stencil)
 
-    member x.CreateTexture(size : V2i, format : TextureFormat, levels : int, samples : int, count : int) : Texture =
-        match count with
-            | 1 -> ctx.CreateTexture2D(size, levels, format, samples)
-            | _ -> ctx.CreateTexture2DArray(size, count, levels, format, samples)
 
+    member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) =
+        ResourceValidation.Textures.validateCreationParams dim size levels samples
+        ctx.CreateTexture(size, dim, format, 0, levels, samples)
 
+    member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) =
+        ResourceValidation.Textures.validateCreationParamsArray dim size levels samples count
+        ctx.CreateTexture(size, dim, format, count, levels, samples)
 
-    member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) =
-        ctx.CreateTexture(size, dim, format, slices, levels, samples)
-
-
-    member x.CreateTextureCube(size : int, format : TextureFormat, levels : int, samples : int) : Texture =
-        ctx.CreateTextureCube(size, levels, format, samples)
-
-    member x.CreateTextureCubeArray(size : int, format : TextureFormat, levels : int, samples : int, count : int) : Texture =
-        ctx.CreateTextureCubeArray(size, levels, format, samples, count)
 
     member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : Renderbuffer =
+        if samples < 1 then raise <| ArgumentException("[Renderbuffer] samples must be greater than 0")
         ctx.CreateRenderbuffer(size, format, samples)
                 
     member x.CreateGeometryPool(types : Map<Symbol, Type>) =
         new SparseBufferGeometryPool(ctx, types) :> IGeometryPool
-        
-    new() = new Runtime(null)

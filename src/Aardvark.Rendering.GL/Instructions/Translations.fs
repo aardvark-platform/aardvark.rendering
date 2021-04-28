@@ -2,15 +2,16 @@
 
 
 open Aardvark.Base
-open Aardvark.Base.Rendering
+
+open Aardvark.Rendering
 open Aardvark.Rendering.GL.OpenGl
         
 
 module Translations =
 
-    type private ABlendFactor = Aardvark.Base.Rendering.BlendFactor
+    type private ABlendFactor = Aardvark.Rendering.BlendFactor
     type private GLBlendFactor = Aardvark.Rendering.GL.OpenGl.Enums.BlendFactor
-    type private ABlendOperation = Aardvark.Base.Rendering.BlendOperation
+    type private ABlendOperation = Aardvark.Rendering.BlendOperation
     type private GLBlendOperation = Aardvark.Rendering.GL.OpenGl.Enums.BlendOperation
 
     let toGLMode (m : IndexedGeometryMode) =
@@ -50,9 +51,14 @@ module Translations =
             | ABlendFactor.InvDestinationColor -> GLBlendFactor.InvDstColor |> int
             | ABlendFactor.InvSourceAlpha -> GLBlendFactor.InvSrcAlpha |> int
             | ABlendFactor.InvSourceColor -> GLBlendFactor.InvSrcColor |> int
+            | ABlendFactor.ConstantColor -> GLBlendFactor.ConstantColor |> int
+            | ABlendFactor.InvConstantColor -> GLBlendFactor.InvConstantColor |> int
+            | ABlendFactor.ConstantAlpha -> GLBlendFactor.ConstantAlpha |> int
+            | ABlendFactor.InvConstantAlpha -> GLBlendFactor.InvConstantAlpha |> int
+            | ABlendFactor.SourceAlphaSaturate -> GLBlendFactor.SrcAlphaSat |> int
             | ABlendFactor.SecondarySourceColor -> GLBlendFactor.Src1Color |> int
-            | ABlendFactor.SecondarySourceAlpha -> GLBlendFactor.Src1Alpha |> int
             | ABlendFactor.InvSecondarySourceColor -> GLBlendFactor.InvSrc1Color |> int
+            | ABlendFactor.SecondarySourceAlpha -> GLBlendFactor.Src1Alpha |> int
             | ABlendFactor.InvSecondarySourceAlpha -> GLBlendFactor.InvSrc1Alpha |> int
             | _ -> failwithf "unknown blend factor: %A" f
 
@@ -65,19 +71,6 @@ module Translations =
             | ABlendOperation.Maximum -> GLBlendOperation.Maximum |> int
             | _ -> failwithf "unknown blend operation %A" f
 
-    let toGLComparison (f : DepthTestComparison) =
-        match f with
-            | DepthTestComparison.None -> 0
-            | DepthTestComparison.Greater -> CompareFunction.Greater |> int
-            | DepthTestComparison.GreaterOrEqual -> CompareFunction.GreaterEqual |> int
-            | DepthTestComparison.Less -> CompareFunction.Less |> int
-            | DepthTestComparison.LessOrEqual -> CompareFunction.LessEqual |> int
-            | DepthTestComparison.Equal -> CompareFunction.Equal |> int
-            | DepthTestComparison.NotEqual -> CompareFunction.NotEqual |> int
-            | DepthTestComparison.Never -> CompareFunction.Never |> int
-            | DepthTestComparison.Always -> CompareFunction.Always |> int
-            | _ -> failwithf "unknown comparison %A" f
-
     let toGLCullMode (f : CullMode) =
         match f with
             | CullMode.None -> 0// glDisable(GL_CULL_FACE) / glCullFace will not be set and
@@ -86,34 +79,47 @@ module Translations =
             | CullMode.FrontAndBack-> Face.FrontAndBack |> int
             | _ -> failwithf "unknown comparison %A" f
 
-    let toGLFrontFace (f : Aardvark.Base.Rendering.WindingOrder) =
+    let toGLFrontFace (f : Aardvark.Rendering.WindingOrder) =
         match f with
-            | Aardvark.Base.Rendering.WindingOrder.Clockwise -> WindingOrder.CW |> int
-            | Aardvark.Base.Rendering.WindingOrder.CounterClockwise -> WindingOrder.CCW |> int
+            | Aardvark.Rendering.WindingOrder.Clockwise -> WindingOrder.CW |> int
+            | Aardvark.Rendering.WindingOrder.CounterClockwise -> WindingOrder.CCW |> int
             | _ -> failwithf "unknown winding order %A" f
 
-    let toGLFunction (f : StencilCompareFunction) =
+    let toGLCompareFunction (f : ComparisonFunction) =
         match f with
-            | StencilCompareFunction.Always -> CompareFunction.Always |> int
-            | StencilCompareFunction.Equal -> CompareFunction.Equal |> int
-            | StencilCompareFunction.Greater -> CompareFunction.Greater |> int
-            | StencilCompareFunction.GreaterOrEqual -> CompareFunction.GreaterEqual |> int
-            | StencilCompareFunction.Less -> CompareFunction.Less |> int
-            | StencilCompareFunction.LessOrEqual -> CompareFunction.LessEqual |> int
-            | StencilCompareFunction.Never -> CompareFunction.Never |> int
-            | StencilCompareFunction.NotEqual -> CompareFunction.NotEqual |> int
+            | ComparisonFunction.Always -> CompareFunction.Always |> int
+            | ComparisonFunction.Equal -> CompareFunction.Equal |> int
+            | ComparisonFunction.Greater -> CompareFunction.Greater |> int
+            | ComparisonFunction.GreaterOrEqual -> CompareFunction.GreaterEqual |> int
+            | ComparisonFunction.Less -> CompareFunction.Less |> int
+            | ComparisonFunction.LessOrEqual -> CompareFunction.LessEqual |> int
+            | ComparisonFunction.Never -> CompareFunction.Never |> int
+            | ComparisonFunction.NotEqual -> CompareFunction.NotEqual |> int
             | _ -> failwithf "unknown comparison %A" f
 
-    let toGLStencilOperation (o : StencilOperationFunction) =
+    let toGLDepthTest (f : DepthTest) =
+         match f with
+             | DepthTest.None -> 0
+             | DepthTest.Greater -> CompareFunction.Greater |> int
+             | DepthTest.GreaterOrEqual -> CompareFunction.GreaterEqual |> int
+             | DepthTest.Less -> CompareFunction.Less |> int
+             | DepthTest.LessOrEqual -> CompareFunction.LessEqual |> int
+             | DepthTest.Equal -> CompareFunction.Equal |> int
+             | DepthTest.NotEqual -> CompareFunction.NotEqual |> int
+             | DepthTest.Never -> CompareFunction.Never |> int
+             | DepthTest.Always -> CompareFunction.Always |> int
+             | _ -> failwithf "unknown depth test %A" f
+
+    let toGLStencilOperation (o : Aardvark.Rendering.StencilOperation) =
         match o with
-            | StencilOperationFunction.Decrement -> StencilOperation.Decrement |> int
-            | StencilOperationFunction.DecrementWrap -> StencilOperation.DecrementWrap  |> int
-            | StencilOperationFunction.Increment -> StencilOperation.Increment  |> int
-            | StencilOperationFunction.IncrementWrap -> StencilOperation.IncrementWrap  |> int
-            | StencilOperationFunction.Invert -> StencilOperation.Invert  |> int
-            | StencilOperationFunction.Keep -> StencilOperation.Keep  |> int
-            | StencilOperationFunction.Replace -> StencilOperation.Replace  |> int
-            | StencilOperationFunction.Zero -> StencilOperation.Zero  |> int
+            | Aardvark.Rendering.StencilOperation.Decrement -> StencilOperation.Decrement |> int
+            | Aardvark.Rendering.StencilOperation.DecrementWrap -> StencilOperation.DecrementWrap  |> int
+            | Aardvark.Rendering.StencilOperation.Increment -> StencilOperation.Increment  |> int
+            | Aardvark.Rendering.StencilOperation.IncrementWrap -> StencilOperation.IncrementWrap  |> int
+            | Aardvark.Rendering.StencilOperation.Invert -> StencilOperation.Invert  |> int
+            | Aardvark.Rendering.StencilOperation.Keep -> StencilOperation.Keep  |> int
+            | Aardvark.Rendering.StencilOperation.Replace -> StencilOperation.Replace  |> int
+            | Aardvark.Rendering.StencilOperation.Zero -> StencilOperation.Zero  |> int
             | _ -> failwithf "unknown stencil operation %A" o
 
     let toGLPolygonMode (f : FillMode) =

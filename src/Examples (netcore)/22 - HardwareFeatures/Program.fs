@@ -11,7 +11,7 @@ The purpose is to show performance and startup cost tradeoffs. For real usage se
 *)
 
 open Aardvark.Base
-open Aardvark.Base.Rendering
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
@@ -298,8 +298,8 @@ let main argv =
         Log.line "using: %s" variantNames.[variant.Value]
     )
     let task = 
-        RenderTask.custom (fun (task,token,desc) -> 
-            variants.[variant.Value].Run(token,desc)
+        RenderTask.custom (fun (task,token,desc,queries) -> 
+            variants.[variant.Value].Run(token,desc,queries)
         )
 
     let puller =
