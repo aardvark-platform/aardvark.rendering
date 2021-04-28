@@ -7,6 +7,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.NativeInterop
+open Aardvark.Rendering.GL
 
 #nowarn "9"
 
@@ -116,7 +117,7 @@ module BufferExtensions =
                 using x.ResourceLock (fun _ ->
                     let handle = GL.CreateBuffer()
                     GL.Check "failed to create buffer"
-
+                    // crucial here to call into dispatching function
                     GL.NamedBufferData(handle, (nativeint sizeInBytes), data, glUsageHint usage)
                     GL.Check "failed to upload buffer"
 

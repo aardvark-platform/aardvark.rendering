@@ -49,7 +49,7 @@ module ExtensionHelpers =
         |> Option.defaultValue 0n
 
     let inline bindBuffer (b : int) (action : BufferTarget -> 'a) =
-        let old = GL.GetInteger(unbox 0x90EF)
+        let old = GL.GetInteger(unbox 0x8F37) // #define GL_COPY_WRITE_BUFFER_BINDING      0x8F37
         try
             GL.BindBuffer(BufferTarget.CopyWriteBuffer, b)
             action BufferTarget.CopyWriteBuffer
