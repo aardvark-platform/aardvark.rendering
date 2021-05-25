@@ -14,6 +14,7 @@ type RuntimeCommand =
     | GeometriesCmd of surface : Surface * pipeline : PipelineState * geometries : aset<Geometry>
     | LodTreeCmd of surface : Surface * pipeline : PipelineState * geometries : LodTreeLoader<Geometry>
     | GeometriesSimpleCmd of effect : FShade.Effect * pipeline : PipelineState * geometries : aset<IndexedGeometry>
+    | TraceRaysCmd of pipeline : Raytracing.PipelineState * scene : aval<Symbol> * raygen : aval<Symbol> * size : aval<V3i>
 
     static member Empty = RuntimeCommand.EmptyCmd
 
@@ -51,6 +52,26 @@ type RuntimeCommand =
 
     static member LodTree(surface : Surface, pipeline : PipelineState, geometries : LodTreeLoader<Geometry>) =
         RuntimeCommand.LodTreeCmd(surface, pipeline, geometries)
+
+    static member TraceRays(pipeline : Raytracing.PipelineState, scene : aval<Symbol>, raygen : aval<Symbol>, size : aval<V3i>) =
+        RuntimeCommand.TraceRaysCmd(pipeline, scene, raygen, size)
+
+    static member TraceRays(pipeline : Raytracing.PipelineState, scene : aval<Symbol>, raygen : aval<Symbol>, size : aval<V2i>) =
+        RuntimeCommand.TraceRaysCmd(pipeline, scene, raygen, size |> AVal.mapNonAdaptive (fun s -> V3i(s, 1)))
+
+    static member TraceRays(pipeline : Raytracing.PipelineState, scene : aval<Symbol>, size : aval<V3i>) =
+        let rg = pipeline.Effect.RayGenerationShaders |> Map.toList |> List.head |> fst
+        RuntimeCommand.TraceRaysCmd(pipeline, scene, AVal.constant rg, size)
+
+    static member TraceRays(pipeline : Raytracing.PipelineState, scene : aval<Symbol>, size : aval<V2i>) =
+        RuntimeCommand.TraceRays(pipeline, scene, size |> AVal.mapNonAdaptive (fun s -> V3i(s, 1)))
+
+    static member TraceRays(pipeline : Raytracing.PipelineState, size : aval<V3i>) =
+        let sc = pipeline.Scenes |> AMap.keys |> ASet.tryMin |> AVal.mapNonAdaptive Option.get
+        RuntimeCommand.TraceRays(pipeline, sc, size)
+
+    static member TraceRays(pipeline : Raytracing.PipelineState, size : aval<V2i>) =
+        RuntimeCommand.TraceRays(pipeline, size |> AVal.mapNonAdaptive (fun s -> V3i(s, 1)))
 
 type CommandRenderObject(pass : RenderPass, scope : Ag.Scope, command : RuntimeCommand) =
     let id = newId()

@@ -1809,7 +1809,8 @@ module rec Command =
         | RuntimeCommand.GeometriesCmd _
         | RuntimeCommand.GeometriesSimpleCmd _
         | RuntimeCommand.DispatchCmd _
-        | RuntimeCommand.LodTreeCmd _ ->
+        | RuntimeCommand.LodTreeCmd _
+        | RuntimeCommand.TraceRaysCmd _ ->
             failwith "not implemented"
 
     let ofRenderObjects (fboSignature : IFramebufferSignature) (x : ResourceManager) (objects : aset<IRenderObject>) =

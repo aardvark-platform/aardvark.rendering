@@ -102,6 +102,7 @@ let main argv =
                 | 1 -> "stable"
                 | 2 -> "stableinstance"
                 | 3 -> "instance"
+                | _ -> failwith ""
             printfn "stable: %A" s
         )
     )

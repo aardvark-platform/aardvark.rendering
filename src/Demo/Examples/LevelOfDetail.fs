@@ -539,7 +539,7 @@ module LevelOfDetail =
 
                 toEffect <| fun (v : Effects.Vertex) ->
                     FShade.ShaderBuilders.fragment {
-                        return v.c * FShade.Imperative.ExpressionExtensions.ShaderIO.ReadInput<V4d>(FShade.Imperative.ParameterKind.Uniform, "NodeColor")
+                        return v.c * FShade.Imperative.ExpressionExtensions.ShaderIO.ReadInput<V4d>(FShade.Imperative.ParameterKind.Uniform, "NodeColor", false)
                     }
 
                 //toEffect DefaultSurfaces.simpleLighting

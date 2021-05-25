@@ -32,6 +32,7 @@
     <Compile Include="Utilities\Memory.fs" />
     <Compile Include="Utilities\Trie.fs" />
     <Compile Include="Utilities\CubeMap.fs" />
+    <Compile Include="Utilities\CompactSet.fs" />
     <Compile Include="Resources\Buffers\Buffers.fs" />
     <Compile Include="Resources\Buffers\ArrayBuffer.fs" />
     <Compile Include="Resources\Buffers\SingleValueBuffer.fs" />
@@ -95,6 +96,7 @@
     <Compile Include="Runtime\Query\MultiQuery.fs" />
     <Compile Include="Runtime\Query\ConcurrentQuery.fs" />
     <Compile Include="Runtime\Compute\Compute.fs" />
+    <Compile Include="Runtime\Raytracing\Raytracing.fs" />
     <Compile Include="Runtime\BackendConfiguration.fs" />
     <Compile Include="Runtime\ResourceManager.fs" />
     <Compile Include="Runtime\ClearValues.fs" />

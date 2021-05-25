@@ -15,6 +15,7 @@
     <OutputPath>..\..\..\bin\Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="CompactSetTests.fs" />
     <Compile Include="SgTest.fs" />
     <Compile Include="TextureTests.fs" />
     <Compile Include="MultiStageAgTest.fs" />

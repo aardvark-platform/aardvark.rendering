@@ -2114,6 +2114,9 @@ module private RuntimeCommands =
                 new IndirectDrawCommand(x, effect, state, fun () -> geometries.GetReader() :> _)
                     :> PreparedCommand
 
+            | RuntimeCommand.TraceRaysCmd(pipeline, scene, raygen, size) ->
+                failwith "[Vulkan] raytracing not implemented"
+
             | RuntimeCommand.DispatchCmd _  ->
                 failwith "[Vulkan] compute commands not implemented"
 
