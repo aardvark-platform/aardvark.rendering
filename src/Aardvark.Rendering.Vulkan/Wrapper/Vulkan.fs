@@ -217,201 +217,201 @@ type VkQueue = nativeint
 [<StructLayout(LayoutKind.Sequential)>]
 type VkDeviceMemory =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkDeviceMemory(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkDeviceMemory(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkFence =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkFence(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkFence(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkSemaphore =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkSemaphore(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkSemaphore(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkEvent =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkEvent(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkEvent(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkQueryPool =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkQueryPool(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkQueryPool(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkBuffer =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkBuffer(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkBuffer(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkBufferView =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkBufferView(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkBufferView(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkImage =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkImage(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkImage(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkImageView =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkImageView(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkImageView(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkShaderModule =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkShaderModule(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkShaderModule(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkPipelineCache =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkPipelineCache(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkPipelineCache(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkPipeline =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkPipeline(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkPipeline(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkPipelineLayout =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkPipelineLayout(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkPipelineLayout(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkSampler =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkSampler(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkSampler(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkDescriptorPool =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkDescriptorPool(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkDescriptorPool(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkDescriptorSet =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkDescriptorSet(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkDescriptorSet(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkDescriptorSetLayout =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkDescriptorSetLayout(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkDescriptorSetLayout(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkFramebuffer =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkFramebuffer(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkFramebuffer(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkRenderPass =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkRenderPass(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkRenderPass(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 
 [<StructLayout(LayoutKind.Sequential)>]
 type VkCommandPool =
     struct
-        val mutable public Handle : int64
+        val mutable public Handle : uint64
         new(h) = { Handle = h }
-        static member Null = VkCommandPool(0L)
-        member x.IsNull = x.Handle = 0L
-        member x.IsValid = x.Handle <> 0L
+        static member Null = VkCommandPool(0UL)
+        member x.IsNull = x.Handle = 0UL
+        member x.IsValid = x.Handle <> 0UL
     end
 type VkCommandBuffer = nativeint
 
@@ -6481,21 +6481,21 @@ module Vulkan11 =
     [<StructLayout(LayoutKind.Sequential)>]
     type VkSamplerYcbcrConversion =
         struct
-            val mutable public Handle : int64
+            val mutable public Handle : uint64
             new(h) = { Handle = h }
-            static member Null = VkSamplerYcbcrConversion(0L)
-            member x.IsNull = x.Handle = 0L
-            member x.IsValid = x.Handle <> 0L
+            static member Null = VkSamplerYcbcrConversion(0UL)
+            member x.IsNull = x.Handle = 0UL
+            member x.IsValid = x.Handle <> 0UL
         end
 
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDescriptorUpdateTemplate =
         struct
-            val mutable public Handle : int64
+            val mutable public Handle : uint64
             new(h) = { Handle = h }
-            static member Null = VkDescriptorUpdateTemplate(0L)
-            member x.IsNull = x.Handle = 0L
-            member x.IsValid = x.Handle <> 0L
+            static member Null = VkDescriptorUpdateTemplate(0UL)
+            member x.IsNull = x.Handle = 0UL
+            member x.IsValid = x.Handle <> 0UL
         end
 
     [<Flags>]
@@ -11784,11 +11784,11 @@ module KHRSurface =
     [<StructLayout(LayoutKind.Sequential)>]
     type VkSurfaceKHR =
         struct
-            val mutable public Handle : int64
+            val mutable public Handle : uint64
             new(h) = { Handle = h }
-            static member Null = VkSurfaceKHR(0L)
-            member x.IsNull = x.Handle = 0L
-            member x.IsValid = x.Handle <> 0L
+            static member Null = VkSurfaceKHR(0UL)
+            member x.IsNull = x.Handle = 0UL
+            member x.IsValid = x.Handle <> 0UL
         end
 
     [<Flags>]
@@ -12075,11 +12075,11 @@ module KHRSwapchain =
     [<StructLayout(LayoutKind.Sequential)>]
     type VkSwapchainKHR =
         struct
-            val mutable public Handle : int64
+            val mutable public Handle : uint64
             new(h) = { Handle = h }
-            static member Null = VkSwapchainKHR(0L)
-            member x.IsNull = x.Handle = 0L
-            member x.IsValid = x.Handle <> 0L
+            static member Null = VkSwapchainKHR(0UL)
+            member x.IsNull = x.Handle = 0UL
+            member x.IsValid = x.Handle <> 0UL
         end
 
     [<Flags>]
@@ -13340,11 +13340,11 @@ module EXTDebugReport =
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDebugReportCallbackEXT =
         struct
-            val mutable public Handle : int64
+            val mutable public Handle : uint64
             new(h) = { Handle = h }
-            static member Null = VkDebugReportCallbackEXT(0L)
-            member x.IsNull = x.Handle = 0L
-            member x.IsValid = x.Handle <> 0L
+            static member Null = VkDebugReportCallbackEXT(0UL)
+            member x.IsNull = x.Handle = 0UL
+            member x.IsValid = x.Handle <> 0UL
         end
 
     [<Flags>]
@@ -13910,21 +13910,21 @@ module KHRDisplay =
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDisplayKHR =
         struct
-            val mutable public Handle : int64
+            val mutable public Handle : uint64
             new(h) = { Handle = h }
-            static member Null = VkDisplayKHR(0L)
-            member x.IsNull = x.Handle = 0L
-            member x.IsValid = x.Handle <> 0L
+            static member Null = VkDisplayKHR(0UL)
+            member x.IsNull = x.Handle = 0UL
+            member x.IsValid = x.Handle <> 0UL
         end
 
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDisplayModeKHR =
         struct
-            val mutable public Handle : int64
+            val mutable public Handle : uint64
             new(h) = { Handle = h }
-            static member Null = VkDisplayModeKHR(0L)
-            member x.IsNull = x.Handle = 0L
-            member x.IsValid = x.Handle <> 0L
+            static member Null = VkDisplayModeKHR(0UL)
+            member x.IsNull = x.Handle = 0UL
+            member x.IsValid = x.Handle <> 0UL
         end
 
     [<Flags>]
@@ -15251,11 +15251,11 @@ module EXTDebugUtils =
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDebugUtilsMessengerEXT =
         struct
-            val mutable public Handle : int64
+            val mutable public Handle : uint64
             new(h) = { Handle = h }
-            static member Null = VkDebugUtilsMessengerEXT(0L)
-            member x.IsNull = x.Handle = 0L
-            member x.IsValid = x.Handle <> 0L
+            static member Null = VkDebugUtilsMessengerEXT(0UL)
+            member x.IsNull = x.Handle = 0UL
+            member x.IsValid = x.Handle <> 0UL
         end
 
     [<Flags>]
@@ -18669,11 +18669,11 @@ module EXTPrivateData =
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPrivateDataSlotEXT =
         struct
-            val mutable public Handle : int64
+            val mutable public Handle : uint64
             new(h) = { Handle = h }
-            static member Null = VkPrivateDataSlotEXT(0L)
-            member x.IsNull = x.Handle = 0L
-            member x.IsValid = x.Handle <> 0L
+            static member Null = VkPrivateDataSlotEXT(0UL)
+            member x.IsNull = x.Handle = 0UL
+            member x.IsValid = x.Handle <> 0UL
         end
 
     [<Flags>]
@@ -20019,11 +20019,11 @@ module EXTValidationCache =
     [<StructLayout(LayoutKind.Sequential)>]
     type VkValidationCacheEXT =
         struct
-            val mutable public Handle : int64
+            val mutable public Handle : uint64
             new(h) = { Handle = h }
-            static member Null = VkValidationCacheEXT(0L)
-            member x.IsNull = x.Handle = 0L
-            member x.IsValid = x.Handle <> 0L
+            static member Null = VkValidationCacheEXT(0UL)
+            member x.IsNull = x.Handle = 0UL
+            member x.IsValid = x.Handle <> 0UL
         end
 
     type VkValidationCacheHeaderVersionEXT =
@@ -20801,11 +20801,11 @@ module INTELPerformanceQuery =
     [<StructLayout(LayoutKind.Sequential)>]
     type VkPerformanceConfigurationINTEL =
         struct
-            val mutable public Handle : int64
+            val mutable public Handle : uint64
             new(h) = { Handle = h }
-            static member Null = VkPerformanceConfigurationINTEL(0L)
-            member x.IsNull = x.Handle = 0L
-            member x.IsValid = x.Handle <> 0L
+            static member Null = VkPerformanceConfigurationINTEL(0UL)
+            member x.IsNull = x.Handle = 0UL
+            member x.IsValid = x.Handle <> 0UL
         end
 
     type VkPerformanceConfigurationTypeINTEL =
@@ -21318,11 +21318,11 @@ module KHRDeferredHostOperations =
     [<StructLayout(LayoutKind.Sequential)>]
     type VkDeferredOperationKHR =
         struct
-            val mutable public Handle : int64
+            val mutable public Handle : uint64
             new(h) = { Handle = h }
-            static member Null = VkDeferredOperationKHR(0L)
-            member x.IsNull = x.Handle = 0L
-            member x.IsValid = x.Handle <> 0L
+            static member Null = VkDeferredOperationKHR(0UL)
+            member x.IsNull = x.Handle = 0UL
+            member x.IsValid = x.Handle <> 0UL
         end
 
     [<AutoOpen>]
@@ -21386,11 +21386,11 @@ module KHRAccelerationStructure =
     [<StructLayout(LayoutKind.Sequential)>]
     type VkAccelerationStructureKHR =
         struct
-            val mutable public Handle : int64
+            val mutable public Handle : uint64
             new(h) = { Handle = h }
-            static member Null = VkAccelerationStructureKHR(0L)
-            member x.IsNull = x.Handle = 0L
-            member x.IsValid = x.Handle <> 0L
+            static member Null = VkAccelerationStructureKHR(0UL)
+            member x.IsNull = x.Handle = 0UL
+            member x.IsValid = x.Handle <> 0UL
         end
 
     type VkAccelerationStructureTypeKHR =
@@ -28114,11 +28114,11 @@ module NVDeviceGeneratedCommands =
     [<StructLayout(LayoutKind.Sequential)>]
     type VkIndirectCommandsLayoutNV =
         struct
-            val mutable public Handle : int64
+            val mutable public Handle : uint64
             new(h) = { Handle = h }
-            static member Null = VkIndirectCommandsLayoutNV(0L)
-            member x.IsNull = x.Handle = 0L
-            member x.IsValid = x.Handle <> 0L
+            static member Null = VkIndirectCommandsLayoutNV(0UL)
+            member x.IsNull = x.Handle = 0UL
+            member x.IsValid = x.Handle <> 0UL
         end
 
     [<Flags>]
@@ -29409,11 +29409,11 @@ module NVRayTracing =
     [<StructLayout(LayoutKind.Sequential)>]
     type VkAccelerationStructureNV =
         struct
-            val mutable public Handle : int64
+            val mutable public Handle : uint64
             new(h) = { Handle = h }
-            static member Null = VkAccelerationStructureNV(0L)
-            member x.IsNull = x.Handle = 0L
-            member x.IsValid = x.Handle <> 0L
+            static member Null = VkAccelerationStructureNV(0UL)
+            member x.IsNull = x.Handle = 0UL
+            member x.IsValid = x.Handle <> 0UL
         end
 
     type VkRayTracingShaderGroupTypeNV = VkRayTracingShaderGroupTypeKHR

@@ -1380,11 +1380,11 @@ module FSharpWriter =
                     printfn "[<StructLayout(LayoutKind.Sequential)>]"
                     printfn "type %s =" h.name
                     printfn "    struct"
-                    printfn "        val mutable public Handle : int64"
+                    printfn "        val mutable public Handle : uint64"
                     printfn "        new(h) = { Handle = h }"
-                    printfn "        static member Null = %s(0L)" h.name
-                    printfn "        member x.IsNull = x.Handle = 0L"
-                    printfn "        member x.IsValid = x.Handle <> 0L"
+                    printfn "        static member Null = %s(0UL)" h.name
+                    printfn "        member x.IsNull = x.Handle = 0UL"
+                    printfn "        member x.IsValid = x.Handle <> 0UL"
                     printfn "    end"
                 | Some alias ->
                     printfn "type %s = %s" h.name alias
