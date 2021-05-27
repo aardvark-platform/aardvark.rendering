@@ -1138,15 +1138,21 @@ module FSharpWriter =
     let knownTypes =
         Map.ofList [
             "VkStructureType", "uint32"
+            "int8_t", "int8"
+            "uint8_t", "byte"
+            "char", "byte"
+            "int16_t", "int16"
+            "uint16_t", "uint16"
             "uint32_t", "uint32"
             "int32_t", "int"
             "int", "int"
             "float", "float32"
+            "double", "float"
+            "int64_t", "int64"
+            "int64_t", "int64"
             "uint64_t", "uint64"
             "uint64_t", "uint64"
             "size_t", "uint64"
-            "char", "byte"
-            "uint8_t", "byte"
 
             // for extern stuff only
             "void", "void"
@@ -1561,6 +1567,22 @@ module FSharpWriter =
                     printfn' 2 "member x.IsEmpty ="
                     printfn' 3 "%s" (checks |> String.concat " && ")
 
+                // Constructor with all fields
+                let constructorWithAllFields (isPrivate : bool) =
+                    printfn ""
+
+                    let name = if isPrivate then "private new" else "new"
+                    fields |> toFunctionDecl 2 name
+
+                    let assignments = [
+                        if hasTypeField then
+                            yield "sType", sType
+
+                        yield! fields |> List.map (fun f -> (fsharpName f.name), (fsharpName f.name))
+                    ]
+
+                    assignments |> toConstructorBody 3
+
                 // Convenience constructor without pNext parameter
                 let constructorWithoutNextPtr () =
                     match nextPtrIndex with
@@ -1583,21 +1605,26 @@ module FSharpWriter =
                     | _ ->
                         ()
 
-                if not s.isUnion then
-
-                    printfn ""
-
+                if s.isUnion then
                     // Constructor with all fields
-                    fields |> toFunctionDecl 2 "new"
+                    constructorWithAllFields true
 
-                    let assignments = [
-                        if hasTypeField then
-                            yield "sType", sType
+                    // Static member constructors for each union case
+                    for f in fields do
+                        printfn ""
 
-                        yield! fields |> List.map (fun f -> (fsharpName f.name), (fsharpName f.name))
-                    ]
+                        let arg = { f with name = "value" }
+                        let name = sprintf "static member %s" (f.name.Substring(0, 1).ToUpper() + f.name.Substring(1))
+                        [arg] |> toFunctionDecl 2 name
+                        printfn' 3 "let mutable _tmp = "
+                        toFunctionCall 4 s.name (List.replicate fields.Length "Unchecked.defaultof<_>")
+                        printfn' 3 "_tmp.%s <- value" (fsharpName f.name)
+                        printfn' 3 "_tmp"
 
-                    assignments |> toConstructorBody 3
+
+                else
+                    // Constructor with all fields
+                    constructorWithAllFields false
 
                     // Constructor without pNext
                     constructorWithoutNextPtr()
