@@ -1606,9 +1606,6 @@ module FSharpWriter =
                         ()
 
                 if s.isUnion then
-                    // Constructor with all fields
-                    constructorWithAllFields true
-
                     // Static member constructors for each union case
                     for f in fields do
                         printfn ""
@@ -1616,10 +1613,9 @@ module FSharpWriter =
                         let arg = { f with name = "value" }
                         let name = sprintf "static member %s" (f.name.Substring(0, 1).ToUpper() + f.name.Substring(1))
                         [arg] |> toFunctionDecl 2 name
-                        printfn' 3 "let mutable _tmp = "
-                        toFunctionCall 4 s.name (List.replicate fields.Length "Unchecked.defaultof<_>")
-                        printfn' 3 "_tmp.%s <- value" (fsharpName f.name)
-                        printfn' 3 "_tmp"
+                        printfn' 3 "let mutable result = Unchecked.defaultof<%s>" s.name
+                        printfn' 3 "result.%s <- value" (fsharpName f.name)
+                        printfn' 3 "result"
 
 
                 else
