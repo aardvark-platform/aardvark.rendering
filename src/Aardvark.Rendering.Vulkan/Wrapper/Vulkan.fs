@@ -2224,30 +2224,20 @@ type VkClearColorValue =
         [<FieldOffset(0)>]
         val mutable public uint32 : V4ui
 
-        private new(float32 : V4f, int32 : V4i, uint32 : V4ui) =
-            {
-                float32 = float32
-                int32 = int32
-                uint32 = uint32
-            }
-
         static member Float32(value : V4f) =
-            let mutable _tmp = 
-                VkClearColorValue(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-            _tmp.float32 <- value
-            _tmp
+            let mutable result = Unchecked.defaultof<VkClearColorValue>
+            result.float32 <- value
+            result
 
         static member Int32(value : V4i) =
-            let mutable _tmp = 
-                VkClearColorValue(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-            _tmp.int32 <- value
-            _tmp
+            let mutable result = Unchecked.defaultof<VkClearColorValue>
+            result.int32 <- value
+            result
 
         static member Uint32(value : V4ui) =
-            let mutable _tmp = 
-                VkClearColorValue(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-            _tmp.uint32 <- value
-            _tmp
+            let mutable result = Unchecked.defaultof<VkClearColorValue>
+            result.uint32 <- value
+            result
 
         override x.ToString() =
             String.concat "; " [
@@ -2291,23 +2281,15 @@ type VkClearValue =
         [<FieldOffset(0)>]
         val mutable public depthStencil : VkClearDepthStencilValue
 
-        private new(color : VkClearColorValue, depthStencil : VkClearDepthStencilValue) =
-            {
-                color = color
-                depthStencil = depthStencil
-            }
-
         static member Color(value : VkClearColorValue) =
-            let mutable _tmp = 
-                VkClearValue(Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-            _tmp.color <- value
-            _tmp
+            let mutable result = Unchecked.defaultof<VkClearValue>
+            result.color <- value
+            result
 
         static member DepthStencil(value : VkClearDepthStencilValue) =
-            let mutable _tmp = 
-                VkClearValue(Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-            _tmp.depthStencil <- value
-            _tmp
+            let mutable result = Unchecked.defaultof<VkClearValue>
+            result.depthStencil <- value
+            result
 
         override x.ToString() =
             String.concat "; " [
@@ -21005,44 +20987,30 @@ module INTELPerformanceQuery =
             [<FieldOffset(0)>]
             val mutable public valueString : cstr
 
-            private new(value32 : uint32, value64 : uint64, valueFloat : float32, valueBool : VkBool32, valueString : cstr) =
-                {
-                    value32 = value32
-                    value64 = value64
-                    valueFloat = valueFloat
-                    valueBool = valueBool
-                    valueString = valueString
-                }
-
             static member Value32(value : uint32) =
-                let mutable _tmp = 
-                    VkPerformanceValueDataINTEL(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.value32 <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkPerformanceValueDataINTEL>
+                result.value32 <- value
+                result
 
             static member Value64(value : uint64) =
-                let mutable _tmp = 
-                    VkPerformanceValueDataINTEL(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.value64 <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkPerformanceValueDataINTEL>
+                result.value64 <- value
+                result
 
             static member ValueFloat(value : float32) =
-                let mutable _tmp = 
-                    VkPerformanceValueDataINTEL(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.valueFloat <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkPerformanceValueDataINTEL>
+                result.valueFloat <- value
+                result
 
             static member ValueBool(value : VkBool32) =
-                let mutable _tmp = 
-                    VkPerformanceValueDataINTEL(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.valueBool <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkPerformanceValueDataINTEL>
+                result.valueBool <- value
+                result
 
             static member ValueString(value : cstr) =
-                let mutable _tmp = 
-                    VkPerformanceValueDataINTEL(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.valueString <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkPerformanceValueDataINTEL>
+                result.valueString <- value
+                result
 
             override x.ToString() =
                 String.concat "; " [
@@ -21500,23 +21468,15 @@ module KHRAccelerationStructure =
             [<FieldOffset(0)>]
             val mutable public hostAddress : nativeint
 
-            private new(deviceAddress : VkDeviceAddress, hostAddress : nativeint) =
-                {
-                    deviceAddress = deviceAddress
-                    hostAddress = hostAddress
-                }
-
             static member DeviceAddress(value : VkDeviceAddress) =
-                let mutable _tmp = 
-                    VkDeviceOrHostAddressConstKHR(Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.deviceAddress <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>
+                result.deviceAddress <- value
+                result
 
             static member HostAddress(value : nativeint) =
-                let mutable _tmp = 
-                    VkDeviceOrHostAddressConstKHR(Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.hostAddress <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkDeviceOrHostAddressConstKHR>
+                result.hostAddress <- value
+                result
 
             override x.ToString() =
                 String.concat "; " [
@@ -21652,30 +21612,20 @@ module KHRAccelerationStructure =
             [<FieldOffset(0)>]
             val mutable public instances : VkAccelerationStructureGeometryInstancesDataKHR
 
-            private new(triangles : VkAccelerationStructureGeometryTrianglesDataKHR, aabbs : VkAccelerationStructureGeometryAabbsDataKHR, instances : VkAccelerationStructureGeometryInstancesDataKHR) =
-                {
-                    triangles = triangles
-                    aabbs = aabbs
-                    instances = instances
-                }
-
             static member Triangles(value : VkAccelerationStructureGeometryTrianglesDataKHR) =
-                let mutable _tmp = 
-                    VkAccelerationStructureGeometryDataKHR(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.triangles <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkAccelerationStructureGeometryDataKHR>
+                result.triangles <- value
+                result
 
             static member Aabbs(value : VkAccelerationStructureGeometryAabbsDataKHR) =
-                let mutable _tmp = 
-                    VkAccelerationStructureGeometryDataKHR(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.aabbs <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkAccelerationStructureGeometryDataKHR>
+                result.aabbs <- value
+                result
 
             static member Instances(value : VkAccelerationStructureGeometryInstancesDataKHR) =
-                let mutable _tmp = 
-                    VkAccelerationStructureGeometryDataKHR(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.instances <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkAccelerationStructureGeometryDataKHR>
+                result.instances <- value
+                result
 
             override x.ToString() =
                 String.concat "; " [
@@ -21730,23 +21680,15 @@ module KHRAccelerationStructure =
             [<FieldOffset(0)>]
             val mutable public hostAddress : nativeint
 
-            private new(deviceAddress : VkDeviceAddress, hostAddress : nativeint) =
-                {
-                    deviceAddress = deviceAddress
-                    hostAddress = hostAddress
-                }
-
             static member DeviceAddress(value : VkDeviceAddress) =
-                let mutable _tmp = 
-                    VkDeviceOrHostAddressKHR(Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.deviceAddress <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkDeviceOrHostAddressKHR>
+                result.deviceAddress <- value
+                result
 
             static member HostAddress(value : nativeint) =
-                let mutable _tmp = 
-                    VkDeviceOrHostAddressKHR(Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.hostAddress <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkDeviceOrHostAddressKHR>
+                result.hostAddress <- value
+                result
 
             override x.ToString() =
                 String.concat "; " [
@@ -25033,51 +24975,35 @@ module KHRPerformanceQuery =
             [<FieldOffset(0)>]
             val mutable public float64 : float
 
-            private new(int32 : int, int64 : int64, uint32 : uint32, uint64 : uint64, float32 : float32, float64 : float) =
-                {
-                    int32 = int32
-                    int64 = int64
-                    uint32 = uint32
-                    uint64 = uint64
-                    float32 = float32
-                    float64 = float64
-                }
-
             static member Int32(value : int) =
-                let mutable _tmp = 
-                    VkPerformanceCounterResultKHR(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.int32 <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkPerformanceCounterResultKHR>
+                result.int32 <- value
+                result
 
             static member Int64(value : int64) =
-                let mutable _tmp = 
-                    VkPerformanceCounterResultKHR(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.int64 <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkPerformanceCounterResultKHR>
+                result.int64 <- value
+                result
 
             static member Uint32(value : uint32) =
-                let mutable _tmp = 
-                    VkPerformanceCounterResultKHR(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.uint32 <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkPerformanceCounterResultKHR>
+                result.uint32 <- value
+                result
 
             static member Uint64(value : uint64) =
-                let mutable _tmp = 
-                    VkPerformanceCounterResultKHR(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.uint64 <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkPerformanceCounterResultKHR>
+                result.uint64 <- value
+                result
 
             static member Float32(value : float32) =
-                let mutable _tmp = 
-                    VkPerformanceCounterResultKHR(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.float32 <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkPerformanceCounterResultKHR>
+                result.float32 <- value
+                result
 
             static member Float64(value : float) =
-                let mutable _tmp = 
-                    VkPerformanceCounterResultKHR(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.float64 <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkPerformanceCounterResultKHR>
+                result.float64 <- value
+                result
 
             override x.ToString() =
                 String.concat "; " [
@@ -25433,37 +25359,25 @@ module KHRPipelineExecutableProperties =
             [<FieldOffset(0)>]
             val mutable public f64 : float
 
-            private new(b32 : VkBool32, i64 : int64, u64 : uint64, f64 : float) =
-                {
-                    b32 = b32
-                    i64 = i64
-                    u64 = u64
-                    f64 = f64
-                }
-
             static member B32(value : VkBool32) =
-                let mutable _tmp = 
-                    VkPipelineExecutableStatisticValueKHR(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.b32 <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkPipelineExecutableStatisticValueKHR>
+                result.b32 <- value
+                result
 
             static member I64(value : int64) =
-                let mutable _tmp = 
-                    VkPipelineExecutableStatisticValueKHR(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.i64 <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkPipelineExecutableStatisticValueKHR>
+                result.i64 <- value
+                result
 
             static member U64(value : uint64) =
-                let mutable _tmp = 
-                    VkPipelineExecutableStatisticValueKHR(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.u64 <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkPipelineExecutableStatisticValueKHR>
+                result.u64 <- value
+                result
 
             static member F64(value : float) =
-                let mutable _tmp = 
-                    VkPipelineExecutableStatisticValueKHR(Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>, Unchecked.defaultof<_>)
-                _tmp.f64 <- value
-                _tmp
+                let mutable result = Unchecked.defaultof<VkPipelineExecutableStatisticValueKHR>
+                result.f64 <- value
+                result
 
             override x.ToString() =
                 String.concat "; " [
