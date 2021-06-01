@@ -453,6 +453,14 @@ module Buffer =
             finally tmp.Dispose()
         }
 
+    let uploadRanges (ptr : nativeint) (ranges : RangeSet) (buffer : Buffer) =
+        buffer |> updateWriter (fun dst ->
+            for r in ranges do
+                let offset = nativeint r.Min
+                let size = nativeint (r.Size + 1)
+                Marshal.Copy(ptr + offset, dst + offset, size)
+        )
+
     let rec tryUpdate (data : IBuffer) (buffer : Buffer) =
         match data with 
             | :? ArrayBuffer as ab ->
@@ -553,6 +561,10 @@ type ContextBufferExtensions private() =
     [<Extension>]
     static member inline CreateBuffer(device : Device, flags : VkBufferUsageFlags, b : IBuffer) =
         device |> Buffer.ofBuffer flags b
+
+    [<Extension>]
+    static member inline UploadRanges(buffer : Buffer, ptr : nativeint, ranges : RangeSet) =
+        buffer |> Buffer.uploadRanges ptr ranges
 
     [<Extension>]
     static member inline TryUpdate(buffer : Buffer, b : IBuffer) =

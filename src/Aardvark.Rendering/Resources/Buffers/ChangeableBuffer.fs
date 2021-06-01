@@ -105,13 +105,18 @@ type ChangeableBuffer(sizeInBytes : nativeint) =
 
         if changed then transact (fun () -> x.MarkOutdated())
 
-    member x.Write(offset : int, data : nativeint, sizeInBytes : int) =
+    member x.Write(offset : int, sizeInBytes : int, write : nativeint -> unit) =
         ReaderWriterLock.read rw (fun () ->
-            Marshal.Copy(data, storage + nativeint offset, sizeInBytes)
+            write (storage + nativeint offset)
         )
 
         addDirty (Range1i.FromMinAndSize(offset, sizeInBytes - 1))
         transact (fun () -> x.MarkOutdated())
+
+    member x.Write(offset : int, data : nativeint, sizeInBytes : int) =
+        x.Write(offset, sizeInBytes, fun dst ->
+            Marshal.Copy(data, dst, sizeInBytes)     
+        )
 
     member x.Write(offset : int, data : Array, sizeInBytes : int) =
         ReaderWriterLock.read rw (fun () ->

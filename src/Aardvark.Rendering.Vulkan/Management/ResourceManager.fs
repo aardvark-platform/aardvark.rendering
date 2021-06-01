@@ -248,7 +248,6 @@ type ImmutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, 
 type MutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, input : aval<'a>, desc : MutableResourceDescription<'a, 'h>) =
     inherit AbstractResourceLocation<'h>(owner, key)
 
-    let mutable refCount = 0
     let mutable handle : Option<'a * 'h> = None
     let mutable version = 0
 
@@ -482,6 +481,59 @@ module Resources =
 //                ieagerDestroy = true
 //            }
 //        )
+
+    type AdaptiveBufferResource(owner : IResourceCache, key : list<obj>, device : Device, usage : VkBufferUsageFlags, input : IAdaptiveBuffer) =
+        inherit AbstractResourceLocation<Buffer>(owner, key)
+
+        let mutable handle : Option<Buffer> = None
+        let mutable reader : IAdaptiveBufferReader = Unchecked.defaultof<_>
+        let mutable version = 0
+
+        let recreate (nb : INativeBuffer) =
+            let buffer = device.CreateBuffer(usage, nb)
+            handle <- Some buffer
+            buffer
+
+        let update token =
+            match handle with
+            | None ->
+                reader <- input.GetReader()
+                let (nb, _) = reader.GetDirtyRanges(token)
+                recreate nb
+
+            | Some old ->
+                let (nb, ranges) = reader.GetDirtyRanges(token)
+
+                if old.Size < int64 nb.SizeInBytes then
+                    recreate nb
+                else
+                    inc &version
+                    nb.Use (fun src -> old.UploadRanges(src, ranges))
+                    old
+
+        override x.Create() =
+            input.Acquire()
+
+        override x.Destroy() =
+            input.Outputs.Remove x |> ignore
+            match handle with
+            | Some h -> 
+                h.Dispose()
+                reader.Dispose()
+                reader <- Unchecked.defaultof<_>
+                handle <- None
+            | None ->
+                ()
+            input.Release()
+
+        override x.GetHandle(token : AdaptiveToken) =
+            if x.OutOfDate then
+                let handle = update token
+                { handle = handle; version = version }
+            else
+                match handle with
+                | Some h -> { handle = h; version = version }
+                | None -> failwith "[Resource] inconsistent state"
 
     type IndirectBufferResource(owner : IResourceCache, key : list<obj>, device : Device, indexed : bool, input : aval<IndirectBuffer>) =
         inherit ImmutableResourceLocation<IndirectBuffer, VkIndirectBuffer>(
@@ -1404,11 +1456,20 @@ type ResourceManager(user : IResourceUser, device : Device) =
 //    member x.CreateRenderPass(signature : Map<Symbol, AttachmentSignature>) =
 //        device.CreateRenderPass(signature)
 
+    member private x.CreateBuffer(input : aval<IBuffer>, usage : VkBufferUsageFlags) =
+        bufferCache.GetOrCreate([input :> obj], fun cache key ->
+            match input with
+            | :? IAdaptiveBuffer as b ->
+                new AdaptiveBufferResource(cache, key, device, usage, b) :> IResourceLocation<Buffer>
+            | _ ->
+                new BufferResource(cache, key, device, usage, input) :> IResourceLocation<Buffer>
+        )
+
     member x.CreateBuffer(input : aval<IBuffer>) =
-        bufferCache.GetOrCreate([input :> obj], fun cache key -> new BufferResource(cache, key, device, VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit, input))
+        x.CreateBuffer(input, VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit)
 
     member x.CreateIndexBuffer(input : aval<IBuffer>) =
-        bufferCache.GetOrCreate([input :> obj], fun cache key -> new BufferResource(cache, key, device, VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.IndexBufferBit, input))
+        x.CreateBuffer(input, VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.IndexBufferBit)
 
     member x.CreateIndirectBuffer(indexed : bool, input : aval<IndirectBuffer>) =
         indirectBufferCache.GetOrCreate([indexed :> obj; input :> obj], fun cache key -> new IndirectBufferResource(cache, key, device, indexed, input))

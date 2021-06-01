@@ -6,19 +6,22 @@ open FSharp.Data.Adaptive
 open System
 open FShade
 
+[<RequireQualifiedAccess>]
 type GeometryData =
     | AABBs     of buffer : BufferView
-    | Triangles of vertexBuffer: BufferView * indexBuffer : option<BufferView>
+    | Triangles of vertexCount: uint32 * vertexBuffer: BufferView * indexBuffer : option<BufferView> * transform : aval<Trafo3d>
 
+[<Flags>]
 type GeometryFlags =
     | None                = 0
     | Opaque              = 1
     | IgnoreDuplicateHits = 2
 
-type Geometry(data, hitGroup, flags) =
-    member x.Data     : GeometryData  = data
-    member x.HitGroup : Symbol        = hitGroup
-    member x.Flags    : GeometryFlags = flags
+type Geometry(data, primitives, hitGroup, flags) =
+    member x.Data       : GeometryData  = data
+    member x.Primitives : uint32        = primitives
+    member x.HitGroup   : Symbol        = hitGroup
+    member x.Flags      : GeometryFlags = flags
 
 [<Struct>]
 type InstanceMask =
