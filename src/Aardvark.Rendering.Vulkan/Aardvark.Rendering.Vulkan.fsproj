@@ -64,7 +64,12 @@
     <Compile Include="Resources\Query\TimeQuery.fs" />
     <Compile Include="Resources\Query\OcclusionQuery.fs" />
     <Compile Include="Resources\Query\PipelineQuery.fs" />
+    <Compile Include="Resources\Raytracing\AccelerationStructureData.fs" />
     <Compile Include="Resources\Raytracing\AccelerationStructure.fs" />
+    <Compile Include="Resources\Raytracing\ShaderGroup.fs" />
+    <Compile Include="Resources\Raytracing\RaytracingProgram.fs" />
+    <Compile Include="Resources\Raytracing\RaytracingPipeline.fs" />
+    <Compile Include="Resources\Raytracing\ShaderBindingTable.fs" />
     <Compile Include="Resources\ComputeShader.fs" />
     <Compile Include="Resources\StopwatchPool.fs" />
     <Compile Include="Swapchain\Surface.fs" />
@@ -72,6 +77,8 @@
     <Compile Include="Swapchain\Swapchain.fs" />
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
+    <Compile Include="Management\Raytracing\SceneManager.fs" />
+    <Compile Include="Management\Raytracing\PreparedPipelineState.fs" />
     <Compile Include="Runtime\GraphicsCommands.fs" />
     <Compile Include="Runtime\CommandTask.fs" />
     <Compile Include="Runtime\Compiler.fs" />

@@ -27,7 +27,7 @@ type private AdaptiveValueWriter<'T>(input : aval<'T>, index : int, elementSizeI
         member x.Dispose() = x.Dispose()
 
 
-type AdaptiveCompactBuffer<'T>(input : CompactSet<aval<'T>>, elementSizeInBytes : int, write : nativeint -> 'T -> unit) =
+type AdaptiveCompactBuffer<'T>(input : amap<aval<'T>, int>, elementSizeInBytes : int, write : nativeint -> 'T -> unit) =
     inherit AdaptiveResource<IBuffer>()
 
     let mutable handle = None
@@ -52,7 +52,7 @@ type AdaptiveCompactBuffer<'T>(input : CompactSet<aval<'T>>, elementSizeInBytes 
 
     let create() =
         let buffer = ChangeableBuffer.create 0n
-        let reader = input.Indices.GetReader()
+        let reader = input.GetReader()
         buffer, reader
 
     let update (token : AdaptiveToken) (buffer : ChangeableBuffer) (reader : IHashMapReader<aval<'T>, int>) =

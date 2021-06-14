@@ -62,12 +62,18 @@ module ShaderModule =
     
     let internal glslangStage =
         LookupTable.lookupTable [
-            ShaderStage.Vertex, GLSLang.ShaderStage.Vertex
-            ShaderStage.TessControl, GLSLang.ShaderStage.TessControl
-            ShaderStage.TessEval, GLSLang.ShaderStage.TessEvaluation
-            ShaderStage.Geometry, GLSLang.ShaderStage.Geometry
-            ShaderStage.Fragment, GLSLang.ShaderStage.Fragment
-            ShaderStage.Compute, GLSLang.ShaderStage.Compute
+            ShaderStage.Vertex,         GLSLang.ShaderStage.Vertex
+            ShaderStage.TessControl,    GLSLang.ShaderStage.TessControl
+            ShaderStage.TessEval,       GLSLang.ShaderStage.TessEvaluation
+            ShaderStage.Geometry,       GLSLang.ShaderStage.Geometry
+            ShaderStage.Fragment,       GLSLang.ShaderStage.Fragment
+            ShaderStage.Compute,        GLSLang.ShaderStage.Compute
+            ShaderStage.RayGeneration,  GLSLang.ShaderStage.RayGen
+            ShaderStage.Intersection,   GLSLang.ShaderStage.Intersect
+            ShaderStage.AnyHit,         GLSLang.ShaderStage.AnyHit       
+            ShaderStage.ClosestHit,     GLSLang.ShaderStage.ClosestHit   
+            ShaderStage.Miss,           GLSLang.ShaderStage.Miss         
+            ShaderStage.Callable,       GLSLang.ShaderStage.Callable     
         ]
 
     let private createRaw (binary : byte[]) (device : Device) =
@@ -86,19 +92,25 @@ module ShaderModule =
 
             return !!pHandle
         }
+
+    let ofGLSLWithTarget (target : GLSLang.Target) (stage : ShaderStage) (defines : List<string>) (info : FShade.GLSL.GLSLShader) (device : Device) =
+        let siface = info.iface.shaders.[ShaderStage.toFShade stage]
+        match GLSLang.GLSLang.tryCompileWithTarget target (glslangStage stage) siface.shaderEntry defines info.code with
+        | Some binary, _ ->
+            let binary = GLSLang.GLSLang.optimizeDefault binary
+            let iface = Map.ofList [stage, siface]
+            let handle = device |> createRaw binary
+            let result = new ShaderModule(device, handle, stage, iface, binary)
+            result
+        | None, err ->
+            Log.error "[Vulkan] %A shader compilation failed: %A" stage err
+            failf "%A shader compilation failed: %A" stage err
+
+    let ofGLSLWithDefines (stage : ShaderStage) (defines : List<string>) (info : FShade.GLSL.GLSLShader) (device : Device) =
+        ofGLSLWithTarget GLSLang.Target.SPIRV_1_0 stage defines info device
         
     let ofGLSL (stage : ShaderStage) (info : FShade.GLSL.GLSLShader) (device : Device) =
-        let siface = info.iface.shaders.[ShaderStage.toFShade stage]
-        match GLSLang.GLSLang.tryCompile (glslangStage stage) siface.shaderEntry [string stage] info.code with
-            | Some binary, _ ->
-                let binary = GLSLang.GLSLang.optimizeDefault binary
-                let iface = Map.ofList [stage, siface]
-                let handle = device |> createRaw binary
-                let result = new ShaderModule(device, handle, stage, iface, binary)
-                result
-            | None, err ->
-                Log.error "[Vulkan] %A shader compilation failed: %A" stage err
-                failf "%A shader compilation failed: %A" stage err
+        ofGLSLWithDefines stage [string stage] info device
 
     let ofBinaryWithInfo (stage : ShaderStage) (info : FShade.GLSL.GLSLShaderInterface) (binary : byte[]) (device : Device) =
         let iface = Map.ofList [stage, info]

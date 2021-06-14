@@ -6,10 +6,25 @@ open FSharp.Data.Adaptive
 open System
 open FShade
 
+type AABBsData =
+    { Buffer : IBuffer
+      Offset : uint64
+      Stride : uint64 }
+
+type VertexData =
+    { Buffer : IBuffer
+      Count  : uint32
+      Offset : uint64
+      Stride : uint64 }
+
+type IndexData =
+    { Buffer : IBuffer
+      Offset : uint64 }
+
 [<RequireQualifiedAccess>]
 type GeometryData =
-    | AABBs     of buffer : BufferView
-    | Triangles of vertexCount: uint32 * vertexBuffer: BufferView * indexBuffer : option<BufferView> * transform : aval<Trafo3d>
+    | AABBs     of data : AABBsData
+    | Triangles of vertexData : VertexData * indexData : option<IndexData> * transform : Trafo3d
 
 [<Flags>]
 type GeometryFlags =
@@ -39,7 +54,7 @@ type InstanceMask =
     static member None = InstanceMask(false)
 
 [<RequireQualifiedAccess>]
-type CullingMode =
+type CullMode =
     /// No face culling.
     | Disabled
 
@@ -58,15 +73,16 @@ type GeometryMode =
     | Transparent
 
 type Instance(geometry, transform, culling, geometryMode, mask) =
-    member x.Geometry     : aset<Geometry>        = geometry
-    member x.Transform    : aval<Trafo3d>         = transform
-    member x.Culling      : aval<CullingMode>     = culling
-    member x.GeometryMode : aval<GeometryMode>    = geometryMode
-    member x.Mask         : aval<InstanceMask>    = mask
+    member x.Geometry     : aval<Geometry[]>   = geometry
+    member x.Transform    : aval<Trafo3d>      = transform
+    member x.Culling      : aval<CullMode>     = culling
+    member x.GeometryMode : aval<GeometryMode> = geometryMode
+    member x.Mask         : aval<InstanceMask> = mask
 
 type PipelineState =
     {
-        Effect      : RaytracingEffect
-        Scenes      : amap<Symbol, CompactSet<Instance>>
-        Uniforms    : IUniformProvider
+        Effect            : RaytracingEffect
+        Scenes            : amap<Symbol, amap<Instance, int>>
+        Uniforms          : IUniformProvider
+        MaxRecursionDepth : aval<int>
     }

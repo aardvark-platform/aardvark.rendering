@@ -5,73 +5,76 @@ open FSharp.Data.Adaptive
 open System
 open System.Collections.Generic
 
-/// Assigns an index within [0, n - 1] to each element in the input set, resulting in a compact array layout.
-/// If a removal of elements results in holes, they are filled by moving elements from the end.
-type CompactSet<'T>(input : aset<'T>) =
+[<AutoOpen>]
+module CompactASetExtensions =
 
-    let mutable keys : 'T[] = Array.empty
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module ASet =
 
-    let reader = input.GetReader()
-    let added = List()
-    let removed = List()
-    let deltas = List<'T * ElementOperation<int>>()
-    let free = Queue<int>()
+        /// Assigns an index within [0, n - 1] to each element in the input set, resulting in a compact array layout.
+        /// If a removal of elements results in holes, they are filled by moving elements from the end.
+        let compact (input : aset<'T>) =
 
-    let indices : amap<'T, int> =
-        AMap.custom (fun token indices ->
-            added.Clear()
-            removed.Clear()
-            deltas.Clear()
+            let mutable keys : 'T[] = Array.empty
 
-            let ops = reader.GetChanges token
+            let reader = input.GetReader()
+            let added = List()
+            let removed = List()
+            let deltas = List<'T * ElementOperation<int>>()
+            let free = Queue<int>()
 
-            for o in ops do
-                match o with
-                | Add(_, value) -> value |> added.Add |> ignore
-                | Rem(_, value) -> value |> removed.Add |> ignore
+            AMap.custom (fun token indices ->
+                added.Clear()
+                removed.Clear()
+                deltas.Clear()
 
-            let delta = added.Count - removed.Count
-            let oldCount = indices.Count
-            let newCount = oldCount + delta
+                let ops = reader.GetChanges token
 
-            // If we remove more values than we add, we have to move some elements from the end (potentially all of them).
-            let moving = HashSet([newCount .. newCount - (delta + 1)])
+                for o in ops do
+                    match o with
+                    | Add(_, value) -> value |> added.Add |> ignore
+                    | Rem(_, value) -> value |> removed.Add |> ignore
 
-            // Remove
-            for key in removed do
-                deltas.Add(key, Remove)
+                let delta = added.Count - removed.Count
+                let oldCount = indices.Count
+                let newCount = oldCount + delta
 
-                // If the index of the removed element is within the new range, we have a hole to fill.
-                // If it is out of range, the index was marked to be moved but no longer has to be.
-                let index = indices.[key]
-                if index < newCount then
-                    free.Enqueue(index)
-                else
-                    assert moving.Remove(index)
+                // If we remove more values than we add, we have to move some elements from the end (potentially all of them).
+                let moving = HashSet([newCount .. newCount - (delta + 1)])
 
-            // Move
-            for i in moving do
-                let newIndex = free.Dequeue()
-                let key = keys.[i]
+                // Remove
+                for key in removed do
+                    deltas.Add(key, Remove)
 
-                deltas.Add(key, Set newIndex)
-                keys.[newIndex] <- key
+                    // If the index of the removed element is within the new range, we have a hole to fill.
+                    // If it is out of range, the index was marked to be moved but no longer has to be.
+                    let index = indices.[key]
+                    if index < newCount then
+                        free.Enqueue(index)
+                    else
+                        assert moving.Remove(index)
 
-            // Resize the key array
-            Array.Resize(&keys, newCount)
+                // Move
+                for i in moving do
+                    let newIndex = free.Dequeue()
+                    let key = keys.[i]
 
-            for i in oldCount .. newCount - 1 do
-                free.Enqueue i
+                    deltas.Add(key, Set newIndex)
+                    keys.[newIndex] <- key
 
-            // Add elements
-            for key in added do
-                let i = free.Dequeue()
-                deltas.Add(key, Set i)
-                keys.[i] <- key
+                // Resize the key array
+                Array.Resize(&keys, newCount)
 
-            assert(free.Count = 0)
+                for i in oldCount .. newCount - 1 do
+                    free.Enqueue i
 
-            HashMapDelta.ofSeq deltas
-        )
+                // Add elements
+                for key in added do
+                    let i = free.Dequeue()
+                    deltas.Add(key, Set i)
+                    keys.[i] <- key
 
-    member x.Indices = indices
+                assert(free.Count = 0)
+
+                HashMapDelta.ofSeq deltas
+            )

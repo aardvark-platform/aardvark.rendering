@@ -9,6 +9,8 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Microsoft.FSharp.NativeInterop
 
+open Aardvark.Rendering.Vulkan.KHRBufferDeviceAddress
+
 #nowarn "9"
 // #nowarn "51"
 
@@ -21,6 +23,7 @@ type Buffer =
         val mutable public Memory : DevicePtr
         val mutable public Size : int64
         val mutable public Usage : VkBufferUsageFlags
+        val mutable public DeviceAddress : VkDeviceAddress
 
         override x.Destroy() =
             if x.Handle.IsValid && x.Size > 0L then
@@ -33,8 +36,17 @@ type Buffer =
             member x.Handle = x.Handle :> obj
             member x.SizeInBytes = nativeint x.Size // NOTE: return size as specified by user. memory might have larger size as it is an aligned block
 
-        new(device, handle, memory, size, usage) =
-            { inherit Resource<_>(device, handle); Memory = memory; Size = size; Usage = usage }
+        new(device : Device, handle, memory, size, usage) =
+            let address =
+                if usage &&& VkBufferUsageFlags.ShaderDeviceAddressBitKhr <> VkBufferUsageFlags.None then
+                    native {
+                        let! pInfo = VkBufferDeviceAddressInfoKHR(handle)
+                        return VkRaw.vkGetBufferDeviceAddressKHR(device.Handle, pInfo)
+                    }
+                else
+                    0UL
+
+            { inherit Resource<_>(device, handle); Memory = memory; Size = size; Usage = usage; DeviceAddress = address }
     end
 
 type BufferView =
@@ -344,7 +356,7 @@ module Buffer =
                     VkRaw.vkDestroyBuffer(device.Handle, handle, NativePtr.zero)
                     mem.Dispose()
                     emptyBuffers.TryRemove(key) |> ignore
-                )   
+                )
 
                 new Buffer(device, handle, mem, 256L, usage)
             )
@@ -520,7 +532,7 @@ module Buffer =
 
             | _ ->
                 failf "unsupported buffer type %A" buffer
-  
+
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

@@ -6,6 +6,7 @@ open Aardvark.Base
 open Aardvark.Base.Sorting
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
+open Aardvark.Rendering.Vulkan.KHRRayTracingPipeline
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
@@ -15,12 +16,18 @@ open Microsoft.FSharp.NativeInterop
 module VkShaderStageFlags =
     let ofShaderStage =
         LookupTable.lookupTable [
-            ShaderStage.Vertex, VkShaderStageFlags.VertexBit
-            ShaderStage.TessControl, VkShaderStageFlags.TessellationControlBit
-            ShaderStage.TessEval, VkShaderStageFlags.TessellationEvaluationBit
-            ShaderStage.Geometry, VkShaderStageFlags.GeometryBit
-            ShaderStage.Fragment, VkShaderStageFlags.FragmentBit
-            ShaderStage.Compute, VkShaderStageFlags.ComputeBit
+            ShaderStage.Vertex,         VkShaderStageFlags.VertexBit
+            ShaderStage.TessControl,    VkShaderStageFlags.TessellationControlBit
+            ShaderStage.TessEval,       VkShaderStageFlags.TessellationEvaluationBit
+            ShaderStage.Geometry,       VkShaderStageFlags.GeometryBit
+            ShaderStage.Fragment,       VkShaderStageFlags.FragmentBit
+            ShaderStage.Compute,        VkShaderStageFlags.ComputeBit
+            ShaderStage.RayGeneration,  VkShaderStageFlags.RaygenBitKhr
+            ShaderStage.Intersection,   VkShaderStageFlags.IntersectionBitKhr
+            ShaderStage.AnyHit,         VkShaderStageFlags.AnyHitBitKhr
+            ShaderStage.ClosestHit,     VkShaderStageFlags.ClosestHitBitKhr
+            ShaderStage.Miss,           VkShaderStageFlags.MissBitKhr
+            ShaderStage.Callable,       VkShaderStageFlags.CallableBitKhr
         ]
         
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

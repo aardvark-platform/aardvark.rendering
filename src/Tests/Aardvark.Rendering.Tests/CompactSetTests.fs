@@ -7,8 +7,8 @@ module ``CompactSet Tests`` =
 
     let data = [| "foo"; "bar"; "a"; "b"; "c"; "d" |]
 
-    let isValid (set : CompactSet<'T>) =
-        let map = set.Indices |> AMap.force
+    let isValid (set : amap<'T, int>) =
+        let map = set |> AMap.force
         let values = map |> HashMap.toValueList |> List.sort
 
         printfn "%s" (string map)
@@ -17,14 +17,14 @@ module ``CompactSet Tests`` =
     [<Test>]
     let ``[CompactSet] Validity``() =
         let input = cset<string>(data)
-        let compact = CompactSet(input)
+        let compact = input |> ASet.compact
 
         Assert.IsTrue (isValid compact)
 
     [<Test>]
     let ``[CompactSet] Remove``() =
         let input = cset<string>(data)
-        let compact = CompactSet(input)
+        let compact = input |> ASet.compact
 
         Assert.IsTrue (isValid compact)
 
@@ -37,7 +37,7 @@ module ``CompactSet Tests`` =
     [<Test>]
     let ``[CompactSet] Add and remove``() =
         let input = cset<string>(data)
-        let compact = CompactSet(input)
+        let compact = input |> ASet.compact
 
         Assert.IsTrue (isValid compact)
 
@@ -46,5 +46,3 @@ module ``CompactSet Tests`` =
         )
 
         Assert.IsTrue (isValid compact)
-
-

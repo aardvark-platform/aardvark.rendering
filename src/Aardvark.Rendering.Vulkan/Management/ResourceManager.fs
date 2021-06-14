@@ -1373,7 +1373,101 @@ module Resources =
         override x.Compute (token : AdaptiveToken) =
             if input.GetValue token then 1 else 0
 
+    module Raytracing =
+        open Aardvark.Rendering.Vulkan.Raytracing
+
+        type AccelerationStructureResource<'T>(owner : IResourceCache, key : list<obj>, device : Device,
+                                               getData : 'T -> AccelerationStructureData, input : aval<'T>) =
+            inherit AbstractResourceLocation<AccelerationStructure>(owner, key)
+
+            let mutable handle : Option<AccelerationStructure> = None
+            let mutable version = 0
+
+            let create (data : AccelerationStructureData) =
+                let acc = AccelerationStructure.create device data
+                handle <- Some acc
+                inc &version
+                { handle = acc; version = version }
+
+            override x.Create() =
+                input.Acquire()
+
+            override x.Destroy() =
+                match handle with
+                | Some h ->
+                    h.Dispose()
+                    handle <- None
+                | None -> ()
+
+                input.Release()
+
+            override x.GetHandle(token : AdaptiveToken) =
+                if x.OutOfDate then
+                    let data = getData <| input.GetValue(token)
+
+                    match handle with
+                    | None -> create data
+
+                    | Some old ->
+                        if old |> AccelerationStructure.tryUpdate data then
+                            { handle = old; version = version }
+                        else
+                            old.Dispose()
+                            create data
+                else
+                    match handle with
+                    | Some h -> { handle = h; version = version }
+                    | None -> failwith "[Resource] inconsistent state"
+
+
+        type RaytracingPipelineResource(owner : IResourceCache, key : list<obj>,
+                                        layout : PipelineLayout, program : IResourceLocation<RaytracingProgram>, maxRecursionDepth : aval<uint32>) =
+            inherit AbstractResourceLocation<RaytracingPipeline>(owner, key)
+
+            let mutable handle : Option<RaytracingPipelineDescription * RaytracingPipeline> = None
+            let mutable version = 0
+
+            let device = layout.Device
+
+            let destroy() =
+                handle |> Option.iter (snd >> Disposable.dispose)
+                handle <- None
+
+            let create description =
+                inc &version
+                let basePipeline = handle |> Option.map snd
+                let pipeline = description |> RaytracingPipeline.create device basePipeline
+                handle <- Some (description, pipeline)
+                basePipeline |> Option.iter Disposable.dispose
+                { handle = pipeline; version = version }
+
+            override x.Create() =
+                program.Acquire()
+
+            override x.Destroy() =
+                destroy()
+                program.Release()
+
+            override x.GetHandle(token : AdaptiveToken) =
+                if x.OutOfDate then
+                    let prog = program.Update(token)
+                    let maxRec = maxRecursionDepth.GetValue(token)
+                    let desc = { Layout = layout; Program = prog.handle; MaxRecursionDepth = maxRec }
+
+                    match handle with
+                    | Some (o, p) when desc = o ->
+                        { handle = p; version = version }
+                    | _ ->
+                        create desc
+
+                else
+                    match handle with
+                    | Some (_, h) -> { handle = h; version = version }
+                    | None -> failwith "[Resource] inconsistent state"
+
 open Resources
+open Resources.Raytracing
+
 type ResourceManager(user : IResourceUser, device : Device) =
     //let descriptorPool = device.CreateDescriptorPool(1 <<< 22, 1 <<< 22)
 
@@ -1391,6 +1485,9 @@ type ResourceManager(user : IResourceUser, device : Device) =
     let programCache            = ResourceLocationCache<ShaderProgram>(user)
     let simpleSurfaceCache      = System.Collections.Concurrent.ConcurrentDictionary<obj, ShaderProgram>()
     let fshadeThingCache        = System.Collections.Concurrent.ConcurrentDictionary<obj, PipelineLayout * aval<FShade.Imperative.Module>>()
+
+    let accelerationStructureCache = ResourceLocationCache<Raytracing.AccelerationStructure>(user)
+    let raytracingPipelineCache    = ResourceLocationCache<Raytracing.RaytracingPipeline>(user)
     
     let vertexInputCache        = NativeResourceLocationCache<VkPipelineVertexInputStateCreateInfo>(user)
     let inputAssemblyCache      = NativeResourceLocationCache<VkPipelineInputAssemblyStateCreateInfo>(user)
@@ -1406,18 +1503,6 @@ type ResourceManager(user : IResourceUser, device : Device) =
     let indexBindingCache       = NativeResourceLocationCache<IndexBufferBinding>(user)
     let isActiveCache           = NativeResourceLocationCache<int>(user)
     
-    static let toInputTopology =
-        LookupTable.lookupTable [
-            IndexedGeometryMode.PointList, FShade.InputTopology.Point
-            IndexedGeometryMode.LineList, FShade.InputTopology.Line
-            IndexedGeometryMode.LineStrip, FShade.InputTopology.Line
-            IndexedGeometryMode.LineAdjacencyList, FShade.InputTopology.LineAdjacency
-            IndexedGeometryMode.TriangleList, FShade.InputTopology.Triangle
-            IndexedGeometryMode.TriangleStrip, FShade.InputTopology.Triangle
-            IndexedGeometryMode.TriangleAdjacencyList, FShade.InputTopology.TriangleAdjacency
-            IndexedGeometryMode.QuadList, FShade.InputTopology.Patch 4
-        ]
-
     member x.ResourceUser = user
 
     member x.Dispose() =
@@ -1434,6 +1519,9 @@ type ResourceManager(user : IResourceUser, device : Device) =
         imageSamplerCache.Clear()
         imageSamplerArrayCache.Clear()
         programCache.Clear()
+
+        accelerationStructureCache.Clear()
+        raytracingPipelineCache.Clear()
 
         vertexInputCache.Clear()
         inputAssemblyCache.Clear()
@@ -1452,9 +1540,6 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
 
     member x.Device = device
-
-//    member x.CreateRenderPass(signature : Map<Symbol, AttachmentSignature>) =
-//        device.CreateRenderPass(signature)
 
     member private x.CreateBuffer(input : aval<IBuffer>, usage : VkBufferUsageFlags) =
         bufferCache.GetOrCreate([input :> obj], fun cache key ->
@@ -1742,6 +1827,41 @@ type ResourceManager(user : IResourceUser, device : Device) =
                     multisample
                 )
 
+        )
+
+    member x.CreateAccelerationStructure(data : aval<Raytracing.Geometry[]>) =
+        accelerationStructureCache.GetOrCreate(
+            [ data :> obj ],
+            fun cache key ->
+                new AccelerationStructureResource<_>(
+                    cache, key, device,
+                    Raytracing.AccelerationStructureData.Geometry,
+                    data
+                )
+        )
+
+    member x.CreateAccelerationStructure(data : aval<Raytracing.InstanceData>) =
+        accelerationStructureCache.GetOrCreate(
+            [ data :> obj ],
+            fun cache key ->
+                new AccelerationStructureResource<_>(
+                    cache, key, device,
+                    Raytracing.AccelerationStructureData.Instances,
+                    data
+                )
+        )
+
+    member x.CreateRaytracingPipeline(layout            : PipelineLayout,
+                                      program           : IResourceLocation<Raytracing.RaytracingProgram>, 
+                                      maxRecursionDepth : aval<uint32>) =
+
+        raytracingPipelineCache.GetOrCreate(
+            [ program :> obj; program :> obj; maxRecursionDepth :> obj ],
+            fun cache key ->
+                new RaytracingPipelineResource(
+                    cache, key,
+                    layout, program, maxRecursionDepth
+                )
         )
 
 
