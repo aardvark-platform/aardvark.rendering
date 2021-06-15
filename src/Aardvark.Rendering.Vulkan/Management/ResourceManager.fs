@@ -1465,6 +1465,52 @@ module Resources =
                     | Some (_, h) -> { handle = h; version = version }
                     | None -> failwith "[Resource] inconsistent state"
 
+
+        type ShaderBindingTableResource(owner : IResourceCache, key : list<obj>,
+                                        pipeline : IResourceLocation<RaytracingPipeline>, hitConfigs : aval<Set<HitGroupConfig>>) =
+            inherit AbstractResourceLocation<ShaderBindingTable>(owner, key)
+
+            let mutable handle : Option<ShaderBindingTable> = None
+            let mutable version = 0
+
+            let destroy() =
+                handle |> Option.iter Disposable.dispose
+                handle <- None
+
+            let create hitConfigs pipeline =
+                inc &version
+                let table = ShaderBindingTable.create hitConfigs pipeline
+                handle <- Some table
+                { handle = table; version = version }
+
+            let update hitConfigs pipeline table =
+                inc &version
+                table |> ShaderBindingTable.update hitConfigs pipeline
+                { handle = table; version = version }
+
+            override x.Create() =
+                pipeline.Acquire()
+
+            override x.Destroy() =
+                destroy()
+                pipeline.Release()
+
+            override x.GetHandle(token : AdaptiveToken) =
+                if x.OutOfDate then
+                    let pipeline = pipeline.Update(token)
+                    let configs = hitConfigs.GetValue(token)
+
+                    match handle with
+                    | Some tbl ->
+                        tbl |> update configs pipeline.handle
+                    | _ ->
+                        create configs pipeline.handle
+
+                else
+                    match handle with
+                    | Some tbl -> { handle = tbl; version = version }
+                    | None -> failwith "[Resource] inconsistent state"
+
 open Resources
 open Resources.Raytracing
 
@@ -1488,6 +1534,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
     let accelerationStructureCache = ResourceLocationCache<Raytracing.AccelerationStructure>(user)
     let raytracingPipelineCache    = ResourceLocationCache<Raytracing.RaytracingPipeline>(user)
+    let shaderBindingTableCache    = ResourceLocationCache<Raytracing.ShaderBindingTable>(user)
     
     let vertexInputCache        = NativeResourceLocationCache<VkPipelineVertexInputStateCreateInfo>(user)
     let inputAssemblyCache      = NativeResourceLocationCache<VkPipelineInputAssemblyStateCreateInfo>(user)
@@ -1522,6 +1569,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
         accelerationStructureCache.Clear()
         raytracingPipelineCache.Clear()
+        shaderBindingTableCache.Clear()
 
         vertexInputCache.Clear()
         inputAssemblyCache.Clear()
@@ -1856,11 +1904,22 @@ type ResourceManager(user : IResourceUser, device : Device) =
                                       maxRecursionDepth : aval<uint32>) =
 
         raytracingPipelineCache.GetOrCreate(
-            [ program :> obj; program :> obj; maxRecursionDepth :> obj ],
+            [ layout :> obj; program :> obj; maxRecursionDepth :> obj ],
             fun cache key ->
                 new RaytracingPipelineResource(
                     cache, key,
                     layout, program, maxRecursionDepth
+                )
+        )
+
+    member x.CreateShaderBindingTable(pipeline : IResourceLocation<Raytracing.RaytracingPipeline>,
+                                      hitConfigs : aval<Set<Raytracing.HitGroupConfig>>) =
+
+        shaderBindingTableCache.GetOrCreate(
+            [ pipeline :> obj; hitConfigs :> obj ],
+            fun cache key ->
+                new ShaderBindingTableResource(
+                    cache, key, pipeline, hitConfigs
                 )
         )
 

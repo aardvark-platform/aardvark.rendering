@@ -12,21 +12,38 @@ open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Vulkan.KHRRayTracingPipeline
 open Aardvark.Rendering.Vulkan.KHRBufferDeviceAddress
 
+type ShaderBindingSubtable<'T when 'T : comparison> =
+    class
+        inherit Resource
+        val public Buffer : Buffer
+        val public Stride : uint64
+        val mutable public Lookup : Map<'T, int>
+
+        member x.AddressRegion =
+            VkStridedDeviceAddressRegionKHR(
+                x.Buffer.DeviceAddress, x.Stride, uint64 x.Buffer.Size
+            )
+
+        override x.Destroy() =
+            x.Buffer.Dispose()
+
+        new ( buffer : Buffer, lookup : Map<'T, int>, stride : uint64) =
+            { inherit Resource(buffer.Device)
+              Buffer = buffer
+              Stride = stride 
+              Lookup = lookup }
+    end
+
+
 type HitGroupConfig = List<Symbol>
 
 type ShaderBindingTable =
     class
         inherit Resource
-        val mutable public Pipeline : RaytracingPipeline
-        val mutable public RaygenTable : Buffer
-        val mutable public RaygenLookup : Map<Symbol, int>
-        val mutable public MissTable : Buffer
-        val mutable public MissLookup : Map<Symbol, int>
-        val mutable public CallableTable : Buffer
-        val mutable public CallableLookup : Map<Symbol, int>
-        val mutable public HitGroupTable : Buffer
-        val mutable public HitGroupLookup : Map<HitGroupConfig, int>
-        val mutable public Stride : uint64
+        val mutable public RaygenTable : ShaderBindingSubtable<Symbol>
+        val mutable public MissTable : ShaderBindingSubtable<Symbol>
+        val mutable public CallableTable : ShaderBindingSubtable<Symbol>
+        val mutable public HitGroupTable : ShaderBindingSubtable<HitGroupConfig>
 
         override x.Destroy() =
             x.RaygenTable.Dispose()
@@ -34,24 +51,17 @@ type ShaderBindingTable =
             x.CallableTable.Dispose()
             x.HitGroupTable.Dispose()
 
-        new(device : Device, pipeline : RaytracingPipeline,
-            raygenTable : Buffer, raygenLookup : Map<Symbol, int>,
-            missTable : Buffer, missLookup : Map<Symbol, int>,
-            callableTable : Buffer, callableLookup : Map<Symbol, int>,
-            hitGroupTable : Buffer, hitGroupLookup : Map<HitGroupConfig, int>,
-            stride : uint64) =
-            { inherit Resource(device)
-              Pipeline = pipeline
+        new(raygenTable : ShaderBindingSubtable<Symbol>,
+            missTable : ShaderBindingSubtable<Symbol>,
+            callableTable : ShaderBindingSubtable<Symbol>,
+            hitGroupTable : ShaderBindingSubtable<HitGroupConfig>) =
+            { inherit Resource(raygenTable.Device)
               RaygenTable = raygenTable
-              RaygenLookup = raygenLookup
               MissTable = missTable
-              MissLookup = missLookup
               CallableTable = callableTable
-              CallableLookup = callableLookup
-              HitGroupTable = hitGroupTable
-              HitGroupLookup = hitGroupLookup
-              Stride = stride }
+              HitGroupTable = hitGroupTable}
     end
+
 
 [<AutoOpen>]
 module private ShaderBindingTableUtilities =
@@ -127,136 +137,143 @@ module private ShaderBindingTableUtilities =
               Size = int size
               SizeAligned = int sizeAligned }
 
+
+    type SubtableData<'T when 'T : comparison> =
+        { Handles : ShaderHandles
+          Entries : int[]
+          Lookup  : Map<'T, int> }
+
+        member x.TotalSize =
+            x.Handles.SizeAligned * x.Entries.Length
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module SubtableData =
+
+        let private withLookup (lookup : Map<Symbol, int>) (shaderHandles : ShaderHandles) (shaderGroups : GroupEntry[]) =
+            let entries =
+                shaderGroups
+                |> Array.sortBy (fun e -> lookup |> Map.find (GroupEntry.name e))
+                |> Array.map GroupEntry.index
+
+            { Handles = shaderHandles
+              Entries = entries
+              Lookup = lookup }
+
+        let private withoutLookup (shaderHandles : ShaderHandles) (shaderGroups : GroupEntry[]) =
+            let lookup =
+                shaderGroups
+                |> Array.mapi (fun i g -> GroupEntry.name g, i)
+                |> Map.ofArray
+
+            withLookup lookup shaderHandles shaderGroups
+
+        let raygen (shaderHandles : ShaderHandles) (shaderGroups : GroupEntry[]) =
+            shaderGroups |> Array.filter GroupEntry.isRaygen |> withoutLookup shaderHandles
+
+        let miss (shaderHandles : ShaderHandles) (shaderGroups : GroupEntry[]) (pipeline : RaytracingPipeline) =
+            let lookup = pipeline.Description.Program.Effect.ShaderBindingTableLayout.MissIndices
+            shaderGroups |> Array.filter GroupEntry.isMiss |> withLookup lookup shaderHandles
+
+        let callable (shaderHandles : ShaderHandles) (shaderGroups : GroupEntry[]) (pipeline : RaytracingPipeline) =
+            let lookup = pipeline.Description.Program.Effect.ShaderBindingTableLayout.CallableIndices
+            shaderGroups |> Array.filter GroupEntry.isCallable |> withLookup lookup shaderHandles
+
+        let hitGroups (shaderHandles : ShaderHandles) (shaderGroups : GroupEntry[]) (configs : Set<HitGroupConfig>) (pipeline : RaytracingPipeline) =
+            let rayOffsets =
+                pipeline.Description.Program.Effect.ShaderBindingTableLayout.RayOffsets
+
+            let rayTypes =
+                Map.toList rayOffsets
+                |> List.sortBy snd
+                |> List.map fst
+
+            let configs =
+                Set.toList configs
+
+            let groups =
+                configs
+                |> List.map (fun cfg ->  
+                    cfg |> List.collect (fun name ->
+                        rayTypes |> List.choose (fun rt ->
+                            match shaderGroups |> Array.tryFind (GroupEntry.isHitGroup name rt) with
+                            | None -> Log.warn "[Raytracing] Missing hit group %A for ray type %A" name rt; None
+                            | x -> x
+                        )
+                    )
+                )
+            
+            let entries =
+                groups |> List.concat |> List.map GroupEntry.index |> List.toArray
+
+            let indices =
+                (0, groups)
+                ||> List.scan (fun cnt entries -> cnt + List.length entries)
+                |> List.take configs.Length
+
+            let lookup =
+                (configs, indices)
+                ||> List.zip
+                |> Map.ofList
+
+            { Handles = shaderHandles
+              Entries = entries
+              Lookup = lookup }
+
+
+    type TableData =
+        { RaygenData   : SubtableData<Symbol>
+          MissData     : SubtableData<Symbol>
+          CallableData : SubtableData<Symbol>
+          HitGroupData : SubtableData<HitGroupConfig> }
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module TableData =
+
+        let create (shaderHandles : ShaderHandles) (shaderGroups : GroupEntry[]) (hitConfigs : Set<HitGroupConfig>) (pipeline : RaytracingPipeline) =
+            { RaygenData   = SubtableData.raygen shaderHandles shaderGroups
+              MissData     = SubtableData.miss shaderHandles shaderGroups pipeline 
+              CallableData = SubtableData.callable shaderHandles shaderGroups pipeline 
+              HitGroupData = SubtableData.hitGroups shaderHandles shaderGroups hitConfigs pipeline }
+
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module ShaderBindingTable =
+module private ShaderBindingSubtable =
 
     let private bufferUsage =
         VkBufferUsageFlags.ShaderBindingTableBitKhr ||| VkBufferUsageFlags.ShaderDeviceAddressBitKhr
 
-    let private tryUpdateBuffer (handles : ShaderHandles) (entries : int[]) (buffer : Buffer) =
-        let size = handles.SizeAligned * entries.Length
-
-        if size > int buffer.Size then
+    let tryUpdate (data : SubtableData<'T>) (table : ShaderBindingSubtable<'T>) =
+        if data.TotalSize > int table.Buffer.Size then
             false
 
         else
-            let pSrc = NativePtr.alloc<uint8> size
+            table.Lookup <- data.Lookup
+
+            let pSrc = NativePtr.alloc<uint8> data.TotalSize
 
             try
                 let src = NativePtr.toNativeInt pSrc
                 let mutable offset = 0n
 
-                for e in entries do
-                    Marshal.Copy(handles.Data, e * handles.Size, src + offset, handles.Size)
-                    offset <- offset + nativeint handles.SizeAligned
+                for e in data.Entries do
+                    Marshal.Copy(data.Handles.Data, e * data.Handles.Size, src + offset, data.Handles.Size)
+                    offset <- offset + nativeint data.Handles.SizeAligned
 
-                let nb = NativeMemoryBuffer(src, size)
-                buffer |> Buffer.tryUpdate nb
+                let nb = NativeMemoryBuffer(src, data.TotalSize)
+                table.Buffer |> Buffer.tryUpdate nb
 
             finally
                 NativePtr.free pSrc
 
-    let private createBuffer (device : Device) (handles : ShaderHandles) (entries : int[]) =
-        let buffer = device |> Buffer.alloc bufferUsage (int64 <| handles.SizeAligned * entries.Length)
-        assert (buffer |> tryUpdateBuffer handles entries)
-        buffer
-
-    let private getRaygenData (shaderGroups : GroupEntry[]) =
-
-        let groups =
-            shaderGroups |> Array.filter GroupEntry.isRaygen
-
-        let entries =
-            groups |> Array.map (fun g -> g.Index)
-
-        let lookup =
-            groups
-            |> Array.mapi (fun i g -> GroupEntry.name g, i)
-            |> Map.ofArray
-
-        entries, lookup
-
-    let private getMissData (shaderGroups : GroupEntry[])  (pipeline : RaytracingPipeline) =
-
-        let lookup =
-             pipeline.Description.Program.Effect.ShaderBindingTableLayout.MissIndices
-
-        let entries =
-            shaderGroups
-            |> Array.filter GroupEntry.isMiss
-            |> Array.sortBy (fun e -> lookup |> Map.find (GroupEntry.name e))
-            |> Array.map GroupEntry.index
-
-        entries, lookup
-
-    let private getCallableData (shaderGroups : GroupEntry[]) (pipeline : RaytracingPipeline) =
-
-        let lookup =
-             pipeline.Description.Program.Effect.ShaderBindingTableLayout.CallableIndices
-
-        let entries =
-            shaderGroups
-            |> Array.filter GroupEntry.isCallable
-            |> Array.sortBy (fun e -> lookup |> Map.find (GroupEntry.name e))
-            |> Array.map GroupEntry.index
-
-        entries, lookup
-
-    let private getHitData (shaderGroups : GroupEntry[]) (configs : Set<HitGroupConfig>) (pipeline : RaytracingPipeline) =
-
-        let rayOffsets =
-            pipeline.Description.Program.Effect.ShaderBindingTableLayout.RayOffsets
-
-        let rayTypes =
-            Map.toList rayOffsets
-            |> List.sortBy snd
-            |> List.map fst
-
-        let configs =
-            Set.toList configs
-
-        let groups =
-            configs
-            |> List.map (fun cfg ->  
-                cfg |> List.collect (fun name ->
-                    rayTypes |> List.choose (fun rt ->
-                        match shaderGroups |> Array.tryFind (GroupEntry.isHitGroup name rt) with
-                        | None -> Log.warn "[Raytracing] Missing hit group %A for ray type %A" name rt; None
-                        | x -> x
-                    )
-                )
-            )
-        
-        let entries =
-            groups |> List.concat |> List.map GroupEntry.index |> List.toArray
-
-        let indices =
-            (0, groups)
-            ||> List.scan (fun cnt entries -> cnt + List.length entries)
-            |> List.take configs.Length
-
-        let lookup =
-            (configs, indices)
-            ||> List.zip
-            |> Map.ofList
-
-        entries, lookup
+    let create (device : Device) (data : SubtableData<'T>) =
+        let buffer = device |> Buffer.alloc bufferUsage (int64 data.TotalSize)
+        let table = new ShaderBindingSubtable<'T>(buffer, data.Lookup, uint64 data.Handles.SizeAligned)
+        assert (table |> tryUpdate data)
+        table
 
 
-    let private getData (shaderGroups : GroupEntry[]) (hitConfigs : Set<HitGroupConfig>) (pipeline : RaytracingPipeline) =
-        let raygenEntries, raygenLookup     = getRaygenData shaderGroups
-        let missEntries, missLookup         = getMissData shaderGroups pipeline
-        let callableEntries, callableLookup = getCallableData shaderGroups pipeline
-        let hitGroupEntries, hitGroupLookup = getHitData shaderGroups hitConfigs pipeline
-
-        {| RaygenEntries   = raygenEntries
-           RaygenLookup    = raygenLookup
-           MissEntries     = missEntries
-           MissLookup      = missLookup
-           CallableEntries = callableEntries
-           CallableLookup  = callableLookup
-           HitGroupEntries = hitGroupEntries
-           HitGroupLookup  = hitGroupLookup |}
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module ShaderBindingTable =
 
     let update (hitConfigs : Set<HitGroupConfig>) (pipeline : RaytracingPipeline) (table : ShaderBindingTable) =
         let device = pipeline.Device
@@ -264,24 +281,23 @@ module ShaderBindingTable =
         let shaderGroups =
             pipeline.Description.Program.Groups |> List.mapi GroupEntry.ofShaderGroup |> Array.ofList
 
-        let shaderGroupHandles =
+        let shaderHandles =
             ShaderHandles.get shaderGroups.Length pipeline
 
-        let data = getData shaderGroups hitConfigs pipeline
+        let tableData =
+            TableData.create shaderHandles shaderGroups hitConfigs pipeline
 
-        if not (table.RaygenTable |> tryUpdateBuffer shaderGroupHandles data.RaygenEntries) then
-            table.RaygenTable <- createBuffer device shaderGroupHandles data.RaygenEntries
+        let updateOrRecreate (data : SubtableData<'T>) (table : ShaderBindingSubtable<'T>) =
+            if ShaderBindingSubtable.tryUpdate data table then
+                table
+            else
+                table.Dispose()
+                ShaderBindingSubtable.create device data
 
-        if not (table.MissTable |> tryUpdateBuffer shaderGroupHandles data.MissEntries) then
-            table.MissTable <- createBuffer device shaderGroupHandles data.MissEntries
-
-        if not (table.CallableTable |> tryUpdateBuffer shaderGroupHandles data.CallableEntries) then
-            table.CallableTable <- createBuffer device shaderGroupHandles data.CallableEntries
-
-        if not (table.HitGroupTable |> tryUpdateBuffer shaderGroupHandles data.HitGroupEntries) then
-            table.HitGroupTable <- createBuffer device shaderGroupHandles data.HitGroupEntries
-
-        table.Pipeline <- pipeline      
+        table.RaygenTable   <- table.RaygenTable   |> updateOrRecreate tableData.RaygenData 
+        table.MissTable     <- table.MissTable     |> updateOrRecreate tableData.MissData
+        table.CallableTable <- table.CallableTable |> updateOrRecreate tableData.CallableData
+        table.HitGroupTable <- table.HitGroupTable |> updateOrRecreate tableData.HitGroupData
 
     let create (hitConfigs : Set<HitGroupConfig>) (pipeline : RaytracingPipeline) =
         let device = pipeline.Device
@@ -289,20 +305,18 @@ module ShaderBindingTable =
         let shaderGroups =
             pipeline.Description.Program.Groups |> List.mapi GroupEntry.ofShaderGroup |> Array.ofList
 
-        let shaderGroupHandles =
+        let shaderHandles =
             ShaderHandles.get shaderGroups.Length pipeline
 
-        let data = getData shaderGroups hitConfigs pipeline
-        let raygenTable   = createBuffer device shaderGroupHandles data.RaygenEntries
-        let missTable     = createBuffer device shaderGroupHandles data.MissEntries
-        let callableTable = createBuffer device shaderGroupHandles data.CallableEntries
-        let hitGroupTable = createBuffer device shaderGroupHandles data.HitGroupEntries
+        let tableData =
+            TableData.create shaderHandles shaderGroups hitConfigs pipeline
+
+        let raygenTable   = tableData.RaygenData   |> ShaderBindingSubtable.create device
+        let missTable     = tableData.MissData     |> ShaderBindingSubtable.create device
+        let callableTable = tableData.CallableData |> ShaderBindingSubtable.create device
+        let hitGroupTable = tableData.HitGroupData |> ShaderBindingSubtable.create device
 
         new ShaderBindingTable(
-            device, pipeline,
-            raygenTable, data.RaygenLookup,
-            missTable, data.MissLookup,
-            callableTable, data.CallableLookup,
-            hitGroupTable, data.HitGroupLookup,
-            uint64 shaderGroupHandles.SizeAligned
+            raygenTable, missTable,
+            callableTable, hitGroupTable
         )
