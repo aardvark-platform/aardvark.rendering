@@ -11,6 +11,7 @@ type ShaderUniformParameter =
     | StorageBufferParameter of FShade.GLSL.GLSLStorageBuffer
     | ImageParameter of FShade.GLSL.GLSLImage
     | SamplerParameter of FShade.GLSL.GLSLSampler
+    | AccelerationStructureParameter of FShade.GLSL.GLSLAccelerationStructure
 
     member x.Name =
         match x with
@@ -18,6 +19,7 @@ type ShaderUniformParameter =
             | StorageBufferParameter b -> b.ssbName
             | ImageParameter i -> i.imageName
             | SamplerParameter i -> i.samplerName
+            | AccelerationStructureParameter a -> a.accelName
             
     member x.DescriptorSet =
         match x with
@@ -25,6 +27,7 @@ type ShaderUniformParameter =
             | StorageBufferParameter b -> b.ssbSet
             | ImageParameter i -> i.imageSet
             | SamplerParameter b -> b.samplerSet
+            | AccelerationStructureParameter a -> a.accelSet
             
     member x.Binding =
         match x with
@@ -32,6 +35,7 @@ type ShaderUniformParameter =
             | StorageBufferParameter b -> b.ssbBinding
             | ImageParameter i -> i.imageBinding
             | SamplerParameter b -> b.samplerBinding
+            | AccelerationStructureParameter a -> a.accelBinding
 
 [<System.Flags>]
 type TessellationFlags =

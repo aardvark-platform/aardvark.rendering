@@ -460,6 +460,7 @@ module Resources =
         | AdaptiveCombinedImageSampler  of slot: int * images: IResourceLocation<ImageSamplerArray>
         | AdaptiveStorageBuffer         of slot: int * buffer: IResourceLocation<Buffer>
         | AdaptiveStorageImage          of slot: int * view: IResourceLocation<ImageView>
+        | AdaptiveAccelerationStructure of slot: int * accel: IResourceLocation<Raytracing.AccelerationStructure>
 
     type BufferResource(owner : IResourceCache, key : list<obj>, device : Device, usage : VkBufferUsageFlags, input : aval<IBuffer>) =
         inherit MutableResourceLocation<IBuffer, Buffer>(
@@ -970,6 +971,9 @@ module Resources =
                 | AdaptiveUniformBuffer(_,b) ->
                     b.Acquire()
 
+                | AdaptiveAccelerationStructure(_,a) ->
+                    a.Acquire()
+
             ()
 
         override x.Destroy() =
@@ -983,6 +987,8 @@ module Resources =
                     b.Release()
                 | AdaptiveUniformBuffer(_,b) ->
                     b.Release()
+                | AdaptiveAccelerationStructure(_,a) ->
+                    a.Release()
 
             match handle with
             | Some set -> 
@@ -1021,6 +1027,11 @@ module Resources =
                                 )
 
                             CombinedImageSampler(slot, arr)
+
+                        
+                        | AdaptiveAccelerationStructure(slot, a) ->
+                            let accel = a.Update(token).handle
+                            AccelerationStructure(slot, accel)
                     )
 
 
@@ -1421,7 +1432,7 @@ module Resources =
 
 
         type RaytracingPipelineResource(owner : IResourceCache, key : list<obj>,
-                                        layout : PipelineLayout, program : IResourceLocation<RaytracingProgram>, maxRecursionDepth : aval<uint32>) =
+                                        layout : PipelineLayout, program : RaytracingProgram, maxRecursionDepth : aval<uint32>) =
             inherit AbstractResourceLocation<RaytracingPipeline>(owner, key)
 
             let mutable handle : Option<RaytracingPipelineDescription * RaytracingPipeline> = None
@@ -1442,17 +1453,15 @@ module Resources =
                 { handle = pipeline; version = version }
 
             override x.Create() =
-                program.Acquire()
+                ()
 
             override x.Destroy() =
                 destroy()
-                program.Release()
 
             override x.GetHandle(token : AdaptiveToken) =
                 if x.OutOfDate then
-                    let prog = program.Update(token)
                     let maxRec = maxRecursionDepth.GetValue(token)
-                    let desc = { Layout = layout; Program = prog.handle; MaxRecursionDepth = maxRec }
+                    let desc = { Layout = layout; Program = program; MaxRecursionDepth = maxRec }
 
                     match handle with
                     | Some (o, p) when desc = o ->
@@ -1900,7 +1909,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
         )
 
     member x.CreateRaytracingPipeline(layout            : PipelineLayout,
-                                      program           : IResourceLocation<Raytracing.RaytracingProgram>, 
+                                      program           : Raytracing.RaytracingProgram, 
                                       maxRecursionDepth : aval<uint32>) =
 
         raytracingPipelineCache.GetOrCreate(

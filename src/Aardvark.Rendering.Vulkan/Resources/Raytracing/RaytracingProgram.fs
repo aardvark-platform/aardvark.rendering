@@ -16,16 +16,20 @@ type RaytracingStageInfo =
     { Index  : uint32
       Module : ShaderModule }
 
-type RaytracingProgram(device : Device, effect : FShade.RaytracingEffect, stages : ShaderGroup<RaytracingStageInfo> list) =
+type RaytracingProgram(device : Device, effect : FShade.RaytracingEffect,
+                       stages : ShaderGroup<RaytracingStageInfo> list,
+                       pipelineLayout : PipelineLayout) =
     inherit CachedResource(device)
 
     member x.Effect = effect
     member x.Groups = stages
+    member x.PipelineLayout = pipelineLayout
 
     override x.Destroy() =
         stages |> List.iter (
             ShaderGroup.iter (fun _ _ _ s -> s.Module.Dispose())
         )
+        x.PipelineLayout.Dispose()
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RaytracingProgram =
@@ -77,7 +81,15 @@ module RaytracingProgram =
                 { Index = uint32 (index - 1); Module = mdl }
             ))
 
-        new RaytracingProgram(device, effect, stages)
+        let shaders =
+            stages
+            |> List.collect ShaderGroup.toList
+            |> List.map (fun i -> i.Module.[i.Module.Stage])
+            |> List.toArray
+
+        let pipelineLayout = device.CreatePipelineLayout(shaders, 1, Set.empty)
+
+        new RaytracingProgram(device, effect, stages, pipelineLayout)
 
 
 [<AbstractClass; Sealed; Extension>]

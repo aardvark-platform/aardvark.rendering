@@ -107,72 +107,78 @@ type DevicePreparedRenderObjectExtensions private() =
         | _ ->
             AVal.constant state.SamplerState
 
+    static let createDescriptorSets (this : ResourceManager) (layout : PipelineLayout) (uniforms : IUniformProvider)
+                                    (resources : System.Collections.Generic.List<IResourceLocation>) =
+        layout.DescriptorSetLayouts |> Array.map (fun ds ->
+            let descriptors = 
+                ds.Bindings |> Array.choose (fun b ->
+                    match b.Parameter with
+                    | UniformBlockParameter block ->
+                        let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
+                        resources.Add buffer
+                        AdaptiveDescriptor.AdaptiveUniformBuffer (b.Binding, buffer) |> Some
+
+                    | StorageBufferParameter block ->
+                        let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
+                        AdaptiveDescriptor.AdaptiveStorageBuffer (b.Binding, buffer) |> Some
+
+                    | SamplerParameter sam ->
+                        match sam.samplerTextures with
+                        | [] ->
+                            Log.warn "could not get sampler information for: %A" sam
+                            None
+
+                        | descriptions ->
+                            let list =
+                                descriptions
+                                |> List.choosei (fun i (textureName, samplerState) ->
+                                    let textureName = Symbol.Create textureName
+
+                                    match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                                    | Some (:? aval<ITexture> as tex) ->
+                                        let s = createSamplerState this textureName uniforms samplerState
+                                        let vs = this.CreateImageSampler(sam.samplerType, tex, s)
+                                        Some(i, vs)
+                                    | _ ->
+                                        Log.warn "[Vulkan] could not find texture: %A" textureName
+                                        None
+                                )
+
+                            let viewSam = this.CreateImageSamplerArray(list)
+                            AdaptiveDescriptor.AdaptiveCombinedImageSampler(b.Binding, viewSam) |> Some
+
+                    | ImageParameter img ->
+                        let viewSam = 
+                            let textureName = Symbol.Create img.imageName
+                            match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                            | Some (:? aval<ITexture> as tex) ->
+
+                                let tex = this.CreateImage(tex)
+                                let view = this.CreateImageView(img.imageType, tex)
+
+                                view
+
+                            | _ ->
+                                failf "could not find texture: %A" textureName
+
+                        AdaptiveDescriptor.AdaptiveStorageImage(b.Binding, viewSam) |> Some
+
+                    | AccelerationStructureParameter _ ->
+                        None
+                )
+
+            let res = this.CreateDescriptorSet(ds, descriptors)
+
+            res
+        )
+
     static let prepareObject (this : ResourceManager) (renderPass : RenderPass) (ro : RenderObject) =
 
         let resources = System.Collections.Generic.List<IResourceLocation>()
 
         let programLayout, program = this.CreateShaderProgram(renderPass, ro.Surface, ro.Mode)
 
-        let descriptorSets =
-            programLayout.DescriptorSetLayouts |> Array.map (fun ds ->
-                let descriptors =
-                    ds.Bindings |> Array.choose (fun b ->
-                        match b.Parameter with
-                        | UniformBlockParameter block ->
-                            let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, ro.Uniforms, SymDict.empty)
-                            resources.Add buffer
-                            AdaptiveDescriptor.AdaptiveUniformBuffer (b.Binding, buffer) |> Some
-
-                        | StorageBufferParameter block ->
-                            let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, ro.Uniforms, SymDict.empty)
-                            AdaptiveDescriptor.AdaptiveStorageBuffer (b.Binding, buffer) |> Some
-
-                        | SamplerParameter sam ->
-                            match sam.samplerTextures with
-                            | [] ->
-                                Log.warn "could not get sampler information for: %A" sam
-                                None
-
-                            | descriptions ->
-                                let list =
-                                    descriptions
-                                    |> List.choosei (fun i (textureName, samplerState) ->
-                                        let textureName = Symbol.Create textureName
-
-                                        match ro.Uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                                        | Some (:? aval<ITexture> as tex) ->
-                                            let s = createSamplerState this textureName ro.Uniforms samplerState
-                                            let vs = this.CreateImageSampler(sam.samplerType, tex, s)
-                                            Some(i, vs)
-                                        | _ ->
-                                            Log.warn "[Vulkan] could not find texture: %A" textureName
-                                            None
-                                    )
-
-                                let viewSam = this.CreateImageSamplerArray(list)
-                                AdaptiveDescriptor.AdaptiveCombinedImageSampler(b.Binding, viewSam) |> Some
-
-                        | ImageParameter img ->
-                            let viewSam =
-                                let textureName = Symbol.Create img.imageName
-                                match ro.Uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                                | Some (:? aval<ITexture> as tex) ->
-
-                                    let tex = this.CreateImage(tex)
-                                    let view = this.CreateImageView(img.imageType, tex)
-
-                                    view
-
-                                | _ ->
-                                    failf "could not find texture: %A" textureName
-
-                            AdaptiveDescriptor.AdaptiveStorageImage(b.Binding, viewSam) |> Some
-                    )
-
-                let res = this.CreateDescriptorSet(ds, descriptors)
-
-                res
-            )
+        let descriptorSets = createDescriptorSets this programLayout ro.Uniforms resources     
 
         let isCompatible (shaderType : FShade.GLSL.GLSLType) (dataType : Type) =
             // TODO: verify type compatibility
@@ -298,69 +304,8 @@ type DevicePreparedRenderObjectExtensions private() =
     [<Extension>]
     static member CreateDescriptorSets (this : ResourceManager, layout : PipelineLayout, uniforms : IUniformProvider) =
         let resources = System.Collections.Generic.List<IResourceLocation>()
-        let sets = 
-            layout.DescriptorSetLayouts |> Array.map (fun ds ->
-                let descriptors = 
-                    ds.Bindings |> Array.choose (fun b ->
-                        match b.Parameter with
-                        | UniformBlockParameter block ->
-                            let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
-                            resources.Add buffer
-                            AdaptiveDescriptor.AdaptiveUniformBuffer (b.Binding, buffer) |> Some
-
-                        | StorageBufferParameter block ->
-                            let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
-                            AdaptiveDescriptor.AdaptiveStorageBuffer (b.Binding, buffer) |> Some
-
-                        | SamplerParameter sam ->
-                            match sam.samplerTextures with
-                            | [] ->
-                                Log.warn "could not get sampler information for: %A" sam
-                                None
-
-                            | descriptions ->
-                                let list =
-                                    descriptions
-                                    |> List.choosei (fun i (textureName, samplerState) ->
-                                        let textureName = Symbol.Create textureName
-                                        let samplerState = samplerState.SamplerState
-
-                                        match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                                        | Some (:? aval<ITexture> as tex) ->
-                                            let vs = this.CreateImageSampler(sam.samplerType, tex, AVal.constant samplerState)
-                                            Some(i, vs)
-                                        | _ ->
-                                            Log.warn "[Vulkan] could not find texture: %A" textureName
-                                            None
-                                    )
-
-                                let viewSam = this.CreateImageSamplerArray(list)
-                                AdaptiveDescriptor.AdaptiveCombinedImageSampler(b.Binding, viewSam) |> Some
-
-                        | ImageParameter img ->
-                            let viewSam = 
-                                let textureName = Symbol.Create img.imageName
-                                match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                                | Some (:? aval<ITexture> as tex) ->
-
-                                    let tex = this.CreateImage(tex)
-                                    let view = this.CreateImageView(img.imageType, tex)
-
-                                    view
-
-                                | _ ->
-                                    failf "could not find texture: %A" textureName
-
-                            AdaptiveDescriptor.AdaptiveStorageImage(b.Binding, viewSam) |> Some
-                    )
-
-                let res = this.CreateDescriptorSet(ds, descriptors)
-
-                res
-            )
-
+        let sets = createDescriptorSets this layout uniforms resources
         sets, CSharpList.toList resources
-
 
     [<Extension>]
     static member PrepareRenderObject(this : ResourceManager, renderPass : RenderPass, ro : RenderObject) =

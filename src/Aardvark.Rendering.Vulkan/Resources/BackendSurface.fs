@@ -14,13 +14,14 @@ open Microsoft.FSharp.NativeInterop
 
 type PipelineInfo =
     {
-        pInputs         : list<FShade.GLSL.GLSLParameter>
-        pOutputs        : list<FShade.GLSL.GLSLParameter>
-        pUniformBlocks  : list<FShade.GLSL.GLSLUniformBuffer>
-        pStorageBlocks  : list<FShade.GLSL.GLSLStorageBuffer>
-        pTextures       : list<FShade.GLSL.GLSLSampler>
-        pImages         : list<FShade.GLSL.GLSLImage>
-        pEffectLayout   : Option<FShade.EffectInputLayout>
+        pInputs                 : list<FShade.GLSL.GLSLParameter>
+        pOutputs                : list<FShade.GLSL.GLSLParameter>
+        pUniformBlocks          : list<FShade.GLSL.GLSLUniformBuffer>
+        pStorageBlocks          : list<FShade.GLSL.GLSLStorageBuffer>
+        pTextures               : list<FShade.GLSL.GLSLSampler>
+        pImages                 : list<FShade.GLSL.GLSLImage>
+        pAccelerationStructures : list<FShade.GLSL.GLSLAccelerationStructure>
+        pEffectLayout           : Option<FShade.EffectInputLayout>
     }
 
 

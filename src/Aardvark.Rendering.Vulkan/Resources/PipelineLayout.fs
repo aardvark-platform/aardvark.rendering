@@ -7,6 +7,7 @@ open Aardvark.Base.Sorting
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Vulkan.KHRRayTracingPipeline
+open Aardvark.Rendering.Vulkan.KHRAccelerationStructure
 open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
@@ -106,6 +107,7 @@ module PipelineLayout =
         let textures = Dict.empty
         let images = Dict.empty
         let storageBlocks = Dict.empty
+        let accelerationStructures = Dict.empty
         let mutable setCount = 0
 
         let mutable inputs = []
@@ -161,11 +163,24 @@ module PipelineLayout =
                         | _ -> VkShaderStageFlags.None
                                     
                 images.[key] <- (img, referenced ||| flags)
+
+            for accel in iface.shaderAccelerationStructures do
+                let accel = iface.program.accelerationStructures.[accel]
+                setCount <- max setCount (accel.accelSet + 1)
+                let key = (accel.accelSet, accel.accelBinding)
+                let referenced = 
+                    match accelerationStructures.TryGetValue key with
+                    | (true, (_, referencedBy)) -> referencedBy
+                    | _ -> VkShaderStageFlags.None
+                                    
+                accelerationStructures.[key] <- (accel, referenced ||| flags)
+                
                             
         let uniformBlocks = uniformBlocks.Values |> Seq.toList
         let storageBlocks = storageBlocks.Values |> Seq.toList
         let textures = textures.Values |> Seq.toList
         let images = images.Values |> Seq.toList
+        let accelerationStructures = accelerationStructures.Values |> Seq.toList
 
         // create DescriptorSetLayouts for all used slots (empty if no bindings)
         let sets = Array.init setCount (fun set -> CSharpList.empty)
@@ -211,6 +226,16 @@ module PipelineLayout =
 
             sets.[img.imageSet].Add binding
 
+        for (accel, stageFlags) in accelerationStructures do
+            let binding = 
+                DescriptorSetLayoutBinding.create
+                    VkDescriptorType.AccelerationStructureKhr
+                    stageFlags
+                    (AccelerationStructureParameter accel)
+                    device
+
+            sets.[accel.accelSet].Add binding
+
 
         let setLayouts =
             sets |> Array.map (fun l -> 
@@ -240,13 +265,14 @@ module PipelineLayout =
   
             let info =    
                 {
-                    pInputs         = inputs
-                    pOutputs        = outputs
-                    pUniformBlocks  = List.map fst uniformBlocks
-                    pStorageBlocks  = List.map fst storageBlocks
-                    pTextures       = List.map fst textures
-                    pImages         = List.map fst images
-                    pEffectLayout   = None
+                    pInputs                 = inputs
+                    pOutputs                = outputs
+                    pUniformBlocks          = List.map fst uniformBlocks
+                    pStorageBlocks          = List.map fst storageBlocks
+                    pTextures               = List.map fst textures
+                    pImages                 = List.map fst images
+                    pAccelerationStructures = List.map fst accelerationStructures
+                    pEffectLayout           = None
                 }    
                       
             return new PipelineLayout(device, !!pHandle, setLayouts, info, layers, perLayer)
