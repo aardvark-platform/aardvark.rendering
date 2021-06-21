@@ -174,14 +174,12 @@ module ``IQuery Extensions`` =
 
     let rec private unwrap (query : IQuery) =
         match query with
-        | :? IVulkanQuery as q -> Seq.singleton q
-        | :? Queries as q -> Seq.concat <| q.Map unwrap
+        | :? IVulkanQuery as q -> [q]
+        | :? Queries as q -> List.concat <| q.Map unwrap
         | _ -> failwithf "unsupported query: %A" query
 
     type IQuery with
-
-        member x.ToVulkanQuery() =
-            unwrap x
+        member x.ToVulkanQuery() = unwrap x
 
 [<AutoOpen>]
 module ``Query Command Extensions`` =

@@ -57,6 +57,7 @@
     <Compile Include="Resources\Raytracing\RaytracingProgram.fs" />
     <Compile Include="Resources\Raytracing\RaytracingPipeline.fs" />
     <Compile Include="Resources\Raytracing\ShaderBindingTable.fs" />
+    <Compile Include="Resources\Raytracing\InstanceBuffer.fs" />
     <Compile Include="Resources\DescriptorPool.fs" />
     <Compile Include="Resources\DescriptorSet.fs" />
     <Compile Include="Resources\States.fs" />
@@ -77,12 +78,12 @@
     <Compile Include="Swapchain\Swapchain.fs" />
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
-    <Compile Include="Management\Raytracing\SceneManager.fs" />
-    <Compile Include="Management\Raytracing\PreparedPipelineState.fs" />
+    <Compile Include="Management\PreparedRaytracingPipeline.fs" />
     <Compile Include="Runtime\GraphicsCommands.fs" />
     <Compile Include="Runtime\CommandTask.fs" />
     <Compile Include="Runtime\Compiler.fs" />
     <Compile Include="Runtime\ClearTask.fs" />
+    <Compile Include="Runtime\RaytracingTask.fs" />
     <Compile Include="Runtime\Runtime.fs" />
     <Compile Include="Runtime\Headless.fs" />
     <Content Include="Aardvark.Rendering.Vulkan.dll.config">

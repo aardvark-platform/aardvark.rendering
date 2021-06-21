@@ -53,11 +53,13 @@
     <Compile Include="Resources\Framebuffer\Framebuffer.fs" />
     <Compile Include="Resources\Framebuffer\FramebufferExtensions.fs" />
     <Compile Include="Resources\Framebuffer\OutputDescription.fs" />
+    <Compile Include="Resources\Raytracing\AccelerationStructure.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveResource.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveTextures.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveRenderbuffers.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveFramebuffers.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveCompactBuffer.fs" />
+    <Compile Include="Resources\Adaptive\AdaptiveAccelerationStructure.fs" />
     <Compile Include="Resources\NullResources.fs" />
     <Compile Include="Resources\ResourceAccess.fs" />
     <Compile Include="Resources\ResourceManagement.fs" />
@@ -87,7 +89,6 @@
     <Compile Include="Pipeline\DrawCalls.fs" />
     <Compile Include="Pipeline\PipelineState.fs" />
     <Compile Include="Pipeline\RenderObject.fs" />
-    <Compile Include="Pipeline\Raytracing.fs" />
     <Compile Include="Runtime\Lod\Lod.fs" />
     <Compile Include="Runtime\Lod\LodTree.fs" />
     <Compile Include="Runtime\Lod\LodRuntime.fs" />
@@ -98,6 +99,8 @@
     <Compile Include="Runtime\Query\MultiQuery.fs" />
     <Compile Include="Runtime\Query\ConcurrentQuery.fs" />
     <Compile Include="Runtime\Compute\Compute.fs" />
+    <Compile Include="Runtime\Raytracing\Raytracing.fs" />
+    <Compile Include="Runtime\Raytracing\RaytracingRuntime.fs" />
     <Compile Include="Runtime\BackendConfiguration.fs" />
     <Compile Include="Runtime\ResourceManager.fs" />
     <Compile Include="Runtime\ClearValues.fs" />

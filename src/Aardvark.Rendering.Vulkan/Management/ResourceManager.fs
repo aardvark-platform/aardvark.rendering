@@ -7,10 +7,13 @@ open System.Runtime.InteropServices
 open Aardvark.Base
 
 open Aardvark.Rendering
+open Aardvark.Rendering.Vulkan.Raytracing
 open FSharp.Data.Adaptive
 open Microsoft.FSharp.NativeInterop
 
 open EXTConservativeRasterization
+open KHRBufferDeviceAddress
+open KHRAccelerationStructure
 
 #nowarn "9"
 // #nowarn "51"
@@ -1385,23 +1388,23 @@ module Resources =
             if input.GetValue token then 1 else 0
 
     module Raytracing =
-        open Aardvark.Rendering.Vulkan.Raytracing
+        open Aardvark.Rendering.Raytracing
 
-        type AccelerationStructureResource<'T>(owner : IResourceCache, key : list<obj>, device : Device,
-                                               getData : 'T -> AccelerationStructureData, input : aval<'T>) =
+        type AccelerationStructureResource(owner : IResourceCache, key : list<obj>, device : Device,
+                                           instanceBuffer : IResourceLocation<Buffer>, instanceCount : aval<int>, usage : AccelerationStructureUsage) =
             inherit AbstractResourceLocation<AccelerationStructure>(owner, key)
 
             let mutable handle : Option<AccelerationStructure> = None
             let mutable version = 0
 
             let create (data : AccelerationStructureData) =
-                let acc = AccelerationStructure.create device data
+                let acc = AccelerationStructure.create device true usage data
                 handle <- Some acc
                 inc &version
                 { handle = acc; version = version }
 
             override x.Create() =
-                input.Acquire()
+                instanceBuffer.Acquire()
 
             override x.Destroy() =
                 match handle with
@@ -1410,11 +1413,13 @@ module Resources =
                     handle <- None
                 | None -> ()
 
-                input.Release()
+                instanceBuffer.Release()
 
             override x.GetHandle(token : AdaptiveToken) =
                 if x.OutOfDate then
-                    let data = getData <| input.GetValue(token)
+                    let buffer = instanceBuffer.GetValue(token)
+                    let count = instanceCount.GetValue(token)
+                    let data = AccelerationStructureData.Instances { Buffer = buffer; Count = uint32 count }
 
                     match handle with
                     | None -> create data
@@ -1432,13 +1437,13 @@ module Resources =
 
 
         type RaytracingPipelineResource(owner : IResourceCache, key : list<obj>,
-                                        layout : PipelineLayout, program : RaytracingProgram, maxRecursionDepth : aval<uint32>) =
+                                        program : RaytracingProgram, maxRecursionDepth : aval<int>) =
             inherit AbstractResourceLocation<RaytracingPipeline>(owner, key)
 
             let mutable handle : Option<RaytracingPipelineDescription * RaytracingPipeline> = None
             let mutable version = 0
 
-            let device = layout.Device
+            let device = program.Device
 
             let destroy() =
                 handle |> Option.iter (snd >> Disposable.dispose)
@@ -1461,7 +1466,7 @@ module Resources =
             override x.GetHandle(token : AdaptiveToken) =
                 if x.OutOfDate then
                     let maxRec = maxRecursionDepth.GetValue(token)
-                    let desc = { Layout = layout; Program = program; MaxRecursionDepth = maxRec }
+                    let desc = { Program = program; MaxRecursionDepth = uint32 maxRec }
 
                     match handle with
                     | Some (o, p) when desc = o ->
@@ -1476,7 +1481,7 @@ module Resources =
 
 
         type ShaderBindingTableResource(owner : IResourceCache, key : list<obj>,
-                                        pipeline : IResourceLocation<RaytracingPipeline>, hitConfigs : aval<Set<HitGroupConfig>>) =
+                                        pipeline : IResourceLocation<RaytracingPipeline>, hitConfigs : aval<Set<HitConfig>>) =
             inherit AbstractResourceLocation<ShaderBindingTable>(owner, key)
 
             let mutable handle : Option<ShaderBindingTable> = None
@@ -1519,6 +1524,7 @@ module Resources =
                     match handle with
                     | Some tbl -> { handle = tbl; version = version }
                     | None -> failwith "[Resource] inconsistent state"
+
 
 open Resources
 open Resources.Raytracing
@@ -1886,43 +1892,35 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
         )
 
-    member x.CreateAccelerationStructure(data : aval<Raytracing.Geometry[]>) =
+    member x.CreateAccelerationStructure(objects : amap<Raytracing.TraceObject, int>, sbt : IResourceLocation<Raytracing.ShaderBindingTable>,
+                                         usage : Raytracing.AccelerationStructureUsage) =
+
+        let bufferUsage = VkBufferUsageFlags.ShaderDeviceAddressBitKhr ||| VkBufferUsageFlags.AccelerationStructureBuildInputReadOnlyBitKhr
+
         accelerationStructureCache.GetOrCreate(
-            [ data :> obj ],
+            [ objects :> obj; sbt :> obj; usage :> obj ],
             fun cache key ->
-                new AccelerationStructureResource<_>(
-                    cache, key, device,
-                    Raytracing.AccelerationStructureData.Geometry,
-                    data
-                )
+                let adaptiveBuffer = AdaptiveInstanceBuffer(objects, sbt)
+                let buffer = x.CreateBuffer(adaptiveBuffer, bufferUsage)
+                let count = adaptiveBuffer.Count
+
+                new AccelerationStructureResource(cache, key, device, buffer, count, usage)
         )
 
-    member x.CreateAccelerationStructure(data : aval<Raytracing.InstanceData>) =
-        accelerationStructureCache.GetOrCreate(
-            [ data :> obj ],
-            fun cache key ->
-                new AccelerationStructureResource<_>(
-                    cache, key, device,
-                    Raytracing.AccelerationStructureData.Instances,
-                    data
-                )
-        )
-
-    member x.CreateRaytracingPipeline(layout            : PipelineLayout,
-                                      program           : Raytracing.RaytracingProgram, 
-                                      maxRecursionDepth : aval<uint32>) =
+    member x.CreateRaytracingPipeline(program           : Raytracing.RaytracingProgram, 
+                                      maxRecursionDepth : aval<int>) =
 
         raytracingPipelineCache.GetOrCreate(
-            [ layout :> obj; program :> obj; maxRecursionDepth :> obj ],
+            [ program :> obj; maxRecursionDepth :> obj ],
             fun cache key ->
                 new RaytracingPipelineResource(
                     cache, key,
-                    layout, program, maxRecursionDepth
+                    program, maxRecursionDepth
                 )
         )
 
     member x.CreateShaderBindingTable(pipeline : IResourceLocation<Raytracing.RaytracingPipeline>,
-                                      hitConfigs : aval<Set<Raytracing.HitGroupConfig>>) =
+                                      hitConfigs : aval<Set<Raytracing.HitConfig>>) =
 
         shaderBindingTableCache.GetOrCreate(
             [ pipeline :> obj; hitConfigs :> obj ],

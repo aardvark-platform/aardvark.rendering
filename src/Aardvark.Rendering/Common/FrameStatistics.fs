@@ -19,6 +19,7 @@ type ResourceKind =
     | IndirectBuffer = 10
     | DrawCall = 11
     | IndexBuffer = 12
+    | AccelerationStructure = 13
 
 
 [<AutoOpen>]

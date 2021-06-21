@@ -5,7 +5,6 @@
 open Microsoft.FSharp.NativeInterop
 
 open Aardvark.Base
-open Aardvark.Rendering
 open Aardvark.Rendering.Raytracing
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Vulkan.KHRAccelerationStructure
@@ -15,16 +14,25 @@ type AccelerationStructure =
     class
         inherit Resource<VkAccelerationStructureKHR>
         val Data : AccelerationStructureData
+        val Usage : AccelerationStructureUsage
+        val AllowUpdate : bool
         val ResultBuffer : Buffer
         val ScratchBuffer : Buffer
         val DeviceAddress : VkDeviceAddress
+
+        member x.GeometryCount =
+            match x.Data with
+            | AccelerationStructureData.Geometry data -> data.Length
+            | _ -> 0
 
         override x.Destroy() =
             VkRaw.vkDestroyAccelerationStructureKHR(x.Device.Handle, x.Handle, NativePtr.zero)
             x.ResultBuffer.Dispose()
             x.ScratchBuffer.Dispose()
 
-        new(device : Device, handle : VkAccelerationStructureKHR, data : AccelerationStructureData, resultBuffer : Buffer, scratchBuffer : Buffer) =
+        new(device : Device, handle : VkAccelerationStructureKHR,
+            data : AccelerationStructureData, usage : AccelerationStructureUsage, allowUpdate : bool,
+            resultBuffer : Buffer, scratchBuffer : Buffer) =
             let address =
                 native {
                     let! pInfo = VkAccelerationStructureDeviceAddressInfoKHR(handle)
@@ -33,9 +41,15 @@ type AccelerationStructure =
 
             { inherit Resource<_>(device, handle)
               Data = data
+              Usage = usage
+              AllowUpdate = allowUpdate
               ResultBuffer = resultBuffer
               ScratchBuffer = scratchBuffer
-              DeviceAddress = address }   
+              DeviceAddress = address }
+
+        interface IAccelerationStructure with
+            member x.Usage = x.Usage
+            member x.GeometryCount = x.GeometryCount
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -78,7 +92,8 @@ module AccelerationStructure =
                         [ CommandResource.compensation (fun _ -> buildRangeInfos |> Array.iter NativePtr.free) ]
                 }
 
-    let private createHandle (device : Device) (data : AccelerationStructureData) (resultBuffer : Buffer) (scratchBuffer : Buffer) =
+    let private createHandle (device : Device) (data : AccelerationStructureData) (usage : AccelerationStructureUsage)
+                             (allowUpdate : bool) (resultBuffer : Buffer) (scratchBuffer : Buffer) =
         let typ =
             match data with
             | AccelerationStructureData.Instances _ -> VkAccelerationStructureTypeKHR.TopLevel
@@ -101,14 +116,14 @@ module AccelerationStructure =
                 return !!pHandle
             }    
 
-        new AccelerationStructure(device, handle, data, resultBuffer, scratchBuffer)
+        new AccelerationStructure(device, handle, data, usage, allowUpdate, resultBuffer, scratchBuffer)
 
     /// Creates and builds an acceleration structure with the given data.
-    let create (device : Device) (data : AccelerationStructureData) =
+    let create (device : Device) (allowUpdate : bool) (usage : AccelerationStructureUsage) (data : AccelerationStructureData) =
 
-        use nativeData = NativeAccelerationStructureData.alloc data
+        use nativeData = NativeAccelerationStructureData.alloc allowUpdate usage data
         let buffers = nativeData |> NativeAccelerationStructureData.createBuffers device
-        let accelerationStructure = createHandle device data buffers.ResultBuffer buffers.ScratchBuffer
+        let accelerationStructure = createHandle device data usage allowUpdate buffers.ResultBuffer buffers.ScratchBuffer
     
         device.perform {
             do! Command.Build(accelerationStructure, nativeData, false)
@@ -131,21 +146,25 @@ module AccelerationStructure =
             | _ -> false
 
         let isCompatible =
-            match data, accelerationStructure.Data with
-            | AccelerationStructureData.Instances n, AccelerationStructureData.Instances o ->
-                n.Count <= o.Count
+            if accelerationStructure.AllowUpdate then
+                match data, accelerationStructure.Data with
+                | AccelerationStructureData.Instances n, AccelerationStructureData.Instances o ->
+                    n.Count <= o.Count
 
-            | AccelerationStructureData.Geometry n, AccelerationStructureData.Geometry o ->
-                n.Length <= o.Length &&
-                (n, o) ||> Array.forall2 (fun n o ->
-                    n.Primitives <= o.Primitives && isGeometryCompatible n.Data o.Data
-                )
+                | AccelerationStructureData.Geometry n, AccelerationStructureData.Geometry o ->
+                    n.Length <= o.Length &&
+                    (n, o) ||> Array.forall2 (fun n o ->
+                        n.Primitives <= o.Primitives && isGeometryCompatible n.Data o.Data
+                    )
 
-            | _ ->
-                failwithf "[Raytracing] Trying to update acceleration structure with data of different type"
+                | _ ->
+                    failwithf "[Raytracing] Trying to update acceleration structure with data of different type"
+
+            else
+                false
 
         if isCompatible then
-            use nativeData = NativeAccelerationStructureData.alloc data
+            use nativeData = NativeAccelerationStructureData.alloc true accelerationStructure.Usage data
             accelerationStructure.Device.perform {
                 do! Command.Build(accelerationStructure, nativeData, true)
             }

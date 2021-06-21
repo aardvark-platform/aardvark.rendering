@@ -405,6 +405,10 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.CreatePipelineQuery(statistics) = failwith ""
         member x.SupportedPipelineStatistics = Set.empty
 
+        member x.CreateAccelerationStructure(geometry, usage, allowUpdate) = failwith ""
+        member x.TryUpdateAccelerationStructure(handle, usage) = failwith ""
+        member x.CompileTrace(pipeline, commands) = failwith ""
+
         member x.ShaderCachePath
             with get() = None
             and set(_) = ()

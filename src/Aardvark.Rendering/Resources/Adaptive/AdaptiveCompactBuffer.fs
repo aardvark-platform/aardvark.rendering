@@ -4,7 +4,7 @@ open Aardvark.Base
 open FSharp.Data.Adaptive
 open System
 
-type private AdaptiveValueWriter<'T>(input : aval<'T>, index : int, elementSizeInBytes : int, write : nativeint -> 'T -> unit) =
+type private AdaptiveValueWriter<'T>(getInput : AdaptiveToken -> int -> 'T, index : int, elementSizeInBytes : int, write : nativeint -> 'T -> unit) =
     inherit AdaptiveObject()
 
     let mutable currentIndex = index
@@ -15,23 +15,25 @@ type private AdaptiveValueWriter<'T>(input : aval<'T>, index : int, elementSizeI
 
     member x.Write(token : AdaptiveToken, buffer : ChangeableBuffer) =
         x.EvaluateIfNeeded token () (fun _ ->
-            let value = input.GetValue(token)
+            let value = getInput token currentIndex
             buffer.Write(currentIndex * elementSizeInBytes, elementSizeInBytes, fun dst -> write dst value)
         )
 
     member x.Dispose() =
-        input.Outputs.Remove(x) |> ignore
         x.Outputs.Clear()
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
 
-type AdaptiveCompactBuffer<'T>(input : amap<aval<'T>, int>, elementSizeInBytes : int, write : nativeint -> 'T -> unit) =
+type AdaptiveCompactBuffer<'T, 'U>(input : amap<'T, int>, elementSizeInBytes : int,
+                                   acquire : 'T -> unit, release : 'T -> unit,
+                                   evaluate : AdaptiveToken -> int -> 'T -> 'U,
+                                   write : nativeint -> 'U -> unit) =
     inherit AdaptiveResource<IBuffer>()
 
     let mutable handle = None
-    let writers = Dict<aval<'T>, AdaptiveValueWriter<'T>>()
+    let writers = Dict<'T, AdaptiveValueWriter<'U>>()
 
     // Adds a writer or modifies its index
     let set value index =
@@ -39,7 +41,9 @@ type AdaptiveCompactBuffer<'T>(input : amap<aval<'T>, int>, elementSizeInBytes :
         | (true, w) ->
             w.SetIndex(index)
         | _ ->
-            let w = new AdaptiveValueWriter<_>(value, index, elementSizeInBytes, write)
+            acquire value
+            let eval t i = evaluate t i value
+            let w = new AdaptiveValueWriter<_>(eval, index, elementSizeInBytes, write)
             writers.Add(value, w)
 
     // Removes writer
@@ -48,6 +52,7 @@ type AdaptiveCompactBuffer<'T>(input : amap<aval<'T>, int>, elementSizeInBytes :
         | (true, w) ->
             w.Dispose()
             writers.Remove(value) |> ignore
+            release value
         | _ -> ()
 
     let create() =
@@ -55,7 +60,7 @@ type AdaptiveCompactBuffer<'T>(input : amap<aval<'T>, int>, elementSizeInBytes :
         let reader = input.GetReader()
         buffer, reader
 
-    let update (token : AdaptiveToken) (buffer : ChangeableBuffer) (reader : IHashMapReader<aval<'T>, int>) =
+    let update (token : AdaptiveToken) (buffer : ChangeableBuffer) (reader : IHashMapReader<'T, int>) =
         let ops = reader.GetChanges(token)
         let mutable delta = 0
         
@@ -79,6 +84,9 @@ type AdaptiveCompactBuffer<'T>(input : amap<aval<'T>, int>, elementSizeInBytes :
             writer.Write(token, buffer)
 
         buffer.GetValue(token)
+
+    member x.Count =
+        writers.Count
 
     override x.Create() =
         handle <- Some <| create()

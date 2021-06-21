@@ -15,30 +15,20 @@ open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Vulkan.KHRAccelerationStructure
 open Aardvark.Rendering.Vulkan.KHRBufferDeviceAddress
 
-//type AccelerationStructureInstance =
-//    { Transform           : Trafo3d
-//      CustomIndex         : uint32
-//      SbtOffset           : uint32
-//      Culling             : CullMode
-//      GeometryMode        : GeometryMode
-//      Mask                : InstanceMask 
-//      BottomLevelAddress  : uint64 }
-
-type InstanceData =
+[<Struct>]
+type Instances =
     { Buffer : Buffer
       Count : uint32 }
 
 [<RequireQualifiedAccess>]
 type AccelerationStructureData =
     | Geometry of Geometry[]
-    | Instances of InstanceData
+    | Instances of Instances
 
-type private NativeAccelerationStructureData(typ : VkAccelerationStructureTypeKHR, data : VkAccelerationStructureGeometryKHR[], primitives : uint32[]) =
+type private NativeAccelerationStructureData(typ : VkAccelerationStructureTypeKHR, data : VkAccelerationStructureGeometryKHR[],
+                                             primitives : uint32[], flags : VkBuildAccelerationStructureFlagsKHR) =
     let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
     let pData = NativePtr.ofNativeInt<VkAccelerationStructureGeometryKHR> <| gc.AddrOfPinnedObject()
-
-    let flags =
-        VkBuildAccelerationStructureFlagsKHR.PreferFastTraceBit ||| VkBuildAccelerationStructureFlagsKHR.AllowUpdateBit
 
     let geometryInfo =
         let mutable info = VkAccelerationStructureBuildGeometryInfoKHR.Empty
@@ -54,10 +44,6 @@ type private NativeAccelerationStructureData(typ : VkAccelerationStructureTypeKH
     member x.Dispose() =
         for d in data do
             match d.geometryType with
-            //| VkGeometryTypeKHR.Instances ->
-            //    let address = d.geometry.instances.data.hostAddress
-            //    address |> NativePtr.ofNativeInt<VkAccelerationStructureInstanceKHR> |> NativePtr.free
-
             | VkGeometryTypeKHR.Triangles ->
                 let address = d.geometry.triangles.transformData.hostAddress
                 address |> NativePtr.ofNativeInt<VkTransformMatrixKHR> |> NativePtr.free
@@ -93,30 +79,21 @@ module private NativeAccelerationStructureData =
             | :? Buffer as b -> b
             | _ -> failwithf "[AccelerationStructure] Expected buffer of type %A but got %A" typeof<Buffer> buffer
 
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module private CullMode =
-    
-        let toFlags = function
-            | CullMode.Enabled order ->
-                if order = WindingOrder.CounterClockwise then
-                    VkGeometryInstanceFlagsKHR.TriangleFrontCounterclockwiseBit
-                else
-                    VkGeometryInstanceFlagsKHR.None
-    
-            | CullMode.Disabled ->
-                VkGeometryInstanceFlagsKHR.TriangleFacingCullDisableBit
-    
-    
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module private GeometryMode =
-    
-        let toFlags = function
-            | GeometryMode.Default -> VkGeometryInstanceFlagsKHR.None
-            | GeometryMode.Opaque -> VkGeometryInstanceFlagsKHR.ForceOpaqueBit
-            | GeometryMode.Transparent -> VkGeometryInstanceFlagsKHR.ForceNoOpaqueBit
+    let private getFlags (allowUpdate : bool) (usage : AccelerationStructureUsage) =
+        let hint =
+            match usage with
+            | AccelerationStructureUsage.Static -> VkBuildAccelerationStructureFlagsKHR.PreferFastTraceBit
+            | AccelerationStructureUsage.Dynamic -> VkBuildAccelerationStructureFlagsKHR.PreferFastBuildBit
 
+        let update =
+            if allowUpdate then
+                VkBuildAccelerationStructureFlagsKHR.AllowUpdateBit
+            else
+                VkBuildAccelerationStructureFlagsKHR.None
 
-    let private ofGeometry (data : Geometry[]) =
+        update ||| hint 
+
+    let private ofGeometry (allowUpdate : bool) (usage : AccelerationStructureUsage) (data : Geometry[]) =
 
         let ofAabbData (data : AABBsData) =
             let address =
@@ -168,29 +145,13 @@ module private NativeAccelerationStructureData =
         let primitives =
             data |> Array.map (fun g -> g.Primitives)
 
+        let flags = getFlags allowUpdate usage
+
         new NativeAccelerationStructureData(
-            VkAccelerationStructureTypeKHR.BottomLevel, geometries, primitives
+            VkAccelerationStructureTypeKHR.BottomLevel, geometries, primitives, flags
         )
 
-
-    //let private ofInstances (data : AccelerationStructureInstance[]) =
-        //let pInstances = NativePtr.alloc data.Length
-
-        //data |> Array.iteri (fun i inst ->
-        //    let flags =
-        //        CullMode.toFlags inst.Culling ||| GeometryMode.toFlags inst.GeometryMode
-
-        //    let inst =
-        //        VkAccelerationStructureInstanceKHR(
-        //            VkTransformMatrixKHR(M34f inst.Transform.Forward),
-        //            uint24 inst.CustomIndex, uint8 inst.Mask, uint24 inst.SbtOffset, uint8 flags,
-        //            inst.BottomLevelAddress
-        //        )
-
-        //    inst |> NativePtr.set pInstances i
-        //)
-
-    let private ofInstances (buffer : InstanceData) =
+    let private ofInstances (allowUpdate : bool) (usage : AccelerationStructureUsage) (buffer : Instances) =
         let geometry =
             VkAccelerationStructureGeometryKHR(
                 VkGeometryTypeKHR.Instances,
@@ -200,14 +161,16 @@ module private NativeAccelerationStructureData =
                 VkGeometryFlagsKHR.None
             )
 
+        let flags = getFlags allowUpdate usage
+
         new NativeAccelerationStructureData(
-            VkAccelerationStructureTypeKHR.TopLevel, [| geometry |], [| buffer.Count |]
+            VkAccelerationStructureTypeKHR.TopLevel, [| geometry |], [| buffer.Count |], flags
         )
 
 
-    let alloc = function
-        | AccelerationStructureData.Geometry data -> ofGeometry data
-        | AccelerationStructureData.Instances data -> ofInstances data
+    let alloc allowUpdate usage = function
+        | AccelerationStructureData.Geometry data -> ofGeometry allowUpdate usage data
+        | AccelerationStructureData.Instances data -> ofInstances allowUpdate usage data
 
     let createBuffers (device : Device) (data : NativeAccelerationStructureData) =
         let sizes =

@@ -587,6 +587,15 @@ type Runtime() =
             else
                 Set.singleton ClippingInputPrimitives
 
+        member x.CreateAccelerationStructure(geometry, usage, allowUpdate) =
+            failwith "GL backend does not support raytracing"
+
+        member x.TryUpdateAccelerationStructure(handle, geometry) =
+            failwith "GL backend does not support raytracing"
+
+        member x.CompileTrace(pipeline, commands) =
+            failwith "GL backend does not support raytracing"
+
         member x.ShaderCachePath
             with get() = ctx.ShaderCachePath
             and set(value) = ctx.ShaderCachePath <- value

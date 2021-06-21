@@ -10,7 +10,6 @@ open Aardvark.Rendering.Vulkan.KHRRayTracingPipeline
 open Aardvark.Rendering.Vulkan.KHRDeferredHostOperations
 
 type RaytracingPipelineDescription = {
-    Layout : PipelineLayout
     Program : RaytracingProgram
     MaxRecursionDepth : uint32
 }
@@ -18,7 +17,10 @@ type RaytracingPipelineDescription = {
 type RaytracingPipeline(device : Device, handle : VkPipeline, description : RaytracingPipelineDescription) =
     inherit Resource<VkPipeline>(device, handle)
 
-    member x.Description = description
+    member x.Description        = description
+    member x.Program            = description.Program
+    member x.MaxRecursionDepth  = description.MaxRecursionDepth
+    member x.Layout             = description.Program.Layout
 
     override x.Destroy() =
         if x.Handle.IsValid then
@@ -95,7 +97,7 @@ module RaytracingPipeline =
                         uint32 groups.Length, pGroups,
                         maxRecursion,
                         NativePtr.zero, NativePtr.zero, NativePtr.zero,
-                        description.Layout.Handle,
+                        description.Program.Layout.Handle,
                         basePipeline, 0
                     )
 

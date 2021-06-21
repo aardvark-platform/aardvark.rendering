@@ -303,6 +303,8 @@ type VulkanApplication(debug : DebugConfig option, chooseDevice : list<PhysicalD
             yield Instance.Extensions.ShaderSubgroupBallot
             yield Instance.Extensions.GetPhysicalDeviceProperties2
 
+            yield! Instance.Extensions.Raytracing
+
             if debug.IsSome then
                 yield Instance.Extensions.DebugReport
                 yield Instance.Extensions.DebugUtils

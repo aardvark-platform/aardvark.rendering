@@ -5,7 +5,9 @@ open System.Runtime.InteropServices
 open FShade
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.Rendering.Raytracing
 open Aardvark.Rendering.Vulkan
+open Aardvark.Rendering.Vulkan.Raytracing
 open FSharp.Data.Adaptive
 open System.Diagnostics
 open System.Collections.Generic
@@ -534,6 +536,19 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         else
             PipelineStatistics.None
 
+    // Raytracing
+    member x.CreateAccelerationStructure(geometry, usage, allowUpdate) =
+        let data = AccelerationStructureData.Geometry geometry
+        AccelerationStructure.create x.Device allowUpdate usage data :> IAccelerationStructure
+
+    member x.TryUpdateAccelerationStructure(handle : IAccelerationStructure, geometry) =
+        let accel = unbox<AccelerationStructure> handle
+        let data = AccelerationStructureData.Geometry geometry
+        AccelerationStructure.tryUpdate data accel
+
+    member x.CompileTrace(pipeline : RaytracingPipelineState, commands : alist<RaytracingCommand>) =
+        new RaytracingTask(manager, pipeline, commands) :> IRaytracingTask
+
 
     interface IRuntime with
 
@@ -667,6 +682,15 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.SupportedPipelineStatistics =
             x.SupportedPipelineStatistics
+
+        member x.CreateAccelerationStructure(geometry, usage, allowUpdate) =
+            x.CreateAccelerationStructure(geometry, usage, allowUpdate)
+
+        member x.TryUpdateAccelerationStructure(handle, geometry) =
+            x.TryUpdateAccelerationStructure(handle, geometry)
+
+        member x.CompileTrace(pipeline, commands) =
+            x.CompileTrace(pipeline, commands)
 
         member x.ShaderCachePath
             with get() = x.ShaderCachePath

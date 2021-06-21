@@ -163,8 +163,14 @@ type DevicePreparedRenderObjectExtensions private() =
 
                         AdaptiveDescriptor.AdaptiveStorageImage(b.Binding, viewSam) |> Some
 
-                    | AccelerationStructureParameter _ ->
-                        None
+                    | AccelerationStructureParameter a ->
+                        let accel =
+                            let name = Sym.ofString a.accelName
+                            match uniforms.TryGetUniform(Ag.Scope.Root, name) with
+                            | Some (:? IResourceLocation<Raytracing.AccelerationStructure> as accel) -> accel
+                            | _ -> failf "could not find acceleration structure: %A" name
+
+                        AdaptiveDescriptor.AdaptiveAccelerationStructure(a.accelBinding, accel) |> Some
                 )
 
             let res = this.CreateDescriptorSet(ds, descriptors)

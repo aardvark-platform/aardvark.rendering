@@ -148,9 +148,11 @@ module DescriptorSet =
             let cnt = descriptors |> Array.sumBy (function StorageBuffer _ | UniformBuffer _ -> 1 | _ -> 0)
             NativePtr.stackalloc cnt
 
-        let mutable accelHandles, accelWrites =
-            let cnt = descriptors |> Array.sumBy (function AccelerationStructure _ -> 1 | _ -> 0)
-            NativePtr.stackalloc cnt, NativePtr.stackalloc cnt
+        let accelCount =
+            descriptors |> Array.sumBy (function AccelerationStructure _ -> 1 | _ -> 0)
+
+        let mutable accelWrites  = NativePtr.stackalloc accelCount
+        let mutable accelHandles = NativePtr.stackalloc accelCount
 
         let resources : Resource[] =
             descriptors |> Array.collect (function

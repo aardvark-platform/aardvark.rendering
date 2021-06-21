@@ -4,13 +4,9 @@ open System.Runtime.CompilerServices
 
 #nowarn "9"
 
-open Microsoft.FSharp.NativeInterop
-
 open Aardvark.Base
 open Aardvark.Rendering
-open Aardvark.Rendering.Raytracing
 open Aardvark.Rendering.Vulkan
-open Aardvark.Rendering.Vulkan.KHRRayTracingPipeline
 
 type RaytracingStageInfo =
     { Index  : uint32
@@ -23,13 +19,13 @@ type RaytracingProgram(device : Device, effect : FShade.RaytracingEffect,
 
     member x.Effect = effect
     member x.Groups = stages
-    member x.PipelineLayout = pipelineLayout
+    member x.Layout = pipelineLayout
 
     override x.Destroy() =
         stages |> List.iter (
             ShaderGroup.iter (fun _ _ _ s -> s.Module.Dispose())
         )
-        x.PipelineLayout.Dispose()
+        x.Layout.Dispose()
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RaytracingProgram =

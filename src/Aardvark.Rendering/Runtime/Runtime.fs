@@ -2,6 +2,7 @@
 
 open System
 open Aardvark.Base
+open Aardvark.Rendering.Raytracing
 open FSharp.Data.Adaptive
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.Control
@@ -22,6 +23,7 @@ and IRuntime =
     inherit IFramebufferRuntime
     inherit IComputeRuntime
     inherit IQueryRuntime
+    inherit IRaytracingRuntime
 
     abstract member OnDispose : IEvent<unit>
     abstract member ResourceManager : IResourceManager
