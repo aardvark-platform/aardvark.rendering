@@ -139,6 +139,7 @@ module private AdaptiveResourceImplementations =
 
 
     type AdaptiveValueWrapper<'T>(value : aval<'T>, inputs : IAdaptiveValue list) =
+        inherit DecoratorObject(value)
 
         new(value : aval<'T>, input : IAdaptiveValue) =
             AdaptiveValueWrapper(value, [input])
@@ -159,30 +160,13 @@ module private AdaptiveResourceImplementations =
             | _ ->
                 false
 
-        interface IAdaptiveObject with
-            member x.AllInputsProcessed(a) = value.AllInputsProcessed(a)
-            member x.InputChanged(a,b) = value.InputChanged(a,b)
-            member x.Mark() = value.Mark()
-            member x.IsConstant = value.IsConstant
-            member x.Level
-                with get() = value.Level
-                and set v = value.Level <- v
-            member x.OutOfDate
-                with get() = value.OutOfDate
-                and set v = value.OutOfDate <- v
-            member x.Outputs = value.Outputs
-            member x.Tag
-                with get() = value.Tag
-                and set t = value.Tag <- t
-            member x.Weak = value.Weak
-
         interface IAdaptiveValue with
             member x.Accept (v : IAdaptiveValueVisitor<'R>) = v.Visit x
             member x.ContentType = typeof<'T>
-            member x.GetValueUntyped(t) = value.GetValue(t) :> obj
+            member x.GetValueUntyped(t) = x.EvaluateAlways t (fun t -> value.GetValue(t) :> obj)
 
         interface IAdaptiveValue<'T> with
-            member x.GetValue(t) = value.GetValue(t)
+            member x.GetValue(t) = x.EvaluateAlways t value.GetValue
 
         interface IAdaptiveResource with
             member x.Acquire() = inputs |> List.iter (fun i -> i.Acquire())
