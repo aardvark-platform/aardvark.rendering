@@ -128,7 +128,7 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
     let compiled = CompiledCommand(preparedPipeline.ShaderBindingTable, commands)
 
     member x.Run(token : AdaptiveToken, queries : IQuery) =
-        x.EvaluateIfNeeded token () (fun token ->
+        x.EvaluateAlways token (fun token ->
 
             let vulkanQueries = queries.ToVulkanQuery()
 
@@ -142,15 +142,16 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
             let commandChanged =
                 compiled.Update(token)
 
-            if Config.showRecompile then
-                let cause =
-                    String.concat "; " [
-                        if commandChanged then yield "content"
-                        if resourcesChanged then yield "resources"
-                    ]
-                    |> sprintf "{ %s }"
+            if commandChanged || resourcesChanged then
+                if Config.showRecompile then
+                    let cause =
+                        String.concat "; " [
+                            if commandChanged then yield "content"
+                            if resourcesChanged then yield "resources"
+                        ]
+                        |> sprintf "{ %s }"
 
-                Log.line "[Raytracing] recompile commands: %s" cause
+                    Log.line "[Raytracing] recompile commands: %s" cause
 
 
             let pipeline = preparedPipeline.Pipeline.Update(token)

@@ -35,7 +35,15 @@ module Effect =
 
         let rgenMain (input : RayGenerationInput) =
             raygen {
-                let color = mainScene.TraceRay<V3d>(V3d(V2d input.work.id.XY / 512.0, 0.0), V3d.ZAxis)
+                let pixelCenter = V2d input.work.id.XY + 0.5
+                let inUV = pixelCenter / V2d input.work.size.XY
+                let d = inUV * 2.0 - 1.0
+
+                let origin = uniform.ViewTrafoInv * V4d.WAxis
+                let target = uniform.ProjTrafoInv * V4d(d, 1.0, 1.0)
+                let direction = uniform.ViewTrafoInv * V4d(target.XYZ.Normalized, 0.0)
+
+                let color = mainScene.TraceRay<V3d>(origin.XYZ, direction.XYZ)
                 uniform.OutputBuffer.[input.work.id.XY] <- V4d(color, 1.0)
             }
 
@@ -61,7 +69,21 @@ let main argv =
     let samples = 8
 
     use win = app.CreateGameWindow(samples = samples)
-    win.RenderAsFastAsPossible <- true
+    //win.RenderAsFastAsPossible <- true
+
+    let cameraView =
+        let initialView = CameraView.LookAt(V3d(10.0,10.0,10.0), V3d.Zero, V3d.OOI)
+        DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
+
+    let viewTrafo =
+        cameraView |> AVal.map CameraView.viewTrafo
+
+    let projTrafo =
+        win.Sizes
+        |> AVal.map (fun s ->
+            Frustum.perspective 60.0 0.1 150.0 (float s.X / float s.Y)
+            |> Frustum.projTrafo
+        )
 
     let traceTexture =
         runtime.CreateTexture2D(TextureFormat.Rgba32f, 1, win.Sizes)
@@ -86,6 +108,8 @@ let main argv =
     use uniforms =
         Map.ofList [
             "OutputBuffer", traceTexture |> AdaptiveResource.mapNonAdaptive (fun t -> t :> ITexture) :> IAdaptiveValue
+            "ViewTrafo", viewTrafo :> IAdaptiveValue
+            "ProjTrafo", projTrafo :> IAdaptiveValue
         ]
         |> UniformProvider.ofMap
 
