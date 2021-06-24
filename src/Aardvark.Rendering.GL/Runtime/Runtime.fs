@@ -590,6 +590,9 @@ type Runtime() =
         member x.SupportsRaytracing =
             false
 
+        member x.MaxRayRecursionDepth =
+            0
+
         member x.CreateAccelerationStructure(geometry, usage, allowUpdate) =
             failwith "GL backend does not support raytracing"
 

@@ -406,6 +406,7 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.SupportedPipelineStatistics = Set.empty
 
         member x.SupportsRaytracing = false
+        member x.MaxRayRecursionDepth = 0
         member x.CreateAccelerationStructure(geometry, usage, allowUpdate) = failwith ""
         member x.TryUpdateAccelerationStructure(handle, usage) = failwith ""
         member x.CompileTrace(pipeline, commands) = failwith ""

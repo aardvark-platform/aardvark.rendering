@@ -104,10 +104,10 @@ type PreparedRaytracingPipeline(device         : Device,
     member x.Update(token : AdaptiveToken) =
         for r in resources do r.Update(token) |> ignore
 
-            
+
 [<AbstractClass; Sealed; Extension>]
 type DevicePreparedRaytracingPipelineExtensions private() =
-            
+
     [<Extension>]
     static member PrepareRaytracingPipeline(this : ResourceManager, state : RaytracingPipelineState) =
 
@@ -141,8 +141,8 @@ type DevicePreparedRaytracingPipelineExtensions private() =
         new PreparedRaytracingPipeline(
             this.Device, state,
             CSharpList.toList resources,
-            program, pipeline, 
+            program, pipeline,
             descriptorSetBinding,
             shaderBindingTable,
             hitConfigPool
-        ) 
+        )

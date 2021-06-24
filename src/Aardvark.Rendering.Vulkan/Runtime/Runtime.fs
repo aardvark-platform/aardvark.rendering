@@ -540,6 +540,11 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.SupportsRaytracing =
         x.Device.PhysicalDevice.Features.Raytracing.Pipeline
 
+    member x.MaxRayRecursionDepth =
+        match x.Device.PhysicalDevice.Limits.Raytracing with
+        | Some limits -> int limits.MaxRayRecursionDepth
+        | _ -> 0
+
     member x.CreateAccelerationStructure(geometry, usage, allowUpdate) =
         if not x.SupportsRaytracing then
             failwithf "[Vulkan] Runtime does not support raytracing"
@@ -697,6 +702,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.SupportsRaytracing =
             x.SupportsRaytracing
+
+        member x.MaxRayRecursionDepth =
+            x.MaxRayRecursionDepth
 
         member x.CreateAccelerationStructure(geometry, usage, allowUpdate) =
             x.CreateAccelerationStructure(geometry, usage, allowUpdate)

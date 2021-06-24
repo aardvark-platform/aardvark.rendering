@@ -13,7 +13,13 @@ type IRaytracingTask =
 and IRaytracingRuntime =
     inherit IAccelerationStructureRuntime
 
+    /// Returns whether the runtime supports raytracing.
     abstract member SupportsRaytracing : bool
+
+    /// Returns the maximum number of levels of ray recursion allowed in a trace command.
+    abstract member MaxRayRecursionDepth : int
+
+    /// Compiles a raytracing task for the given pipeline and commands.
     abstract member CompileTrace : pipeline: RaytracingPipelineState * commands: alist<RaytracingCommand> -> IRaytracingTask
 
 and [<RequireQualifiedAccess>] RaytracingCommand =

@@ -101,7 +101,7 @@ let main argv =
             Effect            = Effect.main()
             Scenes            = Map.ofList [Sym.ofString "MainScene", scene]
             Uniforms          = uniforms
-            MaxRecursionDepth = AVal.constant 0
+            MaxRecursionDepth = AVal.constant 2048
         }
 
     use traceTask = runtime.CompileTraceToTexture(pipeline, traceTexture)
