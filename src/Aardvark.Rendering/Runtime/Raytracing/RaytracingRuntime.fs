@@ -62,3 +62,13 @@ type RaytracingRuntimeExtensions() =
     [<Extension>]
     static member CompileTrace(this : IRaytracingRuntime, pipeline: RaytracingPipelineState, commands: List<RaytracingCommand>) =
         this.CompileTrace(pipeline, commands |> AList.ofList)
+
+    [<Extension>]
+    static member CompileTraceToTexture(this : IRaytracingRuntime, pipeline: RaytracingPipelineState, target: aval<IBackendTexture>) =
+        let commands = target |> AVal.map RaytracingCommand.TraceRaysToTexture
+        this.CompileTrace(pipeline, commands |> AList.ofAVal)
+
+    [<Extension>]
+    static member CompileTraceToTexture(this : IRaytracingRuntime, pipeline: RaytracingPipelineState, target: IBackendTexture) =
+        let commands = target |> RaytracingCommand.TraceRaysToTexture
+        this.CompileTrace(pipeline, commands |> AList.ofList)

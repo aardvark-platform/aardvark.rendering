@@ -63,12 +63,8 @@ let main argv =
     use win = app.CreateGameWindow(samples = samples)
     win.RenderAsFastAsPossible <- true
 
-    let traceTextureOrig =
-        runtime.CreateTexture2D(TextureFormat.Rgba32f, 1, win.Sizes)
-
     let traceTexture =
-        traceTextureOrig
-        |> AdaptiveResource.map (fun t -> t :> ITexture)
+        runtime.CreateTexture2D(TextureFormat.Rgba32f, 1, win.Sizes)
 
     let geometry =
         let vertices = {
@@ -89,7 +85,7 @@ let main argv =
 
     use uniforms =
         Map.ofList [
-            "OutputBuffer", traceTexture :> IAdaptiveValue
+            "OutputBuffer", traceTexture |> AdaptiveResource.mapNonAdaptive (fun t -> t :> ITexture) :> IAdaptiveValue
         ]
         |> UniformProvider.ofMap
 
@@ -108,44 +104,7 @@ let main argv =
             MaxRecursionDepth = AVal.constant 0
         }
 
-    let commands =
-        //let target = traceTexture |> AVal.map unbox<IBackendTexture>
-        //let size = target |> AVal.map (fun t -> t.Size)
-
-        //adaptive {
-        //    let! target = target
-        //    let! size = size
-
-        //    return [
-        //        RaytracingCommand.TransformLayout(target, TextureLayout.ShaderRead, TextureLayout.ShaderWrite)
-        //        RaytracingCommand.TraceRays(size)
-        //        RaytracingCommand.TransformLayout(target, TextureLayout.ShaderWrite, TextureLayout.ShaderRead)
-        //    ]
-        //    //yield! RaytracingCommand.TraceRaysToTexture(unbox target)
-        //}
-        //AVal.custom (fun token ->
-        //    let t = target.GetValue(token)
-        //    let s = size.GetValue(token)
-
-        //    [
-        //        RaytracingCommand.TransformLayout(t, TextureLayout.ShaderRead, TextureLayout.ShaderWrite)
-        //        RaytracingCommand.TraceRays(s)
-        //        RaytracingCommand.TransformLayout(t, TextureLayout.ShaderWrite, TextureLayout.ShaderRead)
-        //    ]
-        //)
-
-        alist {
-            let! texture = traceTextureOrig
-            let target = texture |> unbox<IBackendTexture>
-
-            RaytracingCommand.TransformLayout(target, TextureLayout.ShaderRead, TextureLayout.ShaderWrite)
-            RaytracingCommand.TraceRays(target.Size)
-            RaytracingCommand.TransformLayout(target, TextureLayout.ShaderWrite, TextureLayout.ShaderRead)
-            //yield! RaytracingCommand.TraceRaysToTexture(unbox target)
-        }
-
-
-    use traceTask = runtime.CompileTrace(pipeline, commands)
+    use traceTask = runtime.CompileTraceToTexture(pipeline, traceTexture)
 
     use fullscreenTask =
         let sg =
@@ -162,8 +121,10 @@ let main argv =
 
     use renderTask =
         RenderTask.custom (fun (t, rt, fbo, q) ->
+            q.Begin()
             traceTask.Run(t, q)
             fullscreenTask.Run(t, rt, fbo, q)
+            q.End()
         )
 
     win.RenderTask <- renderTask
