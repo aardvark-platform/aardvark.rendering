@@ -16,8 +16,9 @@ type BufferUsage = // Buffer usage
     | Storage = 16
     | Read = 256
     | Write = 512
+    | AccelerationStructure = 1024
     | ReadWrite = 0x300
-    | Default = 0x031f
+    | Default = 0x071f
 
 type IBuffer = interface end
 

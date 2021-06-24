@@ -37,7 +37,7 @@ type AccelerationStructure =
                 native {
                     let! pInfo = VkAccelerationStructureDeviceAddressInfoKHR(handle)
                     return VkRaw.vkGetAccelerationStructureDeviceAddressKHR(device.Handle, pInfo)
-                }  
+                }
 
             { inherit Resource<_>(device, handle)
               Data = data
@@ -57,12 +57,12 @@ module AccelerationStructure =
 
     [<AutoOpen>]
     module private AccelerationStructureCommands =
-    
+
         type Command with
-    
+
             static member Build(accelerationStructure : AccelerationStructure, data : NativeAccelerationStructureData, updateOnly : bool) =
                 { new Command() with
-                    member x.Compatible = QueueFlags.Graphics
+                    member x.Compatible = QueueFlags.Compute
                     member x.Enqueue cmd =
                         cmd.AppendCommand()
 
@@ -79,7 +79,7 @@ module AccelerationStructure =
                                 info |> NativePtr.write ptr
                                 ptr
                             )
-    
+
                         native {
                             let! pGeometryInfo = info
                             let! ppBuildRangeInfos = buildRangeInfos
@@ -114,21 +114,21 @@ module AccelerationStructure =
                     failwithf "[Raytracing] Could not create acceleration structure: %A" result
 
                 return !!pHandle
-            }    
+            }
 
         new AccelerationStructure(device, handle, data, usage, allowUpdate, resultBuffer, scratchBuffer)
 
     /// Creates and builds an acceleration structure with the given data.
     let create (device : Device) (allowUpdate : bool) (usage : AccelerationStructureUsage) (data : AccelerationStructureData) =
 
-        use nativeData = NativeAccelerationStructureData.alloc allowUpdate usage data
+        use nativeData = NativeAccelerationStructureData.alloc device allowUpdate usage data
         let buffers = nativeData |> NativeAccelerationStructureData.createBuffers device
         let accelerationStructure = createHandle device data usage allowUpdate buffers.ResultBuffer buffers.ScratchBuffer
-    
-        device.perform {
+
+        device.ComputeFamily.run {
             do! Command.Build(accelerationStructure, nativeData, false)
         }
-    
+
         accelerationStructure
 
     /// Attempts to update the given acceleration structure with the given data.
@@ -164,7 +164,7 @@ module AccelerationStructure =
                 false
 
         if isCompatible then
-            use nativeData = NativeAccelerationStructureData.alloc true accelerationStructure.Usage data
+            use nativeData = NativeAccelerationStructureData.alloc accelerationStructure.Device true accelerationStructure.Usage data
             accelerationStructure.Device.perform {
                 do! Command.Build(accelerationStructure, nativeData, true)
             }

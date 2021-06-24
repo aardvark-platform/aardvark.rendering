@@ -1895,7 +1895,10 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateAccelerationStructure(objects : amap<Raytracing.TraceObject, int>, sbt : IResourceLocation<Raytracing.ShaderBindingTable>,
                                          usage : Raytracing.AccelerationStructureUsage) =
 
-        let bufferUsage = VkBufferUsageFlags.ShaderDeviceAddressBitKhr ||| VkBufferUsageFlags.AccelerationStructureBuildInputReadOnlyBitKhr
+        let bufferUsage =
+            VkBufferUsageFlags.TransferDstBit |||
+            VkBufferUsageFlags.ShaderDeviceAddressBitKhr |||
+            VkBufferUsageFlags.AccelerationStructureBuildInputReadOnlyBitKhr
 
         accelerationStructureCache.GetOrCreate(
             [ objects :> obj; sbt :> obj; usage :> obj ],

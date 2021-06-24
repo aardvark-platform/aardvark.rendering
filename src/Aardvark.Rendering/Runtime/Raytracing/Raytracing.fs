@@ -4,7 +4,6 @@ open Aardvark.Base
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open System
-open FShade
 
 [<Struct>]
 type VisibilityMask =
@@ -40,19 +39,79 @@ type GeometryMode =
     /// Treat all geometries as if GeometryFlags.Opaque was not specified.
     | Transparent
 
+
 type HitConfig = List<Symbol>
 
-type TraceObject(geometry, hitGroups, transform, culling, geometryMode, mask) =
-    member x.Geometry     : aval<IAccelerationStructure> = geometry
-    member x.HitGroups    : aval<HitConfig>              = hitGroups
-    member x.Transform    : aval<Trafo3d>                = transform
-    member x.Culling      : aval<CullMode>               = culling
-    member x.GeometryMode : aval<GeometryMode>           = geometryMode
-    member x.Mask         : aval<VisibilityMask>         = mask
+type TraceObject =
+    {
+        Geometry     : aval<IAccelerationStructure>
+        HitGroups    : aval<HitConfig>
+        Transform    : aval<Trafo3d>
+        Culling      : aval<CullMode>
+        GeometryMode : aval<GeometryMode>
+        Mask         : aval<VisibilityMask>
+    }
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module TraceObject =
+
+    let create (geometry : aval<IAccelerationStructure>) =
+        { Geometry     = geometry
+          HitGroups    = AVal.constant []
+          Transform    = AVal.constant Trafo3d.Identity
+          Culling      = AVal.constant CullMode.Disabled
+          GeometryMode = AVal.constant GeometryMode.Default
+          Mask         = AVal.constant VisibilityMask.All }
+
+    let create' (geometry : IAccelerationStructure) =
+        geometry |> AVal.constant |> create
+
+
+    let hitGroups (hitConfig : aval<HitConfig>) (obj : TraceObject) =
+        { obj with HitGroups = hitConfig }
+
+    let hitGroups' (hitConfig : HitConfig) (obj : TraceObject) =
+        obj |> hitGroups (AVal.constant hitConfig)
+
+    let hitGroup (group : aval<Symbol>) (obj : TraceObject) =
+        let groups = group |> AVal.map List.singleton
+        obj  |> hitGroups groups
+
+    let hitGroup' (group : Symbol) (obj : TraceObject) =
+        obj |> hitGroups' [group]
+
+
+    let transform (trafo : aval<Trafo3d>) (obj : TraceObject) =
+        { obj with Transform = trafo }
+
+    let transform' (trafo : Trafo3d) (obj : TraceObject) =
+        obj |> transform (AVal.constant trafo)
+
+
+    let culling (mode : aval<CullMode>) (obj : TraceObject) =
+        { obj with Culling = mode }
+
+    let culling' (mode : CullMode) (obj : TraceObject) =
+        obj |> culling (AVal.constant mode)
+
+
+    let geometryMode (mode : aval<GeometryMode>) (obj : TraceObject) =
+        { obj with GeometryMode = mode }
+
+    let geometryMode' (mode : GeometryMode) (obj : TraceObject) =
+        obj |> geometryMode (AVal.constant mode)
+
+
+    let mask (value : aval<VisibilityMask>) (obj : TraceObject) =
+        { obj with Mask = value }
+
+    let mask' (value : VisibilityMask) (obj : TraceObject) =
+        obj |> mask (AVal.constant value)
+
 
 type RaytracingPipelineState =
     {
-        Effect            : RaytracingEffect
+        Effect            : FShade.RaytracingEffect
         Scenes            : Map<Symbol, amap<TraceObject, int>>
         Uniforms          : IUniformProvider
         MaxRecursionDepth : aval<int>

@@ -31,6 +31,8 @@ type RaytracingPipeline(device : Device, handle : VkPipeline, description : Rayt
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RaytracingPipeline =
 
+    let private pMain = CStr.malloc "main"
+
     let private VkShaderUnused = ~~~0u
 
     let private getStageIndex (stage : Option<RaytracingStageInfo>) =
@@ -52,14 +54,14 @@ module RaytracingPipeline =
             |> List.collect ShaderGroup.toList
             |> List.sortBy (fun i -> i.Index)
             |> List.toArray
-        
+
         let handle =
             native {
                 let! pStages = stages |> Array.map (fun s ->
                     VkPipelineShaderStageCreateInfo(
                         VkPipelineShaderStageCreateFlags.None,
                         VkShaderStageFlags.ofShaderStage s.Module.Stage,
-                        s.Module.Handle, NativePtr.zero, NativePtr.zero
+                        s.Module.Handle, pMain, NativePtr.zero
                     )
                 )
 
@@ -89,11 +91,11 @@ module RaytracingPipeline =
                     match device.PhysicalDevice.Limits.Raytracing with
                     | Some limits -> min limits.MaxRayRecursionDepth description.MaxRecursionDepth
                     | _ -> description.MaxRecursionDepth
-                
+
                 let! pInfo =
                     VkRayTracingPipelineCreateInfoKHR(
                         VkPipelineCreateFlags.AllowDerivativesBit ||| derivativeFlag,
-                        uint32 stages.Length, pStages, 
+                        uint32 stages.Length, pStages,
                         uint32 groups.Length, pGroups,
                         maxRecursion,
                         NativePtr.zero, NativePtr.zero, NativePtr.zero,

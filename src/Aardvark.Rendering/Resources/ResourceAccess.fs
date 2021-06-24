@@ -1,35 +1,23 @@
 ﻿namespace Aardvark.Rendering
 
+open System
+
+[<Flags>]
 type ResourceAccess =
-    | ShaderRead            = 1
-    | ShaderWrite           = 2
-    | TransferRead          = 3
-    | TransferWrite         = 4
-    | IndirectCommandRead   = 5
-    | IndexRead             = 6
-    | VertexAttributeRead   = 7
-    | UniformRead           = 8
-    | InputRead             = 9
-    | ColorRead             = 10
-    | ColorWrite            = 11
-    | DepthStencilRead      = 12
-    | DepthStencilWrite     = 13
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module ResourceAccess =
-
-    let all = Set.ofList [
-        ResourceAccess.ShaderRead
-        ResourceAccess.ShaderWrite
-        ResourceAccess.TransferRead
-        ResourceAccess.TransferWrite
-        ResourceAccess.IndirectCommandRead
-        ResourceAccess.IndexRead
-        ResourceAccess.VertexAttributeRead
-        ResourceAccess.UniformRead
-        ResourceAccess.InputRead
-        ResourceAccess.ColorRead
-        ResourceAccess.ColorWrite
-        ResourceAccess.DepthStencilRead
-        ResourceAccess.DepthStencilWrite
-    ]
+    | None                       = 0x0000
+    | ShaderRead                 = 0x0001
+    | ShaderWrite                = 0x0002
+    | TransferRead               = 0x0004
+    | TransferWrite              = 0x0008
+    | IndirectCommandRead        = 0x0010
+    | IndexRead                  = 0x0020
+    | VertexAttributeRead        = 0x0040
+    | UniformRead                = 0x0080
+    | InputRead                  = 0x0100
+    | ColorRead                  = 0x0200
+    | ColorWrite                 = 0x0400
+    | DepthStencilRead           = 0x0800
+    | DepthStencilWrite          = 0x1000
+    | AccelerationStructureRead  = 0x2000
+    | AccelerationStructureWrite = 0x4000
+    | All                        = 0x7FFF

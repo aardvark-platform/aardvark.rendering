@@ -35,6 +35,17 @@ type MemoryFeatures =
 
         /// Specifies whether protected memory is supported.
         ProtectedMemory: bool
+
+        /// Specifies whether the implementation supports accessing buffer memory in shaders as storage buffers via an address queried from vkGetBufferDeviceAddress.
+        BufferDeviceAddress : bool
+
+        /// Specifies whether the implementation supports saving and reusing buffer and device addresses, e.g. for trace capture and replay.
+        BufferDeviceAddressCaptureReplay: bool
+
+        /// Specifies whether the implementation supports the bufferDeviceAddress, rayTracingPipeline and rayQuery features
+        /// for logical devices created with multiple physical devices. If this feature is not supported, buffer and
+        /// acceleration structure addresses must not be queried on a logical device created with more than one physical device.
+        BufferDeviceAddressMultiDevice: bool
     }
 
     member x.Print(l : ILogger) =
@@ -49,6 +60,11 @@ type MemoryFeatures =
         l.line "sparse 3D images:       %A" x.SparseResidencyImage3D
         l.line "sparse aliased data:    %A" x.SparseResidencyAliased
         l.line "protected memory:       %A" x.ProtectedMemory
+        l.section "buffer device address: " (fun () ->
+            l.line "supported:          %A" x.BufferDeviceAddress
+            l.line "capture & replay:   %A" x.BufferDeviceAddressCaptureReplay
+            l.line "multidevice:        %A" x.BufferDeviceAddressMultiDevice
+        )
 
 type DescriptorFeatures =
     {
@@ -279,7 +295,7 @@ type ShaderFeatures =
             l.line "storage texel buffers:      %A" x.StorageTexelBufferArrayDynamicIndexing
         )
         l.section "non-uniform indexing: " (fun() ->
-            l.line "uniform bufferss:           %A" x.UniformBufferArrayNonUniformIndexing
+            l.line "uniform buffers:           %A" x.UniformBufferArrayNonUniformIndexing
             l.line "sampled images:             %A" x.SampledImageArrayNonUniformIndexing
             l.line "storage buffers:            %A" x.StorageBufferArrayNonUniformIndexing
             l.line "storage images:             %A" x.StorageImageArrayNonUniformIndexing
@@ -512,6 +528,7 @@ module DeviceFeatures =
     open KHRRayTracingPipeline
     open KHRRayQuery
     open KHRAccelerationStructure
+    open KHRBufferDeviceAddress
     open EXTDescriptorIndexing
     open Vulkan11
 
@@ -598,6 +615,13 @@ module DeviceFeatures =
                 toVkBool features.Raytracing.RayQuery
             )
 
+        let bda =
+            VkPhysicalDeviceBufferDeviceAddressFeaturesKHR(
+                toVkBool features.Memory.BufferDeviceAddress,
+                toVkBool features.Memory.BufferDeviceAddressCaptureReplay,
+                toVkBool features.Memory.BufferDeviceAddressMultiDevice
+            )
+
         let features =
             VkPhysicalDeviceFeatures2(
                 VkPhysicalDeviceFeatures(
@@ -669,6 +693,7 @@ module DeviceFeatures =
         |> if not rtp.IsEmpty then VkStructChain.add rtp else id
         |> if not acc.IsEmpty then VkStructChain.add acc else id
         |> if not rq.IsEmpty  then VkStructChain.add rq  else id
+        |> if not bda.IsEmpty then VkStructChain.add bda else id
         |> VkStructChain.add features
 
     let create (protectedMemoryFeatures : VkPhysicalDeviceProtectedMemoryFeatures)
@@ -680,6 +705,7 @@ module DeviceFeatures =
                (raytracingPipelineFeatures : VkPhysicalDeviceRayTracingPipelineFeaturesKHR)
                (accelerationStructureFeatures : VkPhysicalDeviceAccelerationStructureFeaturesKHR)
                (rayQueryFeatures : VkPhysicalDeviceRayQueryFeaturesKHR)
+               (bufferDeviceAddressFeatures : VkPhysicalDeviceBufferDeviceAddressFeaturesKHR)
                (features : VkPhysicalDeviceFeatures) =
 
         {
@@ -696,6 +722,9 @@ module DeviceFeatures =
                     SparseResidency16Samples =                      toBool features.sparseResidency16Samples
                     SparseResidencyAliased =                        toBool features.sparseResidencyAliased
                     ProtectedMemory =                               toBool protectedMemoryFeatures.protectedMemory
+                    BufferDeviceAddress =                           toBool bufferDeviceAddressFeatures.bufferDeviceAddress
+                    BufferDeviceAddressCaptureReplay =              toBool bufferDeviceAddressFeatures.bufferDeviceAddressCaptureReplay
+                    BufferDeviceAddressMultiDevice =                toBool bufferDeviceAddressFeatures.bufferDeviceAddressMultiDevice
                 }
 
             Descriptors =

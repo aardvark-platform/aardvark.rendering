@@ -10,6 +10,7 @@ open Aardvark.Rendering
 open Microsoft.FSharp.NativeInterop
 
 open Aardvark.Rendering.Vulkan.KHRBufferDeviceAddress
+open Aardvark.Rendering.Vulkan.KHRAccelerationStructure
 
 #nowarn "9"
 // #nowarn "51"
@@ -122,27 +123,12 @@ module BufferCommands =
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
 
-                    let access, stage =
-                        if buffer.Usage.HasFlag VkBufferUsageFlags.IndexBufferBit then 
-                            VkAccessFlags.IndexReadBit, VkPipelineStageFlags.VertexInputBit
+                    let access = VkAccessFlags.ofBufferUsage buffer.Usage
+                    let stage = VkAccessFlags.toDstStageFlags cmd.QueueFamily.Flags access
 
-                        elif buffer.Usage.HasFlag VkBufferUsageFlags.VertexBufferBit then
-                            VkAccessFlags.VertexAttributeReadBit, VkPipelineStageFlags.VertexInputBit
-
-                        elif buffer.Usage.HasFlag VkBufferUsageFlags.IndirectBufferBit then
-                            VkAccessFlags.IndirectCommandReadBit, VkPipelineStageFlags.DrawIndirectBit
-
-                        elif buffer.Usage.HasFlag VkBufferUsageFlags.StorageBufferBit then
-                            if cmd.QueueFamily.Flags &&& QueueFlags.Graphics <> QueueFlags.None then
-                                VkAccessFlags.ShaderReadBit, VkPipelineStageFlags.VertexShaderBit
-                            else
-                                VkAccessFlags.ShaderReadBit, VkPipelineStageFlags.ComputeShaderBit
-                        else
-                            failwithf "[Vulkan] bad buffer usage in Acquire: %A" buffer.Usage
-
-                    let mutable barrier =
+                    let barrier =
                         VkBufferMemoryBarrier(
-                            VkAccessFlags.None,
+                            VkAccessFlags.TransferWriteBit ||| VkAccessFlags.HostWriteBit ||| VkAccessFlags.MemoryWriteBit ||| VkAccessFlags.ShaderWriteBit,
                             access,
                             uint32 buffer.Device.TransferFamily.Index,
                             uint32 buffer.Device.GraphicsFamily.Index,
@@ -151,14 +137,16 @@ module BufferCommands =
                             uint64 size
                         )
 
-                    VkRaw.vkCmdPipelineBarrier(
-                        cmd.Handle,
-                        VkPipelineStageFlags.TopOfPipeBit,
-                        stage,
-                        VkDependencyFlags.None,
-                        0u, NativePtr.zero,
-                        0u, NativePtr.zero,
-                        0u, NativePtr.zero
+                    barrier |> pin (fun pBarrier ->
+                        VkRaw.vkCmdPipelineBarrier(
+                            cmd.Handle,
+                            VkPipelineStageFlags.TopOfPipeBit,
+                            stage,
+                            VkDependencyFlags.None,
+                            0u, NativePtr.zero,
+                            1u, pBarrier,
+                            0u, NativePtr.zero
+                        )
                     )
 
                     [buffer]
@@ -182,33 +170,8 @@ module BufferCommands =
                             uint64 b.Size
                         )
 
-                    let srcStage =
-                        match src with
-                            | VkAccessFlags.HostReadBit -> VkPipelineStageFlags.HostBit
-                            | VkAccessFlags.HostWriteBit -> VkPipelineStageFlags.HostBit
-                            | VkAccessFlags.IndexReadBit -> VkPipelineStageFlags.VertexInputBit
-                            | VkAccessFlags.IndirectCommandReadBit -> VkPipelineStageFlags.DrawIndirectBit
-                            | VkAccessFlags.ShaderReadBit -> VkPipelineStageFlags.ComputeShaderBit
-                            | VkAccessFlags.ShaderWriteBit -> VkPipelineStageFlags.ComputeShaderBit
-                            | VkAccessFlags.TransferReadBit -> VkPipelineStageFlags.TransferBit
-                            | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
-                            | VkAccessFlags.UniformReadBit -> VkPipelineStageFlags.ComputeShaderBit
-                            | VkAccessFlags.VertexAttributeReadBit -> VkPipelineStageFlags.VertexInputBit
-                            | _ -> VkPipelineStageFlags.None
-
-                    let dstStage =
-                        match dst with
-                            | VkAccessFlags.HostReadBit -> VkPipelineStageFlags.HostBit
-                            | VkAccessFlags.HostWriteBit -> VkPipelineStageFlags.HostBit
-                            | VkAccessFlags.IndexReadBit -> VkPipelineStageFlags.VertexInputBit
-                            | VkAccessFlags.IndirectCommandReadBit -> VkPipelineStageFlags.DrawIndirectBit
-                            | VkAccessFlags.ShaderReadBit -> VkPipelineStageFlags.VertexShaderBit
-                            | VkAccessFlags.ShaderWriteBit -> VkPipelineStageFlags.VertexShaderBit
-                            | VkAccessFlags.TransferReadBit -> VkPipelineStageFlags.TransferBit
-                            | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
-                            | VkAccessFlags.UniformReadBit -> VkPipelineStageFlags.VertexShaderBit
-                            | VkAccessFlags.VertexAttributeReadBit -> VkPipelineStageFlags.VertexInputBit
-                            | _ -> VkPipelineStageFlags.None
+                    let srcStage = src |> VkAccessFlags.toSrcStageFlags cmd.QueueFamily.Flags
+                    let dstStage = dst |> VkAccessFlags.toDstStageFlags cmd.QueueFamily.Flags
 
                     barrier |> pin (fun pBarrier ->
                         VkRaw.vkCmdPipelineBarrier(
@@ -304,17 +267,6 @@ module Buffer =
                 bits &&& mask <> 0u
                )
             |> Seq.toList
-
-    let toVkUsage (usage : BufferUsage) = 
-        let mutable flags = VkBufferUsageFlags.None
-        if usage.HasFlag BufferUsage.Index then flags <- flags ||| VkBufferUsageFlags.IndexBufferBit
-        if usage.HasFlag BufferUsage.Vertex then flags <- flags ||| VkBufferUsageFlags.VertexBufferBit
-        if usage.HasFlag BufferUsage.Uniform then flags <- flags ||| VkBufferUsageFlags.UniformBufferBit
-        if usage.HasFlag BufferUsage.Indirect then flags <- flags ||| VkBufferUsageFlags.IndirectBufferBit
-        if usage.HasFlag BufferUsage.Storage then flags <- flags ||| VkBufferUsageFlags.StorageBufferBit
-        if usage.HasFlag BufferUsage.Read then flags <- flags ||| VkBufferUsageFlags.TransferSrcBit
-        if usage.HasFlag BufferUsage.Write then flags <- flags ||| VkBufferUsageFlags.TransferDstBit
-        flags
 
     let private emptyBuffers = ConcurrentDictionary<Device * VkBufferUsageFlags, Buffer>()
 

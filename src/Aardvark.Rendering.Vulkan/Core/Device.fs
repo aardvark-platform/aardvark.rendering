@@ -10,6 +10,7 @@ open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 open Aardvark.Rendering
 open KHRSwapchain
+open KHRBufferDeviceAddress
 open Vulkan11
 
 #nowarn "9"
@@ -726,8 +727,8 @@ and CopyEngine(family : DeviceQueueFamily) =
 
                         | CopyCommand.TransformLayoutCmd(image, range, srcLayout, dstLayout) ->
                             stream.PipelineBarrier(
-                                VkImageLayout.toSrcStageFlags srcLayout,
-                                VkImageLayout.toDstStageFlags dstLayout,
+                                VkImageLayout.toSrcStageFlags queue.Flags srcLayout,
+                                VkImageLayout.toDstStageFlags queue.Flags dstLayout,
                                 [||],
                                 [||],
                                 [|
@@ -745,7 +746,7 @@ and CopyEngine(family : DeviceQueueFamily) =
 
                         | CopyCommand.SyncImageCmd(image, range, layout, srcAccess) ->
                             stream.PipelineBarrier(
-                                VkAccessFlags.toVkPipelineStageFlags srcAccess,
+                                VkAccessFlags.toSrcStageFlags queue.Flags srcAccess,
                                 VkPipelineStageFlags.TopOfPipeBit,
                                 [||],
                                 [||],
@@ -1872,21 +1873,31 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
             false
         else
             if heap.TryAdd size then
-                let info =
-                    VkMemoryAllocateInfo(
-                        uint64 size,
-                        uint32 memory.index
-                    )
-
                 let mem =
-                    info |> pin (fun pInfo ->
-                        temporary<VkDeviceMemory, VkDeviceMemory> (fun pHandle ->
-                            VkRaw.vkAllocateMemory(device.Handle, pInfo, NativePtr.zero, pHandle)
-                                |> check "could not allocate memory"
-                            NativePtr.read pHandle
-                        )
-                    )
-            
+                    native {
+                        let flags =
+                            if device.PhysicalDevice.Features.Memory.BufferDeviceAddress then
+                                VkMemoryAllocateFlags.DeviceAddressBitKhr
+                            else
+                                VkMemoryAllocateFlags.None
+
+                        let! pFlagsInfo =
+                            VkMemoryAllocateFlagsInfo(flags, 0u)
+                    
+                        let! pInfo =
+                            VkMemoryAllocateInfo(
+                                NativePtr.toNativeInt pFlagsInfo,
+                                uint64 size,
+                                uint32 memory.index
+                            )
+
+                        let! pHandle = VkDeviceMemory.Null
+                        VkRaw.vkAllocateMemory(device.Handle, pInfo, NativePtr.zero, pHandle)
+                               |> check "could not allocate memory"
+
+                        return NativePtr.read pHandle
+                    }
+
                 let hostPtr = 
                     if hostVisible then
                         temporary<nativeint, nativeint> (fun pPtr ->

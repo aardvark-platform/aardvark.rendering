@@ -13,6 +13,7 @@ open KHRExternalMemoryCapabilities
 open KHRRayTracingPipeline
 open KHRRayQuery
 open KHRAccelerationStructure
+open KHRBufferDeviceAddress
 open EXTDescriptorIndexing
 open Vulkan11
 
@@ -349,7 +350,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
             else
                 !!ptr
 
-        let f, pm, ycbcr, s16, vp, sdp, idx, rtp, acc, rq =
+        let f, pm, ycbcr, s16, vp, sdp, idx, rtp, acc, rq, bda =
             use chain = new VkStructChain()
             let pMem        = chain.Add<VkPhysicalDeviceProtectedMemoryFeatures>()
             let pYcbcr      = chain.Add<VkPhysicalDeviceSamplerYcbcrConversionFeatures>()
@@ -360,12 +361,14 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
             let pRTP        = if hasExtension KHRRayTracingPipeline.Name then chain.Add<VkPhysicalDeviceRayTracingPipelineFeaturesKHR>() else NativePtr.zero
             let pAcc        = if hasExtension KHRAccelerationStructure.Name then chain.Add<VkPhysicalDeviceAccelerationStructureFeaturesKHR>() else NativePtr.zero
             let pRQ         = if hasExtension KHRRayQuery.Name then chain.Add<VkPhysicalDeviceRayQueryFeaturesKHR>() else NativePtr.zero
+            let pDevAddr    = if hasExtension KHRBufferDeviceAddress.Name then chain.Add<VkPhysicalDeviceBufferDeviceAddressFeaturesKHR>() else NativePtr.zero
             let pFeatures   = chain.Add<VkPhysicalDeviceFeatures2>()
 
             VkRaw.vkGetPhysicalDeviceFeatures2(handle, VkStructChain.toNativePtr chain)
-            (!!pFeatures).features, !!pMem, !!pYcbcr, !!p16bit, !!pVarPtrs, !!pDrawParams, readOrEmpty pIdx, readOrEmpty pRTP, readOrEmpty pAcc, readOrEmpty pRQ
+            (!!pFeatures).features, !!pMem, !!pYcbcr, !!p16bit, !!pVarPtrs, !!pDrawParams, readOrEmpty pIdx,
+            readOrEmpty pRTP, readOrEmpty pAcc, readOrEmpty pRQ, readOrEmpty pDevAddr
 
-        DeviceFeatures.create pm ycbcr s16 vp sdp idx rtp acc rq f
+        DeviceFeatures.create pm ycbcr s16 vp sdp idx rtp acc rq bda f
 
     let properties, raytracingProperties =
         use chain = new VkStructChain()

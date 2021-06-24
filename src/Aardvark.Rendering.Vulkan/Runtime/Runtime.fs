@@ -47,7 +47,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 //            p
 //        )
 //
-//    do device.OnDispose.Add (fun _ -> 
+//    do device.OnDispose.Add (fun _ ->
 //        allPools |> Seq.iter device.Delete
 //        allPools.Clear()
 //    )
@@ -120,7 +120,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     let debugSubscription =
         match debug with
         | Some debug ->
-            let res = 
+            let res =
                 instance.DebugMessages.Subscribe {
                     new IObserver<_> with
                         member x.OnNext(msg) = debugMessage msg
@@ -155,8 +155,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
         new SparseTextureImplemetation.DoubleBufferedSparseImage<'a>(
-            device, 
-            size, levels, slices, 
+            device,
+            size, levels, slices,
             dim, format,
             VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit,
             brickSize,
@@ -213,7 +213,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset source.Size
 
-        let image = unbox<Image> t 
+        let image = unbox<Image> t
         device.UploadLevel(image.[ImageAspect.Color, level, slice], source, offset)
 
     member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) =
@@ -283,7 +283,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         Disposable.dispose (unbox<Image> t)
 
     member x.PrepareBuffer (t : IBuffer, usage : BufferUsage) =
-        let flags = Buffer.toVkUsage usage
+        let flags = VkBufferUsageFlags.ofBufferUsage usage
         device.CreateBuffer(flags, t) :> IBackendBuffer
 
     member x.DeleteBuffer(t : IBackendBuffer) =
@@ -304,7 +304,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             else
                 def ||| VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.StorageBit
 
-        let img = device.CreateImage(size, levels, count, samples, dim, format, usage) 
+        let img = device.CreateImage(size, levels, count, samples, dim, format, usage)
         device.GraphicsFamily.run {
             do! Command.TransformLayout(img, layout)
         }
@@ -332,7 +332,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             if isDepth then VkImageUsageFlags.DepthStencilAttachmentBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit
             else VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit
 
-        let img = device.CreateImage(V3i(size.X, size.Y, 1), 1, 1, samples, TextureDimension.Texture2D, format, usage) 
+        let img = device.CreateImage(V3i(size.X, size.Y, 1), 1, 1, samples, TextureDimension.Texture2D, format, usage)
         device.GraphicsFamily.run {
             do! Command.TransformLayout(img, layout)
         }
@@ -360,7 +360,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             | _ ->
                 failf "invalid input for blit: %A" source
 
-        let dst = 
+        let dst =
             let img = unbox<Image> target
             img.[src.Aspect, 0, 0 .. src.SliceCount - 1]
 
@@ -374,10 +374,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             debugSubscription.Dispose()
 
     interface IDisposable with
-        member x.Dispose() = x.Dispose() 
+        member x.Dispose() = x.Dispose()
 
     member x.CreateBuffer(size : nativeint, usage : BufferUsage) =
-        let flags = Buffer.toVkUsage usage
+        let flags = VkBufferUsageFlags.ofBufferUsage usage
         device.CreateBuffer(flags, int64 size)
 
     member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
@@ -398,7 +398,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         }
 
         temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
-        
+
     member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
         let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
         let src = unbox<Buffer> src
@@ -407,7 +407,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         (fun () ->
             task.Wait()
-            if task.IsFaulted then 
+            if task.IsFaulted then
                 temp.Dispose()
                 raise task.Exception
             else
@@ -455,7 +455,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                             src.[ImageAspect.Color, srcLevel, srcBaseSlice .. srcBaseSlice + slices - 1],
                             dst.[ImageAspect.Color, dstLevel, dstBaseSlice .. dstBaseSlice + slices - 1]
                         )
-            
+
             if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, srcLayout)
             if dstLayout <> VkImageLayout.TransferDstOptimal then do! Command.TransformLayout(dst, dstLayout)
         }
@@ -471,7 +471,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         let dstOffset = V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
 
-        
+
         let dst = ImageSubresource.ofTextureSubResource dst
         let dstImage = dst.Image
 
@@ -505,7 +505,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
         let src = ImageSubresourceLayers.ofFramebufferOutput src
         let dst = ImageSubresourceLayers.ofFramebufferOutput dst
-        
+
         let srcOffset = V3i(srcOffset.X, src.Size.Y - (srcOffset.Y + size.Y), srcOffset.Z)
         let dstOffset = V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
 
@@ -537,16 +537,28 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             PipelineStatistics.None
 
     // Raytracing
+    member x.SupportsRaytracing =
+        x.Device.PhysicalDevice.Features.Raytracing.Pipeline
+
     member x.CreateAccelerationStructure(geometry, usage, allowUpdate) =
+        if not x.SupportsRaytracing then
+            failwithf "[Vulkan] Runtime does not support raytracing"
+
         let data = AccelerationStructureData.Geometry geometry
         AccelerationStructure.create x.Device allowUpdate usage data :> IAccelerationStructure
 
     member x.TryUpdateAccelerationStructure(handle : IAccelerationStructure, geometry) =
+        if not x.SupportsRaytracing then
+            failwithf "[Vulkan] Runtime does not support raytracing"
+
         let accel = unbox<AccelerationStructure> handle
         let data = AccelerationStructureData.Geometry geometry
         AccelerationStructure.tryUpdate data accel
 
     member x.CompileTrace(pipeline : RaytracingPipelineState, commands : alist<RaytracingCommand>) =
+        if not x.SupportsRaytracing then
+            failwithf "[Vulkan] Runtime does not support raytracing"
+
         new RaytracingTask(manager, pipeline, commands) :> IRaytracingTask
 
 
@@ -576,7 +588,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) =
             x.Copy(src, srcOffset, dst, fmt, size)
-            
+
         member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
             x.Copy(src, srcOffset, dst, dstOffset, size)
 
@@ -639,7 +651,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
         member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)
-        
+
         member x.CreateGeometryPool(types) = new GeometryPoolUtilities.GeometryPool(device, types) :> IGeometryPool
 
 
@@ -652,13 +664,13 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
             x.Copy(src, srcOffset, dst, size)
 
-        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = 
+        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
             x.Copy(src, srcOffset, dst, dstOffset, size)
 
         member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
             x.CopyAsync(src, srcOffset, dst, size)
 
-        
+
         member x.Clear(fbo : IFramebuffer, clearColors : Map<Symbol,C4f>, depth : Option<float>, stencil : Option<int>) =
             failwith "not implemented"
 
@@ -682,6 +694,9 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.SupportedPipelineStatistics =
             x.SupportedPipelineStatistics
+
+        member x.SupportsRaytracing =
+            x.SupportsRaytracing
 
         member x.CreateAccelerationStructure(geometry, usage, allowUpdate) =
             x.CreateAccelerationStructure(geometry, usage, allowUpdate)

@@ -22,17 +22,17 @@ module private Align =
 type Runtime() =
 
     static let versionRx = System.Text.RegularExpressions.Regex @"([0-9]+\.)*[0-9]+"
-    
+
     let mutable ctx : Context = Unchecked.defaultof<_>
     let mutable manager : ResourceManager = Unchecked.defaultof<_>
 
-    let onDispose = Event<unit>()    
+    let onDispose = Event<unit>()
 
     let compute = lazy ( new GLCompute(ctx) )
 
     member x.Context = ctx
 
-    member x.Initialize(context : Context, shareTextures : bool, shareBuffers : bool) = 
+    member x.Initialize(context : Context, shareTextures : bool, shareBuffers : bool) =
            if ctx <> null then
                Log.warn "Runtime already initialized"
 
@@ -40,10 +40,10 @@ type Runtime() =
            manager <- ResourceManager(context, None, shareTextures, shareBuffers)
 
            Operators.using context.ResourceLock (fun _ ->
-           
+
                try
                    Log.startTimed "initializing OpenGL runtime"
-           
+
                    Driver.printDriverInfo 4
 
                    let driver = context.Driver
@@ -51,32 +51,32 @@ type Runtime() =
                    // GL_CONTEXT_CORE_PROFILE_BIT 1
                    // GL_CONTEXT_COMPATIBILITY_PROFILE_BIT 2
                    let profileType = if driver.profileMask = 1 then " Core" elif driver.profileMask = 2 then " Compatibility" else ""
-           
+
                    Log.line "vendor:   %A" driver.vendor
-                   Log.line "renderer: %A" driver.renderer 
+                   Log.line "renderer: %A" driver.renderer
                    Log.line "version:  OpenGL %A / GLSL %A %s" driver.version driver.glsl profileType
-                                                           
+
                    let major = driver.version.Major
                    let minor = driver.version.Minor
                    if major < 3 || major = 3 && minor < 3 then
                        failwith "OpenGL driver version less than 3.3"
-           
+
                    GLVM.vmInit()
-           
+
                    // perform test OpenGL call
                    if OpenGl.Pointers.ActiveTexture = 0n then
                        failwith "Essentinal OpenGL procedure missing"
-                               
+
                    OpenGl.Unsafe.ActiveTexture (int OpenTK.Graphics.OpenGL4.TextureUnit.Texture0)
                    OpenTK.Graphics.OpenGL4.GL.Check "first GL call failed"
-           
+
                finally
                    Log.stop()
            )
 
     member x.Initialize(context : Context) = x.Initialize(context, true, true)
 
-    member x.Dispose() = 
+    member x.Dispose() =
         if ctx <> null then
             onDispose.Trigger()
             ctx.Dispose()
@@ -90,18 +90,18 @@ type Runtime() =
         member x.CreateLodRenderer(config : LodRendererConfig, data : aset<LodTreeInstance>) =
 
             let preparedState = PreparedPipelineState.ofPipelineState config.fbo x.ResourceManager config.surface config.state
-                            
-            //let info : LodRenderingInfo = 
+
+            //let info : LodRenderingInfo =
             //    {
             //        LodRenderingInfo.quality = quality
             //        LodRenderingInfo.maxQuality = maxQuality
             //        LodRenderingInfo.renderBounds = renderBounds
             //    }
-                            
+
             new LodRenderer(ctx, x.ResourceManager, preparedState, config, data) :> IPreparedRenderObject
 
     interface IRuntime with
-    
+
         member x.DeviceCount = 1
 
         member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) : unit =
@@ -249,7 +249,7 @@ type Runtime() =
                 GL.BindTexture(t, h)
                 f()
                 GL.BindTexture(t, 0)
-                
+
 
             let pFmt = PixelFormat.ofColFormat fmt
             let pType = PixelType.ofType typeof<'a>
@@ -288,7 +288,7 @@ type Runtime() =
 
             let src = srcTensor.SubTensor4(V4i(srcOffset, 0), V4i(size, int dst.SW))
             let dst = dst.SubTensor4(V4i.Zero, V4i(size,channels)).MirrorY()
-            NativeTensor4.copy src dst 
+            NativeTensor4.copy src dst
 
             GL.UnmapBuffer(BufferTarget.PixelPackBuffer) |> ignore
             GL.BindBuffer(BufferTarget.PixelPackBuffer,0)
@@ -319,7 +319,7 @@ type Runtime() =
 
             let srcHandle, srcTarget, srcLevel, srcTemp = args src
             let dstHandle, dstTarget, dstLevel, dstTemp = args dst
-            
+
             let srcOffset = V3i(srcOffset.X, src.Size.Y - (srcOffset.Y + size.Y), srcOffset.Z)
             let dstOffset = V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
 
@@ -345,7 +345,7 @@ type Runtime() =
         member x.CreateFramebufferSignature(attachments : Map<Symbol, AttachmentSignature>, layers : int, perLayer : Set<string>) =
             x.CreateFramebufferSignature(attachments, layers, perLayer)
 
-            
+
         member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) =
             x.CreateTexture(size, dim, format, levels, samples) :> IBackendTexture
 
@@ -375,20 +375,20 @@ type Runtime() =
         member x.ContextLock = ctx.ResourceLock :> IDisposable
         member x.CompileRender (signature, engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(signature, engine,set)
         member x.CompileClear(signature, color, depth, stencil) = x.CompileClear(signature, color, depth, stencil)
-      
-        ///NOTE: OpenGL does not care about 
+
+        ///NOTE: OpenGL does not care about
         member x.CreateBuffer(size : nativeint, usage : BufferUsage) = x.CreateBuffer(size) :> IBackendBuffer
         member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = x.Upload(src, dst, dstOffset, size)
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) = x.Download(src, srcOffset, dst, size)
-        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = 
+        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
             x.Copy(src, srcOffset, dst, dstOffset, size)
-            
+
         member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) : unit -> unit =
             failwith ""
 
         member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
         member x.PrepareSurface (signature, s : ISurface) : IBackendSurface = x.PrepareSurface(signature, s)
-        member x.DeleteSurface (s : IBackendSurface) = 
+        member x.DeleteSurface (s : IBackendSurface) =
             match s with
                 | :? Program as p -> x.DeleteSurface p
                 | _ -> failwithf "unsupported program-type: %A" s
@@ -402,7 +402,7 @@ type Runtime() =
                 | _ -> failwithf "unsupported texture-type: %A" t
 
         member x.PrepareBuffer (b : IBuffer, usage : BufferUsage) = x.PrepareBuffer b :> IBackendBuffer
-        member x.DeleteBuffer (b : IBackendBuffer) = 
+        member x.DeleteBuffer (b : IBackendBuffer) =
             match b with
                 | :? Aardvark.Rendering.GL.Buffer as b -> x.DeleteBuffer b
                 | _ -> failwithf "unsupported buffer-type: %A" b
@@ -431,12 +431,12 @@ type Runtime() =
 
         member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
             x.CreateRenderbuffer(size, format, samples) :> IRenderbuffer
-            
+
 
         member x.CreateGeometryPool(types : Map<Symbol, Type>) =
             x.CreateGeometryPool(types)
 
-            
+
         member x.MaxLocalSize = compute.Value.WorkGroupSize
         member x.CreateComputeShader (c : FShade.ComputeShader) = ctx.CompileKernel c :> IComputeShader
         member x.NewInputBinding(c : IComputeShader) = new ComputeShaderInputBinding(unbox c) :> IComputeShaderInputBinding
@@ -458,24 +458,24 @@ type Runtime() =
             let handle = fbo.Handle
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, handle)
             GL.Check "could not bind framebuffer"
-            
+
             // assume user has not messed with gl state -> omit resetting color/depth/stencil mask
 
             // omit check if farmebuffer signature actually contains depth/stencil
             let mutable combinedClearMask = ClearBufferMask.None
-            match depth with 
+            match depth with
             | Some d -> GL.ClearDepth(d)
                         combinedClearMask <- combinedClearMask ||| ClearBufferMask.DepthBufferBit
             | None -> ()
 
-            match stencil with 
+            match stencil with
             | Some s -> GL.ClearStencil(s)
                         combinedClearMask <- combinedClearMask ||| ClearBufferMask.StencilBufferBit
             | None -> ()
 
             if fbo.Signature.ColorAttachments.Count = 1 then
                 let single = fbo.Signature.ColorAttachments |> Seq.head
-                let name = fst single.Value 
+                let name = fst single.Value
                 match Map.tryFind name clearColors with
                 | Some c ->
                     GL.ClearColor(c.R, c.G, c.B, c.A)
@@ -495,11 +495,11 @@ type Runtime() =
                         GL.ClearColor(c.R, c.G, c.B, c.A)
                         GL.Clear(ClearBufferMask.ColorBufferBit)
                     | None -> ()
-                
+
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
             GL.Check "could not unbind framebuffer"
 
-        member x.ClearColor(texture : IBackendTexture, color : C4f) = 
+        member x.ClearColor(texture : IBackendTexture, color : C4f) =
             use __ = ctx.ResourceLock
 
             let fbo = GL.GenFramebuffer()
@@ -520,7 +520,7 @@ type Runtime() =
             GL.DeleteFramebuffer(fbo)
             GL.Check "could not delete framebuffer"
 
-        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<float>, stencil : Option<int>) = 
+        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<float>, stencil : Option<int>) =
 
             let binding = match (depth, stencil) with
                           | Some x, Some y -> Some FramebufferAttachment.DepthStencilAttachment
@@ -537,7 +537,7 @@ type Runtime() =
 
                 GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo)
                 GL.Check "could not bind framebuffer"
-            
+
                 GL.FramebufferTexture(FramebufferTarget.Framebuffer, b, texture.Handle |> unbox<int>, 0)
                 GL.Check "could not attach framebuffer texture"
 
@@ -546,10 +546,10 @@ type Runtime() =
                     GL.ClearDepth(d)
                     GL.ClearStencil(s)
                     GL.Clear(ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-                | Some d, None -> 
+                | Some d, None ->
                     GL.ClearDepth(d)
                     GL.Clear(ClearBufferMask.DepthBufferBit)
-                | None, Some s -> 
+                | None, Some s ->
                     GL.ClearStencil(s)
                     GL.Clear(ClearBufferMask.StencilBufferBit)
                 | _ -> ()
@@ -561,7 +561,7 @@ type Runtime() =
                 GL.Check "could not delete framebuffer"
 
             | _ -> () // done
-        
+
         member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture =
             ctx.CreateTextureView(unbox<Texture> texture, levels, slices, isArray) :> IBackendTexture
 
@@ -587,6 +587,9 @@ type Runtime() =
             else
                 Set.singleton ClippingInputPrimitives
 
+        member x.SupportsRaytracing =
+            false
+
         member x.CreateAccelerationStructure(geometry, usage, allowUpdate) =
             failwith "GL backend does not support raytracing"
 
@@ -600,7 +603,7 @@ type Runtime() =
             with get() = ctx.ShaderCachePath
             and set(value) = ctx.ShaderCachePath <- value
 
-    
+
     member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
         src |> ResourceValidation.Textures.validateSlices srcBaseSlice slices
         src |> ResourceValidation.Textures.validateLevels srcBaseLevel levels
@@ -611,7 +614,7 @@ type Runtime() =
 
         let src = unbox<Texture> src
         let dst = unbox<Texture> dst
-        
+
         let mutable size = src.GetSize srcBaseLevel
         for l in 0 .. levels - 1 do
             let srcLevel = srcBaseLevel + l
@@ -660,7 +663,7 @@ type Runtime() =
                 |> Map.remove DefaultSemantic.Depth
                 |> Map.remove DefaultSemantic.Stencil
                 |> Map.toList
-                |> List.sortWith (fun (a,_) (b,_) -> 
+                |> List.sortWith (fun (a,_) (b,_) ->
                     if a = DefaultSemantic.Colors then Int32.MinValue
                     elif b = DefaultSemantic.Colors then Int32.MaxValue
                     else String.Compare(a.ToString(), b.ToString())
@@ -680,8 +683,8 @@ type Runtime() =
 
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
-    member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) : IBackendSurface = 
-        Operators.using ctx.ResourceLock (fun d -> 
+    member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) : IBackendSurface =
+        Operators.using ctx.ResourceLock (fun d ->
             let surface =
                 match s with
                     | :? FShadeSurface as f -> Aardvark.Rendering.Surface.FShadeSimple f.Effect
@@ -697,10 +700,10 @@ type Runtime() =
         )
 
 
-    member x.DeleteTexture (t : Texture) = 
+    member x.DeleteTexture (t : Texture) =
         ctx.Delete t
 
-    member x.DeleteSurface (p : Program) = 
+    member x.DeleteSurface (p : Program) =
         ctx.Delete p
 
     member x.DeleteBuffer (b : Aardvark.Rendering.GL.Buffer) =
@@ -723,7 +726,7 @@ type Runtime() =
         let eng = engine.GetValue()
         let shareTextures = eng.sharing &&& ResourceSharing.Textures <> ResourceSharing.None
         let shareBuffers = eng.sharing &&& ResourceSharing.Buffers <> ResourceSharing.None
-            
+
         if Config.UseNewRenderTask then
             new RenderTasks.NewRenderTask(manager, fboSignature, set, engine, shareTextures, shareBuffers) :> IRenderTask
         else
@@ -734,9 +737,9 @@ type Runtime() =
         //match rj with
         //     | :? RenderTaskObject as t -> t :> IPreparedRenderObject
         //     | :? RenderObject as rj -> manager.Prepare(fboSignature, rj) :> IPreparedRenderObject
-        //     | :? MultiRenderObject as rj -> 
-        //        let all = 
-        //            rj.Children 
+        //     | :? MultiRenderObject as rj ->
+        //        let all =
+        //            rj.Children
         //                |> List.map (fun ro -> x.PrepareRenderObject(fboSignature, ro))
         //                |> List.collect (fun o ->
         //                    match o with
@@ -820,19 +823,19 @@ type Runtime() =
 
             match trafo with
                 | ImageTrafo.Identity -> ()
-                | ImageTrafo.MirrorY -> 
+                | ImageTrafo.MirrorY ->
                     dst.Min.Y <- dst.Max.Y - 1
                     dst.Max.Y <- -1
                 | ImageTrafo.MirrorX ->
                     dst.Min.X <- dst.Max.X - 1
                     dst.Max.X <- -1
-                | _ -> 
+                | _ ->
                     failwith "unsupported image trafo"
-                    
-            let mask =  
-                if srcAtt = FramebufferAttachment.DepthStencilAttachment then 
+
+            let mask =
+                if srcAtt = FramebufferAttachment.DepthStencilAttachment then
                     ClearBufferMask.DepthBufferBit
-                else 
+                else
                     GL.ReadBuffer(ReadBufferMode.ColorAttachment0)
                     GL.DrawBuffer(DrawBufferMode.ColorAttachment0)
                     ClearBufferMask.ColorBufferBit
@@ -953,6 +956,6 @@ type Runtime() =
     member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : Renderbuffer =
         if samples < 1 then raise <| ArgumentException("[Renderbuffer] samples must be greater than 0")
         ctx.CreateRenderbuffer(size, format, samples)
-                
+
     member x.CreateGeometryPool(types : Map<Symbol, Type>) =
         new SparseBufferGeometryPool(ctx, types) :> IGeometryPool

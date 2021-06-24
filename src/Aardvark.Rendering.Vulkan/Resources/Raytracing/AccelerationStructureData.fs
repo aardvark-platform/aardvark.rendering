@@ -1,7 +1,5 @@
 ﻿namespace Aardvark.Rendering.Vulkan.Raytracing
 
-open System.Runtime.CompilerServices
-
 #nowarn "9"
 
 open System
@@ -25,8 +23,14 @@ type AccelerationStructureData =
     | Geometry of Geometry[]
     | Instances of Instances
 
+    member x.Count =
+        match x with
+        | Geometry arr -> uint32 arr.Length
+        | Instances inst -> inst.Count
+
 type private NativeAccelerationStructureData(typ : VkAccelerationStructureTypeKHR, data : VkAccelerationStructureGeometryKHR[],
-                                             primitives : uint32[], flags : VkBuildAccelerationStructureFlagsKHR) =
+                                             primitives : uint32[], flags : VkBuildAccelerationStructureFlagsKHR,
+                                             buffers : Buffer[]) =
     let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
     let pData = NativePtr.ofNativeInt<VkAccelerationStructureGeometryKHR> <| gc.AddrOfPinnedObject()
 
@@ -42,15 +46,7 @@ type private NativeAccelerationStructureData(typ : VkAccelerationStructureTypeKH
     member x.GeometryInfo = geometryInfo
 
     member x.Dispose() =
-        for d in data do
-            match d.geometryType with
-            | VkGeometryTypeKHR.Triangles ->
-                let address = d.geometry.triangles.transformData.hostAddress
-                address |> NativePtr.ofNativeInt<VkTransformMatrixKHR> |> NativePtr.free
-
-            | _ ->
-                ()
-
+        buffers |> Array.iter Disposable.dispose
         gc.Free()
 
     interface IDisposable with
@@ -60,24 +56,23 @@ type private NativeAccelerationStructureData(typ : VkAccelerationStructureTypeKH
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module private NativeAccelerationStructureData =
 
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module private NativePtr =
-
-        let toAddress (ptr : nativeptr<'T>) =
-            ptr |> NativePtr.toNativeInt |> VkDeviceOrHostAddressConstKHR.HostAddress
+    open System.Collections.Generic
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module private Buffer =
+
+        let private usage =
+            VkBufferUsageFlags.TransferDstBit |||
+            VkBufferUsageFlags.ShaderDeviceAddressBitKhr |||
+            VkBufferUsageFlags.AccelerationStructureBuildInputReadOnlyBitKhr
 
         let toAddress (offset : uint64) (buffer : Buffer) =
             VkDeviceOrHostAddressConstKHR.DeviceAddress(
                  buffer.DeviceAddress + offset
              )
 
-        let unbox (buffer : IBuffer) =
-            match buffer with
-            | :? Buffer as b -> b
-            | _ -> failwithf "[AccelerationStructure] Expected buffer of type %A but got %A" typeof<Buffer> buffer
+        let prepare (device : Device) (buffer : IBuffer) =
+            device |> Buffer.ofBuffer usage buffer
 
     let private getFlags (allowUpdate : bool) (usage : AccelerationStructureUsage) =
         let hint =
@@ -91,13 +86,20 @@ module private NativeAccelerationStructureData =
             else
                 VkBuildAccelerationStructureFlagsKHR.None
 
-        update ||| hint 
+        update ||| hint
 
-    let private ofGeometry (allowUpdate : bool) (usage : AccelerationStructureUsage) (data : Geometry[]) =
+    let private ofGeometry (device : Device) (allowUpdate : bool) (usage : AccelerationStructureUsage) (data : Geometry[]) =
+
+        let mutable buffers = List<Buffer>()
+
+        let getBufferAddress (offset : uint64) (buffer : IBuffer) =
+            let prepared = buffer |> Buffer.prepare device
+            buffers.Add(prepared)
+            prepared |> Buffer.toAddress offset
 
         let ofAabbData (data : AABBsData) =
             let address =
-                data.Buffer |> Buffer.unbox |> Buffer.toAddress data.Offset
+                getBufferAddress data.Offset data.Buffer
 
             VkAccelerationStructureGeometryDataKHR.Aabbs(
                 VkAccelerationStructureGeometryAabbsDataKHR(address, data.Stride)
@@ -105,11 +107,11 @@ module private NativeAccelerationStructureData =
 
         let ofTriangleData (vertexData : VertexData) (indexData : Option<IndexData>) (transform : Trafo3d) =
             let vertexDataAddress =
-                vertexData.Buffer |> Buffer.unbox |> Buffer.toAddress vertexData.Offset
+                getBufferAddress vertexData.Offset vertexData.Buffer
 
             let indexDataAddress =
                 match indexData with
-                | Some data -> data.Buffer |> Buffer.unbox |> Buffer.toAddress data.Offset
+                | Some data -> getBufferAddress data.Offset data.Buffer
                 | _ -> VkDeviceOrHostAddressConstKHR()
 
             let indexType =
@@ -117,15 +119,14 @@ module private NativeAccelerationStructureData =
                 | Some _ -> VkIndexType.Uint32
                 | _ -> VkIndexType.NoneKhr
 
-            let transformData =
-                let ptr = NativePtr.alloc 1
-                VkTransformMatrixKHR(M34f transform.Forward) |> NativePtr.write ptr
-                NativePtr.toAddress ptr
+            let transformDataAddress =
+                let buffer = ArrayBuffer([| VkTransformMatrixKHR(M34f transform.Forward) |])
+                getBufferAddress 0UL buffer
 
             VkAccelerationStructureGeometryDataKHR.Triangles(
                 VkAccelerationStructureGeometryTrianglesDataKHR(
                     VkFormat.R32g32b32Sfloat, vertexDataAddress, vertexData.Stride, vertexData.Count,
-                    indexType, indexDataAddress, transformData
+                    indexType, indexDataAddress, transformDataAddress
                 )
             )
 
@@ -141,22 +142,22 @@ module private NativeAccelerationStructureData =
 
                 VkAccelerationStructureGeometryKHR(typ, data, unbox g.Flags)
             )
-        
+
         let primitives =
             data |> Array.map (fun g -> g.Primitives)
 
         let flags = getFlags allowUpdate usage
 
         new NativeAccelerationStructureData(
-            VkAccelerationStructureTypeKHR.BottomLevel, geometries, primitives, flags
+            VkAccelerationStructureTypeKHR.BottomLevel, geometries, primitives, flags, buffers.ToArray()
         )
 
-    let private ofInstances (allowUpdate : bool) (usage : AccelerationStructureUsage) (buffer : Instances) =
+    let private ofInstances (allowUpdate : bool) (usage : AccelerationStructureUsage) (instances : Instances) =
         let geometry =
             VkAccelerationStructureGeometryKHR(
                 VkGeometryTypeKHR.Instances,
                 VkAccelerationStructureGeometryDataKHR.Instances(
-                    VkAccelerationStructureGeometryInstancesDataKHR(0u, buffer.Buffer |> Buffer.toAddress 0UL)
+                    VkAccelerationStructureGeometryInstancesDataKHR(0u, instances.Buffer |> Buffer.toAddress 0UL)
                 ),
                 VkGeometryFlagsKHR.None
             )
@@ -164,18 +165,18 @@ module private NativeAccelerationStructureData =
         let flags = getFlags allowUpdate usage
 
         new NativeAccelerationStructureData(
-            VkAccelerationStructureTypeKHR.TopLevel, [| geometry |], [| buffer.Count |], flags
+            VkAccelerationStructureTypeKHR.TopLevel, [| geometry |], [| instances.Count |], flags, Array.empty
         )
 
 
-    let alloc allowUpdate usage = function
-        | AccelerationStructureData.Geometry data -> ofGeometry allowUpdate usage data
+    let alloc device allowUpdate usage = function
+        | AccelerationStructureData.Geometry data -> ofGeometry device allowUpdate usage data
         | AccelerationStructureData.Instances data -> ofInstances allowUpdate usage data
 
     let createBuffers (device : Device) (data : NativeAccelerationStructureData) =
         let sizes =
             native {
-                let! pSizeInfo = Unchecked.defaultof<_>
+                let! pSizeInfo = VkAccelerationStructureBuildSizesInfoKHR.Empty
                 let! pBuildInfo = data.GeometryInfo
                 let! pPrimitiveCounts = data.Primitives
 

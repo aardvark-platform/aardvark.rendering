@@ -35,7 +35,7 @@ module RaytracingProgram =
 
         let toGeneralGroups (map : Map<Symbol, FShade.Shader>) =
             map |> Map.toList |> List.map (fun (n, s) ->
-                ShaderGroup.General { Name = n; Stage = ShaderStage.ofFShade s.shaderStage; Value = s}
+                ShaderGroup.General { Name = Some n; Stage = ShaderStage.ofFShade s.shaderStage; Value = s}
             )
 
         let hitGroups =
@@ -52,20 +52,21 @@ module RaytracingProgram =
             )
 
         let groups =
-            [ yield! effect.RayGenerationShaders |> toGeneralGroups
+            [ yield ShaderGroup.General { Name = None; Stage = ShaderStage.RayGeneration; Value = effect.RayGenerationShader }
               yield! effect.MissShaders |> toGeneralGroups
               yield! effect.CallableShaders |> toGeneralGroups
               yield! hitGroups ]
-  
+
         let glsl =
             effect |> FShade.RaytracingEffect.toModule |> FShade.Backends.ModuleCompiler.compileGLSLRaytracing
 
-        let defines (stage : ShaderStage) (name : Symbol) (rayType : Option<Symbol>) =
+        let defines (stage : ShaderStage) (name : Option<Symbol>) (rayType : Option<Symbol>) =
             let stage = ShaderStage.toFShade stage
 
-            match rayType with
-            | Some rt -> [ sprintf "%A_%A_%A" stage name rt ]
-            | _ -> [ sprintf "%A_%A" stage name ]
+            match name, rayType with
+            | Some n, Some rt -> [ sprintf "%A_%A_%A" stage n rt ]
+            | Some n, _ -> [ sprintf "%A_%A" stage n ]
+            | _ -> [ sprintf "%A" stage ]
 
         let stages =
             let mutable index = 0

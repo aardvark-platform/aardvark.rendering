@@ -492,51 +492,11 @@ module ``Compute Commands`` =
 
             type VKVM.CommandStream with
                 member x.TransformLayout(img : Image, source : VkImageLayout, target : VkImageLayout) =
+                    let src = VkImageLayout.toAccessFlags source
+                    let dst = VkImageLayout.toAccessFlags target
 
-                    let src =
-                        if source = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
-                        elif source = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
-                        elif source = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
-                        elif source = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
-                        elif source = VkImageLayout.Preinitialized then VkAccessFlags.HostWriteBit
-                        elif source = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
-                        elif source = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit // ||| VkAccessFlags.InputAttachmentReadBit
-                        else VkAccessFlags.None
-
-                    let dst =
-                        if target = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
-                        elif target = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
-                        elif target = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
-                        elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
-                        elif target = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit // ||| VkAccessFlags.InputAttachmentReadBit
-                        elif target = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
-                        elif target = VkImageLayout.General then VkAccessFlags.None
-                        else VkAccessFlags.None
-
-                    let srcMask =
-                        if source = VkImageLayout.ColorAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
-                        elif source = VkImageLayout.DepthStencilAttachmentOptimal then VkPipelineStageFlags.LateFragmentTestsBit
-                        elif source = VkImageLayout.TransferDstOptimal then VkPipelineStageFlags.TransferBit
-                        elif source = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
-                        elif source = VkImageLayout.Preinitialized then VkPipelineStageFlags.HostBit
-                        elif source = VkImageLayout.TransferSrcOptimal then VkPipelineStageFlags.TransferBit
-                        elif source = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.ComputeShaderBit
-                        elif source = VkImageLayout.Undefined then VkPipelineStageFlags.HostBit // VK_PIPELINE_STAGE_FLAGS_HOST_BIT
-                        elif source = VkImageLayout.General then VkPipelineStageFlags.HostBit
-                        else VkPipelineStageFlags.None
-
-                    let dstMask =
-                        if target = VkImageLayout.TransferSrcOptimal then VkPipelineStageFlags.TransferBit
-                        elif target = VkImageLayout.TransferDstOptimal then VkPipelineStageFlags.TransferBit
-                        elif target = VkImageLayout.ColorAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
-                        elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkPipelineStageFlags.EarlyFragmentTestsBit
-                        elif target = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.ComputeShaderBit
-                        elif target = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
-                        elif target = VkImageLayout.General then VkPipelineStageFlags.HostBit
-
-
-                        else VkPipelineStageFlags.None
-
+                    let srcStage = VkImageLayout.toSrcStageFlags QueueFlags.Compute source
+                    let dstStage = VkImageLayout.toDstStageFlags QueueFlags.Compute target
 
                     let range =
                         if VkFormat.hasDepth img.Format then img.[ImageAspect.Depth]
@@ -554,57 +514,19 @@ module ``Compute Commands`` =
                             range.VkImageSubresourceRange
                         )
                     x.PipelineBarrier(
-                        srcMask,
-                        dstMask,
+                        srcStage,
+                        dstStage,
                         [||],
                         [||],
                         [| barrier |]    
                     )
                     
                 member x.TransformLayout(range : ImageSubresourceRange, source : VkImageLayout, target : VkImageLayout) =
+                    let src = VkImageLayout.toAccessFlags source
+                    let dst = VkImageLayout.toAccessFlags target
 
-                    let src =
-                        if source = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
-                        elif source = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
-                        elif source = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
-                        elif source = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
-                        elif source = VkImageLayout.Preinitialized then VkAccessFlags.HostWriteBit
-                        elif source = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
-                        elif source = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit // ||| VkAccessFlags.InputAttachmentReadBit
-                        else VkAccessFlags.None
-
-                    let dst =
-                        if target = VkImageLayout.TransferSrcOptimal then VkAccessFlags.TransferReadBit
-                        elif target = VkImageLayout.TransferDstOptimal then VkAccessFlags.TransferWriteBit
-                        elif target = VkImageLayout.ColorAttachmentOptimal then VkAccessFlags.ColorAttachmentWriteBit
-                        elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkAccessFlags.DepthStencilAttachmentWriteBit
-                        elif target = VkImageLayout.ShaderReadOnlyOptimal then VkAccessFlags.ShaderReadBit // ||| VkAccessFlags.InputAttachmentReadBit
-                        elif target = VkImageLayout.PresentSrcKhr then VkAccessFlags.MemoryReadBit
-                        elif target = VkImageLayout.General then VkAccessFlags.None
-                        else VkAccessFlags.None
-
-                    let srcMask =
-                        if source = VkImageLayout.ColorAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
-                        elif source = VkImageLayout.DepthStencilAttachmentOptimal then VkPipelineStageFlags.LateFragmentTestsBit
-                        elif source = VkImageLayout.TransferDstOptimal then VkPipelineStageFlags.TransferBit
-                        elif source = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
-                        elif source = VkImageLayout.Preinitialized then VkPipelineStageFlags.HostBit
-                        elif source = VkImageLayout.TransferSrcOptimal then VkPipelineStageFlags.TransferBit
-                        elif source = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.ComputeShaderBit
-                        elif source = VkImageLayout.Undefined then VkPipelineStageFlags.HostBit // VK_PIPELINE_STAGE_FLAGS_HOST_BIT
-                        elif source = VkImageLayout.General then VkPipelineStageFlags.HostBit
-                        else VkPipelineStageFlags.None
-
-                    let dstMask =
-                        if target = VkImageLayout.TransferSrcOptimal then VkPipelineStageFlags.TransferBit
-                        elif target = VkImageLayout.TransferDstOptimal then VkPipelineStageFlags.TransferBit
-                        elif target = VkImageLayout.ColorAttachmentOptimal then VkPipelineStageFlags.ColorAttachmentOutputBit
-                        elif target = VkImageLayout.DepthStencilAttachmentOptimal then VkPipelineStageFlags.EarlyFragmentTestsBit
-                        elif target = VkImageLayout.ShaderReadOnlyOptimal then VkPipelineStageFlags.ComputeShaderBit
-                        elif target = VkImageLayout.PresentSrcKhr then VkPipelineStageFlags.TransferBit
-                        elif target = VkImageLayout.General then VkPipelineStageFlags.HostBit
-                        else VkPipelineStageFlags.None
-
+                    let srcStage = VkImageLayout.toSrcStageFlags QueueFlags.Compute source
+                    let dstStage = VkImageLayout.toDstStageFlags QueueFlags.Compute target
                         
                     let barrier =
                         VkImageMemoryBarrier(
@@ -618,8 +540,8 @@ module ``Compute Commands`` =
                             range.VkImageSubresourceRange
                         )
                     x.PipelineBarrier(
-                        srcMask,
-                        dstMask,
+                        srcStage,
+                        dstStage,
                         [||],
                         [||],
                         [| barrier |]    
@@ -637,34 +559,8 @@ module ``Compute Commands`` =
                             uint64 b.Size
                         )
 
-                    let srcStage =
-                        match src with
-                            | VkAccessFlags.HostReadBit -> VkPipelineStageFlags.HostBit
-                            | VkAccessFlags.HostWriteBit -> VkPipelineStageFlags.HostBit
-                            | VkAccessFlags.IndexReadBit -> VkPipelineStageFlags.VertexInputBit
-                            | VkAccessFlags.IndirectCommandReadBit -> VkPipelineStageFlags.DrawIndirectBit
-                            | VkAccessFlags.ShaderReadBit -> VkPipelineStageFlags.ComputeShaderBit
-                            | VkAccessFlags.ShaderWriteBit -> VkPipelineStageFlags.ComputeShaderBit
-                            | VkAccessFlags.TransferReadBit -> VkPipelineStageFlags.TransferBit
-                            | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
-                            | VkAccessFlags.UniformReadBit -> VkPipelineStageFlags.ComputeShaderBit
-                            | VkAccessFlags.VertexAttributeReadBit -> VkPipelineStageFlags.VertexInputBit
-                            | _ -> VkPipelineStageFlags.None
-                            
-                    let dstStage =
-                        match dst with
-                            | VkAccessFlags.HostReadBit -> VkPipelineStageFlags.HostBit
-                            | VkAccessFlags.HostWriteBit -> VkPipelineStageFlags.HostBit
-                            | VkAccessFlags.IndexReadBit -> VkPipelineStageFlags.VertexInputBit
-                            | VkAccessFlags.IndirectCommandReadBit -> VkPipelineStageFlags.DrawIndirectBit
-                            | VkAccessFlags.ShaderReadBit -> VkPipelineStageFlags.VertexShaderBit
-                            | VkAccessFlags.ShaderWriteBit -> VkPipelineStageFlags.VertexShaderBit
-                            | VkAccessFlags.TransferReadBit -> VkPipelineStageFlags.TransferBit
-                            | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
-                            | VkAccessFlags.UniformReadBit -> VkPipelineStageFlags.VertexShaderBit
-                            | VkAccessFlags.VertexAttributeReadBit -> VkPipelineStageFlags.VertexInputBit
-                            | _ -> VkPipelineStageFlags.None
-
+                    let srcStage = VkAccessFlags.toSrcStageFlags QueueFlags.Compute src
+                    let dstStage = VkAccessFlags.toDstStageFlags QueueFlags.Compute dst
 
                     x.PipelineBarrier(
                         srcStage,
@@ -680,15 +576,8 @@ module ``Compute Commands`` =
 
                 member x.ImageBarrier(img : ImageSubresourceRange, src : VkAccessFlags, dst : VkAccessFlags) =
 
-                    let srcStage =
-                        match src with
-                            | VkAccessFlags.TransferReadBit | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
-                            | _ -> VkPipelineStageFlags.ComputeShaderBit
-                            
-                    let dstStage =
-                        match dst with
-                            | VkAccessFlags.TransferReadBit | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
-                            | _ -> VkPipelineStageFlags.ComputeShaderBit
+                    let srcStage = VkAccessFlags.toSrcStageFlags QueueFlags.Compute src
+                    let dstStage = VkAccessFlags.toDstStageFlags QueueFlags.Compute dst
 
                     x.PipelineBarrier(
                         srcStage, dstStage,
@@ -910,11 +799,11 @@ module ``Compute Commands`` =
 
 
                 | ComputeCommand.SyncBufferCmd(b, src, dst) ->
-                    Command.Sync(unbox b, VkAccessFlags.ofResourceAccess [src], VkAccessFlags.ofResourceAccess [dst])
+                    Command.Sync(unbox b, VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst)
 
                 | ComputeCommand.SyncImageCmd(i, src, dst) ->
                     let i = unbox<Image> i
-                    Command.ImageBarrier(i.[ImageAspect.Color], VkAccessFlags.ofResourceAccess [src], VkAccessFlags.ofResourceAccess [dst])
+                    Command.ImageBarrier(i.[ImageAspect.Color], VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst)
 
                 | ComputeCommand.SetBufferCmd(b, pattern) ->
                     Command.SetBuffer(unbox b.Buffer, int64 b.Offset, int64 b.Size, pattern)
@@ -1005,11 +894,11 @@ module ``Compute Commands`` =
                         stream.TransformLayout(res, srcLayout, dstLayout) |> ignore
 
                     | ComputeCommand.SyncBufferCmd(b, src, dst) ->
-                        stream.Sync(unbox b, VkAccessFlags.ofResourceAccess [src], VkAccessFlags.ofResourceAccess [dst]) |> ignore
+                        stream.Sync(unbox b, VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst) |> ignore
                         
                     | ComputeCommand.SyncImageCmd(i, src, dst) ->
                         let i = unbox<Image> i
-                        stream.ImageBarrier(i.[ImageAspect.Color], VkAccessFlags.ofResourceAccess [src], VkAccessFlags.ofResourceAccess [dst]) |> ignore
+                        stream.ImageBarrier(i.[ImageAspect.Color], VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst) |> ignore
 
                     | ComputeCommand.SetBufferCmd(b, value) ->
                         stream.SetBuffer(unbox b.Buffer, int64 b.Offset, int64 b.Size, value) |> ignore

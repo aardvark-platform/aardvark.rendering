@@ -23,7 +23,7 @@ module private ``Trace Command Extensions`` =
 
         static member BindRaytracingPipeline(pipeline : RaytracingPipeline, descriptorSets : DescriptorSetBinding) =
             { new Command() with
-                member x.Compatible = QueueFlags.Graphics
+                member x.Compatible = QueueFlags.Compute
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
                     VkRaw.vkCmdBindPipeline(cmd.Handle, VkPipelineBindPoint.RayTracingKhr, pipeline.Handle)
@@ -38,19 +38,19 @@ module private ``Trace Command Extensions`` =
                     []
             }
 
-        static member TraceRays(shaderBindingTable : ShaderBindingTable, raygen : Symbol,
+        static member TraceRays(shaderBindingTable : ShaderBindingTable,
                                 width : uint32, height : uint32, depth : uint32) =
             { new Command() with
-                member x.Compatible = QueueFlags.Graphics
+                member x.Compatible = QueueFlags.Compute
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
                     native {
-                        let! pRaygenAddress   = shaderBindingTable.RaygenTable.GetAddressRegion(raygen)
+                        let! pRaygenAddress   = shaderBindingTable.RaygenTable.AddressRegion
                         let! pMissAddress     = shaderBindingTable.MissTable.AddressRegion
                         let! pHitAddress      = shaderBindingTable.HitGroupTable.AddressRegion
                         let! pCallableAddress = shaderBindingTable.CallableTable.AddressRegion
                         VkRaw.vkCmdTraceRaysKHR(cmd.Handle, pRaygenAddress, pMissAddress, pHitAddress, pCallableAddress, width, height, depth)
-                    }             
+                    }
 
                     []
             }
@@ -59,13 +59,8 @@ module private ``Trace Command Extensions`` =
     module RaytracingCommand =
 
         let toCommand (shaderBindingTable : ShaderBindingTable) = function
-            | RaytracingCommand.TraceRaysCmd(raygen, size) ->
-                let raygen =
-                    raygen |> Option.defaultWith (fun _ ->
-                        shaderBindingTable.RaygenTable.Indices |> Map.toList |> List.head |> fst
-                    )
-
-                Command.TraceRays(shaderBindingTable, raygen, uint32 size.X, uint32 size.Y, uint32 size.Z)
+            | RaytracingCommand.TraceRaysCmd(size) ->
+                Command.TraceRays(shaderBindingTable, uint32 size.X, uint32 size.Y, uint32 size.Z)
 
             | RaytracingCommand.SyncBufferCmd(buffer, src, dst) ->
                 Command.Sync(unbox buffer, VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst)
@@ -74,9 +69,16 @@ module private ``Trace Command Extensions`` =
                 let image = unbox<Image> texture
                 Command.ImageBarrier(image.[ImageAspect.Color], VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst)
 
-            | RaytracingCommand.TransformLayoutCmd(texture, layout) ->
+            | RaytracingCommand.TransformLayoutCmd(texture, src, dst) ->
                 let image = unbox<Image> texture
-                Command.TransformLayout(image, VkImageLayout.ofTextureLayout layout)
+                let aspect = VkFormat.toAspect image.Format
+                let levels = Range1i(0, image.MipMapLevels - 1)
+                let slices = Range1i(0, image.Layers - 1)
+
+                Command.TransformLayout(
+                    image.[unbox (int aspect), levels.Min .. levels.Max, slices.Min .. slices.Max],
+                    VkImageLayout.ofTextureLayout src, VkImageLayout.ofTextureLayout dst
+                )
 
 
 [<AutoOpen>]
@@ -90,11 +92,8 @@ module private RaytracingTaskInternals =
         new (shaderBindingTable : aval<ShaderBindingTable>, commands : alist<RaytracingCommand>) =
             CompiledCommand(shaderBindingTable, commands |> AList.toAVal |> AVal.map IndexList.toList)
 
-        member x.Run(commandBuffer : CommandBuffer) =
-            commandBuffer.enqueue {
-                for cmd in compiled do
-                    do! cmd
-            }
+        member x.Commands =
+            compiled
 
         member x.Update(token : AdaptiveToken) =
             x.EvaluateIfNeeded token false (fun token ->
@@ -117,9 +116,8 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
     let device = manager.Device
     let user = manager.ResourceUser
 
-    let pool = device.GraphicsFamily.CreateCommandPool(CommandPoolFlags.ResetBuffer)
+    let pool = device.ComputeFamily.CreateCommandPool(CommandPoolFlags.ResetBuffer)
     let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
-    let inner = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)
 
     let resources = ResourceLocationSet(user)
 
@@ -130,19 +128,21 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
     let compiled = CompiledCommand(preparedPipeline.ShaderBindingTable, commands)
 
     member x.Run(token : AdaptiveToken, queries : IQuery) =
-        x.EvaluateIfNeeded token () (fun t ->
+        x.EvaluateIfNeeded token () (fun token ->
 
             let vulkanQueries = queries.ToVulkanQuery()
 
             use tt = device.Token
 
-            let commandChanged =
-                compiled.Update(token)
-
             let resourcesChanged =
                 resources.Update(token)
 
-            if commandChanged || resourcesChanged then
+            tt.Sync()
+
+            let commandChanged =
+                compiled.Update(token)
+
+            if Config.showRecompile then
                 let cause =
                     String.concat "; " [
                         if commandChanged then yield "content"
@@ -150,14 +150,8 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
                     ]
                     |> sprintf "{ %s }"
 
-                if Config.showRecompile then
-                    Log.line "[Vulkan] recompile commands: %s" cause
+                Log.line "[Raytracing] recompile commands: %s" cause
 
-                inner.Begin(CommandBufferUsage.None, true)
-                compiled.Run(inner)
-                inner.End()
-
-            tt.Sync()
 
             let pipeline = preparedPipeline.Pipeline.Update(token)
             let descriptorSets = preparedPipeline.DescriptorSets.Update(token)
@@ -170,7 +164,9 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
             cmd.enqueue {
                 do! Command.BindRaytracingPipeline(pipeline.handle, descriptorSets.handle)
-                do! Command.Execute [inner]
+
+                for cmd in compiled.Commands do
+                    do! cmd
             }
 
             for q in vulkanQueries do
@@ -179,7 +175,7 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
             cmd.End()
             queries.End()
 
-            device.GraphicsFamily.RunSynchronously(cmd)
+            device.ComputeFamily.RunSynchronously(cmd)
         )
 
     member x.Dispose() =
@@ -188,7 +184,6 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
                 resources.Remove(r)
 
             preparedPipeline.Dispose()
-            inner.Dispose()
             cmd.Dispose()
             pool.Dispose()
         )

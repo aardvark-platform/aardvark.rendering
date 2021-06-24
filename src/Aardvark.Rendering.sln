@@ -2,6 +2,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.29609.76
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "35 - Raytracing", "Examples (netcore)\35 - Raytracing\35 - Raytracing.fsproj", "{118F8B34-3207-49C5-A8A4-6668D847A6BF}"
+EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "27 - BrowserTexture", "Examples (netcore)\27 - BrowserTexture\27 - BrowserTexture.fsproj", "{43F063C0-1BE0-4478-BCD3-9F9C83F97172}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "18 - AdaptiveResourceSemantics", "Scratch (netcore)\18 - AdaptiveResourceSemantics\18 - AdaptiveResourceSemantics.fsproj", "{9F213324-00AB-4DDA-97BE-455DBF3F9406}"
@@ -213,6 +215,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{118F8B34-3207-49C5-A8A4-6668D847A6BF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{118F8B34-3207-49C5-A8A4-6668D847A6BF}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{118F8B34-3207-49C5-A8A4-6668D847A6BF}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{118F8B34-3207-49C5-A8A4-6668D847A6BF}.Release|Any CPU.Build.0 = Release|Any CPU
 		{43F063C0-1BE0-4478-BCD3-9F9C83F97172}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{43F063C0-1BE0-4478-BCD3-9F9C83F97172}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{43F063C0-1BE0-4478-BCD3-9F9C83F97172}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -562,6 +568,7 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{118F8B34-3207-49C5-A8A4-6668D847A6BF} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{43F063C0-1BE0-4478-BCD3-9F9C83F97172} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{9F213324-00AB-4DDA-97BE-455DBF3F9406} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{7F4EDFB3-674B-4745-A1AB-95A99FC9FD71} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}

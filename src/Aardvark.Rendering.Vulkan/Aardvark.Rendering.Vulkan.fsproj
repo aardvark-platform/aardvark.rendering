@@ -32,6 +32,8 @@
     <Compile Include="Wrapper\VKVM.fs" />
     <Compile Include="Core\Utilities.fs" />
     <Compile Include="Core\Info.fs" />
+    <Compile Include="Core\Formats.fs" />
+    <Compile Include="Core\Flags.fs" />
     <Compile Include="Core\Limits.fs" />
     <Compile Include="Core\Features.fs" />
     <Compile Include="Core\Platform.fs" />

@@ -102,7 +102,7 @@ and private NAryTimeMod(inputs : aval<DateTime>[]) =
 
     override x.InputChangedObject(_,o) =
         match o with
-        | :? aval<DateTime> as o -> 
+        | :? aval<DateTime> as o ->
             let inline change (r : ref<HashSet<aval<DateTime>>>) =
                 ref (HashSet.remove o !r)
             Interlocked.Change(&missing, change) |> ignore
@@ -131,7 +131,7 @@ and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
     let mutable beforeCount = 0
     let mutable afterCount = 0
 
-    do controls |> Array.iter (fun c -> 
+    do controls |> Array.iter (fun c ->
         c.BeforeRender.Add (fun () ->
             let nv = Interlocked.Increment(&beforeCount)
             if nv = 1 then
@@ -140,7 +140,7 @@ and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
                 beforeCount <- 0
         )
     )
-    do controls |> Array.iter (fun c -> 
+    do controls |> Array.iter (fun c ->
         c.AfterRender.Add (fun () ->
             let nv = Interlocked.Increment(&afterCount)
             if nv = controls.Length then
@@ -156,13 +156,13 @@ and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
     let mutable task = RenderTask.empty
 
     let keyboard, mouse, subscriptions =
-        let m = EventMouse(false) 
+        let m = EventMouse(false)
         let k = EventKeyboard()
         let subscriptions =
             controls |> Array.collect(fun c ->
                 [|
-                    k.Use(c.Keyboard) 
-                    m.Use(c.Mouse) 
+                    k.Use(c.Keyboard)
+                    m.Use(c.Mouse)
                 |]
             )
 
@@ -182,11 +182,11 @@ and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
 
     let withLabel (i : int) (ctrl : RenderControl) =
         let runtime = runtime |> unbox<MultiRuntime>
-        let text = 
+        let text =
             let name = runtime.Runtimes.[i].GetType().FullName
             if name.Contains "GL." then "GL"
             else "Vulkan"
-            
+
 
         let label = new Label(Text = text)
         label.ForeColor <- Color.White
@@ -199,7 +199,7 @@ and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
         left.Controls.Add ctrl
         left.Controls.Add label
         left.Dock <- DockStyle.Fill
-        
+
         label.BringToFront()
         left :> Control
 
@@ -224,7 +224,7 @@ and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
 
     let content = merge 0 controls
     do base.Controls.Add(content)
-       
+
     override x.OnClientSizeChanged(e) =
         base.OnClientSizeChanged(e)
         let newSize = this.ClientSize
@@ -238,10 +238,10 @@ and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
         splitterChanged()
 
     member x.Controls = controls
-    
+
     member x.BeforeRender = beforeRender.Publish
     member x.AfterRender = afterRender.Publish
-    
+
     member x.Cursor
         with get() = controls.[0].Cursor
         and set v = for c in controls do c.Cursor <- v
@@ -250,12 +250,12 @@ and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
         member x.FramebufferSignature = signature.Value :> IFramebufferSignature
         member x.Runtime = runtime
         member x.RenderTask
-            with get() = task 
+            with get() = task
             and set t =
                 Array.iter (fun (c : RenderControl) -> c.RenderTask <- t) controls
                 task <- t
         member x.SubSampling
-            with get() = controls.[0].SubSampling 
+            with get() = controls.[0].SubSampling
             and set t = Array.iter (fun (c : RenderControl) -> c.SubSampling <- t) controls
 
         member x.Samples = samples
@@ -291,7 +291,7 @@ and MultiRuntime(runtimes : IRuntime[]) =
 
         member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) : unit =
             failwith "not implemented"
-            
+
         member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) : unit =
             failwith "not implemented"
 
@@ -302,7 +302,7 @@ and MultiRuntime(runtimes : IRuntime[]) =
 
         member x.ResourceManager = failwith "not implemented"
 
-        member x.CreateFramebufferSignature(a,b,c) = 
+        member x.CreateFramebufferSignature(a,b,c) =
             let res = runtimes |> Array.map (fun r -> r.CreateFramebufferSignature(a,b,c))
             MultiFramebufferSignature(x, res) :> IFramebufferSignature
 
@@ -323,7 +323,7 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.ResolveMultisamples(source, target, trafo) = failwith ""
         member x.GenerateMipMaps(t) = failwith ""
         member x.ContextLock = { new IDisposable with member x.Dispose() = () }
-        member x.CompileRender (signature, engine, set) = 
+        member x.CompileRender (signature, engine, set) =
             match signature with
                 | :? MultiFramebufferSignature as signature ->
                     let tasks = Array.map2 (fun (r : IRuntime) (s : IFramebufferSignature) -> r.CompileRender(s, engine, set)) runtimes signature.Signatures
@@ -331,7 +331,7 @@ and MultiRuntime(runtimes : IRuntime[]) =
                 | _ ->
                     failwith ""
 
-        member x.CompileClear(signature, color, depth, stencil) = 
+        member x.CompileClear(signature, color, depth, stencil) =
             match signature with
                 | :? MultiFramebufferSignature as signature ->
                     let tasks = Array.map2 (fun (r : IRuntime) (s : IFramebufferSignature) -> r.CompileClear(s, color, depth, stencil)) runtimes signature.Signatures
@@ -356,7 +356,7 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
             failwith ""
 
-        member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = 
+        member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
             failwith ""
 
 
@@ -370,7 +370,7 @@ and MultiRuntime(runtimes : IRuntime[]) =
 
         member x.CreateGeometryPool(types) = failwith ""
 
-        
+
         member x.CreateBuffer(size : nativeint, usage : BufferUsage) = failwith ""
 
         member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) : unit =
@@ -382,7 +382,7 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) : unit -> unit =
             failwith ""
 
-        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) : unit = 
+        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) : unit =
             failwith ""
 
 
@@ -405,6 +405,7 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.CreatePipelineQuery(statistics) = failwith ""
         member x.SupportedPipelineStatistics = Set.empty
 
+        member x.SupportsRaytracing = false
         member x.CreateAccelerationStructure(geometry, usage, allowUpdate) = failwith ""
         member x.TryUpdateAccelerationStructure(handle, usage) = failwith ""
         member x.CompileTrace(pipeline, commands) = failwith ""
@@ -414,7 +415,7 @@ and MultiRuntime(runtimes : IRuntime[]) =
             and set(_) = ()
 
 type MultiApplication(apps : IApplication[]) =
-    
+
     let runtime = new MultiRuntime(apps |> Array.map (fun a -> a.Runtime))
 
     member x.Initialize(ctrl : IRenderControl, samples : int) =
@@ -430,7 +431,7 @@ type MultiApplication(apps : IApplication[]) =
                 failwithf "unknown control type: %A" ctrl
 
     interface IApplication with
-        member x.Dispose() = 
+        member x.Dispose() =
             runtime.Dispose()
             apps |> Array.iter (fun a -> a.Dispose())
         member x.Runtime = runtime :> IRuntime

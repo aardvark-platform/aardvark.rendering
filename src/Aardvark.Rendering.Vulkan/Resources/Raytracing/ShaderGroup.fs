@@ -5,7 +5,7 @@ open Aardvark.Rendering
 
 type GeneralShader<'T> =
     {
-        Name  : Symbol
+        Name  : Option<Symbol>
         Stage : ShaderStage
         Value : 'T
     }
@@ -36,16 +36,16 @@ module ShaderGroup =
           ClosestHit   = group.ClosestHit   |> Option.map (mapping group.Name group.RayType ShaderStage.ClosestHit)
           Intersection = group.Intersection |> Option.map (mapping group.Name group.RayType ShaderStage.Intersection) }
 
-    let map (mapping : Symbol -> Option<Symbol> -> ShaderStage -> 'T1 -> 'T2) (group : ShaderGroup<'T1>) =
+    let map (mapping : Option<Symbol> -> Option<Symbol> -> ShaderStage -> 'T1 -> 'T2) (group : ShaderGroup<'T1>) =
         match group with
         | ShaderGroup.General g ->
             let value = g.Value |> mapping g.Name None g.Stage
             ShaderGroup.General { Name = g.Name; Stage = g.Stage; Value = value }
 
         | ShaderGroup.HitGroup g ->
-            ShaderGroup.HitGroup (g |> mapHitGroup (fun n rt st v -> mapping n (Some rt) st v))
+            ShaderGroup.HitGroup (g |> mapHitGroup (fun n rt st v -> mapping (Some n) (Some rt) st v))
 
-    let iter (action : Symbol -> Option<Symbol> -> ShaderStage -> 'T -> unit) (group : ShaderGroup<'T>) =
+    let iter (action : Option<Symbol> -> Option<Symbol> -> ShaderStage -> 'T -> unit) (group : ShaderGroup<'T>) =
         group |> map action |> ignore
 
     let set (value : 'T2) (group : ShaderGroup<'T1>) =
@@ -69,7 +69,7 @@ module ShaderGroup =
 
     let name = function
         | ShaderGroup.General g -> g.Name
-        | ShaderGroup.HitGroup g -> g.Name
+        | ShaderGroup.HitGroup g -> Some g.Name
 
     let rayType = function
         | ShaderGroup.HitGroup g -> Some g.RayType
