@@ -20,12 +20,12 @@ type Instances =
 
 [<RequireQualifiedAccess>]
 type AccelerationStructureData =
-    | Geometry of Geometry[]
+    | Geometry of TraceGeometry
     | Instances of Instances
 
     member x.Count =
         match x with
-        | Geometry arr -> uint32 arr.Length
+        | Geometry arr -> uint32 arr.Count
         | Instances inst -> inst.Count
 
 type private NativeAccelerationStructureData(typ : VkAccelerationStructureTypeKHR, data : VkAccelerationStructureGeometryKHR[],
@@ -42,8 +42,14 @@ type private NativeAccelerationStructureData(typ : VkAccelerationStructureTypeKH
         info.pGeometries <- pData
         info
 
+    let buildRangeInfos =
+        primitives |> Array.map (fun count ->
+            VkAccelerationStructureBuildRangeInfoKHR(count, 0u, 0u, 0u)
+        )
+
     member x.Primitives = primitives
     member x.GeometryInfo = geometryInfo
+    member x.BuildRangeInfos = buildRangeInfos
 
     member x.Dispose() =
         buffers |> Array.iter Disposable.dispose
@@ -88,7 +94,7 @@ module private NativeAccelerationStructureData =
 
         update ||| hint
 
-    let private ofGeometry (device : Device) (allowUpdate : bool) (usage : AccelerationStructureUsage) (data : Geometry[]) =
+    let private ofGeometry (device : Device) (allowUpdate : bool) (usage : AccelerationStructureUsage) (geometry : TraceGeometry) =
 
         let mutable buffers = List<Buffer>()
 
@@ -131,25 +137,23 @@ module private NativeAccelerationStructureData =
             )
 
         let geometries =
-            data |> Array.map (fun g ->
-                let typ, data =
-                    match g.Data with
-                    | GeometryData.AABBs d ->
-                        VkGeometryTypeKHR.Aabbs, ofAabbData d
+            match geometry with
+            | TraceGeometry.Triangles arr ->
+                arr |> Array.map (fun mesh ->
+                    let data = ofTriangleData mesh.Vertices mesh.Indices mesh.Transform
+                    VkAccelerationStructureGeometryKHR(VkGeometryTypeKHR.Triangles, data, unbox mesh.Flags)
+                )
 
-                    | GeometryData.Triangles (vertexData, indexData, transform) ->
-                        VkGeometryTypeKHR.Triangles, ofTriangleData vertexData indexData transform
-
-                VkAccelerationStructureGeometryKHR(typ, data, unbox g.Flags)
-            )
-
-        let primitives =
-            data |> Array.map (fun g -> g.Primitives)
+            | TraceGeometry.AABBs arr ->
+                arr |> Array.map (fun bb ->
+                    let data = ofAabbData bb.Data
+                    VkAccelerationStructureGeometryKHR(VkGeometryTypeKHR.Aabbs, data, unbox bb.Flags)
+                )
 
         let flags = getFlags allowUpdate usage
 
         new NativeAccelerationStructureData(
-            VkAccelerationStructureTypeKHR.BottomLevel, geometries, primitives, flags, buffers.ToArray()
+            VkAccelerationStructureTypeKHR.BottomLevel, geometries, geometry.Primitives, flags, buffers.ToArray()
         )
 
     let private ofInstances (allowUpdate : bool) (usage : AccelerationStructureUsage) (instances : Instances) =

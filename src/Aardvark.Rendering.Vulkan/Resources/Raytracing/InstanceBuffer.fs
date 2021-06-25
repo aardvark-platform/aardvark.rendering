@@ -27,7 +27,7 @@ module private AdaptiveInstanceBufferInternals =
                         VkGeometryInstanceFlagsKHR.TriangleFrontCounterclockwiseBit
                     else
                         VkGeometryInstanceFlagsKHR.None
-    
+
                 | CullMode.Disabled ->
                     VkGeometryInstanceFlagsKHR.TriangleFacingCullDisableBit
             )

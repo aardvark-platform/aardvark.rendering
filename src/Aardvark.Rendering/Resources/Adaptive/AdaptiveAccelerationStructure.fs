@@ -1,16 +1,15 @@
 ﻿namespace Aardvark.Rendering.Raytracing
 
-open Aardvark.Base
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open System.Runtime.CompilerServices
 
-type AdaptiveAccelerationStructure(runtime : IAccelerationStructureRuntime, geometry : aval<Geometry[]>, usage : AccelerationStructureUsage) =
+type AdaptiveAccelerationStructure(runtime : IAccelerationStructureRuntime, geometry : aval<TraceGeometry>, usage : AccelerationStructureUsage) =
     inherit AdaptiveResource<IAccelerationStructure>()
 
     let mutable handle : Option<IAccelerationStructure> = None
 
-    let create (data : Geometry[]) =
+    let create (data : TraceGeometry) =
         let accel = runtime.CreateAccelerationStructure(data, usage, true)
         handle <- Some accel
         accel
@@ -46,17 +45,9 @@ type AdaptiveAccelerationStructure(runtime : IAccelerationStructureRuntime, geom
 type IAccelerationStructureRuntimeAdaptiveExtensions private() =
 
     [<Extension>]
-    static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : aval<Geometry[]>, usage : AccelerationStructureUsage) =
+    static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : aval<TraceGeometry>, usage : AccelerationStructureUsage) =
         AdaptiveAccelerationStructure(this, geometry, usage) :> IAdaptiveResource<_>
 
     [<Extension>]
-    static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : aval<Geometry[]>) =
+    static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : aval<TraceGeometry>) =
         this.CreateAccelerationStructure(geometry, AccelerationStructureUsage.Static)
-
-    [<Extension>]
-    static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : aval<Geometry list>, usage : AccelerationStructureUsage) =
-        this.CreateAccelerationStructure(geometry |> AVal.map Array.ofList, usage)
-
-    [<Extension>]
-    static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : aval<Geometry list>) =
-        this.CreateAccelerationStructure(geometry |> AVal.map Array.ofList)

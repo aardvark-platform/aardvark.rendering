@@ -22,7 +22,7 @@ type AccelerationStructure =
 
         member x.GeometryCount =
             match x.Data with
-            | AccelerationStructureData.Geometry data -> data.Length
+            | AccelerationStructureData.Geometry g -> g.Count
             | _ -> 0
 
         override x.Destroy() =
@@ -55,6 +55,14 @@ type AccelerationStructure =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module AccelerationStructure =
 
+    module private Array =
+
+        let inline safeForall2 (predicate : 'T1 -> 'T2 -> bool) (a : 'T1[]) (b : 'T2[]) =
+            let mutable result = true
+            for i = 0 to min a.Length b.Length do
+                result <- result && predicate a.[i] b.[i]
+            result
+
     [<AutoOpen>]
     module private AccelerationStructureCommands =
 
@@ -72,24 +80,17 @@ module AccelerationStructure =
                         info.srcAccelerationStructure <- if updateOnly then accelerationStructure.Handle else VkAccelerationStructureKHR.Null
                         info.dstAccelerationStructure <- accelerationStructure.Handle
 
-                        let buildRangeInfos =
-                            data.Primitives |> Array.map (fun count ->
-                                let info = VkAccelerationStructureBuildRangeInfoKHR(count, 0u, 0u, 0u)
-                                let ptr = NativePtr.alloc 1
-                                info |> NativePtr.write ptr
-                                ptr
-                            )
-
                         native {
                             let! pGeometryInfo = info
-                            let! ppBuildRangeInfos = buildRangeInfos
+                            let! pBuildRangeInfos = data.BuildRangeInfos
+                            let! ppBuildRangeInfos = pBuildRangeInfos
 
                             VkRaw.vkCmdBuildAccelerationStructuresKHR(
                                 cmd.Handle, 1u, pGeometryInfo, ppBuildRangeInfos
                             )
                         }
 
-                        [ CommandResource.compensation (fun _ -> buildRangeInfos |> Array.iter NativePtr.free) ]
+                        []
                 }
 
     let private createHandle (device : Device) (data : AccelerationStructureData) (usage : AccelerationStructureUsage)
@@ -137,12 +138,19 @@ module AccelerationStructure =
 
         // Determine if we can update with new data
         // See: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkGetAccelerationStructureBuildSizesKHR.html
-        let isGeometryCompatible (n : GeometryData) (o : GeometryData) =
+        let isGeometryCompatible (n : TraceGeometry) (o : TraceGeometry) =
             match n, o with
-            | GeometryData.Triangles (nv, ni, _), GeometryData.Triangles (ov, oi, _) ->
-                nv.Count <= ov.Count
+            | TraceGeometry.Triangles nm, TraceGeometry.Triangles om ->
+                nm.Length <= om.Length &&
+                (nm, om) ||> Array.safeForall2 (fun n o ->
+                    n.Primitives <= o.Primitives &&
+                    Option.isSome n.Indices = Option.isSome o.Indices
+                )
 
-            | GeometryData.AABBs _, GeometryData.AABBs _ -> true
+            | TraceGeometry.AABBs nbb, TraceGeometry.AABBs obb ->
+                nbb.Length <= obb.Length &&
+                (nbb, obb) ||> Array.safeForall2 (fun n o -> n.Count <= o.Count)
+
             | _ -> false
 
         let isCompatible =
@@ -152,10 +160,7 @@ module AccelerationStructure =
                     n.Count <= o.Count
 
                 | AccelerationStructureData.Geometry n, AccelerationStructureData.Geometry o ->
-                    n.Length <= o.Length &&
-                    (n, o) ||> Array.forall2 (fun n o ->
-                        n.Primitives <= o.Primitives && isGeometryCompatible n.Data o.Data
-                    )
+                    isGeometryCompatible n o
 
                 | _ ->
                     failwithf "[Raytracing] Trying to update acceleration structure with data of different type"
@@ -165,7 +170,7 @@ module AccelerationStructure =
 
         if isCompatible then
             use nativeData = NativeAccelerationStructureData.alloc accelerationStructure.Device true accelerationStructure.Usage data
-            accelerationStructure.Device.perform {
+            accelerationStructure.Device.ComputeFamily.run {
                 do! Command.Build(accelerationStructure, nativeData, true)
             }
 

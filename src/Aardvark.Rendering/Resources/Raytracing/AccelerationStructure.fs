@@ -21,21 +21,41 @@ type IndexData =
     { Buffer : IBuffer
       Offset : uint64 }
 
-[<RequireQualifiedAccess>]
-type GeometryData =
-    | AABBs     of data : AABBsData
-    | Triangles of vertexData : VertexData * indexData : option<IndexData> * transform : Trafo3d
-
 [<Flags>]
 type GeometryFlags =
     | None                = 0
     | Opaque              = 1
     | IgnoreDuplicateHits = 2
 
-type Geometry(data, primitives, flags) =
-    member x.Data       : GeometryData  = data
-    member x.Primitives : uint32        = primitives
-    member x.Flags      : GeometryFlags = flags
+type TriangleMesh =
+    { Vertices   : VertexData
+      Indices    : Option<IndexData>
+      Transform  : Trafo3d
+      Primitives : uint32
+      Flags      : GeometryFlags }
+
+type BoundingBoxes =
+    { Data  : AABBsData
+      Count : uint32
+      Flags : GeometryFlags }
+
+[<RequireQualifiedAccess>]
+type TraceGeometry =
+    | Triangles of TriangleMesh[]
+    | AABBs of BoundingBoxes[]
+
+    /// Returns the number of geometry instances.
+    member x.Count =
+        match x with
+        | Triangles arr -> arr.Length
+        | AABBs arr -> arr.Length
+
+    /// Returns an array containing the primitive count for
+    /// each geometry instance.
+    member x.Primitives =
+        match x with
+        | Triangles arr -> arr |> Array.map (fun mesh -> mesh.Primitives)
+        | AABBs arr -> arr |> Array.map (fun bb -> bb.Count)
 
 [<RequireQualifiedAccess>]
 type AccelerationStructureUsage =
@@ -52,28 +72,18 @@ type IAccelerationStructure =
     abstract member GeometryCount : int
 
 type IAccelerationStructureRuntime =
-    abstract member CreateAccelerationStructure : geometry: Geometry[] * usage: AccelerationStructureUsage * allowUpdate: bool -> IAccelerationStructure
-    abstract member TryUpdateAccelerationStructure : handle: IAccelerationStructure * geometry: Geometry[] -> bool
+    abstract member CreateAccelerationStructure : geometry: TraceGeometry * usage: AccelerationStructureUsage * allowUpdate: bool -> IAccelerationStructure
+    abstract member TryUpdateAccelerationStructure : handle: IAccelerationStructure * geometry: TraceGeometry -> bool
 
 
 [<Extension>]
 type AccelerationStructureRuntimeExtensions() =
 
     [<Extension>]
-    static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : Geometry[], usage : AccelerationStructureUsage) =
+    static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : TraceGeometry, usage : AccelerationStructureUsage) =
         this.CreateAccelerationStructure(geometry, usage, true)
 
     [<Extension>]
-    static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : Geometry[],
+    static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : TraceGeometry,
                                               [<Optional; DefaultParameterValue(true)>] allowUpdate : bool) =
         this.CreateAccelerationStructure(geometry, AccelerationStructureUsage.Static, allowUpdate)
-
-    [<Extension>]
-    static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : List<Geometry>,
-                                              [<Optional; DefaultParameterValue(true)>] allowUpdate : bool) =
-        this.CreateAccelerationStructure(Array.ofList geometry, AccelerationStructureUsage.Static, allowUpdate)
-
-    [<Extension>]
-    static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : List<Geometry>, usage : AccelerationStructureUsage,
-                                              [<Optional; DefaultParameterValue(true)>] allowUpdate : bool) =
-        this.CreateAccelerationStructure(Array.ofList geometry, usage, allowUpdate)

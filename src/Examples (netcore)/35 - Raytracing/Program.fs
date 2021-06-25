@@ -8,6 +8,8 @@ open FSharp.Data.Adaptive
 
 module Semantic =
     let DefaultHitGroup = Sym.ofString "DefaultHitGroup"
+    let SphereHitGroup = Sym.ofString "SphereHitGroup"
+    let SphereHitGroup2 = Sym.ofString "SphereHitGroup2"
 
 module Effect =
     open FShade
@@ -21,16 +23,6 @@ module Effect =
         let private mainScene =
             scene {
                 accelerationStructure uniform?MainScene
-            }
-
-        let missSolidColor =
-            miss {
-                return V3d(0.55, 0.53, 0.66)
-            }
-
-        let chitSolidColor =
-            closesthit {
-                return V3d(0.7, 0.94, 0.61)
             }
 
         let rgenMain (input : RayGenerationInput) =
@@ -47,16 +39,59 @@ module Effect =
                 uniform.OutputBuffer.[input.work.id.XY] <- V4d(color, 1.0)
             }
 
+        let missSolidColor (color : C3d) =
+            let color = V3d color
+
+            miss {
+                return color
+            }
+
+        let chitSolidColor (color : C3d) =
+            let color = V3d color
+
+            closesthit {
+                return color
+            }
+
+        let intersectionSphere (center : V3d) (radius : float) (input : RayIntersectionInput) =
+            intersection {
+                let origin = input.objectSpace.rayOrigin - center
+                let direction = input.objectSpace.rayDirection
+
+                let a = Vec.dot direction direction
+                let b = 2.0 * Vec.dot origin direction
+                let c = (Vec.dot origin origin) - (radius * radius)
+
+                let discriminant = b * b - 4.0 * a * c
+                if discriminant >= 0.0 then
+                    let t = (-b - sqrt discriminant) / (2.0 * a)
+                    Intersection.Report(t, V2d.Zero) |> ignore
+            }
+
     let private hitgroupMain =
         hitgroup {
-            closesthit chitSolidColor
+            closesthit (chitSolidColor C3d.DodgerBlue)
+        }
+
+    let private hitgroupSphere =
+        hitgroup {
+            closesthit (chitSolidColor C3d.Salmon)
+            intersection (intersectionSphere V3d.Zero 0.5)
+        }
+
+    let private hitgroupSphere2 =
+        hitgroup {
+            closesthit (chitSolidColor C3d.PaleGreen)
+            intersection (intersectionSphere (V3d(0.0, 2.0, 0.0)) 0.5)
         }
 
     let main() =
         raytracing {
             raygen rgenMain
-            miss missSolidColor
+            miss (missSolidColor C3d.Lavender)
             hitgroup (Semantic.DefaultHitGroup, hitgroupMain)
+            hitgroup (Semantic.SphereHitGroup, hitgroupSphere)
+            hitgroup (Semantic.SphereHitGroup2, hitgroupSphere2)
         }
 
 
@@ -64,12 +99,11 @@ module Effect =
 let main argv =
     Aardvark.Init()
 
-    use app = new VulkanApplication(debug = Vulkan.DebugConfig.TraceHandles)
+    use app = new VulkanApplication(debug = true)
     let runtime = app.Runtime :> IRuntime
     let samples = 8
 
     use win = app.CreateGameWindow(samples = samples)
-    //win.RenderAsFastAsPossible <- true
 
     let cameraView =
         let initialView = CameraView.LookAt(V3d(10.0,10.0,10.0), V3d.Zero, V3d.OOI)
@@ -88,22 +122,25 @@ let main argv =
     let traceTexture =
         runtime.CreateTexture2D(TextureFormat.Rgba32f, 1, win.Sizes)
 
-    let geometry =
-        let vertices = {
-                Buffer = ArrayBuffer([| V3f.XAxis; V3f.YAxis; V3f.ZAxis |])
-                Count  = 3u
-                Offset = 0UL
-                Stride = uint64 sizeof<V3f>
-            }
+    let sphere =
+        TraceGeometry.ofCenterAndRadius GeometryFlags.Opaque V3d.Zero 0.5
 
-        let data =
-            GeometryData.Triangles (vertices, None, Trafo3d.Identity)
+    let sphere2 =
+        TraceGeometry.ofCenterAndRadius GeometryFlags.Opaque (V3d(0.0, 2.0, 0.0)) 0.5
 
-        Geometry(data, 1u, GeometryFlags.Opaque)
-        |> Array.singleton
+    let torus =
+        IndexedGeometryPrimitives.Torus.solidTorus (Torus3d(V3d.Zero, V3d.YAxis, 1.0, 0.2)) C4b.White 128 64
+        |> TraceGeometry.ofIndexedGeometry GeometryFlags.Opaque
+
+    let torus2 =
+        IndexedGeometryPrimitives.Torus.solidTorus (Torus3d(V3d.Zero, V3d.YAxis, 0.5, 0.1)) C4b.White 128 64
+        |> TraceGeometry.ofIndexedGeometry GeometryFlags.Opaque
 
     use accelerationStructure =
-        runtime.CreateAccelerationStructure(geometry, AccelerationStructureUsage.Static)
+        runtime.CreateAccelerationStructure(
+            TraceGeometry.ofList [sphere; sphere2],
+            AccelerationStructureUsage.Static
+        )
 
     use uniforms =
         Map.ofList [
@@ -115,8 +152,10 @@ let main argv =
 
     let scene =
         let obj =
-            TraceObject.create' accelerationStructure
-            |> TraceObject.hitGroup' Semantic.DefaultHitGroup
+            traceobject {
+                geometry accelerationStructure
+                hitgroups [Semantic.SphereHitGroup; Semantic.SphereHitGroup2]
+            }
 
         AMap.single obj 0
 

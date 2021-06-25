@@ -109,6 +109,69 @@ module TraceObject =
         obj |> mask (AVal.constant value)
 
 
+[<AutoOpen>]
+module TraceObjectBuilder =
+
+    type GeometryMustBeSpecified = GeometryMustBeSpecified
+
+    type TraceObjectBuilder() =
+        member x.Yield(_) = GeometryMustBeSpecified
+
+        [<CustomOperation("geometry")>]
+        member x.Geometry(_ : GeometryMustBeSpecified, accelerationStructure : aval<IAccelerationStructure>) =
+            TraceObject.create accelerationStructure
+
+        member x.Geometry(_ : GeometryMustBeSpecified, accelerationStructure : IAccelerationStructure) =
+            TraceObject.create' accelerationStructure
+
+        [<CustomOperation("hitgroups")>]
+        member x.HitGroups(o : TraceObject, g : aval<HitConfig>) =
+            o |> TraceObject.hitGroups g
+
+        member x.HitGroups(o : TraceObject, g : HitConfig) =
+            o |> TraceObject.hitGroups' g
+
+        [<CustomOperation("hitgroup")>]
+        member x.HitGroup(o : TraceObject, g : aval<Symbol>) =
+            o |> TraceObject.hitGroup g
+
+        member x.HitGroup(o : TraceObject, g : Symbol) =
+            o |> TraceObject.hitGroup' g
+
+        [<CustomOperation("transform")>]
+        member x.Transform(o : TraceObject, t : aval<Trafo3d>) =
+            o |> TraceObject.transform t
+
+        member x.Transform(o : TraceObject, t : Trafo3d) =
+            o |> TraceObject.transform' t
+
+        [<CustomOperation("culling")>]
+        member x.Culling(o : TraceObject, m : aval<CullMode>) =
+            o |> TraceObject.culling m
+
+        member x.Culling(o : TraceObject, m : CullMode) =
+            o |> TraceObject.culling' m
+
+        [<CustomOperation("geometryMode")>]
+        member x.GeometryMode(o : TraceObject, m : aval<GeometryMode>) =
+            o |> TraceObject.geometryMode m
+
+        member x.GeometryMode(o : TraceObject, m : GeometryMode) =
+            o |> TraceObject.geometryMode' m
+
+        [<CustomOperation("mask")>]
+        member x.Mask(o : TraceObject, m : aval<VisibilityMask>) =
+            o |> TraceObject.mask m
+
+        member x.Mask(o : TraceObject, m : VisibilityMask) =
+            o |> TraceObject.mask' m
+
+        member x.Run(h : TraceObject) =
+            h
+
+    let traceobject = TraceObjectBuilder()
+
+
 type RaytracingPipelineState =
     {
         Effect            : FShade.RaytracingEffect

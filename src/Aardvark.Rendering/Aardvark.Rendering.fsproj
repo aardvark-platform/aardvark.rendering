@@ -99,6 +99,7 @@
     <Compile Include="Runtime\Query\MultiQuery.fs" />
     <Compile Include="Runtime\Query\ConcurrentQuery.fs" />
     <Compile Include="Runtime\Compute\Compute.fs" />
+    <Compile Include="Runtime\Raytracing\TraceGeometry.fs" />
     <Compile Include="Runtime\Raytracing\Raytracing.fs" />
     <Compile Include="Runtime\Raytracing\RaytracingRuntime.fs" />
     <Compile Include="Runtime\BackendConfiguration.fs" />
