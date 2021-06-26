@@ -183,11 +183,13 @@ type IndexedGeometry =
                 | IndexedGeometryMode.LineStrip ->
                     let x = x.ToIndexed()
                     x.IndexArray <- IndexHelpers.lineStripToList x.IndexArray
+                    x.Mode <- IndexedGeometryMode.LineList
                     x
 
                 | IndexedGeometryMode.TriangleStrip ->
                     let x = x.ToIndexed()
                     x.IndexArray <- IndexHelpers.triangleStripToList x.IndexArray
+                    x.Mode <- IndexedGeometryMode.TriangleList
                     x
 
                 | _ ->
