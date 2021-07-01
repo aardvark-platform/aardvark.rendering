@@ -171,8 +171,9 @@ module private ShaderBindingTableUtilities =
         let private withLookup (lookup : Map<Symbol, int>) (shaderHandles : ShaderHandles) (shaderGroups : GroupEntry[]) =
             let entries =
                 shaderGroups
-                |> Array.sortBy (fun e -> lookup |> Map.find (GroupEntry.name e))
-                |> Array.map GroupEntry.index
+                |> Array.choose (fun e -> lookup |> Map.tryFind (GroupEntry.name e) |> Option.map (fun i -> e, i))
+                |> Array.sortBy snd
+                |> Array.map (fst >> GroupEntry.index)
 
             { Entries   = MultiEntry (entries, lookup)
               Handles   = shaderHandles }

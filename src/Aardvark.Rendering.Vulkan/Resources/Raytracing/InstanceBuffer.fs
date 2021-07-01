@@ -7,71 +7,100 @@ open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Vulkan.KHRAccelerationStructure
 
 open FSharp.Data.Adaptive
+open OptimizedClosures
 
 [<AutoOpen>]
 module private AdaptiveInstanceBufferInternals =
 
-    let stride = sizeof<VkAccelerationStructureInstanceKHR>
+    module Offsets =
+        let Index = nativeint sizeof<VkTransformMatrixKHR>
+        let Mask = Index + nativeint sizeof<uint24>
+        let HitGroup = Mask + nativeint sizeof<uint8>
+        let Flags = HitGroup + nativeint sizeof<uint24>
+        let Geometry = Flags + nativeint sizeof<uint8>
 
-    let acquireObject (o : TraceObject) =
-        o.Geometry.Acquire()
+        let Stride = sizeof<VkAccelerationStructureInstanceKHR>
 
-    let releaseObject (o : TraceObject) =
-        o.Geometry.Release()
+    module Writers =
+        let private getFlags (cullMode : CullMode) (geometryMode : GeometryMode) =
+            let c =
+                cullMode |> (function
+                    | CullMode.Enabled order ->
+                        if order = WindingOrder.CounterClockwise then
+                            VkGeometryInstanceFlagsKHR.TriangleFrontCounterclockwiseBit
+                        else
+                            VkGeometryInstanceFlagsKHR.None
 
-    let getFlags (cullMode : CullMode) (geometryMode : GeometryMode) =
-        let c =
-            cullMode |> (function
-                | CullMode.Enabled order ->
-                    if order = WindingOrder.CounterClockwise then
-                        VkGeometryInstanceFlagsKHR.TriangleFrontCounterclockwiseBit
-                    else
-                        VkGeometryInstanceFlagsKHR.None
+                    | CullMode.Disabled ->
+                        VkGeometryInstanceFlagsKHR.TriangleFacingCullDisableBit
+                )
 
-                | CullMode.Disabled ->
-                    VkGeometryInstanceFlagsKHR.TriangleFacingCullDisableBit
-            )
+            let g =
+                geometryMode |> (function
+                    | GeometryMode.Default     -> VkGeometryInstanceFlagsKHR.None
+                    | GeometryMode.Opaque      -> VkGeometryInstanceFlagsKHR.ForceOpaqueBit
+                    | GeometryMode.Transparent -> VkGeometryInstanceFlagsKHR.ForceNoOpaqueBit
+                )
 
-        let g =
-            geometryMode |> (function
-                | GeometryMode.Default     -> VkGeometryInstanceFlagsKHR.None
-                | GeometryMode.Opaque      -> VkGeometryInstanceFlagsKHR.ForceOpaqueBit
-                | GeometryMode.Transparent -> VkGeometryInstanceFlagsKHR.ForceNoOpaqueBit
-            )
+            c ||| g
 
-        c ||| g
+        let writeTransform (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
+            let trafo = o.Transform.GetValue(token)
+            M34f trafo.Forward |> NativeInt.write dst
 
-    let prepareInstance (sbt : aval<ShaderBindingTable>) (token : AdaptiveToken) (index : int) (o : TraceObject) =
-        let sbt = sbt.GetValue(token)
-        let accel = o.Geometry.GetValue(token) |> unbox<AccelerationStructure>
-        let hitg = sbt.HitGroupTable.Indices.[o.HitGroups.GetValue(token)]
-        let trafo = o.Transform.GetValue(token)
-        let cull = o.Culling.GetValue(token)
-        let geom = o.GeometryMode.GetValue(token)
-        let mask = o.Mask.GetValue(token)
+        let writeIndex (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
+            let index = o.CustomIndex.GetValue(token)
+            uint24 index |> NativeInt.write (dst + Offsets.Index)
 
-        let flags = getFlags cull geom
+        let writeMask (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
+            let mask = o.Mask.GetValue(token)
+            uint8 mask |> NativeInt.write (dst + Offsets.Mask)
 
-        VkAccelerationStructureInstanceKHR(
-            VkTransformMatrixKHR(M34f trafo.Forward),
-            uint24 index, uint8 mask, uint24 hitg, uint8 flags,
-            accel.DeviceAddress
-        )
+        let writeHitGroup (sbt : aval<ShaderBindingTable>) (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
+            let sbt = sbt.GetValue(token)
+            let hitg = sbt.HitGroupTable.Indices.[o.HitGroups.GetValue(token)]
+            uint24 hitg |> NativeInt.write (dst + Offsets.HitGroup)
+
+        let writeFlags (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
+            let cull = o.Culling.GetValue(token)
+            let geom = o.GeometryMode.GetValue(token)
+            let flags = getFlags cull geom
+            uint8 flags |> NativeInt.write (dst + Offsets.Flags)
+
+        let writeGeometry (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
+            let accel = o.Geometry.GetValue(token) |> unbox<AccelerationStructure>
+            accel.DeviceAddress |> NativeInt.write (dst + Offsets.Geometry)
 
 
 type AdaptiveInstanceBuffer(objects : amap<TraceObject, int>, sbt : aval<ShaderBindingTable>) =
-    inherit AdaptiveCompactBuffer<TraceObject, VkAccelerationStructureInstanceKHR>(
-        objects, stride, acquireObject, releaseObject, prepareInstance sbt, NativeInt.write
-    )
+    inherit AdaptiveCompactBuffer<TraceObject>(objects, Offsets.Stride)
+
+    let writers =
+        [| Writers.writeTransform
+           Writers.writeIndex
+           Writers.writeMask
+           Writers.writeHitGroup sbt
+           Writers.writeFlags
+           Writers.writeGeometry |]
+        |> Array.map FSharpFunc<_,_,_,_>.Adapt
 
     let count = AMap.count objects
 
     member x.Count = count
 
+    override x.AcquireValue(o : TraceObject) =
+        o.Geometry.Acquire()
+
+    override x.ReleaseValue(o : TraceObject) =
+        o.Geometry.Release()
+
+    override x.WriteValue =
+        writers
+
     override x.Create() =
         sbt.Acquire()
-        base.Acquire()
+        base.Create()
 
     override x.Destroy() =
-        base.Release()
+        base.Destroy()
         sbt.Release()

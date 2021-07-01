@@ -51,11 +51,14 @@ module private PreparedRaytracingPipelineInternals =
             member x.Dispose() = x.Dispose()
 
 
-    type HitConfigPool(scenes : Map<Symbol, amap<TraceObject, int>>) =
+    type HitConfigPool(scenes : Map<Symbol, RaytracingScene>) =
         inherit AdaptiveObject()
 
         let mutable cache = Set.empty
-        let readers = scenes |> Map.toList |> List.map (fun (_, map) -> new HitConfigSceneReader(map))
+        let readers =
+            scenes |> Map.toList |> List.map (fun (_, s) ->
+                new HitConfigSceneReader(s.Objects)
+            )
 
         member x.GetValue(token : AdaptiveToken) =
             x.EvaluateIfNeeded token cache (fun t ->
@@ -120,8 +123,8 @@ type DevicePreparedRaytracingPipelineExtensions private() =
         let shaderBindingTable = this.CreateShaderBindingTable(pipeline, hitConfigPool)
 
         let accelerationStructures =
-            state.Scenes |> Map.map (fun _ objects ->
-                this.CreateAccelerationStructure(objects, shaderBindingTable, AccelerationStructureUsage.Static) :> IAdaptiveValue
+            state.Scenes |> Map.map (fun _ s ->
+                this.CreateAccelerationStructure(s.Objects, shaderBindingTable, s.Usage) :> IAdaptiveValue
             )
 
         resources.AddRange(accelerationStructures |> Map.toList |> List.map (snd >> unbox))

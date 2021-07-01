@@ -105,7 +105,6 @@ type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
 
 [<RequireQualifiedAccess>]
 type UploadMode =
-    | Direct
     | Sync
     | Async
 
@@ -312,12 +311,9 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     let caches = System.Collections.Concurrent.ConcurrentDictionary<Symbol, obj>()
 
     let uploadMode =
-        if deviceMemory.IsHostVisible then
-            UploadMode.Direct 
-        else
-            match transferFamily with
-                | Some _ -> UploadMode.Async
-                | None -> UploadMode.Sync
+        match transferFamily with
+        | Some _ -> UploadMode.Async
+        | None -> UploadMode.Sync
 
     let copyEngine = 
         lazy (

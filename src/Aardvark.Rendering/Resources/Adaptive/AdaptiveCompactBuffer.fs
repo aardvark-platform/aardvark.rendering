@@ -3,20 +3,16 @@
 open Aardvark.Base
 open FSharp.Data.Adaptive
 open System
+open System.Threading
+open OptimizedClosures
 
-type private AdaptiveValueWriter<'T>(getInput : AdaptiveToken -> int -> 'T, index : int, elementSizeInBytes : int, write : nativeint -> 'T -> unit) =
+type private AdaptiveValueWriter<'T>(value : 'T, elementSizeInBytes : int, write : FSharpFunc<AdaptiveToken, nativeint, 'T, unit>) =
     inherit AdaptiveObject()
 
-    let mutable currentIndex = index
-
-    member x.SetIndex(index : int) =
-        currentIndex <- index
-        transact x.MarkOutdated
-
-    member x.Write(token : AdaptiveToken, buffer : ChangeableBuffer) =
-        x.EvaluateIfNeeded token () (fun _ ->
-            let value = getInput token currentIndex
-            buffer.Write(currentIndex * elementSizeInBytes, elementSizeInBytes, fun dst -> write dst value)
+    member x.Write(token : AdaptiveToken, index : int, buffer : ChangeableBuffer) =
+        x.EvaluateIfNeeded token () (fun token ->
+            let offset = index * elementSizeInBytes
+            buffer.Write(offset, elementSizeInBytes, fun dst -> write.Invoke(token, dst, value))
         )
 
     member x.Dispose() =
@@ -26,86 +22,112 @@ type private AdaptiveValueWriter<'T>(getInput : AdaptiveToken -> int -> 'T, inde
         member x.Dispose() = x.Dispose()
 
 
-type AdaptiveCompactBuffer<'T, 'U>(input : amap<'T, int>, elementSizeInBytes : int,
-                                   acquire : 'T -> unit, release : 'T -> unit,
-                                   evaluate : AdaptiveToken -> int -> 'T -> 'U,
-                                   write : nativeint -> 'U -> unit) =
-    inherit AdaptiveResource<IBuffer>()
+type private AdaptiveValueWriterArray<'T>(value : 'T, index : int, elementSizeInBytes : int, write : FSharpFunc<AdaptiveToken, nativeint, 'T, unit>[]) =
+    let writers =
+        write |> Array.map (fun w ->
+            new AdaptiveValueWriter<'T>(value, elementSizeInBytes, w)
+        )
 
-    let mutable handle = None
-    let writers = Dict<'T, AdaptiveValueWriter<'U>>()
+    let mutable currentIndex = index
 
-    // Adds a writer or modifies its index
-    let set value index =
+    member x.SetIndex(index : int) =
+        currentIndex <- index
+        transact (fun _ -> writers |> Array.iter (fun w -> w.MarkOutdated()))
+
+    member x.Write(token : AdaptiveToken, buffer : ChangeableBuffer) =
+        writers |> Array.iter (fun w -> w.Write(token, currentIndex, buffer))
+
+    member x.Dispose() =
+        writers |> Array.iter (fun w -> w.Dispose())
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
+
+[<AbstractClass>]
+type AdaptiveCompactBuffer<'T>(input : amap<'T, int>, elementSizeInBytes : int) =
+    inherit ChangeableBuffer(0n)
+
+    let mutable refCount = 0
+
+    let reader = input.GetReader()
+    let writers = Dict<'T, AdaptiveValueWriterArray<'T>>()
+
+    abstract member AcquireValue : value: 'T -> unit
+    abstract member ReleaseValue : value: 'T -> unit
+    abstract member WriteValue   : FSharpFunc<AdaptiveToken, nativeint, 'T, unit>[]
+
+    abstract member Create : unit -> unit
+    default x.Create() = ()
+
+    abstract member Destroy : unit -> unit
+    default x.Destroy() =
+        reader.Outputs.Remove(x) |> ignore
+        x.Dispose()
+
+    member x.Acquire() =
+        if Interlocked.Increment(&refCount) = 1 then
+            lock x (fun _ ->
+                x.Create()
+            )
+
+    member x.Release() =
+        if Interlocked.Decrement(&refCount) = 0 then
+            lock x (fun _ ->
+                x.Destroy()
+                transact x.MarkOutdated
+            )
+
+    member x.ReleaseAll() =
+        if Interlocked.Exchange(&refCount, 0) > 0 then
+            lock x (fun _ ->
+                x.Destroy()
+                transact x.MarkOutdated
+            )
+
+    member private x.Set(value, index) =
         match writers.TryGetValue value with
         | (true, w) ->
             w.SetIndex(index)
         | _ ->
-            acquire value
-            let eval t i = evaluate t i value
-            let w = new AdaptiveValueWriter<_>(eval, index, elementSizeInBytes, write)
-            writers.Add(value, w)
+            x.AcquireValue(value)
+            let arr = new AdaptiveValueWriterArray<'T>(value, index, elementSizeInBytes, x.WriteValue)
+            writers.Add(value, arr)
 
-    // Removes writer
-    let remove value =
+    member private x.Remove(value) =
         match writers.TryGetValue value with
         | (true, w) ->
             w.Dispose()
             writers.Remove(value) |> ignore
-            release value
+            x.ReleaseValue(value)
         | _ -> ()
 
-    let create() =
-        let buffer = ChangeableBuffer.create 0n
-        let reader = input.GetReader()
-        buffer, reader
-
-    let update (token : AdaptiveToken) (buffer : ChangeableBuffer) (reader : IHashMapReader<'T, int>) =
+    override x.Compute(token) =
         let ops = reader.GetChanges(token)
-        let mutable delta = 0
-        
+
         // Process deltas
         for o in ops do
             match o with
             | value, Set index ->
-                inc &delta;
-                set value index
+                x.Set(value, index)
 
             | value, Remove ->
-                dec &delta;
-                remove value
+                x.Remove(value)
 
         // Grow buffer if necessary
-        if delta > 0 then
-            buffer |> ChangeableBuffer.resize (buffer.Capacity + nativeint (delta * elementSizeInBytes))
+        x.Resize <| nativeint (writers.Count * elementSizeInBytes)
 
         // Write values
         for (KeyValue(_, writer)) in writers do
-            writer.Write(token, buffer)
+            writer.Write(token, x)
 
-        buffer.GetValue(token)
+        base.Compute(token)
 
-    member x.Count =
-        writers.Count
+    interface IAdaptiveResource with
+        member x.Acquire() = x.Acquire()
+        member x.Release() = x.Release()
+        member x.ReleaseAll() = x.ReleaseAll()
+        member x.GetValue(c,t) = x.GetValue(c,t) :> obj
 
-    override x.Create() =
-        handle <- Some <| create()
-    
-    override x.Destroy() =
-        match handle with
-        | Some (b, r) ->
-            r.Outputs.Remove(x) |> ignore
-            b.Dispose()
-            handle <- None
-
-        | _ -> ()
-
-    override x.Compute(t, _) =
-        match handle with
-        | Some (b, r) ->
-            update t b r
-
-        | _ ->
-            let (b, r) = create()
-            handle <- Some (b, r)
-            update t b r
+    interface IAdaptiveResource<IBuffer> with
+        member x.GetValue(c,t) = x.GetValue(c,t)

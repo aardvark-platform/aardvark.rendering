@@ -494,7 +494,7 @@ module Resources =
         let mutable version = 0
 
         let recreate (nb : INativeBuffer) =
-            let buffer = device.CreateBuffer(usage, nb)
+            let buffer = device.HostMemory |> Buffer.ofBufferWithMemory usage nb
             handle <- Some buffer
             buffer
 

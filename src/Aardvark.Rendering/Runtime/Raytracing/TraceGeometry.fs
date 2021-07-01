@@ -41,13 +41,23 @@ module TraceGeometry =
     let ofCenterAndRadius (flags : GeometryFlags) (position : V3d) (radius : float) =
         Box3d.FromCenterAndSize(position, V3d(radius * 2.0)) |> ofBox3d flags
 
-    let ofIndexedGeometry (flags : GeometryFlags) (g : IndexedGeometry) =
+    let ofIndexedGeometry (flags : GeometryFlags) (trafo : Trafo3d) (g : IndexedGeometry) =
 
-        // TODO: Triangulate
-        if g.Mode <> IndexedGeometryMode.TriangleList then
-            failwithf "Unsupported geometry mode: %A" g.Mode
+        let geometry =
+            g |> IndexedGeometry.toNonStripped
 
-        let vertices = g.IndexedAttributes.[DefaultSemantic.Positions]
+        if geometry.Mode <> IndexedGeometryMode.TriangleList then
+            failwithf "Unsupported geometry mode: %A" geometry.Mode
+
+        let vertices = geometry.IndexedAttributes.[DefaultSemantic.Positions]
+
+        let indices =
+            if geometry.IsIndexed then Some geometry.IndexArray else None
+
+        let primitives =
+            match indices with
+            | Some arr -> arr.Length / 3
+            | _ -> vertices.Length / 3
 
         let vertexData =
             { Buffer = ArrayBuffer(vertices)
@@ -55,20 +65,16 @@ module TraceGeometry =
               Offset = 0UL
               Stride = uint64 sizeof<V3f> }
 
-        let indexData, primitives =
-            if g.IsIndexed then
-                Some {
-                    Buffer = ArrayBuffer(g.IndexArray)
-                    Offset = 0UL
-                },
-                g.IndexArray.Length / 3
-            else
-                None, vertices.Length / 3
+        let indexData =
+            indices |> Option.map (fun arr ->
+                { Buffer = ArrayBuffer(arr)
+                  Offset = 0UL }
+            )
 
         let mesh =
             { Vertices = vertexData
               Indices = indexData
-              Transform = Trafo3d.Identity
+              Transform = trafo
               Primitives = uint32 primitives
               Flags = flags }
 

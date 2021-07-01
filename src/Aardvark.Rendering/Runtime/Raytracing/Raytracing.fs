@@ -49,6 +49,7 @@ type TraceObject =
         Transform    : aval<Trafo3d>
         Culling      : aval<CullMode>
         GeometryMode : aval<GeometryMode>
+        CustomIndex  : aval<int>
         Mask         : aval<VisibilityMask>
     }
 
@@ -61,6 +62,7 @@ module TraceObject =
           Transform    = AVal.constant Trafo3d.Identity
           Culling      = AVal.constant CullMode.Disabled
           GeometryMode = AVal.constant GeometryMode.Default
+          CustomIndex  = AVal.constant 0
           Mask         = AVal.constant VisibilityMask.All }
 
     let create' (geometry : IAccelerationStructure) =
@@ -100,6 +102,13 @@ module TraceObject =
 
     let geometryMode' (mode : GeometryMode) (obj : TraceObject) =
         obj |> geometryMode (AVal.constant mode)
+
+
+    let customIndex (index : aval<int>) (obj : TraceObject) =
+        { obj with CustomIndex = index }
+
+    let customIndex' (index : int) (obj : TraceObject) =
+        obj |> customIndex (AVal.constant index)
 
 
     let mask (value : aval<VisibilityMask>) (obj : TraceObject) =
@@ -159,6 +168,13 @@ module TraceObjectBuilder =
         member x.GeometryMode(o : TraceObject, m : GeometryMode) =
             o |> TraceObject.geometryMode' m
 
+        [<CustomOperation("customIndex")>]
+        member x.CustomIndex(o : TraceObject, i : aval<int>) =
+            o |> TraceObject.customIndex i
+
+        member x.CustomIndex(o : TraceObject, i : int) =
+            o |> TraceObject.customIndex' i
+
         [<CustomOperation("mask")>]
         member x.Mask(o : TraceObject, m : aval<VisibilityMask>) =
             o |> TraceObject.mask m
@@ -172,10 +188,16 @@ module TraceObjectBuilder =
     let traceobject = TraceObjectBuilder()
 
 
+type RaytracingScene =
+    {
+        Objects : amap<TraceObject, int>
+        Usage   : AccelerationStructureUsage
+    }
+
 type RaytracingPipelineState =
     {
         Effect            : FShade.RaytracingEffect
-        Scenes            : Map<Symbol, amap<TraceObject, int>>
+        Scenes            : Map<Symbol, RaytracingScene>
         Uniforms          : IUniformProvider
         MaxRecursionDepth : aval<int>
     }

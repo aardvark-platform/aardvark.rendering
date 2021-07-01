@@ -362,30 +362,30 @@ module Buffer =
     let inline alloc (flags : VkBufferUsageFlags) (size : int64) (device : Device) =
         allocConcurrent false flags size device
 
-    let internal ofWriter (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (device : Device) =
+    let internal ofWriter (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (memory : DeviceHeap) =
+        let device = memory.Device
+
         if size > 0n then
-            let align = int64 device.MinUniformBufferOffsetAlignment
+            let size = int64 size
+            let buffer = memory |> create flags size
+            buffer.Size <- size
 
-            let deviceAlignedSize = Alignment.next align (int64 size)
-            let buffer = device |> alloc flags deviceAlignedSize
-            buffer.Size <- int64 size
-            let deviceMem = buffer.Memory
+            if memory.IsHostVisible then
+                buffer.Memory.Mapped (fun dst -> writer dst)
 
-            match device.UploadMode with
-                | UploadMode.Direct ->
-                    buffer.Memory.Mapped (fun dst -> writer dst)
-
+            else
+                match device.UploadMode with
                 | UploadMode.Sync ->
-                    let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit deviceAlignedSize
+                    let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit size
                     hostBuffer.Memory.Mapped (fun dst -> writer dst)
-                    
+
                     device.eventually {
                         try do! Command.Copy(hostBuffer, buffer)
                         finally hostBuffer.Dispose()
                     }
 
-                | UploadMode.Async -> 
-                    let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit deviceAlignedSize
+                | UploadMode.Async ->
+                    let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit size
                     hostBuffer.Memory.Mapped (fun dst -> writer dst)
 
                     device.CopyEngine.EnqueueSafe [
@@ -402,88 +402,98 @@ module Buffer =
         else
             empty flags device
 
-    let internal updateWriter (writer : nativeint -> unit) (buffer : Buffer) =
+    let internal updateRangeWriter (offset : int64) (size : int64) (writer : nativeint -> unit) (buffer : Buffer) =
         let device = buffer.Device
-        let align = int64 device.MinUniformBufferOffsetAlignment
 
-        let deviceAlignedSize = Alignment.next align (int64 buffer.Size)
-        let deviceMem = buffer.Memory
+        if buffer.Memory.Memory.Heap.IsHostVisible then
+            buffer.Memory.Mapped (fun dst -> writer dst)
+        else
+            let tmp = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit buffer.Size
+            tmp.Memory.Mapped (fun dst -> writer dst)
 
-        let tmp = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit buffer.Size
-        tmp.Memory.Mapped (fun dst -> writer dst)
+            device.eventually {
+                try do! Command.Copy(tmp, 0L, buffer, offset, size)
+                finally tmp.Dispose()
+            }
 
-        device.eventually {
-            try do! Command.Copy(tmp, 0L, buffer, 0L, buffer.Size)
-            finally tmp.Dispose()
-        }
+    let internal updateWriter (writer : nativeint -> unit) (buffer : Buffer) =
+        updateRangeWriter 0L buffer.Size writer buffer
 
     let uploadRanges (ptr : nativeint) (ranges : RangeSet) (buffer : Buffer) =
-        buffer |> updateWriter (fun dst ->
+        let baseOffset = int64 ranges.Min
+        let totalSize = int64 (ranges.Max - ranges.Min + 1)
+
+        buffer |> updateRangeWriter baseOffset totalSize (fun dst ->
             for r in ranges do
-                let offset = nativeint r.Min
-                let size = nativeint (r.Size + 1)
-                Marshal.Copy(ptr + offset, dst + offset, size)
+                let srcOffset = nativeint r.Min
+                let dstOffset = nativeint (r.Min - ranges.Min)
+                Marshal.Copy(ptr + srcOffset, dst + dstOffset, r.Size)
         )
 
     let rec tryUpdate (data : IBuffer) (buffer : Buffer) =
-        match data with 
-            | :? ArrayBuffer as ab ->
-                let size = ab.Data.LongLength * int64 (Marshal.SizeOf ab.ElementType)
-                if size = buffer.Size then
-                    let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
-                    buffer |> updateWriter (fun ptr -> Marshal.Copy(gc.AddrOfPinnedObject(), ptr, size) )
-                    gc.Free()
-                    true
-                else
-                    false
-            | :? INativeBuffer as nb ->
-                let size = nb.SizeInBytes |> int64
-                if size = buffer.Size then
-                    nb.Use(fun src ->
-                        buffer |> updateWriter (fun dst -> Marshal.Copy(src, dst, size))
-                    )
-                    true
-                else
-                    false
-                
-            | :? IBufferRange as bv ->
-                let handle = bv.Buffer
-                tryUpdate handle buffer
-
-            | _ ->
+        match data with
+        | :? ArrayBuffer as ab ->
+            let size = ab.Data.LongLength * int64 (Marshal.SizeOf ab.ElementType)
+            if size = buffer.Size then
+                let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
+                buffer |> updateWriter (fun ptr -> Marshal.Copy(gc.AddrOfPinnedObject(), ptr, size) )
+                gc.Free()
+                true
+            else
                 false
 
-    let rec ofBuffer (flags : VkBufferUsageFlags) (buffer : IBuffer) (device : Device) =
+        | :? INativeBuffer as nb ->
+            let size = nb.SizeInBytes |> int64
+            if size = buffer.Size then
+                nb.Use(fun src ->
+                    buffer |> updateWriter (fun dst -> Marshal.Copy(src, dst, size))
+                )
+                true
+            else
+                false
+
+        | :? IBufferRange as bv ->
+            let handle = bv.Buffer
+            tryUpdate handle buffer
+
+        | _ ->
+            false
+
+    let rec ofBufferWithMemory (flags : VkBufferUsageFlags) (buffer : IBuffer) (memory : DeviceHeap) =
+        let device = memory.Device
+
         match buffer with
-            | :? ArrayBuffer as ab ->
-                if ab.Data.Length <> 0 then
-                    let size = nativeint ab.Data.LongLength * nativeint (Marshal.SizeOf ab.ElementType)
-                    let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
-                    try device |> ofWriter flags size (fun dst -> Marshal.Copy(gc.AddrOfPinnedObject(), dst, size))
-                    finally gc.Free()
-                else
-                    device |> empty flags
+        | :? ArrayBuffer as ab ->
+            if ab.Data.Length <> 0 then
+                let size = nativeint ab.Data.LongLength * nativeint (Marshal.SizeOf ab.ElementType)
+                let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
+                try memory |> ofWriter flags size (fun dst -> Marshal.Copy(gc.AddrOfPinnedObject(), dst, size))
+                finally gc.Free()
+            else
+                device |> empty flags
 
-            | :? INativeBuffer as nb ->
-                if nb.SizeInBytes <> 0 then
-                    let size = nb.SizeInBytes |> nativeint
-                    nb.Use(fun src ->
-                        device |> ofWriter flags size (fun dst -> Marshal.Copy(src, dst, size))
-                    )
-                else
-                    device |> empty flags
-                    
+        | :? INativeBuffer as nb ->
+            if nb.SizeInBytes <> 0 then
+                let size = nb.SizeInBytes |> nativeint
+                nb.Use(fun src ->
+                    memory |> ofWriter flags size (fun dst -> Marshal.Copy(src, dst, size))
+                )
+            else
+                device |> empty flags
 
-            | :? Buffer as b ->
-                b.AddReference()
-                b
+        | :? Buffer as b ->
+            b.AddReference()
+            b
 
-            | :? IBufferRange as bv ->
-                let handle = bv.Buffer
-                ofBuffer flags handle device
+        | :? IBufferRange as bv ->
+            let handle = bv.Buffer
+            ofBufferWithMemory flags handle memory
 
-            | _ ->
-                failf "unsupported buffer type %A" buffer
+        | _ ->
+            failf "unsupported buffer type %A" buffer
+
+    let rec ofBuffer (flags : VkBufferUsageFlags) (buffer : IBuffer) (device : Device) =
+        device.DeviceMemory |> ofBufferWithMemory flags buffer
 
 
 

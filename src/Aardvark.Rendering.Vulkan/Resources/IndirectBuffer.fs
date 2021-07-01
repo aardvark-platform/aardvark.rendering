@@ -56,7 +56,7 @@ module IndirectBuffer =
                 if ab.Data.Length <> 0 then
                     let size = nativeint ab.Data.LongLength * nativeint (Marshal.SizeOf ab.ElementType)
                     let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
-                    try device |> Buffer.ofWriter flags size (fun dst -> copy indexed (gc.AddrOfPinnedObject()) dst ab.Data.Length)
+                    try device.DeviceMemory |> Buffer.ofWriter flags size (fun dst -> copy indexed (gc.AddrOfPinnedObject()) dst ab.Data.Length)
                     finally gc.Free()
                 else
                     Buffer.empty flags device
@@ -66,7 +66,7 @@ module IndirectBuffer =
                     let size = nativeint nb.SizeInBytes
                     let count = nb.SizeInBytes / sizeof<DrawCallInfo>
                     nb.Use(fun src ->
-                        device |> Buffer.ofWriter flags size (fun dst -> copy indexed src dst count)
+                        device.DeviceMemory |> Buffer.ofWriter flags size (fun dst -> copy indexed src dst count)
                     )
                 else
                     Buffer.empty flags device
