@@ -80,14 +80,31 @@ module Effect =
             v0 * barycentricCoords.X + v1 * barycentricCoords.Y + v2 * barycentricCoords.Z
 
         [<ReflectedDefinition>]
-        let computeLighting (color : V3d) (light : V3d) (normal : V3d) (position : V3d) =
-            let L = light - position |> Vec.normalize
+        let diffuseLighting (normal : V3d) (position : V3d) =
+            let L = uniform.LightLocation - position |> Vec.normalize
             let NdotL = Vec.dot normal L |> max 0.0
 
             let ambient = 0.3
             let diffuse = ambient + NdotL
 
-            color * diffuse
+            diffuse
+
+        [<ReflectedDefinition>]
+        let diffuseLightingWithShadow (normal : V3d) (input : RayHitInput) =
+            let position =
+                input.ray.origin + input.hit.t * input.ray.direction
+
+            let shadowed =
+                let direction = Vec.normalize (uniform.LightLocation - position)
+                let flags = RayFlags.SkipClosestHitShader ||| RayFlags.TerminateOnFirstHit ||| RayFlags.Opaque ||| RayFlags.CullFrontFacingTriangles
+                mainScene.TraceRay<bool>(position, direction, payload = true, miss = "MissShadow", flags = flags, minT = 0.01)
+
+            let diffuse = diffuseLighting normal position
+
+            if shadowed then
+                diffuse * 0.3
+            else
+                diffuse
 
         let chitModel (color : C3d) (input : RayHitInput) =
             let color = V3d color
@@ -102,19 +119,8 @@ module Effect =
                     let n2 = uniform.ModelNormals.[indices.Z].XYZ
                     input.hit.attribute |> fromBarycentric n0 n1 n2 |> Vec.normalize
 
-                let position =
-                    input.ray.origin + input.hit.t * input.ray.direction
-
-                let shadowed =
-                    let direction = Vec.normalize (uniform.LightLocation - position)
-                    let flags = RayFlags.SkipClosestHitShader ||| RayFlags.TerminateOnFirstHit ||| RayFlags.Opaque ||| RayFlags.CullFrontFacingTriangles
-                    mainScene.TraceRay<bool>(position, direction, payload = true, miss = "MissShadow", flags = flags)
-
-                let diffuse = computeLighting color uniform.LightLocation normal position
-                if shadowed then
-                    return diffuse * 0.3
-                else
-                    return diffuse
+                let diffuse = diffuseLightingWithShadow normal input
+                return color * diffuse
             }
 
         let chitFloor (input : RayHitInput) =
@@ -122,27 +128,15 @@ module Effect =
                 let id = input.geometry.primitiveId
                 let indices = V3i(uniform.FloorIndices.[3 * id], uniform.FloorIndices.[3 * id + 1], uniform.FloorIndices.[3 * id + 2])
 
-                let position =
-                    input.ray.origin + input.hit.t * input.ray.direction
-
                 let texCoords =
                     let uv0 = uniform.FloorTextureCoords.[indices.X]
                     let uv1 = uniform.FloorTextureCoords.[indices.Y]
                     let uv2 = uniform.FloorTextureCoords.[indices.Z]
                     input.hit.attribute |> fromBarycentric2d uv0 uv1 uv2
 
-                let shadowed =
-                    let direction = Vec.normalize (uniform.LightLocation - position)
-                    let flags = RayFlags.SkipClosestHitShader ||| RayFlags.TerminateOnFirstHit ||| RayFlags.Opaque ||| RayFlags.CullFrontFacingTriangles
-                    mainScene.TraceRay<bool>(position, direction, payload = true, miss = "MissShadow", flags = flags)
-
                 let color = textureFloor.Sample(texCoords).XYZ
-                let diffuse = computeLighting color uniform.LightLocation V3d.ZAxis position
-
-                if shadowed then
-                    return diffuse * 0.3
-                else
-                    return diffuse
+                let diffuse = diffuseLightingWithShadow V3d.ZAxis input
+                return color * diffuse
             }
 
         let chitSphere (input : RayHitInput) =
@@ -150,18 +144,8 @@ module Effect =
                 let position = input.ray.origin + input.hit.t * input.ray.direction
                 let normal = Vec.normalize (position - uniform.SphereCenters.[input.geometry.instanceCustomIndex])
 
-                let shadowed =
-                    let direction = Vec.normalize (uniform.LightLocation - position)
-                    let flags = RayFlags.SkipClosestHitShader ||| RayFlags.TerminateOnFirstHit ||| RayFlags.Opaque ||| RayFlags.CullFrontFacingTriangles
-                    mainScene.TraceRay<bool>(position, direction, payload = true, miss = "MissShadow", flags = flags, minT = 0.1)
-
-                let color = V3d.One
-                let diffuse = computeLighting color uniform.LightLocation normal position
-
-                if shadowed then
-                    return diffuse * 0.3
-                else
-                    return diffuse
+                let diffuse = diffuseLightingWithShadow normal input
+                return V3d(diffuse)
             }
 
         let intersectionSphere (center : V3d) (radius : float) (input : RayIntersectionInput) =
