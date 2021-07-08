@@ -390,7 +390,7 @@ module ProgramExtensions =
                                         storageBuffers          = MapExt.empty
                                         uniformBuffers          = MapExt.empty
                                         accelerationStructures  = MapExt.empty
-                                        shaders                 = MapExt.empty
+                                        shaders                 = FShade.GLSL.GLSLProgramShaders.Graphics FShade.GLSL.GLSLGraphicsShaders.empty
                                     }
                             }
 

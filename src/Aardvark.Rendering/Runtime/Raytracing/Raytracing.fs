@@ -179,8 +179,32 @@ module TraceObjectBuilder =
         member x.Mask(o : TraceObject, m : aval<VisibilityMask>) =
             o |> TraceObject.mask m
 
+        member x.Mask(o : TraceObject, m : aval<int8>) =
+            o |> TraceObject.mask (m |> AVal.mapNonAdaptive VisibilityMask)
+
+        member x.Mask(o : TraceObject, m : aval<uint8>) =
+            o |> TraceObject.mask (m |> AVal.mapNonAdaptive VisibilityMask)
+
+        member x.Mask(o : TraceObject, m : aval<int32>) =
+            o |> TraceObject.mask (m |> AVal.mapNonAdaptive VisibilityMask)
+
+        member x.Mask(o : TraceObject, m : aval<uint32>) =
+            o |> TraceObject.mask (m |> AVal.mapNonAdaptive VisibilityMask)
+
         member x.Mask(o : TraceObject, m : VisibilityMask) =
             o |> TraceObject.mask' m
+
+        member x.Mask(o : TraceObject, m : int8) =
+            o |> TraceObject.mask' (VisibilityMask m)
+
+        member x.Mask(o : TraceObject, m : uint8) =
+            o |> TraceObject.mask' (VisibilityMask m)
+
+        member x.Mask(o : TraceObject, m : int32) =
+            o |> TraceObject.mask' (VisibilityMask m)
+
+        member x.Mask(o : TraceObject, m : uint32) =
+            o |> TraceObject.mask' (VisibilityMask m)
 
         member x.Run(h : TraceObject) =
             h

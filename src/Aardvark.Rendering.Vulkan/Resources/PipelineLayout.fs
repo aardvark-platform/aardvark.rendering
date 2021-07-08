@@ -101,7 +101,7 @@ type PipelineLayout =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PipelineLayout =
 
-    let ofShaders (shaders : array<Shader>) (layers : int) (perLayer : Set<string>) (device : Device) =
+    let ofShaders (shaders : array<ShaderModule>) (layers : int) (perLayer : Set<string>) (device : Device) =
         // figure out which stages reference which uniforms/textures
         let uniformBlocks = Dict.empty
         let textures = Dict.empty
@@ -288,7 +288,7 @@ module PipelineLayout =
 [<AbstractClass; Sealed; Extension>]
 type ContextPipelineLayoutExtensions private() =
     [<Extension>]
-    static member inline CreatePipelineLayout(this : Device, shaders : array<Shader>, layers : int, perLayer : Set<string>) =
+    static member inline CreatePipelineLayout(this : Device, shaders : array<ShaderModule>, layers : int, perLayer : Set<string>) =
         this |> PipelineLayout.ofShaders shaders layers perLayer
 
     [<Extension>]

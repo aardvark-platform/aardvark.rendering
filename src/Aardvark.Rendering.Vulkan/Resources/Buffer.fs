@@ -406,9 +406,9 @@ module Buffer =
         let device = buffer.Device
 
         if buffer.Memory.Memory.Heap.IsHostVisible then
-            buffer.Memory.Mapped (fun dst -> writer dst)
+            buffer.Memory.Mapped (fun dst -> writer (dst + nativeint offset))
         else
-            let tmp = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit buffer.Size
+            let tmp = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit size
             tmp.Memory.Mapped (fun dst -> writer dst)
 
             device.eventually {
@@ -421,13 +421,13 @@ module Buffer =
 
     let uploadRanges (ptr : nativeint) (ranges : RangeSet) (buffer : Buffer) =
         let baseOffset = int64 ranges.Min
-        let totalSize = int64 (ranges.Max - ranges.Min + 1)
+        let totalSize = int64 (ranges.Max - ranges.Min)
 
         buffer |> updateRangeWriter baseOffset totalSize (fun dst ->
             for r in ranges do
                 let srcOffset = nativeint r.Min
                 let dstOffset = nativeint (r.Min - ranges.Min)
-                Marshal.Copy(ptr + srcOffset, dst + dstOffset, r.Size)
+                Marshal.Copy(ptr + srcOffset, dst + dstOffset, r.Size + 1)
         )
 
     let rec tryUpdate (data : IBuffer) (buffer : Buffer) =

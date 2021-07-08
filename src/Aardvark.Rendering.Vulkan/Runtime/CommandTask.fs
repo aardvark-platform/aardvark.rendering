@@ -198,14 +198,14 @@ module private RuntimeCommands =
 
                 // replace all reads
                 let shader = 
-                    shader |> Shader.substituteReads (fun kind typ name index ->
+                    shader |> Shader.substituteReads (fun kind typ name index slot ->
                         match kind, index, Map.tryFind name set with
                             | ParameterKind.Uniform, None, Some desiredType ->
                                 assert(desiredType = typ)
                                 if hasIndexedInput then
-                                    Expr.ReadInput(ParameterKind.Input, typ, name, Expr.Value(0)) |> Some
+                                    Expr.ReadInput(ParameterKind.Input, typ, name, Expr.Value(0), slot) |> Some
                                 else
-                                    Expr.ReadInput(ParameterKind.Input, typ, name) |> Some
+                                    Expr.ReadInput(ParameterKind.Input, typ, name, slot) |> Some
                             | _ ->
                                 None
                     )

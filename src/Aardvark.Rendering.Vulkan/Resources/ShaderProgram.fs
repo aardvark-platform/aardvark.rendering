@@ -114,7 +114,7 @@ module private FShadeAdapter =
             sampleShading = sampleShading
         }
 
-type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLayout, original : string, iface : FShade.GLSL.GLSLProgramInterface) =
+type ShaderProgram(device : Device, shaders : array<ShaderModule>, layout : PipelineLayout, original : string, iface : FShade.GLSL.GLSLProgramInterface) =
     inherit CachedResource(device)
 
     static let allTopologies = Enum.GetValues(typeof<IndexedGeometryMode>) |> unbox<IndexedGeometryMode[]> |> Set.ofArray
@@ -151,7 +151,7 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
         match iface.shaderStage with
             | FShade.ShaderStage.Geometry -> geometryInfo <- Some <| FShadeAdapter.geometryInfo iface
             | FShade.ShaderStage.TessControl -> 
-                match shaders |> Array.tryFind (fun (s : Shader) -> s.Interface.shaderStage = FShade.ShaderStage.TessEval) with
+                match shaders |> Array.tryFind (fun (s : ShaderModule) -> s.Interface.shaderStage = FShade.ShaderStage.TessEval) with
                     | Some eval -> 
                         tessInfo <- Some <| FShadeAdapter.tessControlInfo iface eval.Interface
                     | None ->
@@ -195,7 +195,7 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
             VkPipelineShaderStageCreateInfo(
                 VkPipelineShaderStageCreateFlags.None,
                 VkShaderStageFlags.ofShaderStage shader.Stage,
-                shader.Module.Handle,
+                shader.Handle,
                 CStr.malloc shader.Interface.shaderEntry,
                 NativePtr.zero
             )
@@ -224,7 +224,7 @@ type ShaderProgram(device : Device, shaders : array<Shader>, layout : PipelineLa
             | None -> 0
 
     override x.Destroy() =
-        for s in shaders do s.Module.Dispose()
+        for s in shaders do s.Dispose()
         layout.Dispose()
 
         for i in 0 .. createInfos.Length-1 do
@@ -304,7 +304,7 @@ module ShaderProgram =
             Report.Line("{0}", sb.ToString())
 
     let private ofGLSLInteral (layout : Option<PipelineLayout>) (iface : FShade.GLSL.GLSLProgramInterface) (code : string) (layers : int) (perLayer : Set<string>) (device : Device) =
-        let code = 
+        let code =
             layoutRx.Replace(code, fun m ->
                 let set = m.Groups.["set"].Value
                 let binding = m.Groups.["binding"].Value
@@ -314,50 +314,37 @@ module ShaderProgram =
             )
 
         let code = code.Replace("gl_InstanceID", "gl_InstanceIndex").Replace("gl_VertexID", "gl_VertexIndex")
-        
-        let code = 
+
+        let code =
             versionRx.Replace(code, "#version 450 core")
 
         logLines code
 
-        let logs = System.Collections.Generic.Dictionary<ShaderStage, string>()
+        let logs = System.Collections.Generic.Dictionary<FShade.ShaderSlot, string>()
 
         let binaries =
-            iface.shaders
-                |> MapExt.toArray
-                |> Array.map (fun (fshadeStage, shader) ->
-                    let entry = shader.shaderEntry
-                    let stage = ShaderStage.ofFShade fshadeStage
-                    let define =
-                        match fshadeStage with
-                            | FShade.ShaderStage.Vertex -> "Vertex"
-                            | FShade.ShaderStage.Fragment -> "Fragment"
-                            | FShade.ShaderStage.Geometry -> "Geometry"
-                            | FShade.ShaderStage.TessControl -> "TessControl"
-                            | FShade.ShaderStage.TessEval -> "TessEval"
-                            | FShade.ShaderStage.Compute -> "Compute"
-                            | _ -> failwithf "unsupported shader stage: %A" stage
+            iface.shaders.Slots
+            |> MapExt.toArray
+            |> Array.map (fun (slot, shader) ->
+                let entry = shader.shaderEntry
+                let define = slot.Conditional
+                let stage = ShaderModule.glslangStage slot
 
+                match GLSLang.GLSLang.tryCompile stage entry [define] code with
+                | Some binary, log ->
+                    let binary = GLSLang.GLSLang.optimizeDefault binary
+                    logs.[slot] <- log
+                    slot, binary, iface.shaders.[slot]
+                | None, err ->
+                    Log.error "[Vulkan] %A shader compilation failed: %A" slot err
+                    failf "%A shader compilation failed: %A" slot err
+            )
 
-                    let gStage = ShaderModule.glslangStage stage 
-
-                    match GLSLang.GLSLang.tryCompile gStage entry [define] code with
-                        | Some binary, log ->
-                            let binary = GLSLang.GLSLang.optimizeDefault binary
-                            logs.[stage] <- log
-                            stage, binary, iface.shaders.[fshadeStage]
-                        | None, err ->
-                            Log.error "[Vulkan] %A shader compilation failed: %A" stage err
-                            failf "%A shader compilation failed: %A" stage err
-                )
-
-        let shaders = 
+        let shaders =
             binaries
-                |> Array.map (fun (stage, binary, iface) ->
-                    let shaderModule = device.CreateShaderModule(stage, binary, iface)
-                    let shader = shaderModule.[stage]
-                    shader 
-                )
+            |> Array.map (fun (slot, binary, iface) ->
+                device.CreateShaderModule(slot, binary, iface)
+            )
 
         let layout =
             match layout with
@@ -591,7 +578,7 @@ module ShaderProgram =
     type private ShaderProgramData =
         {
             glsl        : string
-            code        : Map<ShaderStage, byte[]>
+            code        : Map<FShade.ShaderSlot, byte[]>
             iface       : GLSLProgramInterface
             layers      : int
             perLayer    : Set<string>
@@ -600,7 +587,7 @@ module ShaderProgram =
     let toByteArray (program : ShaderProgram) =
         pickler.Pickle {
             glsl = program.GLSL
-            code = program.Shaders |> Seq.map (fun s -> s.Module.Stage, s.Module.SpirV) |> Map.ofSeq
+            code = program.Shaders |> Seq.map (fun s -> s.Slot, s.SpirV) |> Map.ofSeq
             iface = program.Interface
             layers = program.PipelineLayout.LayerCount
             perLayer = program.PipelineLayout.PerLayerUniforms
@@ -610,22 +597,19 @@ module ShaderProgram =
         try
             let data : ShaderProgramData = pickler.UnPickle data
 
-            let shaders = 
-                data.code 
-                |> Map.toArray 
-                |> Array.map (fun (stage, arr) -> 
-                    let iface = data.iface.shaders.[ShaderStage.toFShade stage]
-                    let module_ = device.CreateShaderModule(stage, arr, iface)
-                    new Shader(module_, stage, iface)
-                    
+            let shaders =
+                data.code
+                |> Map.toArray
+                |> Array.map (fun (slot, arr) ->
+                    let iface = data.iface.shaders.[slot]
+                    device.CreateShaderModule(slot, arr, iface)
                 )
-                
+
             Report.Begin(4, "Interface")
             let str = FShade.GLSL.GLSLProgramInterface.toString data.iface
             for line in str.Split([|"\r\n"|], StringSplitOptions.None) do
                 Report.Line(4, "{0}", line)
             Report.End(4) |> ignore
-
 
             let layout = device.CreatePipelineLayout(shaders, data.layers, data.perLayer)
 

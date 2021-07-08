@@ -1,80 +1,46 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
-#nowarn "9"
-// #nowarn "51"
-
 type ShaderModule =
     class
         inherit Resource<VkShaderModule>
-        val mutable public Stage : ShaderStage
-        val mutable public Interface : Map<ShaderStage, FShade.GLSL.GLSLShaderInterface>
+        val mutable public Slot : FShade.ShaderSlot
+        val mutable public Interface : FShade.GLSL.GLSLShaderInterface
         val mutable public SpirV : byte[]
 
-        member x.TryGetShader(stage : ShaderStage, [<Out>] shader : byref<Shader>) =
-            match Map.tryFind stage x.Interface with
-                | Some i -> 
-                    shader <- Shader(x, stage, i)
-                    true
-                | _ ->
-                    false
-
-        member x.Item
-            with get(stage : ShaderStage) =
-                match Map.tryFind stage x.Interface with
-                    | Some i -> Shader(x, stage, i)
-                    | _ -> failf "cannot get %A-Shader from module %A" stage x.Interface
+        member x.Stage =
+            ShaderStage.ofFShade x.Slot.Stage
 
         override x.Destroy() =
             if x.Handle.IsValid then
                 VkRaw.vkDestroyShaderModule(x.Device.Handle, x.Handle, NativePtr.zero)
                 x.Handle <- VkShaderModule.Null
 
-        new(device : Device, handle : VkShaderModule, stage, iface, spv) = { inherit Resource<_>(device, handle); Stage = stage; Interface = iface; SpirV = spv }
-    end
-
-and Shader =
-    class
-        val mutable public Module : ShaderModule
-        val mutable public Stage : ShaderStage
-        val mutable public Interface : FShade.GLSL.GLSLShaderInterface
-
-        //member x.ResolveSamplerDescriptions (resolve : ShaderTextureInfo -> list<SamplerDescription>) =
-        //    Shader(x.Module, x.Stage, x.Interface |> ShaderInfo.resolveSamplerDescriptions resolve)
-
-        override x.GetHashCode() = HashCode.Combine(x.Module.GetHashCode(), x.Stage.GetHashCode())
-        override x.Equals o =
-            match o with
-                | :? Shader as o -> x.Module = o.Module && x.Stage = o.Stage
-                | _ -> false
-
-        internal new(m,s,i) = { Module = m; Stage = s; Interface = i }
+        new(device : Device, handle : VkShaderModule, slot, iface, spv) =
+            { inherit Resource<_>(device, handle); Slot = slot; Interface = iface; SpirV = spv }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderModule =
-    
-    let internal glslangStage =
-        LookupTable.lookupTable [
-            ShaderStage.Vertex,         GLSLang.ShaderStage.Vertex
-            ShaderStage.TessControl,    GLSLang.ShaderStage.TessControl
-            ShaderStage.TessEval,       GLSLang.ShaderStage.TessEvaluation
-            ShaderStage.Geometry,       GLSLang.ShaderStage.Geometry
-            ShaderStage.Fragment,       GLSLang.ShaderStage.Fragment
-            ShaderStage.Compute,        GLSLang.ShaderStage.Compute
-            ShaderStage.RayGeneration,  GLSLang.ShaderStage.RayGen
-            ShaderStage.Intersection,   GLSLang.ShaderStage.Intersect
-            ShaderStage.AnyHit,         GLSLang.ShaderStage.AnyHit       
-            ShaderStage.ClosestHit,     GLSLang.ShaderStage.ClosestHit   
-            ShaderStage.Miss,           GLSLang.ShaderStage.Miss         
-            ShaderStage.Callable,       GLSLang.ShaderStage.Callable     
-        ]
+
+    let internal glslangStage = function
+        | FShade.ShaderSlot.Vertex ->         GLSLang.ShaderStage.Vertex
+        | FShade.ShaderSlot.TessControl ->    GLSLang.ShaderStage.TessControl
+        | FShade.ShaderSlot.TessEval ->       GLSLang.ShaderStage.TessEvaluation
+        | FShade.ShaderSlot.Geometry ->       GLSLang.ShaderStage.Geometry
+        | FShade.ShaderSlot.Fragment ->       GLSLang.ShaderStage.Fragment
+        | FShade.ShaderSlot.Compute ->        GLSLang.ShaderStage.Compute
+        | FShade.ShaderSlot.RayGeneration ->  GLSLang.ShaderStage.RayGen
+        | FShade.ShaderSlot.Intersection _ -> GLSLang.ShaderStage.Intersect
+        | FShade.ShaderSlot.AnyHit _ ->       GLSLang.ShaderStage.AnyHit
+        | FShade.ShaderSlot.ClosestHit _ ->   GLSLang.ShaderStage.ClosestHit
+        | FShade.ShaderSlot.Miss _ ->         GLSLang.ShaderStage.Miss
+        | FShade.ShaderSlot.Callable _ ->     GLSLang.ShaderStage.Callable
 
     let private createRaw (binary : byte[]) (device : Device) =
         native {
@@ -93,52 +59,33 @@ module ShaderModule =
             return !!pHandle
         }
 
-    let ofGLSLWithTarget (target : GLSLang.Target) (stage : ShaderStage) (defines : List<string>) (info : FShade.GLSL.GLSLShader) (device : Device) =
-        let siface = info.iface.shaders.[ShaderStage.toFShade stage]
-        match GLSLang.GLSLang.tryCompileWithTarget target (glslangStage stage) siface.shaderEntry defines info.code with
+    let ofGLSLWithTarget (target : GLSLang.Target) (slot : FShade.ShaderSlot) (info : FShade.GLSL.GLSLShader) (device : Device) =
+        let siface = info.iface.shaders.[slot]
+        let defines = [slot.Conditional]
+
+        match GLSLang.GLSLang.tryCompileWithTarget target (glslangStage slot) siface.shaderEntry defines info.code with
         | Some binary, _ ->
             let binary = GLSLang.GLSLang.optimizeDefault binary
-            let iface = Map.ofList [stage, siface]
             let handle = device |> createRaw binary
-            let result = new ShaderModule(device, handle, stage, iface, binary)
+            let result = new ShaderModule(device, handle, slot, siface, binary)
             result
         | None, err ->
-            Log.error "[Vulkan] %A shader compilation failed: %A" stage err
-            failf "%A shader compilation failed: %A" stage err
+            Log.error "[Vulkan] %A shader compilation failed: %A" slot err
+            failf "%A shader compilation failed: %A" slot err
 
-    let ofGLSLWithDefines (stage : ShaderStage) (defines : List<string>) (info : FShade.GLSL.GLSLShader) (device : Device) =
-        ofGLSLWithTarget GLSLang.Target.SPIRV_1_0 stage defines info device
-        
-    let ofGLSL (stage : ShaderStage) (info : FShade.GLSL.GLSLShader) (device : Device) =
-        ofGLSLWithDefines stage [string stage] info device
+    let ofGLSL (slot : FShade.ShaderSlot) (info : FShade.GLSL.GLSLShader) (device : Device) =
+        ofGLSLWithTarget GLSLang.Target.SPIRV_1_0 slot info device
 
-    let ofBinaryWithInfo (stage : ShaderStage) (info : FShade.GLSL.GLSLShaderInterface) (binary : byte[]) (device : Device) =
-        let iface = Map.ofList [stage, info]
+    let ofBinaryWithInfo (slot  : FShade.ShaderSlot) (info : FShade.GLSL.GLSLShaderInterface) (binary : byte[]) (device : Device) =
         let handle = device |> createRaw binary
-        let result = new ShaderModule(device, handle, stage, iface, binary)
+        let result = new ShaderModule(device, handle, slot, info, binary)
         result
-
-    let get (stage : ShaderStage) (m : ShaderModule) =
-        m.[stage]
-
-    let tryGetShader (stage : ShaderStage) (m : ShaderModule) =
-        match Map.tryFind stage m.Interface with
-            | Some i -> Some (Shader(m, stage, i))
-            | _ -> None
-
 
 
 
 [<AbstractClass; Sealed; Extension>]
 type ContextShaderModuleExtensions private() =
-    //[<Extension>]
-    //static member inline CreateShaderModule(this : Device, stage : ShaderStage, glsl : string) =
-    //    this |> ShaderModule.ofGLSL stage glsl
-
-    //[<Extension>]
-    //static member inline CreateShaderModule(this : Device, stage : ShaderStage, spirv : byte[]) =
-    //    this |> ShaderModule.ofBinary stage spirv
 
     [<Extension>]
-    static member inline CreateShaderModule(this : Device, stage : ShaderStage, spirv : byte[], info : FShade.GLSL.GLSLShaderInterface) =
-        this |> ShaderModule.ofBinaryWithInfo stage info spirv
+    static member inline CreateShaderModule(this : Device, slot : FShade.ShaderSlot, spirv : byte[], info : FShade.GLSL.GLSLShaderInterface) =
+        this |> ShaderModule.ofBinaryWithInfo slot info spirv

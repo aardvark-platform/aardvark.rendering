@@ -62,6 +62,18 @@ module RaytracingProgram =
                 sb.Append(lastLine) |> ignore
                 Report.Line("{0}", sb.ToString())
 
+    module private ShaderSlot =
+        let ofStage (name : Option<Symbol>) (ray : Option<Symbol>) (stage : ShaderStage) =
+            match stage, name, ray with
+            | ShaderStage.RayGeneration, _, _           -> FShade.ShaderSlot.RayGeneration
+            | ShaderStage.Miss, Some n, _               -> FShade.ShaderSlot.Miss n
+            | ShaderStage.Callable, Some n, _           -> FShade.ShaderSlot.Callable n
+            | ShaderStage.AnyHit, Some n, Some r        -> FShade.ShaderSlot.AnyHit (n, r)
+            | ShaderStage.ClosestHit, Some n, Some r    -> FShade.ShaderSlot.ClosestHit (n, r)
+            | ShaderStage.Intersection, Some n, Some r  -> FShade.ShaderSlot.Intersection (n, r)
+            | _ ->
+                failwithf "Invalid raytracing shader slot (stage = %A, name = %A, ray = %A)" stage name ray
+
     // TODO: Caching
     let ofEffect (device : Device) (effect : FShade.RaytracingEffect) =
 
@@ -94,28 +106,20 @@ module RaytracingProgram =
 
         Logging.logLines glsl.code
 
-        let defines (stage : ShaderStage) (name : Option<Symbol>) (rayType : Option<Symbol>) =
-            let stage = ShaderStage.toFShade stage
-
-            match name, rayType with
-            | Some n, Some rt -> [ sprintf "%A_%A_%A" stage n rt ]
-            | Some n, _ -> [ sprintf "%A_%A" stage n ]
-            | _ -> [ sprintf "%A" stage ]
-
         let stages =
             let mutable index = 0
 
-            groups |> List.map (ShaderGroup.map (fun name rayType stage shader ->
+            groups |> List.map (ShaderGroup.map (fun name ray stage shader ->
                 inc &index
-                let def = defines stage name rayType
-                let mdl = ShaderModule.ofGLSLWithTarget GLSLang.Target.SPIRV_1_4 stage def glsl device
+                let slot = stage |> ShaderSlot.ofStage name ray
+                let mdl = ShaderModule.ofGLSLWithTarget GLSLang.Target.SPIRV_1_4 slot glsl device
                 { Index = uint32 (index - 1); Module = mdl }
             ))
 
         let shaders =
             stages
             |> List.collect ShaderGroup.toList
-            |> List.map (fun i -> i.Module.[i.Module.Stage])
+            |> List.map (fun i -> i.Module)
             |> List.toArray
 
         let pipelineLayout = device.CreatePipelineLayout(shaders, 1, Set.empty)

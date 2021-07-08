@@ -51,7 +51,17 @@ type ComputeShader =
             x.Samplers <- Map.empty
 
 
-        new(d,s : ShaderModule,l,p,tn,sd,gs,glsl) = { inherit CachedResource(d); Device = d; ShaderModule = s; Layout = l; Handle = p; TextureNames = tn; Samplers = sd; GroupSize = gs; Interface = s.Interface.[ShaderStage.Compute]; GLSL = glsl }
+        new(d,s : ShaderModule,l,p,tn,sd,gs,glsl) =
+            { inherit CachedResource(d);
+              Device = d;
+              ShaderModule = s;
+              Layout = l;
+              Handle = p;
+              TextureNames = tn;
+              Samplers = sd;
+              GroupSize = gs;
+              Interface = s.Interface;
+              GLSL = glsl }
     end
 
 type BindingReference =
@@ -981,13 +991,10 @@ module ComputeShader =
                 ShaderProgram.pickler.UnPickle data
              
             let module_ =
-                device.CreateShaderModule(ShaderStage.Compute, spirv, iface)
-
-            let shader = 
-                 Shader(module_, ShaderStage.Compute, iface)
+                device.CreateShaderModule(FShade.ShaderSlot.Compute, spirv, iface)
 
             let layout =
-                device.CreatePipelineLayout([| shader |], 1, Set.empty)
+                device.CreatePipelineLayout([| module_ |], 1, Set.empty)
                 
             native {
                 let shaderInfo =
@@ -1074,45 +1081,41 @@ module ComputeShader =
             if shader.csLocalSize.AllGreater 0 then shader.csLocalSize
             else V3i.III
 
-        let sm = ShaderModule.ofGLSL ShaderStage.Compute glsl device
+        let sm = ShaderModule.ofGLSL FShade.ShaderSlot.Compute glsl device
 
-        match sm.TryGetShader ShaderStage.Compute with
-            | (true, shaderInfo) ->
-                let layout =
-                    device.CreatePipelineLayout([| shaderInfo |], 1, Set.empty)
+        let layout =
+            device.CreatePipelineLayout([| sm |], 1, Set.empty)
 
-                let shaderInfo =
-                    VkPipelineShaderStageCreateInfo(
-                        VkPipelineShaderStageCreateFlags.None,
-                        VkShaderStageFlags.ComputeBit,
-                        sm.Handle,
-                        main,
-                        NativePtr.zero
-                    )
+        let shaderInfo =
+            VkPipelineShaderStageCreateInfo(
+                VkPipelineShaderStageCreateFlags.None,
+                VkShaderStageFlags.ComputeBit,
+                sm.Handle,
+                main,
+                NativePtr.zero
+            )
 
-                native {
-                    let! pPipelineInfo =
-                        VkComputePipelineCreateInfo(
-                            VkPipelineCreateFlags.None,
-                            shaderInfo,
-                            layout.Handle,
-                            VkPipeline.Null,
-                            0
-                        )
+        native {
+            let! pPipelineInfo =
+                VkComputePipelineCreateInfo(
+                    VkPipelineCreateFlags.None,
+                    shaderInfo,
+                    layout.Handle,
+                    VkPipeline.Null,
+                    0
+                )
 
-                    let! pHandle = VkPipeline.Null
-                    VkRaw.vkCreateComputePipelines(device.Handle, VkPipelineCache.Null, 1u, pPipelineInfo, NativePtr.zero, pHandle)
-                        |> check "could not create compute pipeline"
+            let! pHandle = VkPipeline.Null
+            VkRaw.vkCreateComputePipelines(device.Handle, VkPipelineCache.Null, 1u, pPipelineInfo, NativePtr.zero, pHandle)
+                |> check "could not create compute pipeline"
 
                
-                    let samplers =
-                        shader.csSamplerStates |> Map.map (fun _ s -> device.CreateSampler s.SamplerState)
+            let samplers =
+                shader.csSamplerStates |> Map.map (fun _ s -> device.CreateSampler s.SamplerState)
                 
 
-                    return new ComputeShader(device, sm, layout, !!pHandle, shader.csTextureNames, samplers, shader.csLocalSize, Some glsl.code)
-                }
-            | _ ->
-                failf "could not create compute shader"
+            return new ComputeShader(device, sm, layout, !!pHandle, shader.csTextureNames, samplers, shader.csLocalSize, Some glsl.code)
+        }
 
     let ofFShade (shader : FShade.ComputeShader) (device : Device) =
         device.GetCached(cache, shader, fun shader ->

@@ -494,6 +494,7 @@ module Resources =
         let mutable version = 0
 
         let recreate (nb : INativeBuffer) =
+            handle |> Option.iter Disposable.dispose
             let buffer = device.HostMemory |> Buffer.ofBufferWithMemory usage nb
             handle <- Some buffer
             buffer
