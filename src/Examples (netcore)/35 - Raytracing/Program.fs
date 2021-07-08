@@ -330,6 +330,16 @@ let main argv =
             Trafo3d.RotationZ(t * -Constant.PiHalf) * Trafo3d.Translation(-6.0, 0.0, 2.0)
         )
 
+    let sphereHitgroups =
+        AVal.init [
+            Semantic.HitGroupSphere1
+            Semantic.HitGroupSphere2
+            Semantic.HitGroupSphere3
+            Semantic.HitGroupSphere4
+            Semantic.HitGroupSphere5
+            Semantic.HitGroupSphere6
+        ]
+
     let sphereTrafo2 =
         let startTime = System.DateTime.Now
         win.Time |> AVal.map (fun t ->
@@ -409,18 +419,9 @@ let main argv =
             }
 
         let objSphere =
-            let hitg = [
-                    Semantic.HitGroupSphere1
-                    Semantic.HitGroupSphere2
-                    Semantic.HitGroupSphere3
-                    Semantic.HitGroupSphere4
-                    Semantic.HitGroupSphere5
-                    Semantic.HitGroupSphere6
-                ]
-
             traceobject {
                 geometry accelerationStructureSphere
-                hitgroups hitg
+                hitgroups sphereHitgroups
                 transform sphereTrafo
                 customIndex 0
                 mask 0x80
@@ -486,6 +487,14 @@ let main argv =
             fullscreenTask.Run(t, rt, fbo, q)
             q.End()
         )
+
+    win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
+        transact (fun () ->
+            sphereHitgroups.Value <-
+                let list = sphereHitgroups.Value
+                list |> List.permute (fun i -> (i + 1) % list.Length)
+        )
+    )
 
     win.RenderTask <- renderTask
     win.Run()

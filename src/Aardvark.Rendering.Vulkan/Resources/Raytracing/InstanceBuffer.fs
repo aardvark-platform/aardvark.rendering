@@ -56,12 +56,13 @@ module private AdaptiveInstanceBufferInternals =
             let mask = o.Mask.GetValue(token)
             uint8 mask |> NativeInt.write (dst + Offsets.Mask)
 
-        let writeHitGroup (sbt : aval<ShaderBindingTable>) (geometryCount : ref<int>) (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
+        let writeHitGroup (sbt : aval<ShaderBindingTable>) (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
             let sbt = sbt.GetValue(token)
             let cfg = o.HitGroups.GetValue(token)
+            let accel = o.Geometry.GetValue(token)
 
-            if !geometryCount > cfg.Length then
-                failwithf "[Raytracing] Object has %d geometries but only %d hit groups" !geometryCount cfg.Length
+            if accel.GeometryCount > cfg.Length then
+                failwithf "[Raytracing] Object has %d geometries but only %d hit groups" accel.GeometryCount cfg.Length
 
             let hitg = sbt.HitGroupTable.Indices.[cfg]
             uint24 hitg |> NativeInt.write (dst + Offsets.HitGroup)
@@ -72,23 +73,20 @@ module private AdaptiveInstanceBufferInternals =
             let flags = getFlags cull geom
             uint8 flags |> NativeInt.write (dst + Offsets.Flags)
 
-        let writeGeometry (count : ref<int>) (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
+        let writeGeometry (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
             let accel = o.Geometry.GetValue(token) |> unbox<AccelerationStructure>
             accel.DeviceAddress |> NativeInt.write (dst + Offsets.Geometry)
-            count := accel.GeometryCount
 
 
 type AdaptiveInstanceBuffer(objects : amap<TraceObject, int>, sbt : aval<ShaderBindingTable>) =
     inherit AdaptiveCompactBuffer<TraceObject>(objects, Offsets.Stride)
 
-    let geometryCount = ref 0
-
     let writers =
-        [| Writers.writeGeometry geometryCount
+        [| Writers.writeGeometry
            Writers.writeTransform
            Writers.writeIndex
            Writers.writeMask
-           Writers.writeHitGroup sbt geometryCount
+           Writers.writeHitGroup sbt
            Writers.writeFlags |]
         |> Array.map FSharpFunc<_,_,_,_>.Adapt
 
