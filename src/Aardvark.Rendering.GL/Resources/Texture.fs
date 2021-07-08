@@ -9,6 +9,7 @@ open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.NativeInterop
 open System.Runtime.CompilerServices
+open Aardvark.Rendering.GL
 
 #nowarn "9"
 
