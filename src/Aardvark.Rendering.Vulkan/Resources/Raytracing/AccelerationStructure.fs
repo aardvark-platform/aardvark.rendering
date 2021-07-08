@@ -137,19 +137,20 @@ module AccelerationStructure =
     let tryUpdate (data : AccelerationStructureData) (accelerationStructure : AccelerationStructure) =
 
         // Determine if we can update with new data
-        // See: https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkGetAccelerationStructureBuildSizesKHR.html
+        // https://khronos.org/registry/vulkan/specs/1.2-khr-extensions/html/chap32.html
+        // https://www.khronos.org/registry/vulkan/specs/1.2-extensions/man/html/vkGetAccelerationStructureBuildSizesKHR.html
         let isGeometryCompatible (n : TraceGeometry) (o : TraceGeometry) =
             match n, o with
             | TraceGeometry.Triangles nm, TraceGeometry.Triangles om ->
                 nm.Length <= om.Length &&
                 (nm, om) ||> Array.safeForall2 (fun n o ->
-                    n.Primitives <= o.Primitives &&
+                    n.Primitives = o.Primitives &&
                     Option.isSome n.Indices = Option.isSome o.Indices
                 )
 
             | TraceGeometry.AABBs nbb, TraceGeometry.AABBs obb ->
-                nbb.Length <= obb.Length &&
-                (nbb, obb) ||> Array.safeForall2 (fun n o -> n.Count <= o.Count)
+                nbb.Length = obb.Length &&
+                (nbb, obb) ||> Array.safeForall2 (fun n o -> n.Count = o.Count)
 
             | _ -> false
 
@@ -157,7 +158,7 @@ module AccelerationStructure =
             if accelerationStructure.AllowUpdate then
                 match data, accelerationStructure.Data with
                 | AccelerationStructureData.Instances n, AccelerationStructureData.Instances o ->
-                    n.Count <= o.Count
+                    n.Count = o.Count
 
                 | AccelerationStructureData.Geometry n, AccelerationStructureData.Geometry o ->
                     isGeometryCompatible n o

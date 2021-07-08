@@ -52,24 +52,35 @@ module Effect =
         let private textureFloor =
             sampler2d {
                 texture uniform?TextureFloor
-                filter Filter.MinMagMipLinear
+                filter Filter.MinMagPointMipLinear
                 addressU WrapMode.Wrap
                 addressV WrapMode.Wrap
             }
 
+        [<ReflectedDefinition>]
+        let trace (origin : V3d) (offset : V2d) (input : RayGenerationInput) =
+            let pixelCenter = V2d input.work.id.XY + offset
+            let inUV = pixelCenter / V2d input.work.size.XY
+            let d = inUV * 2.0 - 1.0
+
+            let target = uniform.ProjTrafoInv * V4d(d, 1.0, 1.0)
+            let direction = uniform.ViewTrafoInv * V4d(target.XYZ.Normalized, 0.0)
+
+            let payload = { recursionDepth = 0; color = V3d.Zero }
+            let result = mainScene.TraceRay<Payload>(origin.XYZ, direction.XYZ, payload, flags = RayFlags.CullBackFacingTriangles)
+            result.color
+
         let rgenMain (input : RayGenerationInput) =
             raygen {
-                let pixelCenter = V2d input.work.id.XY + 0.5
-                let inUV = pixelCenter / V2d input.work.size.XY
-                let d = inUV * 2.0 - 1.0
-
                 let origin = uniform.ViewTrafoInv * V4d.WAxis
-                let target = uniform.ProjTrafoInv * V4d(d, 1.0, 1.0)
-                let direction = uniform.ViewTrafoInv * V4d(target.XYZ.Normalized, 0.0)
 
-                let payload = { recursionDepth = 0; color = V3d.Zero }
-                let result = mainScene.TraceRay<Payload>(origin.XYZ, direction.XYZ, payload, flags = RayFlags.CullBackFacingTriangles)
-                uniform.OutputBuffer.[input.work.id.XY] <- V4d(result.color, 1.0)
+                let c1 = input |> trace origin.XYZ (V2d(0.25, 0.25))
+                let c2 = input |> trace origin.XYZ (V2d(0.75, 0.25))
+                let c3 = input |> trace origin.XYZ (V2d(0.25, 0.75))
+                let c4 = input |> trace origin.XYZ (V2d(0.75, 0.75))
+                let final = (c1 + c2 + c3 + c4) / 4.0
+
+                uniform.OutputBuffer.[input.work.id.XY] <- V4d(final, 1.0)
             }
 
         let missSolidColor (color : C3d) =
@@ -270,11 +281,12 @@ module Effect =
 let main argv =
     Aardvark.Init()
 
+    let rnd = RandomSystem()
+
     use app = new VulkanApplication(debug = true)
     let runtime = app.Runtime :> IRuntime
-    let samples = 8
 
-    use win = app.CreateGameWindow(samples = samples)
+    use win = app.CreateGameWindow(samples = 1)
 
     let cameraView =
         let initialView = CameraView.LookAt(V3d.One * 10.0, V3d.Zero, V3d.OOI)
@@ -323,47 +335,26 @@ let main argv =
         AVal.constant <| ArrayBuffer(geometry.IndexArray),
         AVal.constant <| ArrayBuffer(uv)
 
-    let sphereTrafo =
-        let startTime = System.DateTime.Now
-        win.Time |> AVal.map (fun t ->
-            let t = (t - startTime).TotalSeconds
-            Trafo3d.RotationZ(t * -Constant.PiHalf) * Trafo3d.Translation(-6.0, 0.0, 2.0)
-        )
+    let spheres, sphereOffsets =
+        let offsets =
+            let o1 = V3d(0.0, 0.0, 0.5)
+            let o2 = V3d(0.0, 0.0, -0.5)
+            let o3 = V3d(0.5, 0.0, 0.0)
+            let o4 = V3d(-0.5, 0.0, 0.0)
+            let o5 = V3d(0.0, 0.5, 0.0)
+            let o6 = V3d(0.0, -0.5, 0.0)
+            [| o1; o2; o3; o4; o5; o6 |]
 
-    let sphereHitgroups =
-        AVal.init [
-            Semantic.HitGroupSphere1
-            Semantic.HitGroupSphere2
-            Semantic.HitGroupSphere3
-            Semantic.HitGroupSphere4
-            Semantic.HitGroupSphere5
-            Semantic.HitGroupSphere6
-        ]
+        let geometry =
+            offsets |> Array.map (fun offset ->
+                TraceGeometry.ofCenterAndRadius GeometryFlags.Opaque offset 0.2
+            )
+            |> TraceGeometry.ofArray
 
-    let sphereTrafo2 =
-        let startTime = System.DateTime.Now
-        win.Time |> AVal.map (fun t ->
-            let t = (t - startTime).TotalSeconds
-            Trafo3d.RotationX(t * Constant.Pi) * Trafo3d.Translation(-12.0, 0.0, 3.5) * Trafo3d.RotationZ(t * Constant.PiHalf)
-        )
+        let offsetsBuffer =
+            ArrayBuffer(offsets |> Array.map V4f) |> AVal.constant
 
-    let sphereOffsets =
-        let o1 = V3d(0.0, 0.0, 0.5)
-        let o2 = V3d(0.0, 0.0, -0.5)
-        let o3 = V3d(0.5, 0.0, 0.0)
-        let o4 = V3d(-0.5, 0.0, 0.0)
-        let o5 = V3d(0.0, 0.5, 0.0)
-        let o6 = V3d(0.0, -0.5, 0.0)
-        [| o1; o2; o3; o4; o5; o6 |]
-
-    let spheres =
-        sphereOffsets |> Array.map (fun offset ->
-            TraceGeometry.ofCenterAndRadius GeometryFlags.Opaque offset 0.2
-        )
-        |> TraceGeometry.ofArray
-
-    let sphereOffsetsBuffer =
-        ArrayBuffer(sphereOffsets |> Array.map V4f) |> AVal.constant
+        geometry, offsetsBuffer
 
     use accelerationStructureModel =
         runtime.CreateAccelerationStructure(
@@ -399,7 +390,7 @@ let main argv =
             "FloorTextureCoords", floorTextureCoords :> IAdaptiveValue
             "TextureFloor", DefaultTextures.checkerboard :> IAdaptiveValue
             "LightLocation", lightLocation :> IAdaptiveValue
-            "SphereOffsets", sphereOffsetsBuffer :> IAdaptiveValue
+            "SphereOffsets", sphereOffsets :> IAdaptiveValue
         ]
         |> UniformProvider.ofMap
 
@@ -418,40 +409,46 @@ let main argv =
                 culling (CullMode.Enabled WindingOrder.CounterClockwise)
             }
 
-        let objSphere =
-            traceobject {
-                geometry accelerationStructureSphere
-                hitgroups sphereHitgroups
-                transform sphereTrafo
-                customIndex 0
-                mask 0x80
-            }
+        ASet.ofList [objModel; objFloor]
 
-        let objSphere2 =
-            let hitg = [
-                    Semantic.HitGroupSphere4
-                    Semantic.HitGroupSphere6
-                    Semantic.HitGroupSphere2
-                    Semantic.HitGroupSphere1
-                    Semantic.HitGroupSphere3
-                    Semantic.HitGroupSphere5
-                ]
+    let sphereObjects =
+        cset<TraceObject>()
+
+    let createSphere =
+        let hitgroups = [
+            Semantic.HitGroupSphere1
+            Semantic.HitGroupSphere2
+            Semantic.HitGroupSphere3
+            Semantic.HitGroupSphere4
+            Semantic.HitGroupSphere5
+            Semantic.HitGroupSphere6
+        ]
+
+        fun () ->
+            let trafo =
+                let startTime = System.DateTime.Now
+
+                let position = rnd.UniformV3d(Box3d(V3d(-10.0, -10.0, 2.0), V3d(10.0)))
+                let rotation = ((rnd.UniformV3d()) * 2.0 - 1.0) * 2.0 * Constant.Pi
+
+                win.Time |> AVal.map (fun t ->
+                    let t = (t - startTime).TotalSeconds
+                    Trafo3d.RotationEuler(t * rotation) * Trafo3d.Translation(position)
+                )
+
+            let hitg =
+                let shift = rnd.UniformInt(hitgroups.Length)
+                hitgroups |> List.permute (fun i -> (i + shift) % hitgroups.Length)
 
             traceobject {
                 geometry accelerationStructureSphere
                 hitgroups hitg
-                transform sphereTrafo2
-                customIndex 1
+                transform trafo
                 mask 0x80
             }
 
-        ASet.ofList [objModel; objSphere2; objFloor; objSphere]
-
-    let dynamicObjects =
-        cset<TraceObject>()
-
     let objects =
-        ASet.union staticObjects dynamicObjects
+        ASet.union staticObjects sphereObjects
         |> ASet.compact
 
     let scene =
@@ -488,11 +485,19 @@ let main argv =
             q.End()
         )
 
-    win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ ->
+    win.Keyboard.KeyDown(Keys.Enter).Values.Add(fun _ ->
         transact (fun () ->
-            sphereHitgroups.Value <-
-                let list = sphereHitgroups.Value
-                list |> List.permute (fun i -> (i + 1) % list.Length)
+            let obj = createSphere()
+            sphereObjects.Value <- sphereObjects.Value |> HashSet.add obj
+        )
+    )
+
+    win.Keyboard.KeyDown(Keys.Delete).Values.Add(fun _ ->
+        transact (fun () ->
+            let list = sphereObjects.Value |> HashSet.toList
+            let idx = rnd.UniformInt(list.Length)
+            let set = list |> List.indexed |> List.filter (fst >> (<>) idx) |> List.map snd |> HashSet.ofList
+            sphereObjects.Value <- set
         )
     )
 
