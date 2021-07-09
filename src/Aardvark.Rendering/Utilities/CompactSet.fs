@@ -52,7 +52,7 @@ module CompactASetExtensions =
                     if index < newCount then
                         free.Enqueue(index)
                     else
-                        assert moving.Remove(index)
+                        moving.Remove(index) |> ignore
 
                 // Move
                 for i in moving do

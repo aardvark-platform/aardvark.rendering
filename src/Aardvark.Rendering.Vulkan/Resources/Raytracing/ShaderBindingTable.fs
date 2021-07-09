@@ -287,7 +287,8 @@ module private ShaderBindingSubtable =
         let buffer = device |> Buffer.alloc bufferUsage (int64 size)
         let table = new ShaderBindingSubtable<'T>(buffer, data.Lookup, uint64 data.Handles.SizeAligned)
 
-        assert (table |> tryUpdate data)
+        if not (table |> tryUpdate data) then
+            failwith "[Raytracing] Failed to update shader binding table"
 
         table
 

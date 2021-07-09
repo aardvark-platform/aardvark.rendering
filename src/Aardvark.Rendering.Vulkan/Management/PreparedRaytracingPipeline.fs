@@ -122,6 +122,8 @@ type DevicePreparedRaytracingPipelineExtensions private() =
         let hitConfigPool = new HitConfigPool(state.Scenes)
         let shaderBindingTable = this.CreateShaderBindingTable(pipeline, hitConfigPool)
 
+        resources.Add(shaderBindingTable)
+
         let accelerationStructures =
             state.Scenes |> Map.map (fun _ s ->
                 this.CreateAccelerationStructure(s.Objects, shaderBindingTable, s.Usage) :> IAdaptiveValue
