@@ -144,13 +144,17 @@ module AccelerationStructure =
             | TraceGeometry.Triangles nm, TraceGeometry.Triangles om ->
                 nm.Length <= om.Length &&
                 (nm, om) ||> Array.safeForall2 (fun n o ->
+                    n.Flags = o.Flags &&
                     n.Primitives = o.Primitives &&
                     Option.isSome n.Indices = Option.isSome o.Indices
                 )
 
             | TraceGeometry.AABBs nbb, TraceGeometry.AABBs obb ->
                 nbb.Length = obb.Length &&
-                (nbb, obb) ||> Array.safeForall2 (fun n o -> n.Count = o.Count)
+                (nbb, obb) ||> Array.safeForall2 (fun n o ->
+                    n.Count = o.Count &&
+                    n.Flags = o.Flags
+                )
 
             | _ -> false
 
