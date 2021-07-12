@@ -48,8 +48,12 @@ module private AdaptiveInstanceBufferInternals =
             let trafo = o.Transform.GetValue(token)
             M34f trafo.Forward |> NativeInt.write dst
 
-        let writeIndex (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
-            let index = o.CustomIndex.GetValue(token)
+        let writeIndex (indices : Dict<TraceObject, int>) (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
+            let index =
+                match indices.TryGetValue(o) with
+                | (true, i) -> i
+                | _ -> 0
+
             uint24 index |> NativeInt.write (dst + Offsets.Index)
 
         let writeMask (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
@@ -78,19 +82,22 @@ module private AdaptiveInstanceBufferInternals =
             accel.DeviceAddress |> NativeInt.write (dst + Offsets.Geometry)
 
 
-type AdaptiveInstanceBuffer(objects : amap<TraceObject, int>, sbt : aval<ShaderBindingTable>) =
+type AdaptiveInstanceBuffer(objects : aset<TraceObject>, indices : amap<TraceObject, int> , sbt : aval<ShaderBindingTable>) =
     inherit AdaptiveCompactBuffer<TraceObject>(objects, Offsets.Stride)
 
+    let indexMap = Dict.empty
+    let indexReader = indices.GetReader()
+
     let writers =
-        [| Writers.writeGeometry
-           Writers.writeTransform
-           Writers.writeIndex
+        [| Writers.writeTransform
+           Writers.writeIndex indexMap
            Writers.writeMask
            Writers.writeHitGroup sbt
-           Writers.writeFlags |]
+           Writers.writeFlags
+           Writers.writeGeometry |]
         |> Array.map FSharpFunc<_,_,_,_>.Adapt
 
-    let count = AMap.count objects
+    let count = ASet.count objects
 
     member x.Count = count
 
@@ -110,3 +117,17 @@ type AdaptiveInstanceBuffer(objects : amap<TraceObject, int>, sbt : aval<ShaderB
     override x.Destroy() =
         base.Destroy()
         sbt.Release()
+
+    override x.Compute(token) =
+        let ops = indexReader.GetChanges(token)
+
+        for o in ops do
+            match o with
+            | value, Set index ->
+                indexMap.[value] <- index
+                x.MarkDirty(value, 1)       // Writer with index 1 should be index writer
+
+            | value, Remove ->
+                indexMap.Remove(value) |> ignore
+
+        base.Compute(token)

@@ -449,10 +449,11 @@ let main argv =
 
     let objects =
         ASet.union staticObjects sphereObjects
-        |> ASet.compact
 
     let scene =
-        { Objects = objects; Usage = AccelerationStructureUsage.Static }
+        { Objects = objects
+          Indices = AMap.empty
+          Usage   = AccelerationStructureUsage.Static }
 
     let pipeline =
         {

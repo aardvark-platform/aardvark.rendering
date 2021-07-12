@@ -44,12 +44,22 @@ type HitConfig = List<Symbol>
 
 type TraceObject =
     {
+        /// The geometries of the object.
         Geometry     : aval<IAccelerationStructure>
+
+        /// The hit groups for each geometry of the object.
         HitGroups    : aval<HitConfig>
+
+        /// The transformation of the object.
         Transform    : aval<Trafo3d>
+
+        /// The cull mode of the object. Only has an effect if TraceRay() is called with one of the cull flags.
         Culling      : aval<CullMode>
+
+        /// Optionally overrides flags set in the geometry.
         GeometryMode : aval<GeometryMode>
-        CustomIndex  : aval<int>
+
+        /// Visibility mask that is compared against the mask specified by TraceRay().
         Mask         : aval<VisibilityMask>
     }
 
@@ -62,7 +72,6 @@ module TraceObject =
           Transform    = AVal.constant Trafo3d.Identity
           Culling      = AVal.constant CullMode.Disabled
           GeometryMode = AVal.constant GeometryMode.Default
-          CustomIndex  = AVal.constant 0
           Mask         = AVal.constant VisibilityMask.All }
 
     let create' (geometry : IAccelerationStructure) =
@@ -102,13 +111,6 @@ module TraceObject =
 
     let geometryMode' (mode : GeometryMode) (obj : TraceObject) =
         obj |> geometryMode (AVal.constant mode)
-
-
-    let customIndex (index : aval<int>) (obj : TraceObject) =
-        { obj with CustomIndex = index }
-
-    let customIndex' (index : int) (obj : TraceObject) =
-        obj |> customIndex (AVal.constant index)
 
 
     let mask (value : aval<VisibilityMask>) (obj : TraceObject) =
@@ -168,13 +170,6 @@ module TraceObjectBuilder =
         member x.GeometryMode(o : TraceObject, m : GeometryMode) =
             o |> TraceObject.geometryMode' m
 
-        [<CustomOperation("customIndex")>]
-        member x.CustomIndex(o : TraceObject, i : aval<int>) =
-            o |> TraceObject.customIndex i
-
-        member x.CustomIndex(o : TraceObject, i : int) =
-            o |> TraceObject.customIndex' i
-
         [<CustomOperation("mask")>]
         member x.Mask(o : TraceObject, m : aval<VisibilityMask>) =
             o |> TraceObject.mask m
@@ -211,10 +206,16 @@ module TraceObjectBuilder =
 
     let traceobject = TraceObjectBuilder()
 
-
 type RaytracingScene =
     {
-        Objects : amap<TraceObject, int>
+        /// The objects in the scene.
+        Objects : aset<TraceObject>
+
+        /// Custom indices for objects in the scene.
+        /// If no corresponding entry is found, the custom index is set to 0.
+        Indices : amap<TraceObject, int>
+
+        /// Usage flag for the underlying acceleration structure.
         Usage   : AccelerationStructureUsage
     }
 

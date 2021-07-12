@@ -30,9 +30,15 @@ type private AdaptiveValueWriterArray<'T>(value : 'T, index : int, elementSizeIn
 
     let mutable currentIndex = index
 
+    member x.MarkDirty(index : int) =
+        transact (fun _ -> writers.[index].MarkOutdated())
+
+    member x.MarkDirty() =
+        transact (fun _ -> writers |> Array.iter (fun w -> w.MarkOutdated()))
+
     member x.SetIndex(index : int) =
         currentIndex <- index
-        transact (fun _ -> writers |> Array.iter (fun w -> w.MarkOutdated()))
+        x.MarkDirty()
 
     member x.Write(token : AdaptiveToken, buffer : ChangeableBuffer) =
         writers |> Array.iter (fun w -> w.Write(token, currentIndex, buffer))
@@ -52,6 +58,9 @@ type AdaptiveCompactBuffer<'T>(input : amap<'T, int>, elementSizeInBytes : int) 
 
     let reader = input.GetReader()
     let writers = Dict<'T, AdaptiveValueWriterArray<'T>>()
+
+    new(input : aset<'T>, elementSizeInBytes : int) =
+        new AdaptiveCompactBuffer<'T>(input |> ASet.compact, elementSizeInBytes)
 
     abstract member AcquireValue : value: 'T -> unit
     abstract member ReleaseValue : value: 'T -> unit
@@ -84,6 +93,16 @@ type AdaptiveCompactBuffer<'T>(input : amap<'T, int>, elementSizeInBytes : int) 
                 x.Destroy()
                 transact x.MarkOutdated
             )
+
+    member x.MarkDirty(value : 'T) =
+        match writers.TryGetValue value with
+        | (true, w) -> w.MarkDirty()
+        | _ -> ()
+
+    member x.MarkDirty(value : 'T, index : int) =
+        match writers.TryGetValue value with
+        | (true, w) -> w.MarkDirty(index)
+        | _ -> ()
 
     member private x.Set(value, index) =
         match writers.TryGetValue value with

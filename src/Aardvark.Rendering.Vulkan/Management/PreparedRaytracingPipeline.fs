@@ -15,14 +15,14 @@ module private PreparedRaytracingPipelineInternals =
 
     open System.Collections.Generic
 
-    type HitConfigSceneReader(scene : amap<TraceObject, int>) =
+    type HitConfigSceneReader(scene : aset<TraceObject>) =
         inherit AdaptiveObject()
 
         let reader = scene.GetReader()
         let objects = HashSet<TraceObject>()
         let mutable configs = Set.empty
 
-        let set (o : TraceObject) =
+        let add (o : TraceObject) =
             objects.Add(o) |> ignore
 
         let remove (o : TraceObject) =
@@ -34,8 +34,8 @@ module private PreparedRaytracingPipelineInternals =
 
                 for op in deltas do
                     match op with
-                    | o, Set _ -> set o
-                    | o, Remove -> remove o
+                    | Add (_, o) -> add o
+                    | Rem (_, o) -> remove o
 
                 for o in objects do
                     let cfg = o.HitGroups.GetValue(token)
@@ -126,7 +126,7 @@ type DevicePreparedRaytracingPipelineExtensions private() =
 
         let accelerationStructures =
             state.Scenes |> Map.map (fun _ s ->
-                this.CreateAccelerationStructure(s.Objects, shaderBindingTable, s.Usage) :> IAdaptiveValue
+                this.CreateAccelerationStructure(s.Objects, s.Indices, shaderBindingTable, s.Usage) :> IAdaptiveValue
             )
 
         resources.AddRange(accelerationStructures |> Map.toList |> List.map (snd >> unbox))
