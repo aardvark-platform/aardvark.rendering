@@ -10,19 +10,19 @@ type WrapMode =
     | Border = 3
     | MirrorOnce = 4
 
-[<Struct>]
+[<Struct; CLIMutable>]
 type SamplerState =
     {
-        mutable Filter          : TextureFilter
-        mutable AddressU        : WrapMode
-        mutable AddressV        : WrapMode
-        mutable AddressW        : WrapMode
-        mutable Comparison      : ComparisonFunction
-        mutable BorderColor     : C4f
-        mutable MaxAnisotropy   : int
-        mutable MaxLod          : float32
-        mutable MinLod          : float32
-        mutable MipLodBias      : float32
+        Filter          : TextureFilter
+        AddressU        : WrapMode
+        AddressV        : WrapMode
+        AddressW        : WrapMode
+        Comparison      : ComparisonFunction
+        BorderColor     : C4f
+        MaxAnisotropy   : int
+        MaxLod          : float32
+        MinLod          : float32
+        MipLodBias      : float32
     }
 
     /// Returns whether the sampler uses anisotropic filtering, i.e. whether MaxAnisotropy is greater than 1.

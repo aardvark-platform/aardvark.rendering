@@ -26,6 +26,8 @@ namespace CSharpInteropTest
 
             var adaptiveBuffer = (IAdaptiveValue<V3f[]>)AdaptiveValue.Init(new V3f[5]);
             var adaptiveArray = (IAdaptiveValue<Array>)AdaptiveValue.Init((Array)new V3f[5]);
+
+            var blendMode = new BlendMode { SourceColorFactor = BlendFactor.ConstantAlpha };
             
             ISg sg = new Sg.RenderNode(0, IndexedGeometryMode.PointList);
 

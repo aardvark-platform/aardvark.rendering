@@ -121,12 +121,12 @@ module ClearStencil =
 
 
 /// Type representing color, depth, and stencil values used for clearing framebuffer attachments.
-[<Struct>]
+[<Struct; CLIMutable>]
 type ClearValues =
     {
-        mutable Colors  : ClearColors
-        mutable Depth   : ClearDepth
-        mutable Stencil : ClearStencil
+        Colors  : ClearColors
+        Depth   : ClearDepth
+        Stencil : ClearStencil
     }
 
     static member None =

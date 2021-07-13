@@ -1,17 +1,17 @@
 ﻿namespace Aardvark.Rendering
 
 /// Struct describing the applied depth bias
-[<Struct>]
+[<Struct; CLIMutable>]
 type DepthBias =
     {
         /// Scalar factor controlling the constant depth value added to a fragment.
-        mutable Constant    : float
+        Constant    : float
 
         /// Scalar factor controlling the slope of a fragment's depth bias.
-        mutable SlopeScale  : float
+        SlopeScale  : float
 
         /// Maximum or minimum depth bias (no clamping if zero).
-        mutable Clamp       : float
+        Clamp       : float
     }
 
     /// Returns whether depth bias is enabled.

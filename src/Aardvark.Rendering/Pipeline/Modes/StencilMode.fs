@@ -14,7 +14,7 @@ type StencilOperation =
 
 [<Struct>]
 type StencilMask =
-    val mutable Value : uint32
+    val Value : uint32
 
     new(value : uint32) =
         { Value = value }
@@ -34,26 +34,26 @@ type StencilMask =
     static member None =
         StencilMask(false)
 
-[<Struct>]
+[<Struct; CLIMutable>]
 type StencilMode =
     {
         /// The operation performed on samples that pass both the stencil and depth tests.
-        mutable Pass        : StencilOperation
+        Pass        : StencilOperation
 
         /// The operation performed on samples that fail the stencil test.
-        mutable Fail        : StencilOperation
+        Fail        : StencilOperation
 
         /// The operation performed on samples that pass the stencil test but fail the depth test.
-        mutable DepthFail   : StencilOperation
+        DepthFail   : StencilOperation
 
         /// The comparison function used for the stencil test.
-        mutable Comparison  : ComparisonFunction
+        Comparison  : ComparisonFunction
 
         /// A mask specifying the bits of the stencil values used in the stencil test.
-        mutable CompareMask : StencilMask
+        CompareMask : StencilMask
 
         /// The reference stencil value used in the stencil test.
-        mutable Reference   : int32
+        Reference   : int32
     }
 
     member x.Enabled =

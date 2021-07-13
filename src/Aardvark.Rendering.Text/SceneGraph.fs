@@ -227,9 +227,9 @@ module Sg =
             let pass = scope.RenderPass
             let pass = if pass = RenderPass.main then RenderPass.shapes else pass
 
-            shapes.RasterizerState.Multisample <- AVal.map2 (fun a f -> not f || a) aa fill
+            shapes.RasterizerState <- { shapes.RasterizerState with Multisample = AVal.map2 (fun a f -> not f || a) aa fill }
             shapes.RenderPass <- if pass = RenderPass.main then RenderPass.shapes else pass
-            shapes.BlendState.Mode <- AVal.constant BlendMode.Blend
+            shapes.BlendState <- { shapes.BlendState with Mode = AVal.constant BlendMode.Blend }
             shapes.VertexAttributes <- cache.VertexBuffers
             shapes.DrawCalls <- Indirect(indirect)
             shapes.InstanceAttributes <- instanceAttributes
@@ -364,20 +364,20 @@ module Sg =
 
             let pass = scope.RenderPass
             let pass = if pass = RenderPass.main then RenderPass.shapes else pass
-            shapes.RasterizerState.Multisample <- AVal.map2 (fun a f -> not f || a) aa fill
+            shapes.RasterizerState <- { shapes.RasterizerState with Multisample = AVal.map2 (fun a f -> not f || a) aa fill }
             shapes.RenderPass <- pass
-            shapes.BlendState.Mode <- AVal.constant BlendMode.Blend
+            shapes.BlendState <- { shapes.BlendState with Mode = AVal.constant BlendMode.Blend }
             shapes.VertexAttributes <- cache.VertexBuffers
             shapes.DrawCalls <- indirectAndOffsets |> AVal.map (fun (i,_,_,_) -> i) |> Indirect
             shapes.InstanceAttributes <- instanceAttributes
             shapes.Mode <- IndexedGeometryMode.TriangleList
-            shapes.DepthState.Bias <- AVal.constant DepthBias.None
+            shapes.DepthState <- { shapes.DepthState with Bias = AVal.constant DepthBias.None }
             
             //shapes.WriteBuffers <- Some (Set.ofList [DefaultSemantic.Colors])
 
             let boundary = RenderObject.ofScope scope
             boundary.RenderPass <- pass
-            boundary.BlendState.Mode <- AVal.constant BlendMode.Blend
+            boundary.BlendState <- { boundary.BlendState with Mode = AVal.constant BlendMode.Blend }
             boundary.VertexAttributes <- cache.VertexBuffers
             let drawCall =
                 let range = cache.GetBufferRange Shape.Quad
@@ -439,10 +439,11 @@ module Sg =
                 if t.RenderBoundary then ColorMask.All
                 else ColorMask.None
 
-            boundary.BlendState.ColorWriteMask <- AVal.constant writeColor
-            boundary.StencilState.ModeFront <- AVal.constant writeStencil
-            boundary.StencilState.ModeBack <- AVal.constant writeStencil
-            boundary.RasterizerState.FillMode <- AVal.constant FillMode.Fill
+            boundary.BlendState <- { boundary.BlendState with ColorWriteMask = AVal.constant writeColor }
+            boundary.StencilState <- { boundary.StencilState with
+                                            ModeFront = AVal.constant writeStencil
+                                            ModeBack = AVal.constant writeStencil }
+            boundary.RasterizerState <- { boundary.RasterizerState with FillMode = AVal.constant FillMode.Fill }
 
             let style = content |> AVal.map(fun x -> x.renderStyle)
 
@@ -468,21 +469,18 @@ module Sg =
                 match s with
                 | RenderStyle.Normal -> 
                     shapes.Surface <- Surface.FShadeSimple cache.Effect
-                    shapes.DepthState.Test <- depthTest
-                    shapes.StencilState.ModeFront <- stencilFront
-                    shapes.StencilState.ModeBack <- stencilBack
+                    shapes.DepthState <- { shapes.DepthState with Test = depthTest }
+                    shapes.StencilState <- { shapes.StencilState with ModeFront = stencilFront; ModeBack = stencilBack }
                     MultiRenderObject [boundary; shapes] :> IRenderObject  |> HashSet.single
                 | RenderStyle.NoBoundary ->
                     shapes.Surface <- Surface.FShadeSimple cache.Effect
-                    shapes.DepthState.Test <- depthTest
-                    shapes.StencilState.ModeFront <- stencilFront
-                    shapes.StencilState.ModeBack <- stencilBack
+                    shapes.DepthState <- { shapes.DepthState with Test = depthTest }
+                    shapes.StencilState <- { shapes.StencilState with ModeFront = stencilFront; ModeBack = stencilBack }
                     shapes :> IRenderObject |> HashSet.single // MultiRenderObject [shapes] :> IRenderObject 
                 | RenderStyle.Billboard -> 
                     shapes.Surface <- Surface.FShadeSimple cache.BillboardEffect
-                    shapes.DepthState.Test <- depthTest
-                    shapes.StencilState.ModeFront <- stencilFront
-                    shapes.StencilState.ModeBack <- stencilBack
+                    shapes.DepthState <- { shapes.DepthState with Test = depthTest }
+                    shapes.StencilState <- { shapes.StencilState with ModeFront = stencilFront; ModeBack = stencilBack }
                     shapes :> IRenderObject |> HashSet.single
 
                 ) |> ASet.ofAVal
