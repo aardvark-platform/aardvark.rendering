@@ -89,7 +89,7 @@ module private SparseBufferImplementation =
                 if refCount = 1 then
                     Interlocked.Add(totalSize, int64 size) |> ignore
                     wait()
-                    GL.NamedBufferPageCommitment(buffer, offset, size, true)
+                    GLExt.NamedBufferPageCommitment(buffer, offset, size, true)
                     fence <-Fence.Create()
                 else
                     wait()
@@ -101,7 +101,7 @@ module private SparseBufferImplementation =
                 if refCount = 0 then
                     Interlocked.Add(totalSize, int64 -size) |> ignore
                     wait()
-                    GL.NamedBufferPageCommitment(buffer, offset, size, false)
+                    GLExt.NamedBufferPageCommitment(buffer, offset, size, false)
                     fence <- Fence.Create()
                 else
                     wait()
@@ -130,7 +130,7 @@ module private SparseBufferImplementation =
             
 
             if size > 0n then
-                GL.NamedBufferSubData(handle, offset, size, data)
+                GLExt.NamedBufferSubData(handle, offset, size, data)
 
         override x.Commitment(offset : nativeint, size : nativeint, c : bool) =
             if offset < 0n || size < 0n || offset + size > totalSize then
@@ -183,22 +183,22 @@ module private SparseBufferImplementation =
                     let copySize = min c x.SizeInBytes
 
                     if copySize > 0n then
-                        let temp = GL.CreateBuffer()
+                        let temp = GLExt.CreateBuffer()
                         GL.Check "could not create temp buffer"
 
-                        GL.NamedBufferData(temp, copySize, 0n, BufferUsageHint.StaticDraw)
+                        GLExt.NamedBufferData(temp, copySize, 0n, BufferUsageHint.StaticDraw)
                         GL.Check "could not allocate temp buffer"
 
-                        GL.CopyNamedBufferSubData(handle, temp, 0n, 0n, copySize)
+                        GLExt.CopyNamedBufferSubData(handle, temp, 0n, 0n, copySize)
                         GL.Check "could not copy to temp buffer"
 
                         //GL.InvalidateBufferData(handle) // bad on intel and not necessary.
                         //GL.Check "could not invalidate buffer"
 
-                        GL.NamedBufferData(handle, c, 0n, BufferUsageHint.StaticDraw)
+                        GLExt.NamedBufferData(handle, c, 0n, BufferUsageHint.StaticDraw)
                         GL.Check "could not resize buffer"
                     
-                        GL.CopyNamedBufferSubData(temp, handle, 0n, 0n, copySize)
+                        GLExt.CopyNamedBufferSubData(temp, handle, 0n, 0n, copySize)
                         GL.Check "could not copy from temp buffer"
 
                         GL.DeleteBuffer(temp)
@@ -206,7 +206,7 @@ module private SparseBufferImplementation =
 
                         
                     else
-                        GL.NamedBufferData(handle, c, 0n, BufferUsageHint.StaticDraw)
+                        GLExt.NamedBufferData(handle, c, 0n, BufferUsageHint.StaticDraw)
                         GL.Check "could not resize buffer"
 
                     x.SizeInBytes <- c
@@ -222,7 +222,7 @@ module private SparseBufferImplementation =
                     failwith "[GL] write region out of bounds"
             
                 if size > 0n then
-                    GL.NamedBufferSubData(handle, offset, size, data)
+                    GLExt.NamedBufferSubData(handle, offset, size, data)
 
                 writeFences.Enqueue()
             )
@@ -253,10 +253,10 @@ module SparseBufferExtensions =
 
     module private SparseHelpers =
         let rec tryAlloc (cap : byref<nativeint>) =
-            let b = GL.CreateBuffer()
+            let b = GLExt.CreateBuffer()
             GL.Check "could not create buffer"
 
-            GL.NamedBufferStorage(b, cap, 0n, BufferStorageFlags.SparseStorageBit ||| BufferStorageFlags.DynamicStorageBit)
+            GLExt.NamedBufferStorage(b, cap, 0n, BufferStorageFlags.SparseStorageBit ||| BufferStorageFlags.DynamicStorageBit)
             let err = GL.GetError()
             if err = ErrorCode.OutOfMemory then
                 GL.DeleteBuffer(b)
@@ -290,7 +290,7 @@ module SparseBufferExtensions =
         member x.CreateSparseBuffer(beforeRender : unit -> unit, afterRender : unit -> unit) =
             use __ = x.ResourceLock
 
-            if not RuntimeConfig.SupressSparseBuffers && GL.ARB_sparse_buffer then
+            if not RuntimeConfig.SupressSparseBuffers && GLExt.ARB_sparse_buffer then
                 let pageSize = GL.GetInteger(GetPName.BufferPageSize) |> nativeint
                 let pageSize = 2n * pageSize
 
@@ -300,7 +300,7 @@ module SparseBufferExtensions =
                 let handle = SparseHelpers.tryAlloc(&virtualSize)
                 new RealSparseBuffer(x, handle, virtualSize, pageSize, beforeRender, afterRender) :> SparseBuffer
             else
-                let handle = GL.CreateBuffer()
+                let handle = GLExt.CreateBuffer()
                 GL.Check "could not create buffer"
         
                 new FakeSparseBuffer(x, handle, beforeRender, afterRender) :> SparseBuffer

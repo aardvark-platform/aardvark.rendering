@@ -25,7 +25,7 @@ module ARB_sparse_buffer =
     type private BufferPageCommitmentDel = delegate of BufferTarget * nativeint * nativeint * bool -> unit
     type private NamedBufferPageCommitmentDel = delegate of int * nativeint * nativeint * bool -> unit
 
-    type GL private() =
+    type GLExt private() =
         static let supported = 
             let vendor = GL.GetString(StringName.Vendor).ToLower()
             let reallySupportsSparse = vendor.Contains("nvidia")  
