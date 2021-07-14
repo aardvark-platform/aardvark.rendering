@@ -400,23 +400,24 @@ type Image =
     class 
         inherit Resource<VkImage>
 
-        val mutable public Size : V3i
-        val mutable public MipMapLevels : int
-        val mutable public Layers : int
-        val mutable public Samples : int
-        val mutable public Dimension : TextureDimension
-        val mutable public Format : VkFormat
-        val mutable public Memory : DevicePtr
+        val public Size : V3i
+        val public MipMapLevels : int
+        val public Layers : int
+        val public Samples : int
+        val public Dimension : TextureDimension
+        val public Format : VkFormat
+        val public Memory : DevicePtr
+        val public PeerHandles : VkImage[]
+        val public Version : cval<int>
+        val public SamplerLayout : VkImageLayout
+
+        // ISSUE: This is not safe, generally it's not possible to track the layout
         val mutable public Layout : VkImageLayout
-        val mutable public PeerHandles : VkImage[]
-        val mutable public Version : cval<int>
-        val mutable public SamplerLayout : VkImageLayout
 
         override x.Destroy() =
             if x.Device.Handle <> 0n && x.Handle.IsValid then
                 VkRaw.vkDestroyImage(x.Device.Handle, x.Handle, NativePtr.zero)
                 for p in x.PeerHandles do VkRaw.vkDestroyImage(x.Device.Handle, p, NativePtr.zero)
-                x.PeerHandles <- null
                 x.Memory.Dispose()
                 x.Handle <- VkImage.Null
 
@@ -465,7 +466,7 @@ type Image =
         override x.ToString() =
             sprintf "0x%08X" x.Handle.Handle
 
-        new(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, samplerLayout) = 
+        new(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, samplerLayout, peerHandles) =
             {
                 inherit Resource<_>(dev, handle);
                 Size = s
@@ -476,26 +477,19 @@ type Image =
                 Format = fmt
                 Memory = mem
                 Layout = layout
-                PeerHandles = [||]
+                PeerHandles = peerHandles
                 Version = AVal.init 0
                 SamplerLayout = samplerLayout
             }
-            
-        new(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout) = 
-            {
-                inherit Resource<_>(dev, handle);
-                Size = s
-                MipMapLevels = levels
-                Layers = layers
-                Samples = samples
-                Dimension = dim
-                Format = fmt
-                Memory = mem
-                Layout = layout
-                PeerHandles = [||]
-                Version = AVal.init 0
-                SamplerLayout = VkImageLayout.ShaderReadOnlyOptimal
-            }
+
+        new(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, peerHandles) =
+            new Image(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, VkImageLayout.ShaderReadOnlyOptimal, peerHandles)
+
+        new(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, samplerLayout) =
+            new Image(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, samplerLayout, [||])
+
+        new(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout) =
+            new Image(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, [||])
     end
 
 and ImageSubresourceRange(image : Image, aspect : ImageAspect, baseLevel : int, levelCount : int, baseSlice : int, sliceCount : int) =
@@ -2550,8 +2544,8 @@ module Image =
                     }
                     
 
-                let result = new Image(device, handles.[0], size, mipMapLevels, layers, samples, dim, fmt, ptr, VkImageLayout.Undefined)
-                result.PeerHandles <- Array.skip 1 handles
+                let peerHandles = Array.skip 1 handles
+                let result = new Image(device, handles.[0], size, mipMapLevels, layers, samples, dim, fmt, ptr, VkImageLayout.Undefined, peerHandles)
 
                 device.perform {
                     for i in 1 .. handles.Length - 1 do

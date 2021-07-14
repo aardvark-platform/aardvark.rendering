@@ -22,15 +22,15 @@ type ComputeShader =
     class
         inherit CachedResource
 
-        val mutable public Device : Device
-        val mutable public ShaderModule : ShaderModule
-        val mutable public Layout : PipelineLayout
-        val mutable public Handle : VkPipeline
-        val mutable public TextureNames : Map<string * int, string>
-        val mutable public Samplers : Map<string * int, Sampler>
-        val mutable public GroupSize : V3i
-        val mutable public Interface : FShade.GLSL.GLSLShaderInterface
-        val mutable public GLSL : Option<string>
+        val public Device : Device
+        val public ShaderModule : ShaderModule
+        val public Layout : PipelineLayout
+        val public Handle : VkPipeline
+        val public TextureNames : Map<string * int, string>
+        val public Samplers : Map<string * int, Sampler>
+        val public GroupSize : V3i
+        val public Interface : FShade.GLSL.GLSLShaderInterface
+        val public GLSL : Option<string>
 
         interface IComputeShader with
             member x.Runtime = x.Device.Runtime :> IComputeRuntime
@@ -43,13 +43,6 @@ type ComputeShader =
             for (_,s) in Map.toSeq x.Samplers do s.Dispose()
             x.Layout.Dispose()
             x.ShaderModule.Dispose()
-
-            x.ShaderModule <- Unchecked.defaultof<_>
-            x.Layout <- Unchecked.defaultof<_>
-            x.Handle <- VkPipeline.Null
-            x.TextureNames <- Map.empty
-            x.Samplers <- Map.empty
-
 
         new(d,s : ShaderModule,l,p,tn,sd,gs,glsl) = { inherit CachedResource(d); Device = d; ShaderModule = s; Layout = l; Handle = p; TextureNames = tn; Samplers = sd; GroupSize = gs; Interface = s.Interface.[ShaderStage.Compute]; GLSL = glsl }
     end

@@ -18,9 +18,9 @@ open Microsoft.FSharp.NativeInterop
 type Buffer =
     class
         inherit Resource<VkBuffer>
-        val mutable public Memory : DevicePtr
-        val mutable public Size : int64
-        val mutable public Usage : VkBufferUsageFlags
+        val public Memory : DevicePtr
+        val public Usage : VkBufferUsageFlags
+        val public Size : int64
 
         override x.Destroy() =
             if x.Handle.IsValid && x.Size > 0L then
@@ -35,15 +35,18 @@ type Buffer =
 
         new(device, handle, memory, size, usage) =
             { inherit Resource<_>(device, handle); Memory = memory; Size = size; Usage = usage }
+
+        new(device, handle, memory, size, usage, refCount) =
+            { inherit Resource<_>(device, handle, refCount); Memory = memory; Size = size; Usage = usage }
     end
 
 type BufferView =
     class
         inherit Resource<VkBufferView>
-        val mutable public Buffer : Buffer
-        val mutable public Format : VkFormat
-        val mutable public Offset : uint64
-        val mutable public Size : uint64
+        val public Buffer : Buffer
+        val public Format : VkFormat
+        val public Offset : uint64
+        val public Size : uint64
 
         override x.Destroy() =
             if x.Handle.IsValid then
@@ -400,19 +403,15 @@ module Buffer =
 
     let internal ofWriter (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (device : Device) =
         if size > 0n then
-            let align = int64 device.MinUniformBufferOffsetAlignment
-
-            let deviceAlignedSize = Alignment.next align (int64 size)
-            let buffer = device |> alloc flags deviceAlignedSize
-            buffer.Size <- int64 size
-            let deviceMem = buffer.Memory
+            let size = int64 size
+            let buffer = device |> alloc flags size
 
             match device.UploadMode with
                 | UploadMode.Direct ->
                     buffer.Memory.Mapped (fun dst -> writer dst)
 
                 | UploadMode.Sync ->
-                    let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit deviceAlignedSize
+                    let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit size
                     hostBuffer.Memory.Mapped (fun dst -> writer dst)
                     
                     device.eventually {
@@ -421,7 +420,7 @@ module Buffer =
                     }
 
                 | UploadMode.Async -> 
-                    let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit deviceAlignedSize
+                    let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit size
                     hostBuffer.Memory.Mapped (fun dst -> writer dst)
 
                     device.CopyEngine.EnqueueSafe [

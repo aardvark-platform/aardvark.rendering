@@ -11,11 +11,11 @@ open Microsoft.FSharp.NativeInterop
 type ImageView =
     class
         inherit Resource<VkImageView>
-        val mutable public Image            : Image
-        val mutable public ImageViewType    : VkImageViewType
-        val mutable public MipLevelRange    : Range1i
-        val mutable public ArrayRange       : Range1i
-        val mutable public IsResolved       : bool
+        val public Image            : Image
+        val public ImageViewType    : VkImageViewType
+        val public MipLevelRange    : Range1i
+        val public ArrayRange       : Range1i
+        val public IsResolved       : bool
 
         override x.Destroy() =
             if x.Device.Handle <> 0n && x.Handle.IsValid then

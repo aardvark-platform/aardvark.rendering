@@ -40,7 +40,7 @@ type internal DescriptorPoolBag(device : Device, perPool : int, resourcesPerPool
             | h :: t ->
                 match h |> tryAllocSet layout with
                 | Some set ->
-                    set.PoolBag <- Some x
+                    set.SetPoolBag(x)
                     set
                 | None ->
                     partialSet.Remove h |> ignore
@@ -52,7 +52,7 @@ type internal DescriptorPoolBag(device : Device, perPool : int, resourcesPerPool
         lock pools (fun () ->
             let pool = set.Pool
             if pools.Contains pool then
-                if pool.SetCount = perPool then
+                if pool.Capacity = perPool then
                     if partialSet.Remove pool then partial <- List.filter (fun p -> p <> pool) partial
                     pool.Dispose()
                     pools.Remove pool |> ignore
@@ -72,10 +72,18 @@ type internal DescriptorPoolBag(device : Device, perPool : int, resourcesPerPool
 and DescriptorSet =
     class
         inherit Resource<VkDescriptorSet>
-        val mutable internal PoolBag : DescriptorPoolBag option
-        val mutable public Pool : DescriptorPool
-        val mutable public Layout : DescriptorSetLayout
-        val mutable public BoundResources : array<Resource>
+        val public Pool : DescriptorPool
+        val public Layout : DescriptorSetLayout
+
+        val mutable private poolBag : Option<DescriptorPoolBag>
+        val mutable private boundResources : Resource[]
+
+        member internal x.SetPoolBag(bag : DescriptorPoolBag) =
+            x.poolBag <- Some bag
+
+        member x.BindResources(resources : Resource[]) =
+            x.boundResources |> Array.iter Disposable.dispose
+            x.boundResources <- resources
 
         override x.Destroy() =
             lock x.Pool (fun () ->
@@ -87,15 +95,15 @@ and DescriptorSet =
                     }
 
                     x.Handle <- VkDescriptorSet.Null
-                    Interlocked.Increment(&x.Pool.SetCount) |> ignore
+                    x.Pool.FreeSet()
 
-                    x.PoolBag |> Option.iter (fun b -> b.RemoveSet(x))
+                    x.poolBag |> Option.iter (fun b -> b.RemoveSet(x))
             )
 
-            x.BoundResources |> Array.iter Disposable.dispose
+            x.boundResources |> Array.iter Disposable.dispose
 
         new(device : Device, pool : DescriptorPool, layout : DescriptorSetLayout, handle : VkDescriptorSet) =
-            { inherit Resource<_>(device, handle); PoolBag = None; Pool = pool; Layout = layout; BoundResources = [||] }
+            { inherit Resource<_>(device, handle); Pool = pool; Layout = layout; poolBag = None; boundResources = [||] }
     end
 
 
@@ -104,9 +112,7 @@ module DescriptorSet =
 
     let tryAlloc (layout : DescriptorSetLayout) (pool : DescriptorPool) =
         lock pool (fun () ->
-            let canWork = Interlocked.Change(&pool.SetCount, fun c -> if c <= 0 then 0, false else c-1, true)
-
-            if canWork then
+            if pool.TryAllocateSet() then
                 native {
                     let! pLayoutHandle = layout.Handle
                     let! pInfo =
@@ -262,8 +268,7 @@ module DescriptorSet =
             VkRaw.vkUpdateDescriptorSets(device.Handle, uint32 writes.Length, pWrites, 0u, NativePtr.zero)
         }
 
-        set.BoundResources |> Array.iter Disposable.dispose
-        set.BoundResources <- resources
+        set.BindResources(resources)
 
 [<AbstractClass; Sealed; Extension>]
 type ContextDescriptorSetExtensions private() =

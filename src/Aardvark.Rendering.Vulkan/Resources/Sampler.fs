@@ -56,7 +56,7 @@ module ``Sampler Extensions`` =
 type Sampler =
     class
         inherit Resource<VkSampler>
-        val mutable public Description : SamplerState
+        val public Description : SamplerState
 
         override x.Destroy() =
             if x.Handle.IsValid then

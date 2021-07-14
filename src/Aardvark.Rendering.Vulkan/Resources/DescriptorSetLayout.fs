@@ -15,9 +15,9 @@ open Microsoft.FSharp.NativeInterop
 [<AllowNullLiteral>]
 type DescriptorSetLayoutBinding =
     class
-        val mutable public Device : Device
-        val mutable public Handle : VkDescriptorSetLayoutBinding
-        val mutable public Parameter : ShaderUniformParameter
+        val public Device : Device
+        val public Handle : VkDescriptorSetLayoutBinding
+        val public Parameter : ShaderUniformParameter
         member x.StageFlags = x.Handle.stageFlags
         member x.DescriptorCount = int x.Handle.descriptorCount
         member x.Name = x.Parameter.Name
@@ -50,7 +50,7 @@ module DescriptorSetLayoutBinding =
 type DescriptorSetLayout =
     class
         inherit Resource<VkDescriptorSetLayout>
-        val mutable public Bindings : array<DescriptorSetLayoutBinding>
+        val public Bindings : array<DescriptorSetLayoutBinding>
 
         override x.Destroy() =
             if x.Handle.IsValid then

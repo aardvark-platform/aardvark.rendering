@@ -13,10 +13,10 @@ open Microsoft.FSharp.NativeInterop
 type Framebuffer =
     class
         inherit Resource<VkFramebuffer>
-        val mutable public Size : V2i
-        val mutable public RenderPass : RenderPass
-        val mutable public ImageViews : ImageView[]
-        val mutable public Attachments : Map<Symbol, ImageView>
+        val public Size : V2i
+        val public RenderPass : RenderPass
+        val public ImageViews : ImageView[]
+        val public Attachments : Map<Symbol, ImageView>
 
         override x.Destroy() =
             if x.Device.Handle <> 0n && x.Handle.IsValid then
