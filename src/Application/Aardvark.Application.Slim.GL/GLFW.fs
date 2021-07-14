@@ -508,6 +508,9 @@ module internal IconLoader =
             Log.warn "could not load icon. %A" e.Message
             None
 
+module Config =
+    let mutable hideCocoaMenuBar = false
+
 [<Sealed>]
 type Application(runtime : IRuntime) =
     [<System.ThreadStatic; DefaultValue>]
@@ -516,7 +519,13 @@ type Application(runtime : IRuntime) =
     let mutable ctx = Unchecked.defaultof<Aardvark.Rendering.GL.Context>
 
     let glfw = Glfw.GetApi()
-    do if not (glfw.Init()) then  failwith "GLFW init failed"
+    do 
+        if Config.hideCocoaMenuBar then
+            Log.line "hiding cocoa menubar"
+            glfw.InitHint(Silk.NET.GLFW.InitHint.CocoaMenubar, false) // glfwInitHint(GLFW_COCOA_MENUBAR, GLFW_FALSE);
+        
+        if not (glfw.Init()) then  
+            failwith "GLFW init failed"
 
     let mutable lastWindow = None
     let queue = System.Collections.Concurrent.ConcurrentQueue<unit -> unit>()
