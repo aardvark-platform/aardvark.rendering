@@ -68,11 +68,10 @@ type PipelineLayout =
     class
         inherit Resource<VkPipelineLayout>
 
-        val mutable public DescriptorSetLayouts : array<DescriptorSetLayout>
-        val mutable public PipelineInfo : PipelineInfo
-
-        val mutable public LayerCount : int
-        val mutable public PerLayerUniforms : Set<string>
+        val public DescriptorSetLayouts : array<DescriptorSetLayout>
+        val public PipelineInfo : PipelineInfo
+        val public LayerCount : int
+        val public PerLayerUniforms : Set<string>
 
         override x.Destroy() =
             for b in x.DescriptorSetLayouts do
@@ -80,7 +79,6 @@ type PipelineLayout =
 
             VkRaw.vkDestroyPipelineLayout(x.Device.Handle, x.Handle, NativePtr.zero)
             x.Handle <- VkPipelineLayout.Null
-            x.DescriptorSetLayouts <- Array.empty
 
         interface IFramebufferSignature with
             member x.ColorAttachments = 

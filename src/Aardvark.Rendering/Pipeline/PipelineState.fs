@@ -6,14 +6,14 @@ open Aardvark.Base
 
 open Aardvark.Rendering
 
-[<Struct>]
+[<Struct; CLIMutable>]
 type BlendState =
     {
-        mutable Mode                : aval<BlendMode>
-        mutable ColorWriteMask      : aval<ColorMask>
-        mutable ConstantColor       : aval<C4f>
-        mutable AttachmentMode      : aval<Map<Symbol, BlendMode>>
-        mutable AttachmentWriteMask : aval<Map<Symbol, ColorMask>>
+        Mode                : aval<BlendMode>
+        ColorWriteMask      : aval<ColorMask>
+        ConstantColor       : aval<C4f>
+        AttachmentMode      : aval<Map<Symbol, BlendMode>>
+        AttachmentWriteMask : aval<Map<Symbol, ColorMask>>
     }
 
     static member Default =
@@ -25,13 +25,13 @@ type BlendState =
             AttachmentWriteMask = AVal.constant Map.empty
         }
 
-[<Struct>]
+[<Struct; CLIMutable>]
 type DepthState =
     {
-        mutable Test        : aval<DepthTest>
-        mutable Bias        : aval<DepthBias>
-        mutable WriteMask   : aval<bool>
-        mutable Clamp       : aval<bool>
+        Test        : aval<DepthTest>
+        Bias        : aval<DepthBias>
+        WriteMask   : aval<bool>
+        Clamp       : aval<bool>
     }
 
     static member Default =
@@ -42,13 +42,13 @@ type DepthState =
             Clamp       = AVal.constant false
         }
 
-[<Struct>]
+[<Struct; CLIMutable>]
 type StencilState =
     {
-        mutable ModeFront       : aval<StencilMode>
-        mutable WriteMaskFront  : aval<StencilMask>
-        mutable ModeBack        : aval<StencilMode>
-        mutable WriteMaskBack   : aval<StencilMask>
+        ModeFront       : aval<StencilMode>
+        WriteMaskFront  : aval<StencilMask>
+        ModeBack        : aval<StencilMode>
+        WriteMaskBack   : aval<StencilMask>
     }
 
     static member Default =
@@ -59,14 +59,14 @@ type StencilState =
             WriteMaskBack  = AVal.constant StencilMask.All
         }
 
-[<Struct>]
+[<Struct; CLIMutable>]
 type RasterizerState =
     {
-        mutable CullMode            : aval<CullMode>
-        mutable FrontFace           : aval<WindingOrder>
-        mutable FillMode            : aval<FillMode>
-        mutable Multisample         : aval<bool>
-        mutable ConservativeRaster  : aval<bool>
+        CullMode            : aval<CullMode>
+        FrontFace           : aval<WindingOrder>
+        FillMode            : aval<FillMode>
+        Multisample         : aval<bool>
+        ConservativeRaster  : aval<bool>
     }
 
     static member Default =
@@ -78,16 +78,17 @@ type RasterizerState =
             ConservativeRaster  = AVal.constant false
         }
 
+[<CLIMutable>]
 type PipelineState =
     {
-        mutable Mode                : IndexedGeometryMode
-        mutable VertexInputTypes    : Map<Symbol, Type>
+        Mode                : IndexedGeometryMode
+        VertexInputTypes    : Map<Symbol, Type>
 
-        mutable DepthState          : DepthState
-        mutable BlendState          : BlendState
-        mutable StencilState        : StencilState
-        mutable RasterizerState     : RasterizerState
+        DepthState          : DepthState
+        BlendState          : BlendState
+        StencilState        : StencilState
+        RasterizerState     : RasterizerState
 
-        mutable GlobalUniforms      : IUniformProvider
-        mutable PerGeometryUniforms : Map<string, Type>
+        GlobalUniforms      : IUniformProvider
+        PerGeometryUniforms : Map<string, Type>
     }

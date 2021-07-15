@@ -9,9 +9,9 @@ open Microsoft.FSharp.NativeInterop
 type ShaderModule =
     class
         inherit Resource<VkShaderModule>
-        val mutable public Slot : FShade.ShaderSlot
-        val mutable public Interface : FShade.GLSL.GLSLShaderInterface
-        val mutable public SpirV : byte[]
+        val public Slot : FShade.ShaderSlot
+        val public Interface : FShade.GLSL.GLSLShaderInterface
+        val public SpirV : byte[]
 
         member x.Stage =
             ShaderStage.ofFShade x.Slot.Stage

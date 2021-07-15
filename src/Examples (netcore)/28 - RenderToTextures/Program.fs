@@ -54,7 +54,7 @@ let main argv =
             backend Backend.GL
             display Display.Mono
             debug false
-            samples 8
+            samples 1
         }
 
     // define a dynamic transformation depending on the window's time
@@ -69,7 +69,7 @@ let main argv =
 
     let box = Box3d(-V3d.III, V3d.III)
     let color = C4b.Red
-    let size = V2i(512,512) |> AVal.constant
+    let size = V2i(512,512) |> cval
 
     let signature = 
         win.Runtime.CreateFramebufferSignature(
@@ -105,6 +105,20 @@ let main argv =
     win.Keyboard.KeyDown(Keys.Space).Values.Add(fun _ -> 
         transact (fun _ -> mode.Value <- (mode.Value + 1) % 2)
         printfn "%A" mode.Value
+    )
+
+    
+    win.Keyboard.KeyDown(Keys.G).Values.Add(fun _ -> 
+        transact (fun _ ->
+            size.Value <- if size.Value = V2i.II then V2i.II * 1024 else V2i.II)
+        printfn "%A" size.Value
+    )
+
+    win.Keyboard.KeyDown(Keys.D).Values.Add(fun _ -> 
+        let t = (Map.find DefaultSemantic.Colors pass0)
+        let gah = t.GetValue()
+        let tex = win.Runtime.Download(gah)
+        tex.SaveAsImage("guh.jpg")
     )
     
     let finalComposite = 

@@ -30,7 +30,7 @@ type PipelineDescription =
 type Pipeline =
     class
         inherit Resource<VkPipeline>
-        val mutable public Description : PipelineDescription
+        val public Description : PipelineDescription
 
         override x.Destroy() =
             if x.Handle.IsValid then

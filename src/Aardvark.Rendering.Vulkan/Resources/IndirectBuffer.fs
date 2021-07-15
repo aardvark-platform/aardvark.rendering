@@ -13,7 +13,7 @@ open Aardvark.Rendering.Vulkan
 type VkIndirectBuffer =
     class
         inherit Buffer
-        val mutable public Count : int
+        val public Count : int
 
         //interface IIndirectBuffer with
         //    member x.Buffer = x :> IBuffer

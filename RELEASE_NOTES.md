@@ -1,3 +1,6 @@
+### 5.1.12
+- fixed texture download in absense of bufferstorage
+
 ### 5.1.11
 - fixed osx64 glvm build
 

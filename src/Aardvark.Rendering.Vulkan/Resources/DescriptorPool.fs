@@ -15,8 +15,17 @@ open Microsoft.FSharp.NativeInterop
 type DescriptorPool =
     class
         inherit Resource<VkDescriptorPool>
-        val mutable public SetCount : int
-        val mutable public Counts : int[]
+        val public Counts : int[]
+        val mutable private capacity : int
+
+        member x.Capacity =
+            x.capacity
+
+        member x.FreeSet() =
+            Interlocked.Increment(&x.capacity) |> ignore
+
+        member x.TryAllocateSet() =
+            Interlocked.Change(&x.capacity, fun c -> if c <= 0 then 0, false else c-1, true)
 
         override x.Destroy() =
             if x.Handle.IsValid then
@@ -25,7 +34,7 @@ type DescriptorPool =
 
         new(device : Device, handle : VkDescriptorPool, total : int, counts : Map<VkDescriptorType, int>) = 
             let arr = Array.init 11 (fun i -> match Map.tryFind (unbox i) counts with | Some v -> v | None -> 0)
-            { inherit Resource<_>(device, handle); SetCount = total; Counts = arr }
+            { inherit Resource<_>(device, handle); capacity = total; Counts = arr }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

@@ -30,29 +30,29 @@ type BlendFactor =
     | SecondarySourceAlpha    = 17
     | InvSecondarySourceAlpha = 18
 
-[<Struct; CustomEquality; NoComparison>]
+[<Struct; CustomEquality; NoComparison; CLIMutable>]
 type BlendMode =
     {
         /// Specifies whether blending is enabled.
-        mutable Enabled                 : bool
+        Enabled                 : bool
 
         /// The factor multiplied with the source RGB values.
-        mutable SourceColorFactor       : BlendFactor
+        SourceColorFactor       : BlendFactor
 
         /// The factor multiplied with the source alpha value.
-        mutable SourceAlphaFactor       : BlendFactor
+        SourceAlphaFactor       : BlendFactor
 
         /// The factor multiplied with the destination RGB values.
-        mutable DestinationColorFactor  : BlendFactor
+        DestinationColorFactor  : BlendFactor
 
         /// The factor multiplied with the destination alpha value.
-        mutable DestinationAlphaFactor  : BlendFactor
+        DestinationAlphaFactor  : BlendFactor
 
         /// The blend operation performed on the source and destination RGB values.
-        mutable ColorOperation          : BlendOperation
+        ColorOperation          : BlendOperation
 
         /// The blend operation performed on the source and destination alpha values.
-        mutable AlphaOperation          : BlendOperation
+        AlphaOperation          : BlendOperation
     }
 
     member private x.Config = (

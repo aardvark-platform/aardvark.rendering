@@ -8,10 +8,10 @@ open Microsoft.FSharp.NativeInterop
 
 type QueryPool =
     class
-        val mutable public Device : Device
-        val mutable public Handle : VkQueryPool
-        val mutable public Count : int
-        val mutable public Type : VkQueryType
+        val public Device : Device
+        val public Handle : VkQueryPool
+        val public Count : int
+        val public Type : VkQueryType
 
         new(d,h,c,t) = { Device = d; Handle = h; Count = c; Type = t }
     end

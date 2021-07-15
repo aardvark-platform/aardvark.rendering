@@ -155,7 +155,6 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                     VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit
                 )
             // hacky-hack
-            image.Format <- description.colorFormat
             token.Enqueue (Command.TransformLayout(image, VkImageLayout.ColorAttachmentOptimal))
             
             let view = device.CreateOutputImageView(image, 0, 1, 0, 1)
@@ -172,7 +171,6 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                             VkImageUsageFlags.DepthStencilAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit
                         )
                     // hacky-hack
-                    image.Format <- depthFormat
                     token.Enqueue (Command.TransformLayout(image, VkImageLayout.DepthStencilAttachmentOptimal))
 
                     let view = device.CreateOutputImageView(image, 0, 1, 0, 1)
@@ -201,7 +199,6 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                         VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit
                     )
                 // hacky-hack
-                image.Format <- description.colorFormat
                 token.Enqueue (Command.TransformLayout(image, VkImageLayout.TransferDstOptimal))
                 //let view = device.CreateImageView(image, 0, 1, 0, 1, VkComponentMapping.Identity)
                 Some image

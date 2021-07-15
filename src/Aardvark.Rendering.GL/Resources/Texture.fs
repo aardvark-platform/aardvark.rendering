@@ -9,6 +9,7 @@ open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.NativeInterop
 open System.Runtime.CompilerServices
+open Aardvark.Rendering.GL
 
 #nowarn "9"
 
@@ -1311,7 +1312,7 @@ module TextureUploadExtensions =
             let pbo = GL.GenBuffer()
             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
             GL.Check "could not bind PBO"
-            GL.BufferStorage(BufferTarget.PixelUnpackBuffer, sizeInBytes, 0n, BufferStorageFlags.MapWriteBit)
+            GLExt.BufferStorage(BufferTarget.PixelUnpackBuffer, sizeInBytes, 0n, BufferStorageFlags.MapWriteBit)
             GL.Check "could not allocate PBO"
             let pDst = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, sizeInBytes, BufferAccessMask.MapWriteBit)
             GL.Check "could not map PBO"
@@ -1367,7 +1368,7 @@ module TextureUploadExtensions =
             let pbo = GL.GenBuffer()
             GL.BindBuffer(BufferTarget.CopyWriteBuffer, pbo)
             GL.Check "could not bind PBO"
-            GL.BufferStorage(BufferTarget.CopyWriteBuffer, sizeInBytes, 0n, BufferStorageFlags.MapReadBit)
+            GLExt.BufferStorage(BufferTarget.CopyWriteBuffer, sizeInBytes, 0n, BufferStorageFlags.MapReadBit)
             GL.Check "could not allocate PBO"
             GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
 
@@ -1750,7 +1751,7 @@ module TextureExtensions =
                             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo)
                             GL.Check "[uploadTexture2DLevelFile] BindBuffer"
 
-                            GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint size, 0n, BufferStorageFlags.MapWriteBit)
+                            GLExt.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint size, 0n, BufferStorageFlags.MapWriteBit)
                             GL.Check "[uploadTexture2DLevelFile] BufferStorage"
 
                             let ptr = GL.MapBuffer(BufferTarget.PixelUnpackBuffer, BufferAccess.WriteOnly)
@@ -1801,7 +1802,7 @@ module TextureExtensions =
                                     GL.Check "[uploadTexture2DLevelFile] BindBuffer"
 
                                     let size = int64 (alignedLineSize * h)
-                                    GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint size, 0n, BufferStorageFlags.MapWriteBit)
+                                    GLExt.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint size, 0n, BufferStorageFlags.MapWriteBit)
                                     GL.Check "[uploadTexture2DLevelFile] BufferStorage"
                                     
                                     let dst = GL.MapBuffer(BufferTarget.PixelUnpackBuffer, BufferAccess.WriteOnly)
@@ -2215,7 +2216,7 @@ module TextureExtensions =
             GL.BindBuffer(BufferTarget.PixelPackBuffer, b)
             GL.Check "could not bind buffer"
 
-            GL.BufferStorage(BufferTarget.PixelPackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapReadBit)
+            GLExt.BufferStorage(BufferTarget.PixelPackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapReadBit)
             GL.Check "could not set buffer storage"
 
             if t.IsArray then

@@ -21,10 +21,10 @@ open Aardvark.Rendering.Vulkan.KHRAccelerationStructure
 type Buffer =
     class
         inherit Resource<VkBuffer>
-        val mutable public Memory : DevicePtr
-        val mutable public Size : int64
-        val mutable public Usage : VkBufferUsageFlags
-        val mutable public DeviceAddress : VkDeviceAddress
+        val public Memory : DevicePtr
+        val public Usage : VkBufferUsageFlags
+        val public Size : int64
+        val public DeviceAddress : VkDeviceAddress
 
         override x.Destroy() =
             if x.Handle.IsValid && x.Size > 0L then
@@ -37,7 +37,7 @@ type Buffer =
             member x.Handle = x.Handle :> obj
             member x.SizeInBytes = nativeint x.Size // NOTE: return size as specified by user. memory might have larger size as it is an aligned block
 
-        new(device : Device, handle, memory, size, usage) =
+        new(device : Device, handle, memory, size, usage, refCount) =
             let address =
                 if usage &&& VkBufferUsageFlags.ShaderDeviceAddressBitKhr <> VkBufferUsageFlags.None then
                     native {
@@ -47,16 +47,19 @@ type Buffer =
                 else
                     0UL
 
-            { inherit Resource<_>(device, handle); Memory = memory; Size = size; Usage = usage; DeviceAddress = address }
+            { inherit Resource<_>(device, handle, refCount); Memory = memory; Size = size; Usage = usage; DeviceAddress = address }
+
+        new(device, handle, memory, size, usage) =
+            new Buffer(device, handle, memory, size, usage, 1)
     end
 
 type BufferView =
     class
         inherit Resource<VkBufferView>
-        val mutable public Buffer : Buffer
-        val mutable public Format : VkFormat
-        val mutable public Offset : uint64
-        val mutable public Size : uint64
+        val public Buffer : Buffer
+        val public Format : VkFormat
+        val public Offset : uint64
+        val public Size : uint64
 
         override x.Destroy() =
             if x.Handle.IsValid then
@@ -368,7 +371,6 @@ module Buffer =
         if size > 0n then
             let size = int64 size
             let buffer = memory |> create flags size
-            buffer.Size <- size
 
             if memory.IsHostVisible then
                 buffer.Memory.Mapped (fun dst -> writer dst)

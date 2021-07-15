@@ -495,8 +495,8 @@ and DeviceCache<'a, 'b when 'b :> CachedResource>(device : Device, name : Symbol
 
     do device.OnDispose.Add(fun _ ->
             for k in back.Keys do
-                if k.RefCount > 1 then
-                    Log.warn "[Vulkan] Cached resource %A still has %d references" k (k.RefCount - 1)
+                if k.ReferenceCount > 1 then
+                    Log.warn "[Vulkan] Cached resource %A still has %d references" k (k.ReferenceCount - 1)
                 k.Dispose()
             store.Clear()
             back.Clear()
@@ -910,22 +910,29 @@ and CopyEngine(family : DeviceQueueFamily) =
 and [<AbstractClass>] CachedResource =
     class
         inherit Resource
-        val mutable public Cache : Symbol option
+        val mutable private cache : Symbol option
 
-        new(device : Device) = { inherit Resource(device); Cache = None }
-        new(device : Device, cache : Symbol) = { inherit Resource(device); Cache = Some cache }
+        member x.Cache
+            with get () = x.cache
+            and set (value) = x.cache <- value
+
+        new(device : Device) = { inherit Resource(device); cache = None }
+        new(device : Device, cache : Symbol) = { inherit Resource(device); cache = Some cache }
     end
 
 and [<AbstractClass>] Resource =
     class
-        val mutable public Device : Device
-        val mutable public RefCount : int
+        val public Device : Device
+        val mutable private refCount : int
+
+        member x.ReferenceCount =
+            x.refCount
 
         member x.AddReference() =
-            Interlocked.Increment(&x.RefCount) |> ignore
+            Interlocked.Increment(&x.refCount) |> ignore
 
         member x.Dispose() =
-            let refs = Interlocked.Decrement(&x.RefCount)
+            let refs = Interlocked.Decrement(&x.refCount)
             if refs < 0 then
                 Log.warn "[Vulkan] Resource has negative reference count"
             elif refs = 0 then
@@ -933,30 +940,38 @@ and [<AbstractClass>] Resource =
 
         abstract member IsValid : bool
         default x.IsValid =
-            not x.Device.IsDisposed && x.RefCount > 0
+            not x.Device.IsDisposed && x.refCount > 0
 
         abstract member Destroy : unit -> unit
 
-        new(device : Device) = { Device = device; RefCount = 1 }
+        new(device : Device) = { Device = device; refCount = 1 }
+        new(device : Device, refCount : int) = { Device = device; refCount = refCount }
 
         interface ICommandResource with
             member x.AddReference() = x.AddReference()
             member x.Dispose() = x.Dispose()
     end
 
-and [<AbstractClass>] Resource<'a when 'a : unmanaged and 'a : equality> =
+and [<AbstractClass>] Resource<'T when 'T : unmanaged and 'T : equality> =
     class
         inherit Resource
-        val mutable public Handle : 'a
+        val mutable private handle : 'T
+
+        member x.Handle
+            with get () = x.handle
+            and set (value) = x.handle <- value
 
         override x.IsValid =
-            base.IsValid && x.Handle <> Unchecked.defaultof<_>
+            base.IsValid && x.handle <> Unchecked.defaultof<_>
 
-        new(device : Device, handle : 'a) =
+        new(device : Device, handle : 'T, refCount : int) =
             #if DEBUG
             handle |> pin device.Instance.RegisterDebugTrace
             #endif
-            { inherit Resource(device); Handle = handle }
+            { inherit Resource(device, refCount); handle = handle }
+
+        new(device : Device, handle : 'T) =
+            new Resource<_>(device, handle, 1)
     end
 
 

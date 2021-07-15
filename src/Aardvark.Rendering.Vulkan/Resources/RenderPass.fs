@@ -14,10 +14,10 @@ type RenderPass =
     class
         inherit Resource<VkRenderPass>
 
-        val mutable public ColorAttachments : Map<int, Symbol * AttachmentSignature>
-        val mutable public DepthStencilAttachment : Option<int * AttachmentSignature>
-        val mutable public LayerCount : int
-        val mutable public PerLayerUniforms : Set<string>
+        val public ColorAttachments : Map<int, Symbol * AttachmentSignature>
+        val public DepthStencilAttachment : Option<int * AttachmentSignature>
+        val public LayerCount : int
+        val public PerLayerUniforms : Set<string>
 
         member x.Runtime =
             x.Device.Runtime
