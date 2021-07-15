@@ -21,9 +21,9 @@ nuget Aardvark.Geometry                  ~> 5.1.11
 nuget Aardvark.Base.Tensors              ~> 5.1.11
 nuget Aardvark.PixImage.DevIL            ~> 5.1.11
 
-nuget FShade.Core                        ~> 5.2.0
-nuget FShade                             ~> 5.2.0
-nuget FShade.Debug                       ~> 5.2.0
+nuget FShade.Core                        ~> 5.2.1
+nuget FShade                             ~> 5.2.1
+nuget FShade.Debug                       ~> 5.2.1
 
 nuget Unofficial.OpenVR					 ~> 1.1.0
 nuget Unofficial.Typography              ~> 0.1.0

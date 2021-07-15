@@ -29,7 +29,7 @@ module Effect =
             member x.RecursionDepth : int = uniform?RecursionDepth
 
             // Model
-            member x.ModelNormals : V4d[] = uniform?StorageBuffer?ModelNormals
+            //member x.ModelNormals : V4d[] = uniform?StorageBuffer?ModelNormals
 
             // Floor
             member x.FloorIndices : int[] = uniform?StorageBuffer?FloorIndices
@@ -154,22 +154,22 @@ module Effect =
                 let specular = specularLighting shininess normal position
                 result + specularAmount * V3d(specular)
 
-        let chitModel (color : C3d) (input : RayHitInput<Payload>) =
-            let color = V3d color
+        //let chitModel (color : C3d) (input : RayHitInput<Payload>) =
+        //    let color = V3d color
 
-            closesthit {
-                let id = input.geometry.primitiveId
-                let indices = V3i(3 * id, 3 * id + 1, 3 * id + 2)
+        //    closesthit {
+        //        let id = input.geometry.primitiveId
+        //        let indices = V3i(3 * id, 3 * id + 1, 3 * id + 2)
 
-                let normal =
-                    let n0 = uniform.ModelNormals.[indices.X].XYZ
-                    let n1 = uniform.ModelNormals.[indices.Y].XYZ
-                    let n2 = uniform.ModelNormals.[indices.Z].XYZ
-                    input.hit.attribute |> fromBarycentric n0 n1 n2 |> Vec.normalize
+        //        let normal =
+        //            let n0 = uniform.ModelNormals.[indices.X].XYZ
+        //            let n1 = uniform.ModelNormals.[indices.Y].XYZ
+        //            let n2 = uniform.ModelNormals.[indices.Z].XYZ
+        //            input.hit.attribute |> fromBarycentric n0 n1 n2 |> Vec.normalize
 
-                let diffuse = lightingWithShadow 0xFF 0.0 1.0 16.0 normal input
-                return { color = color * diffuse; recursionDepth = 0 }
-            }
+        //        let diffuse = lightingWithShadow 0xFF 0.0 1.0 16.0 normal input
+        //        return { color = color * diffuse; recursionDepth = 0 }
+        //    }
 
         let chitFloor (input : RayHitInput<Payload>) =
             closesthit {
@@ -214,6 +214,11 @@ module Effect =
                     Intersection.Report(t) |> ignore
             }
 
+    // Note: This is not how you should implement materials.
+    // Normally, you'd want to encode the color and radius of your spheres
+    // in a buffer and access those via the custom index. Here, we do it this way to
+    // test if the shader binding table is computed correctly if an object has mutliple
+    // geometries with different hitgroups.
     let private hitgroupSphere1 =
         hitgroup {
             closesthit (chitSphere C3d.BlueViolet)
@@ -250,10 +255,10 @@ module Effect =
             intersection (intersectionSphere 0.2)
         }
 
-    let private hitgroupModel =
-        hitgroup {
-            closesthit (chitModel C3d.BurlyWood)
-        }
+    //let private hitgroupModel =
+    //    hitgroup {
+    //        closesthit (chitModel C3d.BurlyWood)
+    //    }
 
     let private hitgroupFloor =
         hitgroup {
@@ -266,7 +271,7 @@ module Effect =
             raygen rgenMain
             miss (missSolidColor C3d.Lavender)
             miss (Semantic.MissShadow, missShadow)
-            hitgroup (Semantic.HitGroupModel, hitgroupModel)
+            //hitgroup (Semantic.HitGroupModel, hitgroupModel)
             hitgroup (Semantic.HitGroupFloor, hitgroupFloor)
             hitgroup (Semantic.HitGroupSphere1, hitgroupSphere1)
             hitgroup (Semantic.HitGroupSphere2, hitgroupSphere2)
@@ -305,16 +310,16 @@ let main argv =
     let traceTexture =
         runtime.CreateTexture2D(TextureFormat.Rgba32f, 1, win.Sizes)
 
-    let model, modelNormals =
-        let scene = Loader.Assimp.load (Path.combine [__SOURCE_DIRECTORY__; "..";"..";"..";"data";"lucy.obj"])
-        let geometry = scene.meshes.[0].geometry
+    //let model, modelNormals =
+    //    let scene = Loader.Assimp.load (Path.combine [__SOURCE_DIRECTORY__; "..";"..";"..";"data";"lucy.obj"])
+    //    let geometry = scene.meshes.[0].geometry
 
-        let normals =
-            geometry.IndexedAttributes.[DefaultSemantic.Normals] :?> V3f[]
-            |> Array.map V4f
+    //    let normals =
+    //        geometry.IndexedAttributes.[DefaultSemantic.Normals] :?> V3f[]
+    //        |> Array.map V4f
 
-        geometry |> TraceGeometry.ofIndexedGeometry GeometryFlags.Opaque Trafo3d.Identity,
-        AVal.constant <| ArrayBuffer(normals)
+    //    geometry |> TraceGeometry.ofIndexedGeometry GeometryFlags.Opaque Trafo3d.Identity,
+    //    AVal.constant <| ArrayBuffer(normals)
 
     let floor, floorIndices, floorTextureCoords =
         let positions = [| V3f(-0.5f, -0.5f, 0.0f); V3f(-0.5f, 0.5f, 0.0f); V3f(0.5f, -0.5f, 0.0f); V3f(0.5f, 0.5f, 0.0f); |]
@@ -356,10 +361,10 @@ let main argv =
 
         geometry, offsetsBuffer
 
-    use accelerationStructureModel =
-        runtime.CreateAccelerationStructure(
-            model, AccelerationStructureUsage.Static
-        )
+    //use accelerationStructureModel =
+    //    runtime.CreateAccelerationStructure(
+    //        model, AccelerationStructureUsage.Static
+    //    )
 
     use accelerationStructureFloor =
         runtime.CreateAccelerationStructure(
@@ -385,7 +390,7 @@ let main argv =
             "ViewTrafo", viewTrafo :> IAdaptiveValue
             "ProjTrafo", projTrafo :> IAdaptiveValue
             "CameraLocation", cameraView |> AVal.map CameraView.location :> IAdaptiveValue
-            "ModelNormals", modelNormals :> IAdaptiveValue
+            //"ModelNormals", modelNormals :> IAdaptiveValue
             "FloorIndices", floorIndices :> IAdaptiveValue
             "FloorTextureCoords", floorTextureCoords :> IAdaptiveValue
             "TextureFloor", DefaultTextures.checkerboard :> IAdaptiveValue
@@ -395,12 +400,12 @@ let main argv =
         |> UniformProvider.ofMap
 
     let staticObjects =
-        let objModel =
-            traceobject {
-                geometry accelerationStructureModel
-                hitgroup Semantic.HitGroupModel
-                culling (CullMode.Enabled WindingOrder.CounterClockwise)
-            }
+        //let objModel =
+        //    traceobject {
+        //        geometry accelerationStructureModel
+        //        hitgroup Semantic.HitGroupModel
+        //        culling (CullMode.Enabled WindingOrder.CounterClockwise)
+        //    }
 
         let objFloor =
             traceobject {
@@ -409,7 +414,8 @@ let main argv =
                 culling (CullMode.Enabled WindingOrder.CounterClockwise)
             }
 
-        ASet.ofList [objModel; objFloor]
+        ASet.ofList [objFloor]
+        //ASet.ofList [objModel; objFloor]
 
     let sphereObjects =
         cset<TraceObject>()
