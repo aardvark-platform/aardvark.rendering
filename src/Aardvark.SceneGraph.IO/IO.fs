@@ -23,7 +23,10 @@ module Loader =
             elif RuntimeInformation.IsOSPlatform(OSPlatform.Linux) then
                 Aardvark.Base.Aardvark.LoadLibrary(typeof<Assimp.CompileFlags>.Assembly, "libassimp")
             elif RuntimeInformation.IsOSPlatform(OSPlatform.Windows) then
-                Aardvark.Base.Aardvark.LoadLibrary(typeof<Assimp.CompileFlags>.Assembly, "Assimp64")
+                if Environment.Is64BitOperatingSystem then
+                    Aardvark.Base.Aardvark.LoadLibrary(typeof<Assimp.CompileFlags>.Assembly, "Assimp64")
+                else 
+                    Aardvark.Base.Aardvark.LoadLibrary(typeof<Assimp.CompileFlags>.Assembly, "Assimp32")
             else 
                 0n
         Log.line "assimp ptr: %A" l
