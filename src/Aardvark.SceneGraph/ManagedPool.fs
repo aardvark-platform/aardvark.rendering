@@ -513,7 +513,11 @@ type ManagedPool(runtime : IRuntime, signature : GeometrySignature,
             let indexRange = Range1l(int64 indexPtr.Offset, int64 indexPtr.Offset + int64 fvc - 1L)
             match g.indices with
                 | Some v -> indexBuffer.Add(indexRange, v) |> ds.Add
-                | None -> if isNew then indexBuffer.Set(indexRange, zero)
+                | None ->
+                    if isNew then
+                        let conv = PrimitiveValueConverter.getArrayConverter typeof<int> signature.indexType
+                        let data = Array.init fvc id |> conv
+                        indexBuffer.Set(indexRange, data.UnsafeCoerce<byte>())
 
             count <- count + 1
 
