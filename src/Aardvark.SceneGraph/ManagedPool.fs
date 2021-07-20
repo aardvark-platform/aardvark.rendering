@@ -34,6 +34,15 @@ type GeometrySignature =
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module GeometrySignature =
+
+    let create (indexType : Type) (vertexBufferTypes : Map<Symbol, Type>) (uniformTypes : Map<Symbol, Type>) =
+        { indexType         = indexType
+          vertexBufferTypes = vertexBufferTypes
+          uniformTypes      = uniformTypes }
+
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module AdaptiveGeometry =
 
     let ofIndexedGeometry (uniforms : list<Symbol * IAdaptiveValue>) (ig : IndexedGeometry) =
@@ -46,8 +55,7 @@ module AdaptiveGeometry =
 
         let vertexCount =
             anyAtt.Length
-                
-    
+
         {
             faceVertexCount = faceVertexCount
             vertexCount = vertexCount
@@ -441,21 +449,37 @@ type ManagedDrawCall(call : DrawCallInfo, release : IDisposable) =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-type ManagedPool(runtime : IRuntime, signature : GeometrySignature) =
+type ManagedPool(runtime : IRuntime, signature : GeometrySignature,
+                 indexBufferUsage : BufferUsage, vertexBufferUsage : BufferUsage, instanceBufferUsage : BufferUsage) =
     static let zero : byte[] = Array.zeroCreate 1280000
     let mutable count = 0
     let indexManager = LayoutManager<Option<BufferView> * int>()
     let vertexManager = LayoutManager<Map<Symbol, BufferView>>()
     let instanceManager = LayoutManager<Map<Symbol, IAdaptiveValue>>()
 
-    let indexBuffer = new ManagedBuffer<int>(runtime, BufferUsage.Index ||| BufferUsage.ReadWrite) :> IManagedBuffer<int>
-    let vertexBuffers = signature.vertexBufferTypes |> Map.toSeq |> Seq.map (fun (k,t) -> k, ManagedBuffer.create t runtime (BufferUsage.Vertex ||| BufferUsage.ReadWrite)) |> SymDict.ofSeq
-    let instanceBuffers = signature.uniformTypes |> Map.toSeq |> Seq.map (fun (k,t) -> k, ManagedBuffer.create t runtime (BufferUsage.Vertex ||| BufferUsage.ReadWrite)) |> SymDict.ofSeq
-    let vertexDisposables = Dictionary<BufferView, IDisposable>()
+    let toDict f = Map.toSeq >> Seq.map f >> SymDict.ofSeq
 
+    let indexBuffer =
+        ManagedBuffer.create signature.indexType runtime (BufferUsage.ReadWrite ||| indexBufferUsage)
+
+    let vertexBuffers =
+        signature.vertexBufferTypes |> toDict (fun (k, t) ->
+            k, ManagedBuffer.create t runtime (BufferUsage.ReadWrite ||| vertexBufferUsage)
+        )
+
+    let instanceBuffers =
+        signature.uniformTypes |> toDict (fun (k, t) ->
+            k, ManagedBuffer.create t runtime (BufferUsage.ReadWrite ||| instanceBufferUsage)
+        )
 
     let vertexBufferTypes = Map.toArray signature.vertexBufferTypes
     let uniformTypes = Map.toArray signature.uniformTypes
+
+    new (runtime : IRuntime, signature : GeometrySignature) =
+        new ManagedPool(runtime, signature, BufferUsage.Index, BufferUsage.Vertex, BufferUsage.Vertex)
+
+    new (runtime : IRuntime, signature : GeometrySignature, usage : BufferUsage) =
+        new ManagedPool(runtime, signature, usage, usage, usage)
 
     member x.Runtime = runtime
 
@@ -489,7 +513,7 @@ type ManagedPool(runtime : IRuntime, signature : GeometrySignature) =
             let indexRange = Range1l(int64 indexPtr.Offset, int64 indexPtr.Offset + int64 fvc - 1L)
             match g.indices with
                 | Some v -> indexBuffer.Add(indexRange, v) |> ds.Add
-                | None -> if isNew then indexBuffer.Set(indexRange, Array.init fvc id)
+                | None -> if isNew then indexBuffer.Set(indexRange, zero)
 
             count <- count + 1
 
@@ -729,9 +753,23 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
 [<AbstractClass; Sealed; Extension>]
 type IRuntimePoolExtensions private() =
 
+    /// Creates a managed pool with the given geometry signature.
     [<Extension>]
     static member CreateManagedPool(this : IRuntime, signature : GeometrySignature) =
         new ManagedPool(this, signature)
+
+    /// Creates a managed pool with the given geometry signature using the given additional usage flags for all buffers.
+    /// By default, every buffer is created with BufferUsage.ReadWrite.
+    [<Extension>]
+    static member CreateManagedPool(this : IRuntime, signature : GeometrySignature, usage : BufferUsage) =
+        new ManagedPool(this, signature, usage)
+
+    /// Creates a managed pool with the given geometry signature using the given additional usage flags for the corresponding buffers.
+    /// By default, every buffer is created with BufferUsage.ReadWrite.
+    [<Extension>]
+    static member CreateManagedPool(this : IRuntime, signature : GeometrySignature,
+                                    indexBufferUsage : BufferUsage, vertexBufferUsage : BufferUsage, instanceBufferUsage : BufferUsage) =
+        new ManagedPool(this, signature, indexBufferUsage, vertexBufferUsage, instanceBufferUsage)
 
     [<Extension>]
     static member CreateManagedBuffer<'a when 'a : unmanaged>(this : IRuntime) : IManagedBuffer<'a> =
