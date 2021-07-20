@@ -27,7 +27,7 @@ type Buffer =
         val public DeviceAddress : VkDeviceAddress
 
         override x.Destroy() =
-            if x.Handle.IsValid && x.Size > 0L then
+            if x.Handle.IsValid then
                 VkRaw.vkDestroyBuffer(x.Device.Handle, x.Handle, NativePtr.zero)
                 x.Handle <- VkBuffer.Null
                 x.Memory.Dispose()
@@ -260,17 +260,6 @@ module BufferCommands =
 // =======================================================================
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Buffer =
-    [<AutoOpen>]
-    module private Helpers = 
-        let memoryTypes (d : Device) (bits : uint32) =
-            let mutable mask = 1u
-            d.Memories 
-            |> Seq.filter (fun m ->
-                let mask = 1u <<< m.Info.index
-                bits &&& mask <> 0u
-               )
-            |> Seq.toList
-
     let private emptyBuffers = ConcurrentDictionary<Device * VkBufferUsageFlags, Buffer>()
 
     let empty (usage : VkBufferUsageFlags) (device : Device) =
@@ -313,7 +302,7 @@ module Buffer =
                     emptyBuffers.TryRemove(key) |> ignore
                 )
 
-                new Buffer(device, handle, mem, 256L, usage)
+                new Buffer(device, handle, mem, 0L, usage)
             )
 
         buffer.AddReference()
@@ -321,40 +310,44 @@ module Buffer =
 
     let createConcurrent (conc : bool) (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
         let device = memory.Device
-        let info =
-            VkBufferCreateInfo(
-                VkBufferCreateFlags.None,
-                uint64 size, 
-                flags,
-                (if conc then device.AllSharingMode else VkSharingMode.Exclusive),
-                (if conc then device.AllQueueFamiliesCnt else 0u), 
-                (if conc then device.AllQueueFamiliesPtr else NativePtr.zero)
-            )
 
-        let handle =
-            info |> pin (fun pInfo ->
-                temporary (fun pHandle ->
-                    VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
-                        |> check "could not create buffer"
-                    NativePtr.read pHandle
+        if size > 0L then
+            let info =
+                VkBufferCreateInfo(
+                    VkBufferCreateFlags.None,
+                    uint64 size, 
+                    flags,
+                    (if conc then device.AllSharingMode else VkSharingMode.Exclusive),
+                    (if conc then device.AllQueueFamiliesCnt else 0u), 
+                    (if conc then device.AllQueueFamiliesPtr else NativePtr.zero)
                 )
-            )
-        let reqs =
-            temporary (fun ptr ->   
-                VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, ptr)
-                NativePtr.read ptr
-            )
 
-        if reqs.memoryTypeBits &&& (1u <<< memory.Index) = 0u then
-            failf "cannot create buffer using memory %A" memory
+            let handle =
+                info |> pin (fun pInfo ->
+                    temporary (fun pHandle ->
+                        VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
+                            |> check "could not create buffer"
+                        NativePtr.read pHandle
+                    )
+                )
+            let reqs =
+                temporary (fun ptr ->   
+                    VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, ptr)
+                    NativePtr.read ptr
+                )
 
-        let ptr = memory.Alloc(int64 reqs.alignment, int64 reqs.size)
+            if reqs.memoryTypeBits &&& (1u <<< memory.Index) = 0u then
+                failf "cannot create buffer using memory %A" memory
 
-        VkRaw.vkBindBufferMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
-            |> check "could not bind buffer-memory"
+            let ptr = memory.Alloc(int64 reqs.alignment, int64 reqs.size)
 
+            VkRaw.vkBindBufferMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
+                |> check "could not bind buffer-memory"
 
-        new Buffer(device, handle, ptr, size, flags)
+            new Buffer(device, handle, ptr, size, flags)
+
+        else
+            device |> empty flags
 
     let inline create  (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
         createConcurrent false flags size memory
