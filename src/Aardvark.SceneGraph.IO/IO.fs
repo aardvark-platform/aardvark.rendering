@@ -5,6 +5,7 @@ open Aardvark.Base.Sorting
 
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
+open System.Runtime.InteropServices
 
 #nowarn "9"
 #nowarn "51"
@@ -15,8 +16,21 @@ module Loader =
 
     [<OnAardvarkInit>]
     let init() =
-        Assimp.Unmanaged.AssimpLibraryImplementation.NativeLibraryPath <- Aardvark.NativeLibraryPath
-        Assimp.Unmanaged.AssimpLibraryImplementation.SeparateLibraryDirectories <- Aardvark.SeparateLibraryDirectories
+        // load native libs explicitly using aardvark mechanism so that dlopen in assimp is nop
+        let l = 
+            if RuntimeInformation.IsOSPlatform(OSPlatform.OSX) then
+                Aardvark.Base.Aardvark.LoadLibrary(typeof<Assimp.CompileFlags>.Assembly, "libassimp")
+            elif RuntimeInformation.IsOSPlatform(OSPlatform.Linux) then
+                Aardvark.Base.Aardvark.LoadLibrary(typeof<Assimp.CompileFlags>.Assembly, "libassimp")
+            elif RuntimeInformation.IsOSPlatform(OSPlatform.Windows) then
+                Aardvark.Base.Aardvark.LoadLibrary(typeof<Assimp.CompileFlags>.Assembly, "Assimp64")
+            else 
+                0n
+        Log.line "assimp ptr: %A" l
+
+        // this no longer works with aardvark.base >= 5.1. 
+        //Assimp.Unmanaged.AssimpLibraryImplementation.NativeLibraryPath <- Aardvark.NativeLibraryPath
+        //Assimp.Unmanaged.AssimpLibraryImplementation.SeparateLibraryDirectories <- Aardvark.SeparateLibraryDirectories
 
 
 

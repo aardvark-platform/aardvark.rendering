@@ -820,7 +820,7 @@ NUGET
     Ultz.SuperInvoke.Loader (1.1)
       Microsoft.DotNet.PlatformAbstractions (>= 3.1.1)
       Microsoft.Extensions.DependencyModel (>= 3.1.1)
-    Unofficial.AssimpNet (4.0.9)
+    Unofficial.AssimpNet (4.0.10)
     Unofficial.LibTessDotNet (2.0.2)
     Unofficial.OpenTK (3.0.19)
     Unofficial.OpenTK.GLControl (3.0.19)
