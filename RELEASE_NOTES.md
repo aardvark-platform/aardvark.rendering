@@ -1,4 +1,4 @@
-### 5.1.14-prerelease1
+### 5.1.14
 - switched to official AssimpNet
 
 ### 5.1.13
