@@ -1,3 +1,6 @@
+### 5.1.14-prerelease1
+- switched to official AssimpNet
+
 ### 5.1.13
 - updated mac glfw lib & option to control cocoa menu bar
 

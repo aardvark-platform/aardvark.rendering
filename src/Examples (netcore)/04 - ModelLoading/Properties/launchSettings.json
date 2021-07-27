@@ -1,0 +1,8 @@
+{
+  "profiles": {
+    "04 - ModelLoading": {
+      "commandName": "Project",
+      "nativeDebugging": true
+    }
+  }
+}
