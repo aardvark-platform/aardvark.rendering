@@ -4,41 +4,41 @@ open Aardvark.Base
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 
-type RaytracingScene =
+type RaytracingSceneDescription =
     {
-        /// The objects in the scene.
-        Objects : aset<TraceObject>
+        /// The instances in the scene.
+        Instances : aset<TraceInstance>
 
         /// Usage flag for the underlying acceleration structure.
         Usage   : AccelerationStructureUsage
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module RaytracingScene =
+module RaytracingSceneDescription =
 
     let empty =
-        { Objects = ASet.empty; Usage = AccelerationStructureUsage.Static }
+        { Instances = ASet.empty; Usage = AccelerationStructureUsage.Static }
 
-    let ofASet (objects : aset<TraceObject>) =
-        { Objects = objects; Usage = AccelerationStructureUsage.Static }
+    let ofASet (instances : aset<TraceInstance>) =
+        { Instances = instances; Usage = AccelerationStructureUsage.Static }
 
-    let ofList (objects : List<TraceObject>) =
-        objects |> ASet.ofList |> ofASet
+    let ofList (instances : List<TraceInstance>) =
+        instances |> ASet.ofList |> ofASet
 
-    let ofArray (objects : TraceObject[]) =
-        objects |> ASet.ofArray |> ofASet
+    let ofArray (instances : TraceInstance[]) =
+        instances |> ASet.ofArray |> ofASet
 
-    let ofSeq(objects : seq<TraceObject>) =
-        objects |> ASet.ofSeq |> ofASet
+    let ofSeq (instances : seq<TraceInstance>) =
+        instances |> ASet.ofSeq |> ofASet
 
-    let usage (u : AccelerationStructureUsage) (scene : RaytracingScene) =
+    let usage (u : AccelerationStructureUsage) (scene : RaytracingSceneDescription) =
         { scene with Usage = u }
 
 
 type RaytracingPipelineState =
     {
         Effect            : FShade.RaytracingEffect
-        Scenes            : Map<Symbol, RaytracingScene>
+        Scenes            : Map<Symbol, RaytracingSceneDescription>
         Uniforms          : Map<Symbol, IAdaptiveValue>
         MaxRecursionDepth : aval<int>
     }

@@ -15,18 +15,18 @@ module private PreparedRaytracingPipelineInternals =
 
     open System.Collections.Generic
 
-    type HitConfigSceneReader(scene : aset<TraceObject>) =
+    type HitConfigSceneReader(scene : aset<TraceInstance>) =
         inherit AdaptiveObject()
 
         let reader = scene.GetReader()
-        let objects = HashSet<TraceObject>()
+        let instances = HashSet<TraceInstance>()
         let mutable configs = Set.empty
 
-        let add (o : TraceObject) =
-            objects.Add(o) |> ignore
+        let add (inst : TraceInstance) =
+            instances.Add(inst) |> ignore
 
-        let remove (o : TraceObject) =
-            objects.Remove(o) |> ignore
+        let remove (inst : TraceInstance) =
+            instances.Remove(inst) |> ignore
 
         member x.Read(token : AdaptiveToken) =
             x.EvaluateIfNeeded token configs (fun token ->
@@ -34,11 +34,11 @@ module private PreparedRaytracingPipelineInternals =
 
                 for op in deltas do
                     match op with
-                    | Add (_, o) -> add o
-                    | Rem (_, o) -> remove o
+                    | Add (_, inst) -> add inst
+                    | Rem (_, inst) -> remove inst
 
-                for o in objects do
-                    let cfg = o.HitGroups.GetValue(token)
+                for inst in instances do
+                    let cfg = inst.HitGroups.GetValue(token)
                     configs <- configs |> Set.add cfg
 
                 configs
@@ -51,13 +51,13 @@ module private PreparedRaytracingPipelineInternals =
             member x.Dispose() = x.Dispose()
 
 
-    type HitConfigPool(scenes : Map<Symbol, RaytracingScene>) =
+    type HitConfigPool(scenes : Map<Symbol, RaytracingSceneDescription>) =
         inherit AdaptiveObject()
 
         let mutable cache = Set.empty
         let readers =
             scenes |> Map.toList |> List.map (fun (_, s) ->
-                new HitConfigSceneReader(s.Objects)
+                new HitConfigSceneReader(s.Instances)
             )
 
         member x.GetValue(token : AdaptiveToken) =
@@ -126,7 +126,7 @@ type DevicePreparedRaytracingPipelineExtensions private() =
 
         let accelerationStructures =
             state.Scenes |> Map.map (fun _ s ->
-                this.CreateAccelerationStructure(s.Objects, shaderBindingTable, s.Usage) :> IAdaptiveValue
+                this.CreateAccelerationStructure(s.Instances, shaderBindingTable, s.Usage) :> IAdaptiveValue
             )
 
         resources.AddRange(accelerationStructures |> Map.toList |> List.map (snd >> unbox))

@@ -1896,7 +1896,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
         )
 
-    member x.CreateAccelerationStructure(objects : aset<Raytracing.TraceObject>,
+    member x.CreateAccelerationStructure(instances : aset<Raytracing.TraceInstance>,
                                          sbt : IResourceLocation<Raytracing.ShaderBindingTable>,
                                          usage : Raytracing.AccelerationStructureUsage) =
 
@@ -1906,9 +1906,9 @@ type ResourceManager(user : IResourceUser, device : Device) =
             VkBufferUsageFlags.AccelerationStructureBuildInputReadOnlyBitKhr
 
         accelerationStructureCache.GetOrCreate(
-            [ objects :> obj; sbt :> obj; usage :> obj ],
+            [ instances :> obj; sbt :> obj; usage :> obj ],
             fun cache key ->
-                let adaptiveBuffer = AdaptiveInstanceBuffer(objects, sbt)
+                let adaptiveBuffer = AdaptiveInstanceBuffer(instances, sbt)
                 let buffer = x.CreateBuffer(adaptiveBuffer, bufferUsage)
                 let count = adaptiveBuffer.Count
 

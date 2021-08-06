@@ -458,27 +458,27 @@ let main argv =
             Sym.ofString "LightLocation",    lightLocation :> IAdaptiveValue
         ]
 
-    let staticObjects =
-        let objModel =
-            traceObject {
+    let staticInstances =
+        let instModel =
+            traceInstance {
                 geometry model.Geometry
                 customIndex model.Index
                 hitgroup HitGroup.Model
                 culling (CullMode.Enabled WindingOrder.Clockwise)
             }
 
-        let objFloor =
-            traceObject {
+        let instFloor =
+            traceInstance {
                 geometry floor.Geometry
                 customIndex floor.Index
                 hitgroup HitGroup.Floor
                 culling (CullMode.Enabled WindingOrder.CounterClockwise)
             }
 
-        ASet.ofList [objModel; objFloor]
+        ASet.ofList [instModel; instFloor]
 
-    let sphereObjects =
-        cset<TraceObject>()
+    let sphereInstances =
+        cset<TraceInstance>()
 
     let createSphere =
 
@@ -517,8 +517,8 @@ let main argv =
                     Trafo3d.RotationEuler(t * rotation) * Trafo3d.Translation(position)
                 )
 
-            let obj =
-                traceObject {
+            let inst =
+                traceInstance {
                     geometry mti.Geometry
                     customIndex mti.Index
                     hitgroups (HitGroup.Sphere |> List.replicate 6)
@@ -526,13 +526,13 @@ let main argv =
                     mask 0x80
                 }
 
-            obj, mti
+            inst, mti
 
-    let objects =
-        ASet.union staticObjects sphereObjects
+    let instances =
+        ASet.union staticInstances sphereInstances
 
     let scene =
-        RaytracingScene.ofASet objects
+        RaytracingSceneDescription.ofASet instances
 
     let pipeline =
         {
@@ -569,18 +569,18 @@ let main argv =
 
     win.Keyboard.KeyDown(Keys.Enter).Values.Add(fun _ ->
         transact (fun () ->
-            let obj, mti = createSphere()
+            let inst, mti = createSphere()
             mtis.Add(mti)
-            sphereObjects.Value <- sphereObjects.Value |> HashSet.add obj
+            sphereInstances.Value <- sphereInstances.Value |> HashSet.add inst
         )
     )
 
     win.Keyboard.KeyDown(Keys.Delete).Values.Add(fun _ ->
         transact (fun () ->
-            let list = sphereObjects.Value |> HashSet.toList
+            let list = sphereInstances.Value |> HashSet.toList
             let idx = rnd.UniformInt(list.Length)
             let set = list |> List.indexed |> List.filter (fst >> (<>) idx) |> List.map snd |> HashSet.ofList
-            sphereObjects.Value <- set
+            sphereInstances.Value <- set
         )
     )
 

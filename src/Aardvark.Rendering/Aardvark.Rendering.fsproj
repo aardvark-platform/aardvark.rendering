@@ -102,7 +102,7 @@
     <Compile Include="Runtime\Compute\Compute.fs" />
     <Compile Include="Pipeline\Raytracing\TraceGeometry.fs" />
     <Compile Include="Pipeline\Raytracing\AdaptiveTraceGeometry.fs" />
-    <Compile Include="Pipeline\Raytracing\TraceObject.fs" />
+    <Compile Include="Pipeline\Raytracing\TraceInstance.fs" />
     <Compile Include="Pipeline\Raytracing\RaytracingPipelineState.fs" />
     <Compile Include="Runtime\Raytracing\RaytracingRuntime.fs" />
     <Compile Include="Runtime\BackendConfiguration.fs" />

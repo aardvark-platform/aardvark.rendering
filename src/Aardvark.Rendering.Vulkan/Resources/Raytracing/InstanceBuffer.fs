@@ -44,22 +44,22 @@ module private AdaptiveInstanceBufferInternals =
 
             c ||| g
 
-        let writeTransform (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
-            let trafo = o.Transform.GetValue(token)
+        let writeTransform (token : AdaptiveToken) (dst : nativeint) (inst : TraceInstance) =
+            let trafo = inst.Transform.GetValue(token)
             M34f trafo.Forward |> NativeInt.write dst
 
-        let writeIndex (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
-            let index = o.CustomIndex.GetValue(token)
+        let writeIndex (token : AdaptiveToken) (dst : nativeint) (inst : TraceInstance) =
+            let index = inst.CustomIndex.GetValue(token)
             uint24 index |> NativeInt.write (dst + Offsets.Index)
 
-        let writeMask (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
-            let mask = o.Mask.GetValue(token)
+        let writeMask (token : AdaptiveToken) (dst : nativeint) (inst : TraceInstance) =
+            let mask = inst.Mask.GetValue(token)
             uint8 mask |> NativeInt.write (dst + Offsets.Mask)
 
-        let writeHitGroup (sbt : aval<ShaderBindingTable>) (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
+        let writeHitGroup (sbt : aval<ShaderBindingTable>) (token : AdaptiveToken) (dst : nativeint) (inst : TraceInstance) =
             let sbt = sbt.GetValue(token)
-            let cfg = o.HitGroups.GetValue(token)
-            let accel = o.Geometry.GetValue(token)
+            let cfg = inst.HitGroups.GetValue(token)
+            let accel = inst.Geometry.GetValue(token)
 
             if accel.GeometryCount > cfg.Length then
                 failwithf "[Raytracing] Object has %d geometries but only %d hit groups" accel.GeometryCount cfg.Length
@@ -67,19 +67,19 @@ module private AdaptiveInstanceBufferInternals =
             let hitg = sbt.HitGroupTable.Indices.[cfg]
             uint24 hitg |> NativeInt.write (dst + Offsets.HitGroup)
 
-        let writeFlags (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
-            let cull = o.Culling.GetValue(token)
-            let geom = o.GeometryMode.GetValue(token)
+        let writeFlags (token : AdaptiveToken) (dst : nativeint) (inst : TraceInstance) =
+            let cull = inst.Culling.GetValue(token)
+            let geom = inst.GeometryMode.GetValue(token)
             let flags = getFlags cull geom
             uint8 flags |> NativeInt.write (dst + Offsets.Flags)
 
-        let writeGeometry (token : AdaptiveToken) (dst : nativeint) (o : TraceObject) =
-            let accel = o.Geometry.GetValue(token) |> unbox<AccelerationStructure>
+        let writeGeometry (token : AdaptiveToken) (dst : nativeint) (inst : TraceInstance) =
+            let accel = inst.Geometry.GetValue(token) |> unbox<AccelerationStructure>
             accel.DeviceAddress |> NativeInt.write (dst + Offsets.Geometry)
 
 
-type AdaptiveInstanceBuffer(objects : aset<TraceObject>, sbt : aval<ShaderBindingTable>) =
-    inherit AdaptiveCompactBuffer<TraceObject>(objects, Offsets.Stride)
+type AdaptiveInstanceBuffer(instances : aset<TraceInstance>, sbt : aval<ShaderBindingTable>) =
+    inherit AdaptiveCompactBuffer<TraceInstance>(instances, Offsets.Stride)
 
     let writers =
         [| Writers.writeTransform
@@ -90,15 +90,15 @@ type AdaptiveInstanceBuffer(objects : aset<TraceObject>, sbt : aval<ShaderBindin
            Writers.writeGeometry |]
         |> Array.map FSharpFunc<_,_,_,_>.Adapt
 
-    let count = ASet.count objects
+    let count = ASet.count instances
 
     member x.Count = count
 
-    override x.AcquireValue(o : TraceObject) =
-        o.Geometry.Acquire()
+    override x.AcquireValue(inst : TraceInstance) =
+        inst.Geometry.Acquire()
 
-    override x.ReleaseValue(o : TraceObject) =
-        o.Geometry.Release()
+    override x.ReleaseValue(inst : TraceInstance) =
+        inst.Geometry.Release()
 
     override x.WriteValue =
         writers
