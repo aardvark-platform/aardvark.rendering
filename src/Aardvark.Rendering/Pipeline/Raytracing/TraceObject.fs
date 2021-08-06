@@ -230,20 +230,3 @@ module TraceObjectBuilder =
             h
 
     let traceObject = TraceObjectBuilder()
-
-type RaytracingScene =
-    {
-        /// The objects in the scene.
-        Objects : aset<TraceObject>
-
-        /// Usage flag for the underlying acceleration structure.
-        Usage   : AccelerationStructureUsage
-    }
-
-type RaytracingPipelineState =
-    {
-        Effect            : FShade.RaytracingEffect
-        Scenes            : Map<Symbol, RaytracingScene>
-        Uniforms          : IUniformProvider
-        MaxRecursionDepth : aval<int>
-    }

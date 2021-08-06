@@ -72,6 +72,12 @@ type AdaptiveCompactBuffer<'T>(input : amap<'T, int>, elementSizeInBytes : int) 
     abstract member Destroy : unit -> unit
     default x.Destroy() =
         reader.Outputs.Remove(x) |> ignore
+
+        for KeyValue(value, writer) in writers do
+            writer.Dispose()
+            x.ReleaseValue(value)
+
+        writers.Clear()
         x.Dispose()
 
     member x.Acquire() =

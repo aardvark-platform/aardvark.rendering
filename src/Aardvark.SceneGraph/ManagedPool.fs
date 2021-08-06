@@ -481,6 +481,8 @@ type ManagedPool(runtime : IRuntime, signature : GeometrySignature,
     new (runtime : IRuntime, signature : GeometrySignature, usage : BufferUsage) =
         new ManagedPool(runtime, signature, usage, usage, usage)
 
+    static member internal Zero = zero
+
     member x.Runtime = runtime
 
     member x.Count

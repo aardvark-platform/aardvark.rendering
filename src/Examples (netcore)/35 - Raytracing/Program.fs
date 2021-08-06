@@ -3,20 +3,27 @@ open Aardvark.Rendering
 open Aardvark.Rendering.Raytracing
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.IO
+open Aardvark.SceneGraph.Raytracing
 open Aardvark.Application
 open Aardvark.Application.Slim
 open FSharp.Data.Adaptive
 
-module Semantic =
-    let MissShadow = Sym.ofString "MissShadow"
-    let HitGroupModel = Sym.ofString "HitGroupModel"
-    let HitGroupFloor = Sym.ofString "HitGroupFloor"
-    let HitGroupSphere1 = Sym.ofString "HitGroupSphere1"
-    let HitGroupSphere2 = Sym.ofString "HitGroupSphere2"
-    let HitGroupSphere3 = Sym.ofString "HitGroupSphere3"
-    let HitGroupSphere4 = Sym.ofString "HitGroupSphere4"
-    let HitGroupSphere5 = Sym.ofString "HitGroupSphere5"
-    let HitGroupSphere6 = Sym.ofString "HitGroupSphere6"
+[<AutoOpen>]
+module Semantics =
+    module HitGroup =
+        let Model = Sym.ofString "HitGroupModel"
+        let Floor = Sym.ofString "HitGroupFloor"
+        let Sphere = Sym.ofString "HitGroupSphere"
+
+    module MissShader =
+        let Shadow = Sym.ofString "MissShadow"
+
+    module InstanceAttribute =
+        let ModelMatrix = Sym.ofString "ModelMatrix"
+        let NormalMatrix = Sym.ofString "NormalMatrix"
+
+    module GeometryAttribute =
+        let Colors = Sym.ofString "Colors"
 
 module Effect =
     open FShade
@@ -28,15 +35,16 @@ module Effect =
             member x.OutputBuffer : Image2d<Formats.rgba32f> = uniform?OutputBuffer
             member x.RecursionDepth : int = uniform?RecursionDepth
 
-            // Model
-            //member x.ModelNormals : V4d[] = uniform?StorageBuffer?ModelNormals
+            member x.GeometryInfos  : TraceGeometryInfo[]   = uniform?StorageBuffer?GeometryInfos
+            member x.Positions      : V3d[]                 = uniform?StorageBuffer?Positions
+            member x.Normals        : V3d[]                 = uniform?StorageBuffer?Normals
+            member x.Indices        : int[]                 = uniform?StorageBuffer?Indices
+            member x.TextureCoords  : V2d[]                 = uniform?StorageBuffer?TextureCoords
+            member x.ModelMatrices  : M44d[]                = uniform?StorageBuffer?ModelMatrices
+            member x.NormalMatrices : M33d[]                = uniform?StorageBuffer?NormalMatrices
+            member x.Colors         : V3d[]                 = uniform?StorageBuffer?Colors
 
-            // Floor
-            member x.FloorIndices : int[] = uniform?StorageBuffer?FloorIndices
-            member x.FloorTextureCoords : V2d[] = uniform?StorageBuffer?FloorTextureCoords
-
-            // Sphere
-            member x.SphereOffsets : V3d[] = uniform?StorageBuffer?SphereOffsets
+            member x.SphereOffsets  : V3d[]                 = uniform?StorageBuffer?SphereOffsets
 
         type Payload =
             {
@@ -104,6 +112,41 @@ module Effect =
             v0 * barycentricCoords.X + v1 * barycentricCoords.Y + v2 * barycentricCoords.Z
 
         [<ReflectedDefinition>]
+        let getGeometryInfo (input : RayHitInput<'T, 'U>) =
+            let id = input.geometry.instanceCustomIndex + input.geometry.geometryIndex
+            uniform.GeometryInfos.[id]
+
+        [<ReflectedDefinition>]
+        let getIndices (info : TraceGeometryInfo) (input : RayHitInput<'T, 'U>) =
+            let firstIndex = info.FirstIndex + 3 * input.geometry.primitiveId
+            let baseVertex = info.BaseVertex
+
+            V3i(uniform.Indices.[firstIndex],
+                uniform.Indices.[firstIndex + 1],
+                uniform.Indices.[firstIndex + 2]) + baseVertex
+
+        [<ReflectedDefinition>]
+        let getPosition (indices : V3i) (input : RayHitInput<'T, V2d>) =
+            let p0 = uniform.Positions.[indices.X]
+            let p1 = uniform.Positions.[indices.Y]
+            let p2 = uniform.Positions.[indices.Z]
+            input.hit.attribute |> fromBarycentric p0 p1 p2
+
+        [<ReflectedDefinition>]
+        let getNormal (indices : V3i) (input : RayHitInput<'T, V2d>) =
+            let n0 = uniform.Normals.[indices.X]
+            let n1 = uniform.Normals.[indices.Y]
+            let n2 = uniform.Normals.[indices.Z]
+            input.hit.attribute |> fromBarycentric n0 n1 n2
+
+        [<ReflectedDefinition>]
+        let getTextureCoords (indices : V3i) (input : RayHitInput<'T, V2d>) =
+            let uv0 = uniform.TextureCoords.[indices.X]
+            let uv1 = uniform.TextureCoords.[indices.Y]
+            let uv2 = uniform.TextureCoords.[indices.Z]
+            input.hit.attribute |> fromBarycentric2d uv0 uv1 uv2
+
+        [<ReflectedDefinition>]
         let diffuseLighting (normal : V3d) (position : V3d) =
             let L = uniform.LightLocation - position |> Vec.normalize
             let NdotL = Vec.dot normal L |> max 0.0
@@ -130,9 +173,8 @@ module Effect =
                 V3d.Zero
 
         [<ReflectedDefinition>]
-        let lightingWithShadow (mask : int32) (reflectiveness : float) (specularAmount : float) (shininess : float) (normal : V3d) (input : RayHitInput<Payload>) =
-            let position =
-                input.ray.origin + input.hit.t * input.ray.direction
+        let lightingWithShadow (mask : int32) (reflectiveness : float) (specularAmount : float) (shininess : float)
+                               (position : V3d) (normal : V3d) (input : RayHitInput<Payload>) =
 
             let shadowed =
                 let direction = Vec.normalize (uniform.LightLocation - position)
@@ -154,48 +196,54 @@ module Effect =
                 let specular = specularLighting shininess normal position
                 result + specularAmount * V3d(specular)
 
-        //let chitModel (color : C3d) (input : RayHitInput<Payload>) =
-        //    let color = V3d color
-
-        //    closesthit {
-        //        let id = input.geometry.primitiveId
-        //        let indices = V3i(3 * id, 3 * id + 1, 3 * id + 2)
-
-        //        let normal =
-        //            let n0 = uniform.ModelNormals.[indices.X].XYZ
-        //            let n1 = uniform.ModelNormals.[indices.Y].XYZ
-        //            let n2 = uniform.ModelNormals.[indices.Z].XYZ
-        //            input.hit.attribute |> fromBarycentric n0 n1 n2 |> Vec.normalize
-
-        //        let diffuse = lightingWithShadow 0xFF 0.0 1.0 16.0 normal input
-        //        return { color = color * diffuse; recursionDepth = 0 }
-        //    }
-
-        let chitFloor (input : RayHitInput<Payload>) =
-            closesthit {
-                let id = input.geometry.primitiveId
-                let indices = V3i(uniform.FloorIndices.[3 * id], uniform.FloorIndices.[3 * id + 1], uniform.FloorIndices.[3 * id + 2])
-
-                let texCoords =
-                    let uv0 = uniform.FloorTextureCoords.[indices.X]
-                    let uv1 = uniform.FloorTextureCoords.[indices.Y]
-                    let uv2 = uniform.FloorTextureCoords.[indices.Z]
-                    input.hit.attribute |> fromBarycentric2d uv0 uv1 uv2
-
-                let color = textureFloor.Sample(texCoords).XYZ
-                let diffuse = lightingWithShadow 0xFF 0.3 0.5 28.0 V3d.ZAxis input
-                return { color = color * diffuse; recursionDepth = 0 }
-            }
-
-        let chitSphere (color : C3d) (input : RayHitInput<Payload>) =
+        let chitSolidColor (color : C3d) (input : RayHitInput<Payload>) =
             let color = V3d color
 
             closesthit {
+                let info = getGeometryInfo input
+                let indices = getIndices info input
+
+                let position =
+                    let p = getPosition indices input
+                    let m = uniform.ModelMatrices.[info.InstanceAttributeIndex]
+                    m.TransformPos p
+
+                let normal =
+                    let n = getNormal indices input
+                    let m = uniform.NormalMatrices.[info.InstanceAttributeIndex]
+                    (m * n) |> Vec.normalize
+
+                let diffuse = lightingWithShadow 0xFF 0.0 1.0 16.0 position normal input
+                return { color = color * diffuse; recursionDepth = 0 }
+            }
+
+        let chitTextured (input : RayHitInput<Payload>) =
+            closesthit {
+                let info = getGeometryInfo input
+                let indices = getIndices info input
+
+                let position =
+                    let p = getPosition indices input
+                    let m = uniform.ModelMatrices.[info.InstanceAttributeIndex]
+                    m.TransformPos p
+
+                let texCoords =
+                    getTextureCoords indices input
+
+                let color = textureFloor.Sample(texCoords).XYZ
+                let diffuse = lightingWithShadow 0xFF 0.3 0.5 28.0 position V3d.ZAxis input
+                return { color = color * diffuse; recursionDepth = 0 }
+            }
+
+        let chitSphere (input : RayHitInput<Payload>) =
+            closesthit {
+                let info = getGeometryInfo input
                 let position = input.ray.origin + input.hit.t * input.ray.direction
                 let center = input.objectSpace.objectToWorld.TransformPos uniform.SphereOffsets.[input.geometry.geometryIndex]
                 let normal = Vec.normalize (position - center)
 
-                let diffuse = lightingWithShadow 0x7F 0.8 1.0 28.0 normal input
+                let color = uniform.Colors.[info.GeometryAttributeIndex]
+                let diffuse = lightingWithShadow 0x7F 0.8 1.0 28.0 position normal input
                 return { color = color * diffuse; recursionDepth = 0 }
             }
 
@@ -214,73 +262,33 @@ module Effect =
                     Intersection.Report(t) |> ignore
             }
 
-    // Note: This is not how you should implement materials.
-    // Normally, you'd want to encode the color and radius of your spheres
-    // in a buffer and access those via the custom index. Here, we do it this way to
-    // test if the shader binding table is computed correctly if an object has mutliple
-    // geometries with different hitgroups.
-    let private hitgroupSphere1 =
-        hitgroup {
-            closesthit (chitSphere C3d.BlueViolet)
-            intersection (intersectionSphere 0.2)
-        }
 
-    let private hitgroupSphere2 =
+    let private hitgroupModel =
         hitgroup {
-            closesthit (chitSphere C3d.DodgerBlue)
-            intersection (intersectionSphere 0.2)
+            closesthit (chitSolidColor C3d.BurlyWood)
         }
-
-    let private hitgroupSphere3 =
-        hitgroup {
-            closesthit (chitSphere C3d.HoneyDew)
-            intersection (intersectionSphere 0.2)
-        }
-
-    let private hitgroupSphere4 =
-        hitgroup {
-            closesthit (chitSphere C3d.BlanchedAlmond)
-            intersection (intersectionSphere 0.2)
-        }
-
-    let private hitgroupSphere5 =
-        hitgroup {
-            closesthit (chitSphere C3d.LimeGreen)
-            intersection (intersectionSphere 0.2)
-        }
-
-    let private hitgroupSphere6 =
-        hitgroup {
-            closesthit (chitSphere C3d.MistyRose)
-            intersection (intersectionSphere 0.2)
-        }
-
-    //let private hitgroupModel =
-    //    hitgroup {
-    //        closesthit (chitModel C3d.BurlyWood)
-    //    }
 
     let private hitgroupFloor =
         hitgroup {
-            closesthit chitFloor
+            closesthit chitTextured
+        }
+
+    let private hitgroupSphere =
+        hitgroup {
+            closesthit chitSphere
+            intersection (intersectionSphere 0.2)
         }
 
 
-    let main() =
+    let main =
         raytracing {
             raygen rgenMain
             miss (missSolidColor C3d.Lavender)
-            miss (Semantic.MissShadow, missShadow)
-            //hitgroup (Semantic.HitGroupModel, hitgroupModel)
-            hitgroup (Semantic.HitGroupFloor, hitgroupFloor)
-            hitgroup (Semantic.HitGroupSphere1, hitgroupSphere1)
-            hitgroup (Semantic.HitGroupSphere2, hitgroupSphere2)
-            hitgroup (Semantic.HitGroupSphere3, hitgroupSphere3)
-            hitgroup (Semantic.HitGroupSphere4, hitgroupSphere4)
-            hitgroup (Semantic.HitGroupSphere5, hitgroupSphere5)
-            hitgroup (Semantic.HitGroupSphere6, hitgroupSphere6)
+            miss (MissShader.Shadow, missShadow)
+            hitgroup (HitGroup.Model, hitgroupModel)
+            hitgroup (HitGroup.Floor, hitgroupFloor)
+            hitgroup (HitGroup.Sphere, hitgroupSphere)
         }
-
 
 [<EntryPoint>]
 let main argv =
@@ -310,71 +318,118 @@ let main argv =
     let traceTexture =
         runtime.CreateTexture2D(TextureFormat.Rgba32f, 1, win.Sizes)
 
-    //let model, modelNormals =
-    //    let scene = Loader.Assimp.load (Path.combine [__SOURCE_DIRECTORY__; "..";"..";"..";"data";"lucy.obj"])
-    //    let geometry = scene.meshes.[0].geometry
+    let geometryPool =
+        let signature =
+            let vertexAttributes =
+                Map.ofList [
+                    DefaultSemantic.Positions, typeof<V4f>
+                    DefaultSemantic.Normals, typeof<V4f>
+                    DefaultSemantic.DiffuseColorCoordinates, typeof<V2f>
+                ]
 
-    //    let normals =
-    //        geometry.IndexedAttributes.[DefaultSemantic.Normals] :?> V3f[]
-    //        |> Array.map V4f
+            let instanceAttributes =
+                Map.ofList [
+                    InstanceAttribute.ModelMatrix, typeof<M44f>
+                    InstanceAttribute.NormalMatrix, typeof<M34f>
+                ]
 
-    //    geometry |> TraceGeometry.ofIndexedGeometry GeometryFlags.Opaque Trafo3d.Identity,
-    //    AVal.constant <| ArrayBuffer(normals)
+            let geometryAttributes =
+                Map.ofList [
+                    GeometryAttribute.Colors, typeof<V4f>
+                ]
 
-    let floor, floorIndices, floorTextureCoords =
+            { IndexType              = IndexType.UInt32
+              VertexAttributeTypes   = vertexAttributes
+              InstanceAttributeTypes = instanceAttributes
+              GeometryAttributeTypes = geometryAttributes }
+
+        new ManagedRaytracingPool(runtime, signature)
+
+    use model =
+        let scene = Loader.Assimp.load (Path.combine [__SOURCE_DIRECTORY__; "..";"..";"..";"data";"aardvark";"aardvark.obj"])
+
+        let trafo =
+            Trafo3d.Scale(5.0, 5.0, -5.0) * Trafo3d.Translation(0.0, 0.0, 1.5)
+
+        let instanceAttributes =
+            let normalMatrix =
+                trafo.Backward.Transposed.UpperLeftM33()
+
+            Map.ofList [
+                InstanceAttribute.ModelMatrix, AVal.constant trafo.Forward :> IAdaptiveValue
+                InstanceAttribute.NormalMatrix, AVal.constant normalMatrix :> IAdaptiveValue
+            ]
+
+        let instance =
+            AdaptiveTraceInstance.ofIndexedGeometry' GeometryFlags.Opaque trafo scene.meshes.[0].geometry
+            |> AdaptiveTraceInstance.instanceAttributes instanceAttributes
+
+        geometryPool.Add(instance)
+
+    use floor =
         let positions = [| V3f(-0.5f, -0.5f, 0.0f); V3f(-0.5f, 0.5f, 0.0f); V3f(0.5f, -0.5f, 0.0f); V3f(0.5f, 0.5f, 0.0f); |]
         let indices = [| 0; 1; 2; 3 |]
         let uv = positions |> Array.map (fun p -> p.XY + 0.5f)
 
-        let attributes =
+        let vertexAttributes =
             SymDict.ofList [
                 DefaultSemantic.Positions, positions :> System.Array
+                DefaultSemantic.DiffuseColorCoordinates, uv :> System.Array
             ]
 
         let trafo = Trafo3d.Scale(48.0)
-        let geometry =
-            IndexedGeometry(IndexedGeometryMode.TriangleStrip, indices, attributes, SymDict.empty)
-            |> IndexedGeometry.toNonStripped
 
-        geometry |> TraceGeometry.ofIndexedGeometry GeometryFlags.Opaque trafo,
-        AVal.constant <| ArrayBuffer(geometry.IndexArray),
-        AVal.constant <| ArrayBuffer(uv)
+        let instanceAttributes =
+            let normalMatrix =
+                trafo.Backward.Transposed.UpperLeftM33()
 
-    let spheres, sphereOffsets =
-        let offsets =
-            let o1 = V3d(0.0, 0.0, 0.5)
-            let o2 = V3d(0.0, 0.0, -0.5)
-            let o3 = V3d(0.5, 0.0, 0.0)
-            let o4 = V3d(-0.5, 0.0, 0.0)
-            let o5 = V3d(0.0, 0.5, 0.0)
-            let o6 = V3d(0.0, -0.5, 0.0)
-            [| o1; o2; o3; o4; o5; o6 |]
+            Map.ofList [
+                InstanceAttribute.ModelMatrix, AVal.constant trafo.Forward :> IAdaptiveValue
+                InstanceAttribute.NormalMatrix, AVal.constant normalMatrix :> IAdaptiveValue
+            ]
 
         let geometry =
-            offsets |> Array.map (fun offset ->
-                TraceGeometry.ofCenterAndRadius GeometryFlags.Opaque offset 0.2
-            )
-            |> TraceGeometry.ofArray
+            IndexedGeometry(IndexedGeometryMode.TriangleStrip, indices, vertexAttributes, SymDict.empty)
 
-        let offsetsBuffer =
-            ArrayBuffer(offsets |> Array.map V4f) |> AVal.constant
+        let instance =
+            AdaptiveTraceInstance.ofIndexedGeometry' GeometryFlags.Opaque trafo geometry
+            |> AdaptiveTraceInstance.instanceAttributes instanceAttributes
 
-        geometry, offsetsBuffer
+        geometryPool.Add(instance)
 
-    //use accelerationStructureModel =
-    //    runtime.CreateAccelerationStructure(
-    //        model, AccelerationStructureUsage.Static
-    //    )
+    let sphereOffsets =
+        let o1 = V3d(0.0, 0.0, 0.5)
+        let o2 = V3d(0.0, 0.0, -0.5)
+        let o3 = V3d(0.5, 0.0, 0.0)
+        let o4 = V3d(-0.5, 0.0, 0.0)
+        let o5 = V3d(0.0, 0.5, 0.0)
+        let o6 = V3d(0.0, -0.5, 0.0)
 
-    use accelerationStructureFloor =
-        runtime.CreateAccelerationStructure(
-            floor, AccelerationStructureUsage.Static
-        )
+        [| o1; o2; o3; o4; o5; o6 |]
 
-    use accelerationStructureSphere =
-        runtime.CreateAccelerationStructure(
-            spheres, AccelerationStructureUsage.Static
-        )
+    let indices =
+        geometryPool.IndexBuffer
+
+    let positions =
+        geometryPool.GetVertexAttribute DefaultSemantic.Positions
+
+    let textureCoordinates =
+        geometryPool.GetVertexAttribute DefaultSemantic.DiffuseColorCoordinates
+
+    let normals =
+        geometryPool.GetVertexAttribute DefaultSemantic.Normals
+
+    let modelMatrices =
+        geometryPool.GetInstanceAttribute InstanceAttribute.ModelMatrix
+
+    let normalMatrices =
+        geometryPool.GetInstanceAttribute InstanceAttribute.NormalMatrix
+
+    let colors =
+        geometryPool.GetGeometryAttribute GeometryAttribute.Colors
+
+    let geometryInfos =
+        geometryPool.GeometryBuffer
 
     let lightLocation =
         let startTime = System.DateTime.Now
@@ -383,54 +438,74 @@ let main argv =
             V3d(Rot2d(t * Constant.PiQuarter) * V2d(8.0, 0.0), 16.0)
         )
 
-    use uniforms =
+    let uniforms =
         Map.ofList [
-            "OutputBuffer", traceTexture |> AdaptiveResource.mapNonAdaptive (fun t -> t :> ITexture) :> IAdaptiveValue
-            "RecursionDepth", AVal.constant 4 :> IAdaptiveValue
-            "ViewTrafo", viewTrafo :> IAdaptiveValue
-            "ProjTrafo", projTrafo :> IAdaptiveValue
-            "CameraLocation", cameraView |> AVal.map CameraView.location :> IAdaptiveValue
-            //"ModelNormals", modelNormals :> IAdaptiveValue
-            "FloorIndices", floorIndices :> IAdaptiveValue
-            "FloorTextureCoords", floorTextureCoords :> IAdaptiveValue
-            "TextureFloor", DefaultTextures.checkerboard :> IAdaptiveValue
-            "LightLocation", lightLocation :> IAdaptiveValue
-            "SphereOffsets", sphereOffsets :> IAdaptiveValue
+            Sym.ofString "OutputBuffer",     traceTexture |> AdaptiveResource.mapNonAdaptive (fun t -> t :> ITexture) :> IAdaptiveValue
+            Sym.ofString "RecursionDepth",   AVal.constant 4 :> IAdaptiveValue
+            Sym.ofString "ViewTrafo",        viewTrafo :> IAdaptiveValue
+            Sym.ofString "ProjTrafo",        projTrafo :> IAdaptiveValue
+            Sym.ofString "CameraLocation",   cameraView |> AVal.map CameraView.location :> IAdaptiveValue
+            Sym.ofString "GeometryInfos",    geometryInfos :> IAdaptiveValue
+            Sym.ofString "Positions",        positions :> IAdaptiveValue
+            Sym.ofString "Normals",          normals :> IAdaptiveValue
+            Sym.ofString "Indices",          indices :> IAdaptiveValue
+            Sym.ofString "TextureCoords",    textureCoordinates :> IAdaptiveValue
+            Sym.ofString "ModelMatrices",    modelMatrices :> IAdaptiveValue
+            Sym.ofString "NormalMatrices",   normalMatrices :> IAdaptiveValue
+            Sym.ofString "Colors",           colors :> IAdaptiveValue
+            Sym.ofString "SphereOffsets",    sphereOffsets |> Array.map V4f |> ArrayBuffer :> IBuffer |> AVal.constant :> IAdaptiveValue
+            Sym.ofString "TextureFloor",     DefaultTextures.checkerboard :> IAdaptiveValue
+            Sym.ofString "LightLocation",    lightLocation :> IAdaptiveValue
         ]
-        |> UniformProvider.ofMap
 
     let staticObjects =
-        //let objModel =
-        //    traceobject {
-        //        geometry accelerationStructureModel
-        //        hitgroup Semantic.HitGroupModel
-        //        culling (CullMode.Enabled WindingOrder.CounterClockwise)
-        //    }
+        let objModel =
+            traceObject {
+                geometry model.Geometry
+                customIndex model.Index
+                hitgroup HitGroup.Model
+                culling (CullMode.Enabled WindingOrder.Clockwise)
+            }
 
         let objFloor =
-            traceobject {
-                geometry accelerationStructureFloor
-                hitgroup Semantic.HitGroupFloor
+            traceObject {
+                geometry floor.Geometry
+                customIndex floor.Index
+                hitgroup HitGroup.Floor
                 culling (CullMode.Enabled WindingOrder.CounterClockwise)
             }
 
-        ASet.ofList [objFloor]
-        //ASet.ofList [objModel; objFloor]
+        ASet.ofList [objModel; objFloor]
 
     let sphereObjects =
         cset<TraceObject>()
 
     let createSphere =
-        let hitgroups = [
-            Semantic.HitGroupSphere1
-            Semantic.HitGroupSphere2
-            Semantic.HitGroupSphere3
-            Semantic.HitGroupSphere4
-            Semantic.HitGroupSphere5
-            Semantic.HitGroupSphere6
-        ]
+
+        let colors = [|
+            C3d.BlueViolet
+            C3d.DodgerBlue
+            C3d.HoneyDew
+            C3d.BlanchedAlmond
+            C3d.LimeGreen
+            C3d.MistyRose
+        |]
 
         fun () ->
+            let colors =
+                let p = rnd.CreatePermutationArray(colors.Length)
+                colors |> Array.permute (fun i -> p.[i])
+
+            let mti =
+                sphereOffsets |> Array.map (fun offset ->
+                    BoundingBoxes.ofCenterAndRadius offset 0.2
+                    |> BoundingBoxes.flags GeometryFlags.Opaque
+                )
+                |> TraceGeometry.AABBs
+                |> AdaptiveTraceInstance.ofGeometry
+                |> AdaptiveTraceInstance.geometryAttribute' GeometryAttribute.Colors colors
+                |> geometryPool.Add
+
             let trafo =
                 let startTime = System.DateTime.Now
 
@@ -442,28 +517,26 @@ let main argv =
                     Trafo3d.RotationEuler(t * rotation) * Trafo3d.Translation(position)
                 )
 
-            let hitg =
-                let shift = rnd.UniformInt(hitgroups.Length)
-                hitgroups |> List.permute (fun i -> (i + shift) % hitgroups.Length)
+            let obj =
+                traceObject {
+                    geometry mti.Geometry
+                    customIndex mti.Index
+                    hitgroups (HitGroup.Sphere |> List.replicate 6)
+                    transform trafo
+                    mask 0x80
+                }
 
-            traceobject {
-                geometry accelerationStructureSphere
-                hitgroups hitg
-                transform trafo
-                mask 0x80
-            }
+            obj, mti
 
     let objects =
         ASet.union staticObjects sphereObjects
 
     let scene =
-        { Objects = objects
-          Indices = AMap.empty
-          Usage   = AccelerationStructureUsage.Static }
+        RaytracingScene.ofASet objects
 
     let pipeline =
         {
-            Effect            = Effect.main()
+            Effect            = Effect.main
             Scenes            = Map.ofList [Sym.ofString "MainScene", scene]
             Uniforms          = uniforms
             MaxRecursionDepth = AVal.constant 2048
@@ -492,9 +565,12 @@ let main argv =
             q.End()
         )
 
+    let mtis = System.Collections.Generic.List()
+
     win.Keyboard.KeyDown(Keys.Enter).Values.Add(fun _ ->
         transact (fun () ->
-            let obj = createSphere()
+            let obj, mti = createSphere()
+            mtis.Add(mti)
             sphereObjects.Value <- sphereObjects.Value |> HashSet.add obj
         )
     )
@@ -510,5 +586,8 @@ let main argv =
 
     win.RenderTask <- renderTask
     win.Run()
+
+    for mti in mtis do
+        mti.Dispose()
 
     0

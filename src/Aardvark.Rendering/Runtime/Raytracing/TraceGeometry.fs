@@ -52,11 +52,21 @@ module TraceGeometry =
         let vertices = geometry.IndexedAttributes.[DefaultSemantic.Positions]
 
         let indices =
-            if geometry.IsIndexed then Some geometry.IndexArray else None
+            if geometry.IsIndexed then
+                let typ =
+                    let t = geometry.IndexArray.GetType().GetElementType()
+
+                    if t = typeof<uint16> || t = typeof<int16> then IndexType.UInt16
+                    elif t = typeof<uint32> || t = typeof<int32> then IndexType.UInt32
+                    else failwithf "[TraceGeometry] Unsupported index type %A" t
+
+                Some (geometry.IndexArray, typ)
+            else
+                None
 
         let primitives =
             match indices with
-            | Some arr -> arr.Length / 3
+            | Some (arr, _) -> arr.Length / 3
             | _ -> vertices.Length / 3
 
         let vertexData =
@@ -66,8 +76,9 @@ module TraceGeometry =
               Stride = uint64 sizeof<V3f> }
 
         let indexData =
-            indices |> Option.map (fun arr ->
-                { Buffer = ArrayBuffer(arr)
+            indices |> Option.map (fun (arr, t) ->
+                { Type = t
+                  Buffer = ArrayBuffer(arr)
                   Offset = 0UL }
             )
 

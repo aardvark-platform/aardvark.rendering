@@ -94,7 +94,8 @@ module private NativeAccelerationStructureData =
 
         update ||| hint
 
-    let private ofGeometry (device : Device) (allowUpdate : bool) (usage : AccelerationStructureUsage) (geometry : TraceGeometry) =
+    let private ofGeometry (device : Device) (allowUpdate : bool)
+                           (usage : AccelerationStructureUsage) (geometry : TraceGeometry) =
 
         let mutable buffers = List<Buffer>()
 
@@ -103,17 +104,29 @@ module private NativeAccelerationStructureData =
             buffers.Add(prepared)
             prepared |> Buffer.toAddress offset
 
-        let ofAabbData (data : AABBsData) =
+        let ofAabbData (data : AABBsData<IBuffer>) =
             let address =
                 getBufferAddress data.Offset data.Buffer
 
+            let stride =
+                if data.Stride = 0UL then
+                    uint64 sizeof<Box3f>
+                else
+                    data.Stride
+
             VkAccelerationStructureGeometryDataKHR.Aabbs(
-                VkAccelerationStructureGeometryAabbsDataKHR(address, data.Stride)
+                VkAccelerationStructureGeometryAabbsDataKHR(address, stride)
             )
 
-        let ofTriangleData (vertexData : VertexData) (indexData : Option<IndexData>) (transform : Trafo3d) =
+        let ofTriangleData (vertexData : VertexData<IBuffer>) (indexData : IndexData<IBuffer> option) (transform : Trafo3d) =
             let vertexDataAddress =
                 getBufferAddress vertexData.Offset vertexData.Buffer
+
+            let vertexStride =
+                if vertexData.Stride = 0UL then
+                    uint64 sizeof<V3f>
+                else
+                    vertexData.Stride
 
             let indexDataAddress =
                 match indexData with
@@ -121,9 +134,12 @@ module private NativeAccelerationStructureData =
                 | _ -> VkDeviceOrHostAddressConstKHR()
 
             let indexType =
-                match indexData with
-                | Some _ -> VkIndexType.Uint32
-                | _ -> VkIndexType.NoneKhr
+                indexData |> Option.map (fun d ->
+                    match d.Type with
+                    | IndexType.UInt16 -> VkIndexType.Uint16
+                    | IndexType.UInt32 -> VkIndexType.Uint32
+                )
+                |> Option.defaultValue VkIndexType.NoneKhr
 
             let transformDataAddress =
                 let buffer = ArrayBuffer([| VkTransformMatrixKHR(M34f transform.Forward) |])
@@ -131,7 +147,7 @@ module private NativeAccelerationStructureData =
 
             VkAccelerationStructureGeometryDataKHR.Triangles(
                 VkAccelerationStructureGeometryTrianglesDataKHR(
-                    VkFormat.R32g32b32Sfloat, vertexDataAddress, vertexData.Stride, vertexData.Count,
+                    VkFormat.R32g32b32Sfloat, vertexDataAddress, vertexStride, vertexData.Count,
                     indexType, indexDataAddress, transformDataAddress
                 )
             )

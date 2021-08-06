@@ -25,25 +25,6 @@ module SgFSharp =
                 let surface = f() |> FShade.Effect.compose |> Surface.FShadeSimple
                 fun (sg : ISg) -> Sg.SurfaceApplicator(surface, sg) :> ISg
 
-        // These utilities make it possible to pass
-        // a string, Symbol or TypedSymbol as identifier.
-        type NameConverter =
-            static member inline GetSymbol(name : string)            = Sym.ofString name
-            static member inline GetSymbol(symbol : Symbol)          = symbol
-
-        type TypedNameConverter<'a> =
-            inherit NameConverter
-            static member inline GetSymbol(symbol : TypedSymbol<'a>) = symbol.Symbol
-
-        [<AutoOpen>]
-        module internal Aux =
-            let inline untypedSym< ^a> = Unchecked.defaultof<NameConverter>
-            let inline typedSym< ^a>   = Unchecked.defaultof<TypedNameConverter< ^a>>
-
-            let inline symbol (_ : ^z) (name : ^Name) =
-                ((^z or ^Name) : (static member GetSymbol : ^Name -> Symbol) (name))
-
-
         // Utilities to create cached buffer views
         module Caching =
 
@@ -201,7 +182,7 @@ module SgFSharp =
         /// Sets the uniform with the given name to the given value.
         /// The name can be a string, Symbol, or TypedSymbol.
         let inline uniform (name : ^Name) (value : aval<'Value>) (sg : ISg) =
-            let sym = name |> symbol typedSym< ^Name>
+            let sym = name |> Symbol.convert Symbol.Converters.typed<'Value>
             Sg.UniformApplicator(sym, value :> IAdaptiveValue, sg) :> ISg
 
         /// Sets the uniform with the given name to the given value.
@@ -222,7 +203,7 @@ module SgFSharp =
         /// Sets the given texture to the slot with the given name.
         /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
         let inline texture (name : ^Name) (tex : aval< 'Texture>) (sg : ISg) =
-            let sym, value = textureAux<TypedNameConverter<ITexture>, ^Name, 'Texture> name tex
+            let sym, value = textureAux<Symbol.Converters.TypedConverter<ITexture>, ^Name, 'Texture> name tex
             Sg.TextureApplicator(sym, value, sg) :> ISg
 
         /// Sets the given texture to the slot with the given name.
@@ -243,7 +224,7 @@ module SgFSharp =
         /// Loads and sets the given texture file to the slot with the given name.
         /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
         let inline fileTexture (name : ^Name) (path : string) (wantMipMaps : bool) (sg : ISg) =
-            let sym = name |> symbol typedSym<ITexture>
+            let sym = name |> Symbol.convert Symbol.Converters.typed<ITexture>
             sg |> texture sym ~~(FileTexture(path, wantMipMaps) :> ITexture)
 
         /// Loads and sets the given diffuse texture file.
@@ -254,7 +235,7 @@ module SgFSharp =
         /// Sets the given scope-dependent texture to the slot with the given name.
         /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
         let inline scopeDependentTexture (name : ^Name) (tex : Scope -> aval<ITexture>) (sg : ISg) =
-            let sym = name |> symbol typedSym<ITexture>
+            let sym = name |> Symbol.convert Symbol.Converters.typed<ITexture>
             Sg.UniformApplicator(new Providers.ScopeDependentUniformHolder([sym, fun s -> tex s :> IAdaptiveValue]), sg) :> ISg
 
         /// Sets the given scope-dependent diffuse texture.
@@ -284,7 +265,7 @@ module SgFSharp =
         /// Sets the sampler state for the texture slot with the given name.
         /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
         let inline samplerState (name : ^Name) (state : aval<SamplerState option>) (sg : ISg) =
-            let sym = name |> symbol typedSym<ITexture>
+            let sym = name |> Symbol.convert Symbol.Converters.typed<ITexture>
             let modifier =
                 adaptive {
                     let! user = state
@@ -307,7 +288,7 @@ module SgFSharp =
         /// Modifies the sampler state for the texture slot with the given name.
         /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
         let inline modifySamplerState (name : ^Name) (modifier : aval<SamplerState -> SamplerState>) (sg : ISg) =
-            let sym = name |> symbol typedSym<ITexture>
+            let sym = name |> Symbol.convert Symbol.Converters.typed<ITexture>
             let modifier =
                 adaptive {
                     let! modifier = modifier
@@ -689,25 +670,25 @@ module SgFSharp =
         /// Provides a vertex attribute with the given name by supplying an array of values.
         /// The name can be a string, Symbol, or TypedSymbol.
         let inline vertexAttribute (name : ^Name) (value : aval<'Value[]>) (sg : ISg) =
-            let name, view = attributeAux<TypedNameConverter<'Value>, ^Name, 'Value> name value
+            let name, view = attributeAux<Symbol.Converters.TypedConverter<'Value>, ^Name, 'Value> name value
             Sg.VertexAttributeApplicator(Map.ofList [name, view], ~~sg) :> ISg
 
         /// Provides a vertex attribute with the given name by supplying an array of values.
         /// The name can be a string, Symbol, or TypedSymbol.
         let inline vertexAttribute' (name : ^Name) (value : 'Value[]) (sg : ISg) =
-            let name, view = attributeAux'<TypedNameConverter<'Value>, ^Name, 'Value> name value
+            let name, view = attributeAux'<Symbol.Converters.TypedConverter<'Value>, ^Name, 'Value> name value
             Sg.VertexAttributeApplicator(Map.ofList [name, view], ~~sg) :> ISg
 
         /// Provides a vertex attribute with the given name by supplying a BufferView.
         /// The name can be a string or Symbol.
         let inline vertexBuffer (name : ^Name) (view : BufferView) (sg : ISg) =
-            let sym = name |> symbol untypedSym
+            let sym = name |> Symbol.convert Symbol.Converters.untyped
             Sg.VertexAttributeApplicator(sym, view, sg) :> ISg
 
         /// Provides a vertex attribute with the given name by supplying an untyped array.
         /// The name can be a string or Symbol.
         let inline vertexArray (name : ^Name) (value : System.Array) (sg : ISg) =
-            let sym = name |> symbol untypedSym
+            let sym = name |> Symbol.convert Symbol.Converters.untyped
             let view = BufferView(~~(ArrayBuffer value :> IBuffer), value.GetType().GetElementType())
             Sg.VertexAttributeApplicator(Map.ofList [sym, view], ~~sg) :> ISg
 
@@ -715,7 +696,7 @@ module SgFSharp =
         /// The name can be a string, Symbol, or TypedSymbol.
         /// The value has to be compatible with V4f.
         let inline vertexBufferValue (name : ^Name) (value : aval< ^Value>) (sg : ISg) =
-            let sym = name |> symbol typedSym< ^Value>
+            let sym = name |> Symbol.convert Symbol.Converters.typed< ^Value>
             let view = value |> Caching.bufferOfValue v4f
             Sg.VertexAttributeApplicator(Map.ofList [sym, view], ~~sg) :> ISg
 
@@ -723,7 +704,7 @@ module SgFSharp =
         /// The name can be a string, Symbol, or TypedSymbol.
         /// The value has to be compatible with V4f.
         let inline vertexBufferValue' (name : ^Name) (value : ^Value) (sg : ISg) =
-            let sym = name |> symbol typedSym< ^Value>
+            let sym = name |> Symbol.convert Symbol.Converters.typed< ^Value>
             let view = BufferView(SingleValueBuffer(~~(v4f value)), typeof<V4f>)
             Sg.VertexAttributeApplicator(sym, view, sg) :> ISg
 
@@ -731,25 +712,25 @@ module SgFSharp =
         /// Provides an instance attribute with the given name by supplying an array of values.
         /// The name can be a string, Symbol, or TypedSymbol.
         let inline instanceAttribute (name : ^Name) (value : aval<'Value[]>) (sg : ISg) =
-            let name, view = attributeAux<TypedNameConverter<'Value>, ^Name, 'Value> name value
+            let name, view = attributeAux<Symbol.Converters.TypedConverter<'Value>, ^Name, 'Value> name value
             Sg.InstanceAttributeApplicator(Map.ofList [name, view], ~~sg) :> ISg
 
         /// Provides an instance attribute with the given name by supplying an array of values.
         /// The name can be a string, Symbol, or TypedSymbol.
         let inline instanceAttribute' (name : ^Name) (value : 'Value[]) (sg : ISg) =
-            let name, view = attributeAux'<TypedNameConverter<'Value>, ^Name, 'Value> name value
+            let name, view = attributeAux'<Symbol.Converters.TypedConverter<'Value>, ^Name, 'Value> name value
             Sg.InstanceAttributeApplicator(Map.ofList [name, view], ~~sg) :> ISg
 
         /// Provides an index attribute with the given name by supplying a BufferView.
         /// The name can be a string or Symbol.
         let inline instanceBuffer (name : ^Name) (view : BufferView) (sg : ISg) =
-            let sym = name |> symbol untypedSym
+            let sym = name |> Symbol.convert Symbol.Converters.untyped
             Sg.InstanceAttributeApplicator(sym, view, sg) :> ISg
 
         /// Provides an index attribute with the given name by supplying an untyped array.
         /// The name can be a string or Symbol.
         let inline instanceArray (name : ^Name) (value : System.Array) (sg : ISg) =
-            let sym = name |> symbol untypedSym
+            let sym = name |> Symbol.convert Symbol.Converters.untyped
             let view = BufferView(~~(ArrayBuffer value :> IBuffer), value.GetType().GetElementType())
             Sg.InstanceAttributeApplicator(sym, view, sg) :> ISg
 
@@ -757,7 +738,7 @@ module SgFSharp =
         /// The name can be a string, Symbol, or TypedSymbol.
         /// The value has to be compatible with V4f.
         let inline instanceBufferValue (name : ^Name) (value : aval< ^Value>) (sg : ISg) =
-            let sym = name |> symbol typedSym< ^Value>
+            let sym = name |> Symbol.convert Symbol.Converters.typed< ^Value>
             let view = value |> Caching.bufferOfValue v4f
             Sg.InstanceAttributeApplicator(Map.ofList [sym, view], ~~sg) :> ISg
 
@@ -765,7 +746,7 @@ module SgFSharp =
         /// The name can be a string, Symbol, or TypedSymbol.
         /// The value has to be compatible with V4f.
         let inline instanceBufferValue' (name : ^Name) (value : ^Value) (sg : ISg) =
-            let sym = name |> symbol typedSym< ^Value>
+            let sym = name |> Symbol.convert Symbol.Converters.typed< ^Value>
             let view = BufferView(SingleValueBuffer(~~(v4f value)), typeof<V4f>)
             Sg.InstanceAttributeApplicator(sym, view, sg) :> ISg
 

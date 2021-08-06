@@ -6,38 +6,100 @@ open System
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 
-type AABBsData =
-    { Buffer : IBuffer
-      Offset : uint64
-      Stride : uint64 }
+/// Describes a buffer containing Box3f values.
+[<CLIMutable>]
+type AABBsData<'T> =
+    {
+        /// Buffer containing the data.
+        Buffer : 'T
 
-type VertexData =
-    { Buffer : IBuffer
-      Count  : uint32
-      Offset : uint64
-      Stride : uint64 }
+        /// Offset in bytes into the buffer.
+        Offset : uint64
 
-type IndexData =
-    { Buffer : IBuffer
-      Offset : uint64 }
+        /// Stride in bytes between each AABB.
+        Stride : uint64
+    }
 
+/// Describes a buffer containing V3f vertices.
+[<CLIMutable>]
+type VertexData<'T> =
+    {
+        /// Buffer containing the data.
+        Buffer : 'T
+
+        /// Number of vertices in the buffer.
+        Count  : uint32
+
+        /// Offset in bytes into the buffer.
+        Offset : uint64
+
+        /// Stride in bytes between each vertex.
+        Stride : uint64
+    }
+
+[<RequireQualifiedAccess>]
+type IndexType =
+    | UInt16
+    | UInt32
+
+/// Describes a buffer containing index data.
+[<CLIMutable>]
+type IndexData<'T> =
+    {
+        /// The type of the index data.
+        Type   : IndexType
+
+        /// Buffer containing the data.
+        Buffer : 'T
+
+        /// Offset in bytes into the buffer.
+        Offset : uint64
+    }
+
+/// Flags controlling trace properties of geometry.
 [<Flags>]
 type GeometryFlags =
     | None                = 0
+
+    /// Geometry does not invoke any hit shaders.
     | Opaque              = 1
+
+    /// Any hit shader may only be invoked once per primitive in the geometry.
     | IgnoreDuplicateHits = 2
 
+/// Trace geometry described by a triangle mesh.
+[<CLIMutable>]
 type TriangleMesh =
-    { Vertices   : VertexData
-      Indices    : Option<IndexData>
-      Transform  : Trafo3d
-      Primitives : uint32
-      Flags      : GeometryFlags }
+    {
+        /// Vertices of the mesh.
+        Vertices   : VertexData<IBuffer>
 
+        /// Indices of the mesh.
+        Indices    : IndexData<IBuffer> option
+
+        /// Transformation to apply on the mesh.
+        Transform  : Trafo3d
+
+        /// Number of triangles in the mesh.
+        Primitives : uint32
+
+        /// Geometry flags of the mesh.
+        Flags      : GeometryFlags
+    }
+
+/// Trace geometry described by axis-aligned bounding boxes.
+[<CLIMutable>]
 type BoundingBoxes =
-    { Data  : AABBsData
-      Count : uint32
-      Flags : GeometryFlags }
+    {
+        /// Bounding box data.
+        Data  : AABBsData<IBuffer>
+
+        /// Number of bounding boxes.
+        Count : uint32
+
+        /// Geometry flags of the bounding boxes.
+        Flags : GeometryFlags
+    }
 
 [<RequireQualifiedAccess>]
 type TraceGeometry =
@@ -72,7 +134,9 @@ type IAccelerationStructure =
     abstract member GeometryCount : int
 
 type IAccelerationStructureRuntime =
-    abstract member CreateAccelerationStructure : geometry: TraceGeometry * usage: AccelerationStructureUsage * allowUpdate: bool -> IAccelerationStructure
+    abstract member CreateAccelerationStructure : geometry: TraceGeometry *
+                                                  usage: AccelerationStructureUsage *
+                                                  allowUpdate: bool -> IAccelerationStructure
     abstract member TryUpdateAccelerationStructure : handle: IAccelerationStructure * geometry: TraceGeometry -> bool
 
 
