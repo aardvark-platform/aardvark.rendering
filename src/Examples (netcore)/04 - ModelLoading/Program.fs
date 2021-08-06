@@ -10,6 +10,7 @@ open System
 let main argv = 
     
     Aardvark.Init()
+    Aardvark.SceneGraph.IO.Loader.init()
 
     
 

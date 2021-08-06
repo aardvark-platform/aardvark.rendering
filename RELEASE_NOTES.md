@@ -1,3 +1,9 @@
+### 5.1.14
+- switched to official AssimpNet
+
+### 5.1.13
+- updated mac glfw lib & option to control cocoa menu bar
+
 ### 5.1.12
 - fixed texture download in absense of bufferstorage
 
