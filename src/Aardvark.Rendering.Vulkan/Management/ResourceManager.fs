@@ -1896,7 +1896,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
         )
 
-    member x.CreateAccelerationStructure(instances : aset<Raytracing.TraceInstance>,
+    member x.CreateAccelerationStructure(instances : aset<Raytracing.ITraceInstance>,
                                          sbt : IResourceLocation<Raytracing.ShaderBindingTable>,
                                          usage : Raytracing.AccelerationStructureUsage) =
 

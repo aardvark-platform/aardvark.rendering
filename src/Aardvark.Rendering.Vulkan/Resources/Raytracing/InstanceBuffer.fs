@@ -44,19 +44,19 @@ module private AdaptiveInstanceBufferInternals =
 
             c ||| g
 
-        let writeTransform (token : AdaptiveToken) (dst : nativeint) (inst : TraceInstance) =
+        let writeTransform (token : AdaptiveToken) (dst : nativeint) (inst : ITraceInstance) =
             let trafo = inst.Transform.GetValue(token)
             M34f trafo.Forward |> NativeInt.write dst
 
-        let writeIndex (token : AdaptiveToken) (dst : nativeint) (inst : TraceInstance) =
+        let writeIndex (token : AdaptiveToken) (dst : nativeint) (inst : ITraceInstance) =
             let index = inst.CustomIndex.GetValue(token)
             uint24 index |> NativeInt.write (dst + Offsets.Index)
 
-        let writeMask (token : AdaptiveToken) (dst : nativeint) (inst : TraceInstance) =
+        let writeMask (token : AdaptiveToken) (dst : nativeint) (inst : ITraceInstance) =
             let mask = inst.Mask.GetValue(token)
             uint8 mask |> NativeInt.write (dst + Offsets.Mask)
 
-        let writeHitGroup (sbt : aval<ShaderBindingTable>) (token : AdaptiveToken) (dst : nativeint) (inst : TraceInstance) =
+        let writeHitGroup (sbt : aval<ShaderBindingTable>) (token : AdaptiveToken) (dst : nativeint) (inst : ITraceInstance) =
             let sbt = sbt.GetValue(token)
             let cfg = inst.HitGroups.GetValue(token)
             let accel = inst.Geometry.GetValue(token)
@@ -67,19 +67,19 @@ module private AdaptiveInstanceBufferInternals =
             let hitg = sbt.HitGroupTable.Indices.[cfg]
             uint24 hitg |> NativeInt.write (dst + Offsets.HitGroup)
 
-        let writeFlags (token : AdaptiveToken) (dst : nativeint) (inst : TraceInstance) =
+        let writeFlags (token : AdaptiveToken) (dst : nativeint) (inst : ITraceInstance) =
             let cull = inst.Culling.GetValue(token)
             let geom = inst.GeometryMode.GetValue(token)
             let flags = getFlags cull geom
             uint8 flags |> NativeInt.write (dst + Offsets.Flags)
 
-        let writeGeometry (token : AdaptiveToken) (dst : nativeint) (inst : TraceInstance) =
+        let writeGeometry (token : AdaptiveToken) (dst : nativeint) (inst : ITraceInstance) =
             let accel = inst.Geometry.GetValue(token) |> unbox<AccelerationStructure>
             accel.DeviceAddress |> NativeInt.write (dst + Offsets.Geometry)
 
 
-type AdaptiveInstanceBuffer(instances : aset<TraceInstance>, sbt : aval<ShaderBindingTable>) =
-    inherit AdaptiveCompactBuffer<TraceInstance>(instances, Offsets.Stride)
+type AdaptiveInstanceBuffer(instances : aset<ITraceInstance>, sbt : aval<ShaderBindingTable>) =
+    inherit AdaptiveCompactBuffer<ITraceInstance>(instances, Offsets.Stride)
 
     let writers =
         [| Writers.writeTransform
@@ -94,10 +94,10 @@ type AdaptiveInstanceBuffer(instances : aset<TraceInstance>, sbt : aval<ShaderBi
 
     member x.Count = count
 
-    override x.AcquireValue(inst : TraceInstance) =
+    override x.AcquireValue(inst : ITraceInstance) =
         inst.Geometry.Acquire()
 
-    override x.ReleaseValue(inst : TraceInstance) =
+    override x.ReleaseValue(inst : ITraceInstance) =
         inst.Geometry.Release()
 
     override x.WriteValue =

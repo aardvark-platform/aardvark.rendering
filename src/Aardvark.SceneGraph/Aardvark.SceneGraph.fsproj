@@ -42,7 +42,7 @@
     <Compile Include="IndexedGeometryPrimitives.fs" />
     <Compile Include="PointCloud.fs" />
     <Compile Include="ManagedPool.fs" />
-    <Compile Include="ManagedRaytracingPool.fs" />
+    <Compile Include="ManagedTracePool.fs" />
     <Compile Include="ShaderCompositions.fs" />
     <Compile Include="Imperative.fs" />
     <Compile Include="SgCSharp.fs" />

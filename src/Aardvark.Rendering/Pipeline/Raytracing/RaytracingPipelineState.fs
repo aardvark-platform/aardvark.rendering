@@ -7,7 +7,7 @@ open FSharp.Data.Adaptive
 type RaytracingSceneDescription =
     {
         /// The instances in the scene.
-        Instances : aset<TraceInstance>
+        Instances : aset<ITraceInstance>
 
         /// Usage flag for the underlying acceleration structure.
         Usage   : AccelerationStructureUsage
@@ -19,16 +19,17 @@ module RaytracingSceneDescription =
     let empty =
         { Instances = ASet.empty; Usage = AccelerationStructureUsage.Static }
 
-    let ofASet (instances : aset<TraceInstance>) =
-        { Instances = instances; Usage = AccelerationStructureUsage.Static }
+    let ofASet (instances : aset<#ITraceInstance>) =
+        { Instances = instances |> ASet.map (fun x -> x :> ITraceInstance)
+          Usage     = AccelerationStructureUsage.Static }
 
-    let ofList (instances : List<TraceInstance>) =
+    let ofList (instances : List<#ITraceInstance>) =
         instances |> ASet.ofList |> ofASet
 
-    let ofArray (instances : TraceInstance[]) =
+    let ofArray (instances : #ITraceInstance[]) =
         instances |> ASet.ofArray |> ofASet
 
-    let ofSeq (instances : seq<TraceInstance>) =
+    let ofSeq (instances : seq<#ITraceInstance>) =
         instances |> ASet.ofSeq |> ofASet
 
     let usage (u : AccelerationStructureUsage) (scene : RaytracingSceneDescription) =

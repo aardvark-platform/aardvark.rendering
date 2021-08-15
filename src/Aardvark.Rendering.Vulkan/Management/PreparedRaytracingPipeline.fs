@@ -15,17 +15,17 @@ module private PreparedRaytracingPipelineInternals =
 
     open System.Collections.Generic
 
-    type HitConfigSceneReader(scene : aset<TraceInstance>) =
+    type HitConfigSceneReader(scene : aset<ITraceInstance>) =
         inherit AdaptiveObject()
 
         let reader = scene.GetReader()
-        let instances = HashSet<TraceInstance>()
+        let instances = HashSet<ITraceInstance>()
         let mutable configs = Set.empty
 
-        let add (inst : TraceInstance) =
+        let add (inst : ITraceInstance) =
             instances.Add(inst) |> ignore
 
-        let remove (inst : TraceInstance) =
+        let remove (inst : ITraceInstance) =
             instances.Remove(inst) |> ignore
 
         member x.Read(token : AdaptiveToken) =

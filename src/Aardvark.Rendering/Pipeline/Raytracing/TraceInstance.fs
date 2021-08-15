@@ -42,6 +42,31 @@ type GeometryMode =
 
 type HitConfig = List<Symbol>
 
+/// Interface for instances in a raytracing scene.
+type ITraceInstance =
+
+    /// The geometries of the instance.
+    abstract member Geometry     : aval<IAccelerationStructure>
+
+    /// The hit groups for each geometry of the instance.
+    abstract member HitGroups    : aval<HitConfig>
+
+    /// The transformation of the instance.
+    abstract member Transform    : aval<Trafo3d>
+
+    /// The cull mode of the instance. Only has an effect if TraceRay() is called with one of the cull flags.
+    abstract member Culling      : aval<CullMode>
+
+    /// Optionally overrides flags set in the geometry.
+    abstract member GeometryMode : aval<GeometryMode>
+
+    /// Visibility mask that is compared against the mask specified by TraceRay().
+    abstract member Mask         : aval<VisibilityMask>
+
+    /// Custom index provided in shaders.
+    abstract member CustomIndex  : aval<uint32>
+
+// Instance in a raytracing scene.
 [<CLIMutable>]
 type TraceInstance =
     {
@@ -66,6 +91,15 @@ type TraceInstance =
         /// Custom index provided in shaders.
         CustomIndex  : aval<uint32>
     }
+
+    interface ITraceInstance with
+        member x.Geometry     = x.Geometry
+        member x.HitGroups    = x.HitGroups
+        member x.Transform    = x.Transform
+        member x.Culling      = x.Culling
+        member x.GeometryMode = x.GeometryMode
+        member x.Mask         = x.Mask
+        member x.CustomIndex  = x.CustomIndex
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module TraceInstance =
@@ -147,14 +181,14 @@ module TraceInstanceBuilder =
         member x.Geometry(_ : GeometryMustBeSpecified, accelerationStructure : IAccelerationStructure) =
             TraceInstance.create' accelerationStructure
 
-        [<CustomOperation("hitgroups")>]
+        [<CustomOperation("hitGroups")>]
         member x.HitGroups(o : TraceInstance, g : aval<HitConfig>) =
             o |> TraceInstance.hitGroups g
 
         member x.HitGroups(o : TraceInstance, g : HitConfig) =
             o |> TraceInstance.hitGroups' g
 
-        [<CustomOperation("hitgroup")>]
+        [<CustomOperation("hitGroup")>]
         member x.HitGroup(o : TraceInstance, g : aval<Symbol>) =
             o |> TraceInstance.hitGroup g
 

@@ -263,17 +263,17 @@ module Effect =
             }
 
 
-    let private hitgroupModel =
+    let private hitGroupModel =
         hitgroup {
             closesthit (chitSolidColor C3d.BurlyWood)
         }
 
-    let private hitgroupFloor =
+    let private hitGroupFloor =
         hitgroup {
             closesthit chitTextured
         }
 
-    let private hitgroupSphere =
+    let private hitGroupSphere =
         hitgroup {
             closesthit chitSphere
             intersection (intersectionSphere 0.2)
@@ -285,9 +285,9 @@ module Effect =
             raygen rgenMain
             miss (missSolidColor C3d.Lavender)
             miss (MissShader.Shadow, missShadow)
-            hitgroup (HitGroup.Model, hitgroupModel)
-            hitgroup (HitGroup.Floor, hitgroupFloor)
-            hitgroup (HitGroup.Sphere, hitgroupSphere)
+            hitgroup (HitGroup.Model, hitGroupModel)
+            hitgroup (HitGroup.Floor, hitGroupFloor)
+            hitgroup (HitGroup.Sphere, hitGroupSphere)
         }
 
 [<EntryPoint>]
@@ -318,7 +318,7 @@ let main argv =
     let traceTexture =
         runtime.CreateTexture2D(TextureFormat.Rgba32f, 1, win.Sizes)
 
-    let geometryPool =
+    use geometryPool =
         let signature =
             let vertexAttributes =
                 Map.ofList [
@@ -343,15 +343,15 @@ let main argv =
               InstanceAttributeTypes = instanceAttributes
               GeometryAttributeTypes = geometryAttributes }
 
-        new ManagedRaytracingPool(runtime, signature)
+        new ManagedTracePool(runtime, signature)
 
-    use model =
+    let model =
         let scene = Loader.Assimp.load (Path.combine [__SOURCE_DIRECTORY__; "..";"..";"..";"data";"aardvark";"aardvark.obj"])
 
         let trafo =
             Trafo3d.Scale(5.0, 5.0, -5.0) * Trafo3d.Translation(0.0, 0.0, 1.5)
 
-        let instanceAttributes =
+        let instanceAttr =
             let normalMatrix =
                 trafo.Backward.Transposed.UpperLeftM33()
 
@@ -360,18 +360,19 @@ let main argv =
                 InstanceAttribute.NormalMatrix, AVal.constant normalMatrix :> IAdaptiveValue
             ]
 
-        let instance =
-            AdaptiveTraceInstance.ofIndexedGeometry' GeometryFlags.Opaque trafo scene.meshes.[0].geometry
-            |> AdaptiveTraceInstance.instanceAttributes instanceAttributes
+        traceObject {
+            indexedGeometry (scene.meshes.[0].geometry, trafo, GeometryFlags.Opaque)
+            instanceAttributes instanceAttr
+            hitGroup HitGroup.Model
+            culling (CullMode.Enabled WindingOrder.Clockwise)
+        }
 
-        geometryPool.Add(instance)
-
-    use floor =
+    let floor =
         let positions = [| V3f(-0.5f, -0.5f, 0.0f); V3f(-0.5f, 0.5f, 0.0f); V3f(0.5f, -0.5f, 0.0f); V3f(0.5f, 0.5f, 0.0f); |]
         let indices = [| 0; 1; 2; 3 |]
         let uv = positions |> Array.map (fun p -> p.XY + 0.5f)
 
-        let vertexAttributes =
+        let vertexAttr =
             SymDict.ofList [
                 DefaultSemantic.Positions, positions :> System.Array
                 DefaultSemantic.DiffuseColorCoordinates, uv :> System.Array
@@ -379,7 +380,7 @@ let main argv =
 
         let trafo = Trafo3d.Scale(48.0)
 
-        let instanceAttributes =
+        let instanceAttr =
             let normalMatrix =
                 trafo.Backward.Transposed.UpperLeftM33()
 
@@ -388,14 +389,15 @@ let main argv =
                 InstanceAttribute.NormalMatrix, AVal.constant normalMatrix :> IAdaptiveValue
             ]
 
-        let geometry =
-            IndexedGeometry(IndexedGeometryMode.TriangleStrip, indices, vertexAttributes, SymDict.empty)
+        let geom =
+            IndexedGeometry(IndexedGeometryMode.TriangleStrip, indices, vertexAttr, SymDict.empty)
 
-        let instance =
-            AdaptiveTraceInstance.ofIndexedGeometry' GeometryFlags.Opaque trafo geometry
-            |> AdaptiveTraceInstance.instanceAttributes instanceAttributes
-
-        geometryPool.Add(instance)
+        traceObject {
+            indexedGeometry (geom, trafo, GeometryFlags.Opaque)
+            instanceAttributes instanceAttr
+            hitGroup HitGroup.Floor
+            culling (CullMode.Enabled WindingOrder.CounterClockwise)
+        }
 
     let sphereOffsets =
         let o1 = V3d(0.0, 0.0, 0.5)
@@ -458,27 +460,11 @@ let main argv =
             Sym.ofString "LightLocation",    lightLocation :> IAdaptiveValue
         ]
 
-    let staticInstances =
-        let instModel =
-            traceInstance {
-                geometry model.Geometry
-                customIndex model.Index
-                hitgroup HitGroup.Model
-                culling (CullMode.Enabled WindingOrder.Clockwise)
-            }
+    let staticObjects =
+        ASet.ofList [model; floor]
 
-        let instFloor =
-            traceInstance {
-                geometry floor.Geometry
-                customIndex floor.Index
-                hitgroup HitGroup.Floor
-                culling (CullMode.Enabled WindingOrder.CounterClockwise)
-            }
-
-        ASet.ofList [instModel; instFloor]
-
-    let sphereInstances =
-        cset<TraceInstance>()
+    let sphereObjects =
+        cset<TraceObject>()
 
     let createSphere =
 
@@ -496,15 +482,12 @@ let main argv =
                 let p = rnd.CreatePermutationArray(colors.Length)
                 colors |> Array.permute (fun i -> p.[i])
 
-            let mti =
+            let aabbs =
                 sphereOffsets |> Array.map (fun offset ->
                     BoundingBoxes.ofCenterAndRadius offset 0.2
                     |> BoundingBoxes.flags GeometryFlags.Opaque
                 )
                 |> TraceGeometry.AABBs
-                |> AdaptiveTraceInstance.ofGeometry
-                |> AdaptiveTraceInstance.geometryAttribute' GeometryAttribute.Colors colors
-                |> geometryPool.Add
 
             let trafo =
                 let startTime = System.DateTime.Now
@@ -517,22 +500,17 @@ let main argv =
                     Trafo3d.RotationEuler(t * rotation) * Trafo3d.Translation(position)
                 )
 
-            let inst =
-                traceInstance {
-                    geometry mti.Geometry
-                    customIndex mti.Index
-                    hitgroups (HitGroup.Sphere |> List.replicate 6)
-                    transform trafo
-                    mask 0x80
-                }
-
-            inst, mti
-
-    let instances =
-        ASet.union staticInstances sphereInstances
+            traceObject {
+                geometry aabbs
+                geometryAttribute GeometryAttribute.Colors colors
+                hitGroups (HitGroup.Sphere |> List.replicate 6)
+                transform trafo
+                mask 0x80
+            }
 
     let scene =
-        RaytracingSceneDescription.ofASet instances
+        ASet.union staticObjects sphereObjects
+        |> RaytracingSceneDescription.ofPool geometryPool
 
     let pipeline =
         {
@@ -565,29 +543,23 @@ let main argv =
             q.End()
         )
 
-    let mtis = System.Collections.Generic.List()
-
     win.Keyboard.KeyDown(Keys.Enter).Values.Add(fun _ ->
         transact (fun () ->
-            let inst, mti = createSphere()
-            mtis.Add(mti)
-            sphereInstances.Value <- sphereInstances.Value |> HashSet.add inst
+            let s = createSphere()
+            sphereObjects.Value <- sphereObjects.Value |> HashSet.add s
         )
     )
 
     win.Keyboard.KeyDown(Keys.Delete).Values.Add(fun _ ->
         transact (fun () ->
-            let list = sphereInstances.Value |> HashSet.toList
+            let list = sphereObjects.Value |> HashSet.toList
             let idx = rnd.UniformInt(list.Length)
             let set = list |> List.indexed |> List.filter (fst >> (<>) idx) |> List.map snd |> HashSet.ofList
-            sphereInstances.Value <- set
+            sphereObjects.Value <- set
         )
     )
 
     win.RenderTask <- renderTask
     win.Run()
-
-    for mti in mtis do
-        mti.Dispose()
 
     0
