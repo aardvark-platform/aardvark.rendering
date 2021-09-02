@@ -7,7 +7,7 @@ open FSharp.Data.Adaptive
 open Aardvark.Rendering
 open Aardvark.Rendering.GL
 open OpenTK.Graphics.OpenGL4
-open Aardvark.Application.WinForms
+open Aardvark.Application.Slim
 
 let testCompile() =
     use runtime = new Runtime()
@@ -157,7 +157,7 @@ let testTextureCubeArray() =
     let runtime = app.Runtime
     let texRt = runtime :> ITextureRuntime
 
-    let cta = texRt.CreateTextureCubeArray(128, TextureFormat.Rgba8, 1, 1, 4)
+    let cta = texRt.CreateTextureCubeArray(128, TextureFormat.Rgba8, 1, 4)
 
     let cube0View = texRt.CreateTextureView(cta, Range1i(0,0), Range1i(0,5), false) // create TextureCube view of [0]
     let cube1View = texRt.CreateTextureView(cta, Range1i(0,0), Range1i(6,11), false) // create TextureCube view of [1]

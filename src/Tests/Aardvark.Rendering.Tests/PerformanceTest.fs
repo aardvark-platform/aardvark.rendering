@@ -4,11 +4,10 @@ open System
 open Aardvark.Base
 
 open Aardvark.Rendering
-open Aardvark.Rendering.Interactive
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
-open Aardvark.Application.WinForms
+open Aardvark.Application.Slim
 open Aardvark.SceneGraph.Semantics
 open System.Diagnostics
 open Aardvark.Rendering.GL
@@ -105,7 +104,7 @@ module RandomCubesPerformanceTest =
         Aardvark.Init()
 
         use app = new OpenGlApplication()
-        let win = app.CreateSimpleRenderWindow(1)
+        let win = app.CreateGameWindow(1)
 
         let initialView = CameraView.LookAt(180.0 * V3d.III, V3d.OOO, V3d.OOI)
         let perspective = 
@@ -165,7 +164,7 @@ module RenderTaskPerformance =
         Aardvark.Init()
 
         use app = new OpenGlApplication()
-        let win = app.CreateSimpleRenderWindow(1)
+        let win = app.CreateGameWindow(1)
 
         let initialView = CameraView.LookAt(V3d.III, V3d.OOO, V3d.OOI)
         let perspective = 
