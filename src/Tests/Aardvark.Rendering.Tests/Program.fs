@@ -1,4 +1,5 @@
-﻿open Aardvark.Rendering.GL.Tests
+﻿open Aardvark.Rendering.Tests
+open Aardvark.Rendering.GL.Tests
 
 open System
 open Aardvark.Base
@@ -221,11 +222,12 @@ let testCopySlice() =
 [<EntryPoint>]
 let main args =
     Aardvark.Init()
+    ``Texture Tests``.runAllTests()
     //testCompile()
 
     //RadixSortTest.run()
 
-    testDownloadSlice()
+    //testDownloadSlice()
     //testCopySlice()
 
 

@@ -35,6 +35,11 @@ module PixImage =
     let toTexture (wantMipMaps : bool) (img : #PixImage) =
         PixTexture2d(PixImageMipMap [| img :> PixImage |], wantMipMaps) :> ITexture
 
+    let solid (size : V2i) (color : C4b) =
+        let pi = PixImage<byte>(Col.Format.RGBA, size)
+        pi.GetMatrix<C4b>().SetByCoord(fun _ -> color) |> ignore
+        pi
+
     let checkerboard (color : C4b) =
         let pi = PixImage<byte>(Col.Format.RGBA, V2i.II * 256)
         pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
@@ -66,6 +71,9 @@ module PixImage =
 
 
 module ``Texture Tests`` =
+
+    type IBackendTexture with
+        member x.Clear(color : C4b) = x.Runtime.Upload(x, PixImage.solid x.Size.XY color)
 
     type UnexpectedPassException() =
         inherit Exception("Expected an exception but none occurred")
@@ -127,6 +135,7 @@ module ``Texture Tests`` =
         let fmt = TextureFormat.ofPixFormat data.PixFormat TextureParams.empty
 
         let t = runtime.CreateTexture2D(size, fmt, 1, 1)
+        t.Clear(C4b.Zero)
         runtime.Upload(t, data)
         let result = runtime.Download(t).ToPixImage<byte>()
         runtime.DeleteTexture(t)
@@ -713,3 +722,73 @@ module ``Texture Tests`` =
 
         runtime.DeleteTexture(src)
         runtime.DeleteTexture(dst)
+
+    let private allTestsGL = [
+            "[Copy] Arguments out of range"    , fun () -> ``[Copy] Arguments out of range``       ("OpenGL")
+            "[Copy] Mipmapped cube"            , fun () -> ``[Copy] Mipmapped cube``               ("OpenGL")
+            "[Copy] Mipmapped cube array"      , fun () -> ``[Copy] Mipmapped cube array``         ("OpenGL")
+            "[Copy] Multisampled"              , fun () -> ``[Copy] Multisampled``                 ("OpenGL", false)
+            "[Copy] Multisampled"              , fun () -> ``[Copy] Multisampled``                 ("OpenGL", true)
+            "[Copy] Simple"                    , fun () -> ``[Copy] Simple``                       ("OpenGL")
+            "[Create] Invalid usage"           , fun () -> ``[Create] Invalid usage``              ("OpenGL")
+            "[Create] Non-positive arguments"  , fun () -> ``[Create] Non-positive arguments``     ("OpenGL")
+            "[Create] Valid usage"             , fun () -> ``[Create] Valid usage``                ("OpenGL")
+            "[Download] Arguments out of range", fun () -> ``[Download] Arguments out of range``   ("OpenGL")
+            "[Download] Depth and stencil"     , fun () -> ``[Download] Depth and stencil``        ("OpenGL")
+            "[Download] Mipmapped array"       , fun () -> ``[Download] Mipmapped array``          ("OpenGL")
+            "[Download] Mipmapped cube"        , fun () -> ``[Download] Mipmapped cube``           ("OpenGL")
+            "[Download] Mipmapped cube array"  , fun () -> ``[Download] Mipmapped cube array``     ("OpenGL")
+            "[Download] Multisampled"          , fun () -> ``[Download] Multisampled``             ("OpenGL")
+            "[Download] Simple"                , fun () -> ``[Download] Simple``                   ("OpenGL")
+            "[Download] Subwindow"             , fun () -> ``[Download] Subwindow``                ("OpenGL")
+        ]
+
+    let private allTestsVulkan = [
+            "[Copy] Arguments out of range"    , fun () -> ``[Copy] Arguments out of range``       ("Vulkan")
+            "[Copy] Mipmapped cube"            , fun () -> ``[Copy] Mipmapped cube``               ("Vulkan")
+            "[Copy] Mipmapped cube array"      , fun () -> ``[Copy] Mipmapped cube array``         ("Vulkan")
+            "[Copy] Multisampled"              , fun () -> ``[Copy] Multisampled``                 ("Vulkan", false)
+            "[Copy] Multisampled"              , fun () -> ``[Copy] Multisampled``                 ("Vulkan", true)
+            "[Copy] Simple"                    , fun () -> ``[Copy] Simple``                       ("Vulkan")
+            "[Create] Invalid usage"           , fun () -> ``[Create] Invalid usage``              ("Vulkan")
+            "[Create] Non-positive arguments"  , fun () -> ``[Create] Non-positive arguments``     ("Vulkan")
+            "[Create] Valid usage"             , fun () -> ``[Create] Valid usage``                ("Vulkan")
+            "[Download] Arguments out of range", fun () -> ``[Download] Arguments out of range``   ("Vulkan")
+            "[Download] Mipmapped array"       , fun () -> ``[Download] Mipmapped array``          ("Vulkan")
+            "[Download] Mipmapped cube"        , fun () -> ``[Download] Mipmapped cube``           ("Vulkan")
+            "[Download] Mipmapped cube array"  , fun () -> ``[Download] Mipmapped cube array``     ("Vulkan")
+            "[Download] Multisampled"          , fun () -> ``[Download] Multisampled``             ("Vulkan")
+            "[Download] Simple"                , fun () -> ``[Download] Simple``                   ("Vulkan")
+            "[Download] Subwindow"             , fun () -> ``[Download] Subwindow``                ("Vulkan")
+        ]
+
+    let private runSingle (name : string) (test : unit -> unit) =
+        Report.BeginTimed(name)
+
+        try
+            Report.Targets.Remove(Report.ConsoleTarget)
+            test()
+            Report.Targets.Add(Report.ConsoleTarget)
+            Report.EndTimed() |> ignore
+        with
+        | e ->
+            Report.Targets.Add(Report.ConsoleTarget)
+            Report.EndTimed(" failed: {0}", e) |> ignore 
+
+    let private runList (tests : List<string * (unit -> unit)>) =
+        tests |> List.iter (uncurry runSingle)
+
+    let runAllOpenGLTests() =
+        allTestsGL |> runList
+
+    let runAllVulkanTests() =
+        allTestsVulkan |> runList
+
+    let runAllTests() =
+        Report.BeginTimed("OpenGL tests")
+        runAllOpenGLTests()
+        Report.EndTimed() |> ignore
+
+        Report.BeginTimed("Vulkan tests")
+        runAllVulkanTests()
+        Report.EndTimed() |> ignore
