@@ -39,6 +39,7 @@
     <Compile Include="Core\ModeHandles.fs" />
     <Compile Include="Core\MemoryInfo.fs" />
     <Compile Include="Core\Extensions.fs" />
+    <Compile Include="Core\Extensions\ARB_texture_storage.fs" />
     <Compile Include="Core\Extensions\ARB_buffer_storage.fs" />
     <Compile Include="Core\Extensions\ARB_direct_state_access.fs" />
     <Compile Include="Core\Extensions\ARB_sparse_buffer.fs" />
