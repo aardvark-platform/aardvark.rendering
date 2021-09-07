@@ -138,6 +138,10 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "12 - AddRemoveStress", "Scr
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "30 - NaiveShadowMapping", "Examples (netcore)\30 - NaiveShadowMapping\30 - NaiveShadowMapping.fsproj", "{BD65E143-C78B-44B3-895F-EE71AAE74C8E}"
 EndProject
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Rendering.Tests", "Tests\Aardvark.Rendering.Tests\Aardvark.Rendering.Tests.fsproj", "{5742AE92-E754-47CC-8B11-0993B7FD0F0A}"
+EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Tests", "Tests", "{0F1F4F2E-2DAE-47B2-92E4-E7202DAF7BD6}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -368,6 +372,10 @@ Global
 		{BD65E143-C78B-44B3-895F-EE71AAE74C8E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{BD65E143-C78B-44B3-895F-EE71AAE74C8E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{BD65E143-C78B-44B3-895F-EE71AAE74C8E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5742AE92-E754-47CC-8B11-0993B7FD0F0A}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5742AE92-E754-47CC-8B11-0993B7FD0F0A}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5742AE92-E754-47CC-8B11-0993B7FD0F0A}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5742AE92-E754-47CC-8B11-0993B7FD0F0A}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -420,6 +428,7 @@ Global
 		{A21CA003-4F6F-4701-9EB8-899B250FE7CC} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{39028E3D-EC53-4564-93F2-DB65606B0C40} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{BD65E143-C78B-44B3-895F-EE71AAE74C8E} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
+		{5742AE92-E754-47CC-8B11-0993B7FD0F0A} = {0F1F4F2E-2DAE-47B2-92E4-E7202DAF7BD6}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}
