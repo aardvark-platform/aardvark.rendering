@@ -1,14 +1,7 @@
-Aardvark.Base.Essentials
-Aardvark.Base.Incremental
-Aardvark.Base.Runtime
-FShade.Core
-FsUnit
-FSharp.Core
-Unofficial.Typography
-Unofficial.LibTessDotNet
-NUnit
-FShade.GLSL
-Unofficial.OpenTK
-Unofficial.OpenTK.GLControl
-NUnit3TestAdapter
+group Test
+
+Expecto
+Expecto.FsCheck
+Expecto.Hopac
+YoloDev.Expecto.TestSdk
 Microsoft.NET.Test.Sdk
