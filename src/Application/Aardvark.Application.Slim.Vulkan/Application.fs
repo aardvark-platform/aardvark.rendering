@@ -47,6 +47,10 @@ module private VulkanHandles =
                     let info = { XcbSurfaceInfo.connection = NativePtr.ofNativeInt connection; XcbSurfaceInfo.window = i.WindowHandle }
                     Some (SurfaceInfo.Xcb info)
 
+                | :? MacOS.CocoaWindowInfo as c -> 
+                    let info = SurfaceInfo.MacOS { handle = nativeint c.Handle; viewHandle = nativeint c.ViewHandle }
+                    Some info
+
                 | _ ->
 
                     None

@@ -34,6 +34,7 @@ type WaylandSurfaceInfo = { display : nativeptr<nativeint>; surface : nativeptr<
 type MirSurfaceInfo = { connection : nativeptr<nativeint>; mirSurface : nativeptr<nativeint> }
 type AndroidSurfaceInfo = { window : nativeptr<nativeint> }
 type Win32SurfaceInfo = { hinstance : nativeint; hwnd : nativeint }
+type MacOSSurfaceInfo = { handle : nativeint; viewHandle : nativeint }
 
 type SurfaceInfo = 
     | XLib of XLibSurfaceInfo
@@ -42,6 +43,8 @@ type SurfaceInfo =
     | Mir of MirSurfaceInfo
     | Android of AndroidSurfaceInfo
     | Win32 of Win32SurfaceInfo
+    | MacOS of MacOSSurfaceInfo
+    
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -276,6 +279,7 @@ module Surface =
                         )
                     VkRaw.vkCreateWin32SurfaceKHR(instance.Handle, pInfo, NativePtr.zero, pHandle)
                         |> check "could not create win32 surface"
+
 
             return new Surface(device, !!pHandle)
         }
