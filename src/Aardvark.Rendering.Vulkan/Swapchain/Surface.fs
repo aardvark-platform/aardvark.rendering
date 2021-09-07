@@ -212,6 +212,15 @@ type Surface(device : Device, handle : VkSurfaceKHR) =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Surface =
+
+    module MacOSFunctions =
+
+        let mutable ptr : option<nativeint> =None
+
+        [<DllImport("vkvm")>]
+        extern void makeViewMetalCompatible(nativeint handle)
+        extern void unmakeViewMetalCompatible(nativeint handle)
+
     let create (info : SurfaceInfo) (device : Device) =
         native {
             let instance = device.Instance
@@ -279,6 +288,20 @@ module Surface =
                         )
                     VkRaw.vkCreateWin32SurfaceKHR(instance.Handle, pInfo, NativePtr.zero, pHandle)
                         |> check "could not create win32 surface"
+
+                | MacOS info -> 
+                    
+                    let! pInfo =
+                        MVKMacosSurface.VkMacOSSurfaceCreateInfoMVK(VkMacOSSurfaceCreateFlagsMVK.None, info.viewHandle)
+
+                    match MacOSFunctions.ptr with
+                    | None -> failwith ""
+                    | Some ptr -> 
+                        let d = Marshal.GetDelegateForFunctionPointer(ptr, typeof<MVKMacosSurface.VkRaw.VkCreateMacOSSurfaceMVKDel>) |> unbox<MVKMacosSurface.VkRaw.VkCreateMacOSSurfaceMVKDel>
+                        d.Invoke(instance.Handle, pInfo, NativePtr.zero, pHandle) |> check "could not create vkCreateMacOSSurfaceMVK"
+
+                    //MVKMacosSurface.VkRaw.vkCreateMacOSSurfaceMVK(instance.Handle, pInfo, NativePtr.zero, pHandle)
+                    //    |> check "could not create vkCreateMacOSSurfaceMVK"
 
 
             return new Surface(device, !!pHandle)

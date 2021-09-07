@@ -583,6 +583,8 @@ module Instance =
         let ShaderSubgroupVote              = EXTShaderSubgroupVote.Name
         let ShaderSubgroupBallot            = EXTShaderSubgroupBallot.Name
 
+        let MacOSSurface                    = MVKMacosSurface.Name
+
     module Layers =
         let ApiDump             = "VK_LAYER_LUNARG_api_dump"
         let DeviceLimits        = "VK_LAYER_LUNARG_device_limits"

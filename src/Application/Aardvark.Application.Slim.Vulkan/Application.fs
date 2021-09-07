@@ -310,6 +310,9 @@ type VulkanApplication(debug : DebugConfig option, chooseDevice : list<PhysicalD
             if debug.IsSome then
                 yield Instance.Extensions.DebugReport
                 yield Instance.Extensions.DebugUtils
+
+            yield KHRPortabilitySubset.Name
+            yield Instance.Extensions.MacOSSurface
         ]
 
     let requestedLayers =

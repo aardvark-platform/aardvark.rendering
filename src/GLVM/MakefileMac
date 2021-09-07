@@ -8,14 +8,18 @@ deploy: glvm.dylib
 	mkdir -p "../../bin/Debug/netcoreapp3.1/" && cp glvm.dylib ../../bin/Debug/netcoreapp3.1/glvm.dylib
 	mkdir -p "../../bin/Release/netcoreapp3.1/" && cp glvm.dylib ../../bin/Release/netcoreapp3.1/glvm.dylib
 
+mac.o: MacSupport.cpp
+	gcc -fPIC -c MacSupport.cpp -o mac.o
+
+
 glvm.o: glvm.cpp glvm.h
 	g++ -std=c++11 -fPIC -c glvm.cpp -o glvm.o
 
 State.o: State.cpp State.h
 	g++ -std=c++11 -fPIC -c State.cpp -o State.o
 
-glvm.dylib: glvm.o State.o
-	g++ State.o glvm.o -shared -o glvm.dylib -framework OpenGL
+glvm.dylib: glvm.o State.o mac.o
+	g++ State.o glvm.o mac.o -shared -o glvm.dylib -framework OpenGL
 
 .PHONY clean:
 	rm -fr *.o glvm.dylib

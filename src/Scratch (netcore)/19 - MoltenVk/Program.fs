@@ -11,8 +11,12 @@ open System.Runtime.InteropServices
 [<EntryPoint>]
 let main argv = 
     
-    let a = NativeLibrary.Load "libMoltenVK.dylib"
-    printfn "libMoltenVk: %A" a
+    try
+        let handle = NativeLibrary.Load "libMoltenVK.dylib"
+        let f = NativeLibrary.GetExport(handle, "vkCreateMacOSSurfaceMVK")
+        printfn "libMoltenVk: %A -> %A" handle f
+        Aardvark.Rendering.Vulkan.Surface.MacOSFunctions.ptr <- Some f
+    with _ -> ()
     
     Aardvark.Init()
 
