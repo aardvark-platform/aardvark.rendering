@@ -2219,11 +2219,16 @@ module TextureExtensions =
             GL.Check "could not bind buffer"
 
             GL.BufferStorage(BufferTarget.PixelPackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapReadBit)
+            GL.BufferStorage(BufferTarget.PixelPackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapReadBit)
             GL.Check "could not set buffer storage"
 
             if t.IsArray then
                 // For some reason we cannot use the bind target here? Doc says otherwise
-                GL.GetTextureSubImage(t.Handle, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, targetSize, nativeint 0)
+                // Moreover this does not work on OpenGL < 4.5 (Mac!)
+                // Therefore we disable this code path and do an extra copy into a temporary texture instead
+                // TODO: Performance?
+                failwith "Not possible!"
+                //GL.GetTextureSubImage(t.Handle, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, targetSize, nativeint 0)
             else
                 GL.GetTexImage(target, level, pixelFormat, pixelType, 0n)
             GL.Check "could not get texture image"
@@ -2573,7 +2578,7 @@ type ContextTextureExtensions =
         using this.ResourceLock (fun _ ->
             let levelSize = t.GetSize level
             let offset = V2i(offset.X, levelSize.Y - offset.Y - target.Size.Y) // flip y-offset
-            if offset = V2i.Zero && target.Size = levelSize.XY then
+            if offset = V2i.Zero && target.Size = levelSize.XY && not t.IsArray then
                 this.Download(t, level, slice, target)
             else
                 let temp = this.CreateTexture2D(target.Size, 1, t.Format, 1)
@@ -2634,7 +2639,7 @@ type ContextTextureExtensions =
             let targetSize = V2i target.Size
             let levelSize = t.GetSize level
             let offset = V2i(offset.X, levelSize.Y - offset.Y - targetSize.Y) // flip y-offset
-            if offset = V2i.Zero && targetSize = levelSize.XY then
+            if offset = V2i.Zero && targetSize = levelSize.XY && not t.IsArray then
                 this.DownloadStencil(t, level, slice, target)
             else
                 let temp = this.CreateTexture2D(targetSize, 1, t.Format, 1)
@@ -2687,7 +2692,7 @@ type ContextTextureExtensions =
             let targetSize = V2i target.Size
             let levelSize = t.GetSize level
             let offset = V2i(offset.X, levelSize.Y - offset.Y - targetSize.Y) // flip y-offset
-            if offset = V2i.Zero && targetSize = levelSize.XY then
+            if offset = V2i.Zero && targetSize = levelSize.XY && not t.IsArray then
                 this.DownloadDepth(t, level, slice, target)
             else
                 let temp = this.CreateTexture2D(targetSize, 1, t.Format, 1)
