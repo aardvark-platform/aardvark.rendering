@@ -571,21 +571,25 @@ let newExample (name : string) (dir : string) =
 
     let id = maxIndex + 1
 
-    let slnPath = Path.Combine(dir, "..\\Aardvark.Rendering.sln")
-    let sln = slnPath |> Solution.load
-    let examples = Solution.tryFindFolder "Scratch (netcore)" sln
+    let addToSolution (solutionName : string) =
+        let slnPath = Path.Combine(dir, "..", solutionName)
+        let sln = slnPath |> Solution.load
+        let examples = Solution.tryFindFolder "Scratch (netcore)" sln
 
-    match Solution.tryFind sourceProjectName sln with
-        | Some p -> 
-            let dst = Path.Combine(dir, sprintf "%02d - %s" id name)
-            let newProjs = ProjectDirectory.copy template  p.kind id dst 
+        match Solution.tryFind sourceProjectName sln with
+            | Some p -> 
+                let dst = Path.Combine(dir, sprintf "%02d - %s" id name)
+                let newProjs = ProjectDirectory.copy template  p.kind id dst 
 
-            let mutable sln = sln
-            for newProj in newProjs do
-                sln <- Solution.add examples newProj sln
+                let mutable sln = sln
+                for newProj in newProjs do
+                    sln <- Solution.add examples newProj sln
 
-            Solution.save slnPath sln
-        | None -> failwithf "could not find source project in solution: %A" sourceProjectName
+                Solution.save slnPath sln
+            | None -> failwithf "could not find source project in solution: %A" sourceProjectName
+
+    addToSolution "Aardvark.Rendering.sln"
+    addToSolution "Aardvark.Rendering.NonWindows.sln"
 
 printfn "enter a name:"
 let name = Console.ReadLine()
