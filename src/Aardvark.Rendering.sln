@@ -150,8 +150,6 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.OpenVR
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.Slim.GL", "Application\Aardvark.Application.Slim.GL\Aardvark.Application.Slim.GL.fsproj", "{F8E2E201-39EC-4000-B3E7-E317016FA807}"
 EndProject
-Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "SlimJim", "Demo\SlimJim\SlimJim.fsproj", "{6EE5993C-4404-40E3-B3E9-3D0A37FBC699}"
-EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.Slim", "Application\Aardvark.Application.Slim\Aardvark.Application.Slim.fsproj", "{72A7471E-7BF7-41BD-A654-0DC904B49D1F}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Application.Slim.Vulkan", "Application\Aardvark.Application.Slim.Vulkan\Aardvark.Application.Slim.Vulkan.fsproj", "{77AF53B0-FE23-4DE2-B218-5726B295F6BD}"
@@ -477,10 +475,6 @@ Global
 		{F8E2E201-39EC-4000-B3E7-E317016FA807}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{F8E2E201-39EC-4000-B3E7-E317016FA807}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{F8E2E201-39EC-4000-B3E7-E317016FA807}.Release|Any CPU.Build.0 = Release|Any CPU
-		{6EE5993C-4404-40E3-B3E9-3D0A37FBC699}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{6EE5993C-4404-40E3-B3E9-3D0A37FBC699}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{6EE5993C-4404-40E3-B3E9-3D0A37FBC699}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{6EE5993C-4404-40E3-B3E9-3D0A37FBC699}.Release|Any CPU.Build.0 = Release|Any CPU
 		{72A7471E-7BF7-41BD-A654-0DC904B49D1F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{72A7471E-7BF7-41BD-A654-0DC904B49D1F}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{72A7471E-7BF7-41BD-A654-0DC904B49D1F}.Release|Any CPU.ActiveCfg = Release|Any CPU
