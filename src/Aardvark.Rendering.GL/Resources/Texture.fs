@@ -1896,29 +1896,33 @@ module TextureExtensions =
 
     [<AutoOpen>]
     module internal Uploads =
-        let getTextureTarget' (dim : TextureDimension, isArray : bool, isMS : bool) =
+        let getTextureTarget' (dim : TextureDimension) (isArray : bool) (isMS : bool) =
             match dim, isArray, isMS with
+            | TextureDimension.Texture1D,      _,       true     -> failwith "Texture1D cannot be multisampled"
+            | TextureDimension.Texture1D,      true,    _        -> TextureTarget.Texture1DArray
+            | TextureDimension.Texture1D,      false,   _        -> TextureTarget.Texture1D
 
-                | TextureDimension.Texture1D,      _,       true     -> failwith "Texture1D cannot be multisampled"
-                | TextureDimension.Texture1D,      true,    _        -> TextureTarget.Texture1DArray
-                | TextureDimension.Texture1D,      false,   _        -> TextureTarget.Texture1D
-                                                   
-                | TextureDimension.Texture2D,      false,   false    -> TextureTarget.Texture2D
-                | TextureDimension.Texture2D,      true,    false    -> TextureTarget.Texture2DArray
-                | TextureDimension.Texture2D,      false,   true     -> TextureTarget.Texture2DMultisample
-                | TextureDimension.Texture2D,      true,    true     -> TextureTarget.Texture2DMultisampleArray
-                                                   
-                | TextureDimension.Texture3D,      false,   false    -> TextureTarget.Texture3D
-                | TextureDimension.Texture3D,      _,       _        -> failwith "Texture3D cannot be multisampled or an array"
-                                                  
-                | TextureDimension.TextureCube,   false,    false    -> TextureTarget.TextureCubeMap
-                | TextureDimension.TextureCube,   true,     false    -> TextureTarget.TextureCubeMapArray
-                | TextureDimension.TextureCube,   _,        true     -> failwith "TextureCube cannot be multisampled"
+            | TextureDimension.Texture2D,      false,   false    -> TextureTarget.Texture2D
+            | TextureDimension.Texture2D,      true,    false    -> TextureTarget.Texture2DArray
+            | TextureDimension.Texture2D,      false,   true     -> TextureTarget.Texture2DMultisample
+            | TextureDimension.Texture2D,      true,    true     -> TextureTarget.Texture2DMultisampleArray
 
-                | _ -> failwithf "unknown texture dimension: %A" dim
-                
+            | TextureDimension.Texture3D,      false,   false    -> TextureTarget.Texture3D
+            | TextureDimension.Texture3D,      _,       _        -> failwith "Texture3D cannot be multisampled or an array"
+
+            | TextureDimension.TextureCube,   false,    false    -> TextureTarget.TextureCubeMap
+            | TextureDimension.TextureCube,   true,     false    -> TextureTarget.TextureCubeMapArray
+            | TextureDimension.TextureCube,   _,        true     -> failwith "TextureCube cannot be multisampled"
+
+            | _ -> failwithf "unknown texture dimension: %A" dim
+
         let getTextureTarget (texture : Texture) =
-            getTextureTarget' ( texture.Dimension, texture.IsArray, texture.IsMultisampled)
+            getTextureTarget' texture.Dimension texture.IsArray texture.IsMultisampled
+
+        let getTextureSliceTarget (slice : int) (texture : Texture) =
+            match getTextureTarget texture with
+            | TextureTarget.TextureCubeMap -> cubeSides.[slice] |> snd
+            | target -> target
 
         let private uploadTexture2DInternal (bindTarget : TextureTarget) (target : TextureTarget) (isTopLevel : bool) (t : Texture) (startLevel : int) (textureParams : TextureParams) (data : PixImageMipMap) =
             if data.LevelCount <= 0 then
@@ -2149,33 +2153,75 @@ module TextureExtensions =
                     failwith "implement me"
             ()
 
-        let downloadTexture2DInternal (target : TextureTarget) (isTopLevel : bool) (t : Texture) (level : int) (slice : int) (image : PixImage) =
+        let private readTexture2D (texture : Texture) (level : int) (slice : int)
+                                  (offset : V2i) (size : V2i) (pixelFormat : PixelFormat)
+                                  (pixelType : PixelType) (dst : nativeint) =
+            let fbo = GL.GenFramebuffer()
+            GL.Check "could not create framebuffer"
+
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fbo)
+            GL.Check "could not bind framebuffer"
+
+            let attachment, readBuffer =
+                if TextureFormat.isDepthStencil texture.Format then
+                    FramebufferAttachment.DepthStencilAttachment, ReadBufferMode.None
+                elif TextureFormat.isDepth texture.Format then
+                    FramebufferAttachment.DepthAttachment, ReadBufferMode.None
+                else
+                    FramebufferAttachment.ColorAttachment0, ReadBufferMode.ColorAttachment0
+
+            if texture.Slices > 1 then
+                GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, attachment, texture.Handle, level, slice)
+            else
+                GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, attachment, texture.Handle, level)
+            GL.Check "could not attach texture to framebuffer"
+
+            let fboCheck = GL.CheckFramebufferStatus(FramebufferTarget.ReadFramebuffer)
+            if fboCheck <> FramebufferErrorCode.FramebufferComplete then
+                failwithf "could not create input framebuffer: %A" fboCheck
+
+            GL.ReadBuffer(readBuffer)
+            GL.Check "could not set readbuffer"
+
+            GL.ReadPixels(offset.X, offset.Y, size.X, size.Y, pixelFormat, pixelType, dst)
+            GL.Check "could not read pixels"
+
+            GL.ReadBuffer(ReadBufferMode.None)
+            GL.Check "could not unset readbuffer"
+
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
+            GL.Check "could not unbind framebuffer"
+
+            GL.DeleteFramebuffer(fbo)
+            GL.Check "could not delete framebuffer"
+
+
+        let downloadTexture2D (texture : Texture) (level : int) (slice : int) (offset : V2i) (image : PixImage) =
             let format = image.PixFormat
-            let bindTarget =  getTextureTarget t
-            GL.BindTexture(bindTarget, t.Handle)
+            let target =  texture |> getTextureTarget
+            let targetSlice =  texture |> getTextureSliceTarget slice
+            GL.BindTexture(target, texture.Handle)
             GL.Check "could not bind texture"
 
             let pixelType, pixelFormat =
                 match toPixelType format.Type, toPixelFormat image.Format with
-                    | Some t, Some f -> (t,f)
-                    | _ ->
-                        failwith "conversion not implemented"
-
+                | Some t, Some f -> (t, f)
+                | _ ->
+                    failwith "conversion not implemented"
 
             let elementSize = image.PixFormat.Type.GLSize
             let channelCount =
                 match toChannelCount image.Format with
-                    | Some c -> c
-                    | _ -> image.PixFormat.ChannelCount
+                | Some c -> c
+                | _ -> image.PixFormat.ChannelCount
 
             let lineSize = image.Size.X * channelCount * elementSize
-            let packAlign = t.Context.PackAlignment
+            let packAlign = texture.Context.PackAlignment
 
             let alignedLineSize = (lineSize + (packAlign - 1)) &&& ~~~(packAlign - 1)
             let targetSize = alignedLineSize * image.Size.Y
 
-            // TODO: use GetTextureSubImage also for non-array case ?
-            //       PixelPackBuffer vs GetTextureSubImage performance ?
+            // TODO: PixelPackBuffer vs GetTextureSubImage performance (copy to host memory directly)?
             //
             //       assuming GPU to GPU copy is faster than direct GPU to CPU copy
             //       -> in async scenarios using a PixelPackBuffer (GPU to GPU) copy requires to "lock" the texture for shorter time
@@ -2188,32 +2234,6 @@ module TextureExtensions =
             //1: [GL:65538] Pixel-path performance warning: Pixel transfer is synchronized with 3D rendering.
             //
             //   -> use GetTextureSubImage
-
-            // TODO: create test for texture2d (with mip levels), texture cube, texture array
-            
-            //if bindTarget = TextureTarget.Texture2DArray then
-
-            //    let buffer = Array.zeroCreate<byte> targetSize
-
-            //    GL.GetTextureSubImage(t.Handle, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, targetSize, buffer)
-            //    GL.Check "could not GetTextureSubImage"
-
-            //    let dstInfo = image.VolumeInfo
-            //    let dy = int64(alignedLineSize / elementSize)
-            //    let srcInfo = 
-            //        VolumeInfo(
-            //            dy * (dstInfo.Size.Y - 1L), 
-            //            dstInfo.Size, 
-            //            V3l(dstInfo.SZ, -dy, 1L)
-            //        )
-            //    let handle = GCHandle.Alloc(buffer, GCHandleType.Pinned)
-            //    try
-            //        let handlePtr = handle.AddrOfPinnedObject()
-            //        NativeVolume.copyNativeToImage handlePtr srcInfo image
-            //    finally
-            //        handle.Free()
-                
-            //else
             let b = GL.GenBuffer()
             GL.BindBuffer(BufferTarget.PixelPackBuffer, b)
             GL.Check "could not bind buffer"
@@ -2222,15 +2242,20 @@ module TextureExtensions =
             GL.BufferStorage(BufferTarget.PixelPackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapReadBit)
             GL.Check "could not set buffer storage"
 
-            if t.IsArray then
-                // For some reason we cannot use the bind target here? Doc says otherwise
-                // Moreover this does not work on OpenGL < 4.5 (Mac!)
-                // Therefore we disable this code path and do an extra copy into a temporary texture instead
-                // TODO: Performance?
-                failwith "Not possible!"
-                //GL.GetTextureSubImage(t.Handle, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, targetSize, nativeint 0)
+            // In case we download the whole texture and it isn't arrayed, we can
+            // avoid GL.GetTextureSubImage() which is not available on all systems! (e.g. MacOS)
+            if offset = V2i.Zero && image.Size = texture.Size.XY && not texture.IsArray then
+                GL.GetTexImage(targetSlice, level, pixelFormat, pixelType, 0n)
             else
-                GL.GetTexImage(target, level, pixelFormat, pixelType, 0n)
+                if GL.ARB_get_texture_subimage then
+                    GL.GetTextureSubImage(texture.Handle, level, offset.X, offset.Y, slice,
+                                          image.Size.X, image.Size.Y, 1,
+                                          pixelFormat, pixelType, targetSize, 0n)
+
+                // Use readPixels with FBO as fallback
+                else
+                    readTexture2D texture level slice offset image.Size pixelFormat pixelType 0n
+
             GL.Check "could not get texture image"
 
             let src = GL.MapBufferRange(BufferTarget.PixelPackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapReadBit)
@@ -2256,19 +2281,17 @@ module TextureExtensions =
             GL.DeleteBuffer(b)
             GL.Check "could not delete buffer"
 
-            GL.BindTexture(bindTarget, 0)
+            GL.BindTexture(target, 0)
             GL.Check "could not unbind texture"
 
-        let downloadTexture2D (t : Texture) (level : int) (slice : int) (image : PixImage) =
-            downloadTexture2DInternal TextureTarget.Texture2D true t level slice image
-             
-        let downloadTextureCube (t : Texture) (level : int) (slice : int) (image : PixImage) =
-            let target = cubeSides.[slice % 6] |> snd
-            downloadTexture2DInternal target false t level slice image
+        let downloadTexture (texture : Texture) (level : int) (slice : int) (offset : V2i) (image : PixImage) =
+            match texture.Dimension with
+            | TextureDimension.Texture2D
+            | TextureDimension.TextureCube ->
+                downloadTexture2D texture level slice offset image
 
-    //let texSizeInBytes (size : V3i, t : TextureFormat, samples : int) =
-    //    let pixelCount = (int64 size.X) * (int64 size.Y) * (int64 size.Z) * (int64 samples)
-    //    pixelCount * (int64 (InternalFormat.getSizeInBits (unbox (int t)))) / 8L
+            | _ ->
+                failwithf "cannot download textures of kind: %A" texture.Dimension
 
 [<Extension; AbstractClass; Sealed>]
 type ContextTextureExtensions =
@@ -2574,170 +2597,75 @@ type ContextTextureExtensions =
         this.Upload(t, level, 0, source)
 
     [<Extension>]
-    static member Download(this : Context, t : Texture, level : int, slice : int, offset : V2i, target : PixImage) =
+    static member Download(this : Context, texture : Texture, level : int, slice : int, offset : V2i, target : PixImage) =
         using this.ResourceLock (fun _ ->
-            let levelSize = t.GetSize level
+            let levelSize = texture.GetSize level
             let offset = V2i(offset.X, levelSize.Y - offset.Y - target.Size.Y) // flip y-offset
-            if offset = V2i.Zero && target.Size = levelSize.XY && not t.IsArray then
-                this.Download(t, level, slice, target)
-            else
-                let temp = this.CreateTexture2D(target.Size, 1, t.Format, 1)
 
+            // Multisampled texture requires resolve
+            if texture.IsMultisampled then
+                let resolved = this.CreateTexture2D(target.Size, 1, texture.Format, 1)
                 try
-                    if t.IsMultisampled then // resolve multisamples
-                        this.Blit(t, level, slice, Box2i.FromMinAndSize(offset, target.Size), temp, 0, 0, Box2i(V2i.Zero, target.Size), true)
-                    else
-                        this.Copy(t, level, slice, offset, temp, 0, 0, V2i.Zero, target.Size)
-
-                    this.Download(temp, 0, 0, target)
-                finally
-                    this.Delete(temp)
-        )
-
-    [<Extension>]
-    static member Download(this : Context, t : Texture, level : int, slice : int, target : PixImage) =
-        using this.ResourceLock (fun _ ->
-            if t.IsMultisampled then
-                let resolved = this.CreateTexture2D(target.Size, 1, t.Format, 1)
-                try
-                    let region = Box2i(V2i.Zero, target.Size)
-                    this.Blit(t, level, slice, region, resolved, 0, 0, region, false)
-                    downloadTexture2D resolved 0 0 target
+                    let region = Box2i.FromMinAndSize(offset, target.Size)
+                    this.Blit(texture, level, slice, region, resolved, 0, 0, region, false)
+                    downloadTexture2D resolved 0 0 V2i.Zero target
                 finally
                     this.Delete resolved
+
+            // Download directly
             else
-                match t.Dimension with
-                | TextureDimension.Texture2D ->
-                    downloadTexture2D t level slice target
-
-                | TextureDimension.TextureCube ->
-                    downloadTextureCube t level slice target
-
-                | _ ->
-                    failwithf "cannot download textures of kind: %A" t.Dimension
+                downloadTexture texture level slice offset target
         )
 
     [<Extension>]
-    static member Download(this : Context, t : Texture, level : int, slice : int) : PixImage =
-        let fmt = TextureFormat.toDownloadFormat t.Format
-        let levelSize = t.GetSize level
+    static member Download(this : Context, texture : Texture, level : int, slice : int, target : PixImage) =
+        this.Download(texture, level, slice, V2i.Zero, target)
+
+    [<Extension>]
+    static member Download(this : Context, texture : Texture, level : int, slice : int) : PixImage =
+        let fmt = TextureFormat.toDownloadFormat texture.Format
+        let levelSize = texture.GetSize level
         let img = PixImage.Create(fmt, int64 levelSize.X, int64 levelSize.Y)
-        this.Download(t, level, slice, img)
+        this.Download(texture, level, slice, img)
         img
 
     [<Extension>]
-    static member Download(this : Context, t : Texture, level : int) : PixImage =
-        this.Download(t, level, 0)
+    static member Download(this : Context, texture : Texture, level : int) : PixImage =
+        this.Download(texture, level, 0)
 
     [<Extension>]
-    static member Download(this : Context, t : Texture) : PixImage =
-        this.Download(t, 0, 0)
+    static member Download(this : Context, texture : Texture) : PixImage =
+        this.Download(texture, 0, 0)
 
     [<Extension>]
-    static member DownloadStencil(this : Context, t : Texture, level : int, slice : int, offset : V2i, target : Matrix<int>) =
-        using this.ResourceLock (fun _ ->
-            let targetSize = V2i target.Size
-            let levelSize = t.GetSize level
-            let offset = V2i(offset.X, levelSize.Y - offset.Y - targetSize.Y) // flip y-offset
-            if offset = V2i.Zero && targetSize = levelSize.XY && not t.IsArray then
-                this.DownloadStencil(t, level, slice, target)
-            else
-                let temp = this.CreateTexture2D(targetSize, 1, t.Format, 1)
-
-                try
-                    if t.IsMultisampled then // resolve multisamples
-                        this.Blit(t, level, slice, Box2i.FromMinAndSize(offset, targetSize), temp, 0, 0, Box2i(V2i.Zero, targetSize), true)
-                    else
-                        this.Copy(t, level, slice, offset, temp, 0, 0, V2i.Zero, targetSize)
-
-                    this.DownloadStencil(temp, 0, 0, target)
-                finally
-                    this.Delete(temp)
-        )
-
-    [<Extension>]
-    static member DownloadStencil(this : Context, t : Texture, level : int, slice : int, target : Matrix<int>) =
-
-        // wrap matrix into piximage
-        let pix =
+    static member DownloadStencil(this : Context, texture : Texture,
+                                  level : int, slice : int, offset : V2i, target : Matrix<int>) =
+        let image =
             let img : PixImage<int> = PixImage<int>()
             img.Volume <- target.AsVolume()
             img.Format <- Col.Format.Stencil
             img
 
-        using this.ResourceLock (fun _ ->
-            if t.IsMultisampled then
-                let resolved = this.CreateTexture2D(V2i target.Size, 1, t.Format, 1)
-                try
-                    let region = Box2i(V2i.Zero, V2i target.Size)
-                    this.Blit(t, level, slice, region, resolved, 0, 0, region, false)
-                    downloadTexture2D resolved level 0 pix
-                finally
-                    this.Delete resolved
-            else
-                match t.Dimension with
-                | TextureDimension.Texture2D ->
-                    downloadTexture2D t level 0 pix
-
-                | TextureDimension.TextureCube ->
-                    downloadTextureCube t level (unbox slice) pix
-
-                | _ ->
-                    failwithf "cannot download stencil-texture of kind: %A" t.Dimension
-        )
+        this.Download(texture, level, slice, offset, image)
 
     [<Extension>]
-    static member DownloadDepth(this : Context, t : Texture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
-        using this.ResourceLock (fun _ ->
-            let targetSize = V2i target.Size
-            let levelSize = t.GetSize level
-            let offset = V2i(offset.X, levelSize.Y - offset.Y - targetSize.Y) // flip y-offset
-            if offset = V2i.Zero && targetSize = levelSize.XY && not t.IsArray then
-                this.DownloadDepth(t, level, slice, target)
-            else
-                let temp = this.CreateTexture2D(targetSize, 1, t.Format, 1)
-
-                try
-                    if t.IsMultisampled then // resolve multisamples
-                        this.Blit(t, level, slice, Box2i.FromMinAndSize(offset, targetSize), temp, 0, 0, Box2i(V2i.Zero, targetSize), true)
-                    else
-                        this.Copy(t, level, slice, offset, temp, 0, 0, V2i.Zero, targetSize)
-
-                    this.DownloadDepth(temp, 0, 0, target)
-                finally
-                    this.Delete(temp)
-        )
+    static member DownloadStencil(this : Context, texture : Texture, level : int, slice : int, target : Matrix<int>) =
+        this.DownloadStencil(texture, level, slice, V2i.Zero, target)
 
     [<Extension>]
-    static member DownloadDepth(this : Context, t : Texture, level : int, slice : int, target : Matrix<float32>) =
-
-        // wrap matrix into piximage
-        let pix =
+    static member DownloadDepth(this : Context, texture : Texture,
+                                level : int, slice : int, offset : V2i, target : Matrix<float32>) =
+        let image =
             let img : PixImage<float32> = PixImage<float32>()
             img.Volume <- target.AsVolume()
             img.Format <- Col.Format.Depth
             img
 
-        using this.ResourceLock (fun _ ->
-            if t.IsMultisampled then
-                let resolved = this.CreateTexture2D(V2i target.Size, 1, t.Format, 1)
-                try
-                    let region = Box2i(V2i.Zero, V2i target.Size)
-                    this.Blit(t, level, slice, region, resolved, 0, 0, region, false)
-                    downloadTexture2D resolved level 0 pix
-                finally
-                    this.Delete resolved
-            else
-                match t.Dimension with
-                | TextureDimension.Texture2D ->
-                    downloadTexture2D t level 0 pix
+        this.Download(texture, level, slice, offset, image)
 
-                | TextureDimension.TextureCube ->
-                    downloadTextureCube t level (unbox slice) pix
-
-                | _ ->
-                    failwithf "cannot download depth-texture of kind: %A" t.Dimension
-        )
+    [<Extension>]
+    static member DownloadDepth(this : Context, texture : Texture, level : int, slice : int, target : Matrix<float32>) =
+        this.DownloadDepth(texture, level, slice, V2i.Zero, target)
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Texture =
