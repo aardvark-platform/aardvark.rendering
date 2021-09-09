@@ -3,8 +3,9 @@
   <PropertyGroup>
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <GenerateProgramFile>false</GenerateProgramFile>
-    <OutputType>Exe</OutputType>	
+    <OutputType>Exe</OutputType>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+    <RunSettingsFilePath>test.runsettings</RunSettingsFilePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <OutputPath>..\..\..\bin\Debug\</OutputPath>
@@ -14,12 +15,17 @@
     <OutputPath>..\..\..\bin\Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="SgTest.fs" />
-    <Compile Include="TextureTests.fs" />
-    <Compile Include="MultiStageAgTest.fs" />
-    <Compile Include="RenderingTests.fs" />
-    <Compile Include="PerformanceTest.fs" />
-    <Compile Include="RadixSort.fs" />
+    <Compile Include="Scratch\RenderingTests.fs" />
+    <Compile Include="Scratch\PerformanceTest.fs" />
+    <Compile Include="Scratch\RadixSort.fs" />
+    <Compile Include="Scratch\MultiStageAgTest.fs" />
+    <Compile Include="Tests\Common.fs" />
+    <Compile Include="Tests\SgTest.fs" />
+    <Compile Include="Tests\Texture\Utilities.fs" />
+    <Compile Include="Tests\Texture\Copy.fs" />
+    <Compile Include="Tests\Texture\Create.fs" />
+    <Compile Include="Tests\Texture\Download.fs" />
+    <Compile Include="Tests\Texture\TextureTests.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />
   </ItemGroup>

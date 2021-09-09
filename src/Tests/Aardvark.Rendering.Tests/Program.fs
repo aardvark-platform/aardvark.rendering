@@ -222,7 +222,7 @@ let testCopySlice() =
 [<EntryPoint>]
 let main args =
     Aardvark.Init()
-    ``Texture Tests``.runAllTests()
+    //``Texture Tests``.runAllTests()
     //testCompile()
 
     //RadixSortTest.run()
