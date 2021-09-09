@@ -18,7 +18,7 @@ module ``IBackendTexture Slicing Extensions`` =
         /// <paramref name="level"/> is clamped to [0, levels - 1].</summary>
         member x.GetSize(level : int) =
             let level = level |> clamp 0 (x.MipMapLevels - 1)
-            let size = x.Size / (1 <<< level)
+            let size = x.Size >>> level
             size |> max 1
 
     type private TextureRange(aspect : TextureAspect, tex : IBackendTexture, levels : Range1i, slices : Range1i) =

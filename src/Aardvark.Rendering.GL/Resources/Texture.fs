@@ -2239,12 +2239,11 @@ module TextureExtensions =
             GL.Check "could not bind buffer"
 
             GL.BufferStorage(BufferTarget.PixelPackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapReadBit)
-            GL.BufferStorage(BufferTarget.PixelPackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapReadBit)
             GL.Check "could not set buffer storage"
 
             // In case we download the whole texture and it isn't arrayed, we can
             // avoid GL.GetTextureSubImage() which is not available on all systems! (e.g. MacOS)
-            if offset = V2i.Zero && image.Size = texture.Size.XY && not texture.IsArray then
+            if offset = V2i.Zero && image.Size = texture.GetSize(level).XY && not texture.IsArray then
                 GL.GetTexImage(targetSlice, level, pixelFormat, pixelType, 0n)
             else
                 if GL.ARB_get_texture_subimage then
