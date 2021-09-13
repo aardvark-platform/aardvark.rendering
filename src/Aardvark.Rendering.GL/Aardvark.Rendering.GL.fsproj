@@ -40,6 +40,7 @@
     <Compile Include="Core\MemoryInfo.fs" />
     <Compile Include="Core\Extensions.fs" />
     <Compile Include="Core\Extensions\ARB_texture_storage.fs" />
+    <Compile Include="Core\Extensions\ARB_texture_view.fs" />
     <Compile Include="Core\Extensions\ARB_get_texture_subimage.fs" />
     <Compile Include="Core\Extensions\ARB_copy_image.fs" />
     <Compile Include="Core\Extensions\ARB_buffer_storage.fs" />

@@ -257,11 +257,11 @@ module TextureDownload =
 
             runtime.DeleteTexture(t)
 
-        let depthAndStencil (runtime : IRuntime) =
+        let private renderToDepthAndStencil (size : V2i) (runtime : IRuntime) =
             let signature =
-                runtime.CreateFramebufferSignature([
-                    DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
-                ])
+                 runtime.CreateFramebufferSignature([
+                     DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+                 ])
 
             use task =
                 let drawCall =
@@ -286,28 +286,39 @@ module TextureDownload =
                 }
                 |> Sg.compile runtime signature
 
-
-            let size = V2i(256)
-
             let depthStencilBuffer =
                 let clear = clear { depth 1.0; stencil 0 }
                 task |> RenderTask.renderToDepthWithClear (AVal.constant size) clear
 
-            depthStencilBuffer.Acquire()
+            runtime.DeleteFramebufferSignature(signature)
 
-            let depthResult = runtime.DownloadDepth(depthStencilBuffer.GetValue())
-            let stencilResult = runtime.DownloadStencil(depthStencilBuffer.GetValue())
+            depthStencilBuffer
+
+        let depth (runtime : IRuntime) =
+            let size = V2i(256)
+
+            let buffer = renderToDepthAndStencil size runtime
+            buffer.Acquire()
+
+            let depthResult = runtime.DownloadDepth(buffer.GetValue())
 
             Expect.equal (V2i depthResult.Size) size "Unexpected depth texture size"
             Expect.isGreaterThan (Array.min depthResult.Data) 0.0f "Contains zero depth value"
             Expect.isLessThan (Array.min depthResult.Data) 1.0f "All depth one"
 
+            buffer.Release()
+
+        let stencil (runtime : IRuntime) =
+            let size = V2i(256)
+
+            let buffer = renderToDepthAndStencil size runtime
+            buffer.Acquire()
+            let stencilResult = runtime.DownloadStencil(buffer.GetValue())
+
             Expect.equal (V2i stencilResult.Size) size "Unexpected stencil texture size"
             Expect.equal (Array.max stencilResult.Data) 3 "Unexpected stencil value"
 
-            depthStencilBuffer.Release()
-
-            runtime.DeleteFramebufferSignature(signature)
+            buffer.Release()
 
         let argumentsOutOfRange (runtime : IRuntime) =
             let createAndDownload (dimension : TextureDimension) (levels : int) (level : int) (slice : int) (region : Box2i) () =
@@ -345,7 +356,8 @@ module TextureDownload =
             "Subwindow cube array",   Cases.subwindowCubeArray
 
             if backend <> Backend.Vulkan then // not implemented
-                "Depth and stencil",      Cases.depthAndStencil
+                "Depth",              Cases.depth
+                "Stencil",            Cases.stencil
 
             "Arguments out of range", Cases.argumentsOutOfRange
         ]
