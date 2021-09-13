@@ -165,7 +165,64 @@ module TextureDownload =
 
             runtime.DeleteTexture(t)
 
-        let subwindow (runtime : IRuntime) =
+        let subwindow2D (runtime : IRuntime) =
+            let size = V2i(128)
+            let levels = 3
+
+            let data =
+                Array.init levels (fun level ->
+                    let data = PixImage.checkerboard testColors.[level]
+                    let size = size >>> level
+                    data |> PixImage.resized size
+                )
+
+            let format = TextureFormat.ofPixFormat data.[0].PixFormat TextureParams.empty
+            let t = runtime.CreateTexture2D(size, format, levels = levels)
+
+            data |> Array.iteri (fun level img ->
+                runtime.Upload(t, level, img)
+            )
+
+            let level = 2
+            let region = Box2i.FromMinAndSize(V2i(14, 18), V2i(10, 3))
+            let result = runtime.Download(t, level = level, slice = 0, region = region).ToPixImage<byte>()
+
+            let reference = data.[level].SubImage(region)
+            Expect.equal result.Size reference.Size "Unexpected texture size"
+            PixImage.compare V2i.Zero reference result
+
+            runtime.DeleteTexture(t)
+
+        let subwindowCube (runtime : IRuntime) =
+            let levels = 3
+            let size = V2i(128)
+
+            let data =
+                CubeMap.init levels (fun side level ->
+                    let data = PixImage.checkerboard testColors.[int side]
+                    let size = size / (1 <<< level)
+                    data |> PixImage.resized size
+                )
+
+            let format = TextureFormat.ofPixFormat data.[CubeSide.PositiveX].PixFormat TextureParams.empty
+            let t = runtime.CreateTextureCube(size.X, format, levels = levels)
+
+            data |> CubeMap.iteri (fun side level img ->
+                runtime.Upload(t, level, int side, img)
+            )
+
+            let side = CubeSide.PositiveY
+            let level = 1
+            let region = Box2i.FromMinAndSize(V2i(14, 18), V2i(10, 3))
+            let result = runtime.Download(t, level, int side, region).ToPixImage<byte>()
+
+            let reference = data.[side, level].SubImage(region)
+            Expect.equal result.Size reference.Size "Unexpected texture size"
+            PixImage.compare V2i.Zero reference result
+
+            runtime.DeleteTexture(t)
+
+        let subwindowCubeArray (runtime : IRuntime) =
             let count = 2
             let levels = 3
             let size = V2i(128)
@@ -283,7 +340,9 @@ module TextureDownload =
             "Mipmapped array",        Cases.mipmappedArray
             "Mipmapped cube",         Cases.mipmappedCube
             "Mipmapped cube array",   Cases.mipmappedCubeArray
-            "Subwindow",              Cases.subwindow
+            "Subwindow mipmapped 2D", Cases.subwindow2D
+            "Subwindow cube",         Cases.subwindowCube
+            "Subwindow cube array",   Cases.subwindowCubeArray
 
             if backend <> Backend.Vulkan then // not implemented
                 "Depth and stencil",      Cases.depthAndStencil
