@@ -1454,27 +1454,37 @@ module TextureExtensions =
             typeof<int32>, PixelType.Int
             typeof<float32>, PixelType.Float
             typeof<float16>, PixelType.HalfFloat
-
-
         ]
 
     let internal toPixelFormat =
-        LookupTable.lookupTable' [
-        
-            Col.Format.Alpha, PixelFormat.Alpha
-            Col.Format.BW, PixelFormat.Red
-            Col.Format.Gray, PixelFormat.Red
-            Col.Format.GrayAlpha, PixelFormat.Rg
-            Col.Format.RGB, PixelFormat.Rgb
-            Col.Format.BGR, PixelFormat.Bgr
-            Col.Format.RGBA, PixelFormat.Rgba
-            Col.Format.BGRA, PixelFormat.Bgra
-            Col.Format.RGBP, PixelFormat.Rgba
-            Col.Format.NormalUV, PixelFormat.Rg
-            Col.Format.Stencil, PixelFormat.StencilIndex
-            Col.Format.Depth, PixelFormat.DepthComponent
-            Col.Format.DepthStencil, PixelFormat.DepthComponent
-        ]
+        let table =
+            LookupTable.lookupTable' [
+                Col.Format.Alpha, PixelFormat.Alpha
+                Col.Format.BW, PixelFormat.Red
+                Col.Format.Gray, PixelFormat.Red
+                Col.Format.GrayAlpha, PixelFormat.Rg
+                Col.Format.RGB, PixelFormat.Rgb
+                Col.Format.BGR, PixelFormat.Bgr
+                Col.Format.RGBA, PixelFormat.Rgba
+                Col.Format.BGRA, PixelFormat.Bgra
+                Col.Format.RGBP, PixelFormat.Rgba
+                Col.Format.NormalUV, PixelFormat.Rg
+                Col.Format.Stencil, PixelFormat.StencilIndex
+                Col.Format.Depth, PixelFormat.DepthComponent
+                Col.Format.DepthStencil, PixelFormat.DepthComponent
+            ]
+
+        let getVersion() =
+            Version(GL.GetInteger(GetPName.MajorVersion), GL.GetInteger(GetPName.MinorVersion), 0)
+
+        fun input ->
+            match input |> table with
+            | Some PixelFormat.StencilIndex when getVersion() < Version(4, 4, 0) ->
+                Log.error "GL_STENCIL_INDEX requires OpenGL 4.4 or higher"
+                None
+
+            | fmt ->
+                fmt
 
     let toUntypedPixelFormat =
         LookupTable.lookupTable' [
