@@ -2163,7 +2163,7 @@ module TextureExtensions =
                     failwith "implement me"
             ()
 
-        let private readTexture2D (texture : Texture) (level : int) (slice : int)
+        let private readTexture2D (texture : Texture) (targetSlice : TextureTarget) (level : int) (slice : int)
                                   (offset : V2i) (size : V2i) (pixelFormat : PixelFormat)
                                   (pixelType : PixelType) (dst : nativeint) =
             let fbo = GL.GenFramebuffer()
@@ -2180,10 +2180,11 @@ module TextureExtensions =
                 else
                     FramebufferAttachment.ColorAttachment0, ReadBufferMode.ColorAttachment0
 
-            if texture.Slices > 1 then
+            if texture.IsArray then
                 GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, attachment, texture.Handle, level, slice)
             else
-                GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, attachment, texture.Handle, level)
+                GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, attachment, targetSlice, texture.Handle, level)
+
             GL.Check "could not attach texture to framebuffer"
 
             let fboCheck = GL.CheckFramebufferStatus(FramebufferTarget.ReadFramebuffer)
@@ -2263,7 +2264,7 @@ module TextureExtensions =
 
                 // Use readPixels with FBO as fallback
                 else
-                    readTexture2D texture level slice offset image.Size pixelFormat pixelType 0n
+                    readTexture2D texture targetSlice level slice offset image.Size pixelFormat pixelType 0n
 
             GL.Check "could not get texture image"
 
