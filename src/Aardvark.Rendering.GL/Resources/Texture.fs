@@ -2074,7 +2074,7 @@ module TextureExtensions =
 
         let uploadTexture3D (t : Texture) (textureParams : TextureParams) (data : PixVolume) =
             let size = data.Size
-            let expectedLevels = 1 + max size.X size.Y |> Fun.Log2 |> Fun.Floor |> int
+            let expectedLevels = 1 + Fun.Max(size.X, size.Y, size.Z) |> Fun.Log2 |> Fun.Floor |> int
             let generateMipMap = textureParams.wantMipMaps
             let newFormat = TextureFormat.ofPixFormat data.PixFormat textureParams
             let formatChanged = t.Format <> newFormat
