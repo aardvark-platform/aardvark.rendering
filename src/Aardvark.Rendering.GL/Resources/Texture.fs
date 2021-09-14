@@ -1905,7 +1905,7 @@ module TextureExtensions =
 
 
     [<AutoOpen>]
-    module internal Uploads =
+    module internal PixelTransfer =
         let getTextureTarget' (dim : TextureDimension) (isArray : bool) (isMS : bool) =
             match dim, isArray, isMS with
             | TextureDimension.Texture1D,      _,       true     -> failwith "Texture1D cannot be multisampled"
@@ -2232,64 +2232,40 @@ module TextureExtensions =
             let alignedLineSize = (lineSize + (packAlign - 1)) &&& ~~~(packAlign - 1)
             let targetSize = alignedLineSize * image.Size.Y
 
-            // TODO: PixelPackBuffer vs GetTextureSubImage performance (copy to host memory directly)?
-            //
-            //       assuming GPU to GPU copy is faster than direct GPU to CPU copy
-            //       -> in async scenarios using a PixelPackBuffer (GPU to GPU) copy requires to "lock" the texture for shorter time
-            //       and would allow to the perform the actual download (GPU to CPU) independently from rendering that uses the input texture as target
+            let buffer = NativePtr.alloc<byte> targetSize
 
-            // NOTE: When using PixelPackBuffer
-            //1: [GL:65538] Buffer detailed info: Buffer object 1 (bound to GL_PIXEL_PACK_BUFFER_ARB, usage hint is GL_DYNAMIC_DRAW) will use VIDEO memory as the source for buffer object operations.
-            //1: [GL:65538] Buffer performance warning: Buffer object 1 (bound to GL_PIXEL_PACK_BUFFER_ARB, usage hint is GL_DYNAMIC_DRAW) is being copied/moved from VIDEO memory to DMA CACHED memory.
-            //1: [GL:65538] Buffer detailed info: Buffer object 1 (bound to GL_PIXEL_PACK_BUFFER_ARB, usage hint is GL_DYNAMIC_DRAW) will use DMA CACHED memory as the source for buffer object operations.
-            //1: [GL:65538] Pixel-path performance warning: Pixel transfer is synchronized with 3D rendering.
-            //
-            //   -> use GetTextureSubImage
-            let b = GL.GenBuffer()
-            GL.BindBuffer(BufferTarget.PixelPackBuffer, b)
-            GL.Check "could not bind buffer"
-
-            GL.BufferStorage(BufferTarget.PixelPackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapReadBit)
-            GL.Check "could not set buffer storage"
-
-            // In case we download the whole texture and it isn't arrayed, we can
-            // avoid GL.GetTextureSubImage() which is not available on all systems! (e.g. MacOS)
-            if offset = V2i.Zero && image.Size = texture.GetSize(level).XY && not texture.IsArray then
-                GL.GetTexImage(targetSlice, level, pixelFormat, pixelType, 0n)
-            else
-                if GL.ARB_get_texture_subimage then
-                    GL.GetTextureSubImage(texture.Handle, level, offset.X, offset.Y, slice,
-                                          image.Size.X, image.Size.Y, 1,
-                                          pixelFormat, pixelType, targetSize, 0n)
-
-                // Use readPixels with FBO as fallback
-                else
-                    readTexture2D texture targetSlice level slice offset image.Size pixelFormat pixelType 0n
-
-            GL.Check "could not get texture image"
-
-            let src = GL.MapBufferRange(BufferTarget.PixelPackBuffer, 0n, nativeint targetSize, BufferAccessMask.MapReadBit)
-            GL.Check "could not map buffer"
             try
+                let src = NativePtr.toNativeInt buffer
+
+                // In case we download the whole texture and it isn't arrayed, we can
+                // avoid GL.GetTextureSubImage() which is not available on all systems! (e.g. MacOS)
+                if offset = V2i.Zero && image.Size = texture.GetSize(level).XY && not texture.IsArray then
+                    GL.GetTexImage(targetSlice, level, pixelFormat, pixelType, src)
+                else
+                    if GL.ARB_get_texture_subimage then
+                        GL.GetTextureSubImage(texture.Handle, level, offset.X, offset.Y, slice,
+                                              image.Size.X, image.Size.Y, 1,
+                                              pixelFormat, pixelType, targetSize, src)
+
+                    // Use readPixels with FBO as fallback
+                    else
+                        readTexture2D texture targetSlice level slice offset image.Size pixelFormat pixelType src
+
+                GL.Check "could not get texture image"
+
                 let dstInfo = image.VolumeInfo
                 let dy = int64(alignedLineSize / elementSize)
-                let srcInfo = 
+                let srcInfo =
                     VolumeInfo(
-                        dy * (dstInfo.Size.Y - 1L), 
-                        dstInfo.Size, 
+                        dy * (dstInfo.Size.Y - 1L),
+                        dstInfo.Size,
                         V3l(dstInfo.SZ, -dy, 1L)
                     )
 
                 NativeVolume.copyNativeToImage src srcInfo image
 
             finally
-                GL.UnmapBuffer(BufferTarget.PixelPackBuffer) |> ignore
-                GL.Check "could not unmap buffer"
-
-            GL.BindBuffer(BufferTarget.PixelPackBuffer, 0)
-            GL.Check "could not unbind buffer"
-            GL.DeleteBuffer(b)
-            GL.Check "could not delete buffer"
+                NativePtr.free buffer
 
             GL.BindTexture(target, 0)
             GL.Check "could not unbind texture"
