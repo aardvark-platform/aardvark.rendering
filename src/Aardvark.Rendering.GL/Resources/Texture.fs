@@ -2156,10 +2156,22 @@ module TextureExtensions =
             GL.Check "could not bind texture"
 
             let pixelType, pixelFormat =
+               
                 match toPixelType format.Type, toPixelFormat image.Format with
-                    | Some t, Some f -> (t,f)
+                | Some t, Some f -> 
+                    match t with
+                    | PixelType.UnsignedInt | PixelType.Int | PixelType.Short ->
+                        let f = 
+                            match f with
+                            | PixelFormat.Red -> PixelFormat.RedInteger
+                            | PixelFormat.Rgb -> PixelFormat.RgbInteger
+                            | PixelFormat.Rgba -> PixelFormat.RgbaInteger
+                            | _ -> f
+                        (t,f)
                     | _ ->
-                        failwith "conversion not implemented"
+                        (t,f)
+                | _ ->
+                    failwith "conversion not implemented"
 
 
             let elementSize = image.PixFormat.Type.GLSize
@@ -2218,7 +2230,6 @@ module TextureExtensions =
             GL.BindBuffer(BufferTarget.PixelPackBuffer, b)
             GL.Check "could not bind buffer"
 
-            GL.BufferStorage(BufferTarget.PixelPackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapReadBit)
             GL.BufferStorage(BufferTarget.PixelPackBuffer, nativeint targetSize, 0n, BufferStorageFlags.MapReadBit)
             GL.Check "could not set buffer storage"
 
