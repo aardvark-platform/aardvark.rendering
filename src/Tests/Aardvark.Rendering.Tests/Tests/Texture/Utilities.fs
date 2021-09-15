@@ -9,25 +9,25 @@ open Aardvark.Application
 open Aardvark.SceneGraph
 open Expecto
 
-module Window =
+//module Window =
 
-    let create (testBackend : Backend) =
-        IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
-        Aardvark.Init()
+//    let create (testBackend : Backend) =
+//        IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
+//        Aardvark.Init()
 
-        GL.Config.CheckErrors <- true
-        GL.Config.UsePixelUnpackBuffers <- true
+//        GL.Config.CheckErrors <- true
+//        GL.Config.UsePixelUnpackBuffers <- true
 
-        window {
-            display Display.Mono
-            samples 1
-            backend testBackend
-            debug true
-        }
+//        window {
+//            display Display.Mono
+//            samples 1
+//            backend testBackend
+//            debug true
+//        }
 
-    let createUse f backend =
-        use win = create backend
-        f win.Runtime
+//    let createUse f backend =
+//        use win = create backend
+//        f win.Runtime
 
 
 module PixImage =
@@ -120,9 +120,3 @@ module ``Texture Test Utilities`` =
             C4b.Chocolate
             C4b.LawnGreen
         |]
-
-    let prepareCases (backend : Backend) (name : string) (cases : List<string * (IRuntime -> unit)>) =
-        cases |> List.map (fun (name, test) ->
-            testCase name (fun () -> Window.createUse test backend)
-        )
-        |> testList name

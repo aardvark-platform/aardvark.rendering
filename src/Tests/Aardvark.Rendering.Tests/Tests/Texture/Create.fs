@@ -3,6 +3,7 @@
 open System
 open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.Rendering.Tests
 open Aardvark.Application
 open Expecto
 

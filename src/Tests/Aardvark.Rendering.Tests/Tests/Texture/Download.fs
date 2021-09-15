@@ -2,7 +2,7 @@
 
 open Aardvark.Base
 open Aardvark.Rendering
-open Aardvark.Rendering.Vulkan
+open Aardvark.Rendering.Tests
 open Aardvark.Application
 open Aardvark.SceneGraph
 open FSharp.Data.Adaptive
