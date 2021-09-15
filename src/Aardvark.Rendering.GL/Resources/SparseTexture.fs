@@ -169,9 +169,9 @@ module ``Sparse Texture Extensions`` =
                 failwith "[GL] texture upload region out of bounds"
                 
             if size.AllGreater 0 then
-                data.PinPBO(x.PackAlignment, fun size pt pf _ ->
+                data.PinPBO(x.PackAlignment, fun size pt pf pixels _ ->
                     GL.BindTexture(TextureTarget.Texture3D, t.Handle)
-                    GL.TexSubImage3D(TextureTarget.Texture3D, level, min.X, min.Y, min.Z, size.X, size.Y, size.Z, pf, pt, 0n)
+                    GL.TexSubImage3D(TextureTarget.Texture3D, level, min.X, min.Y, min.Z, size.X, size.Y, size.Z, pf, pt, pixels)
                     GL.BindTexture(TextureTarget.Texture3D, 0)
                 )
 
@@ -187,10 +187,10 @@ module ``Sparse Texture Extensions`` =
                 failwith "[GL] texture upload region out of bounds"
                 
             if size.AllGreater 0 then
-                NativeTensor4.withPBO data x.PackAlignment (fun size pt pf _ ->
+                NativeTensor4.withPBO data x.PackAlignment (fun size pt pf pixels _ ->
                     GL.BindTexture(TextureTarget.Texture3D, t.Handle)
                     GL.Check "could not unbind sparse texture"
-                    GL.TexSubImage3D(TextureTarget.Texture3D, level, min.X, min.Y, min.Z, size.X, size.Y, size.Z, pf, pt, 0n)
+                    GL.TexSubImage3D(TextureTarget.Texture3D, level, min.X, min.Y, min.Z, size.X, size.Y, size.Z, pf, pt, pixels)
                     GL.Check "could not upload sparse region"
                     GL.BindTexture(TextureTarget.Texture3D, 0)
                     GL.Check "could not unbind sparse texture"

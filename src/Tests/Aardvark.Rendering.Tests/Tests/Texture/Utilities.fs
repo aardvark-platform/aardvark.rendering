@@ -16,6 +16,7 @@ module Window =
         Aardvark.Init()
 
         GL.Config.CheckErrors <- true
+        GL.Config.UsePixelUnpackBuffers <- true
 
         window {
             display Display.Mono

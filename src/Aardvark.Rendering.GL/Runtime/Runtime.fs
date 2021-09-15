@@ -131,10 +131,8 @@ type Runtime() =
             let sizeInBytes = nativeint alignedRowSize * nativeint size.Y * nativeint size.Z
 
             // copy to temp buffer
-            let temp = GL.GenBuffer()
-            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, temp)
-            GL.BufferStorage(BufferTarget.PixelUnpackBuffer, sizeInBytes, 0n, BufferStorageFlags.MapWriteBit)
-            let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, sizeInBytes, BufferAccessMask.MapWriteBit)
+            let temp = PixelUnpackBuffer.create BufferUsageHint.StaticDraw sizeInBytes
+            let ptr = temp |> PixelUnpackBuffer.map BufferAccess.WriteOnly
 
             let dstTensor =
                 let dy = int64 alignedRowSize / int64 sizeof<'a>
@@ -151,7 +149,7 @@ type Runtime() =
             let dstTensor = dstTensor.MirrorY()
             NativeTensor4.copy src dstTensor
 
-            GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
+            let pixels = temp |> PixelUnpackBuffer.unmap
 
             let pFmt = PixelFormat.ofColFormat fmt
             let pType = PixelType.ofType typeof<'a>
@@ -159,34 +157,34 @@ type Runtime() =
             match dst.Dimension, dst.IsArray with
                 | TextureDimension.Texture1D, false ->
                     bind TextureTarget.Texture1D dst.Handle (fun () ->
-                        GL.TexSubImage1D(TextureTarget.Texture1D, level, dstOffset.X, size.X, pFmt, pType, 0n)
+                        GL.TexSubImage1D(TextureTarget.Texture1D, level, dstOffset.X, size.X, pFmt, pType, pixels)
                     )
 
                 | TextureDimension.Texture1D, true ->
                     let view = GL.GenTexture()
                     GL.TextureView(view, TextureTarget.Texture1D, dst.Handle, unbox (int dst.Format), level, 1, slice, 1)
                     bind TextureTarget.Texture1D view (fun () ->
-                        GL.TexSubImage1D(TextureTarget.Texture1D, 0, dstOffset.X, size.X, pFmt, pType, 0n)
+                        GL.TexSubImage1D(TextureTarget.Texture1D, 0, dstOffset.X, size.X, pFmt, pType, pixels)
                     )
                     GL.DeleteTexture(view)
 
 
                 | TextureDimension.Texture2D, false ->
                     bind TextureTarget.Texture2D dst.Handle (fun () ->
-                        GL.TexSubImage2D(TextureTarget.Texture2D, level, dstOffset.X, dstOffset.Y, size.X, size.Y, pFmt, pType, 0n)
+                        GL.TexSubImage2D(TextureTarget.Texture2D, level, dstOffset.X, dstOffset.Y, size.X, size.Y, pFmt, pType, pixels)
                     )
                 | TextureDimension.Texture2D, true ->
                     let view = GL.GenTexture()
                     GL.TextureView(view, TextureTarget.Texture2D, dst.Handle, unbox (int dst.Format), level, 1, slice, 1)
                     bind TextureTarget.Texture2D view (fun () ->
-                        GL.TexSubImage2D(TextureTarget.Texture2D, 0, dstOffset.X, dstOffset.Y, size.X, size.Y, pFmt, pType, 0n)
+                        GL.TexSubImage2D(TextureTarget.Texture2D, 0, dstOffset.X, dstOffset.Y, size.X, size.Y, pFmt, pType, pixels)
                     )
                     GL.DeleteTexture(view)
 
                 | TextureDimension.TextureCube, false ->
                     bind TextureTarget.TextureCubeMap dst.Handle (fun () ->
                         let target = int TextureTarget.TextureCubeMapPositiveX + slice % 6 |> unbox<TextureTarget>
-                        GL.TexSubImage2D(target, level, dstOffset.X, dstOffset.Y, size.X, size.Y, pFmt, pType, 0n)
+                        GL.TexSubImage2D(target, level, dstOffset.X, dstOffset.Y, size.X, size.Y, pFmt, pType, pixels)
                     )
 
                 | TextureDimension.TextureCube, true ->
@@ -196,13 +194,13 @@ type Runtime() =
                     GL.TextureView(view, TextureTarget.TextureCubeMap, dst.Handle, unbox (int dst.Format), level, 1, slice, 1)
                     bind TextureTarget.TextureCubeMap view (fun () ->
                         let target = int TextureTarget.TextureCubeMapPositiveX + face |> unbox<TextureTarget>
-                        GL.TexSubImage2D(target, 0, dstOffset.X, dstOffset.Y, size.X, size.Y, pFmt, pType, 0n)
+                        GL.TexSubImage2D(target, 0, dstOffset.X, dstOffset.Y, size.X, size.Y, pFmt, pType, pixels)
                     )
                     GL.DeleteTexture(view)
 
                 | TextureDimension.Texture3D, false ->
                     bind TextureTarget.Texture3D dst.Handle (fun () ->
-                        GL.TexSubImage3D(TextureTarget.Texture3D, level, dstOffset.X, dstOffset.Y, dstOffset.Z, size.X, size.Y, size.Z, pFmt, pType, 0n)
+                        GL.TexSubImage3D(TextureTarget.Texture3D, level, dstOffset.X, dstOffset.Y, dstOffset.Z, size.X, size.Y, size.Z, pFmt, pType, pixels)
                     )
 
                 | TextureDimension.Texture3D, true ->
@@ -211,9 +209,7 @@ type Runtime() =
                 | _ ->
                     failwith "[GL] unexpected texture dimension"
 
-
-            GL.BindBuffer(BufferTarget.PixelUnpackBuffer,0)
-            GL.DeleteBuffer(temp)
+            temp |> PixelUnpackBuffer.free
 
         member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) : unit =
             use __ = ctx.ResourceLock
@@ -850,7 +846,7 @@ type Runtime() =
         match t with
             | :? Texture as t ->
                 if t.MipMapLevels > 1 then
-                    let target = Uploads.getTextureTarget t
+                    let target = getTextureTarget t
                     Operators.using ctx.ResourceLock (fun _ ->
                         GL.BindTexture(target, t.Handle)
                         GL.Check "could not bind texture"
