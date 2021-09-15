@@ -859,18 +859,18 @@ module TextureUploadExtensions =
                     TextureFormat.R32f , (PixelFormat.Red, PixelType.Float)
                     TextureFormat.Rg16f , (PixelFormat.Rg, PixelType.HalfFloat)
                     TextureFormat.Rg32f , (PixelFormat.Rg, PixelType.Float)
-                    TextureFormat.R8i , (PixelFormat.Red, PixelType.Byte)
-                    TextureFormat.R8ui , (PixelFormat.Red, PixelType.UnsignedByte)
-                    TextureFormat.R16i , (PixelFormat.Red, PixelType.Short)
-                    TextureFormat.R16ui , (PixelFormat.Red, PixelType.UnsignedShort)
-                    TextureFormat.R32i , (PixelFormat.Red, PixelType.Int)
-                    TextureFormat.R32ui , (PixelFormat.Red, PixelType.UnsignedInt)
-                    TextureFormat.Rg8i , (PixelFormat.Rg, PixelType.Byte)
-                    TextureFormat.Rg8ui , (PixelFormat.Rg, PixelType.UnsignedByte)
-                    TextureFormat.Rg16i , (PixelFormat.Rg, PixelType.Short)
-                    TextureFormat.Rg16ui , (PixelFormat.Rg, PixelType.UnsignedShort)
-                    TextureFormat.Rg32i , (PixelFormat.Rg, PixelType.Int)
-                    TextureFormat.Rg32ui , (PixelFormat.Rg, PixelType.UnsignedInt)
+                    TextureFormat.R8i , (PixelFormat.RedInteger, PixelType.Byte)
+                    TextureFormat.R8ui , (PixelFormat.RedInteger, PixelType.UnsignedByte)
+                    TextureFormat.R16i , (PixelFormat.RedInteger, PixelType.Short)
+                    TextureFormat.R16ui , (PixelFormat.RedInteger, PixelType.UnsignedShort)
+                    TextureFormat.R32i , (PixelFormat.RedInteger, PixelType.Int)
+                    TextureFormat.R32ui , (PixelFormat.RedInteger, PixelType.UnsignedInt)
+                    TextureFormat.Rg8i , (PixelFormat.RgInteger, PixelType.Byte)
+                    TextureFormat.Rg8ui , (PixelFormat.RgInteger, PixelType.UnsignedByte)
+                    TextureFormat.Rg16i , (PixelFormat.RgInteger, PixelType.Short)
+                    TextureFormat.Rg16ui , (PixelFormat.RgInteger, PixelType.UnsignedShort)
+                    TextureFormat.Rg32i , (PixelFormat.RgInteger, PixelType.Int)
+                    TextureFormat.Rg32ui , (PixelFormat.RgInteger, PixelType.UnsignedInt)
                     TextureFormat.CompressedRgbS3tcDxt1Ext , (PixelFormat.Rgb, PixelType.UnsignedByte)
                     TextureFormat.CompressedRgbaS3tcDxt1Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
                     TextureFormat.CompressedRgbaS3tcDxt3Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
@@ -900,18 +900,18 @@ module TextureUploadExtensions =
                     TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
                     TextureFormat.DepthComponent32f , (PixelFormat.DepthComponent, PixelType.Float)
                     TextureFormat.Depth32fStencil8 , (PixelFormat.DepthComponent, PixelType.Float)
-                    TextureFormat.Rgba32ui , (PixelFormat.Rgba, PixelType.UnsignedInt)
-                    TextureFormat.Rgb32ui , (PixelFormat.Rgb, PixelType.UnsignedInt)
-                    TextureFormat.Rgba16ui , (PixelFormat.Rgba, PixelType.UnsignedShort)
-                    TextureFormat.Rgb16ui , (PixelFormat.Rgb, PixelType.UnsignedShort)
-                    TextureFormat.Rgba8ui , (PixelFormat.Rgba, PixelType.UnsignedByte)
-                    TextureFormat.Rgb8ui , (PixelFormat.Rgb, PixelType.UnsignedByte)
-                    TextureFormat.Rgba32i , (PixelFormat.Rgba, PixelType.Int)
-                    TextureFormat.Rgb32i , (PixelFormat.Rgb, PixelType.Int)
-                    TextureFormat.Rgba16i , (PixelFormat.Rgba, PixelType.Short)
-                    TextureFormat.Rgb16i , (PixelFormat.Rgb, PixelType.Short)
-                    TextureFormat.Rgba8i , (PixelFormat.Rgba, PixelType.Byte)
-                    TextureFormat.Rgb8i , (PixelFormat.Rgb, PixelType.Byte)
+                    TextureFormat.Rgba32ui , (PixelFormat.RgbaInteger, PixelType.UnsignedInt)
+                    TextureFormat.Rgb32ui , (PixelFormat.RgbInteger, PixelType.UnsignedInt)
+                    TextureFormat.Rgba16ui , (PixelFormat.RgbaInteger, PixelType.UnsignedShort)
+                    TextureFormat.Rgb16ui , (PixelFormat.RgbInteger, PixelType.UnsignedShort)
+                    TextureFormat.Rgba8ui , (PixelFormat.RgbaInteger, PixelType.UnsignedByte)
+                    TextureFormat.Rgb8ui , (PixelFormat.RgbInteger, PixelType.UnsignedByte)
+                    TextureFormat.Rgba32i , (PixelFormat.RgbaInteger, PixelType.Int)
+                    TextureFormat.Rgb32i , (PixelFormat.RgbInteger, PixelType.Int)
+                    TextureFormat.Rgba16i , (PixelFormat.RgbaInteger, PixelType.Short)
+                    TextureFormat.Rgb16i , (PixelFormat.RgbInteger, PixelType.Short)
+                    TextureFormat.Rgba8i , (PixelFormat.RgbaInteger, PixelType.Byte)
+                    TextureFormat.Rgb8i , (PixelFormat.RgbInteger, PixelType.Byte)
                     TextureFormat.Float32UnsignedInt248Rev , (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev)
                     TextureFormat.CompressedRedRgtc1 , (PixelFormat.Red, PixelType.UnsignedByte)
                     TextureFormat.CompressedSignedRedRgtc1 , (PixelFormat.Red, PixelType.Byte)
@@ -2155,24 +2155,9 @@ module TextureExtensions =
             GL.BindTexture(bindTarget, t.Handle)
             GL.Check "could not bind texture"
 
-            let pixelType, pixelFormat =
+            let pixelFormat, pixelType =
+                TextureFormat.toFormatAndType t.Format
                
-                match toPixelType format.Type, toPixelFormat image.Format with
-                | Some t, Some f -> 
-                    match t with
-                    | PixelType.UnsignedInt | PixelType.Int | PixelType.Short ->
-                        let f = 
-                            match f with
-                            | PixelFormat.Red -> PixelFormat.RedInteger
-                            | PixelFormat.Rgb -> PixelFormat.RgbInteger
-                            | PixelFormat.Rgba -> PixelFormat.RgbaInteger
-                            | _ -> f
-                        (t,f)
-                    | _ ->
-                        (t,f)
-                | _ ->
-                    failwith "conversion not implemented"
-
 
             let elementSize = image.PixFormat.Type.GLSize
             let channelCount =
