@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering.GL
 
 open System
+open System.Runtime.InteropServices
 open System.Threading
 open System.Collections.Concurrent
 open OpenTK
@@ -50,7 +51,8 @@ module Config =
     /// <summary>
     /// Use pixel buffer objects for texture uploads.
     /// </summary>
-    let mutable UsePixelUnpackBuffers = Environment.OSVersion.Platform <> PlatformID.MacOSX
+    let mutable UsePixelUnpackBuffers =
+        not <| RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
 
     /// <summary>
     /// The number of bits used for color values in default contexts
