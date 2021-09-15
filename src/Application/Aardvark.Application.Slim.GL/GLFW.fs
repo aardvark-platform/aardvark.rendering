@@ -542,6 +542,7 @@ type Application(runtime : IRuntime) =
     let openglVersion = 
         let versions =
             [
+                System.Version(4,6)
                 System.Version(4,5)
                 System.Version(4,3)
                 System.Version(4,1)
