@@ -29,8 +29,12 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
     let mutable references : Map<string, list<ComputeShaderInputReference>>  = Map.empty
 
     let addReference (name : string) (r : ComputeShaderInputReference) =
-        let o = Map.tryFind name references |> Option.defaultValue []
-        references <- Map.add name (r :: o) references
+        let names =
+            if name.StartsWith "cs_" then [name; name.Substring 3]
+            else [name]
+        for name in names do
+            let o = Map.tryFind name references |> Option.defaultValue []
+            references <- Map.add name (r :: o) references
 
 
     //let uniformLocations : list<int * UniformLocation> = 
