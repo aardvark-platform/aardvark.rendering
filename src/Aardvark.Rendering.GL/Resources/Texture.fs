@@ -1549,7 +1549,7 @@ module TextureExtensions =
                                             | Some c -> c
                                             | _ -> pixFormat.ChannelCount
                                 
-                                    let align = t.Context.PackAlignment
+                                    let align = t.Context.UnpackAlignment
                                     let lineSize = w * elementSize * channelCount
                                     let alignedLineSize =
                                         if lineSize % align = 0 then lineSize
@@ -1730,7 +1730,7 @@ module TextureExtensions =
             for l in 0..uploadLevels-1 do
                 let image = data.[l]
 
-                image.PinPBO(t.Context.PackAlignment,ImageTrafo.MirrorY, fun dim pixelType pixelFormat pixels size ->
+                image.PinPBO(t.Context.UnpackAlignment,ImageTrafo.MirrorY, fun dim pixelType pixelFormat pixels size ->
                     if sizeChanged || formatChanged then
                         GL.TexImage2D(target, startLevel + l, internalFormat, dim.X, dim.Y, 0, pixelFormat, pixelType, pixels)
                     else
@@ -1822,7 +1822,7 @@ module TextureExtensions =
             GL.BindTexture(TextureTarget.Texture3D, t.Handle)
             GL.Check "could not bind texture"
 
-            data.PinPBO (t.Context.PackAlignment, fun size pt pf pixels sizeInBytes ->
+            data.PinPBO (t.Context.UnpackAlignment, fun size pt pf pixels sizeInBytes ->
                 if sizeChanged || formatChanged then
                     if not generateMipMap then
                         GL.TexParameter(TextureTarget.Texture3D, TextureParameterName.TextureMaxLod, 0)

@@ -124,7 +124,7 @@ type Runtime() =
             let channels = int src.SW
 
             let rowSize = channels * size.X * sizeof<'a>
-            let alignedRowSize = Align.next ctx.PackAlignment rowSize
+            let alignedRowSize = Align.next ctx.UnpackAlignment rowSize
             if alignedRowSize % sizeof<'a> <> 0 then
                 failwithf "[GL] ill-aligned upload"
 
@@ -231,7 +231,7 @@ type Runtime() =
             let channels = int dst.SW
 
             let rowSize = channels * srcSize.X * sizeof<'a>
-            let alignedRowSize = Align.next ctx.PackAlignment rowSize
+            let alignedRowSize = Align.next ctx.UnpackAlignment rowSize
             if alignedRowSize % sizeof<'a> <> 0 then
                 failwithf "[GL] ill-aligned upload"
 
