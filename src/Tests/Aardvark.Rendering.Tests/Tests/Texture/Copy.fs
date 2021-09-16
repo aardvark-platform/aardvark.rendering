@@ -51,7 +51,7 @@ module TextureCopy =
 
             let data =
                 Array.init count (fun index ->
-                    let data = PixImage.checkerboard testColors.[index]
+                    let data = PixImage.random <| V2i(256)
 
                     Array.init levels (fun level ->
                         let size = size / (1 <<< level)
@@ -84,7 +84,7 @@ module TextureCopy =
 
 
         let multisampled (resolve : bool) (runtime : IRuntime) =
-            let data = PixImage.checkerboard C4b.BurlyWood
+            let data = PixImage.random <| V2i(256)
             let size = data.Size
             let samples = 8
 
@@ -125,7 +125,7 @@ module TextureCopy =
 
             let data =
                 CubeMap.init levels (fun side level ->
-                    let data = PixImage.checkerboard testColors.[int side]
+                    let data = PixImage.random <| V2i(256)
                     let size = size / (1 <<< level)
                     data |> PixImage.resized size
                 )
@@ -161,7 +161,7 @@ module TextureCopy =
             let data =
                 Array.init count (fun index ->
                     CubeMap.init levels (fun side level ->
-                        let data = PixImage.checkerboard testColors.[index * 6 + int side]
+                        let data = PixImage.random <| V2i(256)
                         let size = size / (1 <<< level)
                         data |> PixImage.resized size
                     )

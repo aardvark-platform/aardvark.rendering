@@ -14,7 +14,7 @@ module TextureDownload =
 
         let simple (runtime : IRuntime) =
             let size = V2i(333, 666)
-            let data = PixImage.checkerboard C4b.BurlyWood
+            let data = PixImage.random <| V2i(256)
             let fmt = TextureFormat.ofPixFormat data.PixFormat TextureParams.empty
 
             let t = runtime.CreateTexture2D(size, fmt, 1, 1)
@@ -27,7 +27,7 @@ module TextureDownload =
             PixImage.compare V2i.Zero data result
 
         let multisampled (runtime : IRuntime) =
-            let data = PixImage.checkerboard C4b.BurlyWood
+            let data = PixImage.random <| V2i(256)
             let size = data.Size
             let samples = 8
 
@@ -64,7 +64,7 @@ module TextureDownload =
 
             let data =
                 Array.init count (fun index ->
-                    let data = PixImage.checkerboard testColors.[index]
+                    let data = PixImage.random <| V2i(256)
 
                     Array.init levels (fun level ->
                         let size = size / (1 <<< level)
@@ -102,7 +102,7 @@ module TextureDownload =
 
             let data =
                 CubeMap.init levels (fun side level ->
-                    let data = PixImage.checkerboard testColors.[int side]
+                    let data = PixImage.random <| V2i(256)
                     let size = size / (1 <<< level)
                     data |> PixImage.resized size
                 )
@@ -134,7 +134,7 @@ module TextureDownload =
             let data =
                 Array.init count (fun index ->
                     CubeMap.init levels (fun side level ->
-                        let data = PixImage.checkerboard testColors.[index * 6 + int side]
+                        let data = PixImage.random <| V2i(256)
                         let size = size / (1 <<< level)
                         data |> PixImage.resized size
                     )
@@ -171,7 +171,7 @@ module TextureDownload =
 
             let data =
                 Array.init levels (fun level ->
-                    let data = PixImage.checkerboard testColors.[level]
+                    let data = PixImage.random <| V2i(256)
                     let size = size >>> level
                     data |> PixImage.resized size
                 )
@@ -199,7 +199,7 @@ module TextureDownload =
 
             let data =
                 CubeMap.init levels (fun side level ->
-                    let data = PixImage.checkerboard testColors.[int side]
+                    let data = PixImage.random <| V2i(256)
                     let size = size / (1 <<< level)
                     data |> PixImage.resized size
                 )
@@ -230,7 +230,7 @@ module TextureDownload =
             let data =
                 Array.init count (fun index ->
                     CubeMap.init levels (fun side level ->
-                        let data = PixImage.checkerboard testColors.[index * 6 + int side]
+                        let data = PixImage.random <| V2i(256)
                         let size = size / (1 <<< level)
                         data |> PixImage.resized size
                     )

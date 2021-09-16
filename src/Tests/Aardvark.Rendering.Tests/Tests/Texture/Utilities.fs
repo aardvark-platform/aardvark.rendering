@@ -2,89 +2,104 @@
 
 open System
 open System.IO
-open System.Reflection
 open Aardvark.Base
 open Aardvark.Rendering
-open Aardvark.Application
-open Aardvark.SceneGraph
 open Expecto
 
-//module Window =
+[<AutoOpen>]
+module PixData =
 
-//    let create (testBackend : Backend) =
-//        IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
-//        Aardvark.Init()
+    let rng = RandomSystem(1)
 
-//        GL.Config.CheckErrors <- true
-//        GL.Config.UsePixelUnpackBuffers <- true
+    module PixVolume =
 
-//        window {
-//            display Display.Mono
-//            samples 1
-//            backend testBackend
-//            debug true
-//        }
+        let random (size : V3i) =
+            let pv = PixVolume<byte>(Col.Format.RGBA, size)
+            pv.GetVolume<C4b>().SetByIndex(fun _ ->
+                rng.UniformC4f() |> C4b
+            ) |> ignore
+            pv
 
-//    let createUse f backend =
-//        use win = create backend
-//        f win.Runtime
+        let compare (offset : V3i) (input : PixVolume<'T>) (output : PixVolume<'T>) =
+            for x in 0 .. output.Size.X - 1 do
+                for y in 0 .. output.Size.Y - 1 do
+                    for z in 0 .. output.Size.Z - 1 do
+                        for c in 0 .. output.ChannelCount - 1 do
+                            let inputData = input.GetChannel(int64 c)
+                            let outputData = output.GetChannel(int64 c)
 
+                            let coord = V3i(x, y, z)
+                            let coordInput = coord - offset
+                            let ref =
+                                if Vec.allGreaterOrEqual coordInput V3i.Zero && Vec.allSmaller coordInput input.Size then
+                                    inputData.[coordInput]
+                                else
+                                    Unchecked.defaultof<'T>
 
-module PixImage =
+                            Expect.equal outputData.[x, y, z] ref "PixVolume data mismatch"
 
-    let toTexture (wantMipMaps : bool) (img : #PixImage) =
-        PixTexture2d(PixImageMipMap [| img :> PixImage |], wantMipMaps) :> ITexture
+    module PixImage =
 
-    let solid (size : V2i) (color : C4b) =
-        let pi = PixImage<byte>(Col.Format.RGBA, size)
-        pi.GetMatrix<C4b>().SetByCoord(fun _ -> color) |> ignore
-        pi
+        let toTexture (wantMipMaps : bool) (img : #PixImage) =
+            PixTexture2d(PixImageMipMap [| img :> PixImage |], wantMipMaps) :> ITexture
 
-    let checkerboard (color : C4b) =
-        let pi = PixImage<byte>(Col.Format.RGBA, V2i.II * 256)
-        pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
-            let c = c / 16L
-            if (c.X + c.Y) % 2L = 0L then
-                C4b.White
-            else
-                color
-        ) |> ignore
-        pi
+        let solid (size : V2i) (color : C4b) =
+            let pi = PixImage<byte>(Col.Format.RGBA, size)
+            pi.GetMatrix<C4b>().SetByCoord(fun _ -> color) |> ignore
+            pi
 
-    let resized (size : V2i) (img : PixImage<byte>) =
-        let result = PixImage<byte>(img.Format, size)
+        let random (size : V2i) =
+            let pi = PixImage<byte>(Col.Format.RGBA, size)
+            pi.GetMatrix<C4b>().SetByIndex(fun _ ->
+                rng.UniformC4f() |> C4b
+            ) |> ignore
+            pi
 
-        for c in 0L .. img.Volume.Size.Z - 1L do
-            let src = img.Volume.SubXYMatrixWindow(c)
-            let dst = result.Volume.SubXYMatrixWindow(c)
-            dst.SetScaledCubic(src)
+        let checkerboard (color : C4b) =
+            let pi = PixImage<byte>(Col.Format.RGBA, V2i.II * 256)
+            pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
+                let c = c / 16L
+                if (c.X + c.Y) % 2L = 0L then
+                    C4b.White
+                else
+                    color
+            ) |> ignore
+            pi
 
-        result
+        let resized (size : V2i) (img : PixImage<byte>) =
+            let result = PixImage<byte>(img.Format, size)
 
-    let private desktopPath =
-        Environment.GetFolderPath(System.Environment.SpecialFolder.Desktop)
+            for c in 0L .. img.Volume.Size.Z - 1L do
+                let src = img.Volume.SubXYMatrixWindow(c)
+                let dst = result.Volume.SubXYMatrixWindow(c)
+                dst.SetScaledCubic(src)
 
-    let saveToDesktop (fileName : string) (img : #PixImage) =
-        let dir = Path.combine [desktopPath; "UnitTests"]
-        Directory.CreateDirectory(dir) |> ignore
-        img.SaveAsImage(Path.combine [dir; fileName])
+            result
 
-    let compare (offset : V2i) (input : PixImage<'T>) (output : PixImage<'T>) =
-        for x in 0 .. output.Size.X - 1 do
-            for y in 0 .. output.Size.Y - 1 do
-                for c in 0 .. output.ChannelCount - 1 do
-                    let inputData = input.GetChannel(int64 c)
-                    let outputData = output.GetChannel(int64 c)
+        let private desktopPath =
+            Environment.GetFolderPath(System.Environment.SpecialFolder.Desktop)
 
-                    let coord = V2i(x, y)
-                    let coordInput = coord - offset
-                    let ref =
-                        if Vec.allGreaterOrEqual coordInput V2i.Zero && Vec.allSmaller coordInput input.Size then
-                            inputData.[coordInput]
-                        else
-                            Unchecked.defaultof<'T>
+        let saveToDesktop (fileName : string) (img : #PixImage) =
+            let dir = Path.combine [desktopPath; "UnitTests"]
+            Directory.CreateDirectory(dir) |> ignore
+            img.SaveAsImage(Path.combine [dir; fileName])
 
-                    Expect.equal outputData.[x, y] ref "PixImage data mismatch"
+        let compare (offset : V2i) (input : PixImage<'T>) (output : PixImage<'T>) =
+            for x in 0 .. output.Size.X - 1 do
+                for y in 0 .. output.Size.Y - 1 do
+                    for c in 0 .. output.ChannelCount - 1 do
+                        let inputData = input.GetChannel(int64 c)
+                        let outputData = output.GetChannel(int64 c)
+
+                        let coord = V2i(x, y)
+                        let coordInput = coord - offset
+                        let ref =
+                            if Vec.allGreaterOrEqual coordInput V2i.Zero && Vec.allSmaller coordInput input.Size then
+                                inputData.[coordInput]
+                            else
+                                Unchecked.defaultof<'T>
+
+                        Expect.equal outputData.[x, y] ref "PixImage data mismatch"
 
 
 [<AutoOpen>]

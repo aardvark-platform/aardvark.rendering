@@ -264,6 +264,11 @@ type Runtime() =
                         GL.GetTexImage(TextureTarget.Texture2D, level, pFmt, pType, 0n)
                     )
 
+                | TextureDimension.Texture3D, false ->
+                    bind TextureTarget.Texture3D src.Handle (fun () ->
+                        GL.GetTexImage(TextureTarget.Texture3D, level, pFmt, pType, 0n)
+                    )
+
                 | _ ->
                     failwith "not implemented"
 

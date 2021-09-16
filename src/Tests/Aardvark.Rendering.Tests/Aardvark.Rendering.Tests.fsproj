@@ -25,6 +25,7 @@
     <Compile Include="Tests\Texture\Utilities.fs" />
     <Compile Include="Tests\Texture\Copy.fs" />
     <Compile Include="Tests\Texture\Create.fs" />
+    <Compile Include="Tests\Texture\Upload.fs" />
     <Compile Include="Tests\Texture\Download.fs" />
     <Compile Include="Tests\Texture\TextureTests.fs" />
     <Compile Include="Program.fs" />
