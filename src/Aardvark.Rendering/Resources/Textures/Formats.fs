@@ -397,6 +397,26 @@ module TextureFormat =
             TextureFormat.R16, PixFormat.UShortGray
             TextureFormat.Rgba16f, PixFormat(typeof<float16>, Col.Format.RGBA)
 
+            TextureFormat.R8i, PixFormat(typeof<int8>, Col.Format.Gray)
+            TextureFormat.Rg8i, PixFormat(typeof<int8>, Col.Format.NormalUV)
+            TextureFormat.Rgb8i, PixFormat(typeof<int8>, Col.Format.RGB)
+            TextureFormat.Rgba8i, PixFormat(typeof<int8>, Col.Format.RGBA)
+
+            TextureFormat.R8ui, PixFormat(typeof<uint8>, Col.Format.Gray)
+            TextureFormat.Rg8ui, PixFormat(typeof<uint8>, Col.Format.NormalUV)
+            TextureFormat.Rgb8ui, PixFormat(typeof<uint8>, Col.Format.RGB)
+            TextureFormat.Rgba8ui, PixFormat(typeof<uint8>, Col.Format.RGBA)
+
+            TextureFormat.R16i, PixFormat(typeof<int16>, Col.Format.Gray)
+            TextureFormat.Rg16i, PixFormat(typeof<int16>, Col.Format.NormalUV)
+            TextureFormat.Rgb16i, PixFormat(typeof<int16>, Col.Format.RGB)
+            TextureFormat.Rgba16i, PixFormat(typeof<int16>, Col.Format.RGBA)
+
+            TextureFormat.R16ui, PixFormat(typeof<uint16>, Col.Format.Gray)
+            TextureFormat.Rg16ui, PixFormat(typeof<uint16>, Col.Format.NormalUV)
+            TextureFormat.Rgb16ui, PixFormat(typeof<uint16>, Col.Format.RGB)
+            TextureFormat.Rgba16ui, PixFormat(typeof<uint16>, Col.Format.RGBA)
+
             TextureFormat.R32i, PixFormat(typeof<int>, Col.Format.Gray)
             TextureFormat.Rg32i, PixFormat(typeof<int>, Col.Format.NormalUV)
             TextureFormat.Rgb32i, PixFormat(typeof<int>, Col.Format.RGB)
@@ -406,7 +426,6 @@ module TextureFormat =
             TextureFormat.Rg32ui, PixFormat(typeof<uint32>, Col.Format.NormalUV)
             TextureFormat.Rgb32ui, PixFormat(typeof<uint32>, Col.Format.RGB)
             TextureFormat.Rgba32ui, PixFormat(typeof<uint32>, Col.Format.RGBA)
-
         ]
 
     let pixelSizeInBits =

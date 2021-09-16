@@ -151,7 +151,7 @@ type Runtime() =
 
             let pixels = temp |> PixelUnpackBuffer.unmap
 
-            let pFmt = PixelFormat.ofColFormat fmt
+            let pFmt = PixelFormat.ofColFormat dst.Format.IsIntegerFormat fmt
             let pType = PixelType.ofType typeof<'a>
 
             match dst.Dimension, dst.IsArray with
@@ -247,7 +247,7 @@ type Runtime() =
                 GL.BindTexture(t, 0)
                 
 
-            let pFmt = PixelFormat.ofColFormat fmt
+            let pFmt = PixelFormat.ofColFormat src.Format.IsIntegerFormat fmt
             let pType = PixelType.ofType typeof<'a>
 
             match src.Dimension, src.IsArray with

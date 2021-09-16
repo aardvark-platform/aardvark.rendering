@@ -58,9 +58,10 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
         if f <> currentFormat then
             currentFormat <- f
             textureFormat <- TextureFormat.ofPixFormat f TextureParams.empty
+            let integerFormat = TextureFormat.isIntegerFormat textureFormat
             let pf, pt = TextureFormat.toFormatAndType textureFormat
             pixelType <- toPixelType f.Type |> Option.get
-            pixelFormat <- toPixelFormat f.Format |> Option.get
+            pixelFormat <- toPixelFormat integerFormat f.Format |> Option.get
             channels <- PixelFormat.channels pf
             channelSize <- PixelType.size pt
 
@@ -349,9 +350,10 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
         if f <> currentFormat then
             currentFormat <- f
             textureFormat <- TextureFormat.ofPixFormat f TextureParams.empty
+            let integerFormat = TextureFormat.isIntegerFormat textureFormat
             let pf, pt = TextureFormat.toFormatAndType textureFormat
             pixelType <- toPixelType f.Type |> Option.get
-            pixelFormat <- toPixelFormat f.Format |> Option.get
+            pixelFormat <- toPixelFormat integerFormat f.Format |> Option.get
             channels <- PixelFormat.channels pf
             channelSize <- PixelType.size pt
 

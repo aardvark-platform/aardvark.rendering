@@ -1,3 +1,6 @@
+### 5.1.15
+- fixed GL compute shader image bindings
+
 ### 5.1.14
 - switched to official AssimpNet
 

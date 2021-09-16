@@ -690,7 +690,7 @@ module TextureUploadExtensions =
             member x.ChannelCount = toChannelCount x
 
         module PixelFormat =
-        
+
             let channels =
                 LookupTable.lookupTable [
                     PixelFormat.Bgr, 3
@@ -701,7 +701,21 @@ module TextureUploadExtensions =
                     PixelFormat.Rgba, 4
                 ]
 
-            let ofColFormat =
+            let toIntegerFormat (format : PixelFormat) =
+                format |> LookupTable.lookupTable' [
+                    PixelFormat.Red,    PixelFormat.RedInteger
+                    PixelFormat.Green,  PixelFormat.GreenInteger
+                    PixelFormat.Blue,   PixelFormat.BlueInteger
+                    PixelFormat.Alpha,  PixelFormat.AlphaInteger
+                    PixelFormat.Rg,     PixelFormat.RgInteger
+                    PixelFormat.Rgb,    PixelFormat.RgbInteger
+                    PixelFormat.Rgba,   PixelFormat.RgbaInteger
+                    PixelFormat.Bgr,    PixelFormat.BgrInteger
+                    PixelFormat.Bgra,   PixelFormat.BgraInteger
+                ]
+                |> Option.defaultValue format
+
+            let ofColFormat (isInteger : bool) =
                 LookupTable.lookupTable [
                     Col.Format.Alpha, PixelFormat.Red
                     Col.Format.BGR, PixelFormat.Bgr
@@ -715,6 +729,18 @@ module TextureUploadExtensions =
                     Col.Format.RGBA, PixelFormat.Rgba
                     Col.Format.RGBP, PixelFormat.Rgba
                 ]
+                >> if isInteger then toIntegerFormat else id
+
+            let isSupported = function
+                | PixelFormat.StencilIndex ->
+                    let version = Version(GL.GetInteger(GetPName.MajorVersion), GL.GetInteger(GetPName.MinorVersion), 0)
+                    if version < Version(4, 4, 0) then
+                        Log.error "GL_STENCIL_INDEX requires OpenGL 4.4 or higher (got %d.%d)" version.Major version.Minor
+                        false
+                    else
+                        true
+                | _ ->
+                    true
 
         module PixelType =
 
@@ -757,99 +783,140 @@ module TextureUploadExtensions =
 
         module TextureFormat =
 
-            let toFormatAndType =
-                LookupTable.lookupTable [
-                    TextureFormat.Bgr8 , (PixelFormat.Bgr, PixelType.UnsignedByte)
-                    TextureFormat.Bgra8 , (PixelFormat.Bgra, PixelType.UnsignedByte)
-                    TextureFormat.Rgb8 , (PixelFormat.Rgb, PixelType.UnsignedByte)
-                    TextureFormat.Rgb16 , (PixelFormat.Rgb, PixelType.UnsignedShort)
-                    TextureFormat.Rgba8 , (PixelFormat.Rgba, PixelType.UnsignedByte)
-                    TextureFormat.Rgb10A2 , (PixelFormat.Rgba, PixelType.UnsignedInt1010102)
-                    TextureFormat.Rgba16 , (PixelFormat.Rgba, PixelType.UnsignedShort)
-
-                    TextureFormat.DepthComponent16 , (PixelFormat.DepthComponent, PixelType.HalfFloat)
-                    TextureFormat.DepthComponent24 , (PixelFormat.DepthComponent, PixelType.Float)
-                    TextureFormat.DepthComponent32 , (PixelFormat.DepthComponent, PixelType.Float)
-                    TextureFormat.CompressedRed , (PixelFormat.Red, PixelType.UnsignedByte)
-                    TextureFormat.CompressedRg , (PixelFormat.Rg, PixelType.UnsignedByte)
-                    TextureFormat.R8 , (PixelFormat.Red, PixelType.UnsignedByte)
-                    TextureFormat.R16 , (PixelFormat.Red, PixelType.UnsignedShort)
-                    TextureFormat.Rg8 , (PixelFormat.Rg, PixelType.UnsignedByte)
-                    TextureFormat.Rg16 , (PixelFormat.Rg, PixelType.UnsignedShort)
-                    TextureFormat.R16f , (PixelFormat.Red, PixelType.HalfFloat)
-                    TextureFormat.R32f , (PixelFormat.Red, PixelType.Float)
-                    TextureFormat.Rg16f , (PixelFormat.Rg, PixelType.HalfFloat)
-                    TextureFormat.Rg32f , (PixelFormat.Rg, PixelType.Float)
-                    TextureFormat.R8i , (PixelFormat.Red, PixelType.Byte)
-                    TextureFormat.R8ui , (PixelFormat.Red, PixelType.UnsignedByte)
-                    TextureFormat.R16i , (PixelFormat.Red, PixelType.Short)
-                    TextureFormat.R16ui , (PixelFormat.Red, PixelType.UnsignedShort)
-                    TextureFormat.R32i , (PixelFormat.Red, PixelType.Int)
-                    TextureFormat.R32ui , (PixelFormat.Red, PixelType.UnsignedInt)
-                    TextureFormat.Rg8i , (PixelFormat.Rg, PixelType.Byte)
-                    TextureFormat.Rg8ui , (PixelFormat.Rg, PixelType.UnsignedByte)
-                    TextureFormat.Rg16i , (PixelFormat.Rg, PixelType.Short)
-                    TextureFormat.Rg16ui , (PixelFormat.Rg, PixelType.UnsignedShort)
-                    TextureFormat.Rg32i , (PixelFormat.Rg, PixelType.Int)
-                    TextureFormat.Rg32ui , (PixelFormat.Rg, PixelType.UnsignedInt)
-                    TextureFormat.CompressedRgbS3tcDxt1Ext , (PixelFormat.Rgb, PixelType.UnsignedByte)
-                    TextureFormat.CompressedRgbaS3tcDxt1Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
-                    TextureFormat.CompressedRgbaS3tcDxt3Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
-                    TextureFormat.CompressedRgbaS3tcDxt5Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
-                    TextureFormat.CompressedAlpha , (PixelFormat.Alpha, PixelType.UnsignedByte)
-                    TextureFormat.CompressedLuminance , (PixelFormat.Luminance, PixelType.UnsignedByte)
-                    TextureFormat.CompressedLuminanceAlpha , (PixelFormat.LuminanceAlpha, PixelType.UnsignedByte)
-                    TextureFormat.CompressedRgb , (PixelFormat.Rgb, PixelType.UnsignedByte)
-                    TextureFormat.CompressedRgba , (PixelFormat.Rgba, PixelType.UnsignedByte)
-                    TextureFormat.DepthStencil , (PixelFormat.DepthStencil, PixelType.Float32UnsignedInt248Rev)
-
-                    TextureFormat.Rgba32f , (PixelFormat.Rgba, PixelType.Float)
-                    TextureFormat.Rgb32f , (PixelFormat.Rgb, PixelType.Float)
-                    TextureFormat.Rgba16f , (PixelFormat.Rgba, PixelType.HalfFloat)
-                    TextureFormat.Rgb16f , (PixelFormat.Rgb, PixelType.HalfFloat)
-                    TextureFormat.Depth24Stencil8 , (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev)
-                    TextureFormat.Srgb , (PixelFormat.Rgb, PixelType.UnsignedByte)
-                    TextureFormat.Srgb8 , (PixelFormat.Rgb, PixelType.UnsignedByte)
-                    TextureFormat.SrgbAlpha , (PixelFormat.Rgba, PixelType.UnsignedByte)
-                    TextureFormat.Srgb8Alpha8 , (PixelFormat.Rgba, PixelType.UnsignedByte)
-
-                    TextureFormat.CompressedSrgb , (PixelFormat.Rgb, PixelType.UnsignedByte)
-                    TextureFormat.CompressedSrgbAlpha , (PixelFormat.Rgba, PixelType.UnsignedByte)
-                    TextureFormat.CompressedSrgbS3tcDxt1Ext , (PixelFormat.Rgb, PixelType.UnsignedByte)
-                    TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
-                    TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
-                    TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
-                    TextureFormat.DepthComponent32f , (PixelFormat.DepthComponent, PixelType.Float)
-                    TextureFormat.Depth32fStencil8 , (PixelFormat.DepthComponent, PixelType.Float)
-                    TextureFormat.Rgba32ui , (PixelFormat.Rgba, PixelType.UnsignedInt)
-                    TextureFormat.Rgb32ui , (PixelFormat.Rgb, PixelType.UnsignedInt)
-                    TextureFormat.Rgba16ui , (PixelFormat.Rgba, PixelType.UnsignedShort)
-                    TextureFormat.Rgb16ui , (PixelFormat.Rgb, PixelType.UnsignedShort)
-                    TextureFormat.Rgba8ui , (PixelFormat.Rgba, PixelType.UnsignedByte)
-                    TextureFormat.Rgb8ui , (PixelFormat.Rgb, PixelType.UnsignedByte)
-                    TextureFormat.Rgba32i , (PixelFormat.Rgba, PixelType.Int)
-                    TextureFormat.Rgb32i , (PixelFormat.Rgb, PixelType.Int)
-                    TextureFormat.Rgba16i , (PixelFormat.Rgba, PixelType.Short)
-                    TextureFormat.Rgb16i , (PixelFormat.Rgb, PixelType.Short)
-                    TextureFormat.Rgba8i , (PixelFormat.Rgba, PixelType.Byte)
-                    TextureFormat.Rgb8i , (PixelFormat.Rgb, PixelType.Byte)
-                    TextureFormat.Float32UnsignedInt248Rev , (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev)
-                    TextureFormat.CompressedRedRgtc1 , (PixelFormat.Red, PixelType.UnsignedByte)
-                    TextureFormat.CompressedSignedRedRgtc1 , (PixelFormat.Red, PixelType.Byte)
-                    TextureFormat.CompressedRgRgtc2 , (PixelFormat.Rg, PixelType.UnsignedByte)
-                    TextureFormat.CompressedSignedRgRgtc2 , (PixelFormat.Rg, PixelType.Byte)
-                    TextureFormat.CompressedRgbaBptcUnorm , (PixelFormat.Rgba, PixelType.UnsignedByte)
-                    TextureFormat.CompressedRgbBptcSignedFloat , (PixelFormat.Rgb, PixelType.Float)
-                    TextureFormat.CompressedRgbBptcUnsignedFloat , (PixelFormat.Rgb, PixelType.Float)
-                    TextureFormat.R8Snorm , (PixelFormat.Red, PixelType.Byte)
-                    TextureFormat.Rg8Snorm , (PixelFormat.Rg, PixelType.Byte)
-                    TextureFormat.Rgb8Snorm , (PixelFormat.Rgb, PixelType.Byte)
-                    TextureFormat.Rgba8Snorm , (PixelFormat.Rgba, PixelType.Byte)
-                    TextureFormat.R16Snorm , (PixelFormat.Red, PixelType.Short)
-                    TextureFormat.Rg16Snorm , (PixelFormat.Rg, PixelType.Short)
-                    TextureFormat.Rgb16Snorm , (PixelFormat.Rgb, PixelType.Short)
-                    TextureFormat.Rgba16Snorm , (PixelFormat.Rgba, PixelType.Short)
+            let private integerFormats =
+                Set.ofList [
+                    TextureFormat.R8i
+                    TextureFormat.R8ui
+                    TextureFormat.R16i
+                    TextureFormat.R16ui
+                    TextureFormat.R32i
+                    TextureFormat.R32ui
+                    TextureFormat.Rg8i
+                    TextureFormat.Rg8ui
+                    TextureFormat.Rg16i
+                    TextureFormat.Rg16ui
+                    TextureFormat.Rg32i
+                    TextureFormat.Rg32ui
+                    TextureFormat.Rgba32ui
+                    TextureFormat.Rgb32ui
+                    TextureFormat.Rgba16ui
+                    TextureFormat.Rgb16ui
+                    TextureFormat.Rgba8ui
+                    TextureFormat.Rgb8ui
+                    TextureFormat.Rgba32i
+                    TextureFormat.Rgb32i
+                    TextureFormat.Rgba16i
+                    TextureFormat.Rgb16i
+                    TextureFormat.Rgba8i
+                    TextureFormat.Rgb8i
                 ]
+
+            let isIntegerFormat (format : TextureFormat) =
+                integerFormats |> Set.contains format
+
+            let toFormatAndType =
+                let table =
+                    LookupTable.lookupTable' [
+                        TextureFormat.Bgr8 , (PixelFormat.Bgr, PixelType.UnsignedByte)
+                        TextureFormat.Bgra8 , (PixelFormat.Bgra, PixelType.UnsignedByte)
+                        TextureFormat.Rgb8 , (PixelFormat.Rgb, PixelType.UnsignedByte)
+                        TextureFormat.Rgb16 , (PixelFormat.Rgb, PixelType.UnsignedShort)
+                        TextureFormat.Rgba8 , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                        TextureFormat.Rgb10A2 , (PixelFormat.Rgba, PixelType.UnsignedInt1010102)
+                        TextureFormat.Rgba16 , (PixelFormat.Rgba, PixelType.UnsignedShort)
+
+                        TextureFormat.DepthComponent16 , (PixelFormat.DepthComponent, PixelType.HalfFloat)
+                        TextureFormat.DepthComponent24 , (PixelFormat.DepthComponent, PixelType.Float)
+                        TextureFormat.DepthComponent32 , (PixelFormat.DepthComponent, PixelType.Float)
+                        TextureFormat.CompressedRed , (PixelFormat.Red, PixelType.UnsignedByte)
+                        TextureFormat.CompressedRg , (PixelFormat.Rg, PixelType.UnsignedByte)
+                        TextureFormat.R8 , (PixelFormat.Red, PixelType.UnsignedByte)
+                        TextureFormat.R16 , (PixelFormat.Red, PixelType.UnsignedShort)
+                        TextureFormat.Rg8 , (PixelFormat.Rg, PixelType.UnsignedByte)
+                        TextureFormat.Rg16 , (PixelFormat.Rg, PixelType.UnsignedShort)
+                        TextureFormat.R16f , (PixelFormat.Red, PixelType.HalfFloat)
+                        TextureFormat.R32f , (PixelFormat.Red, PixelType.Float)
+                        TextureFormat.Rg16f , (PixelFormat.Rg, PixelType.HalfFloat)
+                        TextureFormat.Rg32f , (PixelFormat.Rg, PixelType.Float)
+                        TextureFormat.R8i , (PixelFormat.RedInteger, PixelType.Byte)
+                        TextureFormat.R8ui , (PixelFormat.RedInteger, PixelType.UnsignedByte)
+                        TextureFormat.R16i , (PixelFormat.RedInteger, PixelType.Short)
+                        TextureFormat.R16ui , (PixelFormat.RedInteger, PixelType.UnsignedShort)
+                        TextureFormat.R32i , (PixelFormat.RedInteger, PixelType.Int)
+                        TextureFormat.R32ui , (PixelFormat.RedInteger, PixelType.UnsignedInt)
+                        TextureFormat.Rg8i , (PixelFormat.RgInteger, PixelType.Byte)
+                        TextureFormat.Rg8ui , (PixelFormat.RgInteger, PixelType.UnsignedByte)
+                        TextureFormat.Rg16i , (PixelFormat.RgInteger, PixelType.Short)
+                        TextureFormat.Rg16ui , (PixelFormat.RgInteger, PixelType.UnsignedShort)
+                        TextureFormat.Rg32i , (PixelFormat.RgInteger, PixelType.Int)
+                        TextureFormat.Rg32ui , (PixelFormat.RgInteger, PixelType.UnsignedInt)
+                        TextureFormat.CompressedRgbS3tcDxt1Ext , (PixelFormat.Rgb, PixelType.UnsignedByte)
+                        TextureFormat.CompressedRgbaS3tcDxt1Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                        TextureFormat.CompressedRgbaS3tcDxt3Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                        TextureFormat.CompressedRgbaS3tcDxt5Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                        TextureFormat.CompressedAlpha , (PixelFormat.Alpha, PixelType.UnsignedByte)
+                        TextureFormat.CompressedLuminance , (PixelFormat.Luminance, PixelType.UnsignedByte)
+                        TextureFormat.CompressedLuminanceAlpha , (PixelFormat.LuminanceAlpha, PixelType.UnsignedByte)
+                        TextureFormat.CompressedRgb , (PixelFormat.Rgb, PixelType.UnsignedByte)
+                        TextureFormat.CompressedRgba , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                        TextureFormat.DepthStencil , (PixelFormat.DepthStencil, PixelType.Float32UnsignedInt248Rev)
+
+                        TextureFormat.Rgba32f , (PixelFormat.Rgba, PixelType.Float)
+                        TextureFormat.Rgb32f , (PixelFormat.Rgb, PixelType.Float)
+                        TextureFormat.Rgba16f , (PixelFormat.Rgba, PixelType.HalfFloat)
+                        TextureFormat.Rgb16f , (PixelFormat.Rgb, PixelType.HalfFloat)
+                        TextureFormat.Depth24Stencil8 , (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev)
+                        TextureFormat.Srgb , (PixelFormat.Rgb, PixelType.UnsignedByte)
+                        TextureFormat.Srgb8 , (PixelFormat.Rgb, PixelType.UnsignedByte)
+                        TextureFormat.SrgbAlpha , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                        TextureFormat.Srgb8Alpha8 , (PixelFormat.Rgba, PixelType.UnsignedByte)
+
+                        TextureFormat.CompressedSrgb , (PixelFormat.Rgb, PixelType.UnsignedByte)
+                        TextureFormat.CompressedSrgbAlpha , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                        TextureFormat.CompressedSrgbS3tcDxt1Ext , (PixelFormat.Rgb, PixelType.UnsignedByte)
+                        TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                        TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                        TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                        TextureFormat.DepthComponent32f , (PixelFormat.DepthComponent, PixelType.Float)
+                        TextureFormat.Depth32fStencil8 , (PixelFormat.DepthComponent, PixelType.Float)
+                        TextureFormat.Rgba32ui , (PixelFormat.RgbaInteger, PixelType.UnsignedInt)
+                        TextureFormat.Rgb32ui , (PixelFormat.RgbInteger, PixelType.UnsignedInt)
+                        TextureFormat.Rgba16ui , (PixelFormat.RgbaInteger, PixelType.UnsignedShort)
+                        TextureFormat.Rgb16ui , (PixelFormat.RgbInteger, PixelType.UnsignedShort)
+                        TextureFormat.Rgba8ui , (PixelFormat.RgbaInteger, PixelType.UnsignedByte)
+                        TextureFormat.Rgb8ui , (PixelFormat.RgbInteger, PixelType.UnsignedByte)
+                        TextureFormat.Rgba32i , (PixelFormat.RgbaInteger, PixelType.Int)
+                        TextureFormat.Rgb32i , (PixelFormat.RgbInteger, PixelType.Int)
+                        TextureFormat.Rgba16i , (PixelFormat.RgbaInteger, PixelType.Short)
+                        TextureFormat.Rgb16i , (PixelFormat.RgbInteger, PixelType.Short)
+                        TextureFormat.Rgba8i , (PixelFormat.RgbaInteger, PixelType.Byte)
+                        TextureFormat.Rgb8i , (PixelFormat.RgbInteger, PixelType.Byte)
+                        TextureFormat.Float32UnsignedInt248Rev , (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev)
+                        TextureFormat.CompressedRedRgtc1 , (PixelFormat.Red, PixelType.UnsignedByte)
+                        TextureFormat.CompressedSignedRedRgtc1 , (PixelFormat.Red, PixelType.Byte)
+                        TextureFormat.CompressedRgRgtc2 , (PixelFormat.Rg, PixelType.UnsignedByte)
+                        TextureFormat.CompressedSignedRgRgtc2 , (PixelFormat.Rg, PixelType.Byte)
+                        TextureFormat.CompressedRgbaBptcUnorm , (PixelFormat.Rgba, PixelType.UnsignedByte)
+                        TextureFormat.CompressedRgbBptcSignedFloat , (PixelFormat.Rgb, PixelType.Float)
+                        TextureFormat.CompressedRgbBptcUnsignedFloat , (PixelFormat.Rgb, PixelType.Float)
+                        TextureFormat.R8Snorm , (PixelFormat.Red, PixelType.Byte)
+                        TextureFormat.Rg8Snorm , (PixelFormat.Rg, PixelType.Byte)
+                        TextureFormat.Rgb8Snorm , (PixelFormat.Rgb, PixelType.Byte)
+                        TextureFormat.Rgba8Snorm , (PixelFormat.Rgba, PixelType.Byte)
+                        TextureFormat.R16Snorm , (PixelFormat.Red, PixelType.Short)
+                        TextureFormat.Rg16Snorm , (PixelFormat.Rg, PixelType.Short)
+                        TextureFormat.Rgb16Snorm , (PixelFormat.Rgb, PixelType.Short)
+                        TextureFormat.Rgba16Snorm , (PixelFormat.Rgba, PixelType.Short)
+                    ]
+
+                fun fmt ->
+                    match fmt |> table with
+                    | Some (pf, pt) when PixelFormat.isSupported pf -> (pf, pt)
+                    | _ ->
+                        failwithf "Conversion from format %A supported" fmt
+
+        type TextureFormat with
+            member x.IsIntegerFormat = TextureFormat.isIntegerFormat x
 
     [<RequireQualifiedAccess>]
     type internal PixelUnpackBuffer =
@@ -907,9 +974,9 @@ module TextureUploadExtensions =
                 NativePtr.free ptr
 
     type PixImage with
-        member image.PinPBO(align : int, trafo : ImageTrafo, f : V2i -> PixelType -> PixelFormat -> nativeint -> nativeint -> unit) =
+        member image.PinPBO(align : int, integerFormat : bool, trafo : ImageTrafo, f : V2i -> PixelType -> PixelFormat -> nativeint -> nativeint -> unit) =
             let pt = PixelType.ofType image.PixFormat.Type
-            let pf = PixelFormat.ofColFormat image.Format
+            let pf = PixelFormat.ofColFormat integerFormat image.Format
             
             let align = align |> nativeint
             let mask = align - 1n |> nativeint
@@ -970,10 +1037,10 @@ module TextureUploadExtensions =
             pbo |> PixelUnpackBuffer.free
 
     type PixVolume with
-        member x.PinPBO(align : int, f : V3i -> PixelType -> PixelFormat -> nativeint -> nativeint -> unit) =
+        member x.PinPBO(align : int, integerFormat : bool, f : V3i -> PixelType -> PixelFormat -> nativeint -> nativeint -> unit) =
             let size = x.Size
             let pt = PixelType.ofType x.PixFormat.Type
-            let pf = PixelFormat.ofColFormat x.Format
+            let pf = PixelFormat.ofColFormat integerFormat x.Format
 
             let align = align |> nativeint
             let alignMask = align - 1n |> nativeint
@@ -1190,25 +1257,25 @@ module TextureExtensions =
             match t with
                 | :? PixTexture3d as t -> Some(PixTexture3D(t.TextureParams, t.PixVolume))
                 | _ -> None
-                
+
     type Col.Format with
         static member Stencil = unbox<Col.Format> (Int32.MaxValue)
         static member Depth = unbox<Col.Format> (Int32.MaxValue - 1)
         static member DepthStencil = unbox<Col.Format> (Int32.MaxValue - 2)
 
     let internal toPixelType =
-        LookupTable.lookupTable' [
-            typeof<uint8>, PixelType.UnsignedByte
-            typeof<int8>, PixelType.Byte
-            typeof<uint16>, PixelType.UnsignedShort
-            typeof<int16>, PixelType.Short
-            typeof<uint32>, PixelType.UnsignedInt
-            typeof<int32>, PixelType.Int
-            typeof<float32>, PixelType.Float
-            typeof<float16>, PixelType.HalfFloat
-        ]
+         LookupTable.lookupTable' [
+             typeof<uint8>, PixelType.UnsignedByte
+             typeof<int8>, PixelType.Byte
+             typeof<uint16>, PixelType.UnsignedShort
+             typeof<int16>, PixelType.Short
+             typeof<uint32>, PixelType.UnsignedInt
+             typeof<int32>, PixelType.Int
+             typeof<float32>, PixelType.Float
+             typeof<float16>, PixelType.HalfFloat
+         ]
 
-    let internal toPixelFormat =
+    let internal toPixelFormat (isInteger : bool) =
         let table =
             LookupTable.lookupTable' [
                 Col.Format.Alpha, PixelFormat.Alpha
@@ -1225,18 +1292,22 @@ module TextureExtensions =
                 Col.Format.Depth, PixelFormat.DepthComponent
                 Col.Format.DepthStencil, PixelFormat.DepthComponent
             ]
-
-        let getVersion() =
-            Version(GL.GetInteger(GetPName.MajorVersion), GL.GetInteger(GetPName.MinorVersion), 0)
+            >> if isInteger then Option.map PixelFormat.toIntegerFormat else id
 
         fun input ->
             match input |> table with
-            | Some PixelFormat.StencilIndex when getVersion() < Version(4, 4, 0) ->
-                Log.error "GL_STENCIL_INDEX requires OpenGL 4.4 or higher"
-                None
+            | Some fmt when not <| PixelFormat.isSupported fmt -> None
+            | fmt -> fmt
 
-            | fmt ->
-                fmt
+    module private PixFormat =
+
+        let toFormatAndType (internalFormat : TextureFormat) (pixFormat : PixFormat) =
+            let isInteger = TextureFormat.isIntegerFormat internalFormat
+
+            match toPixelFormat isInteger pixFormat.Format, toPixelType pixFormat.Type with
+            | Some f, Some t -> f, t
+            | _ ->
+                failwith "conversion not implemented"
 
     let toUntypedPixelFormat =
         LookupTable.lookupTable' [
@@ -1271,119 +1342,7 @@ module TextureExtensions =
             TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext, PixelFormat.Rgba
         ]
 
-    let internal toChannelCount =
-        LookupTable.lookupTable' [
-            Col.Format.Alpha, 1
-            Col.Format.BW, 1
-            Col.Format.Gray, 1
-            Col.Format.GrayAlpha, 2
-            Col.Format.RGB, 3
-            Col.Format.BGR, 3
-            Col.Format.RGBA, 4
-            Col.Format.BGRA, 4
-            Col.Format.RGBP, 4
-            Col.Format.NormalUV, 2
-            Col.Format.Stencil, 1
-            Col.Format.Depth, 1
-        ]
-
-
-    let internal toFormatAndType =
-        LookupTable.lookupTable [
-            TextureFormat.Bgr8 , (PixelFormat.Bgr, PixelType.UnsignedByte)
-            TextureFormat.Bgra8 , (PixelFormat.Bgra, PixelType.UnsignedByte)
-            TextureFormat.Rgb8 , (PixelFormat.Rgb, PixelType.UnsignedByte)
-            TextureFormat.Rgb16 , (PixelFormat.Rgb, PixelType.UnsignedShort)
-            TextureFormat.Rgba8 , (PixelFormat.Rgba, PixelType.UnsignedByte)
-            TextureFormat.Rgb10A2 , (PixelFormat.Rgba, PixelType.UnsignedInt1010102)
-            TextureFormat.Rgba16 , (PixelFormat.Rgba, PixelType.UnsignedShort)
-
-            TextureFormat.DepthComponent16 , (PixelFormat.DepthComponent, PixelType.HalfFloat)
-            TextureFormat.DepthComponent24 , (PixelFormat.DepthComponent, PixelType.Float)
-            TextureFormat.DepthComponent32 , (PixelFormat.DepthComponent, PixelType.Float)
-            TextureFormat.CompressedRed , (PixelFormat.Red, PixelType.UnsignedByte)
-            TextureFormat.CompressedRg , (PixelFormat.Rg, PixelType.UnsignedByte)
-            TextureFormat.R8 , (PixelFormat.Red, PixelType.UnsignedByte)
-            TextureFormat.R16 , (PixelFormat.Red, PixelType.UnsignedShort)
-            TextureFormat.Rg8 , (PixelFormat.Rg, PixelType.UnsignedByte)
-            TextureFormat.Rg16 , (PixelFormat.Rg, PixelType.UnsignedShort)
-            TextureFormat.R16f , (PixelFormat.Red, PixelType.HalfFloat)
-            TextureFormat.R32f , (PixelFormat.Red, PixelType.Float)
-            TextureFormat.Rg16f , (PixelFormat.Rg, PixelType.HalfFloat)
-            TextureFormat.Rg32f , (PixelFormat.Rg, PixelType.Float)
-            TextureFormat.R8i , (PixelFormat.Red, PixelType.Byte)
-            TextureFormat.R8ui , (PixelFormat.Red, PixelType.UnsignedByte)
-            TextureFormat.R16i , (PixelFormat.Red, PixelType.Short)
-            TextureFormat.R16ui , (PixelFormat.Red, PixelType.UnsignedShort)
-            TextureFormat.R32i , (PixelFormat.Red, PixelType.Int)
-            TextureFormat.R32ui , (PixelFormat.Red, PixelType.UnsignedInt)
-            TextureFormat.Rg8i , (PixelFormat.Rg, PixelType.Byte)
-            TextureFormat.Rg8ui , (PixelFormat.Rg, PixelType.UnsignedByte)
-            TextureFormat.Rg16i , (PixelFormat.Rg, PixelType.Short)
-            TextureFormat.Rg16ui , (PixelFormat.Rg, PixelType.UnsignedShort)
-            TextureFormat.Rg32i , (PixelFormat.Rg, PixelType.Int)
-            TextureFormat.Rg32ui , (PixelFormat.Rg, PixelType.UnsignedInt)
-            TextureFormat.CompressedRgbS3tcDxt1Ext , (PixelFormat.Rgb, PixelType.UnsignedByte)
-            TextureFormat.CompressedRgbaS3tcDxt1Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
-            TextureFormat.CompressedRgbaS3tcDxt3Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
-            TextureFormat.CompressedRgbaS3tcDxt5Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
-            TextureFormat.CompressedAlpha , (PixelFormat.Alpha, PixelType.UnsignedByte)
-            TextureFormat.CompressedLuminance , (PixelFormat.Luminance, PixelType.UnsignedByte)
-            TextureFormat.CompressedLuminanceAlpha , (PixelFormat.LuminanceAlpha, PixelType.UnsignedByte)
-            TextureFormat.CompressedRgb , (PixelFormat.Rgb, PixelType.UnsignedByte)
-            TextureFormat.CompressedRgba , (PixelFormat.Rgba, PixelType.UnsignedByte)
-            TextureFormat.DepthStencil , (PixelFormat.DepthStencil, PixelType.Float32UnsignedInt248Rev)
-
-            TextureFormat.Rgba32f , (PixelFormat.Rgba, PixelType.Float)
-            TextureFormat.Rgb32f , (PixelFormat.Rgb, PixelType.Float)
-            TextureFormat.Rgba16f , (PixelFormat.Rgba, PixelType.HalfFloat)
-            TextureFormat.Rgb16f , (PixelFormat.Rgb, PixelType.HalfFloat)
-            TextureFormat.Depth24Stencil8 , (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev)
-            TextureFormat.Srgb , (PixelFormat.Rgb, PixelType.UnsignedByte)
-            TextureFormat.Srgb8 , (PixelFormat.Rgb, PixelType.UnsignedByte)
-            TextureFormat.SrgbAlpha , (PixelFormat.Rgba, PixelType.UnsignedByte)
-            TextureFormat.Srgb8Alpha8 , (PixelFormat.Rgba, PixelType.UnsignedByte)
-
-            TextureFormat.CompressedSrgb , (PixelFormat.Rgb, PixelType.UnsignedByte)
-            TextureFormat.CompressedSrgbAlpha , (PixelFormat.Rgba, PixelType.UnsignedByte)
-            TextureFormat.CompressedSrgbS3tcDxt1Ext , (PixelFormat.Rgb, PixelType.UnsignedByte)
-            TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
-            TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
-            TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
-            TextureFormat.DepthComponent32f , (PixelFormat.DepthComponent, PixelType.Float)
-            TextureFormat.Depth32fStencil8 , (PixelFormat.DepthComponent, PixelType.Float)
-            TextureFormat.Rgba32ui , (PixelFormat.Rgba, PixelType.UnsignedInt)
-            TextureFormat.Rgb32ui , (PixelFormat.Rgb, PixelType.UnsignedInt)
-            TextureFormat.Rgba16ui , (PixelFormat.Rgba, PixelType.UnsignedShort)
-            TextureFormat.Rgb16ui , (PixelFormat.Rgb, PixelType.UnsignedShort)
-            TextureFormat.Rgba8ui , (PixelFormat.Rgba, PixelType.UnsignedByte)
-            TextureFormat.Rgb8ui , (PixelFormat.Rgb, PixelType.UnsignedByte)
-            TextureFormat.Rgba32i , (PixelFormat.Rgba, PixelType.Int)
-            TextureFormat.Rgb32i , (PixelFormat.Rgb, PixelType.Int)
-            TextureFormat.Rgba16i , (PixelFormat.Rgba, PixelType.Short)
-            TextureFormat.Rgb16i , (PixelFormat.Rgb, PixelType.Short)
-            TextureFormat.Rgba8i , (PixelFormat.Rgba, PixelType.Byte)
-            TextureFormat.Rgb8i , (PixelFormat.Rgb, PixelType.Byte)
-            TextureFormat.Float32UnsignedInt248Rev , (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev)
-            TextureFormat.CompressedRedRgtc1 , (PixelFormat.Red, PixelType.UnsignedByte)
-            TextureFormat.CompressedSignedRedRgtc1 , (PixelFormat.Red, PixelType.Byte)
-            TextureFormat.CompressedRgRgtc2 , (PixelFormat.Rg, PixelType.UnsignedByte)
-            TextureFormat.CompressedSignedRgRgtc2 , (PixelFormat.Rg, PixelType.Byte)
-            TextureFormat.CompressedRgbaBptcUnorm , (PixelFormat.Rgba, PixelType.UnsignedByte)
-            TextureFormat.CompressedRgbBptcSignedFloat , (PixelFormat.Rgb, PixelType.Float)
-            TextureFormat.CompressedRgbBptcUnsignedFloat , (PixelFormat.Rgb, PixelType.Float)
-            TextureFormat.R8Snorm , (PixelFormat.Red, PixelType.Byte)
-            TextureFormat.Rg8Snorm , (PixelFormat.Rg, PixelType.Byte)
-            TextureFormat.Rgb8Snorm , (PixelFormat.Rgb, PixelType.Byte)
-            TextureFormat.Rgba8Snorm , (PixelFormat.Rgba, PixelType.Byte)
-            TextureFormat.R16Snorm , (PixelFormat.Red, PixelType.Short)
-            TextureFormat.Rg16Snorm , (PixelFormat.Rg, PixelType.Short)
-            TextureFormat.Rgb16Snorm , (PixelFormat.Rgb, PixelType.Short)
-            TextureFormat.Rgba16Snorm , (PixelFormat.Rgba, PixelType.Short)
-
-        ]
-
-    let compressionRatio = 
+    let compressionRatio =
          LookupTable.lookupTable [
                 TextureFormat.CompressedRgbS3tcDxt1Ext, 6
                 TextureFormat.CompressedRgbaS3tcDxt1Ext, 6
@@ -1405,43 +1364,18 @@ module TextureExtensions =
     module internal Devil =
         open DevILSharp
 
-        let private pixelType =
-            LookupTable.lookupTable' [
-                ChannelType.Byte, PixelType.Byte
-                //ChannelType.Double, PixelType.Double
-                ChannelType.Float, PixelType.Float
-                ChannelType.Half, PixelType.HalfFloat
-                ChannelType.Int, PixelType.Int
-                ChannelType.Short, PixelType.Short
-                ChannelType.UnsignedByte, PixelType.UnsignedByte
-                ChannelType.UnsignedInt, PixelType.UnsignedInt
-                ChannelType.UnsignedShort, PixelType.UnsignedShort
-            ]
-
-        let private pixelFormat =
-            LookupTable.lookupTable' [
-                ChannelFormat.RGB, PixelFormat.Rgb
-                ChannelFormat.BGR, PixelFormat.Bgr
-                ChannelFormat.RGBA, PixelFormat.Rgba
-                ChannelFormat.BGRA, PixelFormat.Bgra
-                ChannelFormat.Luminance, PixelFormat.Luminance
-                ChannelFormat.Alpha, PixelFormat.Alpha
-                ChannelFormat.LuminanceAlpha, PixelFormat.LuminanceAlpha
-
-            ]
-
         let private compressedFormat =
             LookupTable.lookupTable' [
                 (ChannelFormat.RGB, ChannelType.UnsignedByte, false), (CompressedDataFormat.Dxt1, PixelInternalFormat.CompressedRgbS3tcDxt1Ext)
                 (ChannelFormat.RGBA, ChannelType.UnsignedByte, false), (CompressedDataFormat.Dxt5, PixelInternalFormat.CompressedRgbaS3tcDxt5Ext)
                 (ChannelFormat.RGB, ChannelType.UnsignedByte, true), (CompressedDataFormat.Dxt1, PixelInternalFormat.CompressedSrgbS3tcDxt1Ext)
                 (ChannelFormat.RGBA, ChannelType.UnsignedByte, true), (CompressedDataFormat.Dxt5, PixelInternalFormat.CompressedSrgbAlphaS3tcDxt5Ext)
-                
+
                 (ChannelFormat.BGR, ChannelType.UnsignedByte, false), (CompressedDataFormat.Dxt1, PixelInternalFormat.CompressedRgbS3tcDxt1Ext)
                 (ChannelFormat.BGRA, ChannelType.UnsignedByte, false), (CompressedDataFormat.Dxt5, PixelInternalFormat.CompressedRgbaS3tcDxt5Ext)
                 (ChannelFormat.BGR, ChannelType.UnsignedByte, true), (CompressedDataFormat.Dxt1, PixelInternalFormat.CompressedSrgbS3tcDxt1Ext)
                 (ChannelFormat.BGRA, ChannelType.UnsignedByte, true), (CompressedDataFormat.Dxt5, PixelInternalFormat.CompressedSrgbAlphaS3tcDxt5Ext)
-            
+
                 (ChannelFormat.Luminance, ChannelType.UnsignedByte, false), (CompressedDataFormat.Dxt1, PixelInternalFormat.CompressedRedRgtc1)
             ]
 
@@ -1536,19 +1470,12 @@ module TextureExtensions =
                                 | Some pixFormat ->
                                     let ifmt = TextureFormat.ofPixFormat pixFormat config
 
-                                    let pixelType, pixelFormat =
-                                        match toPixelType pixFormat.Type, toPixelFormat pixFormat.Format with
-                                            | Some t, Some f -> (t,f)
-                                            | _ ->
-                                                failwith "conversion not implemented"
-
+                                    let pixelFormat, pixelType =
+                                        PixFormat.toFormatAndType ifmt pixFormat
 
                                     let elementSize = pixFormat.Type.GLSize
-                                    let channelCount =
-                                        match toChannelCount pixFormat.Format with
-                                            | Some c -> c
-                                            | _ -> pixFormat.ChannelCount
-                                
+                                    let channelCount = pixFormat.Format.ChannelCount
+
                                     let align = t.Context.UnpackAlignment
                                     let lineSize = w * elementSize * channelCount
                                     let alignedLineSize =
@@ -1680,9 +1607,10 @@ module TextureExtensions =
             let expectedLevels = 1 + max size.X size.Y |> Fun.Log2 |> Fun.Floor |> int
             let uploadLevels = if textureParams.wantMipMaps then data.LevelCount else 1
             let generateMipMap = textureParams.wantMipMaps && data.LevelCount < expectedLevels
+            let integerFormat = TextureFormat.isIntegerFormat t.Format
             
             let pixelType = PixelType.ofType data.PixFormat.Type 
-            let pixelFormat = PixelFormat.ofColFormat data.PixFormat.Format 
+            let pixelFormat = PixelFormat.ofColFormat integerFormat data.PixFormat.Format 
 
             let compressedFormat =
                         if textureParams.wantCompressed then
@@ -1730,14 +1658,14 @@ module TextureExtensions =
             for l in 0..uploadLevels-1 do
                 let image = data.[l]
 
-                image.PinPBO(t.Context.UnpackAlignment,ImageTrafo.MirrorY, fun dim pixelType pixelFormat pixels size ->
+                image.PinPBO(t.Context.UnpackAlignment, integerFormat, ImageTrafo.MirrorY, fun dim pixelType pixelFormat pixels size ->
                     if sizeChanged || formatChanged then
                         GL.TexImage2D(target, startLevel + l, internalFormat, dim.X, dim.Y, 0, pixelFormat, pixelType, pixels)
                     else
                         GL.TexSubImage2D(target, startLevel + l, 0, 0, dim.X, dim.Y, pixelFormat, pixelType, pixels)
                     GL.Check (sprintf "could not upload texture data for level %d" l)
                 )
-                
+
             // if the image did not contain a sufficient
             // number of MipMaps and the user demanded 
             // MipMaps we generate them using OpenGL
@@ -1817,18 +1745,20 @@ module TextureExtensions =
             let newFormat = TextureFormat.ofPixFormat data.PixFormat textureParams
             let formatChanged = t.Format <> newFormat
             let sizeChanged = size <> t.Size3D
-            let internalFormat = TextureFormat.ofPixFormat data.PixFormat textureParams |> int |> unbox<PixelInternalFormat>
+            let internalFormat = TextureFormat.ofPixFormat data.PixFormat textureParams
+            let pixelInternalFormat = internalFormat |> int |> unbox<PixelInternalFormat>
+            let integerFormat = TextureFormat.isIntegerFormat internalFormat
 
             GL.BindTexture(TextureTarget.Texture3D, t.Handle)
             GL.Check "could not bind texture"
 
-            data.PinPBO (t.Context.UnpackAlignment, fun size pt pf pixels sizeInBytes ->
+            data.PinPBO (t.Context.UnpackAlignment, integerFormat, fun size pt pf pixels sizeInBytes ->
                 if sizeChanged || formatChanged then
                     if not generateMipMap then
                         GL.TexParameter(TextureTarget.Texture3D, TextureParameterName.TextureMaxLod, 0)
                         GL.TexParameter(TextureTarget.Texture3D, TextureParameterName.TextureBaseLevel, 0)
 
-                    GL.TexImage3D(TextureTarget.Texture3D, 0, internalFormat, size.X, size.Y, size.Z, 0, pf, pt, pixels)
+                    GL.TexImage3D(TextureTarget.Texture3D, 0, pixelInternalFormat, size.X, size.Y, size.Z, 0, pf, pt, pixels)
                 else
                     GL.TexSubImage3D(TextureTarget.Texture3D, 0, 0, 0, 0, size.X, size.Y, size.Z, pf, pt, pixels)
                 GL.Check "could not upload texture data"
@@ -1877,7 +1807,7 @@ module TextureExtensions =
                             if isCompressed then
                                 GL.CompressedTexImage2D(target, l, unbox (int data.Format), levelData.Size.X, levelData.Size.Y, 0, int levelData.SizeInBytes, pixels)
                             else
-                                let pf, pt = toFormatAndType data.Format
+                                let pf, pt = TextureFormat.toFormatAndType data.Format
                                 GL.TexImage2D(target, l, unbox (int data.Format), levelData.Size.X, levelData.Size.Y, 0, pf, pt, pixels)
 
                             pbo |> PixelUnpackBuffer.free
@@ -1903,10 +1833,12 @@ module TextureExtensions =
             let target = texture |> getTextureTarget
             let targetSlice = texture |> getTextureSliceTarget slice
 
+            let integerFormat = TextureFormat.isIntegerFormat texture.Format
+
             GL.BindTexture(target, texture.Handle)
             GL.Check "could not bind texture"
 
-            image.PinPBO(texture.Context.UnpackAlignment, ImageTrafo.MirrorY, fun dim pixelType pixelFormat pixels size ->
+            image.PinPBO(texture.Context.UnpackAlignment, integerFormat, ImageTrafo.MirrorY, fun dim pixelType pixelFormat pixels size ->
                 if target = TextureTarget.Texture3D || texture.IsArray then
                     GL.TexSubImage3D(target, level, offset.X, offset.Y, slice, dim.X, dim.Y, 1, pixelFormat, pixelType, pixels)
                 else
@@ -1972,22 +1904,16 @@ module TextureExtensions =
 
         let downloadTexture2D (texture : Texture) (level : int) (slice : int) (offset : V2i) (image : PixImage) =
             let format = image.PixFormat
-            let target =  texture |> getTextureTarget
-            let targetSlice =  texture |> getTextureSliceTarget slice
+            let target = texture |> getTextureTarget
+            let targetSlice = texture |> getTextureSliceTarget slice
             GL.BindTexture(target, texture.Handle)
             GL.Check "could not bind texture"
 
-            let pixelType, pixelFormat =
-                match toPixelType format.Type, toPixelFormat image.Format with
-                | Some t, Some f -> (t, f)
-                | _ ->
-                    failwith "conversion not implemented"
+            let pixelFormat, pixelType =
+                PixFormat.toFormatAndType texture.Format format
 
             let elementSize = image.PixFormat.Type.GLSize
-            let channelCount =
-                match toChannelCount image.Format with
-                | Some c -> c
-                | _ -> image.PixFormat.ChannelCount
+            let channelCount = image.Format.ChannelCount
 
             let lineSize = image.Size.X * channelCount * elementSize
             let packAlign = texture.Context.PackAlignment

@@ -219,9 +219,50 @@ let testCopySlice() =
 
     ()
 
+module CSTest =
+    
+    module Shader =
+        open FShade
+
+        [<LocalSize(X = 8, Y = 8)>]
+        let write (img : Image2d<Formats.rgba8>) =
+            compute {
+                let id = getGlobalId().XY
+                let s = img.Size
+                if id.X < s.X && id.Y < s.Y then
+                    img.[id] <- V4d(V2d id / V2d s, 1.0, 1.0)
+            }
+
+    let run() =
+    
+        let app = new OpenGlApplication()
+        let runtime = app.Runtime :> IRuntime
+
+        let dst = runtime.CreateTexture2D(V2i(1024, 1024), TextureFormat.Rgba8, 1, 1)
+
+        let sh = runtime.CreateComputeShader Shader.write
+        let ip = runtime.NewInputBinding sh
+        ip.["img"] <- dst.[TextureAspect.Color, 0, 0]
+        ip.Flush()
+
+        runtime.Run [
+            ComputeCommand.Bind sh
+            ComputeCommand.SetInput ip
+            ComputeCommand.Dispatch (dst.Size.XY / 8)
+        ]
+
+        let img = PixImage<byte>(Col.Format.RGBA, dst.Size.XY)
+        runtime.Download(dst, 0, 0, img)
+        img.SaveImageSharp @"C:\Users\Schorsch\Desktop\bla.png"
+
+
+
 [<EntryPoint>]
 let main args =
     Aardvark.Init()
+    CSTest.run()
+
+    exit 0
     //``Texture Tests``.runAllTests()
     //testCompile()
 
