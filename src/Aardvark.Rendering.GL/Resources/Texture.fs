@@ -1899,6 +1899,33 @@ module TextureExtensions =
                     failwith "implement me"
             ()
 
+        let private uploadTextureLevelInternal (texture : Texture) (level : int) (slice : int) (offset : V2i) (image : PixImage) =
+            let target = texture |> getTextureTarget
+            let targetSlice = texture |> getTextureSliceTarget slice
+
+            GL.BindTexture(target, texture.Handle)
+            GL.Check "could not bind texture"
+
+            image.PinPBO(texture.Context.UnpackAlignment, ImageTrafo.MirrorY, fun dim pixelType pixelFormat pixels size ->
+                if target = TextureTarget.Texture3D || texture.IsArray then
+                    GL.TexSubImage3D(target, level, offset.X, offset.Y, slice, dim.X, dim.Y, 1, pixelFormat, pixelType, pixels)
+                else
+                    GL.TexSubImage2D(targetSlice, level, offset.X, offset.Y, dim.X, dim.Y, pixelFormat, pixelType, pixels)
+            )
+
+            GL.Check (sprintf "could not upload texture data for level %d" level)
+
+            GL.BindTexture(target, 0)
+            GL.Check "could not unbind texture"
+
+        let uploadTextureLevel (texture : Texture) (level : int) (slice : int) (offset : V2i) (image : PixImage) =
+            match texture.Dimension with
+            | TextureDimension.Texture2D | TextureDimension.Texture3D | TextureDimension.TextureCube ->
+                uploadTextureLevelInternal texture level slice offset image
+
+            | _ ->
+                failwithf "cannot upload texture levels of kind: %A" texture.Dimension
+
         let private readTexture2D (texture : Texture) (targetSlice : TextureTarget) (level : int) (slice : int)
                                   (offset : V2i) (size : V2i) (pixelFormat : PixelFormat)
                                   (pixelType : PixelType) (dst : nativeint) =
@@ -2254,65 +2281,29 @@ type ContextTextureExtensions =
         )
 
     [<Extension>]
-    static member Upload(this : Context, t : Texture, level : int, slice : int, offset : V2i, source : PixImage) =
+    static member Upload(this : Context, texture : Texture, level : int, slice : int, offset : V2i, source : PixImage) =
         using this.ResourceLock (fun _ ->
-            let levelSize = t.GetSize level
+            let levelSize = texture.GetSize level
             let offset = V2i(offset.X, levelSize.Y - offset.Y - source.Size.Y) // flip y-offset
-            if offset = V2i.Zero && source.Size = levelSize.XY then
-                this.Upload(t, level, slice, source)
-            else
-                let temp = this.CreateTexture2D(source.Size, 1, t.Format, 1)
+
+            // Multisampled texture requires blit
+            if texture.IsMultisampled then
+                let temp = this.CreateTexture2D(source.Size, 1, texture.Format, 1)
 
                 try
-                    this.Upload(temp, 0, 0, source)
-
-                    if t.IsMultisampled then // resolve multisamples
-                        this.Blit(temp, 0, 0, V2i.Zero, source.Size, t, level, slice, offset, source.Size, true)
-                    else
-                        this.Copy(temp, 0, 0, V2i.Zero, t, level, slice, offset, source.Size)
+                    uploadTextureLevel temp 0 0 V2i.Zero source
+                    this.Blit(temp, 0, 0, V2i.Zero, source.Size, texture, level, slice, offset, source.Size, true)
                 finally
                     this.Delete(temp)
+
+            // Upload directly
+            else
+                uploadTextureLevel texture level slice offset source
         )
 
     [<Extension>]
-    static member Upload(this : Context, t : Texture, level : int, slice : int, source : PixImage) =
-        using this.ResourceLock (fun _ ->
-            match t.Dimension with
-                | TextureDimension.Texture2D -> 
-                    let target = getTextureTarget t
-                    GL.BindTexture(target, t.Handle)
-                    GL.Check "could not bind texture"
-
-                    source.PinPBO(t.Context.PackAlignment, ImageTrafo.MirrorY, fun dim pixelType pixelFormat pixels size ->
-                        if target = TextureTarget.Texture2DArray then
-                            GL.TexSubImage3D(target, level, 0, 0, slice, dim.X, dim.Y, 1, pixelFormat, pixelType, pixels)
-                        else
-                            GL.TexSubImage2D(target, level, 0, 0, dim.X, dim.Y, pixelFormat, pixelType, pixels)
-                        GL.Check (sprintf "could not upload texture data for level %d" level)
-                    )
-
-                    GL.BindTexture(target, 0)
-                    GL.Check "could not unbind texture"
-
-                | TextureDimension.TextureCube ->
-                    let target = getTextureTarget t
-                    GL.BindTexture(target, t.Handle)
-                    GL.Check "could not bind texture"
-
-                    source.PinPBO(t.Context.PackAlignment, ImageTrafo.MirrorY, fun dim pixelType pixelFormat pixels size ->
-                        if target = TextureTarget.TextureCubeMapArray then
-                            GL.TexSubImage3D(target, level, 0, 0, slice, dim.X, dim.Y, 1, pixelFormat, pixelType, pixels)
-                        else
-                            let target = snd cubeSides.[slice % 6]
-                            GL.TexSubImage2D(target, level, 0, 0, dim.X, dim.Y, pixelFormat, pixelType, pixels)
-                        GL.Check (sprintf "could not upload texture data for level %d" level)
-                    )
-
-                    GL.BindTexture(target, 0)
-                    GL.Check "could not unbind texture"
-                | _ ->  
-                    failwithf "cannot upload textures of kind: %A" t.Dimension
-        )
+    static member Upload(this : Context, texture : Texture, level : int, slice : int, source : PixImage) =
+        this.Upload(texture, level, slice, V2i.Zero, source)
 
     [<Extension>]
     static member Upload(this : Context, t : Texture, level : int, source : PixImage) =
