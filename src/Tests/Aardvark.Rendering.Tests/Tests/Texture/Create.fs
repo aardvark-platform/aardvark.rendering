@@ -96,8 +96,8 @@ module TextureCreate =
 
     let tests (backend : Backend) =
         [
-            "Non-Positive Arguments",  Cases.nonPositiveArguments
-            "Invalid Usage",           Cases.invalidUsage
-            "Valid Usage",             Cases.validUsage
+            "Non-positive arguments",  Cases.nonPositiveArguments
+            "Invalid usage",           Cases.invalidUsage
+            "Valid usage",             Cases.validUsage
         ]
         |> prepareCases backend "Create"

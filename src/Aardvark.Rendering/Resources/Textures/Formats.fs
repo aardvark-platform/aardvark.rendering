@@ -383,19 +383,35 @@ module TextureFormat =
 
     let toDownloadFormat =
         LookupTable.lookupTable [
+            TextureFormat.R8, PixFormat.ByteGray
             TextureFormat.Bgr8, PixFormat.ByteBGR
             TextureFormat.Bgra8, PixFormat.ByteBGRA
             TextureFormat.Rgba8, PixFormat.ByteRGBA
             TextureFormat.Rgb8, PixFormat.ByteRGB
-            TextureFormat.CompressedRgb, PixFormat.ByteRGB
-            TextureFormat.CompressedRgba, PixFormat.ByteRGBA
-            TextureFormat.R32f, PixFormat.FloatGray
-            TextureFormat.Rgb32f, PixFormat.FloatRGB
-            TextureFormat.Rgba32f, PixFormat.FloatRGBA
-            TextureFormat.DepthComponent32, PixFormat.UIntGray
-            TextureFormat.DepthComponent32f, PixFormat.FloatGray
+
             TextureFormat.R16, PixFormat.UShortGray
+            TextureFormat.Rgba16, PixFormat.UShortRGBA
+            TextureFormat.Rgb16, PixFormat.UShortRGB
+
+            TextureFormat.R16f, PixFormat(typeof<float16>, Col.Format.Gray)
+            TextureFormat.Rg16f, PixFormat(typeof<float16>, Col.Format.NormalUV)
+            TextureFormat.Rgb16f, PixFormat(typeof<float16>, Col.Format.RGB)
             TextureFormat.Rgba16f, PixFormat(typeof<float16>, Col.Format.RGBA)
+
+            TextureFormat.R32f, PixFormat(typeof<float32>, Col.Format.Gray)
+            TextureFormat.Rg32f, PixFormat(typeof<float32>, Col.Format.NormalUV)
+            TextureFormat.Rgb32f, PixFormat(typeof<float32>, Col.Format.RGB)
+            TextureFormat.Rgba32f, PixFormat(typeof<float32>, Col.Format.RGBA)
+
+            TextureFormat.R8Snorm, PixFormat(typeof<float32>, Col.Format.Gray)
+            TextureFormat.Rg8Snorm, PixFormat(typeof<float32>, Col.Format.NormalUV)
+            TextureFormat.Rgb8Snorm, PixFormat(typeof<float32>, Col.Format.RGB)
+            TextureFormat.Rgba8Snorm, PixFormat(typeof<float32>, Col.Format.RGBA)
+
+            TextureFormat.R16Snorm, PixFormat(typeof<float32>, Col.Format.Gray)
+            TextureFormat.Rg16Snorm, PixFormat(typeof<float32>, Col.Format.NormalUV)
+            TextureFormat.Rgb16Snorm, PixFormat(typeof<float32>, Col.Format.RGB)
+            TextureFormat.Rgba16Snorm, PixFormat(typeof<float32>, Col.Format.RGBA)
 
             TextureFormat.R8i, PixFormat(typeof<int8>, Col.Format.Gray)
             TextureFormat.Rg8i, PixFormat(typeof<int8>, Col.Format.NormalUV)
@@ -426,6 +442,12 @@ module TextureFormat =
             TextureFormat.Rg32ui, PixFormat(typeof<uint32>, Col.Format.NormalUV)
             TextureFormat.Rgb32ui, PixFormat(typeof<uint32>, Col.Format.RGB)
             TextureFormat.Rgba32ui, PixFormat(typeof<uint32>, Col.Format.RGBA)
+
+            TextureFormat.CompressedRgb, PixFormat.ByteRGB
+            TextureFormat.CompressedRgba, PixFormat.ByteRGBA
+
+            TextureFormat.DepthComponent32, PixFormat.UIntGray
+            TextureFormat.DepthComponent32f, PixFormat.FloatGray
         ]
 
     let pixelSizeInBits =

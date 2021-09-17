@@ -48,12 +48,27 @@ module PixData =
             pi.GetMatrix<C4b>().SetByCoord(fun _ -> color) |> ignore
             pi
 
-        let random (size : V2i) =
-            let pi = PixImage<byte>(Col.Format.RGBA, size)
-            pi.GetMatrix<C4b>().SetByIndex(fun _ ->
-                rng.UniformC4f() |> C4b
-            ) |> ignore
+        let private randomGeneric<'T> (getValue : unit -> 'T) (size : V2i) =
+            let pi = PixImage<'T>(Col.Format.RGBA, size)
+            for c in pi.ChannelArray do
+                c.SetByIndex(ignore >> getValue) |> ignore
             pi
+
+        let random8ui = randomGeneric (rng.UniformUInt >> uint8)
+
+        let random8i = randomGeneric (rng.UniformInt >> int8)
+
+        let random16ui = randomGeneric (rng.UniformUInt >> uint16)
+
+        let random16i = randomGeneric (rng.UniformInt >> int16)
+
+        let random32ui = randomGeneric rng.UniformUInt
+
+        let random32i = randomGeneric rng.UniformInt
+
+        let random32f = randomGeneric rng.UniformFloatClosed
+
+        let random = random8ui
 
         let checkerboard (color : C4b) =
             let pi = PixImage<byte>(Col.Format.RGBA, V2i.II * 256)
@@ -84,7 +99,8 @@ module PixData =
             Directory.CreateDirectory(dir) |> ignore
             img.SaveAsImage(Path.combine [dir; fileName])
 
-        let compare (offset : V2i) (input : PixImage<'T>) (output : PixImage<'T>) =
+        let compareWithComparer (comparer : 'T -> 'T -> string -> unit)
+                                (offset : V2i) (input : PixImage<'T>) (output : PixImage<'T>) =
             for x in 0 .. output.Size.X - 1 do
                 for y in 0 .. output.Size.Y - 1 do
                     for c in 0 .. output.ChannelCount - 1 do
@@ -99,7 +115,15 @@ module PixData =
                             else
                                 Unchecked.defaultof<'T>
 
-                        Expect.equal outputData.[x, y] ref "PixImage data mismatch"
+                        comparer outputData.[x, y] ref "PixImage data mismatch"
+
+
+        let compare (offset : V2i) (input : PixImage<'T>) (output : PixImage<'T>) =
+            compareWithComparer Expect.equal offset input output
+
+        let compare32f (offset : V2i) (accuracy : Accuracy) (input : PixImage<float32>) (output : PixImage<float32>) =
+            let comp a b = Expect.floatClose accuracy (float a) (float b)
+            compareWithComparer comp offset input output
 
 
 [<AutoOpen>]
