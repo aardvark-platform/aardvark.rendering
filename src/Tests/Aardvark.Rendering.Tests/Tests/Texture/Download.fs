@@ -43,9 +43,8 @@ module TextureDownload =
             data |> texture2DWithFormat runtime TextureFormat.Rgba16
 
         let texture2Drgba16snorm (runtime : IRuntime) =
-            let acc = { absolute = 1e-4; relative = 1e-1 }
-            let data = PixImage.random32f <| V2i(256)
-            data |> texture2DWithFormat32f runtime acc TextureFormat.Rgba16Snorm
+            let data = PixImage.random16i <| V2i(256)
+            data |> texture2DWithFormat runtime TextureFormat.Rgba16Snorm
 
         let texture2Drgba32ui (runtime : IRuntime) =
             let data = PixImage.random32ui <| V2i(256)

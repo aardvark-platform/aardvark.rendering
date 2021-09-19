@@ -344,7 +344,6 @@ module TextureFormat =
 
         let rgb8 = buildLookup(TextureFormat.Rgb8, TextureFormat.Srgb8)
         let rgba8 = buildLookup(TextureFormat.Rgba8, TextureFormat.Srgb8Alpha8)
-        let r8 = buildLookup(TextureFormat.R8, TextureFormat.R8Snorm)
 
         LookupTable.lookupTable [
             PixFormat.ByteBGR  , rgb8
@@ -353,9 +352,9 @@ module TextureFormat =
             PixFormat.ByteRGB  , rgb8
             PixFormat.ByteRGBA , rgba8
             PixFormat.ByteRGBP , rgba8
-            PixFormat.ByteGray , r8
+            PixFormat.ByteGray , (fun _ -> TextureFormat.R8)
 
-            PixFormat.UShortRGB ,  (fun _ -> TextureFormat.Rgb16)
+            PixFormat.UShortRGB  ,  (fun _ -> TextureFormat.Rgb16)
             PixFormat.UShortRGBA ,  (fun _ -> TextureFormat.Rgba16)
             PixFormat.UShortRGBP ,  (fun _ -> TextureFormat.Rgba16)
             PixFormat.UShortBGR  ,  (fun _ -> TextureFormat.Rgb16)
@@ -363,22 +362,37 @@ module TextureFormat =
             PixFormat.UShortBGRP ,  (fun _ -> TextureFormat.Rgba16)
             PixFormat.UShortGray ,  (fun _ -> TextureFormat.R16)
 
+            PixFormat(typeof<float16>, Col.Format.Gray)     , (fun _ -> TextureFormat.R16f)
+            PixFormat(typeof<float16>, Col.Format.NormalUV) , (fun _ -> TextureFormat.Rg16f)
+            PixFormat(typeof<float16>, Col.Format.RGB)      , (fun _ -> TextureFormat.Rgb16f)
+            PixFormat(typeof<float16>, Col.Format.RGBA)     , (fun _ -> TextureFormat.Rgba16f)
+
+            PixFormat(typeof<float32>, Col.Format.Gray)     , (fun _ -> TextureFormat.R32f)
+            PixFormat(typeof<float32>, Col.Format.NormalUV) , (fun _ -> TextureFormat.Rg32f)
+            PixFormat(typeof<float32>, Col.Format.RGB)      , (fun _ -> TextureFormat.Rgb32f)
+            PixFormat(typeof<float32>, Col.Format.RGBA)     , (fun _ -> TextureFormat.Rgba32f)
+
+            PixFormat(typeof<int8>, Col.Format.Gray)        , (fun _ -> TextureFormat.R8Snorm)
+            PixFormat(typeof<int8>, Col.Format.NormalUV)    , (fun _ -> TextureFormat.Rg8Snorm)
+            PixFormat(typeof<int8>, Col.Format.RGB)         , (fun _ -> TextureFormat.Rgb8Snorm)
+            PixFormat(typeof<int8>, Col.Format.RGBA)        , (fun _ -> TextureFormat.Rgba8Snorm)
+
+            PixFormat(typeof<int16>, Col.Format.Gray)       , (fun _ -> TextureFormat.R16Snorm)
+            PixFormat(typeof<int16>, Col.Format.NormalUV)   , (fun _ -> TextureFormat.Rg16Snorm)
+            PixFormat(typeof<int16>, Col.Format.RGB)        , (fun _ -> TextureFormat.Rgb16Snorm)
+            PixFormat(typeof<int16>, Col.Format.RGBA)       , (fun _ -> TextureFormat.Rgba16Snorm)
+
+            PixFormat(typeof<int32>, Col.Format.Gray)       , (fun _ -> TextureFormat.R32i)
+            PixFormat(typeof<int32>, Col.Format.NormalUV)   , (fun _ -> TextureFormat.Rg32i)
+            PixFormat(typeof<int32>, Col.Format.RGB)        , (fun _ -> TextureFormat.Rgb32i)
+            PixFormat(typeof<int32>, Col.Format.RGBA)       , (fun _ -> TextureFormat.Rgba32i)
+
+            PixFormat(typeof<uint32>, Col.Format.Gray)      , (fun _ -> TextureFormat.R32ui)
+            PixFormat(typeof<uint32>, Col.Format.NormalUV)  , (fun _ -> TextureFormat.Rg32ui)
+            PixFormat(typeof<uint32>, Col.Format.RGB)       , (fun _ -> TextureFormat.Rgb32ui)
+            PixFormat(typeof<uint32>, Col.Format.RGBA)      , (fun _ -> TextureFormat.Rgba32ui)
+
             PixFormat(typeof<float32>, Col.Format.None), (fun _ -> TextureFormat.DepthComponent32)
-
-            PixFormat(typeof<float32>, Col.Format.Gray), (fun _ -> TextureFormat.R32f)
-            PixFormat(typeof<float32>, Col.Format.NormalUV), (fun _ -> TextureFormat.Rg32f)
-            PixFormat(typeof<float32>, Col.Format.RGB), (fun _ -> TextureFormat.Rgb32f)
-            PixFormat(typeof<float32>, Col.Format.RGBA), (fun _ -> TextureFormat.Rgba32f)
-
-            PixFormat(typeof<int32>, Col.Format.Gray), (fun _ -> TextureFormat.R32i)
-            PixFormat(typeof<int32>, Col.Format.NormalUV), (fun _ -> TextureFormat.Rg32i)
-            PixFormat(typeof<int32>, Col.Format.RGB), (fun _ -> TextureFormat.Rgb32i)
-            PixFormat(typeof<int32>, Col.Format.RGBA), (fun _ -> TextureFormat.Rgba32i)
-
-            PixFormat(typeof<uint32>, Col.Format.Gray), (fun _ -> TextureFormat.R32ui)
-            PixFormat(typeof<uint32>, Col.Format.NormalUV), (fun _ -> TextureFormat.Rg32ui)
-            PixFormat(typeof<uint32>, Col.Format.RGB), (fun _ -> TextureFormat.Rgb32ui)
-            PixFormat(typeof<uint32>, Col.Format.RGBA), (fun _ -> TextureFormat.Rgba32ui)
         ]
 
     let toDownloadFormat =
@@ -388,6 +402,9 @@ module TextureFormat =
             TextureFormat.Bgra8, PixFormat.ByteBGRA
             TextureFormat.Rgba8, PixFormat.ByteRGBA
             TextureFormat.Rgb8, PixFormat.ByteRGB
+
+            TextureFormat.Srgb8, PixFormat.ByteRGB
+            TextureFormat.Srgb8Alpha8, PixFormat.ByteRGBA
 
             TextureFormat.R16, PixFormat.UShortGray
             TextureFormat.Rgba16, PixFormat.UShortRGBA
@@ -403,15 +420,15 @@ module TextureFormat =
             TextureFormat.Rgb32f, PixFormat(typeof<float32>, Col.Format.RGB)
             TextureFormat.Rgba32f, PixFormat(typeof<float32>, Col.Format.RGBA)
 
-            TextureFormat.R8Snorm, PixFormat(typeof<float32>, Col.Format.Gray)
-            TextureFormat.Rg8Snorm, PixFormat(typeof<float32>, Col.Format.NormalUV)
-            TextureFormat.Rgb8Snorm, PixFormat(typeof<float32>, Col.Format.RGB)
-            TextureFormat.Rgba8Snorm, PixFormat(typeof<float32>, Col.Format.RGBA)
+            TextureFormat.R8Snorm, PixFormat(typeof<int8>, Col.Format.Gray)
+            TextureFormat.Rg8Snorm, PixFormat(typeof<int8>, Col.Format.NormalUV)
+            TextureFormat.Rgb8Snorm, PixFormat(typeof<int8>, Col.Format.RGB)
+            TextureFormat.Rgba8Snorm, PixFormat(typeof<int8>, Col.Format.RGBA)
 
-            TextureFormat.R16Snorm, PixFormat(typeof<float32>, Col.Format.Gray)
-            TextureFormat.Rg16Snorm, PixFormat(typeof<float32>, Col.Format.NormalUV)
-            TextureFormat.Rgb16Snorm, PixFormat(typeof<float32>, Col.Format.RGB)
-            TextureFormat.Rgba16Snorm, PixFormat(typeof<float32>, Col.Format.RGBA)
+            TextureFormat.R16Snorm, PixFormat(typeof<int16>, Col.Format.Gray)
+            TextureFormat.Rg16Snorm, PixFormat(typeof<int16>, Col.Format.NormalUV)
+            TextureFormat.Rgb16Snorm, PixFormat(typeof<int16>, Col.Format.RGB)
+            TextureFormat.Rgba16Snorm, PixFormat(typeof<int16>, Col.Format.RGBA)
 
             TextureFormat.R8i, PixFormat(typeof<int8>, Col.Format.Gray)
             TextureFormat.Rg8i, PixFormat(typeof<int8>, Col.Format.NormalUV)
