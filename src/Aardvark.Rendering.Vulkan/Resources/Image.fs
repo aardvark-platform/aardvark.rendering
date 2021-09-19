@@ -1181,11 +1181,11 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
             | TypeInfo.Patterns.Byte    -> 255uy |> unbox<'a>
             | TypeInfo.Patterns.SByte   -> 0y |> unbox<'a>
             | TypeInfo.Patterns.UInt16  -> UInt16.MaxValue |> unbox<'a>
-            | TypeInfo.Patterns.Int16   -> 0 |> unbox<'a>
+            | TypeInfo.Patterns.Int16   -> 0s |> unbox<'a>
             | TypeInfo.Patterns.UInt32  -> UInt32.MaxValue |> unbox<'a>
             | TypeInfo.Patterns.Int32   -> 0 |> unbox<'a>
             | TypeInfo.Patterns.UInt64  -> UInt64.MaxValue |> unbox<'a>
-            | TypeInfo.Patterns.Int64   -> 0 |> unbox<'a>
+            | TypeInfo.Patterns.Int64   -> 0L |> unbox<'a>
             | TypeInfo.Patterns.Float32 -> 1.0f |> unbox<'a>
             | TypeInfo.Patterns.Float64 -> 1.0 |> unbox<'a>
             | _ -> failf "unsupported channel-type: %A" typeof<'a>
