@@ -2004,3 +2004,26 @@ module VkAccessFlags =
             VkAccessFlags.TransferReadBit, VkPipelineStageFlags.TransferBit
             VkAccessFlags.TransferWriteBit, VkPipelineStageFlags.TransferBit
         ]
+
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module VkImageUsageFlags =
+    open Vulkan11
+
+    let private formatFeatureUsage = [
+            VkFormatFeatureFlags.SampledImageBit, VkImageUsageFlags.SampledBit
+            VkFormatFeatureFlags.StorageImageBit, VkImageUsageFlags.StorageBit
+            VkFormatFeatureFlags.ColorAttachmentBit, VkImageUsageFlags.ColorAttachmentBit
+            VkFormatFeatureFlags.DepthStencilAttachmentBit, VkImageUsageFlags.DepthStencilAttachmentBit
+            VkFormatFeatureFlags.TransferSrcBit, VkImageUsageFlags.TransferSrcBit
+            VkFormatFeatureFlags.TransferDstBit, VkImageUsageFlags.TransferDstBit
+        ]
+
+    let getUnsupported (features : VkFormatFeatureFlags) =
+        (VkImageUsageFlags.None, formatFeatureUsage) ||> List.fold (fun r (f, u) ->
+            if not <| features.HasFlag f then r ||| u else r
+        )
+
+    let filterSupported (features : VkFormatFeatureFlags) (usage : VkImageUsageFlags) =
+        let unsupported = getUnsupported features
+        usage &&& ~~~unsupported

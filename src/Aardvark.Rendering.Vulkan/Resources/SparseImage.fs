@@ -340,6 +340,9 @@ type SparseImageDeviceExtensions private() =
         native {
             let imageType = VkImageType.ofTextureDimension dim
 
+            let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, format)
+            let usage = usage |> VkImageUsageFlags.filterSupported features
+
             let! pInfo =
                 VkImageCreateInfo(
                     VkImageCreateFlags.SparseBindingBit ||| VkImageCreateFlags.SparseResidencyBit ||| VkImageCreateFlags.SparseAliasedBit,

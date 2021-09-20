@@ -2369,6 +2369,9 @@ module Image =
     open Vulkan11
 
     let allocLinear (size : V2i) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
+        let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Linear, fmt)
+        let usage = usage |> VkImageUsageFlags.filterSupported features
+
         let info =
             VkImageCreateInfo(
                 VkImageCreateFlags.None,
@@ -2441,7 +2444,9 @@ module Image =
 
 
     let rec alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
-        if device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt) = VkFormatFeatureFlags.None then
+        let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt)
+
+        if features = VkFormatFeatureFlags.None then
             match fmt.NextBetter with
                 | Some fmt -> alloc size mipMapLevels count samples dim fmt usage device
                 | None -> failf "bad image format %A" fmt
@@ -2473,6 +2478,9 @@ module Image =
                 | TextureDimension.Texture2D -> V3i(size.X, size.Y, 1)
                 | TextureDimension.TextureCube -> V3i(size.X, size.X, 1)
                 | _ -> size
+
+            let usage =
+                usage |> VkImageUsageFlags.filterSupported features
 
             let info =
                 VkImageCreateInfo(
