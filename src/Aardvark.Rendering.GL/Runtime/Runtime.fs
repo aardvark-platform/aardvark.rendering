@@ -140,7 +140,7 @@ type Runtime() =
                     Tensor4Info(
                         0L,
                         V4l(int64 size.X, int64 size.Y, int64 size.Z, src.SW),
-                        V4l(int64 channels, dy, dy * int64 size.Z, 1L)
+                        V4l(int64 channels, dy, dy * int64 size.Y, 1L)
                     )
                 NativeTensor4<'a>(NativePtr.ofNativeInt ptr, info)
 
@@ -281,7 +281,7 @@ type Runtime() =
                     Tensor4Info(
                         0L,
                         V4l(int64 srcSize.X, int64 srcSize.Y, int64 srcSize.Z, dst.SW),
-                        V4l(int64 channels, dy, dy * int64 srcSize.Z, 1L)
+                        V4l(int64 channels, dy, dy * int64 srcSize.Y, 1L)
                     )
                 NativeTensor4<'a>(NativePtr.ofNativeInt ptr, info)
 
