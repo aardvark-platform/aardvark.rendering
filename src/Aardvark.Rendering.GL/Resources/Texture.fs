@@ -2246,7 +2246,7 @@ type ContextTextureExtensions =
                 let resolved = this.CreateTexture2D(target.Size, 1, texture.Format, 1)
                 try
                     let region = Box2i.FromMinAndSize(offset, target.Size)
-                    this.Blit(texture, level, slice, region, resolved, 0, 0, region, false)
+                    this.Blit(texture, level, slice, region, resolved, 0, 0, Box2i(V2i.Zero, target.Size), false)
                     downloadTexture2D resolved 0 0 V2i.Zero target
                 finally
                     this.Delete resolved
