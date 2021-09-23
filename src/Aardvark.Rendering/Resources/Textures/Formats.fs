@@ -261,8 +261,10 @@ type TextureParams =
 module TextureParams =
 
     let empty = { wantMipMaps = false; wantSrgb = false; wantCompressed = false}
+    let srgb = { wantMipMaps = false; wantSrgb = true; wantCompressed = false}
     let compressed = { wantMipMaps = false; wantSrgb = false; wantCompressed = true }
     let mipmapped = { wantMipMaps = true; wantSrgb = false; wantCompressed = false }
+    let mipmappedSrgb = { wantMipMaps = true; wantSrgb = true; wantCompressed = false }
     let mipmappedCompressed = { wantMipMaps = true; wantSrgb = false; wantCompressed = true }
 
 

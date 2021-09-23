@@ -4,6 +4,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.Application
+open Expecto
 
 module TextureUpload =
 
@@ -157,6 +158,53 @@ module TextureUpload =
             let region = Some <| Box2i(11, 34, 87, 66)
             uploadAndDownloadTexture2D runtime size 1 5 4 0 2 region
 
+        let private uploadAndDownloadPixTexture2D (runtime : IRuntime) (size : V2i) (textureParams : TextureParams) =
+             let data = PixImage.random size
+
+             let pixTexture = PixTexture2d(PixImageMipMap [| data :> PixImage |], textureParams)
+             let texture = runtime.PrepareTexture pixTexture
+
+             try
+                 let result = runtime.Download(texture).AsPixImage<byte>()
+                 PixImage.compare V2i.Zero data result
+
+             finally
+                 runtime.DeleteTexture(texture)
+
+        let pixTexture2D (runtime : IRuntime) =
+            let size = V2i(256)
+            uploadAndDownloadPixTexture2D runtime size TextureParams.empty
+
+        let pixTexture2DSrgb (runtime : IRuntime) =
+            let size = V2i(256)
+            uploadAndDownloadPixTexture2D runtime size TextureParams.srgb
+
+        let pixTexture2DMipmapped (runtime : IRuntime) =
+            let size = V2i(258, 125)
+            let levels = 1 + max size.X size.Y |> Fun.Log2Int
+
+            let data =
+                Array.init levels (fun i ->
+                    let size = max 1 (size >>> i)
+                    PixImage.random size
+                )
+
+            let texture =
+                let data = data |> Array.map (fun pi -> pi :> PixImage)
+                let pt = PixTexture2d(PixImageMipMap data, TextureParams.mipmapped)
+                runtime.PrepareTexture(pt)
+
+            try
+                for i = 0 to levels - 1 do
+                    let result = runtime.Download(texture, level = i).AsPixImage<byte>()
+
+                    Expect.equal result.Size data.[i].Size "image size mismatch"
+                    PixImage.compare V2i.Zero data.[i] result
+
+            finally
+                runtime.DeleteTexture(texture)
+
+
         let private uploadAndDownloadTexture3D (runtime : IRuntime)
                                                (size : V3i) (levels : int) (level : int)
                                                (window : Box3i option) =
@@ -202,6 +250,31 @@ module TextureUpload =
             let size = V3i(100, 75, 66)
             let region = Some <| Box3i(13, 5, 7, 47, 30, 31)
             uploadAndDownloadTexture3D runtime size 4 1 region
+
+        let private uploadAndDownloadPixTexture3D (runtime : IRuntime) (size : V3i) (textureParams : TextureParams) =
+            let data = PixVolume.random size
+
+            let pixTexture = PixTexture3d(data, textureParams)
+            let texture = runtime.PrepareTexture pixTexture
+
+            try
+                let target = texture.[TextureAspect.Color, 0, 0]
+                let result = PixVolume<byte>(Col.Format.RGBA, size)
+                runtime.Copy(target, result)
+
+                PixVolume.compare V3i.Zero data result
+
+            finally
+                runtime.DeleteTexture(texture)
+
+        let pixTexture3D (runtime : IRuntime) =
+            let size = V3i(64)
+            uploadAndDownloadPixTexture3D runtime size TextureParams.empty
+
+        let pixTexture3DSrgb (runtime : IRuntime) =
+            let size = V3i(64)
+            uploadAndDownloadPixTexture3D runtime size TextureParams.srgb
+
 
         let private uploadAndDownloadTextureCube (runtime : IRuntime)
                                                  (size : int) (levels : int) (count : int)
@@ -266,6 +339,47 @@ module TextureUpload =
             let region = Some <| Box2i(11, 45, 37, 47)
             uploadAndDownloadTextureCube runtime 100 4 5 1 3 region
 
+        let private uploadAndDownloadPixTextureCube (runtime : IRuntime) (size : int) (textureParams : TextureParams) =
+            let levels =
+                if textureParams.wantMipMaps then 1 + Fun.Log2Int(size) else 1
+
+            let data =
+                Array.init 6 (fun _ ->
+                    Array.init levels (fun level ->
+                        let size = size >>> level
+                        PixImage.random <| V2i size
+                    )
+                )
+
+            let texture =
+                let toMipMap arr =
+                    PixImageMipMap(arr |> Array.map (fun pi -> pi :> PixImage))
+
+                let pc = PixImageCube(data |> Array.map toMipMap)
+                let pt = PixTextureCube(pc, textureParams)
+                runtime.PrepareTexture(pt)
+
+            try
+                for slice = 0 to 5 do
+                    for level = 0 to levels - 1 do
+                        let result = runtime.Download(texture, level = level, slice = slice).AsPixImage<byte>()
+                        Expect.equal result.Size data.[slice].[level].Size "image size mismatch"
+                        PixImage.compare V2i.Zero data.[slice].[level] result
+
+            finally
+                runtime.DeleteTexture(texture)
+
+        let pixTextureCube (runtime : IRuntime) =
+            let size = 128
+            uploadAndDownloadPixTextureCube runtime size TextureParams.empty
+
+        let pixTextureCubeSrgb (runtime : IRuntime) =
+            let size = 128
+            uploadAndDownloadPixTextureCube runtime size TextureParams.srgb
+
+        let pixTextureCubeMipmapped (runtime : IRuntime) =
+            let size = 128
+            uploadAndDownloadPixTextureCube runtime size TextureParams.mipmapped
 
     let tests (backend : Backend) =
         [
@@ -289,25 +403,36 @@ module TextureUpload =
             "2D array level",            Cases.texture2DArrayLevel
             "2D array level subwindow",  Cases.texture2DArrayLevelSubwindow
 
+            "2D PixTexture",             Cases.pixTexture2D
+            "2D PixTexture sRGB",        Cases.pixTexture2DSrgb
+            "2D PixTexture mipmapped",   Cases.pixTexture2DMipmapped
+
             if backend <> Backend.Vulkan then // not supported
                 "2D multisampled",                        Cases.texture2DMultisampled
                 "2D multisampled subwindow",              Cases.texture2DMultisampledSubwindow
                 "2D multisampled array",                  Cases.texture2DMultisampledArray
                 "2D multisampled array subwindow",        Cases.texture2DMultisampledArraySubwindow
 
-            "3D",                            Cases.texture3D
-            "3D subwindow",                  Cases.texture3DSubwindow
-            "3D level",                      Cases.texture3DLevel
-            "3D level subwindow",            Cases.texture3DLevelSubwindow
+            "3D",                           Cases.texture3D
+            "3D subwindow",                 Cases.texture3DSubwindow
+            "3D level",                     Cases.texture3DLevel
+            "3D level subwindow",           Cases.texture3DLevelSubwindow
 
-            "Cube",                          Cases.textureCube
-            "Cube subwindow",                Cases.textureCubeSubwindow
-            "Cube level",                    Cases.textureCubeLevel
-            "Cube level subwindow",          Cases.textureCubeLevelSubwindow
+            "3D PixTexture",                Cases.pixTexture3D
+            "3D PixTexture sRGB",           Cases.pixTexture3DSrgb
 
-            "Cube array",                    Cases.textureCubeArray
-            "Cube array subwindow",          Cases.textureCubeArraySubwindow
-            "Cube array level",              Cases.textureCubeArrayLevel
-            "Cube array level subwindow",    Cases.textureCubeArrayLevelSubwindow
+            "Cube",                         Cases.textureCube
+            "Cube subwindow",               Cases.textureCubeSubwindow
+            "Cube level",                   Cases.textureCubeLevel
+            "Cube level subwindow",         Cases.textureCubeLevelSubwindow
+
+            "Cube array",                   Cases.textureCubeArray
+            "Cube array subwindow",         Cases.textureCubeArraySubwindow
+            "Cube array level",             Cases.textureCubeArrayLevel
+            "Cube array level subwindow",   Cases.textureCubeArrayLevelSubwindow
+
+            "Cube PixTexture",              Cases.pixTextureCube
+            "Cube PixTexture sRGB",         Cases.pixTextureCubeSrgb
+            "Cube PixTexture mipmapped",    Cases.pixTextureCubeMipmapped
         ]
         |> prepareCases backend "Upload"
