@@ -181,7 +181,7 @@ module TextureUpload =
 
         let pixTexture2DMipmapped (runtime : IRuntime) =
             let size = V2i(258, 125)
-            let levels = 1 + max size.X size.Y |> Fun.Log2Int
+            let levels = Fun.MipmapLevels(size)
 
             let data =
                 Array.init levels (fun i ->
@@ -341,7 +341,7 @@ module TextureUpload =
 
         let private uploadAndDownloadPixTextureCube (runtime : IRuntime) (size : int) (textureParams : TextureParams) =
             let levels =
-                if textureParams.wantMipMaps then 1 + Fun.Log2Int(size) else 1
+                if textureParams.wantMipMaps then Fun.MipmapLevels(size) else 1
 
             let data =
                 Array.init 6 (fun _ ->

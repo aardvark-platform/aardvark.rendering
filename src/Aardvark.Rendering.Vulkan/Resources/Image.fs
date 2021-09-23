@@ -2593,7 +2593,7 @@ module Image =
         let mipMapLevels =
             if info.wantMipMaps then
                 if pi.LevelCount > 1 then pi.LevelCount
-                else 1 + max size.X size.Y |> Fun.Log2 |> floor |> int 
+                else Fun.MipmapLevels(size)
             else
                 1
 
@@ -2674,7 +2674,7 @@ module Image =
         
         let mipMapLevels =
             if info.wantMipMaps then
-                1 + (max (max size.X size.Y) size.Z) |> Fun.Log2 |> floor |> int 
+                Fun.MipmapLevels(size) 
             else
                 1
 
@@ -2755,7 +2755,7 @@ module Image =
         let mipMapLevels =
             if info.wantMipMaps then
                 if face0.LevelCount > 1 then face0.LevelCount
-                else 1 + max size.X size.Y |> Fun.Log2 |> floor |> int 
+                else Fun.MipmapLevels(size)
             else
                 1
 
@@ -3068,7 +3068,7 @@ module Image =
 
         let mipMapLevels =
             if info.wantMipMaps then
-                1 + max size.X size.Y |> Fun.Log2 |> floor |> int 
+                Fun.MipmapLevels(size)
             else
                 1
 

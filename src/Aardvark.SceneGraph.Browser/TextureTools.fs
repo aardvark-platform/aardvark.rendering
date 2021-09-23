@@ -47,7 +47,7 @@ module internal BrowserTexture =
             
             let levels (size : V2i) =
                 if mipMaps then 
-                    1 + (max size.X size.Y |> float |> log2 |> floor |> int)
+                    Fun.MipmapLevels(size)
                 else    
                     1
 
@@ -235,7 +235,7 @@ module internal BrowserTexture =
 
                         let levels (size : V2i) =
                             if mipMaps then 
-                                1 + (max size.X size.Y |> float |> log2 |> floor |> int)
+                                Fun.MipmapLevels(size)
                             else    
                                 1
 

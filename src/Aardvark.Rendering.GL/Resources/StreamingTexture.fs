@@ -12,7 +12,7 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
     inherit AVal.AbstractVal<ITexture>()
 
     let expectedLevels (size : V2i) = 
-        if mipMap then 1 + max size.X size.Y |> Fun.Log2 |> Fun.Floor |> int
+        if mipMap then Fun.MipmapLevels(size)
         else 1
 
     let mutable pbo = 0
@@ -319,7 +319,7 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
     inherit AVal.AbstractVal<ITexture>()
 
     let expectedLevels (size : V2i) = 
-        if mipMap then 1 + max size.X size.Y |> Fun.Log2 |> Fun.Floor |> int
+        if mipMap then Fun.MipmapLevels(size)
         else 1
 
 
