@@ -121,6 +121,12 @@ module PixData =
         let compare (offset : V2i) (input : PixImage<'T>) (output : PixImage<'T>) =
             compareWithComparer Expect.equal offset input output
 
+        let inline compareWithEpsilon (eps : ^T) (offset : V2i) (input : PixImage< ^T>) (output : PixImage< ^T>) =
+            let comp a b =
+                let diff = if a > b then a - b else b - a
+                Expect.isLessThanOrEqual diff eps
+            compareWithComparer comp offset input output
+
         let compare32f (offset : V2i) (accuracy : Accuracy) (input : PixImage<float32>) (output : PixImage<float32>) =
             let comp a b = Expect.floatClose accuracy (float a) (float b)
             compareWithComparer comp offset input output

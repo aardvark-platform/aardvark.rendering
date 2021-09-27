@@ -178,11 +178,15 @@ module TextureUpload =
 
         let private uploadAndDownloadPixTexture2D (runtime : IRuntime) (size : V2i) (levels : int) (textureParams : TextureParams) =
             let expectedLevels = if textureParams.wantMipMaps then Fun.MipmapLevels(size) else 1
+            let compressed = textureParams.wantCompressed
 
             let data =
                 Array.init levels (fun level ->
                     let size = Fun.MipmapLevelSize(size, level)
-                    PixImage.random <| V2i size
+                    if compressed then
+                        PixImage.checkerboard C4b.BurlyWood |> PixImage.resized size
+                    else
+                        PixImage.random <| V2i size
                 )
 
             let texture =
@@ -191,13 +195,17 @@ module TextureUpload =
                 runtime.PrepareTexture pix
 
             try
+                Expect.equal (TextureFormat.isCompressed texture.Format) compressed "unexpected compression"
                 Expect.equal texture.MipMapLevels expectedLevels "unexpected number of mipmap levels"
 
                 for level = 0 to expectedLevels - 1 do
                     let result = runtime.Download(texture, level = level).AsPixImage<byte>()
                     Expect.equal result.Size (Fun.MipmapLevelSize(size, level)) "image size mismatch"
                     if level < levels then
-                        PixImage.compare V2i.Zero data.[level] result
+                        if compressed then
+                            PixImage.compareWithEpsilon 8uy V2i.Zero data.[level] result
+                        else
+                            PixImage.compare V2i.Zero data.[level] result
                     else
                         let maxValue = result.Array |> unbox<byte[]> |> Array.max
                         Expect.isGreaterThan maxValue 0uy "image all black"
@@ -217,6 +225,10 @@ module TextureUpload =
             let size = V2i(435, 231)
             let levels = if provideMipmap then Fun.MipmapLevels(size) else 1
             uploadAndDownloadPixTexture2D runtime size levels TextureParams.mipmapped
+
+        let pixTexture2DCompressed (runtime : IRuntime) =
+            let size = V2i(256)
+            uploadAndDownloadPixTexture2D runtime size 1 TextureParams.compressed
 
         let private uploadAndDownloadTextureNative (runtime : IRuntime) (size : V2i)
                                                    (levels : int) (count : int) (wantMipmap : bool) =
@@ -483,6 +495,7 @@ module TextureUpload =
 
             "2D PixTexture",                    Cases.pixTexture2D
             "2D PixTexture sRGB",               Cases.pixTexture2DSrgb
+            "2D PixTexture compressed",         Cases.pixTexture2DCompressed
             "2D PixTexture mipmapped",          Cases.pixTexture2DMipmapped true
             "2D PixTexture mipmap generation",  Cases.pixTexture2DMipmapped false
 

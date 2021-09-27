@@ -336,13 +336,9 @@ module TextureFormat =
 
     let ofPixFormat =
 
-        let buildLookup = fun (norm, snorm) ->
-            LookupTable.lookupTable [
-                    TextureParams.empty, norm
-                    { TextureParams.empty with wantSrgb = true}, snorm
-                    { TextureParams.empty with wantMipMaps = true }, norm
-                    { TextureParams.empty with wantSrgb = true; wantMipMaps = true}, snorm
-                ]
+        let buildLookup (rgb, srgb) = function
+            | { wantSrgb = true } -> srgb
+            | _ -> rgb
 
         let rgb8 = buildLookup(TextureFormat.Rgb8, TextureFormat.Srgb8)
         let rgba8 = buildLookup(TextureFormat.Rgba8, TextureFormat.Srgb8Alpha8)
@@ -395,6 +391,48 @@ module TextureFormat =
             PixFormat(typeof<uint32>, Col.Format.RGBA)      , (fun _ -> TextureFormat.Rgba32ui)
 
             PixFormat(typeof<float32>, Col.Format.None), (fun _ -> TextureFormat.DepthComponent32)
+        ]
+
+    let private compressedFormats =
+        HashSet.ofList [
+            TextureFormat.CompressedAlpha
+            TextureFormat.CompressedLuminance
+            TextureFormat.CompressedLuminanceAlpha
+            TextureFormat.CompressedIntensity
+            TextureFormat.CompressedRgb
+            TextureFormat.CompressedRgba
+            TextureFormat.CompressedRed
+            TextureFormat.CompressedRg
+            TextureFormat.CompressedSrgb
+            TextureFormat.CompressedSrgbAlpha
+            TextureFormat.CompressedSluminance
+            TextureFormat.CompressedSluminanceAlpha
+            TextureFormat.CompressedSrgbS3tcDxt1Ext
+            TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext
+            TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext
+            TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext
+            TextureFormat.CompressedRgbS3tcDxt1Ext
+            TextureFormat.CompressedRgbaS3tcDxt1Ext
+            TextureFormat.CompressedRgbaS3tcDxt3Ext
+            TextureFormat.CompressedRgbaS3tcDxt5Ext
+            TextureFormat.CompressedRedRgtc1
+            TextureFormat.CompressedSignedRedRgtc1
+            TextureFormat.CompressedRgRgtc2
+            TextureFormat.CompressedSignedRgRgtc2
+            TextureFormat.CompressedRgbaBptcUnorm
+            TextureFormat.CompressedRgbBptcSignedFloat
+            TextureFormat.CompressedRgbBptcUnsignedFloat
+        ]
+
+    let isCompressed (fmt : TextureFormat) =
+        compressedFormats |> HashSet.contains fmt
+
+    let toCompressed =
+        LookupTable.lookupTable' [
+            TextureFormat.Rgb8, TextureFormat.CompressedRgbS3tcDxt1Ext
+            TextureFormat.Srgb8, TextureFormat.CompressedSrgbS3tcDxt1Ext
+            TextureFormat.Rgba8, TextureFormat.CompressedRgbaS3tcDxt5Ext
+            TextureFormat.Srgb8Alpha8, TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext
         ]
 
     let toDownloadFormat =
@@ -462,11 +500,30 @@ module TextureFormat =
             TextureFormat.Rgb32ui, PixFormat(typeof<uint32>, Col.Format.RGB)
             TextureFormat.Rgba32ui, PixFormat(typeof<uint32>, Col.Format.RGBA)
 
-            TextureFormat.CompressedRgb, PixFormat.ByteRGB
-            TextureFormat.CompressedRgba, PixFormat.ByteRGBA
-
             TextureFormat.DepthComponent32, PixFormat.UIntGray
             TextureFormat.DepthComponent32f, PixFormat.FloatGray
+
+            TextureFormat.CompressedRgb, PixFormat.ByteRGB
+            TextureFormat.CompressedRgba, PixFormat.ByteRGBA
+            TextureFormat.CompressedRgbS3tcDxt1Ext, PixFormat.ByteRGB
+            TextureFormat.CompressedRgbaS3tcDxt1Ext, PixFormat.ByteRGBA
+            TextureFormat.CompressedRgbaS3tcDxt3Ext, PixFormat.ByteRGBA
+            TextureFormat.CompressedRgbaS3tcDxt5Ext, PixFormat.ByteRGBA
+
+            TextureFormat.CompressedSrgb, PixFormat.ByteRGB
+            TextureFormat.CompressedSrgbAlpha, PixFormat.ByteRGBA
+            TextureFormat.CompressedSrgbS3tcDxt1Ext, PixFormat.ByteRGB
+            TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext, PixFormat.ByteRGBA
+            TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext, PixFormat.ByteRGBA
+            TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext, PixFormat.ByteRGBA
+
+            TextureFormat.CompressedRedRgtc1, PixFormat.ByteGray
+            TextureFormat.CompressedSignedRedRgtc1, PixFormat.ByteGray
+            TextureFormat.CompressedRgRgtc2, PixFormat(typeof<uint8>, Col.Format.NormalUV)
+            TextureFormat.CompressedSignedRgRgtc2, PixFormat(typeof<uint8>, Col.Format.NormalUV)
+            TextureFormat.CompressedRgbaBptcUnorm, PixFormat.ByteRGBA
+            TextureFormat.CompressedRgbBptcSignedFloat, PixFormat.FloatRGB
+            TextureFormat.CompressedRgbBptcUnsignedFloat, PixFormat.FloatRGB
         ]
 
     let pixelSizeInBits =
