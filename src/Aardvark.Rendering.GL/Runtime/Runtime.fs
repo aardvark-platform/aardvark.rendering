@@ -478,6 +478,7 @@ type Runtime() =
                 let name = fst single.Value 
                 match Map.tryFind name clearColors with
                 | Some c ->
+                    GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 |> unbox)
                     GL.ClearColor(c.R, c.G, c.B, c.A)
                     GL.Clear(ClearBufferMask.ColorBufferBit ||| combinedClearMask)
                 | None -> failwith "invalid target name"
@@ -511,6 +512,7 @@ type Runtime() =
             GL.FramebufferTexture(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, texture.Handle |> unbox<int>, 0)
             GL.Check "could not attach framebuffer texture"
 
+            GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 |> unbox)
             GL.ClearColor(color.R, color.G, color.B, color.A)
             GL.Clear(ClearBufferMask.ColorBufferBit)
 
