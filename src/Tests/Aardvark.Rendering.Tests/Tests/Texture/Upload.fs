@@ -176,48 +176,78 @@ module TextureUpload =
             let region = Some <| Box2i(11, 34, 87, 66)
             uploadAndDownloadTexture2D runtime size 1 5 4 0 2 region
 
-        let private uploadAndDownloadPixTexture2D (runtime : IRuntime) (size : V2i) (textureParams : TextureParams) =
-             let data = PixImage.random size
-
-             let pixTexture = PixTexture2d(PixImageMipMap [| data :> PixImage |], textureParams)
-             let texture = runtime.PrepareTexture pixTexture
-
-             try
-                 let result = runtime.Download(texture).AsPixImage<byte>()
-                 PixImage.compare V2i.Zero data result
-
-             finally
-                 runtime.DeleteTexture(texture)
-
-        let pixTexture2D (runtime : IRuntime) =
-            let size = V2i(256)
-            uploadAndDownloadPixTexture2D runtime size TextureParams.empty
-
-        let pixTexture2DSrgb (runtime : IRuntime) =
-            let size = V2i(256)
-            uploadAndDownloadPixTexture2D runtime size TextureParams.srgb
-
-        let pixTexture2DMipmapped (runtime : IRuntime) =
-            let size = V2i(258, 125)
-            let levels = Fun.MipmapLevels(size)
+        let private uploadAndDownloadPixTexture2D (runtime : IRuntime) (size : V2i) (levels : int) (textureParams : TextureParams) =
+            let expectedLevels = if textureParams.wantMipMaps then Fun.MipmapLevels(size) else 1
 
             let data =
-                Array.init levels (fun i ->
-                    let size = max 1 (size >>> i)
-                    PixImage.random size
+                Array.init levels (fun level ->
+                    let size = Fun.MipmapLevelSize(size, level)
+                    PixImage.random <| V2i size
                 )
 
             let texture =
                 let data = data |> Array.map (fun pi -> pi :> PixImage)
-                let pt = PixTexture2d(PixImageMipMap data, TextureParams.mipmapped)
-                runtime.PrepareTexture(pt)
+                let pix = PixTexture2d(PixImageMipMap data, textureParams)
+                runtime.PrepareTexture pix
 
             try
-                for i = 0 to levels - 1 do
-                    let result = runtime.Download(texture, level = i).AsPixImage<byte>()
+                Expect.equal texture.MipMapLevels expectedLevels "unexpected number of mipmap levels"
 
-                    Expect.equal result.Size data.[i].Size "image size mismatch"
-                    PixImage.compare V2i.Zero data.[i] result
+                for level = 0 to expectedLevels - 1 do
+                    let result = runtime.Download(texture, level = level).AsPixImage<byte>()
+                    Expect.equal result.Size (Fun.MipmapLevelSize(size, level)) "image size mismatch"
+                    if level < levels then
+                        PixImage.compare V2i.Zero data.[level] result
+                    else
+                        let maxValue = result.Array |> unbox<byte[]> |> Array.max
+                        Expect.isGreaterThan maxValue 0uy "image all black"
+
+            finally
+                runtime.DeleteTexture(texture)
+
+        let pixTexture2D (runtime : IRuntime) =
+            let size = V2i(256)
+            uploadAndDownloadPixTexture2D runtime size 1 TextureParams.empty
+
+        let pixTexture2DSrgb (runtime : IRuntime) =
+            let size = V2i(256)
+            uploadAndDownloadPixTexture2D runtime size 1 TextureParams.srgb
+
+        let pixTexture2DMipmapped (provideMipmap : bool) (runtime : IRuntime) =
+            let size = V2i(435, 231)
+            let levels = if provideMipmap then Fun.MipmapLevels(size) else 1
+            uploadAndDownloadPixTexture2D runtime size levels TextureParams.mipmapped
+
+        let private uploadAndDownloadTextureNative (runtime : IRuntime) (size : V2i)
+                                                   (levels : int) (count : int) (wantMipmap : bool) =
+            let expectedLevels = if wantMipmap then Fun.MipmapLevels(size) else 1
+
+            let data =
+                 Array.init count (fun _ ->
+                     Array.init levels (fun i ->
+                         let size = max 1 (size >>> i)
+                         PixImage.random size
+                     )
+                 )
+
+            let texture =
+                NativeTexture.ofPixImages TextureFormat.Rgba8 wantMipmap data
+                |> runtime.PrepareTexture
+
+            try
+                Expect.equal texture.MipMapLevels expectedLevels "unexpected number of mipmap levels"
+
+                for slice = 0 to count - 1 do
+                    for level = 0 to expectedLevels - 1 do
+                        let result = runtime.Download(texture, level = level, slice = slice).AsPixImage<byte>()
+                        let result = result.Transformed(ImageTrafo.MirrorY).AsPixImage<byte>()
+
+                        Expect.equal result.Size (Fun.MipmapLevelSize(size, level)) "image size mismatch"
+                        if level < levels then
+                            PixImage.compare V2i.Zero data.[slice].[level] result
+                        else
+                            let maxValue = result.Array |> unbox<byte[]> |> Array.max
+                            Expect.isGreaterThan maxValue 0uy "image all black"
 
             finally
                 runtime.DeleteTexture(texture)
@@ -226,63 +256,13 @@ module TextureUpload =
             let size = V2i(258, 125)
             let levels = Fun.MipmapLevels(size)
             let count = 5
+            uploadAndDownloadTextureNative runtime size levels count true
 
-            let data =
-                Array.init count (fun _ ->
-                    Array.init levels (fun i ->
-                        let size = max 1 (size >>> i)
-                        PixImage.random size
-                    )
-                )
-
-            let texture =
-                NativeTexture.ofPixImages TextureFormat.Rgba8 true data
-                |> runtime.PrepareTexture
-
-            try
-                for slice = 0 to count - 1 do
-                    for level = 0 to levels - 1 do
-                        let result = runtime.Download(texture, level = level, slice = slice)
-                        // Native texture upload does not flip while PixImage download does
-                        let result = result.Transformed(ImageTrafo.MirrorY).AsPixImage<byte>()
-                        Expect.equal result.Size data.[slice].[level].Size "image size mismatch"
-                        PixImage.compare V2i.Zero data.[slice].[level] result
-
-              finally
-                  runtime.DeleteTexture(texture)
-
-        let texture2DNativeMipmapGeneration (wantMipmap : bool) (runtime : IRuntime) =
+        let texture2DNativeMipmapGeneration (runtime : IRuntime) =
             let size = V2i(258, 125)
-            let expectedLevels = if wantMipmap then Fun.MipmapLevels(size) else 1
-
-            let data =
-                Array.init 1 (fun _ ->
-                    Array.init 1 (fun _ ->
-                        PixImage.random size
-                    )
-                )
-
-            let texture =
-                NativeTexture.ofPixImages TextureFormat.Rgba8 wantMipmap data
-                |> runtime.PrepareTexture
-
-            try
-                Expect.equal texture.MipMapLevels expectedLevels "unexpected level count"
-
-                for level = 0 to expectedLevels - 1 do
-                    let result = runtime.Download(texture, level = level, slice = 0).AsPixImage<byte>()
-                    // Native texture upload does not flip while PixImage download does
-                    let result = result.Transformed(ImageTrafo.MirrorY).AsPixImage<byte>()
-                    let maxValue = result.Array |> unbox<byte[]> |> Array.max
-                    Expect.equal result.Size (Fun.MipmapLevelSize(size, level)) "image size mismatch"
-                    if level = 0 then
-                        PixImage.compare V2i.Zero data.[0].[0] result
-                    else
-                        Expect.isGreaterThan maxValue 0uy "image all black"
-
-              finally
-                  runtime.DeleteTexture(texture)
-
+            let levels = Fun.MipmapLevels(size)
+            let count = 3
+            uploadAndDownloadTextureNative runtime size levels count true
 
         let private uploadAndDownloadTexture3D (runtime : IRuntime)
                                                (size : V3i) (levels : int) (level : int)
@@ -330,13 +310,18 @@ module TextureUpload =
             let region = Some <| Box3i(13, 5, 7, 47, 30, 31)
             uploadAndDownloadTexture3D runtime size 4 1 region
 
-        let private uploadAndDownloadPixTexture3D (runtime : IRuntime) (size : V3i) (textureParams : TextureParams) =
+        let private uploadAndDownloadPixTexture3D (runtime : IRuntime) (size : V3i) (levels : int) (textureParams : TextureParams) =
+            let expectedLevels =
+                if textureParams.wantMipMaps then Fun.MipmapLevels(size) else 1
+
             let data = PixVolume.random size
 
             let pixTexture = PixTexture3d(data, textureParams)
             let texture = runtime.PrepareTexture pixTexture
 
             try
+                Expect.equal texture.MipMapLevels expectedLevels "unexpected level count"
+
                 let target = texture.[TextureAspect.Color, 0, 0]
                 let result = PixVolume<byte>(Col.Format.RGBA, size)
                 runtime.Copy(target, result)
@@ -348,11 +333,16 @@ module TextureUpload =
 
         let pixTexture3D (runtime : IRuntime) =
             let size = V3i(64)
-            uploadAndDownloadPixTexture3D runtime size TextureParams.empty
+            uploadAndDownloadPixTexture3D runtime size 1 TextureParams.empty
 
         let pixTexture3DSrgb (runtime : IRuntime) =
             let size = V3i(64)
-            uploadAndDownloadPixTexture3D runtime size TextureParams.srgb
+            uploadAndDownloadPixTexture3D runtime size 1 TextureParams.srgb
+
+        let pixTexture3DMipmapGeneration (runtime : IRuntime) =
+            let size = V3i(67)
+            let levels = Fun.MipmapLevels(size)
+            uploadAndDownloadPixTexture3D runtime size levels TextureParams.srgb
 
 
         let private uploadAndDownloadTextureCube (runtime : IRuntime)
@@ -418,14 +408,14 @@ module TextureUpload =
             let region = Some <| Box2i(11, 45, 37, 47)
             uploadAndDownloadTextureCube runtime 100 4 5 1 3 region
 
-        let private uploadAndDownloadPixTextureCube (runtime : IRuntime) (size : int) (textureParams : TextureParams) =
-            let levels =
+        let private uploadAndDownloadPixTextureCube (runtime : IRuntime) (size : int) (levels : int) (textureParams : TextureParams) =
+            let expectedLevels =
                 if textureParams.wantMipMaps then Fun.MipmapLevels(size) else 1
 
             let data =
                 Array.init 6 (fun _ ->
                     Array.init levels (fun level ->
-                        let size = size >>> level
+                        let size = Fun.MipmapLevelSize(size, level)
                         PixImage.random <| V2i size
                     )
                 )
@@ -439,26 +429,33 @@ module TextureUpload =
                 runtime.PrepareTexture(pt)
 
             try
+                Expect.equal texture.MipMapLevels expectedLevels "unexpected level count"
+
                 for slice = 0 to 5 do
-                    for level = 0 to levels - 1 do
+                    for level = 0 to expectedLevels - 1 do
                         let result = runtime.Download(texture, level = level, slice = slice).AsPixImage<byte>()
-                        Expect.equal result.Size data.[slice].[level].Size "image size mismatch"
-                        PixImage.compare V2i.Zero data.[slice].[level] result
+                        Expect.equal result.Size (Fun.MipmapLevelSize(V2i(size), level)) "image size mismatch"
+                        if level < levels then
+                            PixImage.compare V2i.Zero data.[slice].[level] result
+                        else
+                            let maxValue = result.Array |> unbox<byte[]> |> Array.max
+                            Expect.isGreaterThan maxValue 0uy "image all black"
 
             finally
                 runtime.DeleteTexture(texture)
 
         let pixTextureCube (runtime : IRuntime) =
             let size = 128
-            uploadAndDownloadPixTextureCube runtime size TextureParams.empty
+            uploadAndDownloadPixTextureCube runtime size 1 TextureParams.empty
 
         let pixTextureCubeSrgb (runtime : IRuntime) =
             let size = 128
-            uploadAndDownloadPixTextureCube runtime size TextureParams.srgb
+            uploadAndDownloadPixTextureCube runtime size 1 TextureParams.srgb
 
-        let pixTextureCubeMipmapped (runtime : IRuntime) =
+        let pixTextureCubeMipmapped (provideMipmap : bool) (runtime : IRuntime) =
             let size = 128
-            uploadAndDownloadPixTextureCube runtime size TextureParams.mipmapped
+            let levels = if provideMipmap then Fun.MipmapLevels(size) else 1
+            uploadAndDownloadPixTextureCube runtime size levels TextureParams.mipmapped
 
     let tests (backend : Backend) =
         [
@@ -477,17 +474,17 @@ module TextureUpload =
             "2D level",                     Cases.texture2DLevel
             "2D level subwindow",           Cases.texture2DLevelSubwindow
             "2D native",                    Cases.texture2DNative
-            "2D native no mipmap",          Cases.texture2DNativeMipmapGeneration false
-            "2D native mipmap generation",  Cases.texture2DNativeMipmapGeneration true
+            "2D native mipmap generation",  Cases.texture2DNativeMipmapGeneration
 
             "2D array",                  Cases.texture2DArray
             "2D array subwindow",        Cases.texture2DArraySubwindow
             "2D array level",            Cases.texture2DArrayLevel
             "2D array level subwindow",  Cases.texture2DArrayLevelSubwindow
 
-            "2D PixTexture",             Cases.pixTexture2D
-            "2D PixTexture sRGB",        Cases.pixTexture2DSrgb
-            "2D PixTexture mipmapped",   Cases.pixTexture2DMipmapped
+            "2D PixTexture",                    Cases.pixTexture2D
+            "2D PixTexture sRGB",               Cases.pixTexture2DSrgb
+            "2D PixTexture mipmapped",          Cases.pixTexture2DMipmapped true
+            "2D PixTexture mipmap generation",  Cases.pixTexture2DMipmapped false
 
             if backend <> Backend.Vulkan then // not supported
                 "2D multisampled",                        Cases.texture2DMultisampled
@@ -500,8 +497,9 @@ module TextureUpload =
             "3D level",                     Cases.texture3DLevel
             "3D level subwindow",           Cases.texture3DLevelSubwindow
 
-            "3D PixTexture",                Cases.pixTexture3D
-            "3D PixTexture sRGB",           Cases.pixTexture3DSrgb
+            "3D PixTexture",                    Cases.pixTexture3D
+            "3D PixTexture sRGB",               Cases.pixTexture3DSrgb
+            "3D PixTexture mipmap generation",  Cases.pixTexture3DMipmapGeneration
 
             "Cube",                         Cases.textureCube
             "Cube subwindow",               Cases.textureCubeSubwindow
@@ -513,8 +511,9 @@ module TextureUpload =
             "Cube array level",             Cases.textureCubeArrayLevel
             "Cube array level subwindow",   Cases.textureCubeArrayLevelSubwindow
 
-            "Cube PixTexture",              Cases.pixTextureCube
-            "Cube PixTexture sRGB",         Cases.pixTextureCubeSrgb
-            "Cube PixTexture mipmapped",    Cases.pixTextureCubeMipmapped
+            "Cube PixTexture",                      Cases.pixTextureCube
+            "Cube PixTexture sRGB",                 Cases.pixTextureCubeSrgb
+            "Cube PixTexture mipmapped",            Cases.pixTextureCubeMipmapped true
+            "Cube PixTexture mipmap generation",    Cases.pixTextureCubeMipmapped false
         ]
         |> prepareCases backend "Upload"
