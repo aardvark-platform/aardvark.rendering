@@ -35,6 +35,66 @@ module ``Sparse Texture Extensions`` =
         static member inline VirtualPageSizeY = 0x9196 |> unbox<InternalFormatParameter>
         static member inline VirtualPageSizeZ = 0x9197 |> unbox<InternalFormatParameter>
 
+    [<AutoOpen>]
+    module private PixelBufferObject =
+
+        type PBOInfo =
+            {
+                size        : V3i
+                flags       : BufferStorageFlags
+                pixelFormat : PixelFormat
+                pixelType   : PixelType
+            }
+
+        module NativeTensor4 =
+
+            let usePBO (info : PBOInfo) (align : int) (mapping : int -> nativeint -> Tensor4Info -> 'r) =
+                let size = info.size
+                let pt = info.pixelType
+                let pf = info.pixelFormat
+            
+                let align = align |> nativeint
+                let alignMask = align - 1n |> nativeint
+                let channelSize = PixelType.size pt |> nativeint
+                let channels = PixelFormat.channels pf |> nativeint
+
+                let pixelSize = channelSize * channels
+
+                let rowSize = pixelSize * nativeint size.X
+                let alignedRowSize = (rowSize + (alignMask - 1n)) &&& ~~~alignMask
+                let sizeInBytes = alignedRowSize * nativeint size.Y * nativeint size.Z
+            
+                if alignedRowSize % channelSize <> 0n then
+                    failwith "[GL] unexpected row alignment (not implemented atm.)"
+
+                let srcInfo =
+                    let rowPixels = alignedRowSize / channelSize
+                    let viSize = V4l(int64 size.X, int64 size.Y, int64 size.Z, int64 channels)
+                    Tensor4Info(
+                        0L,
+                        viSize,
+                        V4l(
+                            int64 channels, 
+                            int64 rowPixels, 
+                            int64 rowPixels * viSize.Y, 
+                            1L
+                        )
+                    )
+                
+                let pbo = GL.GenBuffer()
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, pbo)
+                GL.Check "could not bind PBO"
+                GL.BufferStorage(BufferTarget.CopyWriteBuffer, sizeInBytes, 0n, BufferStorageFlags.MapReadBit)
+                GL.Check "could not allocate PBO"
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+
+                try 
+                    mapping pbo sizeInBytes srcInfo
+
+                finally
+                    GL.DeleteBuffer(pbo)
+                    GL.Check "could not delete PBO"
+
     module private Align =
 
         let prev (align : int) (value : int) =
@@ -169,11 +229,7 @@ module ``Sparse Texture Extensions`` =
                 failwith "[GL] texture upload region out of bounds"
                 
             if size.AllGreater 0 then
-                data.PinPBO(x.UnpackAlignment, t.Format.IsIntegerFormat, fun size pt pf pixels _ ->
-                    GL.BindTexture(TextureTarget.Texture3D, t.Handle)
-                    GL.TexSubImage3D(TextureTarget.Texture3D, level, min.X, min.Y, min.Z, size.X, size.Y, size.Z, pf, pt, pixels)
-                    GL.BindTexture(TextureTarget.Texture3D, 0)
-                )
+                data |> Texture.uploadPixVolume t false false level min
 
         member x.Upload(t : SparseTexture, level : int, offset : V3i, data : NativeTensor4<'a>) =
             use __ = x.ResourceLock
@@ -187,14 +243,7 @@ module ``Sparse Texture Extensions`` =
                 failwith "[GL] texture upload region out of bounds"
                 
             if size.AllGreater 0 then
-                NativeTensor4.withPBO data x.UnpackAlignment (fun size pt pf pixels _ ->
-                    GL.BindTexture(TextureTarget.Texture3D, t.Handle)
-                    GL.Check "could not unbind sparse texture"
-                    GL.TexSubImage3D(TextureTarget.Texture3D, level, min.X, min.Y, min.Z, size.X, size.Y, size.Z, pf, pt, pixels)
-                    GL.Check "could not upload sparse region"
-                    GL.BindTexture(TextureTarget.Texture3D, 0)
-                    GL.Check "could not unbind sparse texture"
-                )
+                data |> Texture.uploadNativeTensor4 t false false level min size
 
         member x.Download(t : SparseTexture, level : int, offset : V3i, target : NativeTensor4<'a>) =
             use __ = x.ResourceLock
@@ -216,7 +265,7 @@ module ``Sparse Texture Extensions`` =
                         size = size
                         flags = BufferStorageFlags.MapReadBit
                         pixelFormat = pixelFormat target.Size.W
-                        pixelType = PixelType.ofType typeof<'a>
+                        pixelType = PixelType.ofType typeof<'a> |> Option.get
                     }
 
                 NativeTensor4.usePBO pboInfo x.PackAlignment (fun pbo sizeInBytes info ->

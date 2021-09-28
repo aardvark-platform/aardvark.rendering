@@ -60,8 +60,8 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
             textureFormat <- TextureFormat.ofPixFormat f TextureParams.empty
             let integerFormat = TextureFormat.isIntegerFormat textureFormat
             let pf, pt = TextureFormat.toFormatAndType textureFormat
-            pixelType <- toPixelType f.Type |> Option.get
-            pixelFormat <- toPixelFormat integerFormat f.Format |> Option.get
+            pixelType <- PixelType.ofType f.Type |> Option.get
+            pixelFormat <- PixelFormat.ofColFormat integerFormat f.Format |> Option.get
             channels <- PixelFormat.channels pf
             channelSize <- PixelType.size pt
 
@@ -115,7 +115,7 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
             texA.Multisamples <- 1
 
             let newSize = if mipMap then (int64 bufferSize * 4L) / 3L else int64 bufferSize
-            updateTexture ctx texA.SizeInBytes newSize
+            ResourceCounts.updateTexture ctx texA.SizeInBytes newSize
             texA.SizeInBytes <- newSize
 
 
@@ -352,8 +352,8 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
             textureFormat <- TextureFormat.ofPixFormat f TextureParams.empty
             let integerFormat = TextureFormat.isIntegerFormat textureFormat
             let pf, pt = TextureFormat.toFormatAndType textureFormat
-            pixelType <- toPixelType f.Type |> Option.get
-            pixelFormat <- toPixelFormat integerFormat f.Format |> Option.get
+            pixelType <- PixelType.ofType f.Type |> Option.get
+            pixelFormat <- PixelFormat.ofColFormat integerFormat f.Format |> Option.get
             channels <- PixelFormat.channels pf
             channelSize <- PixelType.size pt
 

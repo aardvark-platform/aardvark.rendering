@@ -28,7 +28,11 @@
   <ItemGroup>
     <None Include="Wrapper\gl.xml" />
     <None Include="Wrapper\Generator.fsx" />
-    <Compile Include="Core\Utilities.fs" />
+    <Compile Include="Core\Utilities\Common.fs" />
+    <Compile Include="Core\Utilities\PixelType.fs" />
+    <Compile Include="Core\Utilities\PixelFormat.fs" />
+    <Compile Include="Core\Utilities\TextureFormat.fs" />
+    <Compile Include="Core\Utilities\TextureTarget.fs" />
     <Compile Include="Core\Config.fs" />
     <Compile Include="Core\GLVM.fs" />
     <Compile Include="Core\ContextHandles.fs" />
@@ -50,10 +54,17 @@
     <Compile Include="Instructions\OpenGL.fs" />
     <Compile Include="Instructions\CompileContext.fs" />
     <Compile Include="Instructions\Translations.fs" />
+    <Compile Include="Resources\PixelUnpackBuffer.fs" />
+    <Compile Include="Resources\Textures\PixelTransfer.fs" />
+    <Compile Include="Resources\Textures\Texture.fs" />
+    <Compile Include="Resources\Textures\TextureCopy.fs" />
+    <Compile Include="Resources\Textures\TextureUpload.fs" />
+    <Compile Include="Resources\Textures\TextureDownload.fs" />
+    <Compile Include="Resources\Textures\StreamingTexture.fs" />
+    <Compile Include="Resources\Textures\SparseTexture.fs" />
     <Compile Include="Resources\Fence.fs" />
     <Compile Include="Resources\Buffer.fs" />
     <Compile Include="Resources\Attribute.fs" />
-    <Compile Include="Resources\Texture.fs" />
     <Compile Include="Resources\UniformBuffer.fs" />
     <Compile Include="Resources\UniformLocation.fs" />
     <Compile Include="Resources\SamplerState.fs" />
@@ -62,10 +73,8 @@
     <Compile Include="Resources\Renderbuffer.fs" />
     <Compile Include="Resources\Framebuffer.fs" />
     <Compile Include="Resources\Pointers.fs" />
-    <Compile Include="Resources\StreamingTexture.fs" />
     <Compile Include="Resources\SparseBuffer.fs" />
     <Compile Include="Resources\MappedBuffer.fs" />
-    <Compile Include="Resources\SparseTexture.fs" />
     <Compile Include="Management\ResourceSharing.fs" />
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\AssemblerExtensions.fs" />

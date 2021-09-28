@@ -393,6 +393,37 @@ module TextureFormat =
             PixFormat(typeof<float32>, Col.Format.None), (fun _ -> TextureFormat.DepthComponent32)
         ]
 
+    let private integerFormats =
+        HashSet.ofList [
+            TextureFormat.R8i
+            TextureFormat.R8ui
+            TextureFormat.R16i
+            TextureFormat.R16ui
+            TextureFormat.R32i
+            TextureFormat.R32ui
+            TextureFormat.Rg8i
+            TextureFormat.Rg8ui
+            TextureFormat.Rg16i
+            TextureFormat.Rg16ui
+            TextureFormat.Rg32i
+            TextureFormat.Rg32ui
+            TextureFormat.Rgba32ui
+            TextureFormat.Rgb32ui
+            TextureFormat.Rgba16ui
+            TextureFormat.Rgb16ui
+            TextureFormat.Rgba8ui
+            TextureFormat.Rgb8ui
+            TextureFormat.Rgba32i
+            TextureFormat.Rgb32i
+            TextureFormat.Rgba16i
+            TextureFormat.Rgb16i
+            TextureFormat.Rgba8i
+            TextureFormat.Rgb8i
+        ]
+
+    let isIntegerFormat (format : TextureFormat) =
+        integerFormats |> HashSet.contains format
+
     let private compressedFormats =
         HashSet.ofList [
             TextureFormat.CompressedAlpha
@@ -709,6 +740,15 @@ module TextureFormat =
         match compressionModes.TryGetValue fmt with
             | (true, mode) -> mode
             | _ -> CompressionMode.None
+
+[<AutoOpen>]
+module TextureFormatExtensions =
+    type TextureFormat with
+        member x.IsIntegerFormat = TextureFormat.isIntegerFormat x
+        member x.IsCompressed = TextureFormat.isCompressed x
+        member x.IsSrgb = TextureFormat.isSrgb x
+        member x.IsDepth = TextureFormat.isDepth x
+        member x.IsDepthStencil = TextureFormat.isDepthStencil x
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

@@ -117,7 +117,7 @@ type Runtime() =
                 | TextureDimension.TextureCube  -> V3i(offset.X, offset.Y, slice)
                 | _                             -> offset
 
-            ctx.Upload(dst, level, offset, size, fmt, src)
+            ctx.Upload(dst, level, offset, size, src)
   
         member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) : unit =
             use __ = ctx.ResourceLock
@@ -155,8 +155,8 @@ type Runtime() =
                 GL.BindTexture(t, 0)
                 
 
-            let pFmt = PixelFormat.ofColFormat src.Format.IsIntegerFormat fmt
-            let pType = PixelType.ofType typeof<'a>
+            let pFmt = PixelFormat.ofColFormat src.Format.IsIntegerFormat fmt |> Option.get
+            let pType = PixelType.ofType typeof<'a> |> Option.get
 
             match src.Dimension, src.IsArray with
                 | TextureDimension.Texture1D, false ->
