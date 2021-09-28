@@ -119,7 +119,7 @@ module FramebufferExtensions =
                 else
                     match o.Dimension with
                     | TextureDimension.TextureCube ->
-                        let (_,target) = TextureCubeExtensions.cubeSides.[baseSlice]
+                        let (_,target) = TextureTarget.cubeSides.[baseSlice]
                         if o.IsArray then
                             failwith "cubemaparray currently not implemented"
                         else

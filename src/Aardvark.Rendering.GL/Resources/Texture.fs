@@ -55,29 +55,6 @@ type Texture =
 
 type TextureViewHandle(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int, size : V3i, count : Option<int>, format : TextureFormat) = 
     inherit Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, count, format, 0L, true)
-        
-
-[<AutoOpen>]
-module TextureCubeExtensions =
-    // PositiveX = 0,
-    // NegativeX = 1,
-    // PositiveY = 2,
-    // NegativeY = 3,
-    // PositiveZ = 4,
-    // NegativeZ = 5,
-    // cubeSides are sorted like in their implementation (making some things easier)
-    let cubeSides =
-        [|
-            CubeSide.PositiveX, TextureTarget.TextureCubeMapPositiveX
-            CubeSide.NegativeX, TextureTarget.TextureCubeMapNegativeX
-
-            CubeSide.PositiveY, TextureTarget.TextureCubeMapPositiveY
-            CubeSide.NegativeY, TextureTarget.TextureCubeMapNegativeY
-                
-            CubeSide.PositiveZ, TextureTarget.TextureCubeMapPositiveZ
-            CubeSide.NegativeZ, TextureTarget.TextureCubeMapNegativeZ
-        |]
-
 
 [<AutoOpen>]
 module ResourceCounts =
@@ -133,6 +110,30 @@ module TextureTarget =
     let ofTexture (texture : Texture) =
         ofParameters texture.Dimension texture.IsArray texture.IsMultisampled
 
+    // PositiveX = 0,
+    // NegativeX = 1,
+    // PositiveY = 2,
+    // NegativeY = 3,
+    // PositiveZ = 4,
+    // NegativeZ = 5,
+    // cubeSides are sorted like in their implementation (making some things easier)
+    let cubeSides =
+        [|
+            CubeSide.PositiveX, TextureTarget.TextureCubeMapPositiveX
+            CubeSide.NegativeX, TextureTarget.TextureCubeMapNegativeX
+
+            CubeSide.PositiveY, TextureTarget.TextureCubeMapPositiveY
+            CubeSide.NegativeY, TextureTarget.TextureCubeMapNegativeY
+
+            CubeSide.PositiveZ, TextureTarget.TextureCubeMapPositiveZ
+            CubeSide.NegativeZ, TextureTarget.TextureCubeMapNegativeZ
+        |]
+
+    let toSliceTarget (slice : int) = function
+        | TextureTarget.TextureCubeMap -> cubeSides.[slice] |> snd
+        | target -> target
+
+
 
 [<AutoOpen>]
 module TextureCreationExtensions =
@@ -155,9 +156,45 @@ module TextureCreationExtensions =
             | TextureDimension.Texture2D, true  -> x.CreateTexture2DArray(size.XY, slices, levels, format, samples)
             | TextureDimension.Texture3D, false -> x.CreateTexture3D(size, levels, format)
             | TextureDimension.Texture3D, true  -> raise <| ArgumentException("3D textures cannot be arrayed")
-            | TextureDimension.TextureCube, false -> x.CreateTextureCube(size.X, levels, format, samples)
-            | TextureDimension.TextureCube, true  -> x.CreateTextureCubeArray(size.X, slices, levels, format, samples)
+            | TextureDimension.TextureCube, false -> x.CreateTextureCube(size.X, levels, format)
+            | TextureDimension.TextureCube, true  -> x.CreateTextureCubeArray(size.X, slices, levels, format)
             | _ -> failwith "[GL] Invalid texture dimension"
+
+        member x.CreateTexture(size : V3i, dim : TextureDimension, format : PixFormat, info : TextureParams, slices : int, samples : int) =
+            let format =
+                let baseFormat = TextureFormat.ofPixFormat format info
+                if info.wantCompressed then
+                    match TextureFormat.toCompressed baseFormat with
+                    | Some fmt -> fmt
+                    | _ ->
+                        Log.warn "[GL] Texture format %A does not support compression" baseFormat
+                        baseFormat
+                else
+                    baseFormat
+
+            let levels = if info.wantMipMaps then Fun.MipmapLevels(size) else 1
+            x.CreateTexture(size, dim, format, slices, levels, samples)
+
+        member x.CreateTexture1D(size : int, format : PixFormat, info : TextureParams) =
+            x.CreateTexture(V3i(size, 1, 1), TextureDimension.Texture1D, format, info, 0, 1)
+
+        member x.CreateTexture2D(size : V2i, format : PixFormat, info : TextureParams, samples : int) =
+            x.CreateTexture(V3i(size, 1), TextureDimension.Texture2D, format, info, 0, samples)
+
+        member x.CreateTexture3D(size : V3i, format : PixFormat, info : TextureParams) =
+            x.CreateTexture(size, TextureDimension.Texture3D, format, info, 0, 1)
+
+        member x.CreateTextureCube(size : int, format : PixFormat, info : TextureParams) =
+            x.CreateTexture(V3i(size, 1, 1), TextureDimension.TextureCube, format, info, 0, 1)
+
+        member x.CreateTexture1DArray(size : int, count : int, format : PixFormat, info : TextureParams) =
+            x.CreateTexture(V3i(size, 1, 1), TextureDimension.Texture1D, format, info, count, 1)
+
+        member x.CreateTexture2DArray(size : V2i, count : int, format : PixFormat, info : TextureParams, samples : int) =
+            x.CreateTexture(V3i(size, 1), TextureDimension.Texture2D, format, info, count, samples)
+
+        member x.CreateTextureCubeArray(size : int, count : int, format : PixFormat, info : TextureParams) =
+            x.CreateTexture(V3i(size, 1, 1), TextureDimension.TextureCube, format, info, count, 1)
 
         member x.UpdateTexture(tex : Texture, size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) =
             let isArray = slices > 0
@@ -169,98 +206,98 @@ module TextureCreationExtensions =
             | TextureDimension.Texture2D, true  -> x.UpdateTexture2DArray(tex, size.XY, slices, levels, format, samples)
             | TextureDimension.Texture3D, false -> x.UpdateTexture3D(tex, size, levels, format)
             | TextureDimension.Texture3D, true  -> raise <| ArgumentException("3D textures cannot be arrayed")
-            | TextureDimension.TextureCube, false -> x.UpdateTextureCube(tex, size.X, levels, format, samples)
-            | TextureDimension.TextureCube, true  -> x.UpdateTextureCubeArray(tex, size.X, slices, levels, format, samples)
+            | TextureDimension.TextureCube, false -> x.UpdateTextureCube(tex, size.X, levels, format)
+            | TextureDimension.TextureCube, true  -> x.UpdateTextureCubeArray(tex, size.X, slices, levels, format)
             | _ -> failwith "[GL] Invalid texture dimension"
 
 
-        member x.CreateTexture1D(size : int, mipMapLevels : int, t : TextureFormat) =
+        member x.CreateTexture1D(size : int, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
                 let h = GL.GenTexture()
                 GL.Check "could not create texture"
 
                 addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture1D, mipMapLevels, 1, V3i.Zero, None, t, 0L, false)
-                x.UpdateTexture1D(tex, size, mipMapLevels, t)
+                let tex = Texture(x, h, TextureDimension.Texture1D, mipMapLevels, 1, V3i.Zero, None, format, 0L, false)
+                x.UpdateTexture1D(tex, size, mipMapLevels, format)
 
                 tex
             )
 
-        member x.CreateTexture2D(size : V2i, mipMapLevels : int, t : TextureFormat, samples : int) =
+        member x.CreateTexture2D(size : V2i, mipMapLevels : int, format : TextureFormat, samples : int) =
             using x.ResourceLock (fun _ ->
                 let h = GL.GenTexture()
                 GL.Check "could not create texture"
                 
                 addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture2D, mipMapLevels, 1, V3i.Zero, None, t, 0L, false)
+                let tex = Texture(x, h, TextureDimension.Texture2D, mipMapLevels, 1, V3i.Zero, None, format, 0L, false)
 
-                x.UpdateTexture2D(tex, size, mipMapLevels, t, samples)
+                x.UpdateTexture2D(tex, size, mipMapLevels, format, samples)
 
                 tex
             )
 
-        member x.CreateTexture3D(size : V3i, mipMapLevels : int, t : TextureFormat) =
+        member x.CreateTexture3D(size : V3i, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
                 let h = GL.GenTexture()
                 GL.Check "could not create texture"
 
                 addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture3D, mipMapLevels, 1, V3i.Zero, None, t, 0L, false)
-                x.UpdateTexture3D(tex, size, mipMapLevels, t)
+                let tex = Texture(x, h, TextureDimension.Texture3D, mipMapLevels, 1, V3i.Zero, None, format, 0L, false)
+                x.UpdateTexture3D(tex, size, mipMapLevels, format)
 
                 tex
             )
 
-        member x.CreateTextureCube(size : int, mipMapLevels : int, t : TextureFormat, samples : int) =
+        member x.CreateTextureCube(size : int, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
                 let h = GL.GenTexture()
                 GL.Check "could not create texture"
 
                 addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.TextureCube, mipMapLevels, 1, V3i(size, size, 0), None, t, 0L, false)
-                x.UpdateTextureCube(tex, size, mipMapLevels, t, samples)
+                let tex = Texture(x, h, TextureDimension.TextureCube, mipMapLevels, 1, V3i(size, size, 0), None, format, 0L, false)
+                x.UpdateTextureCube(tex, size, mipMapLevels, format)
 
                 tex
             )
 
-        member x.CreateTexture1DArray(size : int, count : int, mipMapLevels : int, t : TextureFormat) =
+        member x.CreateTexture1DArray(size : int, count : int, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
                 let h = GL.GenTexture()
                 GL.Check "could not create texture"
 
                 addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture1D, mipMapLevels, 1, V3i.Zero, Some count, t, 0L, false)
-                x.UpdateTexture1DArray(tex, size, count, mipMapLevels, t)
+                let tex = Texture(x, h, TextureDimension.Texture1D, mipMapLevels, 1, V3i.Zero, Some count, format, 0L, false)
+                x.UpdateTexture1DArray(tex, size, count, mipMapLevels, format)
 
                 tex
             ) 
 
-        member x.CreateTexture2DArray(size : V2i, count : int, mipMapLevels : int, t : TextureFormat, samples : int) =
+        member x.CreateTexture2DArray(size : V2i, count : int, mipMapLevels : int, format : TextureFormat, samples : int) =
             using x.ResourceLock (fun _ ->
                 let h = GL.GenTexture()
                 GL.Check "could not create texture"
                 
                 addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture2D, mipMapLevels, 1, V3i.Zero, Some count, t, 0L, false)
+                let tex = Texture(x, h, TextureDimension.Texture2D, mipMapLevels, 1, V3i.Zero, Some count, format, 0L, false)
 
-                x.UpdateTexture2DArray(tex, size, count, mipMapLevels, t, samples)
+                x.UpdateTexture2DArray(tex, size, count, mipMapLevels, format, samples)
 
                 tex
             )
 
-        member x.CreateTextureCubeArray(size : int, count : int, mipMapLevels : int, t : TextureFormat, samples : int) =
+        member x.CreateTextureCubeArray(size : int, count : int, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
                 let h = GL.GenTexture()
                 GL.Check "could not create texture"
 
                 addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.TextureCube, mipMapLevels, 1, V3i(size, size, 0), Some count, t, 0L, false)
-                x.UpdateTextureCubeArray(tex, size, count, mipMapLevels, t, samples)
+                let tex = Texture(x, h, TextureDimension.TextureCube, mipMapLevels, 1, V3i(size, size, 0), Some count, format, 0L, false)
+                x.UpdateTextureCubeArray(tex, size, count, mipMapLevels, format)
 
                 tex
             )
             
-        member x.UpdateTexture1D(tex : Texture, size : int, mipMapLevels : int, t : TextureFormat) =
+        member x.UpdateTexture1D(tex : Texture, size : int, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
                 if tex.ImmutableFormat then
                     failwith "cannot update format/size for immutable texture"
@@ -268,13 +305,13 @@ module TextureCreationExtensions =
                 GL.BindTexture(TextureTarget.Texture1D, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let sizeInBytes = texSizeInBytes(V3i(size, 1, 1), t, 1, mipMapLevels)
+                let sizeInBytes = texSizeInBytes(V3i(size, 1, 1), format, 1, mipMapLevels)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
 
                 x.SetDefaultTextureParams(TextureTarget.Texture1D, mipMapLevels)
 
-                GL.TexStorage1D(TextureTarget1d.Texture1D, mipMapLevels, unbox (int t), size)
+                GL.TexStorage1D(TextureTarget1d.Texture1D, mipMapLevels, unbox (int format), size)
                 GL.Check "could not allocate texture"
 
                 GL.BindTexture(TextureTarget.Texture1D, 0)
@@ -283,11 +320,11 @@ module TextureCreationExtensions =
                 tex.MipMapLevels <- mipMapLevels
                 tex.Dimension <- TextureDimension.Texture1D
                 tex.Size <- V3i(size, 1, 1)
-                tex.Format <- t
+                tex.Format <- format
                 tex.ImmutableFormat <- true
             )
 
-        member x.UpdateTexture2D(tex : Texture, size : V2i, mipMapLevels : int, t : TextureFormat, samples : int) =
+        member x.UpdateTexture2D(tex : Texture, size : V2i, mipMapLevels : int, format : TextureFormat, samples : int) =
             using x.ResourceLock (fun _ ->
                 if tex.ImmutableFormat then
                     failwith "cannot update format/size for immutable texture"
@@ -299,17 +336,17 @@ module TextureCreationExtensions =
                 GL.BindTexture(target, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let sizeInBytes = texSizeInBytes(size.XYI, t, samples, mipMapLevels)
+                let sizeInBytes = texSizeInBytes(size.XYI, format, samples, mipMapLevels)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
 
                 if samples = 1 then
                     // parameters only valid for non-multisampled textures
                     x.SetDefaultTextureParams(target, mipMapLevels)
-                    GL.TexStorage2D(TextureTarget2d.Texture2D, mipMapLevels, unbox (int t), size.X, size.Y)
+                    GL.TexStorage2D(TextureTarget2d.Texture2D, mipMapLevels, unbox (int format), size.X, size.Y)
                 else
                     if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
-                    GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, unbox (int t), size.X, size.Y, true)
+                    GL.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, unbox (int format), size.X, size.Y, true)
 
                 GL.Check "could not allocate texture"
                 GL.BindTexture(target, 0)
@@ -320,11 +357,11 @@ module TextureCreationExtensions =
                 tex.Multisamples <- samples
                 tex.Count <- 1
                 tex.Size <- V3i(size.X, size.Y, 1)
-                tex.Format <- t
+                tex.Format <- format
                 tex.ImmutableFormat <- true
             )
 
-        member x.UpdateTexture3D(tex : Texture, size : V3i, mipMapLevels : int, t : TextureFormat) =
+        member x.UpdateTexture3D(tex : Texture, size : V3i, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
                 if tex.ImmutableFormat then
                     failwith "cannot update format/size for immutable texture"
@@ -332,9 +369,9 @@ module TextureCreationExtensions =
                 GL.BindTexture(TextureTarget.Texture3D, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let ifmt = unbox (int t) 
+                let ifmt = unbox (int format) 
 
-                let sizeInBytes = texSizeInBytes(size, t, 1, mipMapLevels)
+                let sizeInBytes = texSizeInBytes(size, format, 1, mipMapLevels)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
 
@@ -351,11 +388,11 @@ module TextureCreationExtensions =
                 tex.Count <- 1
                 tex.Multisamples <- 1
                 tex.Size <- size
-                tex.Format <- t
+                tex.Format <- format
                 tex.ImmutableFormat <- true
             )
 
-        member x.UpdateTextureCube(tex : Texture, size : int, mipMapLevels : int, t : TextureFormat, samples : int) =
+        member x.UpdateTextureCube(tex : Texture, size : int, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
                 if tex.ImmutableFormat then
                     failwith "cannot update format/size for immutable texture"
@@ -363,21 +400,13 @@ module TextureCreationExtensions =
                 GL.BindTexture(TextureTarget.TextureCubeMap, tex.Handle)
                 GL.Check "could not bind texture"
 
-                if samples = 1 then
-                    x.SetDefaultTextureParams(TextureTarget.TextureCubeMap, mipMapLevels)
-                    GL.TexStorage2D(TextureTarget2d.TextureCubeMap, mipMapLevels, unbox (int t), size, size)
-                else
-                    if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
-                    Log.warn "[GL] cubemap MS not working atm."
-                    // TODO: verify that this works!!
-                    for f in 0..5 do
-                        let target = int TextureTarget.TextureCubeMapPositiveX + f
-                        GL.TexImage2DMultisample(unbox target, samples, unbox (int t), size, size, true)
+                x.SetDefaultTextureParams(TextureTarget.TextureCubeMap, mipMapLevels)
+                GL.TexStorage2D(TextureTarget2d.TextureCubeMap, mipMapLevels, unbox (int format), size, size)
 
                 GL.BindTexture(TextureTarget.TextureCubeMap, 0)
                 GL.Check "could not unbind texture"
 
-                let sizeInBytes = texSizeInBytes(V3i(size, size, 1), t, samples, mipMapLevels) * 6L
+                let sizeInBytes = texSizeInBytes(V3i(size, size, 1), format, 1, mipMapLevels) * 6L
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
 
@@ -385,12 +414,11 @@ module TextureCreationExtensions =
                 tex.Dimension <- TextureDimension.TextureCube
                 tex.Size <- V3i(size, size, 1)
                 tex.Count <- 1
-                tex.Multisamples <- samples
-                tex.Format <- t
+                tex.Format <- format
                 tex.ImmutableFormat <- true
             )
 
-        member x.UpdateTexture1DArray(tex : Texture, size : int, count : int, mipMapLevels : int, t : TextureFormat) =
+        member x.UpdateTexture1DArray(tex : Texture, size : int, count : int, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
                 if tex.ImmutableFormat then
                     failwith "cannot update format/size for immutable texture"
@@ -398,13 +426,13 @@ module TextureCreationExtensions =
                 GL.BindTexture(TextureTarget.Texture1DArray, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let sizeInBytes = texSizeInBytes(V3i(size, 1, 1), t, 1, mipMapLevels) * (int64 count)
+                let sizeInBytes = texSizeInBytes(V3i(size, 1, 1), format, 1, mipMapLevels) * (int64 count)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
 
                 x.SetDefaultTextureParams(TextureTarget.Texture1DArray, mipMapLevels)
   
-                GL.TexStorage2D(TextureTarget2d.Texture1DArray, mipMapLevels, unbox (int t), size, count)
+                GL.TexStorage2D(TextureTarget2d.Texture1DArray, mipMapLevels, unbox (int format), size, count)
                 GL.Check "could not allocate texture"
 
                 GL.BindTexture(TextureTarget.Texture1DArray, 0)
@@ -416,11 +444,11 @@ module TextureCreationExtensions =
                 tex.Count <- count
                 tex.Multisamples <- 1
                 tex.Size <- V3i(size, 1, 1)
-                tex.Format <- t
+                tex.Format <- format
                 tex.ImmutableFormat <- true
             )
 
-        member x.UpdateTexture2DArray(tex : Texture, size : V2i, count : int, mipMapLevels : int, t : TextureFormat, samples : int) =
+        member x.UpdateTexture2DArray(tex : Texture, size : V2i, count : int, mipMapLevels : int, format : TextureFormat, samples : int) =
             using x.ResourceLock (fun _ ->
                 if tex.ImmutableFormat then
                     failwith "cannot update format/size for immutable texture"
@@ -432,16 +460,16 @@ module TextureCreationExtensions =
                 GL.BindTexture(target, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let sizeInBytes = texSizeInBytes(size.XYI, t, samples, mipMapLevels) * (int64 count)
+                let sizeInBytes = texSizeInBytes(size.XYI, format, samples, mipMapLevels) * (int64 count)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
 
                 if samples = 1 then
                     x.SetDefaultTextureParams(target, mipMapLevels)
-                    GL.TexStorage3D(TextureTarget3d.Texture2DArray, mipMapLevels, unbox (int t), size.X, size.Y, count)
+                    GL.TexStorage3D(TextureTarget3d.Texture2DArray, mipMapLevels, unbox (int format), size.X, size.Y, count)
                 else
                     if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
-                    GL.TexStorage3DMultisample(TextureTargetMultisample3d.Texture2DMultisampleArray, samples, unbox (int t), size.X, size.Y, count, true)
+                    GL.TexStorage3DMultisample(TextureTargetMultisample3d.Texture2DMultisampleArray, samples, unbox (int format), size.X, size.Y, count, true)
   
                 GL.Check "could not allocate texture"
 
@@ -454,34 +482,25 @@ module TextureCreationExtensions =
                 tex.Count <- count
                 tex.Multisamples <- samples
                 tex.Size <- V3i(size.X, size.Y, 1)
-                tex.Format <- t
+                tex.Format <- format
                 tex.ImmutableFormat <- true
             )
 
-        member x.UpdateTextureCubeArray(tex : Texture, size : int, count : int, mipMapLevels : int, t : TextureFormat, samples : int) =
+        member x.UpdateTextureCubeArray(tex : Texture, size : int, count : int, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
                 if tex.ImmutableFormat then
                     failwith "cannot update format/size for immutable texture"
 
-                let target =
-                    if samples = 1 then TextureTarget.TextureCubeMapArray
-                    else
-                        Log.warn "multi-sampled cube map array not supported"
-                        failwith "multi-sampled cube map array not supported"
-
+                let target = TextureTarget.TextureCubeMapArray
                 GL.BindTexture(target, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let sizeInBytes = texSizeInBytes(V3i(size, size, 1), t, samples, mipMapLevels) * 6L * (int64 count)
+                let sizeInBytes = texSizeInBytes(V3i(size, size, 1), format, 1, mipMapLevels) * 6L * (int64 count)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
 
-                if samples = 1 then
-                    x.SetDefaultTextureParams(target, mipMapLevels)
-                    GL.TexStorage3D(unbox (int target), mipMapLevels, unbox (int t), size, size, count * 6) // NOTE: there is no TextureTarget3d.TextureCubeMapArray ??
-                else
-                    if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
-                    failwith "not reachable"
+                x.SetDefaultTextureParams(target, mipMapLevels)
+                GL.TexStorage3D(unbox (int target), mipMapLevels, unbox (int format), size, size, count * 6)
   
                 GL.Check "could not allocate texture"
 
@@ -492,9 +511,8 @@ module TextureCreationExtensions =
                 tex.Dimension <- TextureDimension.TextureCube
                 tex.IsArray <- true
                 tex.Count <- count
-                tex.Multisamples <- samples
                 tex.Size <- V3i(size, size, 1)
-                tex.Format <- t
+                tex.Format <- format
                 tex.ImmutableFormat <- true
             )
 
@@ -553,6 +571,7 @@ module TextureCreationExtensions =
                 | _ -> removeTexture x t.SizeInBytes
                 GL.DeleteTexture(t.Handle)
                 GL.Check "could not delete texture"
+                t.Handle <- 0
             )
 
 
@@ -684,6 +703,17 @@ module TextureUploadExtensions =
             finally
                 gc.Free()     
 
+        static member Copy(src : PixVolume, dst : nativeint, dstInfo : Tensor4Info) =
+            src.PixFormat.Type |> ExistentialHack.run {
+                new IUnmanagedAction with
+                    member __.Run(def : Option<'a>) =
+                        let x = unbox<PixVolume<'a>> src
+                        let dst = NativeTensor4<'a>(NativePtr.ofNativeInt dst, dstInfo)
+                        NativeTensor4.using x.Tensor4 (fun src ->
+                            src.CopyTo(dst)
+                        )
+            }
+
     [<AutoOpen>]
     module FormatConversions = 
         type Col.Format with
@@ -699,6 +729,12 @@ module TextureUploadExtensions =
                     PixelFormat.Rg, 2
                     PixelFormat.Rgb, 3
                     PixelFormat.Rgba, 4
+                    PixelFormat.BgrInteger, 3
+                    PixelFormat.BgraInteger, 4
+                    PixelFormat.RedInteger, 1
+                    PixelFormat.RgInteger, 2
+                    PixelFormat.RgbInteger, 3
+                    PixelFormat.RgbaInteger, 4
                 ]
 
             let toIntegerFormat (format : PixelFormat) =
@@ -1207,56 +1243,25 @@ module TextureExtensions =
     [<AutoOpen>]
     module internal Patterns =
 
-        let compressedFormats =
-            HashSet.ofList [
-                TextureFormat.CompressedRed
-                TextureFormat.CompressedRg
-                TextureFormat.CompressedRgbS3tcDxt1Ext
-                TextureFormat.CompressedRgbaS3tcDxt1Ext
-                TextureFormat.CompressedRgbaS3tcDxt3Ext
-                TextureFormat.CompressedRgbaS3tcDxt5Ext
-                TextureFormat.CompressedAlpha
-                TextureFormat.CompressedLuminance
-                TextureFormat.CompressedLuminanceAlpha
-                TextureFormat.CompressedIntensity
-                TextureFormat.CompressedRgb
-                TextureFormat.CompressedRgba
-                TextureFormat.CompressedSrgb
-                TextureFormat.CompressedSrgbAlpha
-                TextureFormat.CompressedSluminance
-                TextureFormat.CompressedSluminanceAlpha
-                TextureFormat.CompressedSrgbS3tcDxt1Ext
-                TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext
-                TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext
-                TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext
-                TextureFormat.CompressedRedRgtc1
-                TextureFormat.CompressedSignedRedRgtc1
-                TextureFormat.CompressedRgRgtc2
-                TextureFormat.CompressedSignedRgRgtc2
-                TextureFormat.CompressedRgbaBptcUnorm
-                TextureFormat.CompressedRgbBptcSignedFloat
-                TextureFormat.CompressedRgbBptcUnsignedFloat
-            ]
-
         let (|FileTexture|_|) (t : ITexture) =
             match t with
-                | :? FileTexture as t -> Some(FileTexture(t.TextureParams, t.FileName))
-                | _ -> None
+            | :? FileTexture as t -> Some(FileTexture(t.TextureParams, t.FileName))
+            | _ -> None
 
         let (|PixTextureCube|_|) (t : ITexture) =
             match t with
-                | :? PixTextureCube as t -> Some(PixTextureCube(t.TextureParams, t.PixImageCube))
-                | _ -> None
+            | :? PixTextureCube as t -> Some(PixTextureCube(t.TextureParams, t.PixImageCube))
+            | _ -> None
 
         let (|PixTexture2D|_|) (t : ITexture) =
             match t with
-                | :? PixTexture2d as t -> Some(t.TextureParams, t.PixImageMipMap)
-                | _ -> None
+            | :? PixTexture2d as t -> Some(t.TextureParams, t.PixImageMipMap)
+            | _ -> None
 
         let (|PixTexture3D|_|) (t : ITexture) =
             match t with
-                | :? PixTexture3d as t -> Some(PixTexture3D(t.TextureParams, t.PixVolume))
-                | _ -> None
+            | :? PixTexture3d as t -> Some(PixTexture3D(t.TextureParams, t.PixVolume))
+            | _ -> None
 
     type Col.Format with
         static member Stencil = unbox<Col.Format> (Int32.MaxValue)
@@ -1309,57 +1314,339 @@ module TextureExtensions =
             | _ ->
                 failwith "conversion not implemented"
 
-    let toUntypedPixelFormat =
-        LookupTable.lookupTable' [
-            TextureFormat.DepthComponent16, PixelFormat.DepthComponent
-            TextureFormat.Depth24Stencil8, PixelFormat.DepthComponent
-            TextureFormat.DepthComponent32, PixelFormat.DepthComponent
-            TextureFormat.DepthComponent32f, PixelFormat.DepthComponent
+    [<AutoOpen>]
+    module internal PixelTransfer =
 
-            TextureFormat.Rgba8, PixelFormat.Rgba
-            TextureFormat.Rgba16, PixelFormat.Rgba
-            TextureFormat.Rgba16f, PixelFormat.Rgba
-            TextureFormat.Rgba32f, PixelFormat.Rgba
+        type GeneralPixelDataInfo =
+            {
+                Channels        : int
+                ElementSize     : int
+                AlignedLineSize : nativeint
+                SizeInBytes     : nativeint
+            }
 
-            TextureFormat.Rgb8, PixelFormat.Rgb
-            TextureFormat.Rgb16, PixelFormat.Rgb
-            TextureFormat.Rgb16f, PixelFormat.Rgb
-            TextureFormat.Rgb32f, PixelFormat.Rgb
+        type CompressedPixelDataInfo =
+            {
+                SizeInBytes : nativeint
+            }
 
-            TextureFormat.Rg8, PixelFormat.Rg
-            TextureFormat.Rg16, PixelFormat.Rg
-            TextureFormat.Rg16f, PixelFormat.Rg
-            TextureFormat.Rg32f, PixelFormat.Rg
+        [<RequireQualifiedAccess>]
+        type PixelDataInfo =
+            | General    of GeneralPixelDataInfo
+            | Compressed of CompressedPixelDataInfo
 
-            TextureFormat.R8, PixelFormat.Red
-            TextureFormat.R16, PixelFormat.Red
-            TextureFormat.R16f, PixelFormat.Red
-            TextureFormat.R32f, PixelFormat.Red
+            member x.SizeInBytes =
+                match x with
+                | General i -> i.SizeInBytes
+                | Compressed i -> i.SizeInBytes
 
-            TextureFormat.CompressedRgbS3tcDxt1Ext, PixelFormat.Rgb
-            TextureFormat.CompressedRgbaS3tcDxt5Ext, PixelFormat.Rgba
-            TextureFormat.CompressedSrgbS3tcDxt1Ext, PixelFormat.Rgb
-            TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext, PixelFormat.Rgba
-        ]
+        type CompressedPixelData =
+            {
+                Size        : V3i
+                SizeInBytes : nativeint
+                CopyTo      : nativeint -> unit
+            }
 
-    let compressionRatio =
-         LookupTable.lookupTable [
-                TextureFormat.CompressedRgbS3tcDxt1Ext, 6
-                TextureFormat.CompressedRgbaS3tcDxt1Ext, 6
-                TextureFormat.CompressedRgbaS3tcDxt3Ext, 4 
-                TextureFormat.CompressedRgbaS3tcDxt5Ext, 4
-                TextureFormat.CompressedSrgbS3tcDxt1Ext, 6
-                TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext, 6
-                TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext, 4
-                TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext, 4
-                TextureFormat.CompressedRedRgtc1, 4
-                TextureFormat.CompressedSignedRedRgtc1, 4
-                TextureFormat.CompressedRgRgtc2, 4
-                TextureFormat.CompressedSignedRgRgtc2, 4
-                TextureFormat.CompressedRgbaBptcUnorm, 4
-                TextureFormat.CompressedRgbBptcSignedFloat, 4
-                TextureFormat.CompressedRgbBptcUnsignedFloat, 4
-         ]
+        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+        module CompressedPixelData =
+            let copyTo (dst : nativeint) (data : CompressedPixelData) =
+                data.CopyTo dst
+
+        type GeneralPixelData =
+            {
+                Size   : V3i
+                Type   : PixelType
+                Format : PixelFormat
+                CopyTo : int -> int -> nativeint -> nativeint -> nativeint -> unit
+            }
+
+        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+        module GeneralPixelData =
+            let copyTo (dst : nativeint) (info : GeneralPixelDataInfo) (data : GeneralPixelData) =
+                data.CopyTo info.Channels info.ElementSize info.AlignedLineSize info.SizeInBytes dst
+
+        [<RequireQualifiedAccess>]
+        type PixelData =
+            | General    of GeneralPixelData
+            | Compressed of CompressedPixelData
+
+        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+        module PixelData =
+            let copyTo (dst : nativeint) (info : PixelDataInfo) (data : PixelData) =
+                match data, info with
+                | PixelData.General d, PixelDataInfo.General i ->
+                        GeneralPixelData.copyTo dst i d
+
+                | PixelData.Compressed d, PixelDataInfo.Compressed _ ->
+                        CompressedPixelData.copyTo dst d
+
+                | _ ->
+                    failwithf "PixelData.copyTo not possible with %A and %A" data info
+
+    [<AutoOpen>]
+    module internal Upload =
+
+        let uploadTextureData (texture : Texture) (generateMipmap : bool) (level : int) (offset : V3i) (data : PixelData) =
+            let target = texture |> TextureTarget.ofTexture
+            let targetSlice = target |> TextureTarget.toSliceTarget offset.Z
+
+            let dataInfo =
+                match data with
+                | PixelData.General d ->
+                    let elementSize = PixelType.size d.Type
+                    let channels = PixelFormat.channels d.Format
+
+                    let alignedLineSize =
+                        let lineSize = nativeint d.Size.X * nativeint elementSize * nativeint channels
+                        let align = nativeint texture.Context.UnpackAlignment
+                        let mask = align - 1n
+
+                        if lineSize % align = 0n then lineSize
+                        else (lineSize + mask) &&& ~~~mask
+
+                    let sizeInBytes = alignedLineSize * nativeint d.Size.Y * nativeint d.Size.Z
+
+                    PixelDataInfo.General {
+                        Channels        = channels
+                        ElementSize     = elementSize
+                        AlignedLineSize = alignedLineSize
+                        SizeInBytes     = sizeInBytes
+                    }
+
+                | PixelData.Compressed d ->
+                    PixelDataInfo.Compressed { SizeInBytes = d.SizeInBytes }
+
+            GL.BindTexture(target, texture.Handle)
+            GL.Check "could not bind texture"
+
+            let pbo = PixelUnpackBuffer.create BufferUsageHint.StaticDraw dataInfo.SizeInBytes
+            let dst = pbo |> PixelUnpackBuffer.map BufferAccess.WriteOnly
+
+            (dataInfo, data) ||> PixelData.copyTo dst
+
+            let pixels = pbo |> PixelUnpackBuffer.unmap
+
+            match texture.Dimension, texture.IsArray with
+            | TextureDimension.Texture1D, false ->
+                match data with
+                | PixelData.General d ->
+                    GL.TexSubImage1D(target, level, offset.X, d.Size.X, d.Format, d.Type, pixels)
+                | PixelData.Compressed d ->
+                    GL.CompressedTexSubImage1D(target, level, offset.X, d.Size.X,
+                                               unbox texture.Format, int d.SizeInBytes, pixels)
+
+            | TextureDimension.Texture1D, true
+            | TextureDimension.Texture2D, false
+            | TextureDimension.TextureCube, false ->
+                match data with
+                | PixelData.General d ->
+                    GL.TexSubImage2D(targetSlice, level, offset.X, offset.Y, d.Size.X, d.Size.Y, d.Format, d.Type, pixels)
+                | PixelData.Compressed d ->
+                    GL.CompressedTexSubImage2D(target, level, offset.X, offset.Y, d.Size.X, d.Size.Y,
+                                               unbox texture.Format, int d.SizeInBytes, pixels)
+
+            | TextureDimension.Texture2D, true
+            | TextureDimension.Texture3D, false
+            | TextureDimension.TextureCube, true ->
+                match data with
+                | PixelData.General d ->
+                    GL.TexSubImage3D(target, level, offset.X, offset.Y, offset.Z, d.Size.X, d.Size.Y, d.Size.Z, d.Format, d.Type, pixels)
+                | PixelData.Compressed d ->
+                    GL.CompressedTexSubImage3D(target, level, offset.X, offset.Y, offset.Z,
+                                               d.Size.X, d.Size.Y, d.Size.Z, unbox texture.Format, int d.SizeInBytes, pixels)
+
+            | d, a ->
+                failwithf "unsupported texture data (%A, isArray = %b)" d a
+
+            GL.Check (sprintf "could not upload texture data")
+
+            pbo |> PixelUnpackBuffer.free
+
+            if generateMipmap then
+                GL.GenerateMipmap(unbox target)
+                GL.Check "failed to generate mipmaps"
+
+            GL.BindTexture(target, 0)
+            GL.Check "could not unbind texture"
+
+        let uploadNativeTensor4<'T when 'T : unmanaged> (texture : Texture) (flipY : bool) (generateMipmap : bool) (format : Col.Format)
+                                                        (level : int) (offset : V3i) (size : V3i) (src : NativeTensor4<'T>) =
+            let integerFormat = TextureFormat.isIntegerFormat texture.Format
+            let pixelType = PixelType.ofType typeof<'T>
+            let pixelFormat = PixelFormat.ofColFormat integerFormat format
+
+            let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (dst : nativeint) =
+                let dstTensor =
+                    let dy = int64 alignedLineSize / int64 elementSize
+                    let info =
+                        Tensor4Info(
+                            0L,
+                            V4l(int64 size.X, int64 size.Y, int64 size.Z, src.SW),
+                            V4l(int64 channels, dy, dy * int64 size.Y, 1L)
+                        )
+                    NativeTensor4<'T>(NativePtr.ofNativeInt dst, info)
+
+                let src = src.SubTensor4(V4i.Zero, V4i(size, channels))
+                NativeTensor4.copy src (if flipY then dstTensor.MirrorY() else dstTensor)
+
+            let pixelData =
+                PixelData.General {
+                    Size   = size
+                    Type   = pixelType
+                    Format = pixelFormat
+                    CopyTo = copy
+                }
+
+            uploadTextureData texture generateMipmap level offset pixelData
+
+
+        let uploadNativeTexture (texture : Texture) (baseLevel : int) (baseSlice : int) (data : INativeTexture) =
+            let pixelFormat, pixelType = TextureFormat.toFormatAndType data.Format
+            let isCompressed = TextureFormat.isCompressed data.Format
+
+            let levelCount =
+                if data.WantMipMaps then data.MipMapLevels else 1
+
+            let generateMipmap =
+                data.WantMipMaps && levelCount < texture.MipMapLevels
+
+            for slice = 0 to data.Count - 1 do
+                let offset =
+                    match texture.Dimension with
+                    | TextureDimension.Texture1D -> V3i(0, baseSlice + slice, 0)
+                    | TextureDimension.Texture2D
+                    | TextureDimension.TextureCube -> V3i(0, 0, baseSlice + slice)
+                    | _ -> V3i.Zero
+
+                for level = 0 to levelCount - 1 do
+                    let subdata = data.[slice, level]
+
+                    let copy (dst : nativeint) =
+                        subdata.Use (fun src ->
+                            Marshal.Copy(src, dst, subdata.SizeInBytes)
+                        )
+
+                    let pixelData =
+                        if isCompressed then
+                            PixelData.Compressed {
+                                Size        = subdata.Size
+                                SizeInBytes = nativeint subdata.SizeInBytes
+                                CopyTo      = copy
+                            }
+
+                        else
+                            PixelData.General {
+                                Size   = subdata.Size
+                                Type   = pixelType
+                                Format = pixelFormat
+                                CopyTo = fun _ _ _ _ -> copy
+                            }
+
+                    let generateMipmap = generateMipmap && level = levelCount - 1
+                    uploadTextureData texture generateMipmap (baseLevel + level) offset pixelData
+
+
+        let uploadPixImage (texture : Texture) (flipY : bool) (generateMipmap : bool)
+                           (level : int) (slice : int) (offset : V2i) (image : PixImage) =
+            let integerFormat = TextureFormat.isIntegerFormat texture.Format
+            let pixelType = PixelType.ofType image.PixFormat.Type
+            let pixelFormat = PixelFormat.ofColFormat integerFormat image.Format
+
+            let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (dst : nativeint) =
+                let dstInfo =
+                    let viSize = V3l(int64 image.Size.X, int64 image.Size.Y, int64 channels)
+                    if flipY then
+                        VolumeInfo(
+                            int64 alignedLineSize * (int64 image.Size.Y - 1L),
+                            viSize,
+                            V3l(int64 channels * int64 elementSize, int64 -alignedLineSize, int64 elementSize)
+                        )
+                    else
+                        VolumeInfo(
+                            0L,
+                            viSize,
+                            V3l(int64 channels * int64 elementSize, int64 alignedLineSize, int64 elementSize)
+                        )
+
+                TextureCopyUtils.Copy(image, dst, dstInfo)
+
+            let offset = V3i(offset, slice)
+            let data =
+                PixelData.General {
+                    Size   = V3i(image.Size, 1)
+                    Type   = pixelType
+                    Format = pixelFormat
+                    CopyTo = copy
+                }
+
+            uploadTextureData texture generateMipmap level offset data
+
+
+        let private uploadPixImageMipMapInternal (texture : Texture) (flipY : bool) (wantMipmap : bool) (generateMipmap : bool)
+                                                 (baseLevel : int) (slice : int) (offset : V2i) (images : PixImageMipMap) =
+            let levelCount =
+                if wantMipmap then images.LevelCount else 1
+
+            for i = 0 to levelCount - 1 do
+                let img = images.ImageArray.[i]
+                let mip = generateMipmap && i = levelCount - 1
+                uploadPixImage texture flipY mip (baseLevel + i) slice offset img
+
+
+        let uploadPixImageMipMap (texture : Texture) (flipY : bool) (wantMipmap : bool)
+                                 (baseLevel : int) (slice : int) (offset : V2i) (images : PixImageMipMap) =
+            let generateMipmap =
+                wantMipmap && images.LevelCount < texture.MipMapLevels
+
+            uploadPixImageMipMapInternal texture flipY wantMipmap generateMipmap baseLevel slice offset images
+
+
+        let uploadPixImageCube (texture : Texture) (flipY : bool) (wantMipmap : bool)
+                               (baseLevel : int) (slice : int) (offset : V2i) (data : PixImageCube) =
+            let generateMipmap =
+                wantMipmap && data.MipMapArray |> Array.forany (fun i -> i.LevelCount < texture.MipMapLevels)
+
+            for i = 0 to 5 do
+                let data = data.[unbox<CubeSide> i]
+                let generateMipMap = generateMipmap && i = 5
+                uploadPixImageMipMapInternal texture flipY wantMipmap generateMipMap baseLevel (slice + i) offset data
+
+
+        let uploadPixVolume (texture : Texture) (flipY : bool) (generateMipMap : bool)
+                            (level : int) (offset : V3i) (volume : PixVolume) =
+            let integerFormat = TextureFormat.isIntegerFormat texture.Format
+            let pixelType = PixelType.ofType volume.PixFormat.Type
+            let pixelFormat = PixelFormat.ofColFormat integerFormat volume.Format
+
+            let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (dst : nativeint) =
+                let dstInfo =
+                    let rowPixels = int64 alignedLineSize / int64 elementSize
+                    let tiSize = V4l(volume.SizeL, int64 channels)
+
+                    if flipY then
+                        Tensor4Info(
+                            rowPixels * (tiSize.Y - 1L),
+                            tiSize,
+                            V4l(int64 channels, -rowPixels, rowPixels * tiSize.Y, 1L)
+                        )
+                    else
+                        Tensor4Info(
+                            0L,
+                            tiSize,
+                            V4l(int64 channels, rowPixels, rowPixels * tiSize.Y, 1L)
+                        )
+
+                TextureCopyUtils.Copy(volume, dst, dstInfo)
+
+            let data =
+                PixelData.General {
+                    Size   = volume.Size
+                    Type   = pixelType
+                    Format = pixelFormat
+                    CopyTo = copy
+                }
+
+            uploadTextureData texture generateMipMap level offset data
 
     module internal Devil =
         open DevILSharp
@@ -1379,484 +1666,66 @@ module TextureExtensions =
                 (ChannelFormat.Luminance, ChannelType.UnsignedByte, false), (CompressedDataFormat.Dxt1, PixelInternalFormat.CompressedRedRgtc1)
             ]
 
-        module private PixFormat =
-            let private types =
-                LookupTable.lookupTable' [
-                    ChannelType.Byte, typeof<int8>
-                    //ChannelType.Double, PixelType.Double
-                    ChannelType.Float, typeof<float32>
-                    ChannelType.Half, typeof<float16>
-                    ChannelType.Int, typeof<int>
-                    ChannelType.Short, typeof<int16>
-                    ChannelType.UnsignedByte, typeof<uint8>
-                    ChannelType.UnsignedInt, typeof<uint32>
-                    ChannelType.UnsignedShort, typeof<uint16>
-                ]
-
-            let private colFormat =
-                LookupTable.lookupTable' [
-                    ChannelFormat.RGB, Col.Format.RGB
-                    ChannelFormat.BGR, Col.Format.BGR
-                    ChannelFormat.RGBA, Col.Format.RGBA
-                    ChannelFormat.BGRA, Col.Format.BGRA
-                    ChannelFormat.Luminance, Col.Format.Gray
-                    ChannelFormat.Alpha, Col.Format.Alpha
-                    ChannelFormat.LuminanceAlpha, Col.Format.GrayAlpha
-                ]
-
-            let get(fmt : ChannelFormat, t : ChannelType) =
-                match types t, colFormat fmt with
-                    | Some t, Some fmt -> PixFormat(t, fmt) |> Some
-                    | _ -> None
-
         let devilLock =
             let fi = typeof<PixImageDevil>.GetField("s_devilLock", Reflection.BindingFlags.Static ||| Reflection.BindingFlags.NonPublic)
             fi.GetValue(null)
 
-        let uploadTexture2DLevelFile (t : Texture) (level : int) (file : string) (config : TextureParams) =
+        let tryLoadCompressedFromFile (ctx : Context) (config : TextureParams) (path : string) =
             lock devilLock (fun () ->
                 PixImageDevil.InitDevil()
+
                 let img = IL.GenImage()
+
                 try
                     IL.BindImage(img)
-                    IL.LoadImage(file) |> IL.check "could not load image"
-                
+                    IL.LoadImage(path) |> IL.check "could not load image"
 
-                
-                    let w = IL.GetInteger(IntName.ImageWidth)
-                    let h = IL.GetInteger(IntName.ImageHeight)
-                    let fmt = IL.GetInteger(IntName.ImageFormat) |> unbox<DevILSharp.ChannelFormat>
-                    let pt = IL.GetDataType()
+                    let channelType = IL.GetDataType()
+                    let channelFormat = IL.GetInteger(IntName.ImageFormat) |> unbox<ChannelFormat>
 
-                    let compressedFormat =
-                        if config.wantCompressed then
-                            match compressedFormat(fmt, pt, config.wantSrgb) with
-                                | Some t -> Some t
-                                | _ -> None
-                        else
+                    match compressedFormat (channelFormat, channelType, config.wantSrgb) with
+                    | Some (format, internalFormat) ->
+                        ILU.FlipImage() |> IL.check "could not flip image"
+
+                        let size = V2i(IL.GetInteger(IntName.ImageWidth), IL.GetInteger(IntName.ImageWidth))
+                        let channels = IL.GetInteger(IntName.ImageChannels)
+                        let sizeInBytes = IL.GetDXTCData(0n, 0, format)
+
+                        if sizeInBytes = 0 then
+                            Log.warn "Cannot load compressed data from '%s'" path
                             None
 
+                        else
+                            Log.line "compression: %.2f%%" (100.0 * float sizeInBytes / float (size.X * size.Y * channels))
 
-                    match compressedFormat with
-                        | Some (fmt, ifmt) ->
-                            ILU.FlipImage() |> IL.check "could not flip image"
-                            let channels = IL.GetInteger(IntName.ImageChannels)
-                            let size = IL.GetDXTCData(0n, 0, fmt)
-                
-                            Log.line "compression: %.2f%%" (100.0 * float size / float (w * h * channels)) 
+                            let copy (dst : nativeint) =
+                                IL.GetDXTCData(dst, sizeInBytes, format) |> ignore
 
-                            let pbo = PixelUnpackBuffer.create BufferUsageHint.StaticDraw (nativeint size)
-                            let ptr = pbo |> PixelUnpackBuffer.map BufferAccess.WriteOnly
-   
-                            IL.GetDXTCData(ptr, size, fmt) |> ignore
+                            let data =
+                                PixelData.Compressed {
+                                    Size        = V3i(size, 1)
+                                    SizeInBytes = nativeint sizeInBytes
+                                    CopyTo      = copy
+                                }
 
-                            let pixels = pbo |> PixelUnpackBuffer.unmap
+                            let levels = if config.wantMipMaps then Fun.MipmapLevels(size) else 1
+                            let texture = ctx.CreateTexture2D(size, levels, unbox internalFormat, 1)
+                            data |> uploadTextureData texture config.wantMipMaps 0 V3i.Zero
 
-                            GL.BindTexture(TextureTarget.Texture2D, t.Handle)
-                            GL.Check "[uploadTexture2DLevelFile] BindTexture"
+                            IL.BindImage(0)
 
-                            GL.CompressedTexImage2D(TextureTarget.Texture2D, level, unbox<InternalFormat> (int ifmt), w, h, 0, size, pixels)
-                            GL.Check "[uploadTexture2DLevelFile] CompressedTexImage2D"
-                            GL.BindTexture(TextureTarget.Texture2D, 0)
+                            Some texture
 
-                            pbo |> PixelUnpackBuffer.free
+                    | _ ->
+                        None
 
-                            updateTexture t.Context t.SizeInBytes (int64 size)
-                            t.Format <- unbox (int ifmt)
-                            t.SizeInBytes <- int64 size
-
-                        | _ ->
-                            match PixFormat.get(fmt, pt) with
-                                | Some pixFormat ->
-                                    let ifmt = TextureFormat.ofPixFormat pixFormat config
-
-                                    let pixelFormat, pixelType =
-                                        PixFormat.toFormatAndType ifmt pixFormat
-
-                                    let elementSize = pixFormat.Type.GLSize
-                                    let channelCount = pixFormat.Format.ChannelCount
-
-                                    let align = t.Context.UnpackAlignment
-                                    let lineSize = w * elementSize * channelCount
-                                    let alignedLineSize =
-                                        if lineSize % align = 0 then lineSize
-                                        else (lineSize + (align - 1)) &&& ~~~(align - 1)
-
-
-                                    let size = int64 (alignedLineSize * h)
-                                    let pbo = PixelUnpackBuffer.create BufferUsageHint.StaticDraw (nativeint size)
-                                    let dst = pbo |> PixelUnpackBuffer.map BufferAccess.WriteOnly
-
-                                    let src = IL.GetData()
-
-                                    let d = channelCount * elementSize
-
-                                    let srcInfo =
-                                        VolumeInfo(
-                                            0L, 
-                                            V3l(int64 w, int64 h, int64 d),
-                                            V3l(int64 d, int64 lineSize, 1L)
-                                        )
-
-                                    let dstInfo = 
-                                        VolumeInfo(
-                                            int64 alignedLineSize * (srcInfo.SY-1L), 
-                                            srcInfo.Size, 
-                                            V3l(srcInfo.DX, int64 -alignedLineSize, srcInfo.DZ)
-                                        )
-
-                                    let vSrc = 
-                                        NativeVolume<byte>(
-                                            NativePtr.ofNativeInt src, 
-                                            srcInfo
-                                        )
-
-                                    let vDst = 
-                                        NativeVolume<byte>(
-                                            NativePtr.ofNativeInt dst, 
-                                            dstInfo
-                                        )
-
-                                    NativeVolume.iter2 vSrc vDst (fun src dst -> NativePtr.write dst (NativePtr.read src))
-                                    let pixels = pbo |> PixelUnpackBuffer.unmap
-
-                                    GL.BindTexture(TextureTarget.Texture2D, t.Handle)
-                                    GL.TexImage2D(TextureTarget.Texture2D, level, unbox (int ifmt), w, h, 0, pixelFormat, pixelType, pixels)
-                                    GL.Check "[uploadTexture2DLevelFile] TexImage2D"
-                                    GL.BindTexture(TextureTarget.Texture2D, 0)
-
-                                    pbo |> PixelUnpackBuffer.free
-
-                                    updateTexture t.Context t.SizeInBytes size
-                                    t.SizeInBytes <- size
-                                    t.Format <- ifmt
-
-
-                                | _ -> 
-                                    failwith "[GL] could not get PixFormat for devil-texture"
-
-
-
-
-                    t.Size <- V3i(w,h,1)
-                    t.Dimension <- TextureDimension.Texture2D
-                    t.Count <- 1
-                    t.ImmutableFormat <- false
-                    t.MipMapLevels <- 1
-                    t.Multisamples <- 1
-                    IL.BindImage(0)
                 finally
                     IL.DeleteImage(img)
             )
 
-        let uploadTexture2D (t : Texture) (file : string) (config : TextureParams) =
-            uploadTexture2DLevelFile t 0 file config
-            GL.Check "uploadTexture2D"
-
-            GL.BindTexture(TextureTarget.Texture2D, t.Handle)
-            GL.Check "BindTexture"
-            if config.wantMipMaps then
-                GL.GenerateMipmap(GenerateMipmapTarget.Texture2D)
-                GL.Check "GenerateMipmap"
-                let newSize = 4L * t.SizeInBytes / 3L
-                updateTexture t.Context t.SizeInBytes newSize
-                t.SizeInBytes <- newSize
-            else
-                GL.TexParameterI(TextureTarget.Texture2D, TextureParameterName.TextureMaxLevel, [| 0 |])
-                GL.TexParameterI(TextureTarget.Texture2D, TextureParameterName.TextureMaxLod, [| 0 |])
-                GL.Check "TexParameterI"
-            GL.BindTexture(TextureTarget.Texture2D, 0)
-
-
 
     [<AutoOpen>]
-    module internal PixelTransfer =
-        let getTextureTarget' (dim : TextureDimension) (isArray : bool) (isMS : bool) =
-            match dim, isArray, isMS with
-            | TextureDimension.Texture1D,      _,       true     -> failwith "Texture1D cannot be multisampled"
-            | TextureDimension.Texture1D,      true,    _        -> TextureTarget.Texture1DArray
-            | TextureDimension.Texture1D,      false,   _        -> TextureTarget.Texture1D
-
-            | TextureDimension.Texture2D,      false,   false    -> TextureTarget.Texture2D
-            | TextureDimension.Texture2D,      true,    false    -> TextureTarget.Texture2DArray
-            | TextureDimension.Texture2D,      false,   true     -> TextureTarget.Texture2DMultisample
-            | TextureDimension.Texture2D,      true,    true     -> TextureTarget.Texture2DMultisampleArray
-
-            | TextureDimension.Texture3D,      false,   false    -> TextureTarget.Texture3D
-            | TextureDimension.Texture3D,      _,       _        -> failwith "Texture3D cannot be multisampled or an array"
-
-            | TextureDimension.TextureCube,   false,    false    -> TextureTarget.TextureCubeMap
-            | TextureDimension.TextureCube,   true,     false    -> TextureTarget.TextureCubeMapArray
-            | TextureDimension.TextureCube,   _,        true     -> failwith "TextureCube cannot be multisampled"
-
-            | _ -> failwithf "unknown texture dimension: %A" dim
-
-        let getTextureTarget (texture : Texture) =
-            getTextureTarget' texture.Dimension texture.IsArray texture.IsMultisampled
-
-        let getTextureSliceTarget (slice : int) (texture : Texture) =
-            match getTextureTarget texture with
-            | TextureTarget.TextureCubeMap -> cubeSides.[slice] |> snd
-            | target -> target
-
-        let private uploadTexture2DInternal (bindTarget : TextureTarget) (target : TextureTarget) (isTopLevel : bool) (t : Texture) (startLevel : int) (textureParams : TextureParams) (data : PixImageMipMap) =
-            if data.LevelCount <= 0 then
-                failwith "cannot upload texture having 0 levels"
-
-            let size = data.[0].Size
-            let expectedLevels = Fun.MipmapLevels(size)
-            let uploadLevels = if textureParams.wantMipMaps then data.LevelCount else 1
-            let generateMipMap = textureParams.wantMipMaps && data.LevelCount < expectedLevels
-            let integerFormat = TextureFormat.isIntegerFormat t.Format
-            
-            let pixelType = PixelType.ofType data.PixFormat.Type 
-            let pixelFormat = PixelFormat.ofColFormat integerFormat data.PixFormat.Format 
-
-            let compressedFormat =
-                        if textureParams.wantCompressed then
-                            match PixelType.compressedFormat (pixelFormat, pixelType, textureParams.wantSrgb) with
-                                | Some t -> Some t
-                                | _ -> Log.warn "[GL] Texture format (%A, %A) does not support compression" pixelFormat pixelType; None
-                        else
-                            None
-
-            let newFormat = match compressedFormat with
-                            | Some fmt -> fmt
-                            | _ -> let textureFormat = TextureFormat.ofPixFormat data.[0].PixFormat textureParams
-                                   let internalFormat = TextureFormat.ofPixFormat data.[0].PixFormat textureParams |> int |> unbox<PixelInternalFormat>
-                                   (textureFormat, internalFormat)
-
-            let internalFormat = snd newFormat
-            let newFormat = fst newFormat
-
-            let formatChanged = t.Format <> newFormat
-            let isCompressed = compressedFormats.Contains newFormat
-            let oldIsCompressed = compressedFormats.Contains  t.Format
-            t.Format <- newFormat
-
-            let sizeChanged = size <> t.Size2D
-            let compressionChanged = oldIsCompressed <> isCompressed
-            if sizeChanged || compressionChanged then
-                let texFormatUncompressed = TextureFormat.ofPixFormat data.[0].PixFormat TextureParams.empty
-                let sizeInBytes = texSizeInBytes(size.XYI, texFormatUncompressed, 1, 1)
-                let sizeInBytes = if textureParams.wantMipMaps then (sizeInBytes <<< 2) / 3L else sizeInBytes
-                let sizeInBytes = if isCompressed then 
-                                    let ratio = compressionRatio newFormat
-                                    sizeInBytes / int64 ratio
-                                  else
-                                    sizeInBytes
-                updateTexture t.Context t.SizeInBytes sizeInBytes
-                t.SizeInBytes <- sizeInBytes
-
-            GL.BindTexture(bindTarget, t.Handle)
-            GL.Check "could not bind texture"
-
-            if not generateMipMap then
-                GL.TexParameterI(bindTarget, TextureParameterName.TextureMaxLevel, [|uploadLevels - 1|])
-                GL.TexParameterI(bindTarget, TextureParameterName.TextureBaseLevel, [| 0 |])
-
-            for l in 0..uploadLevels-1 do
-                let image = data.[l]
-
-                image.PinPBO(t.Context.UnpackAlignment, integerFormat, ImageTrafo.MirrorY, fun dim pixelType pixelFormat pixels size ->
-                    if sizeChanged || formatChanged then
-                        GL.TexImage2D(target, startLevel + l, internalFormat, dim.X, dim.Y, 0, pixelFormat, pixelType, pixels)
-                    else
-                        GL.TexSubImage2D(target, startLevel + l, 0, 0, dim.X, dim.Y, pixelFormat, pixelType, pixels)
-                    GL.Check (sprintf "could not upload texture data for level %d" l)
-                )
-
-            // if the image did not contain a sufficient
-            // number of MipMaps and the user demanded 
-            // MipMaps we generate them using OpenGL
-            if generateMipMap && isTopLevel then
-                GL.GenerateMipmap(GenerateMipmapTarget.Texture2D)
-                GL.Check "failed to generate mipmaps"
-
-            GL.BindTexture(bindTarget, 0)
-            GL.Check "could not bind texture"
-
-            // since some attributes of the texture
-            // may have changed we mutate them here
-            if isTopLevel then
-                t.Size <- V3i(size.X, size.Y, 0)
-                t.Multisamples <- 1
-                t.Count <- 1
-                t.Dimension <- TextureDimension.Texture2D
-                //t.ChannelType <- ChannelType.fromGlFormat internalFormat
-
-            generateMipMap
-
-        let uploadTexture2D (t : Texture) (textureParams : TextureParams) (data : PixImageMipMap) =
-            uploadTexture2DInternal TextureTarget.Texture2D TextureTarget.Texture2D true t 0 textureParams data |> ignore
-
-        let uploadTextureCube (t : Texture) (textureParams : TextureParams) (data : PixImageCube) =
-            for (s,_) in cubeSides do
-                if data.[s].LevelCount <= 0 then
-                    failwith "cannot upload texture having 0 levels"
-
-            let mutable generateMipMaps = false
-            let size = data.[CubeSide.NegativeX].[0].Size
-
-            let mutable minLevels = Int32.MaxValue
-            for (side, target) in cubeSides do
-                let data = data.[side]
-                
-                minLevels <- min minLevels data.LevelCount
-                let generate = uploadTexture2DInternal TextureTarget.TextureCubeMap target false t 0 textureParams data
-
-                if generate && textureParams.wantMipMaps then
-                    generateMipMaps <- true
-
-            let realSize = t.SizeInBytes * 6L
-            updateTexture t.Context t.SizeInBytes realSize
-            t.SizeInBytes <- realSize
-
-            let levels =
-                if generateMipMaps then
-                    GL.BindTexture(TextureTarget.TextureCubeMap, t.Handle)
-                    GL.Check "could not bind texture"
-
-                    GL.GenerateMipmap(GenerateMipmapTarget.TextureCubeMap)
-                    GL.Check "failed to generate mipmaps"
-
-                    GL.BindTexture(TextureTarget.TextureCubeMap, 0)
-                    GL.Check "could not unbind texture"
-
-                    GL.GetTexParameterI(TextureTarget.TextureCubeMap, GetTextureParameter.TextureMaxLevel, &minLevels)
-                    minLevels + 1
-                else
-                    GL.TexParameter(TextureTarget.TextureCubeMap, TextureParameterName.TextureMaxLevel, minLevels - 1)
-                    GL.TexParameter(TextureTarget.TextureCubeMap, TextureParameterName.TextureBaseLevel, 0)
-
-                    minLevels
-                
-            t.MipMapLevels <- levels
-            t.Size <- V3i(size.X, size.Y, 0)
-            t.Multisamples <- 1
-            t.Count <- 1
-            t.Dimension <- TextureDimension.TextureCube
-
-
-        let uploadTexture3D (t : Texture) (textureParams : TextureParams) (data : PixVolume) =
-            let size = data.Size
-            let expectedLevels = Fun.MipmapLevels(size)
-            let generateMipMap = textureParams.wantMipMaps
-            let newFormat = TextureFormat.ofPixFormat data.PixFormat textureParams
-            let formatChanged = t.Format <> newFormat
-            let sizeChanged = size <> t.Size3D
-            let internalFormat = TextureFormat.ofPixFormat data.PixFormat textureParams
-            let pixelInternalFormat = internalFormat |> int |> unbox<PixelInternalFormat>
-            let integerFormat = TextureFormat.isIntegerFormat internalFormat
-
-            GL.BindTexture(TextureTarget.Texture3D, t.Handle)
-            GL.Check "could not bind texture"
-
-            data.PinPBO (t.Context.UnpackAlignment, integerFormat, fun size pt pf pixels sizeInBytes ->
-                if sizeChanged || formatChanged then
-                    if not generateMipMap then
-                        GL.TexParameter(TextureTarget.Texture3D, TextureParameterName.TextureMaxLod, 0)
-                        GL.TexParameter(TextureTarget.Texture3D, TextureParameterName.TextureBaseLevel, 0)
-
-                    GL.TexImage3D(TextureTarget.Texture3D, 0, pixelInternalFormat, size.X, size.Y, size.Z, 0, pf, pt, pixels)
-                else
-                    GL.TexSubImage3D(TextureTarget.Texture3D, 0, 0, 0, 0, size.X, size.Y, size.Z, pf, pt, pixels)
-                GL.Check "could not upload texture data"
-            )
-
-            // if the image did not contain a sufficient
-            // number of MipMaps and the user demanded 
-            // MipMaps we generate them using OpenGL
-            if generateMipMap then
-                GL.GenerateMipmap(GenerateMipmapTarget.Texture3D)
-                GL.Check "failed to generate mipmaps"
-
-            GL.BindTexture(TextureTarget.Texture3D, 0)
-            GL.Check "could not bind texture"
-
-            // since some attributes of the texture
-            // may have changed we mutate them here
-            t.Size <- size
-            t.Multisamples <- 1
-            t.Count <- 1
-            t.MipMapLevels <- (if generateMipMap then expectedLevels else 1)
-            t.Dimension <- TextureDimension.Texture3D
-            t.Format <- newFormat
-
-        let uploadNativeTexture (t : Texture) (data : INativeTexture) =
-            match data.Dimension, data.Count with
-                | TextureDimension.Texture2D, 1 ->
-                    let target = TextureTarget.Texture2D
-                    GL.BindTexture(target, t.Handle)
-
-                    let isCompressed = compressedFormats.Contains data.Format
-
-                    let mutable totalSize = 0L
-                    for l in 0 .. data.MipMapLevels - 1 do
-                        let levelData = data.[0,l]
-
-                        totalSize <- totalSize + levelData.SizeInBytes
-                        levelData.Use(fun src ->
-                            let pbo = PixelUnpackBuffer.create BufferUsageHint.StaticDraw (nativeint levelData.SizeInBytes)
-                            let dst = pbo |> PixelUnpackBuffer.map BufferAccess.WriteOnly
-
-                            Marshal.Copy(src, dst, levelData.SizeInBytes)
-
-                            let pixels = pbo |> PixelUnpackBuffer.unmap
-
-                            if isCompressed then
-                                GL.CompressedTexImage2D(target, l, unbox (int data.Format), levelData.Size.X, levelData.Size.Y, 0, int levelData.SizeInBytes, pixels)
-                            else
-                                let pf, pt = TextureFormat.toFormatAndType data.Format
-                                GL.TexImage2D(target, l, unbox (int data.Format), levelData.Size.X, levelData.Size.Y, 0, pf, pt, pixels)
-
-                            pbo |> PixelUnpackBuffer.free
-                        )
-
-                    GL.TexParameterI(target, TextureParameterName.TextureMaxLevel, [|data.MipMapLevels - 1|])
-
-                    updateTexture t.Context t.SizeInBytes totalSize
-                    t.SizeInBytes <- totalSize
-                    t.Count <- 1
-                    t.Dimension <- data.Dimension
-                    t.Format <- data.Format
-                    t.ImmutableFormat <- false
-                    t.MipMapLevels <- data.MipMapLevels
-                    t.Multisamples <- 1
-                    GL.BindTexture(target, 0)
-                | _ ->
-
-                    failwith "implement me"
-            ()
-
-        let private uploadTextureLevelInternal (texture : Texture) (level : int) (slice : int) (offset : V2i) (image : PixImage) =
-            let target = texture |> getTextureTarget
-            let targetSlice = texture |> getTextureSliceTarget slice
-
-            let integerFormat = TextureFormat.isIntegerFormat texture.Format
-
-            GL.BindTexture(target, texture.Handle)
-            GL.Check "could not bind texture"
-
-            image.PinPBO(texture.Context.UnpackAlignment, integerFormat, ImageTrafo.MirrorY, fun dim pixelType pixelFormat pixels size ->
-                if target = TextureTarget.Texture3D || texture.IsArray then
-                    GL.TexSubImage3D(target, level, offset.X, offset.Y, slice, dim.X, dim.Y, 1, pixelFormat, pixelType, pixels)
-                else
-                    GL.TexSubImage2D(targetSlice, level, offset.X, offset.Y, dim.X, dim.Y, pixelFormat, pixelType, pixels)
-            )
-
-            GL.Check (sprintf "could not upload texture data for level %d" level)
-
-            GL.BindTexture(target, 0)
-            GL.Check "could not unbind texture"
-
-        let uploadTextureLevel (texture : Texture) (level : int) (slice : int) (offset : V2i) (image : PixImage) =
-            match texture.Dimension with
-            | TextureDimension.Texture2D | TextureDimension.Texture3D | TextureDimension.TextureCube ->
-                uploadTextureLevelInternal texture level slice offset image
-
-            | _ ->
-                failwithf "cannot upload texture levels of kind: %A" texture.Dimension
+    module internal Download =
 
         let private readTexture2D (texture : Texture) (targetSlice : TextureTarget) (level : int) (slice : int)
                                   (offset : V2i) (size : V2i) (pixelFormat : PixelFormat)
@@ -1904,8 +1773,8 @@ module TextureExtensions =
 
         let downloadTexture2D (texture : Texture) (level : int) (slice : int) (offset : V2i) (image : PixImage) =
             let format = image.PixFormat
-            let target = texture |> getTextureTarget
-            let targetSlice = texture |> getTextureSliceTarget slice
+            let target = texture |> TextureTarget.ofTexture
+            let targetSlice = target |> TextureTarget.toSliceTarget slice
             GL.BindTexture(target, texture.Handle)
             GL.Check "could not bind texture"
 
@@ -1974,85 +1843,50 @@ type ContextTextureExtensions =
     [<Extension>]
     static member CreateTexture(this : Context, data : ITexture) =
         using this.ResourceLock (fun _ ->
-            let newTexture () = // not all cases need new textures
-                let h = GL.GenTexture()
-                GL.Check "could not create texture"
-                addTexture this 0L
-                Texture(this, h, TextureDimension.Texture2D, 1, 1, V3i(-1,-1,-1), None, TextureFormat.Rgba8, 0L, false)
-
             match data with
-
-                | FileTexture(info, file) ->
-                    let t = newTexture ()
-                    if isNull file then 
-                        t
+            | FileTexture(info, file) ->
+                if isNull file then
+                    this.CreateTexture <| NullTexture()
+                else
+                    if info.wantCompressed then
+                        file |> Devil.tryLoadCompressedFromFile this info |> Option.get
                     else
-                        if info.wantCompressed then
-                            Devil.uploadTexture2D t file info
-                        else
-                            let pi = PixImage.Create(file, PixLoadOptions.UseDevil)
-                            let mm = PixImageMipMap [|pi|] 
-                            uploadTexture2D t info mm |> ignore
-                        t
+                        let pi = PixImage.Create(file, PixLoadOptions.UseFreeImage)
+                        let mm = PixImageMipMap [|pi|]
+                        this.CreateTexture <| PixTexture2d(mm, info)
 
-                | PixTexture2D(wantMipMaps, data) -> 
-                    let t = newTexture ()
-                    uploadTexture2D t wantMipMaps data |> ignore
-                    t
+            | PixTexture2D(info, data) ->
+                let texture = this.CreateTexture2D(data.[0].Size, data.PixFormat, info, 1)
+                uploadPixImageMipMap texture true info.wantMipMaps 0 0 V2i.Zero data
+                texture
 
-                | PixTextureCube(info, data) ->
-                    let t = newTexture () 
-                    uploadTextureCube t info data
-                    t
+            | PixTextureCube(info, data) ->
+                let img = data.[CubeSide.NegativeX]
+                let texture = this.CreateTextureCube(img.[0].Size.X, img.PixFormat, info)
+                uploadPixImageCube texture true info.wantMipMaps 0 0 V2i.Zero data
+                texture
 
-                | PixTexture3D(info, data) ->
-                    let t = newTexture ()
-                    uploadTexture3D t info data
-                    t
+            | PixTexture3D(info, data) ->
+                let texture = this.CreateTexture3D(data.Size, data.PixFormat, info)
+                uploadPixVolume texture true info.wantMipMaps 0 V3i.Zero data
+                texture
 
-                | :? NullTexture ->
-                    Texture(this, 0, TextureDimension.Texture2D, 1, 1, V3i(-1,-1,-1), None, TextureFormat.Rgba8, 0L, false)
+            | :? NullTexture ->
+                Texture(this, 0, TextureDimension.Texture2D, 1, 1, V3i(-1,-1,-1), None, TextureFormat.Rgba8, 0L, false)
 
-                | :? Texture as o ->
-                    o
+            | :? Texture as o ->
+                o
 
-                | :? INativeTexture as data ->
-                    let t = newTexture () 
-                    uploadNativeTexture t data
-                    t
+            | :? INativeTexture as data ->
+                let slices = if data.Count > 1 then data.Count else 0
+                let levels = if data.WantMipMaps then Fun.MipmapLevels(data.[0, 0].Size) else 1
+                let texture = this.CreateTexture(data.[0, 0].Size, data.Dimension, data.Format, slices, levels, 1)
+                uploadNativeTexture texture 0 0 data
+                texture
 
-                | _ ->
-                    failwith "unsupported texture data"
+            | _ ->
+                failwith "unsupported texture data"
 
-        )
-
-    [<Extension>]
-    static member Upload(this : Context, t : Texture, data : ITexture) =
-        using this.ResourceLock (fun _ ->
-            match data with
-                | PixTexture2D(wantMipMaps, data) -> 
-                    uploadTexture2D t wantMipMaps data |> ignore
-
-                | PixTextureCube(info, data) -> 
-                    uploadTextureCube t info data
-
-                | PixTexture3D(info, image) ->
-                    uploadTexture3D t info image
-
-                | FileTexture(info, file) ->
-                    Devil.uploadTexture2D t file info
-
-                | :? NullTexture -> failwith "cannot update texture with null texture"
-
-                | :? Texture as o ->
-                    if t.Handle <> o.Handle then
-                        failwith "cannot upload to framebuffer-texture"
-
-                | :? INativeTexture as data ->
-                    uploadNativeTexture t data
-
-                | _ ->
-                    failwith "unsupported texture data"
         )
 
     [<Extension>]
@@ -2159,7 +1993,7 @@ type ContextTextureExtensions =
             GL.Check "could not set readbuffer"
 
 
-            let bindTarget = getTextureTarget dst
+            let bindTarget = TextureTarget.ofTexture dst
             GL.BindTexture(bindTarget, dst.Handle)
             GL.Check "could not bind texture"
 
@@ -2176,11 +2010,10 @@ type ContextTextureExtensions =
                 GL.Check "could not copy texture"
 
             else
-                
                 let copyTarget =
                     match dst.Dimension with
-                        | TextureDimension.TextureCube -> snd cubeSides.[dstSlice]
-                        | _ -> TextureTarget.Texture2D
+                    | TextureDimension.TextureCube -> snd TextureTarget.cubeSides.[dstSlice]
+                    | _ -> TextureTarget.Texture2D
 
                 GL.CopyTexSubImage2D(
                     copyTarget,
@@ -2207,6 +2040,32 @@ type ContextTextureExtensions =
         )
 
     [<Extension>]
+    static member Upload(this : Context, texture : Texture, level : int,
+                         offset : V3i, size : V3i, format : Col.Format, source : NativeTensor4<'T>) =
+        using this.ResourceLock (fun _ ->
+            let levelSize = texture.GetSize level
+            let offset = V3i(offset.X, levelSize.Y - offset.Y - size.Y, offset.Z) // flip y-offset
+
+            // Multisampled texture requires blit
+            if texture.IsMultisampled then
+                let temp = this.CreateTexture2D(size.XY, 1, texture.Format, 1)
+
+                try
+                    uploadNativeTensor4 temp true false format 0 offset size source
+                    this.Blit(temp, 0, 0, V2i.Zero, size.XY, texture, level, offset.Z, offset.XY, size.XY, true)
+                finally
+                    this.Delete(temp)
+
+            // Upload directly
+            else
+                uploadNativeTensor4 texture true false format level offset size source
+        )
+
+    [<Extension>]
+    static member Upload(this : Context, texture : Texture, level : int, size : V3i, format : Col.Format, source : NativeTensor4<'T>) =
+        this.Upload(texture, level, V3i.Zero, size, format, source)
+
+    [<Extension>]
     static member Upload(this : Context, texture : Texture, level : int, slice : int, offset : V2i, source : PixImage) =
         using this.ResourceLock (fun _ ->
             let levelSize = texture.GetSize level
@@ -2217,14 +2076,14 @@ type ContextTextureExtensions =
                 let temp = this.CreateTexture2D(source.Size, 1, texture.Format, 1)
 
                 try
-                    uploadTextureLevel temp 0 0 V2i.Zero source
+                    uploadPixImage temp true false 0 0 V2i.Zero source
                     this.Blit(temp, 0, 0, V2i.Zero, source.Size, texture, level, slice, offset, source.Size, true)
                 finally
                     this.Delete(temp)
 
             // Upload directly
             else
-                uploadTextureLevel texture level slice offset source
+                uploadPixImage texture true false level slice offset source
         )
 
     [<Extension>]
@@ -2318,17 +2177,14 @@ module Texture =
     let create2D (c : Context) (size : V2i) (mipLevels : int) (format : TextureFormat) (samples : int) =
         c.CreateTexture2D(size, mipLevels, format, samples)
 
-    let createCube (c : Context) (size : int) (mipLevels : int) (format : TextureFormat) (samples : int) =
-        c.CreateTextureCube(size, mipLevels, format, samples)
+    let createCube (c : Context) (size : int) (mipLevels : int) (format : TextureFormat) =
+        c.CreateTextureCube(size, mipLevels, format)
 
     let create3D (c : Context) (size : V3i) (mipLevels : int) (format : TextureFormat)  =
         c.CreateTexture3D(size, mipLevels, format)
 
     let delete (tex : Texture) =
         tex.Context.Delete(tex)
-
-    let write (data : ITexture) (tex : Texture) =
-        tex.Context.Upload(tex, data)
 
     let read (format : PixFormat) (level : int) (tex : Texture) : PixImage[] =
         let size = tex.GetSize level

@@ -143,11 +143,10 @@ module Sharing =
                         b.Release()
                         newShared :> Texture
                 | _ ->
-                    if b.Handle = 0 then
-                        x.Create(data)
-                    else
-                        ctx.Upload(b, data)
-                        b
+                    if b.Handle <> 0 then
+                        ctx.Delete b
+
+                    x.Create(data)
 
         member x.Delete(b : Texture) =
             if b.Handle <> 0 then
