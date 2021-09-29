@@ -331,6 +331,8 @@ module internal TextureCompressedFileLoadExtensions =
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Texture =
 
+        // TODO: Provide an API in Aardvark.Base for loading compressed images
+        // Also this only handles unarrayed 2D textures
         let tryLoadCompressedFromFile (ctx : Context) (config : TextureParams) (path : string) =
             Devil.perform (fun () ->
                 let img = IL.GenImage()
@@ -386,6 +388,36 @@ module internal TextureCompressedFileLoadExtensions =
 [<AutoOpen>]
 module ContextTextureUploadExtensions =
 
+    module private Texture =
+
+        let private createOfFormat (dimension : TextureDimension) (format : PixFormat)
+                                   (size : V3i) (slices : int) (samples : int) (info : TextureParams) (context : Context) =
+            let format =
+                let baseFormat = TextureFormat.ofPixFormat format info
+                if info.wantCompressed then
+                    match TextureFormat.toCompressed baseFormat with
+                    | Some fmt -> fmt
+                    | _ ->
+                        Log.warn "[GL] Texture format %A does not support compression" baseFormat
+                        baseFormat
+                else
+                    baseFormat
+
+            let levels = if info.wantMipMaps then Fun.MipmapLevels(size) else 1
+            context.CreateTexture(size, dimension, format, slices, levels, samples)
+
+        let createOfFormat2D (format : PixFormat) (size : V2i) (info : TextureParams) (context : Context) =
+            let size = V3i(size, 1)
+            context |> createOfFormat TextureDimension.Texture2D format size 0 1 info
+
+        let createOfFormat3D (format : PixFormat) (size : V3i) (info : TextureParams) (context : Context) =
+            context |> createOfFormat TextureDimension.Texture3D format size 0 1 info
+
+        let createOfFormatCube (format : PixFormat) (size : int) (info : TextureParams) (context : Context) =
+            let size = V3i(size, 1, 1)
+            context |> createOfFormat TextureDimension.TextureCube format size 0 1 info
+
+
     [<AutoOpen>]
     module private Patterns =
 
@@ -408,6 +440,7 @@ module ContextTextureUploadExtensions =
             match t with
             | :? PixTexture3d as t -> Some(PixTexture3D(t.TextureParams, t.PixVolume))
             | _ -> None
+
 
     let private useTemporaryAndBlit (dst : Texture) (level : int) (slice : int) (offset : V2i) (size : V2i) (f : Texture -> unit) =
         let context = dst.Context
@@ -443,18 +476,18 @@ module ContextTextureUploadExtensions =
                             this.CreateTexture <| PixTexture2d(mm, info)
 
                 | PixTexture2D(info, data) ->
-                    let texture = this.CreateTexture2D(data.[0].Size, data.PixFormat, info, 1)
+                    let texture = this |> Texture.createOfFormat2D data.PixFormat data.[0].Size info
                     Texture.uploadPixImageMipMap texture true info.wantMipMaps 0 0 V2i.Zero data
                     texture
 
                 | PixTextureCube(info, data) ->
                     let img = data.[CubeSide.NegativeX]
-                    let texture = this.CreateTextureCube(img.[0].Size.X, img.PixFormat, info)
+                    let texture = this |> Texture.createOfFormatCube img.PixFormat img.[0].Size.X info
                     Texture.uploadPixImageCube texture true info.wantMipMaps 0 0 V2i.Zero data
                     texture
 
                 | PixTexture3D(info, data) ->
-                    let texture = this.CreateTexture3D(data.Size, data.PixFormat, info)
+                    let texture = this |> Texture.createOfFormat3D data.PixFormat data.Size info
                     Texture.uploadPixVolume texture true info.wantMipMaps 0 V3i.Zero data
                     texture
 

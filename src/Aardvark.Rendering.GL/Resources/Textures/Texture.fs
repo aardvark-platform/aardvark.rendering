@@ -128,42 +128,6 @@ module TextureCreationExtensions =
             | TextureDimension.TextureCube, true  -> x.CreateTextureCubeArray(size.X, slices, levels, format)
             | _ -> failwith "[GL] Invalid texture dimension"
 
-        member x.CreateTexture(size : V3i, dim : TextureDimension, format : PixFormat, info : TextureParams, slices : int, samples : int) =
-            let format =
-                let baseFormat = TextureFormat.ofPixFormat format info
-                if info.wantCompressed then
-                    match TextureFormat.toCompressed baseFormat with
-                    | Some fmt -> fmt
-                    | _ ->
-                        Log.warn "[GL] Texture format %A does not support compression" baseFormat
-                        baseFormat
-                else
-                    baseFormat
-
-            let levels = if info.wantMipMaps then Fun.MipmapLevels(size) else 1
-            x.CreateTexture(size, dim, format, slices, levels, samples)
-
-        member x.CreateTexture1D(size : int, format : PixFormat, info : TextureParams) =
-            x.CreateTexture(V3i(size, 1, 1), TextureDimension.Texture1D, format, info, 0, 1)
-
-        member x.CreateTexture2D(size : V2i, format : PixFormat, info : TextureParams, samples : int) =
-            x.CreateTexture(V3i(size, 1), TextureDimension.Texture2D, format, info, 0, samples)
-
-        member x.CreateTexture3D(size : V3i, format : PixFormat, info : TextureParams) =
-            x.CreateTexture(size, TextureDimension.Texture3D, format, info, 0, 1)
-
-        member x.CreateTextureCube(size : int, format : PixFormat, info : TextureParams) =
-            x.CreateTexture(V3i(size, 1, 1), TextureDimension.TextureCube, format, info, 0, 1)
-
-        member x.CreateTexture1DArray(size : int, count : int, format : PixFormat, info : TextureParams) =
-            x.CreateTexture(V3i(size, 1, 1), TextureDimension.Texture1D, format, info, count, 1)
-
-        member x.CreateTexture2DArray(size : V2i, count : int, format : PixFormat, info : TextureParams, samples : int) =
-            x.CreateTexture(V3i(size, 1), TextureDimension.Texture2D, format, info, count, samples)
-
-        member x.CreateTextureCubeArray(size : int, count : int, format : PixFormat, info : TextureParams) =
-            x.CreateTexture(V3i(size, 1, 1), TextureDimension.TextureCube, format, info, count, 1)
-
         member x.UpdateTexture(tex : Texture, size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) =
             let isArray = slices > 0
 
