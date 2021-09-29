@@ -34,6 +34,10 @@ module TextureDownload =
             let comp a b = Expect.floatClose accuracy (float a) (float b)
             texture2DWithFormatWithComparer runtime comp format data
 
+        let texture2Dr8 (runtime : IRuntime) =
+            let data = PixImage.random8ui' Col.Format.Gray <| V2i(123, 321)
+            data |> texture2DWithFormat runtime TextureFormat.R8
+
         let texture2Drgba8 (runtime : IRuntime) =
             let data = PixImage.random8ui <| V2i(256)
             data |> texture2DWithFormat runtime TextureFormat.Rgba8
@@ -400,6 +404,7 @@ module TextureDownload =
 
     let tests (backend : Backend) =
         [
+            "2D r8",                  Cases.texture2Dr8
             "2D rgba8",               Cases.texture2Drgba8
             "2D Srgba8",              Cases.texture2DSrgba8
             "2D rgba16",              Cases.texture2Drgba16

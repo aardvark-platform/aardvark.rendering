@@ -48,25 +48,27 @@ module PixData =
             pi.GetMatrix<C4b>().SetByCoord(fun _ -> color) |> ignore
             pi
 
-        let private randomGeneric<'T> (getValue : unit -> 'T) (size : V2i) =
-            let pi = PixImage<'T>(Col.Format.RGBA, size)
+        let private randomGeneric<'T> (getValue : unit -> 'T) (format : Col.Format) (size : V2i) =
+            let pi = PixImage<'T>(format, size)
             for c in pi.ChannelArray do
                 c.SetByIndex(ignore >> getValue) |> ignore
             pi
 
-        let random8ui = randomGeneric (rng.UniformUInt >> uint8)
+        let random8ui' = randomGeneric (rng.UniformUInt >> uint8)
+        let random8i' = randomGeneric (rng.UniformInt >> int8)
+        let random16ui' = randomGeneric (rng.UniformUInt >> uint16)
+        let random16i' = randomGeneric (rng.UniformInt >> int16)
+        let random32ui' = randomGeneric rng.UniformUInt
+        let random32i' = randomGeneric rng.UniformInt
+        let random32f' = randomGeneric rng.UniformFloatClosed
 
-        let random8i = randomGeneric (rng.UniformInt >> int8)
-
-        let random16ui = randomGeneric (rng.UniformUInt >> uint16)
-
-        let random16i = randomGeneric (rng.UniformInt >> int16)
-
-        let random32ui = randomGeneric rng.UniformUInt
-
-        let random32i = randomGeneric rng.UniformInt
-
-        let random32f = randomGeneric rng.UniformFloatClosed
+        let random8ui   = random8ui' Col.Format.RGBA
+        let random8i    = random8i' Col.Format.RGBA
+        let random16ui  = random16ui' Col.Format.RGBA
+        let random16i   = random16i' Col.Format.RGBA
+        let random32ui  = random32ui' Col.Format.RGBA
+        let random32i   = random32i' Col.Format.RGBA
+        let random32f   = random32f' Col.Format.RGBA
 
         let random = random8ui
 
