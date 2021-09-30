@@ -15,9 +15,15 @@ module internal TextureDownloadImplementation =
     [<AutoOpen>]
     module private Utilities =
 
-        let getArrayDimension (texture : Texture) (value : V3i) =
-            if texture.Dimension = TextureDimension.Texture1D then value.Y
-            else value.Z
+        let getOffsetAndSlice (texture : Texture) (offset : V3i) =
+            match texture.Dimension with
+            | TextureDimension.Texture1D   -> V3i(offset.X, 0, 0), offset.Y
+            | TextureDimension.Texture2D
+            | TextureDimension.TextureCube -> V3i(offset.XY, 0), offset.Z
+            | _ -> offset, 0
+
+        let getArrayDimension (texture : Texture) =
+            getOffsetAndSlice texture >> snd
 
     module Texture =
 
@@ -29,6 +35,9 @@ module internal TextureDownloadImplementation =
 
             GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fbo)
             GL.Check "could not bind framebuffer"
+
+            let offset, slice =
+                getOffsetAndSlice texture offset
 
             let attachment, readBuffer =
                 if TextureFormat.isDepthStencil texture.Format then
@@ -43,7 +52,6 @@ module internal TextureDownloadImplementation =
             | TextureDimension.Texture2D, true
             | TextureDimension.TextureCube, true
             | TextureDimension.Texture3D, false ->
-                let slice = offset |> getArrayDimension texture
                 GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, attachment, texture.Handle, level, slice)
 
             | TextureDimension.Texture1D, false ->
@@ -118,7 +126,7 @@ module internal TextureDownloadImplementation =
                         else
                             match data with
                             | PixelData.General d ->
-                                d |> readTextureLayer texture target level offset src
+                                d |> readTextureLayer texture targetSlice level offset src
                             | PixelData.Compressed _ ->
                                 failwithf "[GL] Cannot download subwindow of compressed textures without glGetCompressedTextureSubImage (not available)"
 
