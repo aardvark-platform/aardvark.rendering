@@ -130,6 +130,17 @@ module internal TextureCopyUtilities =
                         )
             }
 
+        static member Copy(src : nativeint, srcInfo : Tensor4Info, dst : PixVolume) =
+            dst.PixFormat.Type |> ExistentialHack.run {
+                new IUnmanagedAction with
+                    member __.Run(def : Option<'a>) =
+                        let x = unbox<PixVolume<'a>> dst
+                        let src = NativeTensor4<'a>(NativePtr.ofNativeInt src, srcInfo)
+                        NativeTensor4.using x.Tensor4 (fun dst ->
+                            src.CopyTo(dst)
+                        )
+            }
+
 
 [<AutoOpen>]
 module ContextTextureCopyExtensions =

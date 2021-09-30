@@ -14,23 +14,6 @@ open System.Runtime.CompilerServices
 [<AutoOpen>]
 module internal TextureUploadImplementation =
 
-    [<AutoOpen>]
-    module private Utils =
-
-        type NativeTensor4<'T when 'T : unmanaged> with
-            member x.Format =
-                match x.Size.W with
-                | 1L -> Col.Format.Gray
-                | 2L -> Col.Format.GrayAlpha
-                | 3L -> Col.Format.RGB
-                | _  -> Col.Format.RGBA
-
-        let getFormatAndType (internalFormat : TextureFormat) (format : Col.Format) (typ : Type) =
-            match PixelFormat.ofColFormat internalFormat.IsIntegerFormat format, PixelType.ofType typ with
-            | Some pf, Some pt -> pf, pt
-            | _ ->
-                failwithf "[GL] Pixel format %A and type %A not supported" format typ
-
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Texture =
 
@@ -38,39 +21,15 @@ module internal TextureUploadImplementation =
             let target = texture |> TextureTarget.ofTexture
             let targetSlice = target |> TextureTarget.toSliceTarget offset.Z
 
-            let dataInfo =
-                match data with
-                | PixelData.General d ->
-                    let elementSize = PixelType.size d.Type
-                    let channels = PixelFormat.channels d.Format
-
-                    let alignedLineSize =
-                        let lineSize = nativeint d.Size.X * nativeint elementSize * nativeint channels
-                        let align = nativeint texture.Context.UnpackAlignment
-                        let mask = align - 1n
-
-                        if lineSize % align = 0n then lineSize
-                        else (lineSize + mask) &&& ~~~mask
-
-                    let sizeInBytes = alignedLineSize * nativeint d.Size.Y * nativeint d.Size.Z
-
-                    PixelDataInfo.General {
-                        Channels        = channels
-                        ElementSize     = elementSize
-                        AlignedLineSize = alignedLineSize
-                        SizeInBytes     = sizeInBytes
-                    }
-
-                | PixelData.Compressed d ->
-                    PixelDataInfo.Compressed { SizeInBytes = d.SizeInBytes }
+            let info = data |> PixelData.getInfo texture.Context.UnpackAlignment
 
             GL.BindTexture(target, texture.Handle)
             GL.Check "could not bind texture"
 
-            let pbo = PixelUnpackBuffer.create BufferUsageHint.StaticDraw dataInfo.SizeInBytes
+            let pbo = PixelUnpackBuffer.create BufferUsageHint.StaticDraw info.SizeInBytes
             let dst = pbo |> PixelUnpackBuffer.map BufferAccess.WriteOnly
 
-            (dataInfo, data) ||> PixelData.copyTo dst
+            (info, data) ||> PixelData.copy dst
 
             let pixels = pbo |> PixelUnpackBuffer.unmap
 
@@ -117,11 +76,18 @@ module internal TextureUploadImplementation =
             GL.BindTexture(target, 0)
             GL.Check "could not unbind texture"
 
-        let uploadNativeTensor4<'T when 'T : unmanaged> (texture : Texture) (flipY : bool) (generateMipmap : bool)
+        let uploadNativeTensor4<'T when 'T : unmanaged> (texture : Texture) (generateMipmap : bool)
                                                         (level : int) (offset : V3i) (size : V3i) (src : NativeTensor4<'T>) =
 
             let pixelFormat, pixelType =
-                getFormatAndType texture.Format src.Format typeof<'T>
+                PixFormat.toFormatAndType texture.Format src.PixFormat
+
+            let flipY =
+                Texture.shouldFlipY texture
+
+            let offset =
+                if flipY then offset |> Texture.flipOffsetY texture level size
+                else offset
 
             let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (dst : nativeint) =
                 let dstTensor =
@@ -142,7 +108,7 @@ module internal TextureUploadImplementation =
                     Size   = size
                     Type   = pixelType
                     Format = pixelFormat
-                    CopyTo = copy
+                    Copy   = copy
                 }
 
             uploadPixelData texture generateMipmap level offset pixelData
@@ -179,7 +145,7 @@ module internal TextureUploadImplementation =
                             PixelData.Compressed {
                                 Size        = subdata.Size
                                 SizeInBytes = nativeint subdata.SizeInBytes
-                                CopyTo      = copy
+                                Copy        = copy
                             }
 
                         else
@@ -187,34 +153,30 @@ module internal TextureUploadImplementation =
                                 Size   = subdata.Size
                                 Type   = pixelType
                                 Format = pixelFormat
-                                CopyTo = fun _ _ _ _ -> copy
+                                Copy   = fun _ _ _ _ -> copy
                             }
 
                     let generateMipmap = generateMipmap && level = levelCount - 1
                     uploadPixelData texture generateMipmap (baseLevel + level) offset pixelData
 
 
-        let uploadPixImage (texture : Texture) (flipY : bool) (generateMipmap : bool)
+        let uploadPixImage (texture : Texture) (generateMipmap : bool)
                            (level : int) (slice : int) (offset : V2i) (image : PixImage) =
 
             let pixelFormat, pixelType =
-                getFormatAndType texture.Format image.Format image.PixFormat.Type
+                PixFormat.toFormatAndType texture.Format image.PixFormat
+
+            let offset =
+                offset |> Texture.flipOffsetY2D texture level image.Size
 
             let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (dst : nativeint) =
                 let dstInfo =
                     let viSize = V3l(int64 image.Size.X, int64 image.Size.Y, int64 channels)
-                    if flipY then
-                        VolumeInfo(
-                            int64 alignedLineSize * (int64 image.Size.Y - 1L),
-                            viSize,
-                            V3l(int64 channels * int64 elementSize, int64 -alignedLineSize, int64 elementSize)
-                        )
-                    else
-                        VolumeInfo(
-                            0L,
-                            viSize,
-                            V3l(int64 channels * int64 elementSize, int64 alignedLineSize, int64 elementSize)
-                        )
+                    VolumeInfo(
+                        int64 alignedLineSize * (int64 image.Size.Y - 1L),
+                        viSize,
+                        V3l(int64 channels * int64 elementSize, int64 -alignedLineSize, int64 elementSize)
+                    )
 
                 TextureCopyUtils.Copy(image, dst, dstInfo)
 
@@ -224,13 +186,13 @@ module internal TextureUploadImplementation =
                     Size   = V3i(image.Size, 1)
                     Type   = pixelType
                     Format = pixelFormat
-                    CopyTo = copy
+                    Copy   = copy
                 }
 
             uploadPixelData texture generateMipmap level offset data
 
 
-        let private uploadPixImageMipMapInternal (texture : Texture) (flipY : bool) (wantMipmap : bool) (generateMipmap : bool)
+        let private uploadPixImageMipMapInternal (texture : Texture) (wantMipmap : bool) (generateMipmap : bool)
                                                  (baseLevel : int) (slice : int) (offset : V2i) (images : PixImageMipMap) =
             let levelCount =
                 if wantMipmap then images.LevelCount else 1
@@ -238,18 +200,18 @@ module internal TextureUploadImplementation =
             for i = 0 to levelCount - 1 do
                 let img = images.ImageArray.[i]
                 let mip = generateMipmap && i = levelCount - 1
-                uploadPixImage texture flipY mip (baseLevel + i) slice offset img
+                uploadPixImage texture mip (baseLevel + i) slice offset img
 
 
-        let uploadPixImageMipMap (texture : Texture) (flipY : bool) (wantMipmap : bool)
+        let uploadPixImageMipMap (texture : Texture) (wantMipmap : bool)
                                  (baseLevel : int) (slice : int) (offset : V2i) (images : PixImageMipMap) =
             let generateMipmap =
                 wantMipmap && images.LevelCount < texture.MipMapLevels
 
-            uploadPixImageMipMapInternal texture flipY wantMipmap generateMipmap baseLevel slice offset images
+            uploadPixImageMipMapInternal texture wantMipmap generateMipmap baseLevel slice offset images
 
 
-        let uploadPixImageCube (texture : Texture) (flipY : bool) (wantMipmap : bool)
+        let uploadPixImageCube (texture : Texture) (wantMipmap : bool)
                                (baseLevel : int) (slice : int) (offset : V2i) (data : PixImageCube) =
             let generateMipmap =
                 wantMipmap && data.MipMapArray |> Array.forany (fun i -> i.LevelCount < texture.MipMapLevels)
@@ -257,32 +219,25 @@ module internal TextureUploadImplementation =
             for i = 0 to 5 do
                 let data = data.[unbox<CubeSide> i]
                 let generateMipMap = generateMipmap && i = 5
-                uploadPixImageMipMapInternal texture flipY wantMipmap generateMipMap baseLevel (slice + i) offset data
+                uploadPixImageMipMapInternal texture wantMipmap generateMipMap baseLevel (slice + i) offset data
 
 
-        let uploadPixVolume (texture : Texture) (flipY : bool) (generateMipMap : bool)
+        let uploadPixVolume (texture : Texture) (generateMipMap : bool)
                             (level : int) (offset : V3i) (volume : PixVolume) =
 
             let pixelFormat, pixelType =
-                getFormatAndType texture.Format volume.Format volume.PixFormat.Type
+                PixFormat.toFormatAndType texture.Format volume.PixFormat
 
             let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (dst : nativeint) =
                 let dstInfo =
                     let rowPixels = int64 alignedLineSize / int64 elementSize
                     let tiSize = V4l(volume.SizeL, int64 channels)
 
-                    if flipY then
-                        Tensor4Info(
-                            rowPixels * (tiSize.Y - 1L),
-                            tiSize,
-                            V4l(int64 channels, -rowPixels, rowPixels * tiSize.Y, 1L)
-                        )
-                    else
-                        Tensor4Info(
-                            0L,
-                            tiSize,
-                            V4l(int64 channels, rowPixels, rowPixels * tiSize.Y, 1L)
-                        )
+                    Tensor4Info(
+                        0L,
+                        tiSize,
+                        V4l(int64 channels, rowPixels, rowPixels * tiSize.Y, 1L)
+                    )
 
                 TextureCopyUtils.Copy(volume, dst, dstInfo)
 
@@ -291,7 +246,7 @@ module internal TextureUploadImplementation =
                     Size   = volume.Size
                     Type   = pixelType
                     Format = pixelFormat
-                    CopyTo = copy
+                    Copy   = copy
                 }
 
             uploadPixelData texture generateMipMap level offset data
@@ -366,7 +321,7 @@ module internal TextureCompressedFileLoadExtensions =
                                 PixelData.Compressed {
                                     Size        = V3i(size, 1)
                                     SizeInBytes = nativeint sizeInBytes
-                                    CopyTo      = copy
+                                    Copy        = copy
                                 }
 
                             let levels = if config.wantMipMaps then Fun.MipmapLevels(size) else 1
@@ -477,18 +432,18 @@ module ContextTextureUploadExtensions =
 
                 | PixTexture2D(info, data) ->
                     let texture = this |> Texture.createOfFormat2D data.PixFormat data.[0].Size info
-                    Texture.uploadPixImageMipMap texture true info.wantMipMaps 0 0 V2i.Zero data
+                    Texture.uploadPixImageMipMap texture info.wantMipMaps 0 0 V2i.Zero data
                     texture
 
                 | PixTextureCube(info, data) ->
                     let img = data.[CubeSide.NegativeX]
                     let texture = this |> Texture.createOfFormatCube img.PixFormat img.[0].Size.X info
-                    Texture.uploadPixImageCube texture true info.wantMipMaps 0 0 V2i.Zero data
+                    Texture.uploadPixImageCube texture info.wantMipMaps 0 0 V2i.Zero data
                     texture
 
                 | PixTexture3D(info, data) ->
                     let texture = this |> Texture.createOfFormat3D data.PixFormat data.Size info
-                    Texture.uploadPixVolume texture true info.wantMipMaps 0 V3i.Zero data
+                    Texture.uploadPixVolume texture info.wantMipMaps 0 V3i.Zero data
                     texture
 
                 | :? NullTexture ->
@@ -512,18 +467,15 @@ module ContextTextureUploadExtensions =
         static member Upload(this : Context, texture : Texture, level : int,
                              offset : V3i, size : V3i, source : NativeTensor4<'T>) =
             using this.ResourceLock (fun _ ->
-                let levelSize = texture.GetSize level
-                let offset = V3i(offset.X, levelSize.Y - offset.Y - size.Y, offset.Z) // flip y-offset
-
                 // Multisampled texture requires blit
                 if texture.IsMultisampled then
                     useTemporaryAndBlit texture level offset.Z offset.XY size.XY (fun temp ->
-                        Texture.uploadNativeTensor4 temp true false 0 offset size source
+                        Texture.uploadNativeTensor4 temp false 0 offset size source
                     )
 
                 // Upload directly
                 else
-                    Texture.uploadNativeTensor4 texture true false level offset size source
+                    Texture.uploadNativeTensor4 texture false level offset size source
             )
 
         [<Extension>]
@@ -533,18 +485,15 @@ module ContextTextureUploadExtensions =
         [<Extension>]
         static member Upload(this : Context, texture : Texture, level : int, slice : int, offset : V2i, source : PixImage) =
             using this.ResourceLock (fun _ ->
-                let levelSize = texture.GetSize level
-                let offset = V2i(offset.X, levelSize.Y - offset.Y - source.Size.Y) // flip y-offset
-
                 // Multisampled texture requires blit
                 if texture.IsMultisampled then
                     useTemporaryAndBlit texture level slice offset source.Size (fun temp ->
-                        Texture.uploadPixImage temp true false 0 0 V2i.Zero source
+                        Texture.uploadPixImage temp false 0 0 V2i.Zero source
                     )
 
                 // Upload directly
                 else
-                    Texture.uploadPixImage texture true false level slice offset source
+                    Texture.uploadPixImage texture false level slice offset source
             )
 
         [<Extension>]

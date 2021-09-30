@@ -14,6 +14,28 @@ module internal PixelTransfer =
             SizeInBytes     : nativeint
         }
 
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module GeneralPixelDataInfo =
+
+        let create (alignment : int) (size : V3i) (format : PixelFormat) (typ : PixelType) =
+            let elementSize = PixelType.size typ
+            let channels = PixelFormat.channels format
+
+            let alignedLineSize =
+                let lineSize = nativeint size.X * nativeint elementSize * nativeint channels
+                let align = nativeint alignment
+                let mask = align - 1n
+
+                if lineSize % align = 0n then lineSize
+                else (lineSize + mask) &&& ~~~mask
+
+            let sizeInBytes = alignedLineSize * nativeint size.Y * nativeint size.Z
+
+            { Channels        = channels
+              ElementSize     = elementSize
+              AlignedLineSize = alignedLineSize
+              SizeInBytes     = sizeInBytes }
+
     type CompressedPixelDataInfo =
         {
             SizeInBytes : nativeint
@@ -33,41 +55,60 @@ module internal PixelTransfer =
         {
             Size        : V3i
             SizeInBytes : nativeint
-            CopyTo      : nativeint -> unit
+            Copy        : nativeint -> unit
         }
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module CompressedPixelData =
-        let copyTo (dst : nativeint) (data : CompressedPixelData) =
-            data.CopyTo dst
+        let getInfo (data : CompressedPixelData) =
+            { SizeInBytes = data.SizeInBytes }
+
+        let copy (ptr : nativeint) (data : CompressedPixelData) =
+            data.Copy ptr
 
     type GeneralPixelData =
         {
             Size   : V3i
             Type   : PixelType
             Format : PixelFormat
-            CopyTo : int -> int -> nativeint -> nativeint -> nativeint -> unit
+            Copy   : int -> int -> nativeint -> nativeint -> nativeint -> unit
         }
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module GeneralPixelData =
-        let copyTo (dst : nativeint) (info : GeneralPixelDataInfo) (data : GeneralPixelData) =
-            data.CopyTo info.Channels info.ElementSize info.AlignedLineSize info.SizeInBytes dst
+        let getInfo (alignment : int) (data : GeneralPixelData) =
+            GeneralPixelDataInfo.create alignment data.Size data.Format data.Type
+
+        let copy (ptr : nativeint) (info : GeneralPixelDataInfo) (data : GeneralPixelData) =
+            data.Copy info.Channels info.ElementSize info.AlignedLineSize info.SizeInBytes ptr
 
     [<RequireQualifiedAccess>]
     type PixelData =
         | General    of GeneralPixelData
         | Compressed of CompressedPixelData
 
+        member x.Size =
+            match x with
+            | General d -> d.Size
+            | Compressed d -> d.Size
+
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module PixelData =
-        let copyTo (dst : nativeint) (info : PixelDataInfo) (data : PixelData) =
+        let getInfo (alignment : int) (data : PixelData) =
+            match data with
+            | PixelData.General d ->
+                d |> GeneralPixelData.getInfo alignment |> PixelDataInfo.General
+
+            | PixelData.Compressed d ->
+                d |> CompressedPixelData.getInfo |> PixelDataInfo.Compressed
+
+        let copy (ptr : nativeint) (info : PixelDataInfo) (data : PixelData) =
             match data, info with
             | PixelData.General d, PixelDataInfo.General i ->
-                    GeneralPixelData.copyTo dst i d
+                    GeneralPixelData.copy ptr i d
 
             | PixelData.Compressed d, PixelDataInfo.Compressed _ ->
-                    CompressedPixelData.copyTo dst d
+                    CompressedPixelData.copy ptr d
 
             | _ ->
-                failwithf "PixelData.copyTo not possible with %A and %A" data info
+                failwithf "PixelData.copy not possible with %A and %A" data info

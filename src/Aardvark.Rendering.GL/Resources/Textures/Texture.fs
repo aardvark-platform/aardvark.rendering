@@ -101,7 +101,31 @@ module internal TextureUtilitiesAndExtensions =
             match PixelFormat.ofColFormat isInteger pixFormat.Format, PixelType.ofType pixFormat.Type with
             | Some f, Some t -> f, t
             | _ ->
-                failwith "conversion not implemented"
+                failwithf "[GL] Pixel format %A and type %A not supported" pixFormat.Format pixFormat.Type
+
+    type NativeTensor4<'T when 'T : unmanaged> with
+        member x.Format =
+            match x.Size.W with
+            | 1L -> Col.Format.Gray
+            | 2L -> Col.Format.GrayAlpha
+            | 3L -> Col.Format.RGB
+            | _  -> Col.Format.RGBA
+
+        member x.PixFormat =
+            PixFormat(typeof<'T>, x.Format)
+
+    module Texture =
+        let shouldFlipY (texture : Texture) =
+            match texture.Dimension with
+            | TextureDimension.Texture2D | TextureDimension.TextureCube -> true
+            | _ -> false
+
+        let flipOffsetY (texture : Texture) (level : int) (size : V3i) (offset : V3i) =
+            let levelSize = texture.GetSize level
+            V3i(offset.X, levelSize.Y - offset.Y - size.Y, offset.Z)
+
+        let flipOffsetY2D (texture : Texture) (level : int) (size : V2i) (offset : V2i) =
+            flipOffsetY texture level (V3i(size, 1)) (V3i(offset, 0)) |> Vec.xy
 
 [<AutoOpen>]
 module TextureCreationExtensions =

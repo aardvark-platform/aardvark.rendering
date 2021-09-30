@@ -297,7 +297,7 @@ module TextureUpload =
                 runtime.Copy(data, target, region.Min, region.Size)
 
                 let result = PixVolume<byte>(Col.Format.RGBA, region.Size)
-                runtime.Copy(target, region.Min, result, region.Size)
+                runtime.Download(texture, level, 0, region.Min, result)
 
                 PixVolume.compare V3i.Zero data result
 
