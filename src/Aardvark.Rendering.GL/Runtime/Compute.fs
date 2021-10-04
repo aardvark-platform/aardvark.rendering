@@ -377,10 +377,23 @@ type private GLCompute(ctx : Context) =
                 GL.Sync()
                 GL.Check()
                 ()
-                
-            | ComputeCommand.UploadBufferCmd _ 
-            | ComputeCommand.CopyImageCmd _ ->
-                failwith "please implement"
+
+            | ComputeCommand.UploadBufferCmd(src, dst) ->
+                match src with
+                | HostMemory.Managed(arr, index) ->
+                    let elementSize = arr.GetType().GetElementType() |> Marshal.SizeOf |> nativeint
+                    let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
+                    try
+                        let ptr = gc.AddrOfPinnedObject() + (nativeint index * elementSize)
+                        ctx.Runtime.Copy(ptr, dst.Buffer, dst.Offset, dst.Size)
+                    finally
+                        gc.Free()
+
+                | HostMemory.Unmanaged ptr ->
+                    ctx.Runtime.Copy(ptr, dst.Buffer, dst.Offset, dst.Size)
+
+            | ComputeCommand.CopyImageCmd(src, srcOffset, dst, dstOffset, size) ->
+                ctx.Runtime.Copy(src, srcOffset, dst, dstOffset, size)
 
             | ComputeCommand.SetBufferCmd(dst, value) ->
                 let dstBuffer = unbox<GL.Buffer> dst.Buffer
