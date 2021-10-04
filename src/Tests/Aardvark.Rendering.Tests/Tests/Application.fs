@@ -25,7 +25,6 @@ module TestApplication =
             Config.MajorVersion <- 4
             Config.MinorVersion <- 6
             Config.CheckErrors <- true
-            Config.UsePixelUnpackBuffers <- true
 
             Toolkit.Init(ToolkitOptions(Backend = PlatformBackend.PreferNative)) |> ignore
 
