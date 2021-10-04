@@ -17,10 +17,8 @@ module internal TextureDownloadImplementation =
 
         let getOffsetAndSlice (texture : Texture) (offset : V3i) =
             match texture.Dimension with
-            | TextureDimension.Texture1D   -> V3i(offset.X, 0, 0), offset.Y
-            | TextureDimension.Texture2D
-            | TextureDimension.TextureCube -> V3i(offset.XY, 0), offset.Z
-            | _ -> offset, 0
+            | TextureDimension.Texture1D -> V3i(offset.X, 0, 0), offset.Y
+            | _ -> offset, offset.Z
 
         let getArrayDimension (texture : Texture) =
             getOffsetAndSlice texture >> snd
@@ -28,7 +26,7 @@ module internal TextureDownloadImplementation =
     module Texture =
 
         let private readTextureLayer (texture : Texture) (target : TextureTarget) (level : int)
-                                     (offset : V3i) (pixels : nativeint) (data : GeneralPixelData) =
+                                     (offset : V3i) (pixels : nativeint) (info : GeneralPixelDataInfo) (data : GeneralPixelData) =
 
             let fbo = GL.GenFramebuffer()
             GL.Check "could not create framebuffer"
@@ -36,8 +34,15 @@ module internal TextureDownloadImplementation =
             GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fbo)
             GL.Check "could not bind framebuffer"
 
-            let offset, slice =
+            let offset, baseSlice =
                 getOffsetAndSlice texture offset
+
+            let count =
+                data.Size |> getArrayDimension texture
+
+            // Size of a slice in the output data
+            let bytesPerSlice =
+                info.ElementSize * info.Channels * data.Size.X * data.Size.Y
 
             let attachment, readBuffer =
                 if TextureFormat.isDepthStencil texture.Format then
@@ -47,34 +52,36 @@ module internal TextureDownloadImplementation =
                 else
                     FramebufferAttachment.ColorAttachment0, ReadBufferMode.ColorAttachment0
 
-            match texture.Dimension, texture.IsArray with
-            | TextureDimension.Texture1D, true
-            | TextureDimension.Texture2D, true
-            | TextureDimension.TextureCube, true
-            | TextureDimension.Texture3D, false ->
-                GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, attachment, texture.Handle, level, slice)
-
-            | TextureDimension.Texture1D, false ->
-                GL.FramebufferTexture1D(FramebufferTarget.ReadFramebuffer, attachment, target, texture.Handle, level)
-
-            | TextureDimension.Texture2D, false
-            | TextureDimension.TextureCube, false ->
-                GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, attachment, target, texture.Handle, level)
-
-            | _ ->
-                failwithf "[GL] cannot attach %A%s to framebuffer" texture.Dimension (if texture.IsArray then "[]" else "")
-
-            GL.Check "could not attach texture to framebuffer"
-
-            let fboCheck = GL.CheckFramebufferStatus(FramebufferTarget.ReadFramebuffer)
-            if fboCheck <> FramebufferErrorCode.FramebufferComplete then
-                failwithf "could not create input framebuffer: %A" fboCheck
-
             GL.ReadBuffer(readBuffer)
             GL.Check "could not set readbuffer"
 
-            GL.ReadPixels(offset.X, offset.Y, data.Size.X, data.Size.Y, data.Format, data.Type, pixels)
-            GL.Check "could not read pixels"
+            for i = 0 to count - 1 do
+                match texture.Dimension, texture.IsArray with
+                | TextureDimension.Texture1D, true
+                | TextureDimension.Texture2D, true
+                | TextureDimension.TextureCube, true
+                | TextureDimension.Texture3D, false ->
+                    GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, attachment, texture.Handle, level, baseSlice + i)
+
+                | TextureDimension.Texture1D, false ->
+                    GL.FramebufferTexture1D(FramebufferTarget.ReadFramebuffer, attachment, target, texture.Handle, level)
+
+                | TextureDimension.Texture2D, false
+                | TextureDimension.TextureCube, false ->
+                    GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, attachment, target, texture.Handle, level)
+
+                | _ ->
+                    failwithf "[GL] cannot attach %A%s to framebuffer" texture.Dimension (if texture.IsArray then "[]" else "")
+
+                GL.Check "could not attach texture to framebuffer"
+
+                let fboCheck = GL.CheckFramebufferStatus(FramebufferTarget.ReadFramebuffer)
+                if fboCheck <> FramebufferErrorCode.FramebufferComplete then
+                    failwithf "could not create input framebuffer: %A" fboCheck
+
+                let dstOffset = nativeint <| i * bytesPerSlice
+                GL.ReadPixels(offset.X, offset.Y, data.Size.X, data.Size.Y, data.Format, data.Type, pixels + dstOffset)
+                GL.Check "could not read pixels"
 
             GL.ReadBuffer(ReadBufferMode.None)
             GL.Check "could not unset readbuffer"
@@ -118,17 +125,14 @@ module internal TextureDownloadImplementation =
                             GL.GetCompressedTextureSubImage(texture.Handle, level, offset, d.Size, int info.SizeInBytes, src)
 
                     // We want to download a subregion but don't have GL_ARB_get_texture_subimage
+                    // Use readPixels with FBO as fallback
                     else
-                        if data.Size |> getArrayDimension texture > 1 then
-                            failwithf "[GL] Cannot download multiple texture slices without glGetTextureSubImage (not available)"
+                        match data, info with
+                        | PixelData.General d, PixelDataInfo.General i ->
+                            (i, d) ||> readTextureLayer texture targetSlice level offset src
 
-                        // Use readPixels with FBO as fallback
-                        else
-                            match data with
-                            | PixelData.General d ->
-                                d |> readTextureLayer texture targetSlice level offset src
-                            | PixelData.Compressed _ ->
-                                failwithf "[GL] Cannot download subwindow of compressed textures without glGetCompressedTextureSubImage (not available)"
+                        | _ ->
+                            failwithf "[GL] Cannot download subwindow of compressed textures without glGetCompressedTextureSubImage (not available)"
 
                 GL.Check "could not get texture image"
 
