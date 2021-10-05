@@ -1,3 +1,8 @@
+### 5.1.17
+- fixed package dependeny to FSharp.Data.Adaptive
+- [Vulkan] fixed package dependency to GLSLangSharp
+- [GL] implemented UploadBufferCmd and CopyImageCmd
+
 ### 5.1.16
 - [GL] fixed IRuntime.Clear/ClearColor
 - [Sg] added C# ColorOutput overload
