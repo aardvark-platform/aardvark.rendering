@@ -137,6 +137,8 @@ type SceneGraphExtensions =
     static member ColorOutput(sg : ISg, enabled : aval<Set<Symbol>>) = sg |> Sg.colorOutput enabled
     [<Extension>]
     static member ColorOutput(sg : ISg, enabled : Set<Symbol>)       = sg |> Sg.colorOutput' enabled
+    [<Extension>]
+    static member ColorOutput(sg : ISg, enabled : seq<Symbol>)       = sg |> Sg.colorOutput' (Set.ofSeq enabled)
 
     // Depth
     [<Extension>]

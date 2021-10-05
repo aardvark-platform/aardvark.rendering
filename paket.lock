@@ -825,7 +825,7 @@ NUGET
     FSharp.Control.Reactive (5.0.2)
       FSharp.Core (>= 4.7.2)
       System.Reactive (>= 5.0)
-    FSharp.Core (5.0.2)
+    FSharp.Core (6.0)
     Microsoft.Build (16.11)
     Microsoft.Build.Framework (16.11)
       System.Security.Permissions (>= 4.7)
@@ -853,7 +853,7 @@ NUGET
     Microsoft.NET.StringTools (1.0)
       System.Memory (>= 4.5.4)
       System.Runtime.CompilerServices.Unsafe (>= 5.0)
-    Microsoft.NETCore.Platforms (5.0.2)
+    Microsoft.NETCore.Platforms (5.0.3)
     Microsoft.NETCore.Targets (5.0)
     Microsoft.Win32.Registry (5.0)
       System.Buffers (>= 4.5.1)
@@ -1157,7 +1157,7 @@ NUGET
       System.Runtime.CompilerServices.Unsafe (>= 4.5.3)
 GITHUB
   remote: aardvark-platform/aardvark.fake
-    FULLPROJECT (8a75f714f5874f4ec29f9ab7f29a5bbd7ca44455)
+    FULLPROJECT (30cf1849b67e698cec61ebbbe5998bf2f0587dc1)
       Argu (>= 5.5 < 5.6)
       fake-cli (>= 5.20.4-alpha.1642 < 5.21)
       Fake.Core.ReleaseNotes

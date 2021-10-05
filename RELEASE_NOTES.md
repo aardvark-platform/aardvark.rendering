@@ -1,3 +1,7 @@
+### 5.1.16
+- [GL] fixed IRuntime.Clear/ClearColor
+- [Sg] added C# ColorOutput overload
+
 ### 5.1.15
 - fixed GL compute shader image bindings
 
