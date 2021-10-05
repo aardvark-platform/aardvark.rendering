@@ -4,3 +4,4 @@ FShade.Core
 FShade.GLSL
 FSharp.Core
 Aardvark.Base.Tensors
+FSharp.Data.Adaptive
