@@ -749,6 +749,7 @@ module TextureFormatExtensions =
         member x.IsSrgb = TextureFormat.isSrgb x
         member x.IsDepth = TextureFormat.isDepth x
         member x.IsDepthStencil = TextureFormat.isDepthStencil x
+        member x.HasDepth = TextureFormat.hasDepth x
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -944,6 +945,16 @@ module RenderbufferFormat =
     /// either a stencil for a combined depth-stencil format).
     let hasStencil (fmt : RenderbufferFormat) =
         isStencil fmt || isDepthStencil fmt
+
+[<AutoOpen>]
+module RenderbufferFormatExtensions =
+    type RenderbufferFormat with
+        member x.IsDepth = RenderbufferFormat.isDepth x
+        member x.IsStencil = RenderbufferFormat.isStencil x
+        member x.IsDepthStencil = RenderbufferFormat.isDepthStencil x
+        member x.HasDepth = RenderbufferFormat.hasDepth x
+        member x.HasStencil = RenderbufferFormat.hasStencil x
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module AttachmentSignature =

@@ -45,11 +45,15 @@ module internal TextureUploadImplementation =
             | TextureDimension.Texture1D, true
             | TextureDimension.Texture2D, false
             | TextureDimension.TextureCube, false ->
+                let offset =
+                    if texture.Dimension = TextureDimension.Texture1D then offset.XZ
+                    else offset.XY
+
                 match data with
                 | PixelData.General d ->
                     GL.TexSubImage2D(targetSlice, level, offset.X, offset.Y, d.Size.X, d.Size.Y, d.Format, d.Type, pixels)
                 | PixelData.Compressed d ->
-                    GL.CompressedTexSubImage2D(target, level, offset.X, offset.Y, d.Size.X, d.Size.Y,
+                    GL.CompressedTexSubImage2D(targetSlice, level, offset.X, offset.Y, d.Size.X, d.Size.Y,
                                                unbox texture.Format, int d.SizeInBytes, pixels)
 
             | TextureDimension.Texture2D, true
@@ -63,7 +67,7 @@ module internal TextureUploadImplementation =
                                                d.Size.X, d.Size.Y, d.Size.Z, unbox texture.Format, int d.SizeInBytes, pixels)
 
             | d, a ->
-                failwithf "unsupported texture data (%A, isArray = %b)" d a
+                failwithf "[GL] unsupported texture data %A%s" d (if a then "[]" else "")
 
             GL.Check (sprintf "could not upload texture data")
 
@@ -82,12 +86,8 @@ module internal TextureUploadImplementation =
             let pixelFormat, pixelType =
                 PixFormat.toFormatAndType texture.Format src.PixFormat
 
-            let flipY =
-                Texture.shouldFlipY texture
-
             let offset =
-                if flipY then offset |> Texture.flipOffsetY texture level size
-                else offset
+                texture.WindowOffset(level, offset, size)
 
             let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (dst : nativeint) =
                 let dstTensor =
@@ -101,7 +101,7 @@ module internal TextureUploadImplementation =
                     NativeTensor4<'T>(NativePtr.ofNativeInt dst, info)
 
                 let src = src.SubTensor4(V4i.Zero, V4i(size, channels))
-                NativeTensor4.copy src (if flipY then dstTensor.MirrorY() else dstTensor)
+                NativeTensor4.copy src (if texture.IsCubeOr2D then dstTensor.MirrorY() else dstTensor)
 
             let pixelData =
                 PixelData.General {
@@ -127,10 +127,8 @@ module internal TextureUploadImplementation =
             for slice = 0 to data.Count - 1 do
                 let offset =
                     match texture.Dimension with
-                    | TextureDimension.Texture1D -> V3i(0, baseSlice + slice, 0)
-                    | TextureDimension.Texture2D
-                    | TextureDimension.TextureCube -> V3i(0, 0, baseSlice + slice)
-                    | _ -> V3i.Zero
+                    | TextureDimension.Texture3D -> V3i.Zero
+                    | _ -> V3i(0, 0, baseSlice + slice)
 
                 for level = 0 to levelCount - 1 do
                     let subdata = data.[slice, level]
@@ -167,7 +165,7 @@ module internal TextureUploadImplementation =
                 PixFormat.toFormatAndType texture.Format image.PixFormat
 
             let offset =
-                offset |> Texture.flipOffsetY2D texture level image.Size
+                texture.WindowOffset(level, offset, image.Size)
 
             let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (dst : nativeint) =
                 let dstInfo =
@@ -402,7 +400,7 @@ module ContextTextureUploadExtensions =
         let temp = context.CreateTexture2D(size, 1, dst.Format, 1)
         try
             f temp
-            context.Blit(temp, 0, 0, V2i.Zero, size, dst, level, slice, offset, size, true)
+            context.Blit(temp, 0, 0, V2i.Zero, size, dst, level, slice, offset, size, false)
         finally
             context.Delete(temp)
 

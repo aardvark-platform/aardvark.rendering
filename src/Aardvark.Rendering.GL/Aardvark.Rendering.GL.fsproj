@@ -56,6 +56,7 @@
     <Compile Include="Instructions\Translations.fs" />
     <Compile Include="Resources\PixelUnpackBuffer.fs" />
     <Compile Include="Resources\Textures\PixelTransfer.fs" />
+    <Compile Include="Resources\Textures\Renderbuffer.fs" />
     <Compile Include="Resources\Textures\Texture.fs" />
     <Compile Include="Resources\Textures\TextureCopy.fs" />
     <Compile Include="Resources\Textures\TextureUpload.fs" />
@@ -70,7 +71,6 @@
     <Compile Include="Resources\SamplerState.fs" />
     <Compile Include="Resources\ShaderReflector.fs" />
     <Compile Include="Resources\Program.fs" />
-    <Compile Include="Resources\Renderbuffer.fs" />
     <Compile Include="Resources\Framebuffer.fs" />
     <Compile Include="Resources\Pointers.fs" />
     <Compile Include="Resources\SparseBuffer.fs" />

@@ -112,10 +112,8 @@ type Runtime() =
 
             let offset =
                 match dst.Dimension with
-                | TextureDimension.Texture1D    -> V3i(offset.X, slice, 0)
-                | TextureDimension.Texture2D
-                | TextureDimension.TextureCube  -> V3i(offset.X, offset.Y, slice)
-                | _                             -> offset
+                | TextureDimension.Texture3D -> offset
+                | _ -> V3i(offset.XY, slice)
 
             ctx.Upload(dst, level, offset, size, src)
   
@@ -127,53 +125,27 @@ type Runtime() =
 
             let offset =
                 match src.Dimension with
-                | TextureDimension.Texture1D    -> V3i(offset.X, slice, 0)
-                | TextureDimension.Texture2D
-                | TextureDimension.TextureCube  -> V3i(offset.X, offset.Y, slice)
-                | _                             -> offset
+                | TextureDimension.Texture3D -> offset
+                | _ -> V3i(offset.XY, slice)
 
             ctx.Download(src, level, offset, size, dst)
 
         member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) : unit =
-            use __ = ctx.ResourceLock
 
             let args (t : IFramebufferOutput) =
                 match t with
-                    | :? Renderbuffer as rb ->
-                        rb.Handle, ImageTarget.Renderbuffer, 0, false
+                | :? Renderbuffer as rb ->
+                    Image.Renderbuffer rb, 0
 
-                    | :? ITextureLevel as tl ->
-                        let t = tl.Texture |> unbox<Texture>
-                        let target = TextureTarget.ofTexture t
+                | :? ITextureLevel as tl ->
+                    Image.Texture (unbox tl.Texture), tl.Level
 
-                        let cnt = max t.Count 1
-                        if tl.Slices.Min <> 0 || tl.Slices.Max <> cnt - 1 then
-                            let v = GL.GenTexture()
-                            GL.TextureView(v, target, t.Handle, unbox (int t.Format), tl.Level, 1, tl.Slices.Min, 1 + tl.Slices.Max - tl.Slices.Min)
-                            v, unbox (int target), 0, true
+                | _ ->
+                    failwithf "[GL] invalid FramebufferOutput: %A" t
 
-                        else
-                            t.Handle, unbox (int target), tl.Level, false
-                    | _ ->
-                        failwithf "[GL] invalid FramebufferOutput: %A" t
-
-            let srcHandle, srcTarget, srcLevel, srcTemp = args src
-            let dstHandle, dstTarget, dstLevel, dstTemp = args dst
-            
-            let srcOffset = V3i(srcOffset.X, src.Size.Y - (srcOffset.Y + size.Y), srcOffset.Z)
-            let dstOffset = V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
-
-            GL.CopyImageSubData(
-                srcHandle, srcTarget, srcLevel, srcOffset.X, srcOffset.Y, srcOffset.Z,
-                dstHandle, dstTarget, dstLevel, dstOffset.X, dstOffset.Y, dstOffset.Z,
-                size.X, size.Y, size.Z
-            )
-
-            if srcTemp then GL.DeleteTexture srcHandle
-            if dstTemp then GL.DeleteTexture dstHandle
-
-
-
+            let srcImage, srcLevel = args src
+            let dstImage, dstLevel = args dst
+            ctx.Copy(srcImage, srcLevel, srcOffset, dstImage, dstLevel, dstOffset, size)
 
         member x.OnDispose = onDispose.Publish
 
@@ -442,18 +414,17 @@ type Runtime() =
 
         let src = unbox<Texture> src
         let dst = unbox<Texture> dst
-        
-        let mutable size = src.GetSize srcBaseLevel
+
         for l in 0 .. levels - 1 do
             let srcLevel = srcBaseLevel + l
             let dstLevel = dstBaseLevel + l
-            for s in 0 .. slices - 1 do
-                if src.IsMultisampled then
-                    ctx.Blit(src, srcLevel, srcBaseSlice + s, Box2i(V2i.Zero, size.XY), dst, dstLevel, dstBaseSlice + s, Box2i(V2i.Zero, size.XY), false)
-                else
-                    ctx.Copy(src, srcLevel, srcBaseSlice + s, V2i.Zero, dst, dstLevel, dstBaseSlice + s, V2i.Zero, size.XY)
-            size <- size / 2
+            let srcSize = src.GetSize(srcLevel)
+            let dstSize = src.GetSize(dstLevel)
+            let srcOffset = V3i(0, 0, srcBaseSlice)
+            let dstOffset = V3i(0, 0, dstBaseSlice)
+            let size = V3i(Vec.xy <| min srcSize dstSize, slices)
 
+            ctx.Copy(src, srcLevel, srcOffset, dst, dstLevel, dstOffset, size)
 
     member x.CreateBuffer(size : nativeint) =
         ctx.CreateBuffer(int size)

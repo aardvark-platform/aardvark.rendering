@@ -12,85 +12,25 @@ open Aardvark.Rendering.GL
 [<AutoOpen>]
 module internal TextureDownloadImplementation =
 
-    [<AutoOpen>]
-    module private Utilities =
-
-        let getOffsetAndSlice (texture : Texture) (offset : V3i) =
-            match texture.Dimension with
-            | TextureDimension.Texture1D -> V3i(offset.X, 0, 0), offset.Y
-            | _ -> offset, offset.Z
-
-        let getArrayDimension (texture : Texture) =
-            getOffsetAndSlice texture >> snd
-
     module Texture =
 
-        let private readTextureLayer (texture : Texture) (target : TextureTarget) (level : int)
-                                     (offset : V3i) (pixels : nativeint) (info : GeneralPixelDataInfo) (data : GeneralPixelData) =
-
-            let fbo = GL.GenFramebuffer()
-            GL.Check "could not create framebuffer"
-
-            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fbo)
-            GL.Check "could not bind framebuffer"
-
-            let offset, baseSlice =
-                getOffsetAndSlice texture offset
-
-            let count =
-                data.Size |> getArrayDimension texture
+        let private readTextureLayer (texture : Texture) (level : int) (offset : V3i)
+                                     (pixels : nativeint) (info : GeneralPixelDataInfo) (data : GeneralPixelData) =
 
             // Size of a slice in the output data
             let bytesPerSlice =
                 info.ElementSize * info.Channels * data.Size.X * data.Size.Y
 
-            let attachment, readBuffer =
-                if TextureFormat.isDepthStencil texture.Format then
-                    FramebufferAttachment.DepthStencilAttachment, ReadBufferMode.None
-                elif TextureFormat.isDepth texture.Format then
-                    FramebufferAttachment.DepthAttachment, ReadBufferMode.None
-                else
-                    FramebufferAttachment.ColorAttachment0, ReadBufferMode.ColorAttachment0
+            let image = Image.Texture texture
 
-            GL.ReadBuffer(readBuffer)
-            GL.Check "could not set readbuffer"
+            Image.readLayers image level offset.Z data.Size.Z (fun slice ->
+                let dstOffset =
+                    let index = slice - offset.Z
+                    nativeint <| index * bytesPerSlice
 
-            for i = 0 to count - 1 do
-                match texture.Dimension, texture.IsArray with
-                | TextureDimension.Texture1D, true
-                | TextureDimension.Texture2D, true
-                | TextureDimension.TextureCube, true
-                | TextureDimension.Texture3D, false ->
-                    GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, attachment, texture.Handle, level, baseSlice + i)
-
-                | TextureDimension.Texture1D, false ->
-                    GL.FramebufferTexture1D(FramebufferTarget.ReadFramebuffer, attachment, target, texture.Handle, level)
-
-                | TextureDimension.Texture2D, false
-                | TextureDimension.TextureCube, false ->
-                    GL.FramebufferTexture2D(FramebufferTarget.ReadFramebuffer, attachment, target, texture.Handle, level)
-
-                | _ ->
-                    failwithf "[GL] cannot attach %A%s to framebuffer" texture.Dimension (if texture.IsArray then "[]" else "")
-
-                GL.Check "could not attach texture to framebuffer"
-
-                let fboCheck = GL.CheckFramebufferStatus(FramebufferTarget.ReadFramebuffer)
-                if fboCheck <> FramebufferErrorCode.FramebufferComplete then
-                    failwithf "could not create input framebuffer: %A" fboCheck
-
-                let dstOffset = nativeint <| i * bytesPerSlice
                 GL.ReadPixels(offset.X, offset.Y, data.Size.X, data.Size.Y, data.Format, data.Type, pixels + dstOffset)
                 GL.Check "could not read pixels"
-
-            GL.ReadBuffer(ReadBufferMode.None)
-            GL.Check "could not unset readbuffer"
-
-            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
-            GL.Check "could not unbind framebuffer"
-
-            GL.DeleteFramebuffer(fbo)
-            GL.Check "could not delete framebuffer"
+            )
 
         let downloadPixelData (texture : Texture) (level : int) (offset : V3i) (data : PixelData) =
             let target = texture |> TextureTarget.ofTexture
@@ -118,6 +58,10 @@ module internal TextureDownloadImplementation =
 
                 else
                     if GL.ARB_get_texture_subimage then
+                        let offset =
+                            if texture.Dimension = TextureDimension.Texture1D then offset.XZO
+                            else offset
+
                         match data with
                         | PixelData.General d ->
                             GL.GetTextureSubImage(texture.Handle, level, offset, d.Size, d.Format, d.Type, int info.SizeInBytes, src)
@@ -129,7 +73,7 @@ module internal TextureDownloadImplementation =
                     else
                         match data, info with
                         | PixelData.General d, PixelDataInfo.General i ->
-                            (i, d) ||> readTextureLayer texture targetSlice level offset src
+                            (i, d) ||> readTextureLayer texture level offset src
 
                         | _ ->
                             failwithf "[GL] Cannot download subwindow of compressed textures without glGetCompressedTextureSubImage (not available)"
@@ -150,12 +94,8 @@ module internal TextureDownloadImplementation =
             let pixelFormat, pixelType =
                 PixFormat.toFormatAndType texture.Format dst.PixFormat
 
-            let flipY =
-                Texture.shouldFlipY texture
-
             let offset =
-                if flipY then offset |> Texture.flipOffsetY texture level size
-                else offset
+                texture.WindowOffset(level, offset, size)
 
             let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (src : nativeint) =
                 let srcTensor =
@@ -169,7 +109,7 @@ module internal TextureDownloadImplementation =
                     NativeTensor4<'T>(NativePtr.ofNativeInt src, info)
 
                 let dst = dst.SubTensor4(V4i.Zero, V4i(size, channels))
-                NativeTensor4.copy (if flipY then srcTensor.MirrorY() else srcTensor) dst
+                NativeTensor4.copy (if texture.IsCubeOr2D then srcTensor.MirrorY() else srcTensor) dst
 
             let pixelData =
                 PixelData.General {
@@ -186,7 +126,7 @@ module internal TextureDownloadImplementation =
                 PixFormat.toFormatAndType texture.Format image.PixFormat
 
             let offset =
-                offset |> Texture.flipOffsetY2D texture level image.Size
+                texture.WindowOffset(level, offset, image.Size)
 
             let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (src : nativeint) =
                 let srcInfo =
@@ -245,7 +185,7 @@ module ContextTextureDownloadExtensions =
         let context = src.Context
         let temp = context.CreateTexture2D(size, 1, src.Format, 1)
         try
-            context.Blit(src, level, slice, offset, size, temp, 0, 0, V2i.Zero, size, true)
+            context.Blit(src, level, slice, offset, size, temp, 0, 0, V2i.Zero, size, false)
             f temp
         finally
             context.Delete(temp)

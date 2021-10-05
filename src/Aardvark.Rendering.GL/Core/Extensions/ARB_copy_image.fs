@@ -17,9 +17,9 @@ module ARB_copy_image =
 
     type GL private() =
 
-        static let supported = ExtensionHelpers.isSupported (Version(4,3)) "GL_ARB_image_copy"
+        static let supported = ExtensionHelpers.isSupported (Version(4,3)) "GL_ARB_copy_image"
 
-        static member ARB_image_copy = supported
+        static member ARB_copy_image = supported
 
         static member CopyImageSubData(srcName : int, srcTarget : ImageTarget, srcLevel : int,
                                        srcX : int, srcY : int, srcZ : int,
@@ -31,7 +31,7 @@ module ARB_copy_image =
                                         dstName, dstTarget, dstLevel, dstX, dstY, dstZ,
                                         width, height, depth)
             else
-                failwith "Not implemented"
+                failwith "glCopyImageSubData is not available!"
 
         static member inline CopyImageSubData(srcName : int, srcTarget : ImageTarget, srcLevel : int, srcOffset : V3i,
                                               dstName : int, dstTarget : ImageTarget, dstLevel : int, dstOffset : V3i,

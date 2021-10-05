@@ -141,6 +141,103 @@ module internal TextureCopyUtilities =
                         )
             }
 
+[<AutoOpen>]
+module internal ImageCopyImplementation =
+
+    module Image =
+
+        let private blitInternal (src : Image) (srcLevel : int) (srcOffset : V3i) (srcSize : V3i)
+                                 (dst : Image) (dstLevel : int) (dstOffset : V3i) (dstSize : V3i)
+                                 (linear : bool)  =
+
+            let mask = src.Mask &&& dst.Mask
+            let slices = min srcSize.Z dstSize.Z
+
+            let filter =
+                if linear then BlitFramebufferFilter.Linear else BlitFramebufferFilter.Nearest
+
+            Framebuffer.temporary FramebufferTarget.DrawFramebuffer (fun _ ->
+                Image.readLayers src srcLevel srcOffset.Z slices (fun srcSlice ->
+
+                    let dstSlice = dstOffset.Z + srcSlice - srcOffset.Z
+                    dst |> Image.attach FramebufferTarget.DrawFramebuffer dstLevel dstSlice
+                    Framebuffer.check FramebufferTarget.DrawFramebuffer
+
+                    GL.BlitFramebuffer(
+                        srcOffset.X, srcOffset.Y,
+                        srcOffset.X + srcSize.X, srcOffset.Y + srcSize.Y,
+                        dstOffset.X, dstOffset.Y,
+                        dstOffset.X + dstSize.X, dstOffset.Y + dstSize.Y,
+                        mask, filter
+                    )
+                    GL.Check "could blit framebuffer"
+                )
+            )
+
+        let private copyFramebuffer (src : Image) (srcLevel : int) (srcOffset : V3i)
+                                    (dst : Texture) (dstLevel : int) (dstOffset : V3i)
+                                    (size : V3i)  =
+            let target = dst |> TextureTarget.ofTexture
+            let targetSlice = target |> TextureTarget.toSliceTarget dstOffset.Z
+
+            Image.readLayers src srcLevel srcOffset.Z size.Z (fun slice ->
+                match dst.Dimension, dst.IsArray with
+                | TextureDimension.Texture1D, false ->
+                    GL.CopyTexSubImage1D(target, dstLevel, dstOffset.X, srcOffset.X, srcOffset.Y, size.X)
+
+                | TextureDimension.Texture1D, true
+                | TextureDimension.Texture2D, false
+                | TextureDimension.TextureCube, false ->
+                    let dstOffset =
+                        if dst.Dimension = TextureDimension.Texture1D then V2i(dstOffset.X, slice)
+                        else dstOffset.XY
+
+                    GL.CopyTexSubImage2D(targetSlice, dstLevel, dstOffset.X, dstOffset.Y, srcOffset.X, srcOffset.Y, size.X, size.Y)
+
+                | TextureDimension.Texture2D, true
+                | TextureDimension.Texture3D, false
+                | TextureDimension.TextureCube, true ->
+                    let dstOffset =
+                        if dst.Dimension = TextureDimension.Texture3D then dstOffset
+                        else V3i(dstOffset.XY, slice)
+
+                    GL.CopyTexSubImage3D(target, dstLevel, dstOffset.X, dstOffset.Y, dstOffset.Z, srcOffset.X, srcOffset.Y, size.X, size.Y)
+
+                | d, a ->
+                    failwithf "[GL] unsupported texture data %A%s" d (if a then "[]" else "")
+            )
+
+        let private copyDirect (src : Image) (srcLevel : int) (srcOffset : V3i)
+                               (dst : Image) (dstLevel : int) (dstOffset : V3i)
+                               (size : V3i) =
+            GL.CopyImageSubData(src.Handle, src.Target, srcLevel, srcOffset, dst.Handle, dst.Target, dstLevel, dstOffset, size)
+            GL.Check "could copy image subdata"
+
+        let copy (src : Image) (srcLevel : int) (srcOffset : V3i)
+                 (dst : Image) (dstLevel : int) (dstOffset : V3i)
+                 (size : V3i) =
+
+            let srcOffset = src.WindowOffset(srcLevel, srcOffset, size)
+            let dstOffset = dst.WindowOffset(dstLevel, dstOffset, size)
+
+            if GL.ARB_copy_image && src.Format = dst.Format && src.Samples = dst.Samples then
+                copyDirect src srcLevel srcOffset dst dstLevel dstOffset size
+
+            else
+                match dst with
+                | Image.Texture dst when not (src.IsMultisampled || dst.IsMultisampled) ->
+                    copyFramebuffer src srcLevel srcOffset dst dstLevel dstOffset size
+
+                | _ ->
+                    blitInternal src srcLevel srcOffset size dst dstLevel dstOffset size false
+
+        let blit (src : Image) (srcLevel : int) (srcOffset : V3i) (srcSize : V3i)
+                 (dst : Image) (dstLevel : int) (dstOffset : V3i) (dstSize : V3i)
+                 (linear : bool)  =
+
+            let srcOffset = src.WindowOffset(srcLevel, srcOffset, srcSize)
+            let dstOffset = dst.WindowOffset(dstLevel, dstOffset, dstSize)
+            blitInternal src srcLevel srcOffset srcSize dst dstLevel dstOffset dstSize linear
 
 [<AutoOpen>]
 module ContextTextureCopyExtensions =
@@ -148,157 +245,116 @@ module ContextTextureCopyExtensions =
     [<Extension; AbstractClass; Sealed>]
     type ContextTextureCopyExtensions =
 
+        // ================================================================================================================
+        // Explicit blit
+        // ================================================================================================================
+
         [<Extension>]
-         static member Blit(this : Context,
-                            src : Texture, srcLevel : int, srcSlice : int, srcOffset : V2i, srcSize : V2i,
-                            dst : Texture, dstLevel : int, dstSlice : int, dstOffset : V2i, dstSize : V2i,
-                            linear : bool) =
-             this.Blit(src, srcLevel, srcSlice, Box2i.FromMinAndSize(srcOffset, srcSize),
-                       dst, dstLevel, dstSlice, Box2i.FromMinAndSize(dstOffset, dstSize),
-                       linear)
+        static member internal Blit(this : Context,
+                                    src : Image, srcLevel : int, srcOffset : V3i, srcSize : V3i,
+                                    dst : Image, dstLevel : int, dstOffset : V3i, dstSize : V3i,
+                                    linear : bool) =
+            using this.ResourceLock (fun _ ->
+                Image.blit src srcLevel srcOffset srcSize dst dstLevel dstOffset dstSize linear
+            )
 
-         [<Extension>]
-         static member Blit(this : Context,
-                            src : Texture, srcLevel : int, srcSlice : int, srcRegion : Box2i,
-                            dst : Texture, dstLevel : int, dstSlice : int, dstRegion : Box2i,
-                            linear : bool) =
-             using this.ResourceLock (fun _ ->
-                 let fSrc = GL.GenFramebuffer()
-                 GL.Check "could not create framebuffer"
-                 let fDst = GL.GenFramebuffer()
-                 GL.Check "could not create framebuffer"
+        [<Extension>]
+        static member internal Blit(this : Context,
+                                    src : Image, srcLevel : int, srcSlice : int, srcOffset : V2i, srcSize : V2i,
+                                    dst : Image, dstLevel : int, dstSlice : int, dstOffset : V2i, dstSize : V2i,
+                                    linear : bool) =
+            this.Blit(
+                src, srcLevel, V3i(srcOffset, srcSlice), V3i(srcSize, 1),
+                dst, dstLevel, V3i(dstOffset, dstSlice), V3i(dstSize, 1),
+                linear
+            )
 
-                 GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fSrc)
-                 GL.Check "could not bind framebuffer"
+        [<Extension>]
+        static member internal Blit(this : Context,
+                                    src : Image, srcLevel : int, srcSlice : int, srcRegion : Box2i,
+                                    dst : Image, dstLevel : int, dstSlice : int, dstRegion : Box2i,
+                                    linear : bool) =
+            this.Blit(
+                src, srcLevel, srcSlice, srcRegion.Min, srcRegion.Size,
+                dst, dstLevel, dstSlice, dstRegion.Min, dstRegion.Size,
+                linear
+            )
 
-                 let attachment, mask, linear =
-                     if TextureFormat.isDepthStencil src.Format then
-                         FramebufferAttachment.DepthStencilAttachment, ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit, false
-                     elif TextureFormat.isDepth src.Format then
-                         FramebufferAttachment.DepthAttachment, ClearBufferMask.DepthBufferBit, false
-                     else
-                         FramebufferAttachment.ColorAttachment0, ClearBufferMask.ColorBufferBit, linear
+        [<Extension>]
+        static member Blit(this : Context,
+                           src : Texture, srcLevel : int, srcOffset : V3i, srcSize : V3i,
+                           dst : Texture, dstLevel : int, dstOffset : V3i, dstSize : V3i,
+                           linear : bool) =
+            this.Blit(
+                Image.Texture src, srcLevel, srcOffset, srcSize,
+                Image.Texture dst, dstLevel, dstOffset, dstSize,
+                linear
+            )
 
-                 if src.Slices > 1 then GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, attachment, src.Handle, srcLevel, srcSlice)
-                 else GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, attachment, src.Handle, srcLevel)
-                 GL.Check "could not attach texture to framebuffer"
+        [<Extension>]
+        static member Blit(this : Context,
+                           src : Texture, srcLevel : int, srcSlice : int, srcOffset : V2i, srcSize : V2i,
+                           dst : Texture, dstLevel : int, dstSlice : int, dstOffset : V2i, dstSize : V2i,
+                           linear : bool) =
+            this.Blit(
+                Image.Texture src, srcLevel, srcSlice, srcOffset, srcSize,
+                Image.Texture dst, dstLevel, dstSlice, dstOffset, dstSize,
+                linear
+            )
 
-                 let srcCheck = GL.CheckFramebufferStatus(FramebufferTarget.ReadFramebuffer)
-                 if srcCheck <> FramebufferErrorCode.FramebufferComplete then
-                     failwithf "could not create input framebuffer: %A" srcCheck
+        [<Extension>]
+        static member Blit(this : Context,
+                           src : Texture, srcLevel : int, srcSlice : int, srcRegion : Box2i,
+                           dst : Texture, dstLevel : int, dstSlice : int, dstRegion : Box2i,
+                           linear : bool) =
+            this.Blit(
+                Image.Texture src, srcLevel, srcSlice, srcRegion,
+                Image.Texture dst, dstLevel, dstSlice, dstRegion,
+                linear
+            )
 
-                 GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fDst)
-                 GL.Check "could not bind framebuffer"
+        // ================================================================================================================
+        // Copy (with implicit blit)
+        // ================================================================================================================
 
-                 if dst.Slices > 1 then GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, attachment, dst.Handle, dstLevel, dstSlice)
-                 else GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, attachment, dst.Handle, dstLevel)
-                 GL.Check "could not attach texture to framebuffer"
+        [<Extension>]
+        static member internal Copy(this : Context,
+                                    src : Image, srcLevel : int, srcOffset : V3i,
+                                    dst : Image, dstLevel : int, dstOffset : V3i,
+                                    size : V3i) =
+            using this.ResourceLock (fun _ ->
+                Image.copy src srcLevel srcOffset dst dstLevel dstOffset size
+            )
 
-                 let dstCheck = GL.CheckFramebufferStatus(FramebufferTarget.DrawFramebuffer)
-                 if dstCheck <> FramebufferErrorCode.FramebufferComplete then
-                     failwithf "could not create output framebuffer: %A" dstCheck
+        [<Extension>]
+        static member internal Copy(this : Context,
+                                    src : Image, srcLevel : int, srcSlice : int, srcOffset : V2i,
+                                    dst : Image, dstLevel : int, dstSlice : int, dstOffset : V2i,
+                                    size : V2i) =
+            this.Copy(
+                src, srcLevel, V3i(srcOffset, srcSlice),
+                dst, dstLevel, V3i(dstOffset, dstSlice),
+                V3i(size, 1)
+            )
 
-                 GL.BlitFramebuffer(
-                     srcRegion.Min.X, srcRegion.Min.Y,
-                     srcRegion.Max.X, srcRegion.Max.Y,
+        [<Extension>]
+        static member Copy(this : Context,
+                           src : Texture, srcLevel : int, srcOffset : V3i,
+                           dst : Texture, dstLevel : int, dstOffset : V3i,
+                           size : V3i) =
+            this.Copy(
+                Image.Texture src, srcLevel, srcOffset,
+                Image.Texture dst, dstLevel, dstOffset,
+                size
+            )
 
-                     dstRegion.Min.X, dstRegion.Min.Y,
-                     dstRegion.Max.X, dstRegion.Max.Y,
-
-                     mask,
-                     (if linear then BlitFramebufferFilter.Linear else BlitFramebufferFilter.Nearest)
-                 )
-                 GL.Check "could blit framebuffer"
-
-                 GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
-                 GL.Check "could unbind framebuffer"
-
-                 GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
-                 GL.Check "could unbind framebuffer"
-
-                 GL.DeleteFramebuffer(fSrc)
-                 GL.Check "could delete framebuffer"
-
-                 GL.DeleteFramebuffer(fDst)
-                 GL.Check "could delete framebuffer"
-
-             )
-
-         [<Extension>]
-         static member Copy(this : Context,
-                            src : Texture, srcLevel : int, srcSlice : int, srcOffset : V2i,
-                            dst : Texture, dstLevel : int, dstSlice : int, dstOffset : V2i,
-                            size : V2i) =
-             using this.ResourceLock (fun _ ->
-                 let fSrc = GL.GenFramebuffer()
-                 GL.Check "could not create framebuffer"
-
-                 GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, fSrc)
-                 GL.Check "could not bind framebuffer"
-
-                 let attachment, readBuffer =
-                     if TextureFormat.isDepthStencil src.Format then
-                         FramebufferAttachment.DepthStencilAttachment, ReadBufferMode.None
-                     elif TextureFormat.isDepth src.Format then
-                         FramebufferAttachment.DepthAttachment, ReadBufferMode.None
-                     else
-                         FramebufferAttachment.ColorAttachment0, ReadBufferMode.ColorAttachment0
-
-                 if src.Slices > 1 then
-                     GL.FramebufferTextureLayer(FramebufferTarget.ReadFramebuffer, attachment, src.Handle, srcLevel, srcSlice)
-                 else
-                     GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, attachment, src.Handle, srcLevel)
-                 GL.Check "could not attach texture to framebuffer"
-
-                 let srcCheck = GL.CheckFramebufferStatus(FramebufferTarget.ReadFramebuffer)
-                 if srcCheck <> FramebufferErrorCode.FramebufferComplete then
-                     failwithf "could not create input framebuffer: %A" srcCheck
-
-                 GL.ReadBuffer(readBuffer)
-                 GL.Check "could not set readbuffer"
-
-
-                 let bindTarget = TextureTarget.ofTexture dst
-                 GL.BindTexture(bindTarget, dst.Handle)
-                 GL.Check "could not bind texture"
-
-                 // NOTE: according to glCopyTexSubImage2D/3D documentation: multi-sampled texture are not supported
-                 if dst.IsArray then
-
-                     GL.CopyTexSubImage3D(
-                         bindTarget,
-                         dstLevel,
-                         dstOffset.X, dstOffset.Y, dstSlice,
-                         srcOffset.X, srcOffset.Y,
-                         size.X, size.Y
-                     )
-                     GL.Check "could not copy texture"
-
-                 else
-                     let copyTarget =
-                         match dst.Dimension with
-                         | TextureDimension.TextureCube -> snd TextureTarget.cubeSides.[dstSlice]
-                         | _ -> TextureTarget.Texture2D
-
-                     GL.CopyTexSubImage2D(
-                         copyTarget,
-                         dstLevel,
-                         dstOffset.X, dstOffset.Y,
-                         srcOffset.X, srcOffset.Y,
-                         size.X, size.Y
-                     )
-                     GL.Check "could not copy texture"
-
-
-                 GL.ReadBuffer(ReadBufferMode.None)
-                 GL.Check "could not unset readbuffer"
-
-                 GL.BindTexture(bindTarget, 0)
-                 GL.Check "could not unbind texture"
-
-                 GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
-                 GL.Check "could not unbind framebuffer"
-
-                 GL.DeleteFramebuffer(fSrc)
-                 GL.Check "could not delete framebuffer"
-             )
+        [<Extension>]
+        static member Copy(this : Context,
+                           src : Texture, srcLevel : int, srcSlice : int, srcOffset : V2i,
+                           dst : Texture, dstLevel : int, dstSlice : int, dstOffset : V2i,
+                           size : V2i) =
+            this.Copy(
+                Image.Texture src, srcLevel, srcSlice, srcOffset,
+                Image.Texture dst, dstLevel, dstSlice, dstOffset,
+                size
+            )
