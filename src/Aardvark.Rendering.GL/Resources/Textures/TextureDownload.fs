@@ -154,16 +154,26 @@ module internal TextureDownloadImplementation =
             let pixelFormat, pixelType =
                 PixFormat.toFormatAndType texture.Format volume.PixFormat
 
+            let offset =
+                texture.WindowOffset(level, offset, volume.Size)
+
             let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (src : nativeint) =
                 let srcInfo =
                     let rowPixels = int64 alignedLineSize / int64 elementSize
                     let tiSize = V4l(volume.SizeL, int64 channels)
 
-                    Tensor4Info(
-                        0L,
-                        tiSize,
-                        V4l(int64 channels, rowPixels, rowPixels * tiSize.Y, 1L)
-                    )
+                    if texture.IsCubeOr2D then
+                        Tensor4Info(
+                            rowPixels * (tiSize.Y - 1L),
+                            tiSize,
+                            V4l(int64 channels, -rowPixels, rowPixels * tiSize.Y, 1L)
+                        )
+                    else
+                        Tensor4Info(
+                            0L,
+                            tiSize,
+                            V4l(int64 channels, rowPixels, rowPixels * tiSize.Y, 1L)
+                        )
 
                 TextureCopyUtils.Copy(src, srcInfo, volume)
 

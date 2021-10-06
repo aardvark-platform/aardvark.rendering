@@ -1,6 +1,7 @@
 ﻿namespace Aardvark.Rendering.Tests.Texture
 
 open Aardvark.Base
+open Aardvark.Base.NativeTensors
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.Application
@@ -229,6 +230,28 @@ module TextureUpload =
         let pixTexture2DCompressed (runtime : IRuntime) =
             let size = V2i(256)
             uploadAndDownloadPixTexture2D runtime size 1 TextureParams.compressed
+
+        let pixTexture2DPixVolume (runtime : IRuntime) =
+            let size = V2i(256)
+            let data = PixImage.random <| V2i size
+
+            let texture =
+                let data = data :> PixImage
+                let pix = PixTexture2d(PixImageMipMap data, TextureParams.empty)
+                runtime.PrepareTexture pix
+
+            try
+                let result =
+                    let pv = PixVolume<uint8>(Col.Format.RGBA, V3i(size, 1))
+                    runtime.Download(texture, 0, 0, pv)
+                    let volume = new Volume<uint8>(pv.Tensor4.Data, pv.Tensor4.Info.SubXYZVolume(0L));
+                    PixImage<uint8>(Col.Format.RGBA, volume).Transformed(ImageTrafo.MirrorY).AsPixImage<byte>()
+
+                Expect.equal result.Size size "image size mismatch"
+                PixImage.compare V2i.Zero data result
+            finally
+                runtime.DeleteTexture(texture)
+
 
         let private uploadAndDownloadTextureNative (runtime : IRuntime) (size : V2i)
                                                    (levels : int) (count : int) (wantMipmap : bool) =
@@ -498,6 +521,7 @@ module TextureUpload =
             "2D PixTexture compressed",         Cases.pixTexture2DCompressed
             "2D PixTexture mipmapped",          Cases.pixTexture2DMipmapped true
             "2D PixTexture mipmap generation",  Cases.pixTexture2DMipmapped false
+            "2D PixTexture as PixVolume",       Cases.pixTexture2DPixVolume
 
             if backend <> Backend.Vulkan then // not supported
                 "2D multisampled",                        Cases.texture2DMultisampled
