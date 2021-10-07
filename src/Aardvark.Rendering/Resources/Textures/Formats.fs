@@ -210,6 +210,7 @@ type TextureFormat =
     | CompressedSrgbAlphaS3tcDxt5Ext = 35919
     | DepthComponent32f = 36012
     | Depth32fStencil8 = 36013
+    | StencilIndex8 = 36168
     | Rgba32ui = 36208
     | Rgb32ui = 36209
     | Rgba16ui = 36214
