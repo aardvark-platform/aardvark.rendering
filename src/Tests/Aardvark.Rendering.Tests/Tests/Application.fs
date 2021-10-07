@@ -24,7 +24,7 @@ module TestApplication =
         let create() =
             Config.MajorVersion <- 4
             Config.MinorVersion <- 6
-            Config.CheckErrors <- true
+            Config.ErrorReporting <- ErrorReporting.Exception
 
             Toolkit.Init(ToolkitOptions(Backend = PlatformBackend.PreferNative)) |> ignore
 

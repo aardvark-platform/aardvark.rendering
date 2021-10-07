@@ -13,6 +13,18 @@ open Aardvark.Rendering.GL
 
 type DepthRange = MinusOneToOne=0 | ZeroToOne=1
 
+/// Reporting modes for GL errors.
+[<RequireQualifiedAccess>]
+type ErrorReporting =
+    /// Do not check for errors.
+    | Disabled
+
+    /// Log errors.
+    | Log
+
+    /// Throw an exception on errors.
+    | Exception
+
 /// <summary>
 /// A module containing default GL configuration properties
 /// </summary>
@@ -83,7 +95,10 @@ module Config =
     /// </summary>
     let mutable DepthRange = DepthRange.MinusOneToOne
 
+    [<Obsolete("Use ErrorReporting instead")>]
     let mutable CheckErrors = false
+
+    let mutable ErrorReporting = ErrorReporting.Disabled
 
     //let enableVertexArrayObjectsIfPossible = true // not implemented or deprecated?
     let enableSamplersIfPossible = true
@@ -109,7 +124,7 @@ module Error =
     open System.Runtime.InteropServices
 
     exception OpenGLException of ec : ErrorCode * msg : string with
-        override x.Message = sprintf "[%A] %s" x.ec x.msg
+        override x.Message = sprintf "%A: %s" x.ec x.msg
         
 
     
@@ -150,11 +165,13 @@ module Error =
     // the entire call including the allocation of its arguments
     type GL with
         static member Check str =
-            if Config.CheckErrors then
+            let mode = if Config.CheckErrors then ErrorReporting.Log else Config.ErrorReporting
+
+            if mode <> ErrorReporting.Disabled then
                 let err = GL.GetError()
                 if err <> ErrorCode.NoError then
-                    Aardvark.Base.Report.Warn("{0}: {1}",err,str)
-                    //raise <| OpenGLException(err, str)
+                    if mode = ErrorReporting.Log then Report.Error("{0}: {1}",err,str)
+                    else raise <| OpenGLException(err, sprintf "%A" str)
 
         static member SetupDebugOutput() =
             let ctx = GraphicsContext.CurrentContext |> unbox<IGraphicsContextInternal>
