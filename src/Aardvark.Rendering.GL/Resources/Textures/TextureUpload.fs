@@ -81,13 +81,16 @@ module internal TextureUploadImplementation =
             GL.Check "could not unbind texture"
 
         let uploadNativeTensor4<'T when 'T : unmanaged> (texture : Texture) (generateMipmap : bool)
-                                                        (level : int) (offset : V3i) (size : V3i) (src : NativeTensor4<'T>) =
+                                                        (level : int) (slice : int) (offset : V3i) (size : V3i)
+                                                        (src : NativeTensor4<'T>) =
 
             let pixelFormat, pixelType =
                 PixFormat.toFormatAndType texture.Format src.PixFormat
 
             let offset =
-                texture.WindowOffset(level, offset, size)
+                let flipped = texture.WindowOffset(level, offset, size)
+                if texture.Dimension = TextureDimension.Texture3D then flipped
+                else V3i(flipped.XY, slice)
 
             let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (dst : nativeint) =
                 let dstTensor =
@@ -462,23 +465,23 @@ module ContextTextureUploadExtensions =
             )
 
         [<Extension>]
-        static member Upload(this : Context, texture : Texture, level : int,
+        static member Upload(this : Context, texture : Texture, level : int, slice : int,
                              offset : V3i, size : V3i, source : NativeTensor4<'T>) =
             using this.ResourceLock (fun _ ->
                 // Multisampled texture requires blit
                 if texture.IsMultisampled then
-                    useTemporaryAndBlit texture level offset.Z offset.XY size.XY (fun temp ->
-                        Texture.uploadNativeTensor4 temp false 0 offset size source
+                    useTemporaryAndBlit texture level slice offset.XY size.XY (fun temp ->
+                        Texture.uploadNativeTensor4 temp false 0 0 offset size source
                     )
 
                 // Upload directly
                 else
-                    Texture.uploadNativeTensor4 texture false level offset size source
+                    Texture.uploadNativeTensor4 texture false level slice offset size source
             )
 
         [<Extension>]
-        static member Upload(this : Context, texture : Texture, level : int, size : V3i, source : NativeTensor4<'T>) =
-            this.Upload(texture, level, V3i.Zero, size, source)
+        static member Upload(this : Context, texture : Texture, level : int, slice : int, size : V3i, source : NativeTensor4<'T>) =
+            this.Upload(texture, level, slice, V3i.Zero, size, source)
 
         [<Extension>]
         static member Upload(this : Context, texture : Texture, level : int, slice : int, offset : V2i, source : PixImage) =

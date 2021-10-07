@@ -160,9 +160,6 @@ module Error =
                 else None
             )
 
-    // in release the literal value of CheckErrors in combination
-    // with this inline function leads to a complete elimination of
-    // the entire call including the allocation of its arguments
     type GL with
         static member Check str =
             let mode = if Config.CheckErrors then ErrorReporting.Log else Config.ErrorReporting

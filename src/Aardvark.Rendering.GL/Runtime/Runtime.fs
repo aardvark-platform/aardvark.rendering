@@ -106,46 +106,46 @@ type Runtime() =
 
         member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format,
                                               dst : ITextureSubResource, offset : V3i, size : V3i) : unit =
-            let slice = dst.Slice
             let level = dst.Level
+            let slice = dst.Slice
             let dst = dst.Texture |> unbox<Texture>
 
-            let offset =
-                match dst.Dimension with
-                | TextureDimension.Texture3D -> offset
-                | _ -> V3i(offset.XY, slice)
-
-            ctx.Upload(dst, level, offset, size, src)
+            ctx.Upload(dst, level, slice, offset, size, src)
   
         member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, offset : V3i,
                                               dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) : unit =
-            let slice = src.Slice
             let level = src.Level
+            let slice = src.Slice
             let src = src.Texture |> unbox<Texture>
 
-            let offset =
-                match src.Dimension with
-                | TextureDimension.Texture3D -> offset
-                | _ -> V3i(offset.XY, slice)
-
-            ctx.Download(src, level, offset, size, dst)
+            ctx.Download(src, level, slice, offset, size, dst)
 
         member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) : unit =
 
-            let args (t : IFramebufferOutput) =
+            let args (offset : V3i) (t : IFramebufferOutput) =
                 match t with
                 | :? Renderbuffer as rb ->
-                    Image.Renderbuffer rb, 0
+                    rb |> ResourceValidation.Textures.validateWindow 0 offset size
+                    Image.Renderbuffer rb, 0, Range1i(0)
 
                 | :? ITextureLevel as tl ->
-                    Image.Texture (unbox tl.Texture), tl.Level
+                    tl.Texture |> ResourceValidation.Textures.validateSlices tl.Slices.Min (tl.Slices.Size + 1)
+                    tl.Texture |> ResourceValidation.Textures.validateLevels tl.Level 1
+                    tl.Texture |> ResourceValidation.Textures.validateWindow tl.Level offset size
+                    Image.Texture (unbox tl.Texture), tl.Level, tl.Slices
 
                 | _ ->
                     failwithf "[GL] invalid FramebufferOutput: %A" t
 
-            let srcImage, srcLevel = args src
-            let dstImage, dstLevel = args dst
-            ctx.Copy(srcImage, srcLevel, srcOffset, dstImage, dstLevel, dstOffset, size)
+            let srcImage, srcLevel, srcSlices = args srcOffset src
+            let dstImage, dstLevel, dstSlices = args dstOffset dst
+
+            let srcSize = srcImage.GetSize(srcLevel)
+            let dstSize = dstImage.GetSize(dstLevel)
+            (srcSize, dstSize) ||> ResourceValidation.Textures.validateSizes' srcImage.Dimension
+            (srcImage.Samples, dstImage.Samples) ||> ResourceValidation.Textures.validateSamplesForCopy' srcImage.Dimension
+
+            ctx.Copy(srcImage, srcLevel, srcSlices, srcOffset, dstImage, dstLevel, dstSlices, dstOffset, size)
 
         member x.OnDispose = onDispose.Publish
 
@@ -417,16 +417,17 @@ type Runtime() =
         let src = unbox<Texture> src
         let dst = unbox<Texture> dst
 
+        let srcSlices = Range1i(srcBaseSlice, srcBaseSlice + slices - 1)
+        let dstSlices = Range1i(dstBaseSlice, dstBaseSlice + slices - 1)
+
         for l in 0 .. levels - 1 do
             let srcLevel = srcBaseLevel + l
             let dstLevel = dstBaseLevel + l
             let srcSize = src.GetSize(srcLevel)
-            let dstSize = src.GetSize(dstLevel)
-            let srcOffset = V3i(0, 0, srcBaseSlice)
-            let dstOffset = V3i(0, 0, dstBaseSlice)
-            let size = V3i(Vec.xy <| min srcSize dstSize, slices)
+            let dstSize = dst.GetSize(dstLevel)
+            let size = min srcSize dstSize
 
-            ctx.Copy(src, srcLevel, srcOffset, dst, dstLevel, dstOffset, size)
+            ctx.Copy(src, srcLevel, srcSlices, V3i.Zero, dst, dstLevel, dstSlices, V3i.Zero, size)
 
     member x.CreateBuffer(size : nativeint) =
         ctx.CreateBuffer(int size)

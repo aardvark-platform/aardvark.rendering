@@ -146,6 +146,22 @@ module internal ImageCopyImplementation =
 
     module Image =
 
+        // Encodes the slices in the Z-dimension of the offset and size parameters
+        // as expected by glCopyImageSubData. Makes the logic a bit easier but this concise
+        // encoding is cumbersome to use.
+        let private encodeSlices (dimension : TextureDimension) (offset : V3i) (size : V3i) (slices : Range1i) =
+            let offset =
+                match dimension with
+                | TextureDimension.Texture3D -> offset
+                | _ -> V3i(offset.XY, slices.Min)
+
+            let size =
+                match dimension with
+                | TextureDimension.Texture3D -> size
+                | _ -> V3i(size.XY, 1 + slices.Max - slices.Min)
+
+            offset, size
+
         let private blitInternal (src : Image) (srcLevel : int) (srcOffset : V3i) (srcSize : V3i)
                                  (dst : Image) (dstLevel : int) (dstOffset : V3i) (dstSize : V3i)
                                  (linear : bool)  =
@@ -213,12 +229,19 @@ module internal ImageCopyImplementation =
             GL.CopyImageSubData(src.Handle, src.Target, srcLevel, srcOffset, dst.Handle, dst.Target, dstLevel, dstOffset, size)
             GL.Check "could copy image subdata"
 
-        let copy (src : Image) (srcLevel : int) (srcOffset : V3i)
-                 (dst : Image) (dstLevel : int) (dstOffset : V3i)
+        let copy (src : Image) (srcLevel : int) (srcSlices : Range1i) (srcOffset : V3i)
+                 (dst : Image) (dstLevel : int) (dstSlices : Range1i) (dstOffset : V3i)
                  (size : V3i) =
 
-            let srcOffset = src.WindowOffset(srcLevel, srcOffset, size)
-            let dstOffset = dst.WindowOffset(dstLevel, dstOffset, size)
+            let srcOffset, srcSize =
+                let flipped = src.WindowOffset(srcLevel, srcOffset, size)
+                encodeSlices src.Dimension flipped size srcSlices
+
+            let dstOffset, dstSize =
+                let flipped = dst.WindowOffset(dstLevel, dstOffset, size)
+                encodeSlices dst.Dimension flipped size dstSlices
+
+            let size = min srcSize dstSize
 
             if GL.ARB_copy_image && src.Format = dst.Format && src.Samples = dst.Samples then
                 copyDirect src srcLevel srcOffset dst dstLevel dstOffset size
@@ -231,12 +254,18 @@ module internal ImageCopyImplementation =
                 | _ ->
                     blitInternal src srcLevel srcOffset size dst dstLevel dstOffset size false
 
-        let blit (src : Image) (srcLevel : int) (srcOffset : V3i) (srcSize : V3i)
-                 (dst : Image) (dstLevel : int) (dstOffset : V3i) (dstSize : V3i)
+        let blit (src : Image) (srcLevel : int) (srcSlices : Range1i) (srcOffset : V3i) (srcSize : V3i)
+                 (dst : Image) (dstLevel : int) (dstSlices : Range1i) (dstOffset : V3i) (dstSize : V3i)
                  (linear : bool)  =
 
-            let srcOffset = src.WindowOffset(srcLevel, srcOffset, srcSize)
-            let dstOffset = dst.WindowOffset(dstLevel, dstOffset, dstSize)
+            let srcOffset, srcSize =
+                let flipped = src.WindowOffset(srcLevel, srcOffset, srcSize)
+                encodeSlices src.Dimension flipped srcSize srcSlices
+
+            let dstOffset, dstSize =
+                let flipped = dst.WindowOffset(dstLevel, dstOffset, dstSize)
+                encodeSlices dst.Dimension flipped dstSize dstSlices
+
             blitInternal src srcLevel srcOffset srcSize dst dstLevel dstOffset dstSize linear
 
 [<AutoOpen>]
@@ -251,11 +280,11 @@ module ContextTextureCopyExtensions =
 
         [<Extension>]
         static member internal Blit(this : Context,
-                                    src : Image, srcLevel : int, srcOffset : V3i, srcSize : V3i,
-                                    dst : Image, dstLevel : int, dstOffset : V3i, dstSize : V3i,
+                                    src : Image, srcLevel : int, srcSlices : Range1i, srcOffset : V3i, srcSize : V3i,
+                                    dst : Image, dstLevel : int, dstSlices : Range1i, dstOffset : V3i, dstSize : V3i,
                                     linear : bool) =
             using this.ResourceLock (fun _ ->
-                Image.blit src srcLevel srcOffset srcSize dst dstLevel dstOffset dstSize linear
+                Image.blit src srcLevel srcSlices srcOffset srcSize dst dstLevel dstSlices dstOffset dstSize linear
             )
 
         [<Extension>]
@@ -264,8 +293,8 @@ module ContextTextureCopyExtensions =
                                     dst : Image, dstLevel : int, dstSlice : int, dstOffset : V2i, dstSize : V2i,
                                     linear : bool) =
             this.Blit(
-                src, srcLevel, V3i(srcOffset, srcSlice), V3i(srcSize, 1),
-                dst, dstLevel, V3i(dstOffset, dstSlice), V3i(dstSize, 1),
+                src, srcLevel, Range1i(srcSlice), V3i(srcOffset, 0), V3i(srcSize, 1),
+                dst, dstLevel, Range1i(dstSlice), V3i(dstOffset, 0), V3i(dstSize, 1),
                 linear
             )
 
@@ -282,12 +311,12 @@ module ContextTextureCopyExtensions =
 
         [<Extension>]
         static member Blit(this : Context,
-                           src : Texture, srcLevel : int, srcOffset : V3i, srcSize : V3i,
-                           dst : Texture, dstLevel : int, dstOffset : V3i, dstSize : V3i,
+                           src : Texture, srcLevel : int, srcSlices : Range1i, srcOffset : V3i, srcSize : V3i,
+                           dst : Texture, dstLevel : int, dstSlices : Range1i, dstOffset : V3i, dstSize : V3i,
                            linear : bool) =
             this.Blit(
-                Image.Texture src, srcLevel, srcOffset, srcSize,
-                Image.Texture dst, dstLevel, dstOffset, dstSize,
+                Image.Texture src, srcLevel, srcSlices, srcOffset, srcSize,
+                Image.Texture dst, dstLevel, dstSlices, dstOffset, dstSize,
                 linear
             )
 
@@ -319,11 +348,11 @@ module ContextTextureCopyExtensions =
 
         [<Extension>]
         static member internal Copy(this : Context,
-                                    src : Image, srcLevel : int, srcOffset : V3i,
-                                    dst : Image, dstLevel : int, dstOffset : V3i,
+                                    src : Image, srcLevel : int, srcSlices : Range1i, srcOffset : V3i,
+                                    dst : Image, dstLevel : int, dstSlices : Range1i, dstOffset : V3i,
                                     size : V3i) =
             using this.ResourceLock (fun _ ->
-                Image.copy src srcLevel srcOffset dst dstLevel dstOffset size
+                Image.copy src srcLevel srcSlices srcOffset dst dstLevel dstSlices dstOffset size
             )
 
         [<Extension>]
@@ -332,19 +361,19 @@ module ContextTextureCopyExtensions =
                                     dst : Image, dstLevel : int, dstSlice : int, dstOffset : V2i,
                                     size : V2i) =
             this.Copy(
-                src, srcLevel, V3i(srcOffset, srcSlice),
-                dst, dstLevel, V3i(dstOffset, dstSlice),
+                src, srcLevel, Range1i(srcSlice), V3i(srcOffset, 0),
+                dst, dstLevel, Range1i(dstSlice), V3i(dstOffset, 0),
                 V3i(size, 1)
             )
 
         [<Extension>]
         static member Copy(this : Context,
-                           src : Texture, srcLevel : int, srcOffset : V3i,
-                           dst : Texture, dstLevel : int, dstOffset : V3i,
+                           src : Texture, srcLevel : int, srcSlices : Range1i, srcOffset : V3i,
+                           dst : Texture, dstLevel : int, dstSlices : Range1i, dstOffset : V3i,
                            size : V3i) =
             this.Copy(
-                Image.Texture src, srcLevel, srcOffset,
-                Image.Texture dst, dstLevel, dstOffset,
+                Image.Texture src, srcLevel, srcSlices, srcOffset,
+                Image.Texture dst, dstLevel, dstSlices, dstOffset,
                 size
             )
 

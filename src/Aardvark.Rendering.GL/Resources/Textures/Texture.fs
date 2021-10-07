@@ -172,6 +172,11 @@ module internal TextureUtilitiesAndExtensions =
             | Texture t -> t.Handle
             | Renderbuffer rb -> rb.Handle
 
+        member x.Dimension =
+            match x with
+            | Texture t -> t.Dimension
+            | Renderbuffer _ -> TextureDimension.Texture2D
+
         member x.Format =
             match x with
             | Texture t -> t.Format
@@ -181,6 +186,11 @@ module internal TextureUtilitiesAndExtensions =
             match x with
             | Texture t -> unbox<ImageTarget> <| TextureTarget.ofTexture t
             | Renderbuffer _ -> ImageTarget.Renderbuffer
+
+        member x.GetSize(level : int) =
+            match x with
+            | Texture t -> t.GetSize(level)
+            | Renderbuffer rb -> V3i(rb.Size, 1)
 
         member x.Samples =
             match x with

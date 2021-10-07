@@ -88,14 +88,16 @@ module internal TextureDownloadImplementation =
             GL.BindTexture(target, 0)
             GL.Check "could not unbind texture"
 
-        let downloadNativeTensor4<'T when 'T : unmanaged> (texture : Texture) (level : int) (offset : V3i)
-                                                          (size : V3i) (dst : NativeTensor4<'T>) =
+        let downloadNativeTensor4<'T when 'T : unmanaged> (texture : Texture) (level : int) (slice : int)
+                                                          (offset : V3i) (size : V3i) (dst : NativeTensor4<'T>) =
 
             let pixelFormat, pixelType =
                 PixFormat.toFormatAndType texture.Format dst.PixFormat
 
             let offset =
-                texture.WindowOffset(level, offset, size)
+                let flipped = texture.WindowOffset(level, offset, size)
+                if texture.Dimension = TextureDimension.Texture3D then flipped
+                else V3i(flipped.XY, slice)
 
             let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (src : nativeint) =
                 let srcTensor =
@@ -204,23 +206,23 @@ module ContextTextureDownloadExtensions =
     type ContextTextureDownloadExtensions =
 
         [<Extension>]
-        static member Download(this : Context, texture : Texture, level : int,
+        static member Download(this : Context, texture : Texture, level : int, slice : int,
                                offset : V3i, size : V3i, target : NativeTensor4<'T>) =
             using this.ResourceLock (fun _ ->
                 // Multisampled texture requires blit
                 if texture.IsMultisampled then
-                    resolve texture level offset.Z offset.XY size.XY (fun temp ->
-                        Texture.downloadNativeTensor4 temp 0 offset size target
+                    resolve texture level slice offset.XY size.XY (fun temp ->
+                        Texture.downloadNativeTensor4 temp 0 0 offset size target
                     )
 
                 // Download directly
                 else
-                    Texture.downloadNativeTensor4 texture level offset size target
+                    Texture.downloadNativeTensor4 texture level slice offset size target
             )
 
         [<Extension>]
-        static member Download(this : Context, texture : Texture, level : int, size : V3i, target : NativeTensor4<'T>) =
-            this.Download(texture, level, V3i.Zero, size, target)
+        static member Download(this : Context, texture : Texture, level : int, slice : int, size : V3i, target : NativeTensor4<'T>) =
+            this.Download(texture, level, slice, V3i.Zero, size, target)
 
         [<Extension>]
         static member Download(this : Context, texture : Texture, level : int, slice : int, offset : V2i, target : PixImage) =
