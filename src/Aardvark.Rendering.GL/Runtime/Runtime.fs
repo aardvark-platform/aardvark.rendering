@@ -140,9 +140,6 @@ type Runtime() =
             let srcImage, srcLevel, srcSlices = args srcOffset src
             let dstImage, dstLevel, dstSlices = args dstOffset dst
 
-            let srcSize = srcImage.GetSize(srcLevel)
-            let dstSize = dstImage.GetSize(dstLevel)
-            (srcSize, dstSize) ||> ResourceValidation.Textures.validateSizes' srcImage.Dimension
             (srcImage.Samples, dstImage.Samples) ||> ResourceValidation.Textures.validateSamplesForCopy' srcImage.Dimension
 
             ctx.Copy(srcImage, srcLevel, srcSlices, srcOffset, dstImage, dstLevel, dstSlices, dstOffset, size)

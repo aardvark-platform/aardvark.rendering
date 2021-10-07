@@ -245,7 +245,7 @@ module TextureUpload =
                     let pv = PixVolume<uint8>(Col.Format.RGBA, V3i(size, 1))
                     runtime.Download(texture, 0, 0, pv)
                     let volume = new Volume<uint8>(pv.Tensor4.Data, pv.Tensor4.Info.SubXYZVolume(0L));
-                    PixImage<uint8>(Col.Format.RGBA, volume).Transformed(ImageTrafo.MirrorY).AsPixImage<byte>()
+                    PixImage<uint8>(Col.Format.RGBA, volume).AsPixImage<byte>()
 
                 Expect.equal result.Size size "image size mismatch"
                 PixImage.compare V2i.Zero data result
