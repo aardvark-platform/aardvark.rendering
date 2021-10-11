@@ -537,7 +537,7 @@ module PreparedPipelineStateAssembler =
             x.SetCullMode(me.pCullMode)
             x.SetFrontFace(me.pFrontFace)
             x.SetMultisample(me.pMultisample)
-            x.SetConservativeRaster(me.pConservativeRaster)
+            x.SetConservativeRaster(GL.NV_conservative_raster, me.pConservativeRaster)
             
             let myProg = me.pProgram.Handle.GetValue()
             x.UseProgram(me.pProgram)
@@ -647,7 +647,7 @@ module PreparedPipelineStateAssembler =
                 icnt <- icnt + 1
 
             if prev.pConservativeRaster <> me.pConservativeRaster then
-                x.SetConservativeRaster(me.pConservativeRaster)
+                x.SetConservativeRaster(GL.NV_conservative_raster, me.pConservativeRaster)
                 icnt <- icnt + 1
 
             // Program

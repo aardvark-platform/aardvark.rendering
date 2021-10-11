@@ -46,7 +46,7 @@ type ICommandStream =
     abstract member SetPolygonMode : m : nativeptr<int> -> unit
     abstract member SetCullMode : m : nativeptr<int> -> unit
     abstract member SetFrontFace : m : nativeptr<int> -> unit
-    abstract member SetConservativeRaster : r : nativeptr<int> -> unit
+    abstract member SetConservativeRaster : s : bool * r : nativeptr<int> -> unit
     abstract member SetMultisample : r : nativeptr<int> -> unit
 
     abstract member UseProgram : p : int -> unit
@@ -428,8 +428,9 @@ module GLAssemblerExtensions =
             s.PushIntArg(NativePtr.toNativeInt m)
             s.Call(OpenGl.Pointers.FrontFace)
 
-        member this.SetConservativeRaster(r : nativeptr<int>) =
-            this.Toggle(int NvConservativeRaster.ConservativeRasterizationNv, r)
+        member this.SetConservativeRaster(s : bool, r : nativeptr<int>) =
+            if s then
+                this.Toggle(int EnableCap.ConservativeRasterization, r)
 
         member this.SetMultisample(m : nativeptr<int>) =
             this.Toggle(int EnableCap.Multisample, m)
@@ -876,7 +877,7 @@ module GLAssemblerExtensions =
             member this.SetBlendModes(count : int, ptr: nativeint) = this.SetBlendModes(count, ptr)
             member this.SetColorMasks(count : int, ptr: nativeint) = this.SetColorMasks(count, ptr)
             member this.SetColorMask(r : bool, g : bool, b : bool, a : bool) = this.SetColorMask(r, g, b, a)
-            member this.SetConservativeRaster(r: nativeptr<int>) = this.SetConservativeRaster(r)
+            member this.SetConservativeRaster(s: bool, r: nativeptr<int>) = this.SetConservativeRaster(s, r)
             member this.SetCullMode(m: nativeptr<int>) = this.SetCullMode(m)
             member this.SetFrontFace(m: nativeptr<int>) = this.SetFrontFace(m)
             member this.SetDepthTest(m: nativeptr<int>) = this.SetDepthTest(m)
@@ -981,7 +982,7 @@ module GLAssemblerExtensions =
             member x.SetBlendModes(count : int, ptr: nativeint) = inner.SetBlendModes(count, ptr); x.Append("SetBlendModes", ptr)
             member x.SetColorMasks(count : int, ptr: nativeint) = inner.SetColorMasks(count, ptr); x.Append("SetColorMasks", ptr)
             member x.SetColorMask(r : bool, g : bool, b : bool, a : bool) = inner.SetColorMask(r, g, b, a); x.Append("SetColorMask", r, g, b, a)
-            member x.SetConservativeRaster(r: nativeptr<int>) = inner.SetConservativeRaster(r); x.Append("SetConservativeRaster", r)
+            member x.SetConservativeRaster(s: bool, r: nativeptr<int>) = if s then inner.SetConservativeRaster(s, r); x.Append("SetConservativeRaster", r)
             member x.SetCullMode(m: nativeptr<int>) = inner.SetCullMode(m); x.Append("SetCullMode", m)
             member x.SetFrontFace(m: nativeptr<int>) = inner.SetFrontFace(m); x.Append("SetFrontFace", m)
             member x.SetDepthTest(m: nativeptr<int>) = inner.SetDepthTest(m); x.Append("SetDepthTest", m)
@@ -1055,7 +1056,7 @@ module GLAssemblerExtensions =
             let handle = vao.Handle.GetValue() // unchangeable
             x.BindVertexAttributes(ctx, handle)
 
-        member inline x.SetConservativeRaster(r : IResource<_,int>) = x.SetConservativeRaster(r.Pointer)
+        member inline x.SetConservativeRaster(s : bool, r : IResource<_,int>) = x.SetConservativeRaster(s, r.Pointer)
         member inline x.SetMultisample(r : IResource<_,int>) = x.SetMultisample(r.Pointer)
 
         member inline x.DrawArrays(stats : nativeptr<V2i>, isActive : IResource<_,int>, beginMode : IResource<_, GLBeginMode>, calls : IResource<_,DrawCallInfoList>) =
