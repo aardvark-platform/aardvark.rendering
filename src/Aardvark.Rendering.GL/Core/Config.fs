@@ -2,14 +2,9 @@
 
 open System
 open System.Runtime.InteropServices
-open System.Threading
-open System.Collections.Concurrent
-open OpenTK
-open OpenTK.Platform
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
-open Aardvark.Rendering.GL
 
 type DepthRange = MinusOneToOne=0 | ZeroToOne=1
 
@@ -121,44 +116,8 @@ module RuntimeConfig =
 [<AutoOpen>]
 module Error =
 
-    open System.Runtime.InteropServices
-
     exception OpenGLException of ec : ErrorCode * msg : string with
         override x.Message = sprintf "%A: %s" x.ec x.msg
-        
-
-    
-    let private debug (debugSource : DebugSource) (debugType : DebugType) (id : int) (severity : DebugSeverity) (length : int) (message : nativeint) (userParam : nativeint) =
-         let message = Marshal.PtrToStringAnsi(message,length)
-         match severity with
-             | DebugSeverity.DebugSeverityNotification -> 
-                Report.Line(2, "[GL:{0}] {1}", userParam, message)
-
-             | DebugSeverity.DebugSeverityMedium ->
-                match debugType with
-                    | DebugType.DebugTypePerformance -> Report.Line(1, "[GL:{0}] {1}", userParam, message)
-                    | _ -> Report.Warn("[GL:{0}] {1}", userParam, message)
-
-             | DebugSeverity.DebugSeverityHigh ->
-                 Report.Error("[GL:{0}] {1}", userParam, message)
-
-             | _ ->
-                Report.Line(2, "[GL:{0}] {1}", userParam, message)
-
-    let private debugHandler = DebugProc debug
-    let private debugGC = Marshal.PinDelegate debugHandler
-
-    type private GLDebugMessageCallbackDel = delegate of callback : nativeint * userData : nativeint -> unit
-
-
-    let private suffixes = [""; "EXT"; "KHR"; "NV"; "AMD"]
-    type IGraphicsContextInternal with
-        member x.TryGetAddress (name : string) =
-            suffixes |> List.tryPick (fun s ->
-                let ptr = x.GetAddress(name + s)
-                if ptr <> 0n then Some ptr
-                else None
-            )
 
     type GL with
         static member Check str =
@@ -170,26 +129,8 @@ module Error =
                     if mode = ErrorReporting.Log then Report.Error("{0}: {1}",err,str)
                     else raise <| OpenGLException(err, sprintf "%A" str)
 
-        static member SetupDebugOutput() =
-            let ctx = GraphicsContext.CurrentContext |> unbox<IGraphicsContextInternal>
-
-            match ctx.TryGetAddress("glDebugMessageCallback") with
-                | Some ptr ->
-                    Report.BeginTimed(4, "[GL] setting up debug callback")
-                    let del = Marshal.GetDelegateForFunctionPointer(ptr, typeof<GLDebugMessageCallbackDel>) |> unbox<GLDebugMessageCallbackDel>
-                    del.Invoke(debugGC.Pointer, ctx.Context.Handle)
-                    
-                    Report.End(4) |> ignore
-                    let arr : uint32[] = null
-                    let severity = DebugSeverityControl.DontCare //DebugSeverityControl.DebugSeverityHigh ||| DebugSeverityControl.DebugSeverityMedium 
-            
-                    Report.BeginTimed(4, "[GL] debug message control")
-                    GL.DebugMessageControl(DebugSourceControl.DontCare, DebugTypeControl.DontCare, severity, 0, arr, true)
-                    GL.Check "DebugMessageControl"
-                    Report.End(4) |> ignore
-                    true
-                | _ ->
-                    false
+[<AutoOpen>]
+module Stopwatch =
 
     type GLTimer private() =
         let counter = GL.GenQuery()

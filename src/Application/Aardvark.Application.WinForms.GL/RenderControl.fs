@@ -266,7 +266,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         let mutable initial = false
         if loaded then
             if isNull contextHandle || contextHandle.Handle.IsDisposed then
-                contextHandle <- ContextHandle(base.Context, base.WindowInfo)
+                contextHandle <- new ContextHandle(base.Context, base.WindowInfo)
                 contextHandle.AttachDebugOutputIfNeeded(enableDebug)
                 initial <- true
 

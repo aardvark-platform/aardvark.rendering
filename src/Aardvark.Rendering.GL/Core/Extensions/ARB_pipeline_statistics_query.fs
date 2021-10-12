@@ -7,8 +7,8 @@ open OpenTK.Graphics.OpenGL4
 module ARB_pipeline_statistics_query =
 
     type GL private() =
-        static member ARB_pipeline_statistics_query =
-            ExtensionHelpers.isSupported (Version(4, 6)) "GL_ARB_pipeline_statistics_query"
+        static let supported = ExtensionHelpers.isSupported (Version(4, 6)) "GL_ARB_pipeline_statistics_query"
+        static member ARB_pipeline_statistics_query = supported
 
     [<AutoOpen>]
     module private Values =

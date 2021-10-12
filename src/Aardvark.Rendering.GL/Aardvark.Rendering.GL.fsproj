@@ -34,6 +34,7 @@
     <Compile Include="Core\Utilities\TextureFormat.fs" />
     <Compile Include="Core\Utilities\TextureTarget.fs" />
     <Compile Include="Core\Config.fs" />
+    <Compile Include="Core\DebugOutput.fs" />
     <Compile Include="Core\GLVM.fs" />
     <Compile Include="Core\ContextHandles.fs" />
     <Compile Include="Core\ShaderCache.fs" />

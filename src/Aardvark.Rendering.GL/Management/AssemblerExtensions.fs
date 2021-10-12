@@ -925,6 +925,7 @@ module GLAssemblerExtensions =
                 let sofar = Seq.take (i + 1) commands |> Seq.toArray
                 System.Diagnostics.Debugger.Break()
                 printfn "%A" sofar
+                Log.error "%A" err
 
         let afterDel =
             Marshal.PinDelegate(DebugCallbackDelegate(after))
