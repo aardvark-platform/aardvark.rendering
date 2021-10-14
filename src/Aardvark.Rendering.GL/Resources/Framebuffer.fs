@@ -18,42 +18,54 @@ module private FramebufferMemoryUsage =
         Interlocked.Decrement(&ctx.MemoryUsage.VirtualFramebufferCount) |> ignore
 
 type Framebuffer(ctx : Context, signature : IFramebufferSignature, create : Aardvark.Rendering.GL.ContextHandle -> int, destroy : int -> unit, 
-                 bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>) =
+                 bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>, stencil : Option<IFramebufferOutput>) =
     inherit UnsharedObject(ctx, (fun h -> addPhysicalFbo ctx; create h), (fun h -> removePhysicalFbo ctx; destroy h))
 
     let mutable bindings = bindings
     let mutable depth = depth
+    let mutable stencil = stencil
 
     let resolution() =
-        match depth with
-            | Some d -> d.Size
-            | _ ->
-                let res = 
-                    bindings |> Seq.tryPick (fun (_,_,b) ->
-                        Some b.Size
-                    )
-                match res with
-                    | Some s -> s
-                    | None -> V2i.II //failwith "could not determine framebuffer-size."
+        match depth, stencil with
+        | Some d, _ -> d.Size
+        | _, Some s -> s.Size
+        | _ ->
+            let res = 
+                bindings |> Seq.tryPick (fun (_,_,b) ->
+                    Some b.Size
+                )
+            match res with
+            | Some s -> s
+            | None -> V2i.II //failwith "could not determine framebuffer-size."
 
     let mutable size = resolution()
 
     let mutable outputBySem = 
         let bindings = (bindings |> List.map (fun (_,s,o) -> (s,o)))
         let depth = match depth with | Some d -> [DefaultSemantic.Depth, d] | _ -> []
-        List.append bindings depth |> Map.ofList
+        let stencil = match stencil with | Some s -> [DefaultSemantic.Stencil, s] | _ -> []
+        [depth; stencil] |> List.concat |> List.append bindings |> Map.ofList
+
+    new (ctx : Context, signature : IFramebufferSignature, create : Aardvark.Rendering.GL.ContextHandle -> int, destroy : int -> unit, 
+         bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>) =
+        new Framebuffer(ctx, signature, create, destroy, bindings, depth, None)
 
     member x.Size 
         with get() = size
         and set v = size <- v
 
-    member x.Update(create : Aardvark.Rendering.GL.ContextHandle -> int, b : list<int * Symbol * IFramebufferOutput>, d : Option<IFramebufferOutput>) =
+    member x.Update(create : Aardvark.Rendering.GL.ContextHandle -> int,
+                    b : list<int * Symbol * IFramebufferOutput>,
+                    d : Option<IFramebufferOutput>,
+                    s : Option<IFramebufferOutput>) =
         base.Update(create)
         bindings <- b
         depth <- d
+        stencil <- s
         let bindings = (bindings |> List.map (fun (_,s,o) -> (s,o)))
         let depth = match depth with | Some d -> [DefaultSemantic.Depth, d] | _ -> []
-        outputBySem <- List.append bindings depth |> Map.ofList
+        let stencil = match stencil with | Some s -> [DefaultSemantic.Stencil, s] | _ -> []
+        outputBySem <- [depth; stencil] |> List.concat |> List.append bindings |> Map.ofList
 
     member x.Attachments = outputBySem
     member x.Signature = signature
@@ -178,7 +190,7 @@ module FramebufferExtensions =
         member x.CreateFramebuffer (signature : IFramebufferSignature, bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>, stencil : Option<IFramebufferOutput>) =
             let init = init bindings depth stencil
             addVirtualFbo x
-            new Framebuffer(x, signature, init, destroy, bindings, depth)
+            new Framebuffer(x, signature, init, destroy, bindings, depth, stencil)
 
         member x.Delete(f : Framebuffer) =
             removeVirtualFbo x
@@ -186,4 +198,4 @@ module FramebufferExtensions =
 
         member x.Update (f : Framebuffer, bindings : list<int * Symbol * IFramebufferOutput>, depth : Option<IFramebufferOutput>, stencil : Option<IFramebufferOutput>) =
             let init = init bindings depth stencil
-            f.Update(init, bindings, depth)
+            f.Update(init, bindings, depth, stencil)
