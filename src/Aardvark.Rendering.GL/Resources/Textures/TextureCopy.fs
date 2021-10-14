@@ -194,30 +194,38 @@ module internal ImageCopyImplementation =
                                     (dst : Texture) (dstLevel : int) (dstOffset : V3i)
                                     (size : V3i)  =
             let target = dst |> TextureTarget.ofTexture
-            let targetSlice = target |> TextureTarget.toSliceTarget dstOffset.Z
 
-            Image.readLayers src srcLevel srcOffset.Z size.Z (fun slice ->
+            GL.BindTexture(target, dst.Handle)
+            GL.Check "could not bind texture"
+
+            Image.readLayers src srcLevel srcOffset.Z size.Z (fun srcSlice ->
+                let dstSlice = dstOffset.Z + srcSlice - srcOffset.Z
+                let targetSlice = target |> TextureTarget.toSliceTarget dstSlice
+
                 match dst.Dimension, dst.IsArray with
                 | TextureDimension.Texture1D, false ->
                     GL.CopyTexSubImage1D(target, dstLevel, dstOffset.X, srcOffset.X, srcOffset.Y, size.X)
+                    GL.Check "could not copy texture subimage 1D"
 
                 | TextureDimension.Texture1D, true
                 | TextureDimension.Texture2D, false
                 | TextureDimension.TextureCube, false ->
                     let dstOffset =
-                        if dst.Dimension = TextureDimension.Texture1D then V2i(dstOffset.X, slice)
+                        if dst.Dimension = TextureDimension.Texture1D then V2i(dstOffset.X, dstSlice)
                         else dstOffset.XY
 
                     GL.CopyTexSubImage2D(targetSlice, dstLevel, dstOffset.X, dstOffset.Y, srcOffset.X, srcOffset.Y, size.X, size.Y)
+                    GL.Check "could not copy texture subimage 2D"
 
                 | TextureDimension.Texture2D, true
                 | TextureDimension.Texture3D, false
                 | TextureDimension.TextureCube, true ->
                     let dstOffset =
                         if dst.Dimension = TextureDimension.Texture3D then dstOffset
-                        else V3i(dstOffset.XY, slice)
+                        else V3i(dstOffset.XY, dstSlice)
 
                     GL.CopyTexSubImage3D(target, dstLevel, dstOffset.X, dstOffset.Y, dstOffset.Z, srcOffset.X, srcOffset.Y, size.X, size.Y)
+                    GL.Check "could not copy texture subimage 3D"
 
                 | d, a ->
                     failwithf "[GL] unsupported texture data %A%s" d (if a then "[]" else "")
