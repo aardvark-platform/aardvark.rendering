@@ -315,6 +315,11 @@ module TextureFormat =
             TextureFormat.DepthComponent32f
         ]
 
+    let private stencilFormats =
+        HashSet.ofList [
+            TextureFormat.StencilIndex8
+        ]
+
     let private depthStencilFormats =
         HashSet.ofList [
             TextureFormat.DepthStencil
@@ -326,6 +331,10 @@ module TextureFormat =
     let isDepth (fmt : TextureFormat) =
         depthFormats.Contains fmt
 
+    /// Returns whether the given format is a stencil format.
+    let isStencil (fmt : TextureFormat) =
+        stencilFormats.Contains fmt
+
     /// Returns whether the given format is a combined depth-stencil format.
     let isDepthStencil (fmt : TextureFormat) =
         depthStencilFormats.Contains fmt
@@ -334,6 +343,11 @@ module TextureFormat =
     /// either a depth for a combined depth-stencil format).
     let hasDepth (fmt : TextureFormat) =
         isDepth fmt || isDepthStencil fmt
+
+    /// Returns whether the given format has a stencil component (i.e. it is
+    /// either a stencil for a combined depth-stencil format).
+    let hasStencil (fmt : TextureFormat) =
+        isStencil fmt || isDepthStencil fmt
 
     let ofPixFormat =
 
@@ -531,9 +545,6 @@ module TextureFormat =
             TextureFormat.Rg32ui, PixFormat(typeof<uint32>, Col.Format.NormalUV)
             TextureFormat.Rgb32ui, PixFormat(typeof<uint32>, Col.Format.RGB)
             TextureFormat.Rgba32ui, PixFormat(typeof<uint32>, Col.Format.RGBA)
-
-            TextureFormat.DepthComponent32, PixFormat.UIntGray
-            TextureFormat.DepthComponent32f, PixFormat.FloatGray
 
             TextureFormat.CompressedRgb, PixFormat.ByteRGB
             TextureFormat.CompressedRgba, PixFormat.ByteRGBA
@@ -749,8 +760,10 @@ module TextureFormatExtensions =
         member x.IsCompressed = TextureFormat.isCompressed x
         member x.IsSrgb = TextureFormat.isSrgb x
         member x.IsDepth = TextureFormat.isDepth x
+        member x.IsStencil = TextureFormat.isStencil x
         member x.IsDepthStencil = TextureFormat.isDepthStencil x
         member x.HasDepth = TextureFormat.hasDepth x
+        member x.HasStencil = TextureFormat.hasStencil x
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

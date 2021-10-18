@@ -297,7 +297,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 VkImageUsageFlags.TransferDstBit |||
                 VkImageUsageFlags.SampledBit
 
-            if TextureFormat.hasDepth format then
+            if format.HasDepth || format.HasStencil then
                 def ||| VkImageUsageFlags.DepthStencilAttachmentBit
             else
                 def ||| VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.StorageBit

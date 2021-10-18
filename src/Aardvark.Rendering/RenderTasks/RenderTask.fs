@@ -135,6 +135,16 @@ module RenderTask =
         task |> renderToDepthWithClear size defaultClearValues
 
 
+    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Stencil as texture.
+    /// The resulting framebuffer is cleared according to the given clear values before the render task is executed.
+    let renderToStencilWithClear (size : aval<V2i>) (clearValues : ClearValues) (task : IRenderTask) =
+        task |> renderSemanticsWithClear (Set.singleton DefaultSemantic.Stencil) size clearValues |> Map.find DefaultSemantic.Stencil
+
+    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Stencil as texture.
+    let renderToStencil (size : aval<V2i>) (task : IRenderTask) =
+        task |> renderToStencilWithClear size defaultClearValues
+
+
     /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Depth and DefaultSemantic.Stencil as textures.
     /// The resulting framebuffer is cleared according to the given clear values before the render task is executed.
     let renderToDepthAndStencilWithClear (size : aval<V2i>) (clearValues : ClearValues) (task : IRenderTask) =
