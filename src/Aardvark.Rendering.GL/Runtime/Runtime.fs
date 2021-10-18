@@ -695,12 +695,14 @@ type Runtime() =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
+        t |> ResourceValidation.Textures.validateStencilFormat
         ctx.DownloadStencil(unbox<Texture> t, level, slice, offset, target)
 
     member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
+        t |> ResourceValidation.Textures.validateDepthFormat
         ctx.DownloadDepth(unbox<Texture> t, level, slice, offset, target)
 
     member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) =

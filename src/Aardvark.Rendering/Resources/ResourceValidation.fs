@@ -13,6 +13,12 @@ module ResourceValidation =
                 static member inline GetDimension(t : IBackendTexture) = t.Dimension
                 static member inline GetDimension(t : IRenderbuffer) = TextureDimension.Texture2D
 
+                static member inline HasDepth(t : IBackendTexture) = t.Format.HasDepth
+                static member inline HasDepth(t : IRenderbuffer) = t.Format.HasDepth
+
+                static member inline HasStencil(t : IBackendTexture) = t.Format.HasStencil
+                static member inline HasStencil(t : IRenderbuffer) = t.Format.HasStencil
+
                 static member inline GetSlices(t : IBackendTexture) = t.Slices
                 static member inline GetSlices(t : IRenderbuffer) = 1
 
@@ -30,6 +36,12 @@ module ResourceValidation =
             let inline getDimensionAux (_ : ^z) (t : ^Texture) =
                 ((^z or ^Texture) : (static member GetDimension : ^Texture -> TextureDimension) (t))
 
+            let inline hasDepthAux (_ : ^z) (t : ^Texture) =
+                ((^z or ^Texture) : (static member HasDepth : ^Texture -> bool) (t))
+
+            let inline hasStencilAux (_ : ^z) (t : ^Texture) =
+                ((^z or ^Texture) : (static member HasStencil: ^Texture -> bool) (t))
+
             let inline getSlicesAux (_ : ^z) (t : ^Texture) =
                 ((^z or ^Texture) : (static member GetSlices : ^Texture -> int) (t))
 
@@ -44,6 +56,12 @@ module ResourceValidation =
 
         let inline getDimension (texture : ^Texture) =
             getDimensionAux Unchecked.defaultof<Helpers.TextureOrRenderbuffer> texture
+
+        let inline hasDepth (texture : ^Texture) =
+            hasDepthAux Unchecked.defaultof<Helpers.TextureOrRenderbuffer> texture
+
+        let inline hasStencil (texture : ^Texture) =
+            hasStencilAux Unchecked.defaultof<Helpers.TextureOrRenderbuffer> texture
 
         let inline getSlices (texture : ^Texture) =
             getSlicesAux Unchecked.defaultof<Helpers.TextureOrRenderbuffer> texture
@@ -176,3 +194,17 @@ module ResourceValidation =
             if count < 1 then fail "count must be greater than 0"
             if dimension = TextureDimension.Texture3D then fail "cannot be arrayed"
             validateCreationParams dimension size levels samples
+
+        /// Raises an ArgumentException if the image does not have a depth format.
+        let inline validateDepthFormat (texture : ^Texture) =
+            let dimension = getDimension texture
+
+            if not <| hasDepth texture then
+                Utils.failf dimension "image does not have a depth component"
+
+        /// Raises an ArgumentException if the image does not have a stencil format.
+        let inline validateStencilFormat (texture : ^Texture) =
+            let dimension = getDimension texture
+
+            if not <| hasStencil texture then
+                Utils.failf dimension "image does not have a stencil component"
