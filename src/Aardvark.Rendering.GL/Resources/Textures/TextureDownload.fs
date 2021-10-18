@@ -88,16 +88,29 @@ module internal TextureDownloadImplementation =
             GL.BindTexture(target, 0)
             GL.Check "could not unbind texture"
 
+        let private downloadGeneralPixelData (texture : Texture) (level : int) (slice : int) (offset : V3i) (size : V3i)
+                                             (pixelFormat : PixelFormat) (pixelType : PixelType)
+                                             (copy : int -> int -> nativeint -> nativeint -> nativeint -> unit) =
+            let offset =
+                let flipped = texture.WindowOffset(level, offset, size)
+                if texture.Dimension = TextureDimension.Texture3D then flipped
+                else V3i(flipped.XY, slice)
+
+            let pixelData =
+                PixelData.General {
+                    Size   = size
+                    Type   = pixelType
+                    Format = pixelFormat
+                    Copy   = copy
+                }
+
+            downloadPixelData texture level offset pixelData
+
         let downloadNativeTensor4<'T when 'T : unmanaged> (texture : Texture) (level : int) (slice : int)
                                                           (offset : V3i) (size : V3i) (dst : NativeTensor4<'T>) =
 
             let pixelFormat, pixelType =
                 PixFormat.toFormatAndType texture.Format dst.PixFormat
-
-            let offset =
-                let flipped = texture.WindowOffset(level, offset, size)
-                if texture.Dimension = TextureDimension.Texture3D then flipped
-                else V3i(flipped.XY, slice)
 
             let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (src : nativeint) =
                 let srcTensor =
@@ -113,22 +126,11 @@ module internal TextureDownloadImplementation =
                 let dst = dst.SubTensor4(V4i.Zero, V4i(size, channels))
                 NativeTensor4.copy (if texture.IsCubeOr2D then srcTensor.MirrorY() else srcTensor) dst
 
-            let pixelData =
-                PixelData.General {
-                    Size   = size
-                    Type   = pixelType
-                    Format = pixelFormat
-                    Copy   = copy
-                }
-
-            downloadPixelData texture level offset pixelData
+            downloadGeneralPixelData texture level slice offset size pixelFormat pixelType copy
 
         let downloadPixImage (texture : Texture) (level : int) (slice : int) (offset : V2i) (image : PixImage) =
             let pixelFormat, pixelType =
                 PixFormat.toFormatAndType texture.Format image.PixFormat
-
-            let offset =
-                texture.WindowOffset(level, offset, image.Size)
 
             let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (src : nativeint) =
                 let srcInfo =
@@ -141,23 +143,13 @@ module internal TextureDownloadImplementation =
 
                 TextureCopyUtils.Copy(src, srcInfo, image)
 
+            let size = V3i(image.Size, 1)
             let offset = V3i(offset, slice)
-            let data =
-                PixelData.General {
-                    Size   = V3i(image.Size, 1)
-                    Type   = pixelType
-                    Format = pixelFormat
-                    Copy   = copy
-                }
-
-            downloadPixelData texture level offset data
+            downloadGeneralPixelData texture level slice offset size pixelFormat pixelType copy
 
         let downloadPixVolume (texture : Texture) (level : int) (offset : V3i) (volume : PixVolume) =
             let pixelFormat, pixelType =
                 PixFormat.toFormatAndType texture.Format volume.PixFormat
-
-            let offset =
-                texture.WindowOffset(level, offset, volume.Size)
 
             let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (src : nativeint) =
                 let srcInfo =
@@ -179,15 +171,60 @@ module internal TextureDownloadImplementation =
 
                 TextureCopyUtils.Copy(src, srcInfo, volume)
 
-            let data =
-                  PixelData.General {
-                      Size   = volume.Size
-                      Type   = pixelType
-                      Format = pixelFormat
-                      Copy   = copy
-                  }
+            downloadGeneralPixelData texture level 0 offset volume.Size pixelFormat pixelType copy
 
-            downloadPixelData texture level offset data
+        let downloadStencil (texture : Texture) (level : int) (slice : int) (offset : V2i) (matrix : Matrix<int>) =
+            match texture.Format with
+            | TextureFormat.StencilIndex8 ->
+                let info = VolumeInfo(0L, V3l (matrix.Size, 1L), V3l (4L, 4L * matrix.SX, 1L))
+                let volume = Volume<uint8>(matrix.Array.UnsafeCoerce<uint8>(), info)
+
+                let image =
+                    let img : PixImage<uint8> = PixImage<uint8>()
+                    img.Volume <- volume
+                    img.Format <- Col.Format.Stencil
+                    img
+
+                downloadPixImage texture level slice offset image
+                matrix.Array.UnsafeCoerce<int>() |> ignore
+
+            | TextureFormat.Depth24Stencil8 ->
+                let image =
+                    let img : PixImage<int> = PixImage<int>()
+                    img.Volume <- matrix.AsVolume()
+                    img.Format <- Col.Format.Stencil
+                    img
+
+                downloadPixImage texture level slice offset image
+
+            // 64 bits per pixel
+            | TextureFormat.Depth32fStencil8 ->
+                let image =
+                    let img : PixImage<int> = PixImage<int>()
+                    img.Volume <- matrix.AsVolume()
+                    img.Format <- Col.Format.Stencil
+                    img
+
+                let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (src : nativeint) =
+                    let srcInfo =
+                        let viSize = V3l(matrix.Size, int64 channels)
+                        VolumeInfo(
+                            int64 alignedLineSize * (matrix.Size.Y - 1L) + 4L,
+                            viSize,
+                            V3l(int64 channels * int64 elementSize, int64 -alignedLineSize, int64 elementSize)
+                        )
+
+                    TextureCopyUtils.Copy(src, srcInfo, image)
+
+                let pt = PixelType.Float32UnsignedInt248Rev
+                let pf = PixelFormat.DepthStencil
+
+                let size = V3i(V2i matrix.Size, 1)
+                let offset = V3i(offset, slice)
+
+                downloadGeneralPixelData texture level slice offset size pf pt copy
+
+            | fmt -> failwithf "[GL] %A is not a stencil format" fmt
 
 
 [<AutoOpen>]
@@ -275,13 +312,9 @@ module ContextTextureDownloadExtensions =
         [<Extension>]
         static member DownloadStencil(this : Context, texture : Texture,
                                       level : int, slice : int, offset : V2i, target : Matrix<int>) =
-            let image =
-                let img : PixImage<int> = PixImage<int>()
-                img.Volume <- target.AsVolume()
-                img.Format <- Col.Format.Stencil
-                img
-
-            this.Download(texture, level, slice, offset, image)
+            using this.ResourceLock (fun _ ->
+                Texture.downloadStencil texture level slice offset target
+            )
 
         [<Extension>]
         static member DownloadStencil(this : Context, texture : Texture, level : int, slice : int, target : Matrix<int>) =
