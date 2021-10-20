@@ -22,17 +22,17 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
     let mutable texA = 
         use t = ctx.ResourceLock
         let handle = GL.GenTexture()
-        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L, false)
+        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L)
 
     let mutable texB = 
         use t = ctx.ResourceLock
         let handle = GL.GenTexture()
-        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L, false)
+        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L)
 
     let mutable texC = 
         use t = ctx.ResourceLock
         let handle = GL.GenTexture()
-        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L, false)
+        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L)
 
     let mutable fenceAB = 0n
     let mutable fenceC = 0n
@@ -109,7 +109,6 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
             texA.Size <- V3i(size.X, size.Y, 1)
             texA.Format <- textureFormat
             texA.MipMapLevels <- mipMapLevels
-            texA.ImmutableFormat <- false
             texA.Count <- 1
             texA.Dimension <- TextureDimension.Texture2D
             texA.Multisamples <- 1
@@ -323,9 +322,8 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
         else 1
 
 
-    let texture = 
+    let texture =
         let res = ctx.CreateTexture2D(V2i.II, 1, TextureFormat.Bgra8, 1)
-        res.ImmutableFormat <- false
         res
 
     let swapLock = obj()

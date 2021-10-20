@@ -20,7 +20,6 @@ type Texture =
         val mutable public Format : TextureFormat
         val mutable public MipMapLevels : int
         val mutable public SizeInBytes : int64
-        val mutable public ImmutableFormat : bool
         val mutable public IsArray : bool
 
         member x.IsMultisampled = x.Multisamples > 1
@@ -41,19 +40,19 @@ type Texture =
             member x.Samples = x.Multisamples
 
         new(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int,
-            size : V3i, count : Option<int>, format : TextureFormat, sizeInBytes : int64, immutable : bool) =
+            size : V3i, count : Option<int>, format : TextureFormat, sizeInBytes : int64) =
             let cnt, isArray =
                 match count with
                     | Some cnt -> cnt, true
                     | None -> 1, false
             { Context = ctx; Handle = handle; Dimension = dimension; MipMapLevels = mipMapLevels; Multisamples = multisamples;
-              Size = size; Count = cnt; IsArray = isArray; Format = format; SizeInBytes = sizeInBytes; ImmutableFormat = immutable }
+              Size = size; Count = cnt; IsArray = isArray; Format = format; SizeInBytes = sizeInBytes }
 
     end
 
 type TextureViewHandle(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int,
                        multisamples : int, size : V3i, count : Option<int>, format : TextureFormat) =
-    inherit Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, count, format, 0L, true)
+    inherit Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, count, format, 0L)
 
 
 [<AutoOpen>]
@@ -346,33 +345,23 @@ module TextureCreationExtensions =
             GL.TexParameter(target, TextureParameterName.TextureMagFilter, int TextureMagFilter.Linear)
 
         member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) =
-            let isArray = slices > 0
+            using x.ResourceLock (fun _ ->
+                let isArray = slices > 0
 
-            match dim, isArray with
-            | TextureDimension.Texture1D, false -> x.CreateTexture1D(size.X, levels, format)
-            | TextureDimension.Texture1D, true  -> x.CreateTexture1DArray(size.X, slices, levels, format)
-            | TextureDimension.Texture2D, false -> x.CreateTexture2D(size.XY, levels, format, samples)
-            | TextureDimension.Texture2D, true  -> x.CreateTexture2DArray(size.XY, slices, levels, format, samples)
-            | TextureDimension.Texture3D, false -> x.CreateTexture3D(size, levels, format)
-            | TextureDimension.Texture3D, true  -> raise <| ArgumentException("3D textures cannot be arrayed")
-            | TextureDimension.TextureCube, false -> x.CreateTextureCube(size.X, levels, format)
-            | TextureDimension.TextureCube, true  -> x.CreateTextureCubeArray(size.X, slices, levels, format)
-            | _ -> failwith "[GL] Invalid texture dimension"
+                if format = TextureFormat.StencilIndex8 && not GL.ARB_texture_stencil8 then
+                    failwithf "[GL] textures with format %A not supported" format
 
-        member x.UpdateTexture(tex : Texture, size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) =
-            let isArray = slices > 0
-
-            match dim, isArray with
-            | TextureDimension.Texture1D, false -> x.UpdateTexture1D(tex, size.X, levels, format)
-            | TextureDimension.Texture1D, true  -> x.UpdateTexture1DArray(tex, size.X, slices, levels, format)
-            | TextureDimension.Texture2D, false -> x.UpdateTexture2D(tex, size.XY, levels, format, samples)
-            | TextureDimension.Texture2D, true  -> x.UpdateTexture2DArray(tex, size.XY, slices, levels, format, samples)
-            | TextureDimension.Texture3D, false -> x.UpdateTexture3D(tex, size, levels, format)
-            | TextureDimension.Texture3D, true  -> raise <| ArgumentException("3D textures cannot be arrayed")
-            | TextureDimension.TextureCube, false -> x.UpdateTextureCube(tex, size.X, levels, format)
-            | TextureDimension.TextureCube, true  -> x.UpdateTextureCubeArray(tex, size.X, slices, levels, format)
-            | _ -> failwith "[GL] Invalid texture dimension"
-
+                match dim, isArray with
+                | TextureDimension.Texture1D, false -> x.CreateTexture1D(size.X, levels, format)
+                | TextureDimension.Texture1D, true  -> x.CreateTexture1DArray(size.X, slices, levels, format)
+                | TextureDimension.Texture2D, false -> x.CreateTexture2D(size.XY, levels, format, samples)
+                | TextureDimension.Texture2D, true  -> x.CreateTexture2DArray(size.XY, slices, levels, format, samples)
+                | TextureDimension.Texture3D, false -> x.CreateTexture3D(size, levels, format)
+                | TextureDimension.Texture3D, true  -> raise <| ArgumentException("3D textures cannot be arrayed")
+                | TextureDimension.TextureCube, false -> x.CreateTextureCube(size.X, levels, format)
+                | TextureDimension.TextureCube, true  -> x.CreateTextureCubeArray(size.X, slices, levels, format)
+                | _ -> failwith "[GL] Invalid texture dimension"
+            )
 
         member x.CreateTexture1D(size : int, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
@@ -380,7 +369,7 @@ module TextureCreationExtensions =
                 GL.Check "could not create texture"
 
                 ResourceCounts.addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture1D, mipMapLevels, 1, V3i.Zero, None, format, 0L, false)
+                let tex = Texture(x, h, TextureDimension.Texture1D, mipMapLevels, 1, V3i.Zero, None, format, 0L)
                 x.UpdateTexture1D(tex, size, mipMapLevels, format)
 
                 tex
@@ -392,7 +381,7 @@ module TextureCreationExtensions =
                 GL.Check "could not create texture"
 
                 ResourceCounts.addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture2D, mipMapLevels, 1, V3i.Zero, None, format, 0L, false)
+                let tex = Texture(x, h, TextureDimension.Texture2D, mipMapLevels, 1, V3i.Zero, None, format, 0L)
 
                 x.UpdateTexture2D(tex, size, mipMapLevels, format, samples)
 
@@ -405,7 +394,7 @@ module TextureCreationExtensions =
                 GL.Check "could not create texture"
 
                 ResourceCounts.addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture3D, mipMapLevels, 1, V3i.Zero, None, format, 0L, false)
+                let tex = Texture(x, h, TextureDimension.Texture3D, mipMapLevels, 1, V3i.Zero, None, format, 0L)
                 x.UpdateTexture3D(tex, size, mipMapLevels, format)
 
                 tex
@@ -417,7 +406,7 @@ module TextureCreationExtensions =
                 GL.Check "could not create texture"
 
                 ResourceCounts.addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.TextureCube, mipMapLevels, 1, V3i(size, size, 0), None, format, 0L, false)
+                let tex = Texture(x, h, TextureDimension.TextureCube, mipMapLevels, 1, V3i(size, size, 0), None, format, 0L)
                 x.UpdateTextureCube(tex, size, mipMapLevels, format)
 
                 tex
@@ -429,7 +418,7 @@ module TextureCreationExtensions =
                 GL.Check "could not create texture"
 
                 ResourceCounts.addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture1D, mipMapLevels, 1, V3i.Zero, Some count, format, 0L, false)
+                let tex = Texture(x, h, TextureDimension.Texture1D, mipMapLevels, 1, V3i.Zero, Some count, format, 0L)
                 x.UpdateTexture1DArray(tex, size, count, mipMapLevels, format)
 
                 tex
@@ -441,7 +430,7 @@ module TextureCreationExtensions =
                 GL.Check "could not create texture"
 
                 ResourceCounts.addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture2D, mipMapLevels, 1, V3i.Zero, Some count, format, 0L, false)
+                let tex = Texture(x, h, TextureDimension.Texture2D, mipMapLevels, 1, V3i.Zero, Some count, format, 0L)
 
                 x.UpdateTexture2DArray(tex, size, count, mipMapLevels, format, samples)
 
@@ -454,17 +443,14 @@ module TextureCreationExtensions =
                 GL.Check "could not create texture"
 
                 ResourceCounts.addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.TextureCube, mipMapLevels, 1, V3i(size, size, 0), Some count, format, 0L, false)
+                let tex = Texture(x, h, TextureDimension.TextureCube, mipMapLevels, 1, V3i(size, size, 0), Some count, format, 0L)
                 x.UpdateTextureCubeArray(tex, size, count, mipMapLevels, format)
 
                 tex
             )
 
-        member x.UpdateTexture1D(tex : Texture, size : int, mipMapLevels : int, format : TextureFormat) =
+        member private x.UpdateTexture1D(tex : Texture, size : int, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
-                if tex.ImmutableFormat then
-                    failwith "cannot update format/size for immutable texture"
-
                 GL.BindTexture(TextureTarget.Texture1D, tex.Handle)
                 GL.Check "could not bind texture"
 
@@ -484,14 +470,10 @@ module TextureCreationExtensions =
                 tex.Dimension <- TextureDimension.Texture1D
                 tex.Size <- V3i(size, 1, 1)
                 tex.Format <- format
-                tex.ImmutableFormat <- true
             )
 
-        member x.UpdateTexture2D(tex : Texture, size : V2i, mipMapLevels : int, format : TextureFormat, samples : int) =
+        member private x.UpdateTexture2D(tex : Texture, size : V2i, mipMapLevels : int, format : TextureFormat, samples : int) =
             using x.ResourceLock (fun _ ->
-                if tex.ImmutableFormat then
-                    failwith "cannot update format/size for immutable texture"
-
                 let target =
                     if samples = 1 then TextureTarget.Texture2D
                     else TextureTarget.Texture2DMultisample
@@ -521,14 +503,10 @@ module TextureCreationExtensions =
                 tex.Count <- 1
                 tex.Size <- V3i(size.X, size.Y, 1)
                 tex.Format <- format
-                tex.ImmutableFormat <- true
             )
 
-        member x.UpdateTexture3D(tex : Texture, size : V3i, mipMapLevels : int, format : TextureFormat) =
+        member private x.UpdateTexture3D(tex : Texture, size : V3i, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
-                if tex.ImmutableFormat then
-                    failwith "cannot update format/size for immutable texture"
-
                 GL.BindTexture(TextureTarget.Texture3D, tex.Handle)
                 GL.Check "could not bind texture"
 
@@ -552,14 +530,10 @@ module TextureCreationExtensions =
                 tex.Multisamples <- 1
                 tex.Size <- size
                 tex.Format <- format
-                tex.ImmutableFormat <- true
             )
 
-        member x.UpdateTextureCube(tex : Texture, size : int, mipMapLevels : int, format : TextureFormat) =
+        member private x.UpdateTextureCube(tex : Texture, size : int, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
-                if tex.ImmutableFormat then
-                    failwith "cannot update format/size for immutable texture"
-
                 GL.BindTexture(TextureTarget.TextureCubeMap, tex.Handle)
                 GL.Check "could not bind texture"
 
@@ -578,14 +552,10 @@ module TextureCreationExtensions =
                 tex.Size <- V3i(size, size, 1)
                 tex.Count <- 1
                 tex.Format <- format
-                tex.ImmutableFormat <- true
             )
 
-        member x.UpdateTexture1DArray(tex : Texture, size : int, count : int, mipMapLevels : int, format : TextureFormat) =
+        member private x.UpdateTexture1DArray(tex : Texture, size : int, count : int, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
-                if tex.ImmutableFormat then
-                    failwith "cannot update format/size for immutable texture"
-
                 GL.BindTexture(TextureTarget.Texture1DArray, tex.Handle)
                 GL.Check "could not bind texture"
 
@@ -608,14 +578,10 @@ module TextureCreationExtensions =
                 tex.Multisamples <- 1
                 tex.Size <- V3i(size, 1, 1)
                 tex.Format <- format
-                tex.ImmutableFormat <- true
             )
 
-        member x.UpdateTexture2DArray(tex : Texture, size : V2i, count : int, mipMapLevels : int, format : TextureFormat, samples : int) =
+        member private x.UpdateTexture2DArray(tex : Texture, size : V2i, count : int, mipMapLevels : int, format : TextureFormat, samples : int) =
             using x.ResourceLock (fun _ ->
-                if tex.ImmutableFormat then
-                    failwith "cannot update format/size for immutable texture"
-
                 let target =
                     if samples = 1 then TextureTarget.Texture2DArray
                     else TextureTarget.Texture2DMultisampleArray
@@ -646,14 +612,10 @@ module TextureCreationExtensions =
                 tex.Multisamples <- samples
                 tex.Size <- V3i(size.X, size.Y, 1)
                 tex.Format <- format
-                tex.ImmutableFormat <- true
             )
 
-        member x.UpdateTextureCubeArray(tex : Texture, size : int, count : int, mipMapLevels : int, format : TextureFormat) =
+        member private x.UpdateTextureCubeArray(tex : Texture, size : int, count : int, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
-                if tex.ImmutableFormat then
-                    failwith "cannot update format/size for immutable texture"
-
                 let target = TextureTarget.TextureCubeMapArray
                 GL.BindTexture(target, tex.Handle)
                 GL.Check "could not bind texture"
@@ -676,14 +638,10 @@ module TextureCreationExtensions =
                 tex.Count <- count
                 tex.Size <- V3i(size, size, 1)
                 tex.Format <- format
-                tex.ImmutableFormat <- true
             )
 
         member x.CreateTextureView(orig : Texture, levels : Range1i, slices : Range1i, isArray : bool) =
             using x.ResourceLock (fun _ ->
-                if not orig.ImmutableFormat then
-                    failwithf "cannot create texture-views for mutable textures"
-
                 let handle = GL.GenTexture()
                 GL.Check "could not create texture"
 
@@ -742,7 +700,7 @@ module TextureCreationExtensions =
 module Texture =
 
     let empty =
-        Texture(null,0,TextureDimension.Texture2D,0,0,V3i.Zero,None,TextureFormat.Rgba8,0L, false)
+        Texture(null, 0, TextureDimension.Texture2D, 0, 0, V3i.Zero, None, TextureFormat.Rgba8, 0L)
 
     let create1D (c : Context) (size : int) (mipLevels : int) (format : TextureFormat) =
         c.CreateTexture1D(size, mipLevels, format)

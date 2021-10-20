@@ -65,17 +65,6 @@ module internal PixelFormat =
         ]
         >> if isInteger then Option.map toIntegerFormat else id
 
-    let isSupported = function
-        | PixelFormat.StencilIndex ->
-            let version = Version(GL.GetInteger(GetPName.MajorVersion), GL.GetInteger(GetPName.MinorVersion), 0)
-            if version < Version(4, 4, 0) then
-                Log.error "GL_STENCIL_INDEX requires OpenGL 4.4 or higher (got %d.%d)" version.Major version.Minor
-                false
-            else
-                true
-        | _ ->
-            true
-
 [<AutoOpen>]
 module internal PixelFormatExtensions =
 

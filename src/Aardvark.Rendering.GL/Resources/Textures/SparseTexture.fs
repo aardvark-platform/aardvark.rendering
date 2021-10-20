@@ -11,7 +11,7 @@ open Aardvark.Rendering.GL
 #nowarn "9"
 
 type SparseTexture(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int, size : V3i, count : Option<int>, format : TextureFormat, pageSize : V3i, sparseLevels : int) = 
-    inherit Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, count, format, 0L, true)
+    inherit Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, count, format, 0L)
 
     member x.PageSize = pageSize
     member x.SparseLevels = sparseLevels

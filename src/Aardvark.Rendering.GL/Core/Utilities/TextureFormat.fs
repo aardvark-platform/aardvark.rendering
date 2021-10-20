@@ -105,12 +105,9 @@ module internal TextureFormatExtensions =
                     TextureFormat.Rg16Snorm,   (PixelFormat.Rg, PixelType.Short)
                     TextureFormat.Rgb16Snorm,  (PixelFormat.Rgb, PixelType.Short)
                     TextureFormat.Rgba16Snorm, (PixelFormat.Rgba, PixelType.Short)
-
-                    TextureFormat.Float32UnsignedInt248Rev, (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev)
                 ]
 
             fun fmt ->
                 match fmt |> table with
-                | Some (pf, pt) when PixelFormat.isSupported pf -> (pf, pt)
-                | _ ->
-                    failwithf "Conversion from format %A supported" fmt
+                | Some res -> res
+                | _ -> failwithf "Conversion from format %A supported" fmt

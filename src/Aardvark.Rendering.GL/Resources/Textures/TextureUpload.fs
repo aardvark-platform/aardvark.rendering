@@ -432,7 +432,7 @@ module ContextTextureUploadExtensions =
                     texture
 
                 | :? NullTexture ->
-                    Texture(this, 0, TextureDimension.Texture2D, 1, 1, V3i(-1,-1,-1), None, TextureFormat.Rgba8, 0L, false)
+                    Texture.empty
 
                 | :? Texture as o ->
                     o
