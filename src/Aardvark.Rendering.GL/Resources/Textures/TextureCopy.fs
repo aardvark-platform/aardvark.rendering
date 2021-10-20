@@ -102,13 +102,12 @@ module internal TextureCopyUtilities =
             finally
                 gc.Free()
 
-        static member Copy(src : nativeint, srcInfo : VolumeInfo, dst : PixImage) =
+        static member Copy(elementType : Type, src : nativeint, srcInfo : VolumeInfo, dst : PixImage) =
             let gc = GCHandle.Alloc(dst.Array, GCHandleType.Pinned)
             try
                 let pDst = gc.AddrOfPinnedObject()
                 let imgInfo = dst.VolumeInfo
-                let elementType = dst.PixFormat.Type
-                let elementSize = elementType.GLSize |> int64
+                let elementSize = dst.PixFormat.Type.GLSize |> int64
                 let dstInfo =
                     VolumeInfo(
                         imgInfo.Origin * elementSize,
@@ -118,6 +117,9 @@ module internal TextureCopyUtilities =
                 TextureCopyUtils.Copy(elementType, src, srcInfo, pDst, dstInfo)
             finally
                 gc.Free()
+
+        static member Copy(src : nativeint, srcInfo : VolumeInfo, dst : PixImage) =
+            TextureCopyUtils.Copy(dst.PixFormat.Type, src, srcInfo, dst)
 
         static member Copy(src : PixVolume, dst : nativeint, dstInfo : Tensor4Info) =
             src.PixFormat.Type |> ExistentialHack.run {

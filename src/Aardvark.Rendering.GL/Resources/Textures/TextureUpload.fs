@@ -94,17 +94,14 @@ module internal TextureUploadImplementation =
 
             let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (dst : nativeint) =
                 let dstTensor =
-                    let dy = int64 alignedLineSize / int64 elementSize
                     let info =
-                        Tensor4Info(
-                            0L,
-                            V4l(int64 size.X, int64 size.Y, int64 size.Z, src.SW),
-                            V4l(int64 channels, dy, dy * int64 size.Y, 1L)
-                        )
+                        let rowPixels = alignedLineSize / nativeint elementSize
+                        Tensor4Info.deviceLayout texture.IsCubeOr2D 1 rowPixels channels (V3l size)
+
                     NativeTensor4<'T>(NativePtr.ofNativeInt dst, info)
 
                 let src = src.SubTensor4(V4i.Zero, V4i(size, channels))
-                NativeTensor4.copy src (if texture.IsCubeOr2D then dstTensor.MirrorY() else dstTensor)
+                NativeTensor4.copy src dstTensor
 
             let pixelData =
                 PixelData.General {
@@ -171,14 +168,7 @@ module internal TextureUploadImplementation =
                 texture.WindowOffset(level, offset, image.Size)
 
             let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (dst : nativeint) =
-                let dstInfo =
-                    let viSize = V3l(int64 image.Size.X, int64 image.Size.Y, int64 channels)
-                    VolumeInfo(
-                        int64 alignedLineSize * (int64 image.Size.Y - 1L),
-                        viSize,
-                        V3l(int64 channels * int64 elementSize, int64 -alignedLineSize, int64 elementSize)
-                    )
-
+                let dstInfo = VolumeInfo.deviceLayout true elementSize alignedLineSize channels image.SizeL
                 TextureCopyUtils.Copy(image, dst, dstInfo)
 
             let offset = V3i(offset, slice)
@@ -231,14 +221,8 @@ module internal TextureUploadImplementation =
 
             let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (dst : nativeint) =
                 let dstInfo =
-                    let rowPixels = int64 alignedLineSize / int64 elementSize
-                    let tiSize = V4l(volume.SizeL, int64 channels)
-
-                    Tensor4Info(
-                        0L,
-                        tiSize,
-                        V4l(int64 channels, rowPixels, rowPixels * tiSize.Y, 1L)
-                    )
+                    let rowPixels = alignedLineSize / nativeint elementSize
+                    Tensor4Info.deviceLayout false 1 rowPixels channels volume.SizeL
 
                 TextureCopyUtils.Copy(volume, dst, dstInfo)
 

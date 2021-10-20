@@ -16,6 +16,7 @@ module internal PixelType =
             PixelType.Int,                      4
             PixelType.HalfFloat,                2
             PixelType.Float,                    4
+            PixelType.UnsignedInt248,           4
             PixelType.Float32UnsignedInt248Rev, 8
         ]
 

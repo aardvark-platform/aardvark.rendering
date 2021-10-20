@@ -103,16 +103,52 @@ module internal TextureUtilitiesAndExtensions =
             | _ ->
                 failwithf "[GL] Pixel format %A and type %A not supported" pixFormat.Format pixFormat.Type
 
-    type NativeTensor4<'T when 'T : unmanaged> with
-        member x.Format =
-            match x.Size.W with
-            | 1L -> Col.Format.Gray
-            | 2L -> Col.Format.GrayAlpha
-            | 3L -> Col.Format.RGB
-            | _  -> Col.Format.RGBA
+    [<AutoOpen>]
+    module TensorExtensions =
 
-        member x.PixFormat =
-            PixFormat(typeof<'T>, x.Format)
+        type NativeTensor4<'T when 'T : unmanaged> with
+            member x.Format =
+                match x.Size.W with
+                | 1L -> Col.Format.Gray
+                | 2L -> Col.Format.GrayAlpha
+                | 3L -> Col.Format.RGB
+                | _  -> Col.Format.RGBA
+
+            member x.PixFormat =
+                PixFormat(typeof<'T>, x.Format)
+
+        module VolumeInfo =
+
+            let deviceLayoutWithOffset (flipY : bool) (elementOffset : int) (elementSize : int) (stride : nativeint) (channels : int) (size : V2l) =
+                let size = V3l(size, int64 channels)
+                let channelSize = int64 elementSize
+
+                let origin, deltaY =
+                    if flipY then
+                        int64 stride * (size.Y - 1L), int64 -stride
+                    else
+                        0L, int64 stride
+
+                let delta = V3l(int64 channels * channelSize, deltaY, channelSize)
+                VolumeInfo(origin + int64 elementOffset, size, delta)
+
+            let deviceLayout (flipY : bool) (elementSize : int) (stride : nativeint) (channels : int) (size : V2l) =
+                deviceLayoutWithOffset flipY 0 elementSize stride channels size
+
+        module Tensor4Info =
+
+            let deviceLayout (flipY : bool) (elementSize : int) (stride : nativeint) (channels : int) (size : V3l) =
+                let size = V4l(size, int64 channels)
+                let channelSize = int64 elementSize
+
+                let origin, deltaY =
+                    if flipY then
+                        int64 stride * (size.Y - 1L), int64 -stride
+                    else
+                        0L, int64 stride
+
+                let delta = V4l(int64 channels * channelSize, deltaY, int64 stride * size.Y, channelSize)
+                Tensor4Info(origin, size, delta)
 
     module private WindowOffset =
 
