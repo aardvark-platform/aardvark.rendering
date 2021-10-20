@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering.Tests.Texture
 
+open System
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
@@ -308,75 +309,141 @@ module TextureDownload =
             finally
                 runtime.DeleteTexture(t)
 
-        let private renderToDepthAndStencil (size : V2i) (runtime : IRuntime) =
+        type private RenderTo =
+            {
+                Task : IRenderTask
+                Disposable : IDisposable
+            }
+
+            member x.Dispose() =
+                x.Task.Dispose()
+                x.Disposable.Dispose()
+
+            interface IDisposable with
+                member x.Dispose() = x.Dispose()
+
+        let private renderTo (runtime : IRuntime) (attachments : seq<Symbol * RenderbufferFormat>) =
             let signature =
-                 runtime.CreateFramebufferSignature([
-                     DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
-                 ])
+                 runtime.CreateFramebufferSignature(attachments)
 
-            try
-                use task =
-                    let drawCall =
-                        DrawCallInfo(
-                            FaceVertexCount = 4,
-                            InstanceCount = 1
-                        )
+            let task =
+                let drawCall =
+                    DrawCallInfo(
+                        FaceVertexCount = 4,
+                        InstanceCount = 1
+                    )
 
-                    let positions = [| V3f(-0.5,-0.5,0.0); V3f(0.5,-0.5,0.0); V3f(-0.5,0.5,0.0); V3f(0.5,0.5,0.0) |]
+                let positions = [| V3f(-0.5,-0.5,0.0); V3f(0.5,-0.5,0.0); V3f(-0.5,0.5,0.0); V3f(0.5,0.5,0.0) |]
 
-                    let stencilMode =
-                        { StencilMode.None with
-                            Pass = StencilOperation.Replace;
-                            Reference = 3 }
+                let stencilMode =
+                    { StencilMode.None with
+                        Pass = StencilOperation.Replace;
+                        Reference = 3 }
 
-                    drawCall
-                    |> Sg.render IndexedGeometryMode.TriangleStrip
-                    |> Sg.vertexAttribute DefaultSemantic.Positions (AVal.constant positions)
-                    |> Sg.stencilMode' stencilMode
-                    |> Sg.shader {
-                        do! DefaultSurfaces.trafo
-                    }
-                    |> Sg.compile runtime signature
+                drawCall
+                |> Sg.render IndexedGeometryMode.TriangleStrip
+                |> Sg.vertexAttribute DefaultSemantic.Positions (AVal.constant positions)
+                |> Sg.stencilMode' stencilMode
+                |> Sg.shader {
+                    do! DefaultSurfaces.trafo
+                }
+                |> Sg.compile runtime signature
 
-                let depthStencilBuffer =
-                    let clear = clear { depth 1.0; stencil 0 }
-                    task |> RenderTask.renderToDepthWithClear (AVal.constant size) clear
+            { Task = task
+              Disposable =
+                { new IDisposable with
+                    member x.Dispose() = runtime.DeleteFramebufferSignature(signature)
+                }
+            }
 
-                depthStencilBuffer
+        let private renderToStencil (runtime : IRuntime) (format : RenderbufferFormat) (size : V2i) (f : IBackendTexture -> 'T) =
+            use task =
+                let atts = [ DefaultSemantic.Stencil, format ]
+                renderTo runtime atts
 
-            finally
-                runtime.DeleteFramebufferSignature(signature)
+            let buffer =
+                task.Task |> RenderTask.renderToStencil (AVal.constant size)
 
-        let textureDepth (runtime : IRuntime) =
-            let size = V2i(256)
-
-            let buffer = renderToDepthAndStencil size runtime
             buffer.Acquire()
 
             try
-                let depthResult = runtime.DownloadDepth(buffer.GetValue())
+                f <| buffer.GetValue()
+            finally
+                buffer.Release()
+
+        let private renderToDepth (runtime : IRuntime) (format : RenderbufferFormat) (size : V2i)
+                                  (f : IBackendTexture -> 'T) =
+            use task =
+                let atts = [ DefaultSemantic.Depth, format ]
+                renderTo runtime atts
+
+            let buffer =
+                task.Task |> RenderTask.renderToDepth (AVal.constant size)
+
+            buffer.Acquire()
+
+            try
+                f <| buffer.GetValue()
+            finally
+                buffer.Release()
+
+        let textureDepthComponent (format : RenderbufferFormat) (runtime : IRuntime) =
+            let size = V2i(256)
+
+            renderToDepth runtime format size (fun buffer ->
+                let depthResult = runtime.DownloadDepth(buffer)
+
+                Expect.equal (V2i depthResult.Size) size "Unexpected depth texture size"
+                Expect.isGreaterThan (Array.min depthResult.Data) 0.0f "Contains zero depth value"
+                Expect.isLessThan (Array.min depthResult.Data) 1.0f "All depth one"
+            )
+
+        let textureDepthComponent16 = textureDepthComponent RenderbufferFormat.DepthComponent16
+        let textureDepthComponent24 = textureDepthComponent RenderbufferFormat.DepthComponent24
+        let textureDepthComponent32 = textureDepthComponent RenderbufferFormat.DepthComponent32
+        let textureDepthComponent32f = textureDepthComponent RenderbufferFormat.DepthComponent32f
+
+        let textureDepth24Stencil8 (runtime : IRuntime) =
+            let size = V2i(256)
+
+            renderToDepth runtime RenderbufferFormat.Depth24Stencil8 size (fun buffer ->
+                let depthResult = runtime.DownloadDepth(buffer)
 
                 Expect.equal (V2i depthResult.Size) size "Unexpected depth texture size"
                 Expect.isGreaterThan (Array.min depthResult.Data) 0.0f "Contains zero depth value"
                 Expect.isLessThan (Array.min depthResult.Data) 1.0f "All depth one"
 
-            finally
-                buffer.Release()
-
-        let textureStencil (runtime : IRuntime) =
-            let size = V2i(256)
-
-            let buffer = renderToDepthAndStencil size runtime
-            buffer.Acquire()
-
-            try
-                let stencilResult = runtime.DownloadStencil(buffer.GetValue())
+                let stencilResult = runtime.DownloadStencil(buffer)
 
                 Expect.equal (V2i stencilResult.Size) size "Unexpected stencil texture size"
                 Expect.equal (Array.max stencilResult.Data) 3 "Unexpected stencil value"
+            )
 
-            finally
-                buffer.Release()
+        let textureDepth32fStencil8 (runtime : IRuntime) =
+            let size = V2i(256)
+
+            renderToDepth runtime RenderbufferFormat.Depth32fStencil8 size (fun buffer ->
+                let depthResult = runtime.DownloadDepth(buffer)
+
+                Expect.equal (V2i depthResult.Size) size "Unexpected depth texture size"
+                Expect.isGreaterThan (Array.min depthResult.Data) 0.0f "Contains zero depth value"
+                Expect.isLessThan (Array.min depthResult.Data) 1.0f "All depth one"
+
+                let stencilResult = runtime.DownloadStencil(buffer)
+
+                Expect.equal (V2i stencilResult.Size) size "Unexpected stencil texture size"
+                Expect.equal (Array.max stencilResult.Data) 3 "Unexpected stencil value"
+            )
+
+        let textureStencilIndex8 (runtime : IRuntime) =
+            let size = V2i(256)
+
+            renderToStencil runtime RenderbufferFormat.StencilIndex8 size (fun buffer ->
+                let stencilResult = runtime.DownloadStencil(buffer)
+
+                Expect.equal (V2i stencilResult.Size) size "Unexpected stencil texture size"
+                Expect.equal (Array.max stencilResult.Data) 3 "Unexpected stencil value"
+            )
 
         let argumentsOutOfRange (runtime : IRuntime) =
             let createAndDownload (dimension : TextureDimension) (levels : int) (level : int) (slice : int) (region : Box2i) () =
@@ -420,8 +487,13 @@ module TextureDownload =
             "Cube array subwindow",   Cases.textureCubeArraySubwindow
 
             if backend <> Backend.Vulkan then // not implemented
-                "Depth",              Cases.textureDepth
-                "Stencil",            Cases.textureStencil
+                "DepthComponent16",         Cases.textureDepthComponent16
+                "DepthComponent24",         Cases.textureDepthComponent24
+                "DepthComponent32",         Cases.textureDepthComponent32
+                "DepthComponent32f",        Cases.textureDepthComponent32f
+                "Depth24Stencil8",          Cases.textureDepth24Stencil8
+                "Depth32fStencil8",         Cases.textureDepth32fStencil8
+                "StencilIndex8",            Cases.textureStencilIndex8
 
             "Arguments out of range", Cases.argumentsOutOfRange
         ]
