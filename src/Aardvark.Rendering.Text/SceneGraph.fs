@@ -227,7 +227,14 @@ module Sg =
             let pass = scope.RenderPass
             let pass = if pass = RenderPass.main then RenderPass.shapes else pass
 
-            shapes.RasterizerState.Multisample <- AVal.map2 (fun a f -> not f || a) aa fill
+            
+            let multisample = 
+                (aa, fill) ||> AVal.map2 (fun a f -> 
+                    // @krauthaufen - why always multisampling when outline only?
+                    not f || a
+                )
+
+            shapes.RasterizerState.Multisample <- multisample
             shapes.RenderPass <- if pass = RenderPass.main then RenderPass.shapes else pass
             shapes.BlendState.Mode <- AVal.constant BlendMode.Blend
             shapes.VertexAttributes <- cache.VertexBuffers
@@ -364,7 +371,15 @@ module Sg =
 
             let pass = scope.RenderPass
             let pass = if pass = RenderPass.main then RenderPass.shapes else pass
-            shapes.RasterizerState.Multisample <- AVal.map2 (fun a f -> not f || a) aa fill
+
+            
+            let multisample = 
+                (aa, fill) ||> AVal.map2 (fun a f -> 
+                    // @krauthaufen - why always multisampling when outline only?
+                    not f || a
+                )
+
+            shapes.RasterizerState.Multisample <- multisample
             shapes.RenderPass <- pass
             shapes.BlendState.Mode <- AVal.constant BlendMode.Blend
             shapes.VertexAttributes <- cache.VertexBuffers
@@ -376,6 +391,7 @@ module Sg =
             //shapes.WriteBuffers <- Some (Set.ofList [DefaultSemantic.Colors])
 
             let boundary = RenderObject.ofScope scope
+            boundary.RasterizerState.Multisample <- multisample
             boundary.RenderPass <- pass
             boundary.BlendState.Mode <- AVal.constant BlendMode.Blend
             boundary.VertexAttributes <- cache.VertexBuffers
