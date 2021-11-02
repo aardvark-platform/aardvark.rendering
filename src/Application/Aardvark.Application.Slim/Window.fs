@@ -199,24 +199,25 @@ module private GameWindowIO =
 
         let mousePos() =
             try
-             match ctrl with
-                | Some ctrl -> 
-                    let state = OpenTK.Input.Mouse.GetCursorState()
-                    let p = ctrl.PointToClient(Drawing.Point(state.X, state.Y))
-                    let s = ctrl.ClientSize
+                match ctrl with
+                    | Some ctrl -> 
+                        let state = OpenTK.Input.Mouse.GetCursorState()
+                        let p = ctrl.PointToClient(Drawing.Point(state.X, state.Y))
+                        let s = ctrl.ClientSize
         
-                    let x = clamp 0 (s.Width-1) p.X
-                    let y = clamp 0 (s.Height-1) p.Y
+                        let x = clamp 0 (s.Width-1) p.X
+                        let y = clamp 0 (s.Height-1) p.Y
 
-                    PixelPosition(x, y, ctrl.ClientSize.Width, ctrl.ClientSize.Height)
-                | _ ->
-                    PixelPosition(0,0,0,0)
-             with e -> 
+                        PixelPosition(x, y, ctrl.ClientSize.Width, ctrl.ClientSize.Height)
+                    | _ ->
+                        PixelPosition(0,0,0,0)
+            with e -> 
                 Log.warn "could not grab mouse position."
                 lastPos
 
 
-        let onMouseDownHandler = EventHandler<MouseButtonEventArgs>(fun s e -> this.Down(%%e, %e.Button))
+
+        let onMouseDownHandler = EventHandler<MouseButtonEventArgs>(fun s e -> this.Down((%%e), (%e.Button)))
         let onMouseUpHandler = EventHandler<MouseButtonEventArgs>(fun s e -> this.Up(%%e, %e.Button))
         let onMouseMoveHandler = EventHandler<MouseMoveEventArgs>(fun s e -> this.Move %%e)
         let onMouseWheelHandler = EventHandler<MouseWheelEventArgs>(fun s e -> this.Scroll (%%e, (float e.Delta * 120.0)))
