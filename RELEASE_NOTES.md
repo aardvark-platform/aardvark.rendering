@@ -1,3 +1,7 @@
+### 5.1.18
+
+- disabled multisampling for text outline - fix for https://github.com/aardvark-platform/aardvark.rendering/issues/86
+
 ### 5.1.17
 - fixed package dependeny to FSharp.Data.Adaptive
 - [Vulkan] fixed package dependency to GLSLangSharp
