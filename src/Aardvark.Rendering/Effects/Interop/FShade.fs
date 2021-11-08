@@ -459,6 +459,17 @@ module FShadeInterop =
 
     let inline toEffect a = Effect.ofFunction a
 
+    module Surface =
+        let effectPool (effects : FShade.Effect[]) (active : aval<int>) =
+            let compile (cfg : FShade.EffectConfig) =
+                let modules1 = effects |> Array.map (FShade.Effect.toModule cfg)
+                let layout = FShade.EffectInputLayout.ofModules modules1
+                let modules = modules1 |> Array.map (FShade.EffectInputLayout.apply layout)
+                let current = active |> AVal.map (fun i -> modules.[i % modules.Length])
+                layout, current
+
+            Surface.FShade compile
+
 
 [<AbstractClass; Sealed; Extension>]
 type FShadeRuntimeExtensions private() =
