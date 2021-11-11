@@ -196,18 +196,18 @@ module FShadeInterop =
             RenderbufferFormat.R32f, typeof<float>
             RenderbufferFormat.Rg16f, typeof<V2d>
             RenderbufferFormat.Rg32f, typeof<V2d>
-            RenderbufferFormat.R8i, typeof<float>
-            RenderbufferFormat.R8ui, typeof<float>
-            RenderbufferFormat.R16i, typeof<float>
-            RenderbufferFormat.R16ui, typeof<float>
-            RenderbufferFormat.R32i, typeof<float>
-            RenderbufferFormat.R32ui, typeof<float>
-            RenderbufferFormat.Rg8i, typeof<V2d>
-            RenderbufferFormat.Rg8ui, typeof<V2d>
-            RenderbufferFormat.Rg16i, typeof<V2d>
-            RenderbufferFormat.Rg16ui, typeof<V2d>
-            RenderbufferFormat.Rg32i, typeof<V2d>
-            RenderbufferFormat.Rg32ui, typeof<V2d>
+            RenderbufferFormat.R8i, typeof<int>
+            RenderbufferFormat.R8ui, typeof<int>
+            RenderbufferFormat.R16i, typeof<int>
+            RenderbufferFormat.R16ui, typeof<int>
+            RenderbufferFormat.R32i, typeof<int>
+            RenderbufferFormat.R32ui, typeof<int>
+            RenderbufferFormat.Rg8i, typeof<V2i>
+            RenderbufferFormat.Rg8ui, typeof<V2i>
+            RenderbufferFormat.Rg16i, typeof<V2i>
+            RenderbufferFormat.Rg16ui, typeof<V2i>
+            RenderbufferFormat.Rg32i, typeof<V2i>
+            RenderbufferFormat.Rg32ui, typeof<V2i>
             RenderbufferFormat.DepthStencil, typeof<float>
             RenderbufferFormat.Rgba32f, typeof<V4d>
             RenderbufferFormat.Rgb32f, typeof<V3d>
@@ -224,19 +224,19 @@ module FShadeInterop =
             RenderbufferFormat.StencilIndex4, typeof<int>
             RenderbufferFormat.StencilIndex8, typeof<int>
             RenderbufferFormat.StencilIndex16, typeof<int>
-            RenderbufferFormat.Rgba32ui, typeof<V4d>
-            RenderbufferFormat.Rgb32ui, typeof<V3d>
-            RenderbufferFormat.Rgba16ui, typeof<V4d>
-            RenderbufferFormat.Rgb16ui, typeof<V3d>
-            RenderbufferFormat.Rgba8ui, typeof<V4d>
-            RenderbufferFormat.Rgb8ui, typeof<V3d>
-            RenderbufferFormat.Rgba32i, typeof<V4d>
-            RenderbufferFormat.Rgb32i, typeof<V3d>
-            RenderbufferFormat.Rgba16i, typeof<V4d>
-            RenderbufferFormat.Rgb16i, typeof<V3d>
-            RenderbufferFormat.Rgba8i, typeof<V4d>
-            RenderbufferFormat.Rgb8i, typeof<V3d>
-            RenderbufferFormat.Rgb10A2ui, typeof<V4d>
+            RenderbufferFormat.Rgba32ui, typeof<V4i>
+            RenderbufferFormat.Rgb32ui, typeof<V3i>
+            RenderbufferFormat.Rgba16ui, typeof<V4i>
+            RenderbufferFormat.Rgb16ui, typeof<V3i>
+            RenderbufferFormat.Rgba8ui, typeof<V4i>
+            RenderbufferFormat.Rgb8ui, typeof<V3i>
+            RenderbufferFormat.Rgba32i, typeof<V4i>
+            RenderbufferFormat.Rgb32i, typeof<V3i>
+            RenderbufferFormat.Rgba16i, typeof<V4i>
+            RenderbufferFormat.Rgb16i, typeof<V3i>
+            RenderbufferFormat.Rgba8i, typeof<V4i>
+            RenderbufferFormat.Rgb8i, typeof<V3i>
+            RenderbufferFormat.Rgb10A2ui, typeof<V4i>
         ]
 
     [<GLSLIntrinsic("gl_DeviceIndex", "GL_EXT_device_group")>]
