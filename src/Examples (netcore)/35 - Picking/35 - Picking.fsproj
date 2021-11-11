@@ -1,0 +1,34 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>netcoreapp3.1</TargetFramework>
+    <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
+    <OutputPath>..\..\..\bin\Debug</OutputPath>
+    <DefineConstants>DEBUG;TRACE</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
+    <OutputPath>..\..\..\bin\Release</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <None Include="paket.references" />
+    <Compile Include="Program.fs" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />
+    <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj" />
+    <ProjectReference Include="..\..\Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj" />
+    <ProjectReference Include="..\..\Aardvark.Rendering.Vulkan\Aardvark.Rendering.Vulkan.fsproj" />
+    <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj" />
+    <ProjectReference Include="..\..\Application\Aardvark.Application.OpenVR.Vulkan\Aardvark.Application.OpenVR.Vulkan.fsproj" />
+    <ProjectReference Include="..\..\Application\Aardvark.Application.OpenVR\Aardvark.Application.OpenVR.fsproj" />
+    <ProjectReference Include="..\..\Application\Aardvark.Application.Utilities\Aardvark.Application.Utilities.fsproj" />
+    <ProjectReference Include="..\..\Application\Aardvark.Application.Slim.GL\Aardvark.Application.Slim.GL.fsproj" />
+    <ProjectReference Include="..\..\Application\Aardvark.Application.Slim.Vulkan\Aardvark.Application.Slim.Vulkan.fsproj" />
+    <ProjectReference Include="..\..\Application\Aardvark.Application.Slim\Aardvark.Application.Slim.fsproj" />
+    <ProjectReference Include="..\..\Application\Aardvark.Application\Aardvark.Application.fsproj" />
+  </ItemGroup>
+  <Import Project="..\..\..\.paket\Paket.Restore.targets" />
+</Project>
