@@ -3,7 +3,11 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 16.0.29609.76
 MinimumVisualStudioVersion = 10.0.40219.1
+<<<<<<< HEAD
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "19 - CubeArrayTest", "Scratch (netcore)\19 - CubeArrayTest\19 - CubeArrayTest.fsproj", "{11540F98-9BA5-4B2C-975C-632940EE12B2}"
+=======
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "35 - Picking", "Examples (netcore)\35 - Picking\35 - Picking.fsproj", "{C65585C4-A3E6-4AB9-8C13-842FDF73BCED}"
+>>>>>>> master
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "27 - BrowserTexture", "Examples (netcore)\27 - BrowserTexture\27 - BrowserTexture.fsproj", "{43F063C0-1BE0-4478-BCD3-9F9C83F97172}"
 EndProject
@@ -180,7 +184,11 @@ Global
 		SolutionGuid  = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+<<<<<<< HEAD
 		{11540F98-9BA5-4B2C-975C-632940EE12B2} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
+=======
+		{C65585C4-A3E6-4AB9-8C13-842FDF73BCED} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
+>>>>>>> master
 		{43F063C0-1BE0-4478-BCD3-9F9C83F97172} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{9F213324-00AB-4DDA-97BE-455DBF3F9406} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{7F4EDFB3-674B-4745-A1AB-95A99FC9FD71} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
@@ -246,10 +254,17 @@ Global
 		{D362070A-E74D-47D5-A029-12E1987DC4A2} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+<<<<<<< HEAD
 		{11540F98-9BA5-4B2C-975C-632940EE12B2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{11540F98-9BA5-4B2C-975C-632940EE12B2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{11540F98-9BA5-4B2C-975C-632940EE12B2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{11540F98-9BA5-4B2C-975C-632940EE12B2}.Release|Any CPU.Build.0 = Release|Any CPU
+=======
+		{C65585C4-A3E6-4AB9-8C13-842FDF73BCED}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{C65585C4-A3E6-4AB9-8C13-842FDF73BCED}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{C65585C4-A3E6-4AB9-8C13-842FDF73BCED}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{C65585C4-A3E6-4AB9-8C13-842FDF73BCED}.Release|Any CPU.Build.0 = Release|Any CPU
+>>>>>>> master
 		{43F063C0-1BE0-4478-BCD3-9F9C83F97172}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{43F063C0-1BE0-4478-BCD3-9F9C83F97172}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{43F063C0-1BE0-4478-BCD3-9F9C83F97172}.Release|Any CPU.ActiveCfg = Release|Any CPU
