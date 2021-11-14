@@ -5,16 +5,47 @@ open FSharp.Data.Adaptive.Operators
 open Aardvark.SceneGraph
 open Aardvark.Application
 open Aardvark.Application.Slim
+open System
 
 (*
 
-This example demonstrates how to implement picking by rendering object IDs into a texture, which is used for subsequent lookups.
+This example demonstrates how to implement picking by rendering object IDs and other attributes into a texture, which is used for subsequent lookups.
 
 *)
 
-module Semantic =
+module DefaultSemantic =
+    let PickData = Sym.ofString "PickData"
     let CustomId = Sym.ofString "CustomId"
-    let All = Set.ofList [DefaultSemantic.Colors; CustomId]
+
+module RenderPass =
+    let pickingInfo = RenderPass.after "pickingInfo" RenderPassOrder.Arbitrary RenderPass.main
+
+module OctNormal =
+
+    // Encode normals as a V2d by mapping to an octahedron
+    // and projecting onto the z=0 plane (Meyer et al. 2010)
+    [<ReflectedDefinition>]
+    let private signNonZero (v : V2d) =
+        V2d (
+            (if v.X >= 0.0 then 1.0 else - 1.0),
+            (if v.Y >= 0.0 then 1.0 else - 1.0)
+        )
+
+    [<ReflectedDefinition>]
+    let encode (n : V3d) =
+        let p = n.XY * (1.0 / (abs n.X + abs n.Y + abs n.Z))
+        if n.Z <= 0.0 then (1.0 - abs p.YX) * signNonZero p else p
+
+    [<ReflectedDefinition>]
+    let decode (e : V2d) =
+        let z = 1.0 - abs e.X - abs e.Y
+
+        Vec.normalize (
+            if z < 0.0 then
+                V3d((1.0 - abs e.YX) * signNonZero e.XY, z)
+            else
+                V3d(e.XY, z)
+        )
 
 module Shader =
     open FShade
@@ -23,8 +54,10 @@ module Shader =
         inherit SemanticAttribute("CustomId")
 
     type Fragment = {
+        [<Position>]     pos   : V4d
+        [<Normal>]       n     : V3d
+        [<FragCoord>]    coord : V4d
         [<CustomId; Interpolation(InterpolationMode.Flat)>] id : int
-        [<FragCoord>] coord : V4d
     }
 
     [<AutoOpen>]
@@ -42,33 +75,28 @@ module Shader =
                 filter Filter.MinMagPoint
             }
 
-        let diffuseSamplerInt =
-            intSampler2d {
-                texture uniform?DiffuseColorTexture
-                filter Filter.MinMagPoint
-            }
-
-        let diffuseSamplerIntMS =
-            intSampler2dMS {
-                texture uniform?DiffuseColorTexture
-                filter Filter.MinMagPoint
-            }
-
-
-    let writeId (f : Fragment) =
+    // R = id (encoded as float, since we use an RGBA32f texture)
+    // G = NDC depth
+    // B, A = normal encoded using oct mapping
+    let picking (f : Fragment) =
         fragment {
-            return {| CustomId = f.id |}
+            let id = float <| Fun.FloatFromBits(f.id)
+            let d = f.pos.Z / f.pos.W
+            let n = OctNormal.encode f.n
+            return {| PickData = V4d(id, d, n) |}
         }
 
-    let resolveId (samples : int) (f : Fragment) =
+    let withoutPicking (f : Fragment) =
         fragment {
-            let id =
-                if samples > 1 then
-                    diffuseSamplerIntMS.Read(V2i f.coord.XY, 0)
-                else
-                    diffuseSamplerInt.Read(V2i f.coord.XY, 0)
+            return {| PickData = V4d.Zero |}
+        }
 
-            return { f with id = id.X }
+    let resolveSingle (samples : int) (f : Fragment) =
+        fragment {
+            if samples > 1 then
+                return diffuseSamplerMS.Read(V2i f.coord.XY, 0)
+            else
+                return diffuseSampler.Read(V2i f.coord.XY, 0)
         }
 
     let resolve (samples : int) (f : Fragment) =
@@ -84,84 +112,63 @@ module Shader =
                 return diffuseSampler.Read(V2i f.coord.XY, 0)
         }
 
+type Scene =
+    {
+        CubeSg     : ISg
+        CubeIds    : int[]
+        CubeTrafos : aval<Trafo3d[]>
+        ViewTrafo  : aval<Trafo3d>
+        ProjTrafo  : aval<Trafo3d>
+    }
 
-[<EntryPoint>]
-let main argv =
-
-    Aardvark.Init()
-
-    // uncomment/comment to switch between the backends
-    //use app = new VulkanApplication(debug = true)
-    use app = new OpenGlApplication()
-    let runtime = app.Runtime :> IRuntime
-    let samples = 8
-
-    use win = app.CreateGameWindow(samples = 1)
+module Scene =
 
     // Define how many cubes we want
-    let rows = 32
-    let cols = 32
-    let count = rows * cols
+    let private size = V2i(32, 32)
+    let private count = size.X * size.Y
+    let private margin = 3.0
 
-    let frustum =
-        win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 500.0 (float s.X / float s.Y))
-
-    let cameraView =
-        let center = V2d(float rows * 1.5, float cols * 1.5)
-        let initialView = CameraView.LookAt(V3d(10.0,10.0,10.0), center.XYO, V3d.OOI)
-        DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
-
-
-    let rnd = RandomSystem(0)
-
-    // Layout cubes in a XY grid
-    let instancePositions =
-        Array.init count (fun index ->
-            let x = index % cols
-            let y = index / cols
-
-            V3d(float x * 3.0, float y * 3.0, 0.0)
-        )
-        |> AVal.constant
-
-    // Rotations are based on time
-    let instanceRotations =
-        let factors = Array.init count (fun _ -> rnd.UniformDouble() * 2.0 - 1.0)
-        let startTime = System.DateTime.Now
-
-        win.Time |> AVal.map (fun t ->
-            let dt = (t - startTime).TotalSeconds
-            factors |> Array.map (fun f -> dt * f)
-        )
-
-    let instanceTrafos =
+    let private trafos (rnd : RandomSystem) (time : aval<DateTime>) =
         let offset = Trafo3d.Translation(V3d(-0.5))
 
-        (instancePositions, instanceRotations)
-        ||> AVal.map2 (
-            Array.map2 (fun p r ->
-                offset * Trafo3d.RotationZ(r) * Trafo3d.Translation(p)
+        // Layout cubes in a static XY grid
+        let positions =
+            Array.init count (fun index ->
+                let x = index % size.Y
+                let y = index / size.Y
+
+                V3d(float x * margin, float y * margin, 0.0)
+            )
+
+        // Rotations are based on time
+        let rotations =
+            let factors = Array.init count (fun _ -> rnd.UniformDouble() * 2.0 - 1.0)
+            let startTime = System.DateTime.Now
+
+            time |> AVal.map (fun t ->
+                let dt = (t - startTime).TotalSeconds
+                factors |> Array.map (fun f -> dt * f)
+            )
+
+        rotations |> AVal.map (
+            Array.mapi (fun i r ->
+                offset * Trafo3d.RotationZ(r) * Trafo3d.Translation(positions.[i])
             )
         )
 
     // Generate some random IDs, don't care about collisions in this example
-    let instanceCustomIds =
-        Array.init count (fun _ -> rnd.UniformIntNonZero()) |> AVal.constant
+    let private customIds (rnd : RandomSystem) =
+        Array.init count (fun _ -> rnd.UniformIntNonZero())
 
-    // Colors are changeable
-    let instanceColors =
-        Array.init count (fun _ -> rnd.UniformC3f() |> C4f) |> AVal.init
+    // Random colors
+    let private colors (rnd : RandomSystem) =
+        Array.init count (fun _ -> rnd.UniformC3f() |> C4f)
 
-    // First we render the scene into an offscreen buffer, which has the
-    // default color and depth attachments, and additionally a 32bit integer texture for object IDs.
-    let offscreenSignature =
-        runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples }
-            DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
-            Semantic.CustomId, { format = RenderbufferFormat.R32i; samples = samples }
-        ]
+    // Render the cubes using indirect multidraw
+    let create (win : IRenderWindow) (rnd : RandomSystem) =
+        let ids = customIds rnd
+        let trafos = trafos rnd win.Time
 
-    use offscreenTask =
         let geometry =
             IndexedGeometryPrimitives.Box.solidBox Box3d.Unit C4b.Black
 
@@ -186,91 +193,232 @@ let main argv =
             BufferView(buffer, typeof<'U>)
 
         let instanceIndex =
-            instanceCustomIds |> makeBufferView id
+            ids |> AVal.constant |> makeBufferView id
 
         let instanceColor =
-            instanceColors |> makeBufferView id
+            colors rnd |> AVal.constant |> makeBufferView id
 
         let instanceTrafo =
-            instanceTrafos |> makeBufferView (Trafo.forward >> M44f)
+            trafos |> makeBufferView (Trafo.forward >> M44f)
 
         let instanceTrafoInv =
-            instanceTrafos |> makeBufferView (Trafo.backward >> M44f)
+            trafos |> makeBufferView (Trafo.backward >> M44f)
 
-        Sg.indirectDraw geometry.Mode ~~indirectBuffer
-        |> Sg.indexArray geometry.IndexArray
-        |> Sg.vertexArray DefaultSemantic.Positions geometry.IndexedAttributes.[DefaultSemantic.Positions]
-        |> Sg.vertexArray DefaultSemantic.Normals geometry.IndexedAttributes.[DefaultSemantic.Normals]
-        |> Sg.instanceBuffer Semantic.CustomId instanceIndex
-        |> Sg.instanceBuffer DefaultSemantic.Colors instanceColor
-        |> Sg.instanceBuffer DefaultSemantic.InstanceTrafo instanceTrafo
-        |> Sg.instanceBuffer DefaultSemantic.InstanceTrafoInv instanceTrafoInv
-        |> Sg.uniform' "LightLocation" (V3d(10.0, 5.0, 15.0))
-        |> Sg.shader {
-            do! DefaultSurfaces.instanceTrafo
-            do! DefaultSurfaces.trafo
-            do! DefaultSurfaces.vertexColor
-            do! DefaultSurfaces.simpleLighting
-            do! Shader.writeId
-        }
-        |> Sg.viewTrafo (cameraView |> AVal.map CameraView.viewTrafo)
-        |> Sg.projTrafo (frustum |> AVal.map Frustum.projTrafo)
+        let sg =
+            Sg.indirectDraw geometry.Mode ~~indirectBuffer
+            |> Sg.indexArray geometry.IndexArray
+            |> Sg.vertexArray DefaultSemantic.Positions geometry.IndexedAttributes.[DefaultSemantic.Positions]
+            |> Sg.vertexArray DefaultSemantic.Normals geometry.IndexedAttributes.[DefaultSemantic.Normals]
+            |> Sg.instanceBuffer DefaultSemantic.CustomId instanceIndex
+            |> Sg.instanceBuffer DefaultSemantic.Colors instanceColor
+            |> Sg.instanceBuffer DefaultSemantic.InstanceTrafo instanceTrafo
+            |> Sg.instanceBuffer DefaultSemantic.InstanceTrafoInv instanceTrafoInv
+
+        let projTrafo =
+            win.Sizes |> AVal.map (fun s ->
+                Frustum.perspective 60.0 0.1 500.0 (float s.X / float s.Y)
+                |> Frustum.projTrafo
+            )
+
+        let viewTrafo =
+            let center = (V2d size) * margin * 0.5
+            let initialView = CameraView.LookAt(V3d(10.0,10.0,10.0), center.XYO, V3d.OOI)
+            DefaultCameraController.control win.Mouse win.Keyboard win.Time initialView
+            |> AVal.map CameraView.viewTrafo
+
+        { CubeSg = sg
+          CubeIds = ids
+          CubeTrafos = trafos
+          ViewTrafo = viewTrafo
+          ProjTrafo = projTrafo }
+
+    // Computes the world position from the given normalized device coordinates.
+    let getWorldPosition (ndc : V3d) (scene : Scene) =
+        let projTrafo = scene.ProjTrafo.GetValue()
+        let viewTrafo = scene.ViewTrafo.GetValue()
+
+        let vp = ndc |> Mat.transformPosProj projTrafo.Backward
+        vp |> Mat.transformPos viewTrafo.Backward
+
+type PickingInfo =
+    {
+        ObjectIndex : int   // Index of the picked object
+        Position : V3d      // Position of the picked point in local space
+        Normal : V3d        // Normal at the picked point in local space
+    }
+
+module PickingInfo =
+
+    // Gets the picking info from the given id, world space position and normal
+    let fromWorldSpace (scene : Scene) (id : int) (position : V3d) (normal : V3d) =
+        let index = scene.CubeIds |> Array.tryFindIndex ((=) id)
+
+        match index with
+        | Some idx ->
+            let trafo = scene.CubeTrafos.GetValue().[idx]
+            let position = position |> Mat.transformPos trafo.Backward
+            let normal = normal |> Mat.transformDir trafo.Forward.Transposed
+
+            Some {
+                ObjectIndex = idx
+                Position = position
+                Normal = normal
+            }
+
+        | None ->
+            None
+
+[<EntryPoint>]
+let main argv =
+
+    Aardvark.Init()
+
+    // uncomment/comment to switch between the backends
+    //use app = new VulkanApplication(debug = true)
+    use app = new OpenGlApplication()
+    let runtime = app.Runtime :> IRuntime
+    let samples = 8
+
+    use win = app.CreateGameWindow(samples = 1)
+    let rnd = RandomSystem(0)
+
+    let scene =
+        Scene.create win rnd
+
+    let pickingInfo =
+        AVal.init None
+
+    // First we render the scene into an offscreen buffer, which has the
+    // default color and depth attachments, and additionally the pick buffer.
+    let offscreenSignature =
+        runtime.CreateFramebufferSignature [
+            DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples }
+            DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
+            DefaultSemantic.PickData, { format = RenderbufferFormat.Rgba32f; samples = samples }
+        ]
+
+    use offscreenTask =
+        let cubes =
+            scene.CubeSg
+            |> Sg.shader {
+                do! DefaultSurfaces.instanceTrafo
+                do! DefaultSurfaces.trafo
+                do! DefaultSurfaces.vertexColor
+                do! DefaultSurfaces.simpleLighting
+                do! Shader.picking
+            }
+
+        // Visualize the picked point.
+        // Note that we do not write into the pick buffer!
+        let hit =
+            let line =
+                adaptive {
+                    let! trafos = scene.CubeTrafos
+
+                    match! pickingInfo with
+                    | Some i ->
+                        let trafo = trafos.[i.ObjectIndex].Forward
+                        let p0 = i.Position |> Mat.transformPos trafo
+                        let p1 = (i.Position + i.Normal * 0.25) |> Mat.transformPos trafo
+                        return Line3d(p0, p1)
+                    | None ->
+                        return Line3d()
+                }
+
+            let sphere =
+                Sg.sphere' 16 C4b.Red 0.02
+                |> Sg.translation (line |> AVal.map (fun p -> p.P0))
+                |> Sg.shader {
+                    do! DefaultSurfaces.trafo
+                    do! DefaultSurfaces.vertexColor
+                    do! Shader.withoutPicking           // Do not write picking data
+                }
+
+            let lines =
+                Sg.lines ~~C4b.Red (line |> AVal.map Array.singleton)
+                |> Sg.shader {
+                    do! DefaultSurfaces.trafo
+                    do! DefaultSurfaces.thickLine
+                    do! DefaultSurfaces.vertexColor
+                    do! Shader.withoutPicking           // Do not write picking data
+                }
+                |> Sg.uniform' "LineWidth" 2.0
+
+            Sg.ofList [sphere; lines]
+            |> Sg.colorOutput' (Set.singleton DefaultSemantic.Colors)   // Only write to color buffer
+            |> Sg.pass RenderPass.pickingInfo                           // Make sure to render after pickable objects
+            |> Sg.onOff (pickingInfo |> AVal.map Option.isSome)
+
+        Sg.ofList [cubes; hit]
+        |> Sg.uniform' "LightLocation" (V3d(10.0, 5.0, 50.0))
+        |> Sg.viewTrafo scene.ViewTrafo
+        |> Sg.projTrafo scene.ProjTrafo
         |> Sg.compile runtime offscreenSignature
 
     let offscreenBuffer =
         let clear =
             clear {
                 colors [
-                    Semantic.CustomId, C4f.Zero
                     DefaultSemantic.Colors, C4f.AliceBlue
+                    DefaultSemantic.PickData, C4f.Zero
                 ]
 
                 depth 1.0
             }
 
-        offscreenTask |> RenderTask.renderSemanticsWithClear Semantic.All win.Sizes clear
+        let output = Set.ofList [ DefaultSemantic.Colors; DefaultSemantic.PickData ]
+        offscreenTask |> RenderTask.renderSemanticsWithClear output win.Sizes clear
 
-    // Before we can use the pick ID buffer for our lookups we first need to resolve it (in case it is multisampled)
-    // However, we can't use a normal resolve as this would average our samples resulting in invalid IDs possibly.
-    // Instead, we use a fragment shader to extract the first sample.
+    // Before we can use the pick buffer for our lookups we first need to resolve it (in case it is multisampled)
+    // However, using a normal resolve would average our samples resulting in possibly invalid IDs.
+    // Therefore, we use a fragment shader to extract the first sample.
     let resolvePickSignature =
         runtime.CreateFramebufferSignature [
-            Semantic.CustomId, { format = RenderbufferFormat.R32i; samples = 1 }
+            DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba32f; samples = 1 }
         ]
 
     use resolvePickTask =
         Sg.fullScreenQuad
-        |> Sg.diffuseTexture offscreenBuffer.[Semantic.CustomId]
+        |> Sg.diffuseTexture offscreenBuffer.[DefaultSemantic.PickData]
         |> Sg.shader {
-            do! Shader.resolveId samples
-            do! Shader.writeId
+            do! Shader.resolveSingle samples
         }
         |> Sg.compile runtime resolvePickSignature
 
     let pickTexture =
-        let output = Set.singleton Semantic.CustomId
-        resolvePickTask |> RenderTask.renderSemantics output win.Sizes |> Map.find Semantic.CustomId
+        resolvePickTask |> RenderTask.renderToColor win.Sizes
 
     pickTexture.Acquire()
 
     // Finally we install a callback on mouse click events.
-    // We download the resolved pick ID texture and simply lookup the value in the PixImage.
-    win.Mouse.Up.Values.Add(fun btn ->
+    // We download the resolved pick buffer and simply lookup the values in the PixImage.
+    win.Mouse.DoubleClick.Values.Add(fun btn ->
         if btn.HasFlag(MouseButtons.Left) then
-            let ids = pickTexture.GetValue().Download().AsPixImage<int>()
+            let data = pickTexture.GetValue().Download().AsPixImage<float32>()
+            let pixels = data.GetMatrix<C4f>()
+
             let pos = win.Mouse.Position.GetValue().Position
 
-            if Vec.allGreaterOrEqual pos 0 && Vec.allSmaller pos ids.Size then
-                let id = ids.Matrix.[pos]
-                let index = instanceCustomIds.GetValue() |> Array.tryFindIndex ((=) id)
+            // Check if in bounds
+            if Vec.allGreaterOrEqual pos 0 && Vec.allSmaller pos data.Size then
 
-                match index with
-                | Some idx ->
+                // Get id, depth and normal from buffer
+                let id = Fun.FloatToBits pixels.[pos].R
+                let depth = float pixels.[pos].G
+                let normal = OctNormal.decode <| V2d(pixels.[pos].B, pixels.[pos].A)
+
+                // Compute world space position
+                let wp =
+                    let uv = (V2d pos + 0.5) / V2d data.Size
+                    let uv = V2d(uv.X, 1.0 - uv.Y)              // Flip Y
+                    let ndc = V3d(uv * 2.0 - 1.0, depth)
+                    scene |> Scene.getWorldPosition ndc
+
+                // Update picking info
+                match PickingInfo.fromWorldSpace scene id wp normal with
+                | Some p ->
                     transact (fun _ ->
-                        instanceColors.Value <-
-                            instanceColors.Value |> Array.mapi (fun i c ->
-                                if i <> idx then c else C4f (rnd.UniformC3f())
-                            )
+                        pickingInfo.Value <- Some p
                     )
 
                 | None ->
