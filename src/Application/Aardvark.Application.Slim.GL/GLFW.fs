@@ -539,17 +539,32 @@ type Application(runtime : IRuntime) =
 
 
 
-    let openglVersion = 
+    let openglVersion =
+        let defaultVersion = System.Version(GL.Config.MajorVersion, GL.Config.MinorVersion)
+
         let versions =
             [
+                System.Version(4,6)
                 System.Version(4,5)
+                System.Version(4,4)
                 System.Version(4,3)
+                System.Version(4,2)
                 System.Version(4,1)
+                System.Version(4,0)
                 System.Version(3,3)
-                System.Version(3,0)
             ]
+
+        let startAt =
+            match versions |> List.tryFindIndex ((=) defaultVersion) with
+            | Some idx -> idx
+            | _ ->
+                Log.warn "OpenGL version %A is invalid" defaultVersion
+                0
+
         let best = 
-            versions |> List.tryFind (fun v -> 
+            versions
+            |> List.skip startAt
+            |> List.tryFind (fun v -> 
                 glfw.DefaultWindowHints()
                 glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.OpenGL)
                 glfw.WindowHint(WindowHintInt.ContextVersionMajor, v.Major)
