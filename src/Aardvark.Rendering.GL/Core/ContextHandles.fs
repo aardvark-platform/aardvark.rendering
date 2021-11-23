@@ -33,9 +33,8 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
     static let contextError = new Event<ContextErrorEventHandler, ContextErrorEventArgs>()
 
     let l = obj()
-    let mutable debugCallbackInstalled = false
+    let mutable debugOutput = None
     let mutable onMakeCurrent : ConcurrentHashSet<unit -> unit> = null
-    let mutable debugOutputEnabled = false
     let mutable driverInfo = None
 
     static member Current
@@ -135,38 +134,47 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                 finally
                     x.ReleaseCurrent()
 
-
-
     // Installs debug callback if not yet installed (context is assumed to be current)
     member x.AttachDebugOutputIfNeeded(enable : bool) =
-        if debugCallbackInstalled then ()
-        else
-            debugCallbackInstalled <- true
-            x.Use (fun () ->
-                if enable then
-                    let works = GL.SetupDebugOutput()
-                    if works then 
-                        GL.Enable(EnableCap.DebugOutput)
-                        // GL.Enable(EnableCap.DebugOutputSynchronous)
-                    
+        debugOutput <-
+            if enable && debugOutput.IsNone then
+                x.Use (fun _ ->
+                    match DebugOutput.tryInitialize() with
+                    | Some dbg ->
+                        let dbg = dbg |> DebugOutput.enable false
+
                         let str = "debug output enabled"
-                        GL.DebugMessageInsert(DebugSourceExternal.DebugSourceApplication, DebugType.DebugTypeOther, 1234, DebugSeverity.DebugSeverityLow, str.Length, str)
-            )
+                        GL.DebugMessageInsert(DebugSourceExternal.DebugSourceApplication, DebugType.DebugTypeOther, 1234,
+                                              DebugSeverity.DebugSeverityLow, str.Length, str)
+
+                        Some dbg
+
+                    | _ ->
+                        Log.warn "Failed to initialize debug output"
+                        None
+                )
+            else
+                debugOutput
 
     member x.AttachDebugOutputIfNeeded() =
         x.AttachDebugOutputIfNeeded true
 
     member x.DebugOutputEnabled
-        with get() = debugOutputEnabled
-        and set (value : bool) =
-            if value <> debugOutputEnabled then
-                if value then
-                    x.AttachDebugOutputIfNeeded()
-                    GL.Enable(EnableCap.DebugOutput)
-                else
-                    GL.Disable(EnableCap.DebugOutput)
-                debugOutputEnabled <- value
+        with get() =
+            debugOutput |> Option.map (DebugOutput.isEnabled) |> Option.defaultValue false
 
+        and set (value : bool) =
+            if value then
+                x.AttachDebugOutputIfNeeded()
+                debugOutput <- debugOutput |> Option.map (DebugOutput.enable false)
+            else
+                debugOutput <- debugOutput |> Option.map DebugOutput.disable
+
+    member x.Dispose() =
+        debugOutput |> Option.iter (fun dbg -> dbg.Dispose())
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 /// <summary>
 /// A module for managing context handles
@@ -180,7 +188,7 @@ module ContextHandle =
     let delete(ctx : ContextHandle) =
         if ctx.IsCurrent then
             ctx.ReleaseCurrent()
-
+        ctx.Dispose()
         //match windows.TryRemove ctx with
         //    | (true, w) -> w.Dispose()
         //    | _ -> ()

@@ -212,6 +212,8 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
 
     let mutable packAlignment = None
 
+    let mutable unpackAlignment = None
+
     let mutable shaderCachePath : Option<string> = None
     
     member x.CreateContext() = createContext()
@@ -252,14 +254,25 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
 
     member x.PackAlignment =
         match packAlignment with
-            | Some p -> p
-            | None ->
-                let p = 
-                    using x.ResourceLock (fun _ ->
-                        GL.GetInteger(GetPName.PackAlignment)
-                    )
-                packAlignment <- Some p
-                p
+        | Some p -> p
+        | None ->
+            let p =
+                using x.ResourceLock (fun _ ->
+                    GL.GetInteger(GetPName.PackAlignment)
+                )
+            packAlignment <- Some p
+            p
+
+    member x.UnpackAlignment =
+        match unpackAlignment with
+        | Some p -> p
+        | None ->
+            let p =
+                using x.ResourceLock (fun _ ->
+                    GL.GetInteger(GetPName.UnpackAlignment)
+                )
+            unpackAlignment <- Some p
+            p
 
     /// <summary>
     /// makes the given render context current providing a re-entrant

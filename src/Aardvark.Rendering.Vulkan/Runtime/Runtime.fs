@@ -184,6 +184,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
+        t |> ResourceValidation.Textures.validateStencilFormat
 
         let image = unbox<Image> t
         let pix =
@@ -198,6 +199,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
+        t |> ResourceValidation.Textures.validateDepthFormat
 
         let image = unbox<Image> t
         let pix =
@@ -299,7 +301,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
                 VkImageUsageFlags.TransferDstBit |||
                 VkImageUsageFlags.SampledBit
 
-            if TextureFormat.hasDepth format then
+            if format.HasDepth || format.HasStencil then
                 def ||| VkImageUsageFlags.DepthStencilAttachmentBit
             else
                 def ||| VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.StorageBit

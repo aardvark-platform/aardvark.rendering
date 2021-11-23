@@ -12,7 +12,7 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
     inherit AVal.AbstractVal<ITexture>()
 
     let expectedLevels (size : V2i) = 
-        if mipMap then 1 + max size.X size.Y |> Fun.Log2 |> Fun.Floor |> int
+        if mipMap then Fun.MipmapLevels(size)
         else 1
 
     let mutable pbo = 0
@@ -22,17 +22,17 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
     let mutable texA = 
         use t = ctx.ResourceLock
         let handle = GL.GenTexture()
-        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L, false)
+        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L)
 
     let mutable texB = 
         use t = ctx.ResourceLock
         let handle = GL.GenTexture()
-        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L, false)
+        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L)
 
     let mutable texC = 
         use t = ctx.ResourceLock
         let handle = GL.GenTexture()
-        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L, false)
+        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L)
 
     let mutable fenceAB = 0n
     let mutable fenceC = 0n
@@ -58,9 +58,10 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
         if f <> currentFormat then
             currentFormat <- f
             textureFormat <- TextureFormat.ofPixFormat f TextureParams.empty
+            let integerFormat = TextureFormat.isIntegerFormat textureFormat
             let pf, pt = TextureFormat.toFormatAndType textureFormat
-            pixelType <- toPixelType f.Type |> Option.get
-            pixelFormat <- toPixelFormat f.Format |> Option.get
+            pixelType <- PixelType.ofType f.Type |> Option.get
+            pixelFormat <- PixelFormat.ofColFormat integerFormat f.Format |> Option.get
             channels <- PixelFormat.channels pf
             channelSize <- PixelType.size pt
 
@@ -108,13 +109,12 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
             texA.Size <- V3i(size.X, size.Y, 1)
             texA.Format <- textureFormat
             texA.MipMapLevels <- mipMapLevels
-            texA.ImmutableFormat <- false
             texA.Count <- 1
             texA.Dimension <- TextureDimension.Texture2D
             texA.Multisamples <- 1
 
             let newSize = if mipMap then (int64 bufferSize * 4L) / 3L else int64 bufferSize
-            updateTexture ctx texA.SizeInBytes newSize
+            ResourceCounts.updateTexture ctx texA.SizeInBytes newSize
             texA.SizeInBytes <- newSize
 
 
@@ -318,13 +318,12 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
     inherit AVal.AbstractVal<ITexture>()
 
     let expectedLevels (size : V2i) = 
-        if mipMap then 1 + max size.X size.Y |> Fun.Log2 |> Fun.Floor |> int
+        if mipMap then Fun.MipmapLevels(size)
         else 1
 
 
-    let texture = 
+    let texture =
         let res = ctx.CreateTexture2D(V2i.II, 1, TextureFormat.Bgra8, 1)
-        res.ImmutableFormat <- false
         res
 
     let swapLock = obj()
@@ -349,9 +348,10 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
         if f <> currentFormat then
             currentFormat <- f
             textureFormat <- TextureFormat.ofPixFormat f TextureParams.empty
+            let integerFormat = TextureFormat.isIntegerFormat textureFormat
             let pf, pt = TextureFormat.toFormatAndType textureFormat
-            pixelType <- toPixelType f.Type |> Option.get
-            pixelFormat <- toPixelFormat f.Format |> Option.get
+            pixelType <- PixelType.ofType f.Type |> Option.get
+            pixelFormat <- PixelFormat.ofColFormat integerFormat f.Format |> Option.get
             channels <- PixelFormat.channels pf
             channelSize <- PixelType.size pt
 

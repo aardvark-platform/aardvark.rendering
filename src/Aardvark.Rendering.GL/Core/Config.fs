@@ -1,16 +1,24 @@
 ﻿namespace Aardvark.Rendering.GL
 
 open System
-open System.Threading
-open System.Collections.Concurrent
-open OpenTK
-open OpenTK.Platform
+open System.Runtime.InteropServices
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
-open Aardvark.Rendering.GL
 
 type DepthRange = MinusOneToOne=0 | ZeroToOne=1
+
+/// Reporting modes for GL errors.
+[<RequireQualifiedAccess>]
+type ErrorReporting =
+    /// Do not check for errors.
+    | Disabled
+
+    /// Log errors.
+    | Log
+
+    /// Throw an exception on errors.
+    | Exception
 
 /// <summary>
 /// A module containing default GL configuration properties
@@ -24,7 +32,7 @@ module Config =
     /// <summary>
     /// The minor GL Version for default contexts
     /// </summary>
-    let mutable MinorVersion = 5
+    let mutable MinorVersion = 6
 
     /// <summary>
     /// The number of subsamples for default windows
@@ -41,11 +49,17 @@ module Config =
     /// rendering context instance.
     /// </summary>
     let mutable NumberOfResourceContexts = 2
-    
+
     /// <summary>
     /// Use the "new" RenderTask OpenGL RenderTask supporting RuntimeCommands (5.1.0)
     /// </summary>
     let mutable UseNewRenderTask = false
+
+    /// <summary>
+    /// Use pixel buffer objects for texture uploads.
+    /// </summary>
+    let mutable UsePixelUnpackBuffers =
+        not <| RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
 
     /// <summary>
     /// The number of bits used for color values in default contexts
@@ -76,7 +90,10 @@ module Config =
     /// </summary>
     let mutable DepthRange = DepthRange.MinusOneToOne
 
+    [<Obsolete("Use ErrorReporting instead")>]
     let mutable CheckErrors = false
+
+    let mutable ErrorReporting = ErrorReporting.Disabled
 
     //let enableVertexArrayObjectsIfPossible = true // not implemented or deprecated?
     let enableSamplersIfPossible = true
@@ -99,76 +116,21 @@ module RuntimeConfig =
 [<AutoOpen>]
 module Error =
 
-    open System.Runtime.InteropServices
-
     exception OpenGLException of ec : ErrorCode * msg : string with
-        override x.Message = sprintf "[%A] %s" x.ec x.msg
-        
+        override x.Message = sprintf "%A: %s" x.ec x.msg
 
-    
-    let private debug (debugSource : DebugSource) (debugType : DebugType) (id : int) (severity : DebugSeverity) (length : int) (message : nativeint) (userParam : nativeint) =
-         let message = Marshal.PtrToStringAnsi(message,length)
-         match severity with
-             | DebugSeverity.DebugSeverityNotification -> 
-                Report.Line(2, "[GL:{0}] {1}", userParam, message)
-
-             | DebugSeverity.DebugSeverityMedium ->
-                match debugType with
-                    | DebugType.DebugTypePerformance -> Report.Line(1, "[GL:{0}] {1}", userParam, message)
-                    | _ -> Report.Warn("[GL:{0}] {1}", userParam, message)
-
-             | DebugSeverity.DebugSeverityHigh ->
-                 Report.Error("[GL:{0}] {1}", userParam, message)
-
-             | _ ->
-                Report.Line(2, "[GL:{0}] {1}", userParam, message)
-
-    let private debugHandler = DebugProc debug
-    let private debugGC = Marshal.PinDelegate debugHandler
-
-    type private GLDebugMessageCallbackDel = delegate of callback : nativeint * userData : nativeint -> unit
-
-
-    let private suffixes = [""; "EXT"; "KHR"; "NV"; "AMD"]
-    type IGraphicsContextInternal with
-        member x.TryGetAddress (name : string) =
-            suffixes |> List.tryPick (fun s ->
-                let ptr = x.GetAddress(name + s)
-                if ptr <> 0n then Some ptr
-                else None
-            )
-
-    // in release the literal value of CheckErrors in combination
-    // with this inline function leads to a complete elimination of
-    // the entire call including the allocation of its arguments
     type GL with
         static member Check str =
-            if Config.CheckErrors then
+            let mode = if Config.CheckErrors then ErrorReporting.Log else Config.ErrorReporting
+
+            if mode <> ErrorReporting.Disabled then
                 let err = GL.GetError()
                 if err <> ErrorCode.NoError then
-                    Aardvark.Base.Report.Warn("{0}: {1}",err,str)
-                    //raise <| OpenGLException(err, str)
+                    if mode = ErrorReporting.Log then Report.Error("{0}: {1}",err,str)
+                    else raise <| OpenGLException(err, sprintf "%A" str)
 
-        static member SetupDebugOutput() =
-            let ctx = GraphicsContext.CurrentContext |> unbox<IGraphicsContextInternal>
-
-            match ctx.TryGetAddress("glDebugMessageCallback") with
-                | Some ptr ->
-                    Report.BeginTimed(4, "[GL] setting up debug callback")
-                    let del = Marshal.GetDelegateForFunctionPointer(ptr, typeof<GLDebugMessageCallbackDel>) |> unbox<GLDebugMessageCallbackDel>
-                    del.Invoke(debugGC.Pointer, ctx.Context.Handle)
-                    
-                    Report.End(4) |> ignore
-                    let arr : uint32[] = null
-                    let severity = DebugSeverityControl.DontCare //DebugSeverityControl.DebugSeverityHigh ||| DebugSeverityControl.DebugSeverityMedium 
-            
-                    Report.BeginTimed(4, "[GL] debug message control")
-                    GL.DebugMessageControl(DebugSourceControl.DontCare, DebugTypeControl.DontCare, severity, 0, arr, true)
-                    GL.Check "DebugMessageControl"
-                    Report.End(4) |> ignore
-                    true
-                | _ ->
-                    false
+[<AutoOpen>]
+module Stopwatch =
 
     type GLTimer private() =
         let counter = GL.GenQuery()

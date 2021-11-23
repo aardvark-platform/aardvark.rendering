@@ -47,7 +47,7 @@ module internal BrowserTexture =
             
             let levels (size : V2i) =
                 if mipMaps then 
-                    1 + (max size.X size.Y |> float |> log2 |> floor |> int)
+                    Fun.MipmapLevels(size)
                 else    
                     1
 
@@ -218,7 +218,7 @@ module internal BrowserTexture =
         let create (runtime : Runtime) (client : Offler) (mipMaps : bool) =
             let ctx = runtime.Context
             let emptySub = { new IDisposable with member x.Dispose() = () }
-            let mutable tex = Texture(ctx, 0, TextureDimension.Texture2D, 1, 1, V3i.III, None, TextureFormat.Rgba8, 0L, false)
+            let mutable tex = Texture(ctx, 0, TextureDimension.Texture2D, 1, 1, V3i.III, None, TextureFormat.Rgba8, 0L)
             let mutable running = false
             let mutable dirty = false
             let mutable sub = emptySub
@@ -235,7 +235,7 @@ module internal BrowserTexture =
 
                         let levels (size : V2i) =
                             if mipMaps then 
-                                1 + (max size.X size.Y |> float |> log2 |> floor |> int)
+                                Fun.MipmapLevels(size)
                             else    
                                 1
 
@@ -354,7 +354,7 @@ module internal BrowserTexture =
                                 use __ = ctx.ResourceLock
                                 ctx.Delete tex
                                 GL.DeleteBuffer pbo
-                                tex <- Texture(ctx, 0, TextureDimension.Texture2D, 1, 1, V3i.III, None, TextureFormat.Rgba8, 0L, false)
+                                tex <- Texture(ctx, 0, TextureDimension.Texture2D, 1, 1, V3i.III, None, TextureFormat.Rgba8, 0L)
                     member x.Compute(at, rt) =
                         tex :> ITexture
                 } :> IAdaptiveResource<_>

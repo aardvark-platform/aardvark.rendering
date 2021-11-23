@@ -31,7 +31,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool, shaderCachePath :
         
     let createContext() =
         let w = glfw.CreateWindow windowConfig
-        let h = ContextHandle(w.Context, w.WindowInfo)
+        let h = new ContextHandle(w.Context, w.WindowInfo)
         if enableDebug then h.AttachDebugOutputIfNeeded()
         let o = ContextHandle.Current
         h.MakeCurrent()

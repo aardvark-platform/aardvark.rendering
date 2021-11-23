@@ -123,6 +123,7 @@ module VkFormat =
 //                TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext, VkFormat.
 //                TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext, VkFormat.
 //                TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext, VkFormat.
+            TextureFormat.StencilIndex8, VkFormat.S8Uint
             TextureFormat.DepthComponent32f, VkFormat.D32Sfloat
             TextureFormat.Depth32fStencil8, VkFormat.D32SfloatS8Uint
             TextureFormat.Rgba32ui, VkFormat.R32g32b32a32Uint

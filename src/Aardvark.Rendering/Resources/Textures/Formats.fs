@@ -210,6 +210,7 @@ type TextureFormat =
     | CompressedSrgbAlphaS3tcDxt5Ext = 35919
     | DepthComponent32f = 36012
     | Depth32fStencil8 = 36013
+    | StencilIndex8 = 36168
     | Rgba32ui = 36208
     | Rgb32ui = 36209
     | Rgba16ui = 36214
@@ -261,8 +262,10 @@ type TextureParams =
 module TextureParams =
 
     let empty = { wantMipMaps = false; wantSrgb = false; wantCompressed = false}
+    let srgb = { wantMipMaps = false; wantSrgb = true; wantCompressed = false}
     let compressed = { wantMipMaps = false; wantSrgb = false; wantCompressed = true }
     let mipmapped = { wantMipMaps = true; wantSrgb = false; wantCompressed = false }
+    let mipmappedSrgb = { wantMipMaps = true; wantSrgb = true; wantCompressed = false }
     let mipmappedCompressed = { wantMipMaps = true; wantSrgb = false; wantCompressed = true }
 
 
@@ -312,6 +315,11 @@ module TextureFormat =
             TextureFormat.DepthComponent32f
         ]
 
+    let private stencilFormats =
+        HashSet.ofList [
+            TextureFormat.StencilIndex8
+        ]
+
     let private depthStencilFormats =
         HashSet.ofList [
             TextureFormat.DepthStencil
@@ -323,6 +331,10 @@ module TextureFormat =
     let isDepth (fmt : TextureFormat) =
         depthFormats.Contains fmt
 
+    /// Returns whether the given format is a stencil format.
+    let isStencil (fmt : TextureFormat) =
+        stencilFormats.Contains fmt
+
     /// Returns whether the given format is a combined depth-stencil format.
     let isDepthStencil (fmt : TextureFormat) =
         depthStencilFormats.Contains fmt
@@ -332,19 +344,19 @@ module TextureFormat =
     let hasDepth (fmt : TextureFormat) =
         isDepth fmt || isDepthStencil fmt
 
+    /// Returns whether the given format has a stencil component (i.e. it is
+    /// either a stencil for a combined depth-stencil format).
+    let hasStencil (fmt : TextureFormat) =
+        isStencil fmt || isDepthStencil fmt
+
     let ofPixFormat =
 
-        let buildLookup = fun (norm, snorm) ->
-            LookupTable.lookupTable [
-                    TextureParams.empty, norm
-                    { TextureParams.empty with wantSrgb = true}, snorm
-                    { TextureParams.empty with wantMipMaps = true }, norm
-                    { TextureParams.empty with wantSrgb = true; wantMipMaps = true}, snorm
-                ]
+        let buildLookup (rgb, srgb) = function
+            | { wantSrgb = true } -> srgb
+            | _ -> rgb
 
         let rgb8 = buildLookup(TextureFormat.Rgb8, TextureFormat.Srgb8)
         let rgba8 = buildLookup(TextureFormat.Rgba8, TextureFormat.Srgb8Alpha8)
-        let r8 = buildLookup(TextureFormat.R8, TextureFormat.R8Snorm)
 
         LookupTable.lookupTable [
             PixFormat.ByteBGR  , rgb8
@@ -353,9 +365,9 @@ module TextureFormat =
             PixFormat.ByteRGB  , rgb8
             PixFormat.ByteRGBA , rgba8
             PixFormat.ByteRGBP , rgba8
-            PixFormat.ByteGray , r8
+            PixFormat.ByteGray , (fun _ -> TextureFormat.R8)
 
-            PixFormat.UShortRGB ,  (fun _ -> TextureFormat.Rgb16)
+            PixFormat.UShortRGB  ,  (fun _ -> TextureFormat.Rgb16)
             PixFormat.UShortRGBA ,  (fun _ -> TextureFormat.Rgba16)
             PixFormat.UShortRGBP ,  (fun _ -> TextureFormat.Rgba16)
             PixFormat.UShortBGR  ,  (fun _ -> TextureFormat.Rgb16)
@@ -363,39 +375,166 @@ module TextureFormat =
             PixFormat.UShortBGRP ,  (fun _ -> TextureFormat.Rgba16)
             PixFormat.UShortGray ,  (fun _ -> TextureFormat.R16)
 
+            PixFormat(typeof<float16>, Col.Format.Gray)     , (fun _ -> TextureFormat.R16f)
+            PixFormat(typeof<float16>, Col.Format.NormalUV) , (fun _ -> TextureFormat.Rg16f)
+            PixFormat(typeof<float16>, Col.Format.RGB)      , (fun _ -> TextureFormat.Rgb16f)
+            PixFormat(typeof<float16>, Col.Format.RGBA)     , (fun _ -> TextureFormat.Rgba16f)
+
+            PixFormat(typeof<float32>, Col.Format.Gray)     , (fun _ -> TextureFormat.R32f)
+            PixFormat(typeof<float32>, Col.Format.NormalUV) , (fun _ -> TextureFormat.Rg32f)
+            PixFormat(typeof<float32>, Col.Format.RGB)      , (fun _ -> TextureFormat.Rgb32f)
+            PixFormat(typeof<float32>, Col.Format.RGBA)     , (fun _ -> TextureFormat.Rgba32f)
+
+            PixFormat(typeof<int8>, Col.Format.Gray)        , (fun _ -> TextureFormat.R8Snorm)
+            PixFormat(typeof<int8>, Col.Format.NormalUV)    , (fun _ -> TextureFormat.Rg8Snorm)
+            PixFormat(typeof<int8>, Col.Format.RGB)         , (fun _ -> TextureFormat.Rgb8Snorm)
+            PixFormat(typeof<int8>, Col.Format.RGBA)        , (fun _ -> TextureFormat.Rgba8Snorm)
+
+            PixFormat(typeof<int16>, Col.Format.Gray)       , (fun _ -> TextureFormat.R16Snorm)
+            PixFormat(typeof<int16>, Col.Format.NormalUV)   , (fun _ -> TextureFormat.Rg16Snorm)
+            PixFormat(typeof<int16>, Col.Format.RGB)        , (fun _ -> TextureFormat.Rgb16Snorm)
+            PixFormat(typeof<int16>, Col.Format.RGBA)       , (fun _ -> TextureFormat.Rgba16Snorm)
+
+            PixFormat(typeof<int32>, Col.Format.Gray)       , (fun _ -> TextureFormat.R32i)
+            PixFormat(typeof<int32>, Col.Format.NormalUV)   , (fun _ -> TextureFormat.Rg32i)
+            PixFormat(typeof<int32>, Col.Format.RGB)        , (fun _ -> TextureFormat.Rgb32i)
+            PixFormat(typeof<int32>, Col.Format.RGBA)       , (fun _ -> TextureFormat.Rgba32i)
+
+            PixFormat(typeof<uint32>, Col.Format.Gray)      , (fun _ -> TextureFormat.R32ui)
+            PixFormat(typeof<uint32>, Col.Format.NormalUV)  , (fun _ -> TextureFormat.Rg32ui)
+            PixFormat(typeof<uint32>, Col.Format.RGB)       , (fun _ -> TextureFormat.Rgb32ui)
+            PixFormat(typeof<uint32>, Col.Format.RGBA)      , (fun _ -> TextureFormat.Rgba32ui)
+
             PixFormat(typeof<float32>, Col.Format.None), (fun _ -> TextureFormat.DepthComponent32)
+        ]
 
-            PixFormat(typeof<float32>, Col.Format.Gray), (fun _ -> TextureFormat.R32f)
-            PixFormat(typeof<float32>, Col.Format.NormalUV), (fun _ -> TextureFormat.Rg32f)
-            PixFormat(typeof<float32>, Col.Format.RGB), (fun _ -> TextureFormat.Rgb32f)
-            PixFormat(typeof<float32>, Col.Format.RGBA), (fun _ -> TextureFormat.Rgba32f)
+    let private integerFormats =
+        HashSet.ofList [
+            TextureFormat.R8i
+            TextureFormat.R8ui
+            TextureFormat.R16i
+            TextureFormat.R16ui
+            TextureFormat.R32i
+            TextureFormat.R32ui
+            TextureFormat.Rg8i
+            TextureFormat.Rg8ui
+            TextureFormat.Rg16i
+            TextureFormat.Rg16ui
+            TextureFormat.Rg32i
+            TextureFormat.Rg32ui
+            TextureFormat.Rgba32ui
+            TextureFormat.Rgb32ui
+            TextureFormat.Rgba16ui
+            TextureFormat.Rgb16ui
+            TextureFormat.Rgba8ui
+            TextureFormat.Rgb8ui
+            TextureFormat.Rgba32i
+            TextureFormat.Rgb32i
+            TextureFormat.Rgba16i
+            TextureFormat.Rgb16i
+            TextureFormat.Rgba8i
+            TextureFormat.Rgb8i
+        ]
 
-            PixFormat(typeof<int32>, Col.Format.Gray), (fun _ -> TextureFormat.R32i)
-            PixFormat(typeof<int32>, Col.Format.NormalUV), (fun _ -> TextureFormat.Rg32i)
-            PixFormat(typeof<int32>, Col.Format.RGB), (fun _ -> TextureFormat.Rgb32i)
-            PixFormat(typeof<int32>, Col.Format.RGBA), (fun _ -> TextureFormat.Rgba32i)
+    let isIntegerFormat (format : TextureFormat) =
+        integerFormats |> HashSet.contains format
 
-            PixFormat(typeof<uint32>, Col.Format.Gray), (fun _ -> TextureFormat.R32ui)
-            PixFormat(typeof<uint32>, Col.Format.NormalUV), (fun _ -> TextureFormat.Rg32ui)
-            PixFormat(typeof<uint32>, Col.Format.RGB), (fun _ -> TextureFormat.Rgb32ui)
-            PixFormat(typeof<uint32>, Col.Format.RGBA), (fun _ -> TextureFormat.Rgba32ui)
+    let private compressedFormats =
+        HashSet.ofList [
+            TextureFormat.CompressedAlpha
+            TextureFormat.CompressedLuminance
+            TextureFormat.CompressedLuminanceAlpha
+            TextureFormat.CompressedIntensity
+            TextureFormat.CompressedRgb
+            TextureFormat.CompressedRgba
+            TextureFormat.CompressedRed
+            TextureFormat.CompressedRg
+            TextureFormat.CompressedSrgb
+            TextureFormat.CompressedSrgbAlpha
+            TextureFormat.CompressedSluminance
+            TextureFormat.CompressedSluminanceAlpha
+            TextureFormat.CompressedSrgbS3tcDxt1Ext
+            TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext
+            TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext
+            TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext
+            TextureFormat.CompressedRgbS3tcDxt1Ext
+            TextureFormat.CompressedRgbaS3tcDxt1Ext
+            TextureFormat.CompressedRgbaS3tcDxt3Ext
+            TextureFormat.CompressedRgbaS3tcDxt5Ext
+            TextureFormat.CompressedRedRgtc1
+            TextureFormat.CompressedSignedRedRgtc1
+            TextureFormat.CompressedRgRgtc2
+            TextureFormat.CompressedSignedRgRgtc2
+            TextureFormat.CompressedRgbaBptcUnorm
+            TextureFormat.CompressedRgbBptcSignedFloat
+            TextureFormat.CompressedRgbBptcUnsignedFloat
+        ]
+
+    let isCompressed (fmt : TextureFormat) =
+        compressedFormats |> HashSet.contains fmt
+
+    let toCompressed =
+        LookupTable.lookupTable' [
+            TextureFormat.Rgb8, TextureFormat.CompressedRgbS3tcDxt1Ext
+            TextureFormat.Srgb8, TextureFormat.CompressedSrgbS3tcDxt1Ext
+            TextureFormat.Rgba8, TextureFormat.CompressedRgbaS3tcDxt5Ext
+            TextureFormat.Srgb8Alpha8, TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext
         ]
 
     let toDownloadFormat =
         LookupTable.lookupTable [
+            TextureFormat.R8, PixFormat.ByteGray
             TextureFormat.Bgr8, PixFormat.ByteBGR
             TextureFormat.Bgra8, PixFormat.ByteBGRA
             TextureFormat.Rgba8, PixFormat.ByteRGBA
             TextureFormat.Rgb8, PixFormat.ByteRGB
-            TextureFormat.CompressedRgb, PixFormat.ByteRGB
-            TextureFormat.CompressedRgba, PixFormat.ByteRGBA
-            TextureFormat.R32f, PixFormat.FloatGray
-            TextureFormat.Rgb32f, PixFormat.FloatRGB
-            TextureFormat.Rgba32f, PixFormat.FloatRGBA
-            TextureFormat.DepthComponent32, PixFormat.UIntGray
-            TextureFormat.DepthComponent32f, PixFormat.FloatGray
+
+            TextureFormat.Srgb8, PixFormat.ByteRGB
+            TextureFormat.Srgb8Alpha8, PixFormat.ByteRGBA
+
             TextureFormat.R16, PixFormat.UShortGray
+            TextureFormat.Rgba16, PixFormat.UShortRGBA
+            TextureFormat.Rgb16, PixFormat.UShortRGB
+
+            TextureFormat.R16f, PixFormat(typeof<float16>, Col.Format.Gray)
+            TextureFormat.Rg16f, PixFormat(typeof<float16>, Col.Format.NormalUV)
+            TextureFormat.Rgb16f, PixFormat(typeof<float16>, Col.Format.RGB)
             TextureFormat.Rgba16f, PixFormat(typeof<float16>, Col.Format.RGBA)
+
+            TextureFormat.R32f, PixFormat(typeof<float32>, Col.Format.Gray)
+            TextureFormat.Rg32f, PixFormat(typeof<float32>, Col.Format.NormalUV)
+            TextureFormat.Rgb32f, PixFormat(typeof<float32>, Col.Format.RGB)
+            TextureFormat.Rgba32f, PixFormat(typeof<float32>, Col.Format.RGBA)
+
+            TextureFormat.R8Snorm, PixFormat(typeof<int8>, Col.Format.Gray)
+            TextureFormat.Rg8Snorm, PixFormat(typeof<int8>, Col.Format.NormalUV)
+            TextureFormat.Rgb8Snorm, PixFormat(typeof<int8>, Col.Format.RGB)
+            TextureFormat.Rgba8Snorm, PixFormat(typeof<int8>, Col.Format.RGBA)
+
+            TextureFormat.R16Snorm, PixFormat(typeof<int16>, Col.Format.Gray)
+            TextureFormat.Rg16Snorm, PixFormat(typeof<int16>, Col.Format.NormalUV)
+            TextureFormat.Rgb16Snorm, PixFormat(typeof<int16>, Col.Format.RGB)
+            TextureFormat.Rgba16Snorm, PixFormat(typeof<int16>, Col.Format.RGBA)
+
+            TextureFormat.R8i, PixFormat(typeof<int8>, Col.Format.Gray)
+            TextureFormat.Rg8i, PixFormat(typeof<int8>, Col.Format.NormalUV)
+            TextureFormat.Rgb8i, PixFormat(typeof<int8>, Col.Format.RGB)
+            TextureFormat.Rgba8i, PixFormat(typeof<int8>, Col.Format.RGBA)
+
+            TextureFormat.R8ui, PixFormat(typeof<uint8>, Col.Format.Gray)
+            TextureFormat.Rg8ui, PixFormat(typeof<uint8>, Col.Format.NormalUV)
+            TextureFormat.Rgb8ui, PixFormat(typeof<uint8>, Col.Format.RGB)
+            TextureFormat.Rgba8ui, PixFormat(typeof<uint8>, Col.Format.RGBA)
+
+            TextureFormat.R16i, PixFormat(typeof<int16>, Col.Format.Gray)
+            TextureFormat.Rg16i, PixFormat(typeof<int16>, Col.Format.NormalUV)
+            TextureFormat.Rgb16i, PixFormat(typeof<int16>, Col.Format.RGB)
+            TextureFormat.Rgba16i, PixFormat(typeof<int16>, Col.Format.RGBA)
+
+            TextureFormat.R16ui, PixFormat(typeof<uint16>, Col.Format.Gray)
+            TextureFormat.Rg16ui, PixFormat(typeof<uint16>, Col.Format.NormalUV)
+            TextureFormat.Rgb16ui, PixFormat(typeof<uint16>, Col.Format.RGB)
+            TextureFormat.Rgba16ui, PixFormat(typeof<uint16>, Col.Format.RGBA)
 
             TextureFormat.R32i, PixFormat(typeof<int>, Col.Format.Gray)
             TextureFormat.Rg32i, PixFormat(typeof<int>, Col.Format.NormalUV)
@@ -407,6 +546,27 @@ module TextureFormat =
             TextureFormat.Rgb32ui, PixFormat(typeof<uint32>, Col.Format.RGB)
             TextureFormat.Rgba32ui, PixFormat(typeof<uint32>, Col.Format.RGBA)
 
+            TextureFormat.CompressedRgb, PixFormat.ByteRGB
+            TextureFormat.CompressedRgba, PixFormat.ByteRGBA
+            TextureFormat.CompressedRgbS3tcDxt1Ext, PixFormat.ByteRGB
+            TextureFormat.CompressedRgbaS3tcDxt1Ext, PixFormat.ByteRGBA
+            TextureFormat.CompressedRgbaS3tcDxt3Ext, PixFormat.ByteRGBA
+            TextureFormat.CompressedRgbaS3tcDxt5Ext, PixFormat.ByteRGBA
+
+            TextureFormat.CompressedSrgb, PixFormat.ByteRGB
+            TextureFormat.CompressedSrgbAlpha, PixFormat.ByteRGBA
+            TextureFormat.CompressedSrgbS3tcDxt1Ext, PixFormat.ByteRGB
+            TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext, PixFormat.ByteRGBA
+            TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext, PixFormat.ByteRGBA
+            TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext, PixFormat.ByteRGBA
+
+            TextureFormat.CompressedRedRgtc1, PixFormat.ByteGray
+            TextureFormat.CompressedSignedRedRgtc1, PixFormat.ByteGray
+            TextureFormat.CompressedRgRgtc2, PixFormat(typeof<uint8>, Col.Format.NormalUV)
+            TextureFormat.CompressedSignedRgRgtc2, PixFormat(typeof<uint8>, Col.Format.NormalUV)
+            TextureFormat.CompressedRgbaBptcUnorm, PixFormat.ByteRGBA
+            TextureFormat.CompressedRgbBptcSignedFloat, PixFormat.FloatRGB
+            TextureFormat.CompressedRgbBptcUnsignedFloat, PixFormat.FloatRGB
         ]
 
     let pixelSizeInBits =
@@ -592,6 +752,18 @@ module TextureFormat =
         match compressionModes.TryGetValue fmt with
             | (true, mode) -> mode
             | _ -> CompressionMode.None
+
+[<AutoOpen>]
+module TextureFormatExtensions =
+    type TextureFormat with
+        member x.IsIntegerFormat = TextureFormat.isIntegerFormat x
+        member x.IsCompressed = TextureFormat.isCompressed x
+        member x.IsSrgb = TextureFormat.isSrgb x
+        member x.IsDepth = TextureFormat.isDepth x
+        member x.IsStencil = TextureFormat.isStencil x
+        member x.IsDepthStencil = TextureFormat.isDepthStencil x
+        member x.HasDepth = TextureFormat.hasDepth x
+        member x.HasStencil = TextureFormat.hasStencil x
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -787,6 +959,16 @@ module RenderbufferFormat =
     /// either a stencil for a combined depth-stencil format).
     let hasStencil (fmt : RenderbufferFormat) =
         isStencil fmt || isDepthStencil fmt
+
+[<AutoOpen>]
+module RenderbufferFormatExtensions =
+    type RenderbufferFormat with
+        member x.IsDepth = RenderbufferFormat.isDepth x
+        member x.IsStencil = RenderbufferFormat.isStencil x
+        member x.IsDepthStencil = RenderbufferFormat.isDepthStencil x
+        member x.HasDepth = RenderbufferFormat.hasDepth x
+        member x.HasStencil = RenderbufferFormat.hasStencil x
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module AttachmentSignature =

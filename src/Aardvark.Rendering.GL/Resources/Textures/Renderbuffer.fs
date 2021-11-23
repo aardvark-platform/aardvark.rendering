@@ -14,7 +14,7 @@ type Renderbuffer =
         val mutable public Format : RenderbufferFormat
         val mutable public Samples : int
         val mutable public SizeInBytes : int64
-        
+
         interface IFramebufferOutput with
             member x.Runtime = x.Context.Runtime :> ITextureRuntime
             member x.Format = x.Format
@@ -32,34 +32,20 @@ type Renderbuffer =
 [<AutoOpen>]
 module RenderbufferExtensions =
 
+    module private ResourceCounts =
+        let addRenderbuffer (ctx:Context) size =
+            Interlocked.Increment(&ctx.MemoryUsage.RenderBufferCount) |> ignore
+            Interlocked.Add(&ctx.MemoryUsage.RenderBufferMemory,size) |> ignore
 
-    let private addRenderbuffer (ctx:Context) size =
-        Interlocked.Increment(&ctx.MemoryUsage.RenderBufferCount) |> ignore
-        Interlocked.Add(&ctx.MemoryUsage.RenderBufferMemory,size) |> ignore
+        let removeRenderbuffer(ctx:Context) size =
+            Interlocked.Decrement(&ctx.MemoryUsage.RenderBufferCount)  |> ignore
+            Interlocked.Add(&ctx.MemoryUsage.RenderBufferMemory,-size) |> ignore
 
-    let private removeRenderbuffer(ctx:Context) size =
-        Interlocked.Decrement(&ctx.MemoryUsage.RenderBufferCount)  |> ignore
-        Interlocked.Add(&ctx.MemoryUsage.RenderBufferMemory,-size) |> ignore
-
-    let private resizeRenderbuffer(ctx:Context) oldSize newSize =
-        Interlocked.Add(&ctx.MemoryUsage.RenderBufferMemory,newSize - oldSize) |> ignore
-
-
-    let private lookup (name : string) (l : list<'a * 'b>) =
-        let d = Dict.empty
-        for (k,v) in l do
-            match d.TryGetValue k with
-                | (true, vo) -> printfn "duplicated entry in %s: %A (%A, %A)" name k vo v
-                | _ -> ()
-            d.[k] <- v
-
-        fun a ->
-            match d.TryGetValue a with
-                | (true, b) -> b
-                | _ -> failwithf "unknown %s: %A" name a  
+        let resizeRenderbuffer(ctx:Context) oldSize newSize =
+            Interlocked.Add(&ctx.MemoryUsage.RenderBufferMemory,newSize - oldSize) |> ignore
 
     let private storageFormat =
-        lookup "RenderBufferFormat" [
+        LookupTable.lookupTable [
             RenderbufferFormat.DepthComponent, RenderbufferStorage.DepthComponent
             RenderbufferFormat.R3G3B2, RenderbufferStorage.R3G3B2
             RenderbufferFormat.Rgb4, RenderbufferStorage.Rgb4
@@ -129,7 +115,6 @@ module RenderbufferExtensions =
         ]
 
 
-
     let private updateRenderbuffer (handle : int) (size : V2i) (format : RenderbufferStorage) (samples : int) =
         GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, handle)
         GL.Check "could not bind renderbuffer"
@@ -142,7 +127,7 @@ module RenderbufferExtensions =
         GL.Check "could not set renderbuffer storage"
 
         GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0)
-        GL.Check "could not unbind renderbuffer"  
+        GL.Check "could not unbind renderbuffer"
 
     type Context with
         member x.CreateRenderbuffer (size : V2i, format : RenderbufferFormat, ?samples : int) =
@@ -155,16 +140,11 @@ module RenderbufferExtensions =
 
                 let storageFormat = storageFormat format
                 updateRenderbuffer handle size storageFormat samples
-                
+
                 let sizeInBytes = (int64 size.X * int64 size.Y * int64 (RenderbufferStorage.getSizeInBits storageFormat)) / 8L
-                addRenderbuffer x sizeInBytes
+                ResourceCounts.addRenderbuffer x sizeInBytes
                 Renderbuffer(x, handle, size, format, samples, sizeInBytes)
             )
-
-//        member x.CreateRenderbuffer (size : V2i, format : ChannelType, ?samples : int) =
-//            match samples with
-//                | Some s -> x.CreateRenderbuffer(size, toRenderbufferFormat format, s)
-//                | None -> x.CreateRenderbuffer(size, toRenderbufferFormat format)
 
         member x.Update(r : Renderbuffer, size : V2i, format : RenderbufferFormat, ?samples : int) =
             let samples = defaultArg samples 1
@@ -184,9 +164,9 @@ module RenderbufferExtensions =
                     GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0)
                     GL.Check "could not unbind renderbuffer"
 
-                    let sizeInBytes = (int64 size.X * int64 size.Y * int64 (RenderbufferStorage.getSizeInBits storageFormat)) / 8L 
+                    let sizeInBytes = (int64 size.X * int64 size.Y * int64 (RenderbufferStorage.getSizeInBits storageFormat)) / 8L
 
-                    resizeRenderbuffer x r.SizeInBytes sizeInBytes
+                    ResourceCounts.resizeRenderbuffer x r.SizeInBytes sizeInBytes
                     r.SizeInBytes <- sizeInBytes
                     r.Size <- size
                     r.Format <- format
@@ -196,6 +176,6 @@ module RenderbufferExtensions =
         member x.Delete(r : Renderbuffer) =
             using x.ResourceLock (fun _ ->
                 GL.DeleteRenderbuffer(r.Handle)
-                removeRenderbuffer x r.SizeInBytes
+                ResourceCounts.removeRenderbuffer x r.SizeInBytes
                 GL.Check "could not delete renderbuffer"
             )

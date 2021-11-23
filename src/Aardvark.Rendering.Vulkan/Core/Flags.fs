@@ -175,3 +175,26 @@ module VkAccessFlags =
 
     let toDstStageFlags (queue : QueueFlags) (access : VkAccessFlags) =
         access |> Enum.convertFlags (Conversion.toDstStageFlags queue) VkPipelineStageFlags.None
+
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module VkImageUsageFlags =
+    open Vulkan11
+
+    let private formatFeatureUsage = [
+            VkFormatFeatureFlags.SampledImageBit, VkImageUsageFlags.SampledBit
+            VkFormatFeatureFlags.StorageImageBit, VkImageUsageFlags.StorageBit
+            VkFormatFeatureFlags.ColorAttachmentBit, VkImageUsageFlags.ColorAttachmentBit
+            VkFormatFeatureFlags.DepthStencilAttachmentBit, VkImageUsageFlags.DepthStencilAttachmentBit
+            VkFormatFeatureFlags.TransferSrcBit, VkImageUsageFlags.TransferSrcBit
+            VkFormatFeatureFlags.TransferDstBit, VkImageUsageFlags.TransferDstBit
+        ]
+
+    let getUnsupported (features : VkFormatFeatureFlags) =
+        (VkImageUsageFlags.None, formatFeatureUsage) ||> List.fold (fun r (f, u) ->
+            if not <| features.HasFlag f then r ||| u else r
+        )
+
+    let filterSupported (features : VkFormatFeatureFlags) (usage : VkImageUsageFlags) =
+        let unsupported = getUnsupported features
+        usage &&& ~~~unsupported

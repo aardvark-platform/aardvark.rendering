@@ -1078,7 +1078,7 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
             glfw.PostEmptyEvent()
         )
 
-    let ctxHandle = Aardvark.Rendering.GL.ContextHandle(ctx, info)
+    let ctxHandle = new Aardvark.Rendering.GL.ContextHandle(ctx, info)
 
     let defaultFramebuffer = 
         new Aardvark.Rendering.GL.Framebuffer(

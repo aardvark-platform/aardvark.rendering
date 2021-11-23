@@ -163,6 +163,15 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                         | _ -> 
                             failf "invalid storage image argument: %A" value
 
+                let imageFormat = VkFormat.toTextureFormat view.Image.Format
+                let expectedFormat = info.format |> Option.map unbox<TextureFormat>
+
+                let isValidFormat =
+                    expectedFormat |> Option.map ((=) imageFormat) |> Option.defaultValue true
+
+                if not isValidFormat then
+                    failf "expected image with format %A but got %A" expectedFormat.Value imageFormat
+
                 let write = Descriptor.StorageImage(binding, view)
                 update set binding write
                 setResource set binding 0 res

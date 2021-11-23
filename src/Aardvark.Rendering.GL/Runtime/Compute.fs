@@ -43,9 +43,9 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
     //    )
 
     let inputImages =
-        shader.Images |> List.map (fun (b, name) ->
+        shader.Images |> List.map (fun (b, name, typ) ->
             addReference name (Image b)
-            b, (Texture.empty, 0, false, 0)
+            b, (Texture.empty, 0, false, 0, typ)
         ) |> Dictionary.ofList
 
     let inputBuffers =
@@ -97,7 +97,7 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
         for (KeyValue(slot, (b, o, s))) in inputBuffers do
             stream.BindBufferRange(BufferRangeTarget.ShaderStorageBuffer, slot, b.Handle, o, s)
             
-        for (KeyValue(l, (tex, level, layered, layer))) in inputImages do
+        for (KeyValue(l, (tex, level, layered, layer, _))) in inputImages do
             stream.BindImageTexture(l, tex.Handle, level, layered, layer, TextureAccess.ReadWrite, tex.Format)
             
         for (KeyValue(l, (target, tex, sampler))) in inputSamplers do
@@ -117,7 +117,7 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
             boundThings.Add(Buffer(slot,BufferTarget.ShaderStorageBuffer)) |> ignore
             GL.Check "could not bind storage buffer"
 
-        for (KeyValue(l, (tex, level, layered, layer))) in inputImages do
+        for (KeyValue(l, (tex, level, layered, layer, _))) in inputImages do
             GL.BindImageTexture(l, tex.Handle, level, layered, layer, TextureAccess.ReadWrite, unbox (int tex.Format))
             boundThings.Add(Bound.Image l) |> ignore
             GL.Check "could not bind image texture"
@@ -132,44 +132,52 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
 
     member private x.Write(name : string, value : obj) =
         match Map.tryFind name references with
-            | Some refs ->
-                for ref in refs do
-                    match ref with
-                        | Uniform write -> 
-                            write value
+        | Some refs ->
+            for ref in refs do
+                match ref with
+                | Uniform write -> 
+                    write value
 
-                        | StorageBuffer(slot, _) ->
-                            match value with
-                                | null ->
-                                    inputBuffers.[slot] <- (new Aardvark.Rendering.GL.Buffer(ctx, 0n, 0), 0n, 0n)
-                                | :? IBufferRange as range ->
-                                    let buffer = unbox<GL.Buffer> range.Buffer
-                                    inputBuffers.[slot] <- (buffer, range.Offset, range.Size)
+                | StorageBuffer(slot, _) ->
+                    match value with
+                    | null ->
+                        inputBuffers.[slot] <- (new Aardvark.Rendering.GL.Buffer(ctx, 0n, 0), 0n, 0n)
+                    | :? IBufferRange as range ->
+                        let buffer = unbox<GL.Buffer> range.Buffer
+                        inputBuffers.[slot] <- (buffer, range.Offset, range.Size)
 
-                                | :? GL.Buffer as b ->
-                                    inputBuffers.[slot] <- (b, 0n, b.SizeInBytes)
+                    | :? GL.Buffer as b ->
+                        inputBuffers.[slot] <- (b, 0n, b.SizeInBytes)
 
-                                | _ ->
-                                    failwithf "[GL] bad buffer: %A" value
-                                    
+                    | _ ->
+                        failwithf "[GL] bad buffer: %A" value
 
-                        | Image slot ->
-                            let (t, level, layered, layer) = inputImages.[slot]
-                            match value with
-                                | :? ITextureLevel as l ->
-                                    let t = l.Texture |> unbox<Texture>
-                                    let isLayered = l.Slices.Min <> l.Slices.Max
-                                    inputImages.[slot] <- (t, l.Level, isLayered, l.Slices.Min)
-                                | _ ->
-                                    failwithf "[GL] bad image texture: %A" value
-                        | Texture slot ->
-                            let (target, t, s) = inputSamplers.[slot]
-                            match value with
-                                | :? Texture as t ->
-                                    inputSamplers.[slot] <- (target, t, s)
-                                | _ ->
-                                    failwithf "[GL] bad texture: %A" value
-                               
+
+                | Image slot ->
+                    let (_, _, _, _, typ) = inputImages.[slot]
+                    let expectedFormat = typ.format |> Option.map unbox<TextureFormat>
+
+                    match value with
+                    | :? ITextureLevel as l ->
+                        let t = l.Texture |> unbox<Texture>
+
+                        let isValidFormat =
+                            expectedFormat |> Option.map ((=) t.Format) |> Option.defaultValue true
+
+                        if not isValidFormat then
+                            failwithf "[GL] Expected image '%s' with format %A but got %A" name expectedFormat.Value t.Format
+
+                        let isLayered = l.Slices.Min <> l.Slices.Max
+                        inputImages.[slot] <- (t, l.Level, isLayered, l.Slices.Min, typ)
+                    | _ ->
+                        failwithf "[GL] bad image texture: %A" value
+                | Texture slot ->
+                    let (target, t, s) = inputSamplers.[slot]
+                    match value with
+                    | :? Texture as t ->
+                        inputSamplers.[slot] <- (target, t, s)
+                    | _ ->
+                        failwithf "[GL] bad texture: %A" value
             | None ->
                 ()
     
@@ -230,7 +238,7 @@ and ComputeShader(prog : Program, localSize : V3i) =
 
     let images =
         iface.images |> MapExt.toList |> List.map (fun (_,u) ->
-            u.imageBinding, u.imageName
+            u.imageBinding, u.imageName, u.imageType
             //match u.Type with
             //    | ShaderParameterType.Image(valueType,dim,isMS,isArray) ->
             //        match u.Path with
@@ -288,7 +296,7 @@ and ComputeShader(prog : Program, localSize : V3i) =
 
     member x.Context : Context = ctx
     member x.Buffers : list<int * string * GLSL.GLSLType>  = buffers
-    member x.Images : list<int * string> = images
+    member x.Images : list<int * string * GLSL.GLSLImageType> = images
     member x.Samplers : list<int * string * Sampler> = samplers
     member x.UniformBlocks : list<GLSL.GLSLUniformBuffer> = MapExt.toList uniformBlocks |> List.map snd
     member x.Handle = prog.Handle

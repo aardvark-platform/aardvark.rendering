@@ -1177,11 +1177,11 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
             | TypeInfo.Patterns.Byte    -> 255uy |> unbox<'a>
             | TypeInfo.Patterns.SByte   -> 0y |> unbox<'a>
             | TypeInfo.Patterns.UInt16  -> UInt16.MaxValue |> unbox<'a>
-            | TypeInfo.Patterns.Int16   -> 0 |> unbox<'a>
+            | TypeInfo.Patterns.Int16   -> 0s |> unbox<'a>
             | TypeInfo.Patterns.UInt32  -> UInt32.MaxValue |> unbox<'a>
             | TypeInfo.Patterns.Int32   -> 0 |> unbox<'a>
             | TypeInfo.Patterns.UInt64  -> UInt64.MaxValue |> unbox<'a>
-            | TypeInfo.Patterns.Int64   -> 0 |> unbox<'a>
+            | TypeInfo.Patterns.Int64   -> 0L |> unbox<'a>
             | TypeInfo.Patterns.Float32 -> 1.0f |> unbox<'a>
             | TypeInfo.Patterns.Float64 -> 1.0 |> unbox<'a>
             | _ -> failf "unsupported channel-type: %A" typeof<'a>
@@ -2292,6 +2292,9 @@ module Image =
     open Vulkan11
 
     let allocLinear (size : V2i) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
+        let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Linear, fmt)
+        let usage = usage |> VkImageUsageFlags.filterSupported features
+
         let info =
             VkImageCreateInfo(
                 VkImageCreateFlags.None,
@@ -2364,7 +2367,9 @@ module Image =
 
 
     let rec alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
-        if device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt) = VkFormatFeatureFlags.None then
+        let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt)
+
+        if features = VkFormatFeatureFlags.None then
             match fmt.NextBetter with
                 | Some fmt -> alloc size mipMapLevels count samples dim fmt usage device
                 | None -> failf "bad image format %A" fmt
@@ -2396,6 +2401,9 @@ module Image =
                 | TextureDimension.Texture2D -> V3i(size.X, size.Y, 1)
                 | TextureDimension.TextureCube -> V3i(size.X, size.X, 1)
                 | _ -> size
+
+            let usage =
+                usage |> VkImageUsageFlags.filterSupported features
 
             let info =
                 VkImageCreateInfo(
@@ -2508,7 +2516,7 @@ module Image =
         let mipMapLevels =
             if info.wantMipMaps then
                 if pi.LevelCount > 1 then pi.LevelCount
-                else 1 + max size.X size.Y |> Fun.Log2 |> floor |> int 
+                else Fun.MipmapLevels(size)
             else
                 1
 
@@ -2589,7 +2597,7 @@ module Image =
         
         let mipMapLevels =
             if info.wantMipMaps then
-                1 + (max (max size.X size.Y) size.Z) |> Fun.Log2 |> floor |> int 
+                Fun.MipmapLevels(size) 
             else
                 1
 
@@ -2670,7 +2678,7 @@ module Image =
         let mipMapLevels =
             if info.wantMipMaps then
                 if face0.LevelCount > 1 then face0.LevelCount
-                else 1 + max size.X size.Y |> Fun.Log2 |> floor |> int 
+                else Fun.MipmapLevels(size)
             else
                 1
 
@@ -2983,7 +2991,7 @@ module Image =
 
         let mipMapLevels =
             if info.wantMipMaps then
-                1 + max size.X size.Y |> Fun.Log2 |> floor |> int 
+                Fun.MipmapLevels(size)
             else
                 1
 

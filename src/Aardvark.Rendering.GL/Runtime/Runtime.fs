@@ -104,236 +104,45 @@ type Runtime() =
 
         member x.DeviceCount = 1
 
-        member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) : unit =
-            use __ = ctx.ResourceLock
-
-            let slice = dst.Slice
+        member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format,
+                                              dst : ITextureSubResource, offset : V3i, size : V3i) : unit =
             let level = dst.Level
+            let slice = dst.Slice
             let dst = dst.Texture |> unbox<Texture>
-            let dstSize = dst.GetSize level
-            let dstOffset = V3i(dstOffset.X, dstSize.Y - (dstOffset.Y + size.Y), dstOffset.Z)
 
-            if dst.Multisamples > 1 then
-                failwith "[GL] cannot upload multisampled texture"
-
-            let inline bind (t : TextureTarget) (h : int) (f : unit -> unit) =
-                GL.BindTexture(t, h)
-                f()
-                GL.BindTexture(t, 0)
-
-            let channels = int src.SW
-
-            let rowSize = channels * size.X * sizeof<'a>
-            let alignedRowSize = Align.next ctx.PackAlignment rowSize
-            if alignedRowSize % sizeof<'a> <> 0 then
-                failwithf "[GL] ill-aligned upload"
-
-            let sizeInBytes = nativeint alignedRowSize * nativeint size.Y * nativeint size.Z
-
-            // copy to temp buffer
-            let temp = GL.GenBuffer()
-            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, temp)
-            GL.BufferStorage(BufferTarget.PixelUnpackBuffer, sizeInBytes, 0n, BufferStorageFlags.MapWriteBit)
-            let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, sizeInBytes, BufferAccessMask.MapWriteBit)
-
-            let dstTensor =
-                let dy = int64 alignedRowSize / int64 sizeof<'a>
-                let info =
-                    Tensor4Info(
-                        0L,
-                        V4l(int64 size.X, int64 size.Y, int64 size.Z, src.SW),
-                        V4l(int64 channels, dy, dy * int64 size.Z, 1L)
-                    )
-                NativeTensor4<'a>(NativePtr.ofNativeInt ptr, info)
-
-
-            let src = src.SubTensor4(V4i.Zero, V4i(size,channels))
-            let dstTensor = dstTensor.MirrorY()
-            NativeTensor4.copy src dstTensor
-
-            GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
-
-            let pFmt = PixelFormat.ofColFormat fmt
-            let pType = PixelType.ofType typeof<'a>
-
-            match dst.Dimension, dst.IsArray with
-                | TextureDimension.Texture1D, false ->
-                    bind TextureTarget.Texture1D dst.Handle (fun () ->
-                        GL.TexSubImage1D(TextureTarget.Texture1D, level, dstOffset.X, size.X, pFmt, pType, 0n)
-                    )
-
-                | TextureDimension.Texture1D, true ->
-                    let view = GL.GenTexture()
-                    GL.TextureView(view, TextureTarget.Texture1D, dst.Handle, unbox (int dst.Format), level, 1, slice, 1)
-                    bind TextureTarget.Texture1D view (fun () ->
-                        GL.TexSubImage1D(TextureTarget.Texture1D, 0, dstOffset.X, size.X, pFmt, pType, 0n)
-                    )
-                    GL.DeleteTexture(view)
-
-
-                | TextureDimension.Texture2D, false ->
-                    bind TextureTarget.Texture2D dst.Handle (fun () ->
-                        GL.TexSubImage2D(TextureTarget.Texture2D, level, dstOffset.X, dstOffset.Y, size.X, size.Y, pFmt, pType, 0n)
-                    )
-                | TextureDimension.Texture2D, true ->
-                    let view = GL.GenTexture()
-                    GL.TextureView(view, TextureTarget.Texture2D, dst.Handle, unbox (int dst.Format), level, 1, slice, 1)
-                    bind TextureTarget.Texture2D view (fun () ->
-                        GL.TexSubImage2D(TextureTarget.Texture2D, 0, dstOffset.X, dstOffset.Y, size.X, size.Y, pFmt, pType, 0n)
-                    )
-                    GL.DeleteTexture(view)
-
-                | TextureDimension.TextureCube, false ->
-                    bind TextureTarget.TextureCubeMap dst.Handle (fun () ->
-                        let target = int TextureTarget.TextureCubeMapPositiveX + slice % 6 |> unbox<TextureTarget>
-                        GL.TexSubImage2D(target, level, dstOffset.X, dstOffset.Y, size.X, size.Y, pFmt, pType, 0n)
-                    )
-
-                | TextureDimension.TextureCube, true ->
-                    let face = slice % 6
-                    let slice = slice / 6
-                    let view = GL.GenTexture()
-                    GL.TextureView(view, TextureTarget.TextureCubeMap, dst.Handle, unbox (int dst.Format), level, 1, slice, 1)
-                    bind TextureTarget.TextureCubeMap view (fun () ->
-                        let target = int TextureTarget.TextureCubeMapPositiveX + face |> unbox<TextureTarget>
-                        GL.TexSubImage2D(target, 0, dstOffset.X, dstOffset.Y, size.X, size.Y, pFmt, pType, 0n)
-                    )
-                    GL.DeleteTexture(view)
-
-                | TextureDimension.Texture3D, false ->
-                    bind TextureTarget.Texture3D dst.Handle (fun () ->
-                        GL.TexSubImage3D(TextureTarget.Texture3D, level, dstOffset.X, dstOffset.Y, dstOffset.Z, size.X, size.Y, size.Z, pFmt, pType, 0n)
-                    )
-
-                | TextureDimension.Texture3D, true ->
-                    failwith "[GL] cannot upload 3D array"
-
-                | _ ->
-                    failwith "[GL] unexpected texture dimension"
-
-
-            GL.BindBuffer(BufferTarget.PixelUnpackBuffer,0)
-            GL.DeleteBuffer(temp)
-
-        member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) : unit =
-            use __ = ctx.ResourceLock
-
-            let slice = src.Slice
+            ctx.Upload(dst, level, slice, offset, size, src)
+  
+        member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, offset : V3i,
+                                              dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) : unit =
             let level = src.Level
+            let slice = src.Slice
             let src = src.Texture |> unbox<Texture>
-            let srcSize = src.GetSize level
-            let srcOffset = V3i(srcOffset.X, srcSize.Y - (srcOffset.Y + size.Y), srcOffset.Z)
 
-            if src.Multisamples > 1 then
-                failwith "[GL] cannot upload multisampled texture"
-
-            let inline bind (t : TextureTarget) (h : int) (f : unit -> unit) =
-                GL.BindTexture(t, h)
-                f()
-                GL.BindTexture(t, 0)
-
-            let channels = int dst.SW
-
-            let rowSize = channels * srcSize.X * sizeof<'a>
-            let alignedRowSize = Align.next ctx.PackAlignment rowSize
-            if alignedRowSize % sizeof<'a> <> 0 then
-                failwithf "[GL] ill-aligned upload"
-
-            let sizeInBytes = nativeint alignedRowSize * nativeint srcSize.Y * nativeint srcSize.Z
-
-            let temp = GL.GenBuffer()
-            GL.BindBuffer(BufferTarget.PixelPackBuffer, temp)
-            GL.BufferStorage(BufferTarget.PixelPackBuffer, sizeInBytes, 0n, BufferStorageFlags.MapReadBit)
-
-            let inline bind (t : TextureTarget) (h : int) (f : unit -> unit) =
-                GL.BindTexture(t, h)
-                f()
-                GL.BindTexture(t, 0)
-
-
-            let pFmt = PixelFormat.ofColFormat fmt
-            let pType = PixelType.ofType typeof<'a>
-
-            match src.Dimension, src.IsArray with
-                | TextureDimension.Texture1D, false ->
-                    bind TextureTarget.Texture1D src.Handle (fun () ->
-                        GL.GetTexImage(TextureTarget.Texture1D, level, pFmt, pType, 0n)
-                    )
-
-                | TextureDimension.Texture1D, true ->
-                    failwith "not implemented"
-
-                | TextureDimension.Texture2D, false ->
-                    bind TextureTarget.Texture2D src.Handle (fun () ->
-                        GL.GetTexImage(TextureTarget.Texture2D, level, pFmt, pType, 0n)
-                    )
-
-                | _ ->
-                    failwith "not implemented"
-
-            // copy from temp buffer
-            let ptr = GL.MapBufferRange(BufferTarget.PixelPackBuffer, 0n, sizeInBytes, BufferAccessMask.MapReadBit)
-
-            let srcTensor =
-                let dy = int64 alignedRowSize / int64 sizeof<'a>
-                let info =
-                    Tensor4Info(
-                        0L,
-                        V4l(int64 srcSize.X, int64 srcSize.Y, int64 srcSize.Z, dst.SW),
-                        V4l(int64 channels, dy, dy * int64 srcSize.Z, 1L)
-                    )
-                NativeTensor4<'a>(NativePtr.ofNativeInt ptr, info)
-
-
-
-            let src = srcTensor.SubTensor4(V4i(srcOffset, 0), V4i(size, int dst.SW))
-            let dst = dst.SubTensor4(V4i.Zero, V4i(size,channels)).MirrorY()
-            NativeTensor4.copy src dst
-
-            GL.UnmapBuffer(BufferTarget.PixelPackBuffer) |> ignore
-            GL.BindBuffer(BufferTarget.PixelPackBuffer,0)
-            GL.DeleteBuffer(temp)
+            ctx.Download(src, level, slice, offset, size, dst)
 
         member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) : unit =
-            use __ = ctx.ResourceLock
 
-            let args (t : IFramebufferOutput) =
+            let args (offset : V3i) (t : IFramebufferOutput) =
                 match t with
-                    | :? Renderbuffer as rb ->
-                        rb.Handle, ImageTarget.Renderbuffer, 0, false
+                | :? Renderbuffer as rb ->
+                    rb |> ResourceValidation.Textures.validateWindow 0 offset size
+                    Image.Renderbuffer rb, 0, Range1i(0)
 
-                    | :? ITextureLevel as tl ->
-                        let t = tl.Texture |> unbox<Texture>
-                        let target = TextureTarget.ofTexture t
+                | :? ITextureLevel as tl ->
+                    tl.Texture |> ResourceValidation.Textures.validateSlices tl.Slices.Min (tl.Slices.Size + 1)
+                    tl.Texture |> ResourceValidation.Textures.validateLevels tl.Level 1
+                    tl.Texture |> ResourceValidation.Textures.validateWindow tl.Level offset size
+                    Image.Texture (unbox tl.Texture), tl.Level, tl.Slices
 
-                        let cnt = max t.Count 1
-                        if tl.Slices.Min <> 0 || tl.Slices.Max <> cnt - 1 then
-                            let v = GL.GenTexture()
-                            GL.TextureView(v, target, t.Handle, unbox (int t.Format), tl.Level, 1, tl.Slices.Min, 1 + tl.Slices.Max - tl.Slices.Min)
-                            v, unbox (int target), 0, true
+                | _ ->
+                    failwithf "[GL] invalid FramebufferOutput: %A" t
 
-                        else
-                            t.Handle, unbox (int target), tl.Level, false
-                    | _ ->
-                        failwithf "[GL] invalid FramebufferOutput: %A" t
+            let srcImage, srcLevel, srcSlices = args srcOffset src
+            let dstImage, dstLevel, dstSlices = args dstOffset dst
 
-            let srcHandle, srcTarget, srcLevel, srcTemp = args src
-            let dstHandle, dstTarget, dstLevel, dstTemp = args dst
+            (srcImage.Samples, dstImage.Samples) ||> ResourceValidation.Textures.validateSamplesForCopy' srcImage.Dimension
 
-            let srcOffset = V3i(srcOffset.X, src.Size.Y - (srcOffset.Y + size.Y), srcOffset.Z)
-            let dstOffset = V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
-
-            GL.CopyImageSubData(
-                srcHandle, srcTarget, srcLevel, srcOffset.X, srcOffset.Y, srcOffset.Z,
-                dstHandle, dstTarget, dstLevel, dstOffset.X, dstOffset.Y, dstOffset.Z,
-                size.X, size.Y, size.Z
-            )
-
-            if srcTemp then GL.DeleteTexture srcHandle
-            if dstTemp then GL.DeleteTexture dstHandle
-
-
-
+            ctx.Copy(srcImage, srcLevel, srcSlices, srcOffset, dstImage, dstLevel, dstSlices, dstOffset, size)
 
         member x.OnDispose = onDispose.Publish
 
@@ -620,17 +429,17 @@ type Runtime() =
         let src = unbox<Texture> src
         let dst = unbox<Texture> dst
 
-        let mutable size = src.GetSize srcBaseLevel
+        let srcSlices = Range1i(srcBaseSlice, srcBaseSlice + slices - 1)
+        let dstSlices = Range1i(dstBaseSlice, dstBaseSlice + slices - 1)
+
         for l in 0 .. levels - 1 do
             let srcLevel = srcBaseLevel + l
             let dstLevel = dstBaseLevel + l
-            for s in 0 .. slices - 1 do
-                if src.IsMultisampled then
-                    ctx.Blit(src, srcLevel, srcBaseSlice + s, Box2i(V2i.Zero, size.XY), dst, dstLevel, dstBaseSlice + s, Box2i(V2i.Zero, size.XY), false)
-                else
-                    ctx.Copy(src, srcLevel, srcBaseSlice + s, V2i.Zero, dst, dstLevel, dstBaseSlice + s, V2i.Zero, size.XY)
-            size <- size / 2
+            let srcSize = src.GetSize(srcLevel)
+            let dstSize = dst.GetSize(dstLevel)
+            let size = min srcSize dstSize
 
+            ctx.Copy(src, srcLevel, srcSlices, V3i.Zero, dst, dstLevel, dstSlices, V3i.Zero, size)
 
     member x.CreateBuffer(size : nativeint) =
         ctx.CreateBuffer(int size)
@@ -867,7 +676,7 @@ type Runtime() =
         match t with
             | :? Texture as t ->
                 if t.MipMapLevels > 1 then
-                    let target = Uploads.getTextureTarget t
+                    let target = TextureTarget.ofTexture t
                     Operators.using ctx.ResourceLock (fun _ ->
                         GL.BindTexture(target, t.Handle)
                         GL.Check "could not bind texture"
@@ -892,18 +701,23 @@ type Runtime() =
         ctx.Download(unbox<Texture> t, level, slice, offset, target)
 
     member x.Download(t : IBackendTexture, level : int, slice : int, offset : V3i, target : PixVolume) : unit =
-       failwith "[GL] Volume download not implemented"
+        t |> ResourceValidation.Textures.validateLevel level
+        t |> ResourceValidation.Textures.validateSlice slice
+        t |> ResourceValidation.Textures.validateWindow level offset target.Size
+        ctx.Download(unbox<Texture> t, level, offset, target)
 
     member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<int>) =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
+        t |> ResourceValidation.Textures.validateStencilFormat
         ctx.DownloadStencil(unbox<Texture> t, level, slice, offset, target)
 
     member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
+        t |> ResourceValidation.Textures.validateDepthFormat
         ctx.DownloadDepth(unbox<Texture> t, level, slice, offset, target)
 
     member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) =

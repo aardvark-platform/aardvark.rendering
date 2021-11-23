@@ -11,7 +11,7 @@ open Aardvark.Rendering.GL
 #nowarn "9"
 
 type SparseTexture(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int, size : V3i, count : Option<int>, format : TextureFormat, pageSize : V3i, sparseLevels : int) = 
-    inherit Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, count, format, 0L, true)
+    inherit Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, count, format, 0L)
 
     member x.PageSize = pageSize
     member x.SparseLevels = sparseLevels
@@ -69,15 +69,6 @@ module ``Sparse Texture Extensions`` =
                 let ptr = current.GetAddress "glTexPageCommitmentARB"
                 Marshal.GetDelegateForFunctionPointer(ptr, typeof<TexPageCommitmentDelegate>) |> unbox<TexPageCommitmentDelegate>
             )
-
-
-    let private pixelFormat =
-        LookupTable.lookupTable [
-            1L, PixelFormat.Red
-            2L, PixelFormat.Rg
-            3L, PixelFormat.Rgb
-            4L, PixelFormat.Rgba
-        ]
 
 
     type GL with
@@ -169,11 +160,7 @@ module ``Sparse Texture Extensions`` =
                 failwith "[GL] texture upload region out of bounds"
                 
             if size.AllGreater 0 then
-                data.PinPBO(x.PackAlignment, fun size pt pf _ ->
-                    GL.BindTexture(TextureTarget.Texture3D, t.Handle)
-                    GL.TexSubImage3D(TextureTarget.Texture3D, level, min.X, min.Y, min.Z, size.X, size.Y, size.Z, pf, pt, 0n)
-                    GL.BindTexture(TextureTarget.Texture3D, 0)
-                )
+                data |> Texture.uploadPixVolume t false level min
 
         member x.Upload(t : SparseTexture, level : int, offset : V3i, data : NativeTensor4<'a>) =
             use __ = x.ResourceLock
@@ -187,59 +174,10 @@ module ``Sparse Texture Extensions`` =
                 failwith "[GL] texture upload region out of bounds"
                 
             if size.AllGreater 0 then
-                NativeTensor4.withPBO data x.PackAlignment (fun size pt pf _ ->
-                    GL.BindTexture(TextureTarget.Texture3D, t.Handle)
-                    GL.Check "could not unbind sparse texture"
-                    GL.TexSubImage3D(TextureTarget.Texture3D, level, min.X, min.Y, min.Z, size.X, size.Y, size.Z, pf, pt, 0n)
-                    GL.Check "could not upload sparse region"
-                    GL.BindTexture(TextureTarget.Texture3D, 0)
-                    GL.Check "could not unbind sparse texture"
-                )
+                data |> Texture.uploadNativeTensor4 t false level 0 min size
 
         member x.Download(t : SparseTexture, level : int, offset : V3i, target : NativeTensor4<'a>) =
-            use __ = x.ResourceLock
-
-            let size = V3i target.Size.XYZ
-            let temp = x.CreateTexture3D(size, 1, t.Format)
-
-            try
-                GL.CopyImageSubData(
-                    t.Handle, ImageTarget.Texture3D, level, 
-                    offset.X, offset.Y, offset.Z,
-                    temp.Handle, ImageTarget.Texture3D, 0,
-                    0, 0, 0,
-                    size.X, size.Y, size.Z
-                )
-
-                let pboInfo =
-                    {
-                        size = size
-                        flags = BufferStorageFlags.MapReadBit
-                        pixelFormat = pixelFormat target.Size.W
-                        pixelType = PixelType.ofType typeof<'a>
-                    }
-
-                NativeTensor4.usePBO pboInfo x.PackAlignment (fun pbo sizeInBytes info ->
-                    GL.BindTexture(TextureTarget.Texture3D, temp.Handle)
-                    GL.BindBuffer(BufferTarget.PixelPackBuffer, pbo)
-
-                    GL.GetTexImage(TextureTarget.Texture3D, 0, pboInfo.pixelFormat, pboInfo.pixelType, 0n)
-
-                    GL.BindTexture(TextureTarget.Texture3D, 0)
-
-                    let ptr = GL.MapBufferRange(BufferTarget.PixelPackBuffer, 0n, sizeInBytes, BufferAccessMask.MapReadBit)
-
-                    let t = NativeTensor4<'a>(NativePtr.ofNativeInt ptr, info)
-                    t.CopyTo(target)
-
-                    GL.UnmapBuffer(BufferTarget.PixelPackBuffer) |> ignore
-
-
-                    GL.BindBuffer(BufferTarget.PixelPackBuffer, 0)
-                )
-
-            finally
-                x.Delete temp
+            t.Context.Download(t, level, offset, target)
 
     type SparseTexture with
         member inline x.Commitment(level : int, region : Box3i, commit : bool) =

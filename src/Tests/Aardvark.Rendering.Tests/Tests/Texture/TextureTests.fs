@@ -7,6 +7,7 @@ open Expecto
 module ``Texture Tests`` =
 
     let private tests = [
+        TextureUpload.tests
         TextureDownload.tests
         TextureCreate.tests
         TextureCopy.tests
