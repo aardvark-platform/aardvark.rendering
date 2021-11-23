@@ -91,10 +91,17 @@ module Effect =
                 uniform.OutputBuffer.[input.work.id.XY] <- V4d(final, 1.0)
             }
 
-        let missSolidColor (color : C3d) =
-            let color = V3d color
+        let missSky (input : RayMissInput) =
+            let top = V3d(0.25, 0.5, 1.0)
+            let bottom = V3d C3d.Lavender
 
             miss {
+                let color =
+                    if input.ray.direction.Z > 0.0 then
+                        input.ray.direction.Z |> lerp bottom top
+                    else
+                        bottom
+
                 return { color = color; recursionDepth = 0 }
             }
 
@@ -283,7 +290,7 @@ module Effect =
     let main =
         raytracing {
             raygen rgenMain
-            miss (missSolidColor C3d.Lavender)
+            miss missSky
             miss (MissShader.Shadow, missShadow)
             hitgroup (HitGroup.Model, hitGroupModel)
             hitgroup (HitGroup.Floor, hitGroupFloor)
