@@ -6,7 +6,7 @@ open OpenTK.Graphics.OpenGL4
 [<AutoOpen>]
 module ARB_pipeline_statistics_query =
 
-    type GLExt private() =
+    type GL private() =
         static member ARB_pipeline_statistics_query =
             ExtensionHelpers.isSupported (Version(4, 6)) "GL_ARB_pipeline_statistics_query"
 

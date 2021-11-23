@@ -26,12 +26,12 @@ type UniformBufferManager(ctx : Context) =
                 new Buffer(ctx, 0n, 0)
             else
                 use __ = ctx.ResourceLock
-                let handle = GLExt.CreateBuffer()
+                let handle = GL.CreateBuffer()
                 GL.Check "failed to create uniform buffer"
 
                 BufferMemoryUsage.addUniformBuffer ctx (int64 size)
 
-                GLExt.NamedBufferStorage(handle, size, 0n, BufferStorageFlags.DynamicStorageBit)
+                GL.NamedBufferStorage(handle, size, 0n, BufferStorageFlags.DynamicStorageBit)
                 GL.Check "could not allocate uniform buffer"
 
                 new Buffer(ctx, size, handle)
@@ -117,7 +117,7 @@ type UniformBufferManager(ctx : Context) =
 
                         for (offset,w) in writers do w.Write(token, store + offset)
 
-                        GLExt.NamedBufferSubData(handle.Buffer.Handle, handle.Offset, handle.Size, store)
+                        GL.NamedBufferSubData(handle.Buffer.Handle, handle.Offset, handle.Size, store)
                         GL.Check "could not upload uniform buffer"
                         //buffer.WriteUnsafe(handle.Offset, handle.Size, store)
                         handle

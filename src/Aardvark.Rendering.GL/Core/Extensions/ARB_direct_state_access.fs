@@ -3,6 +3,7 @@
 #nowarn "51"
 
 open System
+open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
 
@@ -11,7 +12,13 @@ open ExtensionHelpers
 [<AutoOpen>]
 module ARB_direct_state_access =
 
-    type GLExt private() =
+    // Arb functions are in GL type, need alias to prevent recursive calls
+    [<AutoOpen>]
+    module private ArbFunctions =
+        module GL =
+            type Arb = OpenGL4.GL
+
+    type GL private() =
 
         static let supported = ExtensionHelpers.isSupported (Version(4,5)) "GL_ARB_direct_state_access"
 
@@ -49,7 +56,7 @@ module ARB_direct_state_access =
 
         static member NamedBufferData(buffer : int, size : nativeint, data : nativeint, usage : BufferUsageHint) =
             if supported then
-                GL.NamedBufferData(buffer, size, data, usage)
+                GL.Arb.NamedBufferData(buffer, size, data, usage)
             else
                 bindBuffer buffer (fun t ->
                     GL.BufferData(t, size, data, usage)
@@ -57,7 +64,7 @@ module ARB_direct_state_access =
 
         static member NamedBufferSubData(buffer : int, offset : nativeint, size : nativeint, data : nativeint) =
             if supported then
-                GL.NamedBufferSubData(buffer, offset, size, data)
+                GL.Arb.NamedBufferSubData(buffer, offset, size, data)
             else
                 bindBuffer buffer (fun t ->
                     GL.BufferSubData(t, offset, size, data)
@@ -65,7 +72,7 @@ module ARB_direct_state_access =
 
         static member ClearNamedBufferSubData(buffer : int, ifmt : PixelInternalFormat, offset : nativeint, size : nativeint, fmt : PixelFormat, pixelType : PixelType, data : nativeint) =
             if supported then
-                GL.ClearNamedBufferSubData(buffer, ifmt, offset, size, fmt, pixelType, data)
+                GL.Arb.ClearNamedBufferSubData(buffer, ifmt, offset, size, fmt, pixelType, data)
             else
                 bindBuffer buffer (fun t ->
                     GL.ClearBufferSubData(t, ifmt, offset, int size, fmt, pixelType, data)
@@ -73,7 +80,7 @@ module ARB_direct_state_access =
 
         static member GetNamedBufferSubData(buffer : int, offset : nativeint, size : nativeint, data : nativeint) =
             if supported then
-                GL.GetNamedBufferSubData(buffer, offset, size, data)
+                GL.Arb.GetNamedBufferSubData(buffer, offset, size, data)
             else
                 bindBuffer buffer (fun t ->
                     GL.GetBufferSubData(t, offset, size, data)
@@ -81,7 +88,7 @@ module ARB_direct_state_access =
 
         static member CopyNamedBufferSubData(src : int, dst : int, srcOffset : nativeint, dstOffset : nativeint, size : nativeint) =
             if supported then
-                GL.CopyNamedBufferSubData(src, dst, srcOffset, dstOffset, size)
+                GL.Arb.CopyNamedBufferSubData(src, dst, srcOffset, dstOffset, size)
             else
                 bindBuffers src dst (fun tSrc tDst ->
                     GL.CopyBufferSubData(tSrc, tDst, srcOffset, dstOffset, size)
@@ -89,18 +96,18 @@ module ARB_direct_state_access =
 
         static member NamedBufferStorage(buffer: int, size : nativeint, data : nativeint, flags: BufferStorageFlags) =
             if supported then
-                if GLExt.ARB_buffer_storage then
-                    GL.NamedBufferStorage(buffer, size, data, flags)
+                if GL.ARB_buffer_storage then
+                    GL.Arb.NamedBufferStorage(buffer, size, data, flags)
                 else
-                    GL.NamedBufferData(buffer, size, data, BufferUsageHint.DynamicDraw)
+                    GL.Arb.NamedBufferData(buffer, size, data, BufferUsageHint.DynamicDraw)
             else
                 bindBuffer buffer (fun t ->
-                    GLExt.BufferStorage(t, size, data, flags)
+                    GL.BufferStorage(t, size, data, flags)
                 )
 
         static member MapNamedBuffer(buffer: int, access : BufferAccess) =
             if supported then
-                GL.MapNamedBuffer(buffer, access)
+                GL.Arb.MapNamedBuffer(buffer, access)
             else
                 bindBuffer buffer (fun t ->
                     GL.MapBuffer(t, access)
@@ -108,7 +115,7 @@ module ARB_direct_state_access =
 
         static member UnmapNamedBuffer(buffer: int) =
             if supported then
-                GL.UnmapNamedBuffer(buffer)
+                GL.Arb.UnmapNamedBuffer(buffer)
             else
                 bindBuffer buffer (fun t ->
                     GL.UnmapBuffer(t)
@@ -116,7 +123,7 @@ module ARB_direct_state_access =
 
         static member MapNamedBufferRange(buffer: int, offset : nativeint, size : nativeint, access : BufferAccessMask) =
             if supported then
-                GL.MapNamedBufferRange(buffer, offset, size, access)
+                GL.Arb.MapNamedBufferRange(buffer, offset, size, access)
             else
                 bindBuffer buffer (fun t ->
                     GL.MapBufferRange(t, offset, size, access)
@@ -124,7 +131,7 @@ module ARB_direct_state_access =
 
         static member FlushMappedNamedBufferRange(buffer: int, offset : nativeint, size : nativeint) =
             if supported then
-                GL.FlushMappedNamedBufferRange(buffer, offset, size)
+                GL.Arb.FlushMappedNamedBufferRange(buffer, offset, size)
             else
                 bindBuffer buffer (fun t ->
                     GL.FlushMappedBufferRange(t, offset, size)
@@ -132,7 +139,7 @@ module ARB_direct_state_access =
 
         static member GetNamedBufferParameter(buffer : int, pname : BufferParameterName, arr : int[]) =
             if supported then
-                GL.GetNamedBufferParameter(buffer, pname, arr)
+                GL.Arb.GetNamedBufferParameter(buffer, pname, arr)
             else
                 bindBuffer buffer (fun t ->
                     GL.GetBufferParameter(t, pname, arr)
@@ -140,7 +147,7 @@ module ARB_direct_state_access =
 
         static member GetNamedBufferParameter(buffer : int, pname : BufferParameterName, res : byref<int>) =
             if supported then
-                GL.GetNamedBufferParameter(buffer, pname, &res)
+                GL.Arb.GetNamedBufferParameter(buffer, pname, &res)
             else
                 let mutable r = res
                 bindBuffer buffer (fun t ->
@@ -150,7 +157,7 @@ module ARB_direct_state_access =
 
         static member GetNamedBufferParameter(buffer : int, pname : BufferParameterName, res : byref<int64>) =
             if supported then
-                GL.GetNamedBufferParameter(buffer, pname, &&res)
+                GL.Arb.GetNamedBufferParameter(buffer, pname, &&res)
             else
                 let mutable r = res
                 bindBuffer buffer (fun t ->

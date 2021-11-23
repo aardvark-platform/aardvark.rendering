@@ -8,7 +8,6 @@ open Aardvark.Rendering.GL
 open Aardvark.Application
 open Aardvark.SceneGraph
 open Aardvark.SceneGraph.Semantics
-open OpenTK.Graphics.OpenGL4
 
 module StereoShader =
     open FShade

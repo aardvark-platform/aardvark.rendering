@@ -133,7 +133,7 @@ type Runtime() =
             // copy to temp buffer
             let temp = GL.GenBuffer()
             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, temp)
-            GLExt.BufferStorage(BufferTarget.PixelUnpackBuffer, sizeInBytes, 0n, BufferStorageFlags.MapWriteBit)
+            GL.BufferStorage(BufferTarget.PixelUnpackBuffer, sizeInBytes, 0n, BufferStorageFlags.MapWriteBit)
             let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, sizeInBytes, BufferAccessMask.MapWriteBit)
 
             let dstTensor =
@@ -243,7 +243,7 @@ type Runtime() =
 
             let temp = GL.GenBuffer()
             GL.BindBuffer(BufferTarget.PixelPackBuffer, temp)
-            GLExt.BufferStorage(BufferTarget.PixelPackBuffer, sizeInBytes, 0n, BufferStorageFlags.MapReadBit)
+            GL.BufferStorage(BufferTarget.PixelPackBuffer, sizeInBytes, 0n, BufferStorageFlags.MapReadBit)
 
             let inline bind (t : TextureTarget) (h : int) (f : unit -> unit) =
                 GL.BindTexture(t, h)
@@ -576,7 +576,7 @@ type Runtime() =
         member x.CreatePipelineQuery(statistics) =
             use __ = ctx.ResourceLock
 
-            if GLExt.ARB_pipeline_statistics_query then
+            if GL.ARB_pipeline_statistics_query then
                 new PipelineQuery(ctx, statistics) :> IPipelineQuery
             else
                 new GeometryQuery(ctx) :> IPipelineQuery
@@ -584,7 +584,7 @@ type Runtime() =
         member x.SupportedPipelineStatistics =
             use __ = ctx.ResourceLock
 
-            if GLExt.ARB_pipeline_statistics_query then
+            if GL.ARB_pipeline_statistics_query then
                 PipelineStatistics.All
             else
                 Set.singleton ClippingInputPrimitives
@@ -637,21 +637,21 @@ type Runtime() =
 
     member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         use __ = ctx.ResourceLock
-        GLExt.NamedBufferSubData(unbox<int> dst.Handle, dstOffset, size, src)
+        GL.NamedBufferSubData(unbox<int> dst.Handle, dstOffset, size, src)
         GL.Check "could not upload buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
 
     member x.Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
         use __ = ctx.ResourceLock
-        GLExt.GetNamedBufferSubData(unbox<int> src.Handle, srcOffset, size, dst)
+        GL.GetNamedBufferSubData(unbox<int> src.Handle, srcOffset, size, dst)
         GL.Check "could not download buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
 
     member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         use __ = ctx.ResourceLock
-        GLExt.CopyNamedBufferSubData(unbox<int> src.Handle, unbox<int> dst.Handle, srcOffset, dstOffset, size)
+        GL.CopyNamedBufferSubData(unbox<int> src.Handle, unbox<int> dst.Handle, srcOffset, dstOffset, size)
         GL.Check "could not copy buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()

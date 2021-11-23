@@ -243,7 +243,7 @@ module internal BrowserTexture =
                             let p = GL.GenBuffer()
                             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, p)
                             check "BindBuffer"
-                            GLExt.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint size, 0n, BufferStorageFlags.MapWriteBit)
+                            GL.BufferStorage(BufferTarget.PixelUnpackBuffer, nativeint size, 0n, BufferStorageFlags.MapWriteBit)
                             check "BufferStorage"
                             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
                             check "BindBuffer"
@@ -252,7 +252,7 @@ module internal BrowserTexture =
                         let mapPBO (buffer : int) (size : int) (action : nativeint -> unit) =
                             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, buffer)
                             check "BindBuffer"
-                            //let ptr = GLExt.MapNamedBufferRange(buffer, 0n, nativeint size, BufferAccessMask.MapInvalidateRangeBitExt ||| BufferAccessMask.MapWriteBit)
+                            //let ptr = GL.MapNamedBufferRange(buffer, 0n, nativeint size, BufferAccessMask.MapInvalidateRangeBitExt ||| BufferAccessMask.MapWriteBit)
                             let ptr = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, nativeint size, BufferAccessMask.MapInvalidateBufferBit ||| BufferAccessMask.MapWriteBit)
                             check "MapBufferRange"
                             try action ptr
@@ -299,7 +299,7 @@ module internal BrowserTexture =
                               
                                     if pbo <> 0 then
                                         ctx.Delete tex
-                                        GLExt.UnmapNamedBuffer pbo |> ignore
+                                        GL.UnmapNamedBuffer pbo |> ignore
                                         GL.DeleteBuffer pbo
                                     tex <- newImg
                                     pbo <- newPBO

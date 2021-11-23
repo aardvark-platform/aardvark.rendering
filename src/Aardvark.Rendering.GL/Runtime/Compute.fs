@@ -398,7 +398,7 @@ type private GLCompute(ctx : Context) =
             | ComputeCommand.SetBufferCmd(dst, value) ->
                 let dstBuffer = unbox<GL.Buffer> dst.Buffer
                 let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
-                GLExt.ClearNamedBufferSubData(dstBuffer.Handle, PixelInternalFormat.R32ui, dst.Offset, dst.Size, PixelFormat.Red, PixelType.UnsignedInt, gc.AddrOfPinnedObject())
+                GL.ClearNamedBufferSubData(dstBuffer.Handle, PixelInternalFormat.R32ui, dst.Offset, dst.Size, PixelFormat.Red, PixelType.UnsignedInt, gc.AddrOfPinnedObject())
                 gc.Free()
                 GL.Sync()
                 GL.Check()
@@ -411,11 +411,11 @@ type private GLCompute(ctx : Context) =
                     | HostMemory.Managed(arr,index) ->
                         let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
                         let es = Marshal.SizeOf (arr.GetType().GetElementType()) |> nativeint
-                        GLExt.GetNamedBufferSubData(srcBuffer.Handle, src.Offset, src.Size, gc.AddrOfPinnedObject() + es * nativeint index)
+                        GL.GetNamedBufferSubData(srcBuffer.Handle, src.Offset, src.Size, gc.AddrOfPinnedObject() + es * nativeint index)
                         gc.Free()
 
                     | HostMemory.Unmanaged ptr ->   
-                        GLExt.GetNamedBufferSubData(srcBuffer.Handle, src.Offset, src.Size, ptr)
+                        GL.GetNamedBufferSubData(srcBuffer.Handle, src.Offset, src.Size, ptr)
             | ComputeCommand.ExecuteCmd other ->
                 other.Run(queries)
     
