@@ -1,3 +1,19 @@
+### 5.1.18
+
+- disabled multisampling for text outline - fix for https://github.com/aardvark-platform/aardvark.rendering/issues/86
+
+### 5.1.17
+- fixed package dependeny to FSharp.Data.Adaptive
+- [Vulkan] fixed package dependency to GLSLangSharp
+- [GL] implemented UploadBufferCmd and CopyImageCmd
+
+### 5.1.16
+- [GL] fixed IRuntime.Clear/ClearColor
+- [Sg] added C# ColorOutput overload
+
+### 5.1.15
+- fixed GL compute shader image bindings
+
 ### 5.1.14
 - switched to official AssimpNet
 

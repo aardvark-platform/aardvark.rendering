@@ -12,14 +12,14 @@ nuget CSharp.Data.Adaptive               ~> 1.2.6
 
 nuget Aardvark.Base.TypeProviders        ~> 4.5.15
 
-nuget Aardvark.Base.FSharp               ~> 5.1.11
-nuget Aardvark.Base.IO                   ~> 5.1.11
-nuget Aardvark.Base.Incremental          ~> 5.1.11
-nuget Aardvark.Base.Runtime              ~> 5.1.11
-nuget Aardvark.Base.Essentials           ~> 5.1.11
-nuget Aardvark.Geometry                  ~> 5.1.11
-nuget Aardvark.Base.Tensors              ~> 5.1.11
-nuget Aardvark.PixImage.DevIL            ~> 5.1.11
+nuget Aardvark.Base.FSharp               ~> 5.1.21
+nuget Aardvark.Base.IO                   ~> 5.1.21
+nuget Aardvark.Base.Incremental          ~> 5.1.21
+nuget Aardvark.Base.Runtime              ~> 5.1.21
+nuget Aardvark.Base.Essentials           ~> 5.1.21
+nuget Aardvark.Geometry                  ~> 5.1.21
+nuget Aardvark.Base.Tensors              ~> 5.1.21
+nuget Aardvark.PixImage.DevIL            ~> 5.1.21
 
 nuget FShade.Core                        ~> 5.2.1
 nuget FShade                             ~> 5.2.1
@@ -28,7 +28,7 @@ nuget FShade.Debug                       ~> 5.2.1
 nuget Unofficial.OpenVR					 ~> 1.1.0
 nuget Unofficial.Typography              ~> 0.1.0
 nuget CommonMark.NET                     ~> 0.15.1
-nuget GLSLangSharp                       ~> 0.4.9
+nuget GLSLangSharp                       ~> 0.4.10
 
 nuget BruTile                            ~> 2.0.0-alpha1
 nuget Unofficial.LibTessDotNet           ~> 2.0.2
@@ -50,14 +50,16 @@ nuget Clipper                            ~> 6.4.0
 
 nuget SharpZipLib                        ~> 1.2.0
 
-nuget NUnit.Console                      ~> 3.8.0
-nuget NUnit                              ~> 3.9.0
-nuget FsUnit                             ~> 3.1.0
-nuget System.Collections.Immutable       ~> 1.7.0
-nuget NUnit3TestAdapter                  ~> 3.17.0
-nuget Microsoft.NET.Test.Sdk             ~> 16.8.3
+group Test
+framework: netcoreapp3.1
+source https://api.nuget.org/v3/index.json
 
-
+nuget Expecto                            ~> 9.0.4
+nuget Expecto.BenchmarkDotNet            ~> 9.0.4
+nuget Expecto.FsCheck                    ~> 9.0.4
+nuget Expecto.Hopac                      ~> 9.0.4
+nuget YoloDev.Expecto.TestSdk            ~> 0.12.8
+nuget Microsoft.NET.Test.Sdk             ~> 16.11.0
 
 group Build
 framework: netstandard2.0

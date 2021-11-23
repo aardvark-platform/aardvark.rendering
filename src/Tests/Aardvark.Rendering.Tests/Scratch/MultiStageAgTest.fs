@@ -11,7 +11,7 @@ module MultipleStageAgMemoryLeakTest =
     open Aardvark.SceneGraph.Semantics
 
     open Aardvark.Application
-    open Aardvark.Application.WinForms
+    open Aardvark.Application.Slim
 
     open Aardvark.Base.Ag
 
@@ -170,7 +170,7 @@ module MultipleStageAgMemoryLeakTest =
         let rsg = Sg.set sg
 
         use app = new OpenGlApplication()
-        let win = app.CreateSimpleRenderWindow()
+        let win = app.CreateGameWindow()
    
 
         win.Keyboard.Down.Values.Subscribe(fun k -> 

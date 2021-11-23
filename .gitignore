@@ -52,3 +52,5 @@ src/GLVM/*.dylib
 **/Aardvark.log
 src/Aardvark.Rendering.Interactive/bin/
 .DS_Store
+**/.idea
+*.sln.DotSettings.user

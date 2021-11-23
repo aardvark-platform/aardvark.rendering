@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Project Sdk="Microsoft.NET.Sdk.WindowsDesktop">
+<Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <TargetFramework>netcoreapp3.1</TargetFramework>
     <GenerateProgramFile>false</GenerateProgramFile>
-    <OutputType>Exe</OutputType>	
+    <OutputType>Exe</OutputType>
     <DisableImplicitFSharpCoreReference>true</DisableImplicitFSharpCoreReference>
-    <UseWindowsForms>true</UseWindowsForms>
+    <RunSettingsFilePath>$(MSBuildThisFileDirectory)\test.runsettings</RunSettingsFilePath>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|AnyCPU'">
     <OutputPath>..\..\..\bin\Debug\</OutputPath>
@@ -15,27 +15,31 @@
     <OutputPath>..\..\..\bin\Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="CompactSetTests.fs" />
-    <Compile Include="SgTest.fs" />
-    <Compile Include="TextureTests.fs" />
-    <Compile Include="MultiStageAgTest.fs" />
-    <Compile Include="RenderingTests.fs" />
-    <Compile Include="PerformanceTest.fs" />
-    <Compile Include="RadixSort.fs" />
+    <Compile Include="Scratch\RenderingTests.fs" />
+    <Compile Include="Scratch\PerformanceTest.fs" />
+    <Compile Include="Scratch\RadixSort.fs" />
+    <Compile Include="Scratch\MultiStageAgTest.fs" />
+    <Compile Include="Tests\Common.fs" />
+    <Compile Include="Tests\Texture\Utilities.fs" />
+    <Compile Include="Tests\Texture\Copy.fs" />
+    <Compile Include="Tests\Texture\Create.fs" />
+    <Compile Include="Tests\Texture\Download.fs" />
+    <Compile Include="Tests\Texture\TextureTests.fs" />
+    <Compile Include="Tests\SgTest.fs" />
+    <Compile Include="Tests\CompactSetTests.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Aardvark.GPGPU\Aardvark.GPGPU.fsproj" />
-    <ProjectReference Include="..\..\Aardvark.Rendering.Interactive\Aardvark.Rendering.Interactive.fsproj" />
-    <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms.GL\Aardvark.Application.WinForms.GL.fsproj" />
-    <ProjectReference Include="..\..\Application\Aardvark.Application.WinForms\Aardvark.Application.WinForms.fsproj" />
-    <ProjectReference Include="..\..\Application\Aardvark.Application\Aardvark.Application.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj" />
     <ProjectReference Include="..\..\Aardvark.SceneGraph\Aardvark.SceneGraph.fsproj" />
-    <ProjectReference Include="..\..\Application\Aardvark.Application\Aardvark.Application.fsproj" />
+    <ProjectReference Include="..\..\Application\Aardvark.Application.Slim.GL\Aardvark.Application.Slim.GL.fsproj" />
+    <ProjectReference Include="..\..\Application\Aardvark.Application.Slim.Vulkan\Aardvark.Application.Slim.Vulkan.fsproj" />
+    <ProjectReference Include="..\..\Application\Aardvark.Application.Slim\Aardvark.Application.Slim.fsproj" />
     <ProjectReference Include="..\..\Application\Aardvark.Application.Utilities\Aardvark.Application.Utilities.fsproj" />
+    <ProjectReference Include="..\..\Application\Aardvark.Application\Aardvark.Application.fsproj" />
   </ItemGroup>
   <Import Project="..\..\..\.paket\Paket.Restore.targets" />
 </Project>

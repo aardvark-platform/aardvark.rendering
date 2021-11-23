@@ -29,8 +29,12 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
     let mutable references : Map<string, list<ComputeShaderInputReference>>  = Map.empty
 
     let addReference (name : string) (r : ComputeShaderInputReference) =
-        let o = Map.tryFind name references |> Option.defaultValue []
-        references <- Map.add name (r :: o) references
+        let names =
+            if name.StartsWith "cs_" then [name; name.Substring 3]
+            else [name]
+        for name in names do
+            let o = Map.tryFind name references |> Option.defaultValue []
+            references <- Map.add name (r :: o) references
 
 
     //let uniformLocations : list<int * UniformLocation> = 
@@ -373,10 +377,23 @@ type private GLCompute(ctx : Context) =
                 GL.Sync()
                 GL.Check()
                 ()
-                
-            | ComputeCommand.UploadBufferCmd _ 
-            | ComputeCommand.CopyImageCmd _ ->
-                failwith "please implement"
+
+            | ComputeCommand.UploadBufferCmd(src, dst) ->
+                match src with
+                | HostMemory.Managed(arr, index) ->
+                    let elementSize = arr.GetType().GetElementType() |> Marshal.SizeOf |> nativeint
+                    let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
+                    try
+                        let ptr = gc.AddrOfPinnedObject() + (nativeint index * elementSize)
+                        ctx.Runtime.Copy(ptr, dst.Buffer, dst.Offset, dst.Size)
+                    finally
+                        gc.Free()
+
+                | HostMemory.Unmanaged ptr ->
+                    ctx.Runtime.Copy(ptr, dst.Buffer, dst.Offset, dst.Size)
+
+            | ComputeCommand.CopyImageCmd(src, srcOffset, dst, dstOffset, size) ->
+                ctx.Runtime.Copy(src, srcOffset, dst, dstOffset, size)
 
             | ComputeCommand.SetBufferCmd(dst, value) ->
                 let dstBuffer = unbox<GL.Buffer> dst.Buffer

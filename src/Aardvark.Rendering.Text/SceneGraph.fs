@@ -227,7 +227,14 @@ module Sg =
             let pass = scope.RenderPass
             let pass = if pass = RenderPass.main then RenderPass.shapes else pass
 
-            shapes.RasterizerState <- { shapes.RasterizerState with Multisample = AVal.map2 (fun a f -> not f || a) aa fill }
+            
+            let multisample = 
+                (aa, fill) ||> AVal.map2 (fun a f -> 
+                    // @krauthaufen - why always multisampling when outline only?
+                    not f || a
+                )
+
+            shapes.RasterizerState <- { shapes.RasterizerState with Multisample = multisample }
             shapes.RenderPass <- if pass = RenderPass.main then RenderPass.shapes else pass
             shapes.BlendState <- { shapes.BlendState with Mode = AVal.constant BlendMode.Blend }
             shapes.VertexAttributes <- cache.VertexBuffers
@@ -235,16 +242,26 @@ module Sg =
             shapes.InstanceAttributes <- instanceAttributes
             shapes.Mode <- IndexedGeometryMode.TriangleList
 
-            trafosAndShapes 
-                |> AVal.map(fun l -> 
-                    match l |> Array.tryFind (fun (_,s) -> s.renderStyle = RenderStyle.Billboard) with
-                    | Some x -> 
-                        shapes.Surface <- Surface.FShadeSimple cache.InstancedBillboardEffect
-                    | None -> 
-                        shapes.Surface <- Surface.FShadeSimple cache.InstancedEffect
-                    shapes :> IRenderObject |> HashSet.single
+            let style =
+                trafosAndShapes |> AVal.map (fun items ->
+                    match Array.tryHead items with
+                    | Some (_, s) -> s.renderStyle
+                    | _ -> RenderStyle.Normal
                 )
-                |> ASet.ofAVal
+
+            style |> AVal.map(fun s ->
+                match s with
+                | RenderStyle.Normal
+                | RenderStyle.NoBoundary ->
+                    shapes.Surface <- Surface.FShadeSimple cache.InstancedEffect
+                    RenderObject.Clone shapes :> IRenderObject
+
+                | RenderStyle.Billboard ->
+                    shapes.Surface <- Surface.FShadeSimple cache.InstancedBillboardEffect
+                    RenderObject.Clone shapes :> IRenderObject
+
+                |> HashSet.single
+            ) |> ASet.ofAVal
 
         member x.RenderObjects(t : Shape, scope : Ag.Scope) : aset<IRenderObject> =
             let content = t.Content
@@ -364,7 +381,15 @@ module Sg =
 
             let pass = scope.RenderPass
             let pass = if pass = RenderPass.main then RenderPass.shapes else pass
-            shapes.RasterizerState <- { shapes.RasterizerState with Multisample = AVal.map2 (fun a f -> not f || a) aa fill }
+
+            
+            let multisample = 
+                (aa, fill) ||> AVal.map2 (fun a f -> 
+                    // @krauthaufen - why always multisampling when outline only?
+                    not f || a
+                )
+
+            shapes.RasterizerState <- { shapes.RasterizerState with Multisample = multisample }
             shapes.RenderPass <- pass
             shapes.BlendState <- { shapes.BlendState with Mode = AVal.constant BlendMode.Blend }
             shapes.VertexAttributes <- cache.VertexBuffers
@@ -376,6 +401,7 @@ module Sg =
             //shapes.WriteBuffers <- Some (Set.ofList [DefaultSemantic.Colors])
 
             let boundary = RenderObject.ofScope scope
+            boundary.RasterizerState <- { shapes.RasterizerState with Multisample = multisample }
             boundary.RenderPass <- pass
             boundary.BlendState <- { boundary.BlendState with Mode = AVal.constant BlendMode.Blend }
             boundary.VertexAttributes <- cache.VertexBuffers
@@ -465,25 +491,25 @@ module Sg =
                     | _ -> scope.StencilModeBack
                 )
 
-            style |> AVal.map(fun s -> 
+            shapes.DepthState <- { shapes.DepthState with Test = depthTest }
+            shapes.StencilState <- { shapes.StencilState with ModeFront = stencilFront; ModeBack = stencilBack }
+
+            style |> AVal.map(fun s ->
                 match s with
-                | RenderStyle.Normal -> 
+                | RenderStyle.Normal ->
                     shapes.Surface <- Surface.FShadeSimple cache.Effect
-                    shapes.DepthState <- { shapes.DepthState with Test = depthTest }
-                    shapes.StencilState <- { shapes.StencilState with ModeFront = stencilFront; ModeBack = stencilBack }
-                    MultiRenderObject [boundary; shapes] :> IRenderObject  |> HashSet.single
+                    MultiRenderObject [boundary; shapes] :> IRenderObject
+
                 | RenderStyle.NoBoundary ->
                     shapes.Surface <- Surface.FShadeSimple cache.Effect
-                    shapes.DepthState <- { shapes.DepthState with Test = depthTest }
-                    shapes.StencilState <- { shapes.StencilState with ModeFront = stencilFront; ModeBack = stencilBack }
-                    shapes :> IRenderObject |> HashSet.single // MultiRenderObject [shapes] :> IRenderObject 
-                | RenderStyle.Billboard -> 
-                    shapes.Surface <- Surface.FShadeSimple cache.BillboardEffect
-                    shapes.DepthState <- { shapes.DepthState with Test = depthTest }
-                    shapes.StencilState <- { shapes.StencilState with ModeFront = stencilFront; ModeBack = stencilBack }
-                    shapes :> IRenderObject |> HashSet.single
+                    RenderObject.Clone shapes :> IRenderObject
 
-                ) |> ASet.ofAVal
+                | RenderStyle.Billboard ->
+                    shapes.Surface <- Surface.FShadeSimple cache.BillboardEffect
+                    RenderObject.Clone shapes :> IRenderObject
+
+                |> HashSet.single
+            ) |> ASet.ofAVal
 
         member x.FillGlyphs(s : ISg, scope : Ag.Scope) =
             let mode = scope.FillMode

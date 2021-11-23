@@ -4,7 +4,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.GL
 open Aardvark.Application
-open Aardvark.Application.WinForms
+open Aardvark.Application.Slim
 
 let run() =
 

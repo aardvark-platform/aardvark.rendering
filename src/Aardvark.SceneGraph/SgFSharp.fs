@@ -784,6 +784,11 @@ module SgFSharp =
         let surface (m : ISurface) (sg : ISg) =
             Sg.SurfaceApplicator(Surface.Backend m, sg) :> ISg
 
+        /// Applies the given pool of effects to the scene.
+        /// The index active determines which effect is used at a time.
+        let effectPool (effects : FShade.Effect[]) (active : aval<int>) (sg : ISg) =
+            Sg.SurfaceApplicator(Surface.effectPool effects active, sg) :> ISg
+
         /// Applies the given render pass.
         let pass (pass : RenderPass) (sg : ISg) =
             Sg.PassApplicator(pass, sg) :> ISg

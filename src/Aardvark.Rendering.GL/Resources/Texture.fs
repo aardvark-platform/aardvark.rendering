@@ -136,7 +136,14 @@ module TextureTarget =
 
 [<AutoOpen>]
 module TextureCreationExtensions =
-    type Context with 
+    type Context with
+        member private x.SetDefaultTextureParams(target : TextureTarget, mipMapLevels : int) =
+            GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels - 1)
+            GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
+            GL.TexParameter(target, TextureParameterName.TextureWrapS, int TextureWrapMode.ClampToEdge)
+            GL.TexParameter(target, TextureParameterName.TextureWrapT, int TextureWrapMode.ClampToEdge)
+            GL.TexParameter(target, TextureParameterName.TextureMinFilter, int TextureMinFilter.Linear)
+            GL.TexParameter(target, TextureParameterName.TextureMagFilter, int TextureMagFilter.Linear)
 
         member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) =
             let isArray = slices > 0
@@ -264,7 +271,9 @@ module TextureCreationExtensions =
                 let sizeInBytes = texSizeInBytes(V3i(size, 1, 1), t, 1, mipMapLevels)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
-  
+
+                x.SetDefaultTextureParams(TextureTarget.Texture1D, mipMapLevels)
+
                 GL.TexStorage1D(TextureTarget1d.Texture1D, mipMapLevels, unbox (int t), size)
                 GL.Check "could not allocate texture"
 
@@ -294,16 +303,9 @@ module TextureCreationExtensions =
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
 
-                if samples = 1 then // parameters only valid for non-multisampled textures
-                    GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels - 1)
-                    GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
-                    GL.TexParameter(target, TextureParameterName.TextureWrapS, int TextureWrapMode.ClampToEdge)
-                    GL.TexParameter(target, TextureParameterName.TextureWrapT, int TextureWrapMode.ClampToEdge)
-                    GL.TexParameter(target, TextureParameterName.TextureMinFilter, int TextureMinFilter.Linear)
-                    GL.TexParameter(target, TextureParameterName.TextureMagFilter, int TextureMagFilter.Linear)
-
-
                 if samples = 1 then
+                    // parameters only valid for non-multisampled textures
+                    x.SetDefaultTextureParams(target, mipMapLevels)
                     GL.TexStorage2D(TextureTarget2d.Texture2D, mipMapLevels, unbox (int t), size.X, size.Y)
                 else
                     if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
@@ -336,6 +338,8 @@ module TextureCreationExtensions =
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
 
+                x.SetDefaultTextureParams(TextureTarget.Texture3D, mipMapLevels)
+
                 GL.TexStorage3D(TextureTarget3d.Texture3D, mipMapLevels, ifmt, size.X, size.Y, size.Z)
                 GL.Check "could not allocate texture"
 
@@ -360,6 +364,7 @@ module TextureCreationExtensions =
                 GL.Check "could not bind texture"
 
                 if samples = 1 then
+                    x.SetDefaultTextureParams(TextureTarget.TextureCubeMap, mipMapLevels)
                     GL.TexStorage2D(TextureTarget2d.TextureCubeMap, mipMapLevels, unbox (int t), size, size)
                 else
                     if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
@@ -396,6 +401,8 @@ module TextureCreationExtensions =
                 let sizeInBytes = texSizeInBytes(V3i(size, 1, 1), t, 1, mipMapLevels) * (int64 count)
                 updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
+
+                x.SetDefaultTextureParams(TextureTarget.Texture1DArray, mipMapLevels)
   
                 GL.TexStorage2D(TextureTarget2d.Texture1DArray, mipMapLevels, unbox (int t), size, count)
                 GL.Check "could not allocate texture"
@@ -430,16 +437,13 @@ module TextureCreationExtensions =
                 tex.SizeInBytes <- sizeInBytes
 
                 if samples = 1 then
+                    x.SetDefaultTextureParams(target, mipMapLevels)
                     GL.TexStorage3D(TextureTarget3d.Texture2DArray, mipMapLevels, unbox (int t), size.X, size.Y, count)
                 else
                     if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
                     GL.TexStorage3DMultisample(TextureTargetMultisample3d.Texture2DMultisampleArray, samples, unbox (int t), size.X, size.Y, count, true)
   
                 GL.Check "could not allocate texture"
-
-                GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels)
-                GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
-
 
                 GL.BindTexture(target, 0)
                 GL.Check "could not unbind texture"
@@ -473,6 +477,7 @@ module TextureCreationExtensions =
                 tex.SizeInBytes <- sizeInBytes
 
                 if samples = 1 then
+                    x.SetDefaultTextureParams(target, mipMapLevels)
                     GL.TexStorage3D(unbox (int target), mipMapLevels, unbox (int t), size, size, count * 6) // NOTE: there is no TextureTarget3d.TextureCubeMapArray ??
                 else
                     if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
@@ -480,9 +485,6 @@ module TextureCreationExtensions =
   
                 GL.Check "could not allocate texture"
 
-                GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels)
-                GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
-                
                 GL.BindTexture(target, 0)
                 GL.Check "could not unbind texture"
 
@@ -857,18 +859,18 @@ module TextureUploadExtensions =
                     TextureFormat.R32f , (PixelFormat.Red, PixelType.Float)
                     TextureFormat.Rg16f , (PixelFormat.Rg, PixelType.HalfFloat)
                     TextureFormat.Rg32f , (PixelFormat.Rg, PixelType.Float)
-                    TextureFormat.R8i , (PixelFormat.Red, PixelType.Byte)
-                    TextureFormat.R8ui , (PixelFormat.Red, PixelType.UnsignedByte)
-                    TextureFormat.R16i , (PixelFormat.Red, PixelType.Short)
-                    TextureFormat.R16ui , (PixelFormat.Red, PixelType.UnsignedShort)
-                    TextureFormat.R32i , (PixelFormat.Red, PixelType.Int)
-                    TextureFormat.R32ui , (PixelFormat.Red, PixelType.UnsignedInt)
-                    TextureFormat.Rg8i , (PixelFormat.Rg, PixelType.Byte)
-                    TextureFormat.Rg8ui , (PixelFormat.Rg, PixelType.UnsignedByte)
-                    TextureFormat.Rg16i , (PixelFormat.Rg, PixelType.Short)
-                    TextureFormat.Rg16ui , (PixelFormat.Rg, PixelType.UnsignedShort)
-                    TextureFormat.Rg32i , (PixelFormat.Rg, PixelType.Int)
-                    TextureFormat.Rg32ui , (PixelFormat.Rg, PixelType.UnsignedInt)
+                    TextureFormat.R8i , (PixelFormat.RedInteger, PixelType.Byte)
+                    TextureFormat.R8ui , (PixelFormat.RedInteger, PixelType.UnsignedByte)
+                    TextureFormat.R16i , (PixelFormat.RedInteger, PixelType.Short)
+                    TextureFormat.R16ui , (PixelFormat.RedInteger, PixelType.UnsignedShort)
+                    TextureFormat.R32i , (PixelFormat.RedInteger, PixelType.Int)
+                    TextureFormat.R32ui , (PixelFormat.RedInteger, PixelType.UnsignedInt)
+                    TextureFormat.Rg8i , (PixelFormat.RgInteger, PixelType.Byte)
+                    TextureFormat.Rg8ui , (PixelFormat.RgInteger, PixelType.UnsignedByte)
+                    TextureFormat.Rg16i , (PixelFormat.RgInteger, PixelType.Short)
+                    TextureFormat.Rg16ui , (PixelFormat.RgInteger, PixelType.UnsignedShort)
+                    TextureFormat.Rg32i , (PixelFormat.RgInteger, PixelType.Int)
+                    TextureFormat.Rg32ui , (PixelFormat.RgInteger, PixelType.UnsignedInt)
                     TextureFormat.CompressedRgbS3tcDxt1Ext , (PixelFormat.Rgb, PixelType.UnsignedByte)
                     TextureFormat.CompressedRgbaS3tcDxt1Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
                     TextureFormat.CompressedRgbaS3tcDxt3Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
@@ -898,18 +900,18 @@ module TextureUploadExtensions =
                     TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext , (PixelFormat.Rgba, PixelType.UnsignedByte)
                     TextureFormat.DepthComponent32f , (PixelFormat.DepthComponent, PixelType.Float)
                     TextureFormat.Depth32fStencil8 , (PixelFormat.DepthComponent, PixelType.Float)
-                    TextureFormat.Rgba32ui , (PixelFormat.Rgba, PixelType.UnsignedInt)
-                    TextureFormat.Rgb32ui , (PixelFormat.Rgb, PixelType.UnsignedInt)
-                    TextureFormat.Rgba16ui , (PixelFormat.Rgba, PixelType.UnsignedShort)
-                    TextureFormat.Rgb16ui , (PixelFormat.Rgb, PixelType.UnsignedShort)
-                    TextureFormat.Rgba8ui , (PixelFormat.Rgba, PixelType.UnsignedByte)
-                    TextureFormat.Rgb8ui , (PixelFormat.Rgb, PixelType.UnsignedByte)
-                    TextureFormat.Rgba32i , (PixelFormat.Rgba, PixelType.Int)
-                    TextureFormat.Rgb32i , (PixelFormat.Rgb, PixelType.Int)
-                    TextureFormat.Rgba16i , (PixelFormat.Rgba, PixelType.Short)
-                    TextureFormat.Rgb16i , (PixelFormat.Rgb, PixelType.Short)
-                    TextureFormat.Rgba8i , (PixelFormat.Rgba, PixelType.Byte)
-                    TextureFormat.Rgb8i , (PixelFormat.Rgb, PixelType.Byte)
+                    TextureFormat.Rgba32ui , (PixelFormat.RgbaInteger, PixelType.UnsignedInt)
+                    TextureFormat.Rgb32ui , (PixelFormat.RgbInteger, PixelType.UnsignedInt)
+                    TextureFormat.Rgba16ui , (PixelFormat.RgbaInteger, PixelType.UnsignedShort)
+                    TextureFormat.Rgb16ui , (PixelFormat.RgbInteger, PixelType.UnsignedShort)
+                    TextureFormat.Rgba8ui , (PixelFormat.RgbaInteger, PixelType.UnsignedByte)
+                    TextureFormat.Rgb8ui , (PixelFormat.RgbInteger, PixelType.UnsignedByte)
+                    TextureFormat.Rgba32i , (PixelFormat.RgbaInteger, PixelType.Int)
+                    TextureFormat.Rgb32i , (PixelFormat.RgbInteger, PixelType.Int)
+                    TextureFormat.Rgba16i , (PixelFormat.RgbaInteger, PixelType.Short)
+                    TextureFormat.Rgb16i , (PixelFormat.RgbInteger, PixelType.Short)
+                    TextureFormat.Rgba8i , (PixelFormat.RgbaInteger, PixelType.Byte)
+                    TextureFormat.Rgb8i , (PixelFormat.RgbInteger, PixelType.Byte)
                     TextureFormat.Float32UnsignedInt248Rev , (PixelFormat.DepthComponent, PixelType.Float32UnsignedInt248Rev)
                     TextureFormat.CompressedRedRgtc1 , (PixelFormat.Red, PixelType.UnsignedByte)
                     TextureFormat.CompressedSignedRedRgtc1 , (PixelFormat.Red, PixelType.Byte)
@@ -2153,12 +2155,9 @@ module TextureExtensions =
             GL.BindTexture(bindTarget, t.Handle)
             GL.Check "could not bind texture"
 
-            let pixelType, pixelFormat =
-                match toPixelType format.Type, toPixelFormat image.Format with
-                    | Some t, Some f -> (t,f)
-                    | _ ->
-                        failwith "conversion not implemented"
-
+            let pixelFormat, pixelType =
+                TextureFormat.toFormatAndType t.Format
+               
 
             let elementSize = image.PixFormat.Type.GLSize
             let channelCount =
@@ -2221,7 +2220,11 @@ module TextureExtensions =
 
             if t.IsArray then
                 // For some reason we cannot use the bind target here? Doc says otherwise
-                GL.GetTextureSubImage(t.Handle, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, targetSize, nativeint 0)
+                // Moreover this does not work on OpenGL < 4.5 (Mac!)
+                // Therefore we disable this code path and do an extra copy into a temporary texture instead
+                // TODO: Performance?
+                failwith "Not possible!"
+                //GL.GetTextureSubImage(t.Handle, level, 0, 0, slice, image.Size.X, image.Size.Y, 1, pixelFormat, pixelType, targetSize, nativeint 0)
             else
                 GL.GetTexImage(target, level, pixelFormat, pixelType, 0n)
             GL.Check "could not get texture image"
@@ -2571,7 +2574,7 @@ type ContextTextureExtensions =
         using this.ResourceLock (fun _ ->
             let levelSize = t.GetSize level
             let offset = V2i(offset.X, levelSize.Y - offset.Y - target.Size.Y) // flip y-offset
-            if offset = V2i.Zero && target.Size = levelSize.XY then
+            if offset = V2i.Zero && target.Size = levelSize.XY && not t.IsArray then
                 this.Download(t, level, slice, target)
             else
                 let temp = this.CreateTexture2D(target.Size, 1, t.Format, 1)
@@ -2632,7 +2635,7 @@ type ContextTextureExtensions =
             let targetSize = V2i target.Size
             let levelSize = t.GetSize level
             let offset = V2i(offset.X, levelSize.Y - offset.Y - targetSize.Y) // flip y-offset
-            if offset = V2i.Zero && targetSize = levelSize.XY then
+            if offset = V2i.Zero && targetSize = levelSize.XY && not t.IsArray then
                 this.DownloadStencil(t, level, slice, target)
             else
                 let temp = this.CreateTexture2D(targetSize, 1, t.Format, 1)
@@ -2685,7 +2688,7 @@ type ContextTextureExtensions =
             let targetSize = V2i target.Size
             let levelSize = t.GetSize level
             let offset = V2i(offset.X, levelSize.Y - offset.Y - targetSize.Y) // flip y-offset
-            if offset = V2i.Zero && targetSize = levelSize.XY then
+            if offset = V2i.Zero && targetSize = levelSize.XY && not t.IsArray then
                 this.DownloadDepth(t, level, slice, target)
             else
                 let temp = this.CreateTexture2D(targetSize, 1, t.Format, 1)
