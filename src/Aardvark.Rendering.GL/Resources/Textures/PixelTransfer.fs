@@ -105,10 +105,10 @@ module internal PixelTransfer =
         let copy (ptr : nativeint) (info : PixelDataInfo) (data : PixelData) =
             match data, info with
             | PixelData.General d, PixelDataInfo.General i ->
-                    GeneralPixelData.copy ptr i d
+                GeneralPixelData.copy ptr i d
 
             | PixelData.Compressed d, PixelDataInfo.Compressed _ ->
-                    CompressedPixelData.copy ptr d
+                CompressedPixelData.copy ptr d
 
             | _ ->
                 failwithf "PixelData.copy not possible with %A and %A" data info

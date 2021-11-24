@@ -250,27 +250,26 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
         member x.UpdateAsync(f,s,d) = x.UpdateAsync(f,s,d)
         member x.ReadPixel(pos) = x.ReadPixel(pos)
 
-
-type PixelBuffer =
-    class
-        val mutable public Context : Context
-        val mutable public Handle : int
-        val mutable public Size : nativeint
-        val mutable public ImageSize : V2i
-
-        val mutable public PixelType : PixelType
-        val mutable public PixelFormat : PixelFormat
-        val mutable public InternalFormat : PixelInternalFormat
-
-        val mutable public Sync : nativeint
-
-        new(ctx : Context, handle : int, size : nativeint, s : V2i, pt, pf, pif) =
-            { Context = ctx; Handle = handle; Size = size; ImageSize = s; PixelType = pt; PixelFormat = pf; InternalFormat = pif; Sync = 0n }
-    end
-
 [<AutoOpen>]
-module PixelBufferExtensions =
+module private PixelBufferExtensions =
     
+    type PixelBuffer =
+        class
+            val mutable public Context : Context
+            val mutable public Handle : int
+            val mutable public Size : nativeint
+            val mutable public ImageSize : V2i
+    
+            val mutable public PixelType : PixelType
+            val mutable public PixelFormat : PixelFormat
+            val mutable public InternalFormat : PixelInternalFormat
+    
+            val mutable public Sync : nativeint
+    
+            new(ctx : Context, handle : int, size : nativeint, s : V2i, pt, pf, pif) =
+                { Context = ctx; Handle = handle; Size = size; ImageSize = s; PixelType = pt; PixelFormat = pf; InternalFormat = pif; Sync = 0n }
+        end
+
     type Context with
         member x.CreatePixelBuffer(imageSize : V2i, size : nativeint, pixelType : PixelType, pixelFormat : PixelFormat, ifmt : TextureFormat) =
             use t = x.ResourceLock

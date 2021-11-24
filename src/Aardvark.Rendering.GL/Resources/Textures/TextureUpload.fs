@@ -26,52 +26,51 @@ module internal TextureUploadImplementation =
             GL.BindTexture(target, texture.Handle)
             GL.Check "could not bind texture"
 
-            let pbo = PixelUnpackBuffer.create BufferUsageHint.StaticDraw info.SizeInBytes
-            let dst = pbo |> PixelUnpackBuffer.map BufferAccess.WriteOnly
+            PixelBuffer.unpack info.SizeInBytes (fun pbo ->
+                let pixels = pbo.Pixels
 
-            (info, data) ||> PixelData.copy dst
+                pbo |> PixelBuffer.mapped BufferAccess.WriteOnly (fun dst ->
+                    (info, data) ||> PixelData.copy dst
+                )
 
-            let pixels = pbo |> PixelUnpackBuffer.unmap
+                match texture.Dimension, texture.IsArray with
+                | TextureDimension.Texture1D, false ->
+                    match data with
+                    | PixelData.General d ->
+                        GL.TexSubImage1D(target, level, offset.X, d.Size.X, d.Format, d.Type, pixels)
+                    | PixelData.Compressed d ->
+                        GL.CompressedTexSubImage1D(target, level, offset.X, d.Size.X,
+                                                   unbox texture.Format, int d.SizeInBytes, pixels)
 
-            match texture.Dimension, texture.IsArray with
-            | TextureDimension.Texture1D, false ->
-                match data with
-                | PixelData.General d ->
-                    GL.TexSubImage1D(target, level, offset.X, d.Size.X, d.Format, d.Type, pixels)
-                | PixelData.Compressed d ->
-                    GL.CompressedTexSubImage1D(target, level, offset.X, d.Size.X,
-                                               unbox texture.Format, int d.SizeInBytes, pixels)
+                | TextureDimension.Texture1D, true
+                | TextureDimension.Texture2D, false
+                | TextureDimension.TextureCube, false ->
+                    let offset =
+                        if texture.Dimension = TextureDimension.Texture1D then offset.XZ
+                        else offset.XY
 
-            | TextureDimension.Texture1D, true
-            | TextureDimension.Texture2D, false
-            | TextureDimension.TextureCube, false ->
-                let offset =
-                    if texture.Dimension = TextureDimension.Texture1D then offset.XZ
-                    else offset.XY
+                    match data with
+                    | PixelData.General d ->
+                        GL.TexSubImage2D(targetSlice, level, offset.X, offset.Y, d.Size.X, d.Size.Y, d.Format, d.Type, pixels)
+                    | PixelData.Compressed d ->
+                        GL.CompressedTexSubImage2D(targetSlice, level, offset.X, offset.Y, d.Size.X, d.Size.Y,
+                                                   unbox texture.Format, int d.SizeInBytes, pixels)
 
-                match data with
-                | PixelData.General d ->
-                    GL.TexSubImage2D(targetSlice, level, offset.X, offset.Y, d.Size.X, d.Size.Y, d.Format, d.Type, pixels)
-                | PixelData.Compressed d ->
-                    GL.CompressedTexSubImage2D(targetSlice, level, offset.X, offset.Y, d.Size.X, d.Size.Y,
-                                               unbox texture.Format, int d.SizeInBytes, pixels)
+                | TextureDimension.Texture2D, true
+                | TextureDimension.Texture3D, false
+                | TextureDimension.TextureCube, true ->
+                    match data with
+                    | PixelData.General d ->
+                        GL.TexSubImage3D(target, level, offset.X, offset.Y, offset.Z, d.Size.X, d.Size.Y, d.Size.Z, d.Format, d.Type, pixels)
+                    | PixelData.Compressed d ->
+                        GL.CompressedTexSubImage3D(target, level, offset.X, offset.Y, offset.Z,
+                                                   d.Size.X, d.Size.Y, d.Size.Z, unbox texture.Format, int d.SizeInBytes, pixels)
 
-            | TextureDimension.Texture2D, true
-            | TextureDimension.Texture3D, false
-            | TextureDimension.TextureCube, true ->
-                match data with
-                | PixelData.General d ->
-                    GL.TexSubImage3D(target, level, offset.X, offset.Y, offset.Z, d.Size.X, d.Size.Y, d.Size.Z, d.Format, d.Type, pixels)
-                | PixelData.Compressed d ->
-                    GL.CompressedTexSubImage3D(target, level, offset.X, offset.Y, offset.Z,
-                                               d.Size.X, d.Size.Y, d.Size.Z, unbox texture.Format, int d.SizeInBytes, pixels)
+                | d, a ->
+                    failwithf "[GL] unsupported texture data %A%s" d (if a then "[]" else "")
 
-            | d, a ->
-                failwithf "[GL] unsupported texture data %A%s" d (if a then "[]" else "")
-
-            GL.Check (sprintf "could not upload texture data")
-
-            pbo |> PixelUnpackBuffer.free
+                GL.Check (sprintf "could not upload texture data")
+            )
 
             if generateMipmap then
                 GL.GenerateMipmap(unbox target)

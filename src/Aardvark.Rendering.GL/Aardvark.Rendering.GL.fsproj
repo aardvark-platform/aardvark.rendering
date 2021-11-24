@@ -57,7 +57,7 @@
     <Compile Include="Instructions\OpenGL.fs" />
     <Compile Include="Instructions\CompileContext.fs" />
     <Compile Include="Instructions\Translations.fs" />
-    <Compile Include="Resources\PixelUnpackBuffer.fs" />
+    <Compile Include="Resources\PixelBuffer.fs" />
     <Compile Include="Resources\Textures\PixelTransfer.fs" />
     <Compile Include="Resources\Textures\Renderbuffer.fs" />
     <Compile Include="Resources\Textures\Texture.fs" />

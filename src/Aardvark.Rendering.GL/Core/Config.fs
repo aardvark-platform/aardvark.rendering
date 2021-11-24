@@ -56,9 +56,9 @@ module Config =
     let mutable UseNewRenderTask = false
 
     /// <summary>
-    /// Use pixel buffer objects for texture uploads.
+    /// Use pixel buffer objects for texture uploads and downloads.
     /// </summary>
-    let mutable UsePixelUnpackBuffers =
+    let mutable UsePixelBufferObjects =
         not <| RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
 
     /// <summary>

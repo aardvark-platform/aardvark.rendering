@@ -394,22 +394,25 @@ let main argv =
     // We download the resolved pick buffer and simply lookup the values in the PixImage.
     win.Mouse.DoubleClick.Values.Add(fun btn ->
         if btn.HasFlag(MouseButtons.Left) then
-            let data = pickTexture.GetValue().Download().AsPixImage<float32>()
-            let pixels = data.GetMatrix<C4f>()
-
             let pos = win.Mouse.Position.GetValue().Position
+            let tex = pickTexture.GetValue()
 
             // Check if in bounds
-            if Vec.allGreaterOrEqual pos 0 && Vec.allSmaller pos data.Size then
+            if Vec.allGreaterOrEqual pos 0 && Vec.allSmaller pos tex.Size.XY then
 
-                // Get id, depth and normal from buffer
-                let id = Fun.FloatToBits pixels.[pos].R
-                let depth = float pixels.[pos].G
-                let normal = OctNormal.decode <| V2d(pixels.[pos].B, pixels.[pos].A)
+                // Download pixel
+                let pixel =
+                    let data = tex.Download(0, 0, Box2i.FromMinAndSize(pos, V2i.II)).AsPixImage<float32>()
+                    data.GetMatrix<C4f>().[0, 0]
+
+                // Get id, depth and normal from pixel
+                let id = Fun.FloatToBits pixel.R
+                let depth = float pixel.G
+                let normal = OctNormal.decode <| V2d(pixel.B, pixel.A)
 
                 // Compute world space position
                 let wp =
-                    let uv = (V2d pos + 0.5) / V2d data.Size
+                    let uv = (V2d pos + 0.5) / V2d tex.Size.XY
                     let uv = V2d(uv.X, 1.0 - uv.Y)              // Flip Y
                     let ndc = V3d(uv * 2.0 - 1.0, depth)
                     scene |> Scene.getWorldPosition ndc

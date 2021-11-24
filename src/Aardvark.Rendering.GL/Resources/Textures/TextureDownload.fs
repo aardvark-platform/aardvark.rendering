@@ -43,19 +43,17 @@ module internal TextureDownloadImplementation =
             GL.BindTexture(target, texture.Handle)
             GL.Check "could not bind texture"
 
-            let buffer = NativePtr.alloc<byte> (int info.SizeInBytes)
-
-            try
-                let src = NativePtr.toNativeInt buffer
+            PixelBuffer.pack info.SizeInBytes (fun pbo ->
+                let pixels = pbo.Pixels
 
                 // In case we download the whole texture and it isn't arrayed, we can
                 // avoid GL.GetTextureSubImage() which is not available on all systems! (e.g. MacOS)
                 if offset = V3i.Zero && data.Size = texture.GetSize(level) && not texture.IsArray then
                     match data with
                     | PixelData.General d ->
-                        GL.GetTexImage(targetSlice, level, d.Format, d.Type, src)
+                        GL.GetTexImage(targetSlice, level, d.Format, d.Type, pixels)
                     | PixelData.Compressed _ ->
-                        GL.GetCompressedTexImage(targetSlice, level, src)
+                        GL.GetCompressedTexImage(targetSlice, level, pixels)
 
                 else
                     if GL.ARB_get_texture_subimage then
@@ -65,26 +63,26 @@ module internal TextureDownloadImplementation =
 
                         match data with
                         | PixelData.General d ->
-                            GL.GetTextureSubImage(texture.Handle, level, offset, d.Size, d.Format, d.Type, int info.SizeInBytes, src)
+                            GL.GetTextureSubImage(texture.Handle, level, offset, d.Size, d.Format, d.Type, int info.SizeInBytes, pixels)
                         | PixelData.Compressed d ->
-                            GL.GetCompressedTextureSubImage(texture.Handle, level, offset, d.Size, int info.SizeInBytes, src)
+                            GL.GetCompressedTextureSubImage(texture.Handle, level, offset, d.Size, int info.SizeInBytes, pixels)
 
                     // We want to download a subregion but don't have GL_ARB_get_texture_subimage
                     // Use readPixels with FBO as fallback
                     else
                         match data, info with
                         | PixelData.General d, PixelDataInfo.General i ->
-                            (i, d) ||> readTextureLayer texture level offset src
+                            (i, d) ||> readTextureLayer texture level offset pixels
 
                         | _ ->
                             failwithf "[GL] Cannot download subwindow of compressed textures without glGetCompressedTextureSubImage (not available)"
 
                 GL.Check "could not get texture image"
 
-                (info, data) ||> PixelData.copy src
-
-            finally
-                NativePtr.free buffer
+                pbo |> PixelBuffer.mapped BufferAccess.ReadOnly (fun src ->
+                    (info, data) ||> PixelData.copy src
+                )
+            )
 
             GL.BindTexture(target, 0)
             GL.Check "could not unbind texture"

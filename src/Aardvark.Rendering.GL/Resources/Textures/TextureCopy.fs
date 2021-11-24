@@ -9,6 +9,7 @@ open Microsoft.FSharp.NativeInterop
 open System.Runtime.CompilerServices
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
+open System.Reflection
 
 #nowarn "9"
 
@@ -54,33 +55,47 @@ module internal TextureCopyUtilities =
             ]
 
     [<AutoOpen>]
-    module private ExistentialHack =
-        type IUnmanagedAction =
-            abstract member Run<'a when 'a : unmanaged> : Option<'a> -> unit
+    module private CopyDispatch =
 
-        let private meth = typeof<IUnmanagedAction>.GetMethod "Run"
+        type private Dispatcher() =
 
-        let run (e : IUnmanagedAction) (t : Type) =
-            let mi = meth.MakeGenericMethod [|t|]
-            mi.Invoke(e, [| null |]) |> ignore
+            static member NativeToNative<'T when 'T : unmanaged>(src : nativeint, srcInfo : VolumeInfo, dst : nativeint, dstInfo : VolumeInfo) =
+                let vSrc = NativeVolume<byte>(NativePtr.ofNativeInt src, srcInfo)
+                let vDst = NativeVolume<byte>(NativePtr.ofNativeInt dst, dstInfo)
+
+                let copy (s : nativeptr<byte>) (d : nativeptr<byte>) =
+                    let s : nativeptr<'T> = NativePtr.cast s
+                    let d : nativeptr<'T> = NativePtr.cast d
+                    NativePtr.write d (NativePtr.read s)
+
+                NativeVolume.iter2 vSrc vDst copy
+
+            static member PixVolumeToNative<'T when 'T : unmanaged>(src : PixVolume, dst : nativeint, dstInfo : Tensor4Info) =
+                let x = unbox<PixVolume<'T>> src
+                let dst = NativeTensor4<'T>(NativePtr.ofNativeInt dst, dstInfo)
+                NativeTensor4.using x.Tensor4 (fun src ->
+                    src.CopyTo(dst)
+                )
+
+            static member NativeToPixVolume<'T when 'T : unmanaged>(src : nativeint, srcInfo : Tensor4Info, dst : PixVolume) =
+                let x = unbox<PixVolume<'T>> dst
+                let src = NativeTensor4<'T>(NativePtr.ofNativeInt src, srcInfo)
+                NativeTensor4.using x.Tensor4 (fun dst ->
+                    src.CopyTo(dst)
+                )
+
+        module Method =
+            let private flags = BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public
+            let copyNativeToNative = typeof<Dispatcher>.GetMethod("NativeToNative", flags)
+            let copyPixVolumeToNative = typeof<Dispatcher>.GetMethod("PixVolumeToNative", flags)
+            let copyNativeToPixVolume = typeof<Dispatcher>.GetMethod("NativeToPixVolume", flags)
 
     [<Sealed; AbstractClass>]
     type TextureCopyUtils() =
 
         static member Copy(elementType : Type, src : nativeint, srcInfo : VolumeInfo, dst : nativeint, dstInfo : VolumeInfo) =
-            elementType |> run {
-                new IUnmanagedAction with
-                    member x.Run(a : Option<'a>) =
-                        let vSrc = NativeVolume<byte>(NativePtr.ofNativeInt src, srcInfo)
-                        let vDst = NativeVolume<byte>(NativePtr.ofNativeInt dst, dstInfo)
-
-                        let copy (s : nativeptr<byte>) (d : nativeptr<byte>) =
-                            let s : nativeptr<'a> = NativePtr.cast s
-                            let d : nativeptr<'a> = NativePtr.cast d
-                            NativePtr.write d (NativePtr.read s)
-
-                        NativeVolume.iter2 vSrc vDst copy
-            }
+            let mi = Method.copyNativeToNative.MakeGenericMethod [| elementType |]
+            mi.Invoke(null, [| src; srcInfo; dst; dstInfo |]) |> ignore
 
         static member Copy(elementSize : int, src : nativeint, srcInfo : VolumeInfo, dst : nativeint, dstInfo : VolumeInfo) =
             TextureCopyUtils.Copy(StructTypes.types.[elementSize], src, srcInfo, dst, dstInfo)
@@ -122,26 +137,12 @@ module internal TextureCopyUtilities =
             TextureCopyUtils.Copy(dst.PixFormat.Type, src, srcInfo, dst)
 
         static member Copy(src : PixVolume, dst : nativeint, dstInfo : Tensor4Info) =
-            src.PixFormat.Type |> ExistentialHack.run {
-                new IUnmanagedAction with
-                    member __.Run(def : Option<'a>) =
-                        let x = unbox<PixVolume<'a>> src
-                        let dst = NativeTensor4<'a>(NativePtr.ofNativeInt dst, dstInfo)
-                        NativeTensor4.using x.Tensor4 (fun src ->
-                            src.CopyTo(dst)
-                        )
-            }
+            let mi = Method.copyPixVolumeToNative.MakeGenericMethod [| src.PixFormat.Type |]
+            mi.Invoke(null, [| src; dst; dstInfo |]) |> ignore
 
         static member Copy(src : nativeint, srcInfo : Tensor4Info, dst : PixVolume) =
-            dst.PixFormat.Type |> ExistentialHack.run {
-                new IUnmanagedAction with
-                    member __.Run(def : Option<'a>) =
-                        let x = unbox<PixVolume<'a>> dst
-                        let src = NativeTensor4<'a>(NativePtr.ofNativeInt src, srcInfo)
-                        NativeTensor4.using x.Tensor4 (fun dst ->
-                            src.CopyTo(dst)
-                        )
-            }
+            let mi = Method.copyNativeToPixVolume.MakeGenericMethod [| dst.PixFormat.Type |]
+            mi.Invoke(null, [| src; srcInfo; dst |]) |> ignore
 
 [<AutoOpen>]
 module internal ImageCopyImplementation =
