@@ -99,10 +99,10 @@ module UniformBufferExtensions =
         member x.CreateUniformBuffer(dataSize : nativeint) =
             Operators.using x.ResourceLock (fun _ ->
                 
-                let handle = GL.CreateBuffer()
+                let handle = GL.Dispatch.CreateBuffer()
                 GL.Check "could not create uniform buffer"
 
-                GL.NamedBufferData(handle, dataSize, 0n, BufferUsageHint.DynamicDraw)
+                GL.Dispatch.NamedBufferData(handle, dataSize, 0n, BufferUsageHint.DynamicDraw)
                 GL.Check "could not allocate uniform buffer"
 
                 addUniformBuffer x (int64 dataSize)
@@ -113,10 +113,10 @@ module UniformBufferExtensions =
         member x.CreateUniformBuffer(block : ShaderBlock) =
             Operators.using x.ResourceLock (fun _ ->
                 
-                let handle = GL.CreateBuffer()
+                let handle = GL.Dispatch.CreateBuffer()
                 GL.Check "could not create uniform buffer"
 
-                GL.NamedBufferData(handle, nativeint block.DataSize, 0n, BufferUsageHint.DynamicDraw)
+                GL.Dispatch.NamedBufferData(handle, nativeint block.DataSize, 0n, BufferUsageHint.DynamicDraw)
                 GL.Check "could not allocate uniform buffer"
 
                 addUniformBuffer x (int64 block.DataSize)
@@ -136,7 +136,7 @@ module UniformBufferExtensions =
             if b.Dirty then
                 b.Dirty <- false
                 Operators.using x.ResourceLock (fun _ ->
-                    GL.NamedBufferSubData(b.Handle, 0n, nativeint b.Size, b.Data)
+                    GL.Dispatch.NamedBufferSubData(b.Handle, 0n, nativeint b.Size, b.Data)
                     GL.Check "could not upload uniform buffer" 
                 )
     

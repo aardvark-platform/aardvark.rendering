@@ -89,46 +89,9 @@ module ResizeBufferImplementation =
 
 
 module ManagedBufferImplementation =
-    
-    [<AutoOpen>]
-    module private SparseBufferImpl = 
-        type private BufferPageCommitmentDel = delegate of BufferTarget * nativeint * nativeint * bool -> unit
-        type private NamedBufferPageCommitmentDel = delegate of uint32 * nativeint * nativeint * bool -> unit
-
-        let private lockObj = obj()
-        let mutable private initialized = false
-        let mutable private del : BufferPageCommitmentDel = null
-        let mutable supported = false
-
-        let init() =
-            lock lockObj (fun () ->
-                if not initialized then
-                    initialized <- true
-                    let handle = ContextHandle.Current |> ValueOption.get
-                    let ctx = handle.Handle |> unbox<IGraphicsContextInternal>
-                    let ptr = ctx.GetAddress("glBufferPageCommitmentARB")
-                    if ptr <> 0n then
-                        supported <- true
-                        del <- Marshal.GetDelegateForFunctionPointer(ptr, typeof<BufferPageCommitmentDel>) |> unbox
-                    else
-                        supported <- false
-            )
-
-        type GL with
-            static member BufferPageCommitment(target : BufferTarget, offset : nativeint, size : nativeint, commit : bool) =
-                del.Invoke(target, offset, size, commit)
-
-
-        type BufferStorageFlags with
-            static member inline SparseStorageBit = unbox<BufferStorageFlags> 0x0400
-
-        type GetPName with
-            static member inline BufferPageSize = unbox<GetPName> 0x82F8
 
     module SparseBuffers =
-        let supported() =
-            SparseBufferImpl.init()
-            SparseBufferImpl.supported
+        let supported() = GL.ARB_sparse_buffer
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module private Alignment = 
@@ -184,10 +147,10 @@ module ManagedBufferImplementation =
     [<AutoOpen>]
     module private Allocator = 
         let rec alloc (cap : byref<int64>) =
-            let b = GL.CreateBuffer()
+            let b = GL.Dispatch.CreateBuffer()
             GL.Check "could not create buffer"
 
-            GL.NamedBufferStorage(b, nativeint cap, 0n, BufferStorageFlags.SparseStorageBit ||| BufferStorageFlags.DynamicStorageBit)
+            GL.Dispatch.NamedBufferStorage(b, nativeint cap, 0n, BufferStorageFlags.SparseStorageBit ||| BufferStorageFlags.DynamicStorageBit)
             let err = GL.GetError()
             if err = ErrorCode.OutOfMemory then
                 GL.DeleteBuffer(b)
@@ -222,7 +185,6 @@ module ManagedBufferImplementation =
     type SparseGeometryPool(ctx : Context, types : Map<Symbol, Type>) as this =
         let pageSize, handles =
             use __ = ctx.ResourceLock
-            SparseBufferImpl.init()
             let total = Memory.total ctx
             let pageSize = GL.GetInteger(GetPName.BufferPageSize) |> int64
             let pageSize = 16L * pageSize
@@ -304,7 +266,7 @@ module ManagedBufferImplementation =
                         assert(data.Length >= int ptr.Size)
 
                         let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-                        GL.NamedBufferSubData(buffer.Handle, o, s, gc.AddrOfPinnedObject())
+                        GL.Dispatch.NamedBufferSubData(buffer.Handle, o, s, gc.AddrOfPinnedObject())
                         GL.Check (sprintf "[Pool] could not write to buffer %A" sem)
                         gc.Free()
                     | _ ->
@@ -360,7 +322,7 @@ module ManagedBufferImplementation =
                 if refCount = 1 then
                     Interlocked.Add(totalSize, int64 size) |> ignore
                     wait()
-                    GL.NamedBufferPageCommitment(b, offset, size, true)
+                    GL.Dispatch.NamedBufferPageCommitment(b, offset, size, true)
                     GL.Sync()
                     let f = Fence.Create()
                     fence <- f
@@ -374,7 +336,7 @@ module ManagedBufferImplementation =
                 if refCount = 0 then
                     Interlocked.Add(totalSize, int64 -size) |> ignore
                     wait()
-                    GL.NamedBufferPageCommitment(b, offset, size, false)
+                    GL.Dispatch.NamedBufferPageCommitment(b, offset, size, false)
                     let f = Fence.Create()
                     fence <- f
                 else
@@ -438,7 +400,7 @@ module ManagedBufferImplementation =
 
             types |> Map.map (fun sem t ->
                 let s = nativeint t.GLSize
-                let b = GL.CreateBuffer()
+                let b = GL.Dispatch.CreateBuffer()
                 GL.Check "could not generate buffer"
                 new ResizeGeometryPoolBuffer(this, ctx, b, rw, 0n), s, t
             )
@@ -567,21 +529,21 @@ module ManagedBufferImplementation =
 
                 if copySize > 0n then
                     // allocate a temp buffer
-                    let temp = GL.CreateBuffer()
+                    let temp = GL.Dispatch.CreateBuffer()
                     GL.Check "could not create temp-buffer"
-                    GL.NamedBufferData(temp, copySize, 0n, BufferUsageHint.StaticDraw)
+                    GL.Dispatch.NamedBufferData(temp, copySize, 0n, BufferUsageHint.StaticDraw)
                     GL.Check "could not allocate temp-buffer"
 
                     // copy data to temp
-                    GL.CopyNamedBufferSubData(handle, temp, 0n, 0n, copySize)
+                    GL.Dispatch.CopyNamedBufferSubData(handle, temp, 0n, 0n, copySize)
                     GL.Check (sprintf "could not copy buffer (size: %A)" copySize)
                     
                     // resize the original buffer
-                    GL.NamedBufferData(handle, newCapacity, 0n, BufferUsageHint.StaticDraw)
+                    GL.Dispatch.NamedBufferData(handle, newCapacity, 0n, BufferUsageHint.StaticDraw)
                     GL.Check "could not reallocate buffer"
                     
                     // copy data back
-                    GL.CopyNamedBufferSubData(temp, handle, 0n, 0n, copySize)
+                    GL.Dispatch.CopyNamedBufferSubData(temp, handle, 0n, 0n, copySize)
                     GL.Check "could not copy buffer"
 
                     // delete the temp buffer
@@ -589,7 +551,7 @@ module ManagedBufferImplementation =
                     GL.Check "could not delete temp-buffer"
 
                 else
-                    GL.NamedBufferData(handle, newCapacity, 0n, BufferUsageHint.StaticDraw)
+                    GL.Dispatch.NamedBufferData(handle, newCapacity, 0n, BufferUsageHint.StaticDraw)
                     GL.Check "could not resize buffer"
 
 
@@ -602,7 +564,7 @@ module ManagedBufferImplementation =
         member internal x.Write(offset : nativeint, size : nativeint, data : nativeint) =
             use __ = ctx.ResourceLock
 
-            GL.NamedBufferSubData(handle, offset, size, data) 
+            GL.Dispatch.NamedBufferSubData(handle, offset, size, data) 
             GL.Check "could not upload buffer"
 
 

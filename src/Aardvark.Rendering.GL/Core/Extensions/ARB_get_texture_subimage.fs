@@ -1,7 +1,6 @@
 ﻿namespace Aardvark.Rendering.GL
 
 open System
-open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 open Aardvark.Rendering.GL
@@ -9,24 +8,20 @@ open Aardvark.Rendering.GL
 [<AutoOpen>]
 module ARB_get_texture_subimage =
 
-    // Arb functions are in GL type, need alias to prevent recursive calls
-    [<AutoOpen>]
-    module private ArbFunctions =
-        module GL =
-            type Arb = OpenGL4.GL
-
     type GL private() =
 
         static let supported = ExtensionHelpers.isSupported (Version(4,5)) "GL_ARB_get_texture_sub_image"
 
         static member ARB_get_texture_subimage = supported
 
+    type GL.Dispatch with
+
         static member GetTextureSubImage(texture : int,
                                          level : int, xoffset : int, yoffset : int, zoffset : int,
                                          width : int, height : int, depth : int, format : PixelFormat,
                                          typ : PixelType, bufferSize : int, pixels : nativeint) =
-            if supported then
-                GL.Arb.GetTextureSubImage(texture, level, xoffset, yoffset, zoffset,
+            if GL.ARB_get_texture_subimage then
+                GL.GetTextureSubImage(texture, level, xoffset, yoffset, zoffset,
                                           width, height, depth,
                                           format, typ, bufferSize, pixels)
             else
@@ -45,8 +40,8 @@ module ARB_get_texture_subimage =
                                                    xoffset : int, yoffset : int, zoffset : int,
                                                    width : int, height : int, depth : int,
                                                    bufferSize : int, pixels : nativeint) =
-            if supported then
-                GL.Arb.GetCompressedTextureSubImage(texture, level, xoffset, yoffset, zoffset,
+            if GL.ARB_get_texture_subimage then
+                GL.GetCompressedTextureSubImage(texture, level, xoffset, yoffset, zoffset,
                                                     width, height, depth,
                                                     bufferSize, pixels)
             else

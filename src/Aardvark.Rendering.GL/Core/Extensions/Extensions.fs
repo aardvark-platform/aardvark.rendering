@@ -6,6 +6,17 @@ open Aardvark.Rendering
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 
+[<AutoOpen>]
+module ExtensionDispatcher =
+
+    module GL =
+
+        /// Contains dispatchers for GL calls that either invoke fallback implementations, or throw
+        /// an expception if the feature is not supported by the platform.
+        [<AbstractClass; Sealed>]
+        type Dispatch private() =
+            class end
+
 module ExtensionHelpers =
     let private suffixes = [""; "EXT"; "ARB"; "NV"; "AMD"]
 

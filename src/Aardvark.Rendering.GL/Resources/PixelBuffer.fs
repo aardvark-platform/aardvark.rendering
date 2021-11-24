@@ -25,7 +25,7 @@ module internal PixelBuffer =
         GL.BindBuffer(target, pbo)
         GL.Check "could not bind PBO"
 
-        GL.BufferStorage(target, sizeInBytes, 0n, flags)
+        GL.Dispatch.BufferStorage(target, sizeInBytes, 0n, flags)
         GL.Check "could not initialize PBO"
 
         try

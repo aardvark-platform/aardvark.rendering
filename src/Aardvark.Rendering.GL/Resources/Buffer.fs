@@ -7,7 +7,6 @@ open Aardvark.Base
 open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.NativeInterop
-open Aardvark.Rendering.GL
 
 #nowarn "9"
 
@@ -79,10 +78,10 @@ module BufferExtensions =
             
             let handle = 
                 using x.ResourceLock (fun _ ->
-                    let handle = GL.CreateBuffer()
+                    let handle = GL.Dispatch.CreateBuffer()
                     GL.Check "failed to create buffer"
                     
-                    GL.NamedBufferData(handle, (nativeint size), 0n, glUsageHint usageHint)
+                    GL.Dispatch.NamedBufferData(handle, (nativeint size), 0n, glUsageHint usageHint)
                     GL.Check "failed to upload buffer"
                     
                     handle
@@ -115,10 +114,10 @@ module BufferExtensions =
             
             let handle = 
                 using x.ResourceLock (fun _ ->
-                    let handle = GL.CreateBuffer()
+                    let handle = GL.Dispatch.CreateBuffer()
                     GL.Check "failed to create buffer"
                     // crucial here to call into dispatching function
-                    GL.NamedBufferData(handle, (nativeint sizeInBytes), data, glUsageHint usage)
+                    GL.Dispatch.NamedBufferData(handle, (nativeint sizeInBytes), data, glUsageHint usage)
                     GL.Check "failed to upload buffer"
 
                     handle
@@ -211,7 +210,7 @@ module BufferExtensions =
             if targetOffset < 0 || totalSize > buffer.SizeInBytes then
                 raise <| IndexOutOfRangeException("range uploads may not exceed the buffer's size")
             else
-                let target = GL.MapNamedBufferRange(buffer.Handle, nativeint targetOffset, nativeSize, BufferAccessMask.MapWriteBit)
+                let target = GL.Dispatch.MapNamedBufferRange(buffer.Handle, nativeint targetOffset, nativeSize, BufferAccessMask.MapWriteBit)
                 GL.Check "failed to map buffer for writing"
                 if target <> 0n then
                     // TODO: Marshal.Copy should possibly take int64 sizes
@@ -219,13 +218,13 @@ module BufferExtensions =
                 else
                     Log.warn "[GL] could not map buffer for writing"
 
-                GL.UnmapNamedBuffer(buffer.Handle) |> ignore
+                GL.Dispatch.UnmapNamedBuffer(buffer.Handle) |> ignore
                 GL.Check "failed to unmap buffer"
 
 
         member x.UploadRanges(buffer : Buffer, src : nativeint, ranges : seq<Range1i>) =
             use __ = x.ResourceLock
-            let target = GL.MapNamedBufferRange(buffer.Handle, 0n, buffer.SizeInBytes, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
+            let target = GL.Dispatch.MapNamedBufferRange(buffer.Handle, 0n, buffer.SizeInBytes, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
             GL.Check "failed to map buffer for writing"
             if target <> 0n then
                 for r in ranges do
@@ -234,12 +233,12 @@ module BufferExtensions =
 
                     Marshal.Copy(src + offset, target + offset, size)
 
-                    GL.FlushMappedNamedBufferRange(buffer.Handle, offset, size)
+                    GL.Dispatch.FlushMappedNamedBufferRange(buffer.Handle, offset, size)
                     GL.Check "failed to invalidate buffer-range"
             else
                 Log.warn "[GL] could not map buffer"
 
-            GL.UnmapNamedBuffer(buffer.Handle) |> ignore
+            GL.Dispatch.UnmapNamedBuffer(buffer.Handle) |> ignore
             GL.Check "failed to unmap buffer"
 
         /// <summary>
@@ -295,7 +294,7 @@ module BufferExtensions =
             if sourceOffset < 0 || totalSize > buffer.SizeInBytes then
                 raise <| IndexOutOfRangeException("downloads may not exceed the buffer's size")
             else
-                let src = GL.MapNamedBufferRange(buffer.Handle, nativeint sourceOffset, nativeSize, BufferAccessMask.MapReadBit)
+                let src = GL.Dispatch.MapNamedBufferRange(buffer.Handle, nativeint sourceOffset, nativeSize, BufferAccessMask.MapReadBit)
                 GL.Check "failed to map buffer for reading"
                 if src <> 0n then
                     // TODO: Marshal.Copy should possibly take int64 sizes
@@ -303,7 +302,7 @@ module BufferExtensions =
                 else
                     Log.warn "[GL] could not map buffer for reading"
 
-                GL.UnmapNamedBuffer(buffer.Handle) |> ignore
+                GL.Dispatch.UnmapNamedBuffer(buffer.Handle) |> ignore
                 GL.Check "failed to unmap buffer"
 
                 
@@ -360,7 +359,7 @@ module BufferExtensions =
                 let source = if size = 0n then 0n else src
 
                 if useNamed then
-                    GL.NamedBufferData(buffer.Handle, size, source, BufferUsageHint.StaticDraw)
+                    GL.Dispatch.NamedBufferData(buffer.Handle, size, source, BufferUsageHint.StaticDraw)
                     GL.Check "could not resize buffer"
                 else
                     ExtensionHelpers.bindBuffer buffer.Handle (fun t ->
@@ -370,7 +369,7 @@ module BufferExtensions =
 
             elif size <> 0n then
                 if useNamed then
-                    GL.NamedBufferSubData(buffer.Handle, 0n, size, src)
+                    GL.Dispatch.NamedBufferSubData(buffer.Handle, 0n, size, src)
                     GL.Check "failed to upload buffer"
                 else
                     ExtensionHelpers.bindBuffer buffer.Handle (fun t ->
@@ -528,7 +527,7 @@ module IndirectBufferExtensions =
 
         if indexed && callCount > 0 then
             using b.Context.ResourceLock (fun _ ->
-                let ptr = GL.MapNamedBufferRange(b.Handle, 0n, b.SizeInBytes, BufferAccessMask.MapReadBit ||| BufferAccessMask.MapWriteBit)
+                let ptr = GL.Dispatch.MapNamedBufferRange(b.Handle, 0n, b.SizeInBytes, BufferAccessMask.MapReadBit ||| BufferAccessMask.MapWriteBit)
                 if ptr = 0n then failwithf "[GL] could not map buffer"
 
 
@@ -548,7 +547,7 @@ module IndirectBufferExtensions =
                     next <- current + 1
 
 
-                GL.UnmapNamedBuffer(b.Handle) |> ignore
+                GL.Dispatch.UnmapNamedBuffer(b.Handle) |> ignore
                 GL.Check "could not unmap buffer"
                 
 
@@ -571,7 +570,7 @@ module IndirectBufferExtensions =
 
         member x.Clear(b : Buffer, size : nativeint) =
             using x.ResourceLock (fun _ ->
-                GL.NamedBufferData(b.Handle, size, 0n, BufferUsageHint.StaticDraw)
+                GL.Dispatch.NamedBufferData(b.Handle, size, 0n, BufferUsageHint.StaticDraw)
                 GL.Check "could not clear buffer"
                 b.SizeInBytes <- size
             )
@@ -585,7 +584,7 @@ module IndirectBufferExtensions =
             if targetOffset + size > target.SizeInBytes || sourceOffset + size > source.SizeInBytes then
                 failwith "[GL] insufficient buffer size"
                 
-            GL.CopyNamedBufferSubData(source.Handle, target.Handle, sourceOffset, targetOffset, size)
+            GL.Dispatch.CopyNamedBufferSubData(source.Handle, target.Handle, sourceOffset, targetOffset, size)
             GL.Check "could not copy buffer"
 
         member x.Clone(b : Buffer, offset : nativeint, size : nativeint) =

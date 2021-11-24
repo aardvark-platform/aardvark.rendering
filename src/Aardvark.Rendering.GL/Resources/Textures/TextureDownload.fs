@@ -63,9 +63,9 @@ module internal TextureDownloadImplementation =
 
                         match data with
                         | PixelData.General d ->
-                            GL.GetTextureSubImage(texture.Handle, level, offset, d.Size, d.Format, d.Type, int info.SizeInBytes, pixels)
+                            GL.Dispatch.GetTextureSubImage(texture.Handle, level, offset, d.Size, d.Format, d.Type, int info.SizeInBytes, pixels)
                         | PixelData.Compressed d ->
-                            GL.GetCompressedTextureSubImage(texture.Handle, level, offset, d.Size, int info.SizeInBytes, pixels)
+                            GL.Dispatch.GetCompressedTextureSubImage(texture.Handle, level, offset, d.Size, int info.SizeInBytes, pixels)
 
                     // We want to download a subregion but don't have GL_ARB_get_texture_subimage
                     // Use readPixels with FBO as fallback

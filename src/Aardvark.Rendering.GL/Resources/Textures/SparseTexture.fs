@@ -107,7 +107,7 @@ module ``Sparse Texture Extensions`` =
             GL.TexParameter(TextureTarget.Texture3D, TextureParameterName.TextureMaxLevel, levels - 1)
             GL.Check "could not set sparse texture max level"
 
-            GL.TexStorage3D(TextureTarget3d.Texture3D, levels, ifmt, size.X, size.Y, size.Z)
+            GL.Dispatch.TexStorage3D(TextureTarget3d.Texture3D, levels, ifmt, size.X, size.Y, size.Z)
             GL.Check "could not set sparse texture storage"
 
             let mutable sparseLevels = -1

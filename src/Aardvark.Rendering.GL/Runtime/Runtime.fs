@@ -446,21 +446,21 @@ type Runtime() =
 
     member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         use __ = ctx.ResourceLock
-        GL.NamedBufferSubData(unbox<int> dst.Handle, dstOffset, size, src)
+        GL.Dispatch.NamedBufferSubData(unbox<int> dst.Handle, dstOffset, size, src)
         GL.Check "could not upload buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
 
     member x.Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
         use __ = ctx.ResourceLock
-        GL.GetNamedBufferSubData(unbox<int> src.Handle, srcOffset, size, dst)
+        GL.Dispatch.GetNamedBufferSubData(unbox<int> src.Handle, srcOffset, size, dst)
         GL.Check "could not download buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
 
     member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         use __ = ctx.ResourceLock
-        GL.CopyNamedBufferSubData(unbox<int> src.Handle, unbox<int> dst.Handle, srcOffset, dstOffset, size)
+        GL.Dispatch.CopyNamedBufferSubData(unbox<int> src.Handle, unbox<int> dst.Handle, srcOffset, dstOffset, size)
         GL.Check "could not copy buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()

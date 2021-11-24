@@ -296,14 +296,14 @@ type private Regression(degree : int, maxSamples : int) =
 module private ContextMappingExtensions = 
     type Context with
         member x.MapBufferRange(b : Buffer, offset : nativeint, size : nativeint, access : BufferAccessMask) =
-            let ptr = GL.MapNamedBufferRange(b.Handle, offset, size, access)
+            let ptr = GL.Dispatch.MapNamedBufferRange(b.Handle, offset, size, access)
             if ptr = 0n then 
                 let err = GL.GetError()
                 failwithf "[GL] cannot map buffer %d: %A" b.Handle err
             ptr
 
         member x.UnmapBuffer(b : Buffer) =
-            let worked = GL.UnmapNamedBuffer(b.Handle)
+            let worked = GL.Dispatch.UnmapNamedBuffer(b.Handle)
             if not worked then failwithf "[GL] cannot unmap buffer %d" b.Handle
 
 type InstanceBuffer(ctx : Context, semantics : MapExt<string, GLSLType * Type>, count : int) =
@@ -358,7 +358,7 @@ type InstanceBuffer(ctx : Context, semantics : MapExt<string, GLSLType * Type>, 
             let srcOff = nativeint srcOffset * nativeint elemSize
             let dstOff = nativeint dstOffset * nativeint elemSize
             let s = nativeint elemSize * nativeint count
-            GL.CopyNamedBufferSubData(srcBuffer.Handle, dstBuffer.Handle, srcOff, dstOff, s)
+            GL.Dispatch.CopyNamedBufferSubData(srcBuffer.Handle, dstBuffer.Handle, srcOff, dstOff, s)
         )
 
     member x.Dispose() =
@@ -419,7 +419,7 @@ type VertexBuffer(ctx : Context, semantics : MapExt<string, Type>, count : int) 
             let srcOff = nativeint srcOffset * nativeint elemSize
             let dstOff = nativeint dstOffset * nativeint elemSize
             let s = nativeint elemSize * nativeint count
-            GL.CopyNamedBufferSubData(srcBuffer.Handle, dstBuffer.Handle, srcOff, dstOff, s)
+            GL.Dispatch.CopyNamedBufferSubData(srcBuffer.Handle, dstBuffer.Handle, srcOff, dstOff, s)
         )
 
     member x.Dispose() =
@@ -652,7 +652,7 @@ module AtlasTextureUpload =
                             member x.Accept<'a when 'a : unmanaged>(col : Col.Format, channels : int) =
                                 let sizeInBytes = int64 size.X * int64 size.Y * int64 (TextureFormat.pixelSizeInBytes image.Format)
 
-                                let dstPtr = GL.MapNamedBufferRange(buffer.Handle, 0n, nativeint sizeInBytes, BufferAccessMask.MapInvalidateRangeBit ||| BufferAccessMask.MapWriteBit)
+                                let dstPtr = GL.Dispatch.MapNamedBufferRange(buffer.Handle, 0n, nativeint sizeInBytes, BufferAccessMask.MapInvalidateRangeBit ||| BufferAccessMask.MapWriteBit)
 
                                 let src = 
                                     NativeVolume<'a>(
@@ -713,7 +713,7 @@ module AtlasTextureUpload =
                                     let lst = NativeVolume<'a>(p.Pointer, VolumeInfo(p.Origin, V3l(p.SX, h.Y, p.SZ), V3l(p.DX, 0L, p.DZ)))
                                     NativeVolume.copy lst dst.[*, e.Y+1L..,*]
 
-                                GL.UnmapNamedBuffer buffer.Handle |> ignore
+                                GL.Dispatch.UnmapNamedBuffer buffer.Handle |> ignore
 
 
                                 0
@@ -721,7 +721,7 @@ module AtlasTextureUpload =
                 ) |> ignore
                 
                 GL.BindBuffer(BufferTarget.PixelUnpackBuffer, buffer.Handle)
-                GL.TextureSubImage2D(texture.Handle, level, offset.X, offset.Y, size.X, size.Y, fmt, typ, 0n)
+                GL.Dispatch.TextureSubImage2D(texture.Handle, TextureTarget.ofTexture texture, level, offset, size, fmt, typ, 0n)
                 GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
 
                 lastOffset <- offset
@@ -756,7 +756,7 @@ module AtlasTextureUpload =
                         
             //            NativeMatrix.using (dst.Transformed ImageTrafo.Rot90) (fun dst ->
             //                NativeMatrix.copy src dst
-            //                GL.TextureSubImage2D(texture.Handle, level, offset.X, offset.Y, size.X, size.Y, fmt, typ, NativePtr.toNativeInt dst.Pointer)
+            //                GL.Dispatch.TextureSubImage2D(texture.Handle, level, offset.X, offset.Y, size.X, size.Y, fmt, typ, NativePtr.toNativeInt dst.Pointer)
             //            )
             //        )
 
@@ -766,7 +766,7 @@ module AtlasTextureUpload =
             //    for level in 0 .. levels - 1 do
             //        let data = image.[0, level]
             //        data.Use (fun ptr ->
-            //            GL.TextureSubImage2D(texture.Handle, level, offset.X, offset.Y, size.X, size.Y, fmt, typ, ptr)
+            //            GL.Dispatch.TextureSubImage2D(texture.Handle, level, offset.X, offset.Y, size.X, size.Y, fmt, typ, ptr)
             //        )
 
             //        offset <- offset / 2
@@ -1163,7 +1163,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
                 let o = r * es |> nativeint
                 let s = es |> nativeint
                 Marshal.Copy(NativePtr.toNativeInt mem + o, ptr + o, s)
-                GL.FlushMappedNamedBufferRange(buffer.Handle, o, s)
+                GL.Dispatch.FlushMappedNamedBufferRange(buffer.Handle, o, s)
             ctx.UnmapBuffer(buffer)
 
             if bounds then
@@ -1172,7 +1172,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
                     let o = r * bs |> nativeint
                     let s = bs |> nativeint
                     Marshal.Copy(NativePtr.toNativeInt bmem + o, bptr + o, s)
-                    GL.FlushMappedNamedBufferRange(bbuffer.Handle, o, s)
+                    GL.Dispatch.FlushMappedNamedBufferRange(bbuffer.Handle, o, s)
                 ctx.UnmapBuffer(bbuffer)
 
 

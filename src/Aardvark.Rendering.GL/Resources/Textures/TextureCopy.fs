@@ -237,7 +237,7 @@ module internal ImageCopyImplementation =
         let private copyDirect (src : Image) (srcLevel : int) (srcOffset : V3i)
                                (dst : Image) (dstLevel : int) (dstOffset : V3i)
                                (size : V3i) =
-            GL.CopyImageSubData(src.Handle, src.Target, srcLevel, srcOffset, dst.Handle, dst.Target, dstLevel, dstOffset, size)
+            GL.Dispatch.CopyImageSubData(src.Handle, src.Target, srcLevel, srcOffset, dst.Handle, dst.Target, dstLevel, dstOffset, size)
             GL.Check "could copy image subdata"
 
         let copy (src : Image) (srcLevel : int) (srcSlices : Range1i) (srcOffset : V3i)
