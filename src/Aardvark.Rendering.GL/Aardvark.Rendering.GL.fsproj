@@ -44,6 +44,7 @@
     <Compile Include="Core\Extensions\ARB_sparse_buffer.fs" />
     <Compile Include="Core\Extensions\ARB_pipeline_statistics_query.fs" />
     <Compile Include="Core\Extensions\ARB_texture_stencil8.fs" />
+    <Compile Include="Core\Extensions\ARB_shader_image_load_store.fs" />
     <Compile Include="Core\Config.fs" />
     <Compile Include="Core\DebugOutput.fs" />
     <Compile Include="Core\GLVM.fs" />

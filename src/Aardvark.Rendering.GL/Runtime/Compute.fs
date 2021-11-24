@@ -118,7 +118,7 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
             GL.Check "could not bind storage buffer"
 
         for (KeyValue(l, (tex, level, layered, layer, _))) in inputImages do
-            GL.BindImageTexture(l, tex.Handle, level, layered, layer, TextureAccess.ReadWrite, unbox (int tex.Format))
+            GL.Dispatch.BindImageTexture(l, tex.Handle, level, layered, layer, TextureAccess.ReadWrite, unbox (int tex.Format))
             boundThings.Add(Bound.Image l) |> ignore
             GL.Check "could not bind image texture"
 
@@ -439,7 +439,7 @@ type private GLCompute(ctx : Context) =
                 | Bound.Buffer(slot,target) -> 
                     GL.BindBufferBase(unbox (int target),slot,0)
                 | Bound.Image(slot) -> 
-                    GL.BindImageTexture(slot,0,0,false,0,TextureAccess.ReadWrite,SizedInternalFormat.Rgba8)
+                    GL.Dispatch.BindImageTexture(slot,0,0,false,0,TextureAccess.ReadWrite,SizedInternalFormat.Rgba8)
                 | Bound.Texture(slot,target) -> 
                     GL.ActiveTexture(TextureUnit.Texture0 + unbox slot)
                     GL.BindTexture(target,0)

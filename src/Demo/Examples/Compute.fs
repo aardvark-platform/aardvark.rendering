@@ -192,7 +192,7 @@ module ComputeTest =
 //                                                    GL.Check "active"
                                     //GL.Enable(EnableCap.Texture
                                     //GL.BindImageTextures(loc, 1, [|t.Handle|])
-                                    GL.BindImageTexture(binding, t.Handle, view.Level, false, view.Slice, TextureAccess.ReadWrite, fmt)
+                                    GL.Dispatch.BindImageTexture(binding, t.Handle, view.Level, false, view.Slice, TextureAccess.ReadWrite, fmt)
                                     GL.Check "image"
                                 | _ ->
                                     failwithf "[GL] incompatible compute shader image: %A" view.Texture
