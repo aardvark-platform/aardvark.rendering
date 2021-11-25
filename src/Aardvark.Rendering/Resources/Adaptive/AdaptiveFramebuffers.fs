@@ -163,7 +163,7 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
 
         let inline createAttachment (sem : Symbol) (att : AttachmentSignature) =
             if writeOnly |> Set.contains sem then
-                let rb = this.CreateRenderbuffer(att.format, att.samples, size)
+                let rb = this.CreateRenderbuffer(size, att.format, att.samples)
                 this.CreateRenderbufferAttachment(rb) :> aval<_>
             else
                 let tex = this.CreateTexture2D(size, TextureFormat.ofRenderbufferFormat att.format, samples = att.samples)
@@ -189,7 +189,6 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
     [<Extension>]
     static member CreateFramebuffer (this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<V2i>) : IAdaptiveResource<IFramebuffer> =
         this.CreateFramebuffer(signature, size, Set.ofList [DefaultSemantic.Depth; DefaultSemantic.Stencil])
-
 
 
     // ================================================================================================================
@@ -226,7 +225,7 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
             if writeOnly |> Set.contains sem then
                 let rb =
                     renderBuffers.GetOrCreate(sem, fun _ ->
-                        this.CreateRenderbuffer(att.format, att.samples, size |> AVal.map V2i)
+                        this.CreateRenderbuffer(size |> AVal.map V2i, att.format, att.samples)
                     )
 
                 this.CreateRenderbufferAttachment(rb) :> aval<_>

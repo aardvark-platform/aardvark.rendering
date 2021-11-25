@@ -5,6 +5,7 @@ open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 
 open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
 
 [<AutoOpen>]
 module private AdaptiveRenderbufferTypes =
@@ -69,32 +70,24 @@ module private AdaptiveRenderbufferTypes =
 
 [<AbstractClass; Sealed; Extension>]
 type ITextureRuntimeAdaptiveRenderbufferExtensions private() =
-    
-    ///<summary>Creates an adaptive renderbuffer.</summary>
-    ///<param name="this">The runtime.</param>
-    ///<param name="format">The desired renderbuffer format.</param>
-    ///<param name="samples">The number of samples.</param>
-    ///<param name="size">The size of the renderbuffer.</param>
-    [<Extension>]
-    static member CreateRenderbuffer(this : ITextureRuntime, format : aval<RenderbufferFormat>, samples : aval<int>, size : aval<V2i>) =
-        AdaptiveRenderbuffer(this, format, samples, size) :> IAdaptiveResource<_>
 
     ///<summary>Creates an adaptive renderbuffer.</summary>
     ///<param name="this">The runtime.</param>
+    ///<param name="size">The size of the renderbuffer.</param>
     ///<param name="format">The desired renderbuffer format.</param>
     ///<param name="samples">The number of samples.</param>
-    ///<param name="size">The size of the renderbuffer.</param>
     [<Extension>]
-    static member CreateRenderbuffer(this : ITextureRuntime, format : RenderbufferFormat, samples : aval<int>, size : aval<V2i>) =
+    static member CreateRenderbuffer(this : ITextureRuntime, size : aval<V2i>, format : RenderbufferFormat, samples : aval<int>) =
         AdaptiveRenderbuffer(this, ~~format, samples, size) :> IAdaptiveResource<_>
 
     ///<summary>Creates an adaptive renderbuffer.</summary>
     ///<param name="this">The runtime.</param>
-    ///<param name="format">The desired renderbuffer format.</param>
-    ///<param name="samples">The number of samples.</param>
     ///<param name="size">The size of the renderbuffer.</param>
+    ///<param name="format">The desired renderbuffer format.</param>
+    ///<param name="samples">The number of samples. Default is 1.</param>
     [<Extension>]
-    static member CreateRenderbuffer(this : ITextureRuntime, format : RenderbufferFormat, samples : int, size : aval<V2i>) =
+    static member CreateRenderbuffer(this : ITextureRuntime, size : aval<V2i>, format : RenderbufferFormat,
+                                     [<Optional; DefaultParameterValue(1)>] samples : int) =
         AdaptiveRenderbuffer(this, ~~format, ~~samples, size) :> IAdaptiveResource<_>
 
 
@@ -116,26 +109,13 @@ type ITextureRuntimeAdaptiveRenderbufferExtensions private() =
 
     ///<summary>Creates a framebuffer attachment from the given adaptive texture.</summary>
     ///<param name="texture">The input texture.</param>
-    ///<param name="slice">The slice of the texture to use as output. If negative, all slices are used.</param>
-    ///<param name="level">The mip level of the texture to use as output.</param>
+    ///<param name="slice">The slice of the texture to use as output. If negative, all slices are used. Default is -1.</param>
+    ///<param name="level">The mip level of the texture to use as output. Default is 0.</param>
     [<Extension>]
-    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#ITexture>, slice : int, level : int) =
+    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#ITexture>,
+                                          [<Optional; DefaultParameterValue(-1)>] slice : int,
+                                          [<Optional; DefaultParameterValue(0)>] level : int) =
         AdaptiveTextureAttachment(texture, ~~slice, ~~level) :> IAdaptiveResource<_>
-
-    ///<summary>Creates a framebuffer attachment from the given adaptive texture.
-    /// If the input texture is mipmapped, the first level is used.</summary>
-    ///<param name="texture">The input texture.</param>
-    ///<param name="slice">The slice of the texture to use as output. If negative, all slices are used.</param>
-    [<Extension>]
-    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#ITexture>, slice : int) =
-        AdaptiveTextureAttachment(texture, ~~slice, ~~0) :> IAdaptiveResource<_>
-
-    ///<summary>Creates a framebuffer attachment from the given adaptive texture.
-    /// If the input texture is mipmapped, the first level is used. If it is an array or a cube, all items or faces are used.</summary>
-    ///<param name="texture">The input texture.</param>
-    [<Extension>]
-    static member CreateTextureAttachment(_ : ITextureRuntime, texture : IAdaptiveResource<#ITexture>) =
-        AdaptiveTextureAttachment(texture, ~~(-1), ~~0) :> IAdaptiveResource<_>
 
     ///<summary>Creates a framebuffer attachment from the given adaptive renderbuffer.</summary>
     ///<param name="renderbuffer">The input renderbuffer.</param>

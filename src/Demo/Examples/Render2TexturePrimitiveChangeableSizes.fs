@@ -41,7 +41,7 @@ module Render2TexturePrimiviteChangeableSize =
         runtime.CreateTextureAttachment(tex, 0) :> aval<_>
 
     let depth =
-        let rb = runtime.CreateRenderbuffer(RenderbufferFormat.Depth24Stencil8, 1, sizeM)
+        let rb = runtime.CreateRenderbuffer(sizeM, RenderbufferFormat.Depth24Stencil8)
         runtime.CreateRenderbufferAttachment(rb)
 
     // Signatures are required to compile render tasks. Signatures can be seen as the `type` of a framebuffer

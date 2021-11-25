@@ -164,7 +164,7 @@ module WeightedBlended =
 
         let depthBuffer =
             runtime.CreateRenderbufferAttachment(
-                runtime.CreateRenderbuffer(RenderbufferFormat.Depth24Stencil8, samples, size)
+                runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, samples)
             )
 
         let offscreenFbo =
