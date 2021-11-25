@@ -323,7 +323,7 @@ let main argv =
         )
 
     let traceTexture =
-        runtime.CreateTexture2D(TextureFormat.Rgba32f, 1, win.Sizes)
+        runtime.CreateTexture2D(win.Sizes, TextureFormat.Rgba32f)
 
     use geometryPool =
         let signature =

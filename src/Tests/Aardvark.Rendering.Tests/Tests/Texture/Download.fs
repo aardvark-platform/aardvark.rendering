@@ -447,7 +447,14 @@ module TextureDownload =
 
         let argumentsOutOfRange (runtime : IRuntime) =
             let createAndDownload (dimension : TextureDimension) (levels : int) (level : int) (slice : int) (region : Box2i) () =
-                let t = runtime.CreateTexture(V3i(128), dimension, TextureFormat.Rgba32f, levels, 1)
+                let size =
+                    match dimension with
+                    | TextureDimension.Texture1D -> V3i(128, 1, 1)
+                    | TextureDimension.Texture2D -> V3i(128, 128, 1)
+                    | TextureDimension.Texture3D -> V3i(128)
+                    | _                          -> V3i(128, 128, 1)
+
+                let t = runtime.CreateTexture(size, dimension, TextureFormat.Rgba32f, levels, 1)
                 try
                     runtime.Download(t, level, slice, region) |> ignore
                 finally

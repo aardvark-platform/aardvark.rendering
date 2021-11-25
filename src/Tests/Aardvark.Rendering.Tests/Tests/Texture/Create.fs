@@ -59,12 +59,18 @@ module TextureCreate =
 
 
         let validUsage (runtime : IRuntime) =
+            let size = function
+                | TextureDimension.Texture1D -> V3i(128, 1, 1)
+                | TextureDimension.Texture2D -> V3i(128, 128, 1)
+                | TextureDimension.Texture3D -> V3i(128)
+                | _                          -> V3i(128, 128, 1)
+
             let create (dimension : TextureDimension) (levels : int) (samples : int) () =
-                let t = runtime.CreateTexture(V3i(128), dimension, TextureFormat.Rgba32f, levels, samples)
+                let t = runtime.CreateTexture(size dimension, dimension, TextureFormat.Rgba32f, levels, samples)
                 runtime.DeleteTexture(t)
 
             let createArray (dimension : TextureDimension) (levels : int) (samples : int) (count : int) () =
-                let t = runtime.CreateTextureArray(V3i(128), dimension, TextureFormat.Rgba32f, levels, samples, count)
+                let t = runtime.CreateTextureArray(size dimension, dimension, TextureFormat.Rgba32f, levels, samples, count)
                 runtime.DeleteTexture(t)
 
             create TextureDimension.Texture1D 1 1 ()

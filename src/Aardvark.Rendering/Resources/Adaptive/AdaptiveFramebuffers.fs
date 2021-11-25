@@ -166,7 +166,7 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
                 let rb = this.CreateRenderbuffer(att.format, att.samples, size)
                 this.CreateRenderbufferAttachment(rb) :> aval<_>
             else
-                let tex = this.CreateTexture2D(TextureFormat.ofRenderbufferFormat att.format, att.samples, size)
+                let tex = this.CreateTexture2D(size, TextureFormat.ofRenderbufferFormat att.format, samples = att.samples)
                 this.CreateTextureAttachment(tex, 0) :> aval<_>
 
         let atts = SymDict.empty
@@ -233,7 +233,7 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
             else
                 let tex =
                     textures.GetOrCreate(sem, fun _ ->
-                        this.CreateTextureCube(TextureFormat.ofRenderbufferFormat att.format, levels, att.samples, size)
+                        this.CreateTextureCube(size, TextureFormat.ofRenderbufferFormat att.format, levels)
                     )
 
                 this.CreateTextureAttachment(tex, int face, level) :> aval<_>
