@@ -183,7 +183,7 @@ module DescriptorSet =
                         VkDescriptorBufferInfo(
                             b.Handle,
                             uint64 offset,
-                            uint64 size
+                            if size > 0L then uint64 size else VkWholeSize
                         )
 
                     NativePtr.write bufferInfos info
@@ -206,7 +206,7 @@ module DescriptorSet =
                         VkDescriptorBufferInfo(
                             ub.Handle,
                             0UL,
-                            uint64 ub.Storage.Size
+                            if ub.Storage.Size > 0 then uint64 ub.Storage.Size else VkWholeSize
                         )
 
                     NativePtr.write bufferInfos info
