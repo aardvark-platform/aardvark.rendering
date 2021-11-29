@@ -389,7 +389,6 @@ module private ManagedTracePoolUtils =
             let view = BufferView(data.Buffer, data.Type.Type, int data.Offset)
             x.Add(range, view)
 
-[<Struct>]
 type internal TracePoolResources =
     {
         Pool                  : ManagedTracePool
@@ -411,7 +410,7 @@ and ManagedTraceObject internal(index : int, geometry : aval<IAccelerationStruct
     /// Acceleration structure of the object.
     member x.Geometry = geometry
 
-    member internal x.Resources = &poolResources
+    member internal x.Resources = poolResources
 
     member x.Dispose() =
         poolResources.Pool.Free(x)
@@ -496,8 +495,11 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature) =
 
     member internal x.Free(obj : ManagedTraceObject) =
         lock x (fun _ ->
-            objects.Remove(obj) |> ignore
-            free obj
+            if objects.Remove(obj) then
+                free obj
+
+                if objects.Count = 0 then
+                    clear()
         )
 
     member x.Add(obj : TraceObject) =

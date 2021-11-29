@@ -1,11 +1,5 @@
 ﻿namespace Aardvark.SceneGraph
 
-open System
-open System.Threading
-open System.Reflection
-open System.Collections.Generic
-open System.Runtime.InteropServices
-open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
@@ -13,39 +7,46 @@ open Aardvark.SceneGraph
 open Aardvark.Base.Monads.State
 open Microsoft.FSharp.NativeInterop
 
+open System
+open System.Threading
+open System.Reflection
+open System.Collections.Generic
+open System.Runtime.InteropServices
+open System.Runtime.CompilerServices
+
 #nowarn "9"
 #nowarn "51"
 
 [<ReferenceEquality; NoComparison>]
 type AdaptiveGeometry =
     {
-        faceVertexCount  : int
-        vertexCount      : int
-        indices          : Option<BufferView>
-        uniforms         : Map<Symbol,IAdaptiveValue>
-        vertexAttributes : Map<Symbol,BufferView>
+        FaceVertexCount    : int
+        VertexCount        : int
+        Indices            : Option<BufferView>
+        VertexAttributes   : Map<Symbol, BufferView>
+        InstanceAttributes : Map<Symbol, IAdaptiveValue>
     }
 
 type GeometrySignature =
     {
-        indexType           : Type
-        vertexBufferTypes   : Map<Symbol, Type>
-        uniformTypes        : Map<Symbol, Type>
+        IndexType              : Type
+        VertexAttributeTypes   : Map<Symbol, Type>
+        InstanceAttributeTypes : Map<Symbol, Type>
     }
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module GeometrySignature =
 
-    let create (indexType : Type) (vertexBufferTypes : Map<Symbol, Type>) (uniformTypes : Map<Symbol, Type>) =
-        { indexType         = indexType
-          vertexBufferTypes = vertexBufferTypes
-          uniformTypes      = uniformTypes }
+    let create (indexType : Type) (vertexAttributeTypes : Map<Symbol, Type>) (instanceAttributeTypes : Map<Symbol, Type>) =
+        { IndexType              = indexType
+          VertexAttributeTypes   = vertexAttributeTypes
+          InstanceAttributeTypes = instanceAttributeTypes }
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module AdaptiveGeometry =
 
-    let ofIndexedGeometry (uniforms : list<Symbol * IAdaptiveValue>) (ig : IndexedGeometry) =
+    let ofIndexedGeometry (instanceAttributes : list<Symbol * IAdaptiveValue>) (ig : IndexedGeometry) =
         let anyAtt = (ig.IndexedAttributes |> Seq.head).Value
 
         let faceVertexCount, index =
@@ -57,11 +58,11 @@ module AdaptiveGeometry =
             anyAtt.Length
 
         {
-            faceVertexCount = faceVertexCount
-            vertexCount = vertexCount
-            indices = index
-            uniforms = Map.ofList uniforms
-            vertexAttributes = ig.IndexedAttributes |> SymDict.toMap |> Map.map (fun _ -> BufferView.ofArray)
+            FaceVertexCount = faceVertexCount
+            VertexCount = vertexCount
+            Indices = index
+            VertexAttributes = ig.IndexedAttributes |> SymDict.toMap |> Map.map (fun _ -> BufferView.ofArray)
+            InstanceAttributes = Map.ofList instanceAttributes
         }
 
 
@@ -438,21 +439,29 @@ type private LayoutManager<'a>() =
             | _ ->
                 ()
 
+type internal PoolResources =
+    {
+        Pool        : ManagedPool
+        IndexPtr    : managedptr
+        VertexPtr   : managedptr
+        InstancePtr : managedptr
+        Disposables : List<IDisposable>
+    }
 
-type ManagedDrawCall(call : DrawCallInfo, release : IDisposable) =
-    let mutable isDisposed = false
+and ManagedDrawCall internal(call : DrawCallInfo, poolResources : PoolResources) =
     member x.Call = call
-        
-    member x.Dispose() = if not isDisposed then 
-                            release.Dispose()
-                            isDisposed <- true
+    member internal x.Resources = poolResources
+
+    member x.Dispose() =
+        poolResources.Pool.Free(x)
+
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-type ManagedPool(runtime : IRuntime, signature : GeometrySignature,
+and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
                  indexBufferUsage : BufferUsage, vertexBufferUsage : BufferUsage, instanceBufferUsage : BufferUsage) =
     static let zero : byte[] = Array.zeroCreate 1280000
-    let mutable count = 0
+
     let indexManager = LayoutManager<Option<BufferView> * int>()
     let vertexManager = LayoutManager<Map<Symbol, BufferView>>()
     let instanceManager = LayoutManager<Map<Symbol, IAdaptiveValue>>()
@@ -460,20 +469,37 @@ type ManagedPool(runtime : IRuntime, signature : GeometrySignature,
     let toDict f = Map.toSeq >> Seq.map f >> SymDict.ofSeq
 
     let indexBuffer =
-        ManagedBuffer.create signature.indexType runtime (BufferUsage.ReadWrite ||| indexBufferUsage)
+        ManagedBuffer.create signature.IndexType runtime (BufferUsage.ReadWrite ||| indexBufferUsage)
 
     let vertexBuffers =
-        signature.vertexBufferTypes |> toDict (fun (k, t) ->
+        signature.VertexAttributeTypes |> toDict (fun (k, t) ->
             k, ManagedBuffer.create t runtime (BufferUsage.ReadWrite ||| vertexBufferUsage)
         )
 
     let instanceBuffers =
-        signature.uniformTypes |> toDict (fun (k, t) ->
+        signature.InstanceAttributeTypes |> toDict (fun (k, t) ->
             k, ManagedBuffer.create t runtime (BufferUsage.ReadWrite ||| instanceBufferUsage)
         )
 
-    let vertexBufferTypes = Map.toArray signature.vertexBufferTypes
-    let uniformTypes = Map.toArray signature.uniformTypes
+    let vertexBufferTypes = Map.toArray signature.VertexAttributeTypes
+    let uniformTypes = Map.toArray signature.InstanceAttributeTypes
+
+    let drawCalls = HashSet<ManagedDrawCall>()
+
+    let free (mdc : ManagedDrawCall) =
+        for d in mdc.Resources.Disposables do d.Dispose()
+        vertexManager.Free mdc.Resources.VertexPtr
+        instanceManager.Free mdc.Resources.InstancePtr
+        indexManager.Free mdc.Resources.IndexPtr
+
+    let clear() =
+        for mdc in drawCalls do
+            free mdc
+
+        indexBuffer.Clear()
+        for KeyValue(_, b) in vertexBuffers do b.Clear()
+        for KeyValue(_, b)in instanceBuffers do b.Clear()
+        drawCalls.Clear()
 
     new (runtime : IRuntime, signature : GeometrySignature) =
         new ManagedPool(runtime, signature, BufferUsage.Index, BufferUsage.Vertex, BufferUsage.Vertex)
@@ -484,59 +510,57 @@ type ManagedPool(runtime : IRuntime, signature : GeometrySignature,
     static member internal Zero = zero
 
     member x.Runtime = runtime
+    member x.Count = drawCalls.Count
 
-    member x.Count
-        with get() = count
+    member internal x.Free(mdc : ManagedDrawCall) =
+        lock x (fun _ ->
+            if drawCalls.Remove(mdc) then
+                free mdc
+
+                if drawCalls.Count = 0 then
+                    clear()
+        )
 
     member x.Add(g : AdaptiveGeometry) =
         lock x (fun () ->
             let ds = List()
-            let fvc = g.faceVertexCount
-            let vertexCount = g.vertexCount
+            let fvc = g.FaceVertexCount
+            let vertexCount = g.VertexCount
             
             
-            let vertexPtr = vertexManager.Alloc(g.vertexAttributes, vertexCount)
+            let vertexPtr = vertexManager.Alloc(g.VertexAttributes, vertexCount)
             let vertexRange = Range1l(int64 vertexPtr.Offset, int64 vertexPtr.Offset + int64 vertexCount - 1L)
             for (k,t) in vertexBufferTypes do
                 let target = vertexBuffers.[k]
-                match Map.tryFind k g.vertexAttributes with
+                match Map.tryFind k g.VertexAttributes with
                     | Some v -> target.Add(vertexRange, v) |> ds.Add
                     | None -> target.Set(vertexRange, zero)
             
-            let instancePtr = instanceManager.Alloc(g.uniforms, 1)
+            let instancePtr = instanceManager.Alloc(g.InstanceAttributes, 1)
             let instanceIndex = int instancePtr.Offset
             for (k,t) in uniformTypes do
                 let target = instanceBuffers.[k]
-                match Map.tryFind k g.uniforms with
+                match Map.tryFind k g.InstanceAttributes with
                     | Some v -> target.Add(instanceIndex, v) |> ds.Add
                     | None -> target.Set(Range1l(int64 instanceIndex, int64 instanceIndex), zero)
 
-            let isNew, indexPtr = indexManager.TryAlloc((g.indices, fvc), fvc)
+            let isNew, indexPtr = indexManager.TryAlloc((g.Indices, fvc), fvc)
             let indexRange = Range1l(int64 indexPtr.Offset, int64 indexPtr.Offset + int64 fvc - 1L)
-            match g.indices with
+            match g.Indices with
                 | Some v -> indexBuffer.Add(indexRange, v) |> ds.Add
                 | None ->
                     if isNew then
-                        let conv = PrimitiveValueConverter.getArrayConverter typeof<int> signature.indexType
+                        let conv = PrimitiveValueConverter.getArrayConverter typeof<int> signature.IndexType
                         let data = Array.init fvc id |> conv
                         indexBuffer.Set(indexRange, data.UnsafeCoerce<byte>())
 
-            count <- count + 1
-
-            let disposable =
-                { new IDisposable with
-                    member __.Dispose() = 
-                        lock x (fun () ->
-                            count <- count - 1
-                            if count = 0 then 
-                                for b in vertexBuffers.Values do b.Clear()
-                                for b in instanceBuffers.Values do b.Clear()
-                                indexBuffer.Clear() 
-                            for d in ds do d.Dispose()
-                            vertexManager.Free vertexPtr
-                            instanceManager.Free instancePtr
-                            indexManager.Free indexPtr
-                        )
+            let resources =
+                {
+                    Pool        = x
+                    IndexPtr    = indexPtr
+                    VertexPtr   = vertexPtr
+                    InstancePtr = instancePtr
+                    Disposables = ds
                 }
 
             let call =
@@ -548,8 +572,7 @@ type ManagedPool(runtime : IRuntime, signature : GeometrySignature,
                     BaseVertex = int vertexPtr.Offset
                 }
 
-            
-            new ManagedDrawCall(call, disposable)
+            new ManagedDrawCall(call, resources)
         )
 
     member x.VertexAttributes =
@@ -574,6 +597,12 @@ type ManagedPool(runtime : IRuntime, signature : GeometrySignature,
 
     member x.IndexBuffer =
         BufferView(indexBuffer, indexBuffer.ElementType)
+
+    member x.Dispose() =
+        lock x clear
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
     inherit AVal.AbstractVal<IndirectBuffer>()

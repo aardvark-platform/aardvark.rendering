@@ -40,7 +40,7 @@ let main argv =
 
     use app = new OpenGlApplication()
     let win = app.CreateSimpleRenderWindow(samples = 8)
-    //use app = new VulkanApplication()
+    //use app = new VulkanApplication(debug = true)
     //let win = app.CreateSimpleRenderWindow(8)
 
     let initialView = CameraView.LookAt(V3d(2.0,2.0,2.0), V3d.Zero, V3d.OOI)
@@ -53,16 +53,16 @@ let main argv =
     let rnd = Random(1123)
 
 
-    let pool =
+    use pool =
         app.Runtime.CreateManagedPool {
-            indexType = typeof<int>
-            vertexBufferTypes = 
+            IndexType = typeof<int>
+            VertexAttributeTypes = 
                 Map.ofList [ 
                     DefaultSemantic.Positions, typeof<V3f>
                     DefaultSemantic.Normals, typeof<V3f> 
                     DefaultSemantic.DiffuseColorCoordinates, typeof<V3f> 
                 ]
-            uniformTypes = 
+            InstanceAttributeTypes = 
                 Map.ofList [ 
                     Sem.InstanceTrafo, typeof<M44f> 
                     Sem.InstanceNormalTrafo, typeof<M33f> 
@@ -86,7 +86,7 @@ let main argv =
                
     let addToPool(ag : AdaptiveGeometry) = 
             
-        Report.BeginTimed("add to pool: vc={0}", ag.vertexCount)
+        Report.BeginTimed("add to pool: vc={0}", ag.VertexCount)
         let mdc = pool.Add ag
         Report.End() |> ignore
         mdc
@@ -111,7 +111,7 @@ let main argv =
             |> Sg.viewTrafo (cameraView  |> AVal.map CameraView.viewTrafo )
             |> Sg.projTrafo (frustum |> AVal.map Frustum.projTrafo    )
 
-    let renderTask = 
+    use renderTask = 
         app.Runtime.CompileRender(win.FramebufferSignature, sg)
 
     let sw = Stopwatch.StartNew()
