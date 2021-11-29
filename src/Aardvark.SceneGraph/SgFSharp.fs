@@ -800,13 +800,13 @@ module SgFSharp =
         /// Creates a single draw call for the given geometry mode.
         let draw (mode : IndexedGeometryMode) =
             Sg.RenderNode(
-                DrawCallInfo(
-                    FirstInstance = 0,
-                    InstanceCount = 1,
-                    FirstIndex = 0,
-                    FaceVertexCount = -1,
+                {
+                    FirstInstance = 0
+                    InstanceCount = 1
+                    FirstIndex = 0
+                    FaceVertexCount = -1
                     BaseVertex = 0
-                ),
+                },
                 mode
             ) :> ISg
 
@@ -836,13 +836,13 @@ module SgFSharp =
                     null, g.IndexedAttributes.[DefaultSemantic.Positions].Length
 
             let call =
-                DrawCallInfo(
-                    FaceVertexCount = faceVertexCount,
-                    FirstIndex = 0,
-                    InstanceCount = 1,
-                    FirstInstance = 0,
+                {
+                    FaceVertexCount = faceVertexCount
+                    FirstIndex = 0
+                    InstanceCount = 1
+                    FirstInstance = 0
                     BaseVertex = 0
-                )
+                }
 
             let sg = Sg.VertexAttributeApplicator(attributes, Sg.RenderNode(call,g.Mode)) :> ISg
             if not (isNull index) then
@@ -868,13 +868,13 @@ module SgFSharp =
                     null, g.IndexedAttributes.[DefaultSemantic.Positions].Length
 
             let call =
-                DrawCallInfo(
-                    FaceVertexCount = faceVertexCount,
-                    FirstIndex = 0,
-                    InstanceCount = instanceCount,
-                    FirstInstance = 0,
+                {
+                    FaceVertexCount = faceVertexCount
+                    FirstIndex = 0
+                    InstanceCount = instanceCount
+                    FirstInstance = 0
                     BaseVertex = 0
-                )
+                }
 
             let sg = Sg.VertexAttributeApplicator(attributes, Sg.RenderNode(call, g.Mode)) :> ISg
             if not (isNull index) then
@@ -900,13 +900,13 @@ module SgFSharp =
                     null, g.IndexedAttributes.[DefaultSemantic.Positions].Length
 
             let call = instanceCount |> AVal.map (fun ic ->
-                                                    DrawCallInfo(
-                                                        FaceVertexCount = faceVertexCount,
-                                                        FirstIndex = 0,
-                                                        InstanceCount = ic,
-                                                        FirstInstance = 0,
+                                                    {
+                                                        FaceVertexCount = faceVertexCount
+                                                        FirstIndex = 0
+                                                        InstanceCount = ic
+                                                        FirstInstance = 0
                                                         BaseVertex = 0
-                                                    ))
+                                                    })
 
             let sg = Sg.VertexAttributeApplicator(attributes, Sg.RenderNode(call, g.Mode)) :> ISg
             if not (isNull index) then
@@ -956,13 +956,13 @@ module SgFSharp =
                     null, count
 
             let call =
-                DrawCallInfo(
-                    FaceVertexCount = faceVertexCount,
-                    FirstIndex = 0,
-                    InstanceCount = 1,
-                    FirstInstance = 0,
+                {
+                    FaceVertexCount = faceVertexCount
+                    FirstIndex = 0
+                    InstanceCount = 1
+                    FirstInstance = 0
                     BaseVertex = 0
-                )
+                }
 
             let sg = Sg.VertexAttributeApplicator(views, Sg.RenderNode(call,g.Mode)) :> ISg
             if index <> null then
@@ -988,13 +988,13 @@ module SgFSharp =
                     null, g.IndexedAttributes.[DefaultSemantic.Positions].Length
 
             let call = trafos |> AVal.map (fun t ->
-                    DrawCallInfo(
-                        FaceVertexCount = faceVertexCount,
-                        FirstIndex = 0,
-                        InstanceCount = t.Length,
-                        FirstInstance = 0,
+                    {
+                        FaceVertexCount = faceVertexCount
+                        FirstIndex = 0
+                        InstanceCount = t.Length
+                        FirstInstance = 0
                         BaseVertex = 0
-                    )
+                    }
                 )
 
             let sg = Sg.VertexAttributeApplicator(vertexAttributes, Sg.RenderNode(call, g.Mode)) :> ISg

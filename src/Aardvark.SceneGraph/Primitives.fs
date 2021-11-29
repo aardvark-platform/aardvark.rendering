@@ -437,10 +437,10 @@ module SgPrimitives =
         // creates a quad on the z-Plane, ranging -1,-1,0 to 1,1,0
         let quad =
             let drawCall = 
-                DrawCallInfo(
-                    FaceVertexCount = 4,
+                { DrawCallInfo.empty with
+                    FaceVertexCount = 4
                     InstanceCount = 1
-                )
+                }
 
             let positions =     [| V3f(-1,-1,0); V3f(1,-1,0); V3f(-1,1,0); V3f(1,1,0) |]
             let texcoords =     [| V2f(0,0); V2f(1,0); V2f(0,1); V2f(1,1) |]
@@ -457,10 +457,10 @@ module SgPrimitives =
 
         let farPlaneQuad =
             let drawCall = 
-                DrawCallInfo(
-                    FaceVertexCount = 4,
+                { DrawCallInfo.empty with
+                    FaceVertexCount = 4
                     InstanceCount = 1
-                )
+                }
 
             let positions =     [| V3f(-1,-1,1); V3f(1,-1,1); V3f(-1,1,1); V3f(1,1,1) |]
             let texcoords =     [| V2f(0,0); V2f(1,0); V2f(0,1); V2f(1,1) |]
@@ -473,7 +473,7 @@ module SgPrimitives =
                 |> Sg.vertexAttribute DefaultSemantic.DiffuseColorCoordinates (AVal.constant texcoords)
 
         let coordinateCross (size : aval<float>) =  
-            let drawCall = DrawCallInfo(FaceVertexCount = 6, InstanceCount = 1)
+            let drawCall = { DrawCallInfo.empty with FaceVertexCount = 6; InstanceCount = 1 }
 
             drawCall
                 |> Sg.render IndexedGeometryMode.LineList
@@ -518,10 +518,10 @@ module SgPrimitives =
 
             let call = 
                 lines |> AVal.map (fun lines ->
-                    DrawCallInfo(
-                        FaceVertexCount = 2 * lines.Length,
+                    { DrawCallInfo.empty with
+                        FaceVertexCount = 2 * lines.Length
                         InstanceCount = 1
-                    )
+                    }
                 )
 
             let positions =
@@ -539,10 +539,10 @@ module SgPrimitives =
         let triangles (color : aval<C4b>) (triangles : aval<Triangle3d[]>) =
             let call = 
                 triangles |> AVal.map (fun triangles ->
-                    DrawCallInfo(
-                        FaceVertexCount = 3 * triangles.Length,
+                    { DrawCallInfo.empty with
+                        FaceVertexCount = 3 * triangles.Length
                         InstanceCount = 1
-                    )
+                    }
                 )
 
             let positions =

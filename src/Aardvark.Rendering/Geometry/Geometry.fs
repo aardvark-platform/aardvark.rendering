@@ -49,7 +49,9 @@ module Geometry =
                 |> Map.ofSeq
 
         let call =
-            DrawCallInfo(FaceVertexCount = fvc, InstanceCount = 1)
+            { DrawCallInfo.empty with
+                FaceVertexCount = fvc
+                InstanceCount = 1 }
 
         {
             vertexAttributes    = attributes

@@ -540,13 +540,13 @@ type ManagedPool(runtime : IRuntime, signature : GeometrySignature,
                 }
 
             let call =
-                DrawCallInfo(
-                    FaceVertexCount = fvc,
-                    FirstIndex = int indexPtr.Offset,
-                    FirstInstance = int instancePtr.Offset,
-                    InstanceCount = 1,
+                {
+                    FaceVertexCount = fvc
+                    FirstIndex = int indexPtr.Offset
+                    FirstInstance = int instancePtr.Offset
+                    InstanceCount = 1
                     BaseVertex = int vertexPtr.Offset
-                )
+                }
 
             
             new ManagedDrawCall(call, disposable)
@@ -607,9 +607,14 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
     //let stride = if indexed then 20 else 16 // NOTE: vulkan currently does not support custom stride
     let stride = 20
     let upload (call : DrawCallInfo) (index : int) =
-        let mutable c = call
-        if indexed then
-            Fun.Swap(&c.BaseVertex, &c.FirstInstance)
+        let c =
+            if indexed then
+                { call with
+                    BaseVertex    = call.FirstInstance
+                    FirstInstance = call.BaseVertex
+                }
+            else
+                call
         let gc = GCHandle.Alloc(c, GCHandleType.Pinned)
         try
             let ptr = gc.AddrOfPinnedObject()

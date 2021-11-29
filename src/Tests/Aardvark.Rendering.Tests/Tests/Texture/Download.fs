@@ -328,10 +328,10 @@ module TextureDownload =
 
             let task =
                 let drawCall =
-                    DrawCallInfo(
-                        FaceVertexCount = 4,
+                    { DrawCallInfo.empty with
+                        FaceVertexCount = 4
                         InstanceCount = 1
-                    )
+                    }
 
                 let positions = [| V3f(-0.5,-0.5,0.0); V3f(0.5,-0.5,0.0); V3f(-0.5,0.5,0.0); V3f(0.5,0.5,0.0) |]
 

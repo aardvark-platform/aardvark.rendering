@@ -604,13 +604,11 @@ module PointCloudRenderObjectSemantics =
                     else set
 
                 let call (r : Range1i) =
-                    DrawCallInfo(
-                        FaceVertexCount = (r.Max - r.Min + 1),
-                        InstanceCount = 1,
-                        FirstIndex = r.Min,
-                        FirstInstance = 0,
-                        BaseVertex = 0
-                    )
+                    { DrawCallInfo.empty with
+                        FaceVertexCount = (r.Max - r.Min + 1)
+                        InstanceCount = 1
+                        FirstIndex = r.Min
+                    }
 
                 loadedGeometries 
                     |> ASet.foldGroup add sub RangeSet.empty

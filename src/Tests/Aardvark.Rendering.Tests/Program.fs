@@ -25,10 +25,10 @@ let testCompile() =
         )
 
     let callInfo = 
-        DrawCallInfo(
-            FaceVertexCount = 6,
+        { DrawCallInfo.empty with
+            FaceVertexCount = 6
             InstanceCount = 1
-        )
+        }
 
     let surface =
         runtime.PrepareEffect(

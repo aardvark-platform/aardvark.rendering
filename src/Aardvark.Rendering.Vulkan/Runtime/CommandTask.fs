@@ -1999,12 +1999,12 @@ module private RuntimeCommands =
 
                         let rem = 
                             indirectBuffer.Add <|
-                                DrawCallInfo(
-                                    FaceVertexCount = vSlot.VertexCount,
-                                    InstanceCount = uSlot.InstanceCount,
-                                    FirstIndex = vSlot.FirstVertex,
+                                { DrawCallInfo.empty with
+                                    FaceVertexCount = vSlot.VertexCount
+                                    InstanceCount = uSlot.InstanceCount
+                                    FirstIndex = vSlot.FirstVertex
                                     FirstInstance = uSlot.FirstInstance
-                                )
+                                }
 
                         activations.[(vSlot, uSlot)] <- rem
 

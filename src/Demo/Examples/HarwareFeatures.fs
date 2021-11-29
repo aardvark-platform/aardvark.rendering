@@ -53,7 +53,11 @@ module HarwareFeatures =
                             yield M44f.Translation(float32 x,float32 y,float32 z) * M44f.Scale(0.3f)
             |]
 
-        let call = DrawCallInfo(FaceVertexCount = cube.IndexedAttributes.[DefaultSemantic.Positions].Length, InstanceCount = trafos.Length)
+        let call =
+            { DrawCallInfo.empty with
+                FaceVertexCount = cube.IndexedAttributes.[DefaultSemantic.Positions].Length
+                InstanceCount = trafos.Length
+            }
 
         let sg =    
             Sg.render IndexedGeometryMode.TriangleList call
@@ -94,7 +98,10 @@ module HarwareFeatures =
                     for y in -size .. size do
                         for z in -size .. size do
                             //if i % 2 = 0 then
-                            yield  DrawCallInfo(FaceVertexCount = cube.IndexedAttributes.[DefaultSemantic.Positions].Length, InstanceCount = 1, FirstInstance = i)
+                            yield { DrawCallInfo.empty with
+                                        FaceVertexCount = cube.IndexedAttributes.[DefaultSemantic.Positions].Length
+                                        InstanceCount = 1
+                                        FirstInstance = i }
                             inc &i
             |]
 

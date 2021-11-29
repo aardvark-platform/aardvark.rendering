@@ -226,7 +226,7 @@ let main argv =
     let pos  = sphere.IndexedAttributes.[DefaultSemantic.Positions]
     let norm = sphere.IndexedAttributes.[DefaultSemantic.Normals]
     
-    let call = DrawCallInfo(FaceVertexCount = pos.Length, InstanceCount = particeCount)
+    let call = { DrawCallInfo.empty with FaceVertexCount = pos.Length; InstanceCount = particeCount }
     
     let instanceBuffer (name : Symbol) (view : BufferView) (s : ISg) =
         Sg.InstanceAttributeApplicator(name, view, s) :> ISg

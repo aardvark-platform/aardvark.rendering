@@ -181,10 +181,10 @@ module Assimp =
                             let sg = 
                                 Sg.VertexAttributeApplicator(attributes,
                                     Sg.RenderNode(
-                                        DrawCallInfo(
-                                            FaceVertexCount = faceVertexCount,
+                                        { DrawCallInfo.empty with
+                                            FaceVertexCount = faceVertexCount
                                             InstanceCount = 1
-                                        ),
+                                        },
                                         IndexedGeometryMode.TriangleList
                                     )
                                 ) :> ISg

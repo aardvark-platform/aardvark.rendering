@@ -476,7 +476,7 @@ type BrowserNodeSem() =
         o.Indices <-
             BufferView(AVal.constant (ArrayBuffer [|0;1;2; 0;2;3|] :> IBuffer), typeof<int>) |> Some
 
-        o.DrawCalls <- DrawCalls.Direct (AVal.constant [DrawCallInfo(6)])
+        o.DrawCalls <- DrawCalls.Direct (AVal.constant [{ DrawCallInfo.empty with FaceVertexCount = 6; InstanceCount = 1 }])
 
         o.Activate <- activate
         ASet.single (o :> IRenderObject)

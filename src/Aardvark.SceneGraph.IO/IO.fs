@@ -280,10 +280,10 @@ module Loader =
                                 mesh.geometry.IndexArray.Length, true
 
                         let call =
-                            DrawCallInfo(
-                                FaceVertexCount = faceVertexCount,
+                            { DrawCallInfo.empty with
+                                FaceVertexCount = faceVertexCount
                                 InstanceCount = 1
-                            )
+                            }
 
                         let ro = RenderObject.ofScope scope
                         ro.VertexAttributes <- mesh

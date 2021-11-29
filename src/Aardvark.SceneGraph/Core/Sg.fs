@@ -34,25 +34,25 @@ module Sg =
         new(call : DrawCallInfo, mode : IndexedGeometryMode) = RenderNode(AVal.constant call, mode)
         new(count : int, mode : IndexedGeometryMode) =
             let call =
-                DrawCallInfo(
-                    FaceVertexCount = count,
-                    InstanceCount = 1,
-                    FirstIndex = 0,
-                    FirstInstance = 0,
+                {
+                    FaceVertexCount = count
+                    InstanceCount = 1
+                    FirstIndex = 0
+                    FirstInstance = 0
                     BaseVertex = 0
-                )
+                }
             RenderNode(AVal.constant call, mode)
 
         new(count : aval<int>, mode : IndexedGeometryMode) =
             let call =
                 count |> AVal.map (fun x ->
-                    DrawCallInfo(
-                        FaceVertexCount = x,
-                        InstanceCount = 1,
-                        FirstIndex = 0,
-                        FirstInstance = 0,
+                    {
+                        FaceVertexCount = x
+                        InstanceCount = 1
+                        FirstIndex = 0
+                        FirstInstance = 0
                         BaseVertex = 0
-                    )
+                    }
                 )
             RenderNode(call, mode)
 

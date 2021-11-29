@@ -33,8 +33,9 @@ module IndirectBuffer =
         let mutable src = src
         let mutable dst = dst
         for i in 1 .. cnt do
-            let mutable c = NativePtr.read src
-            Fun.Swap(&c.BaseVertex, &c.FirstInstance)
+            let c =
+                let call = NativePtr.read src
+                { call with BaseVertex = call.FirstInstance; FirstInstance = call.BaseVertex }
             NativePtr.write dst c
             src <- NativePtr.add src 1
             dst <- NativePtr.add dst 1
