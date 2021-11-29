@@ -167,7 +167,7 @@ module BufferCommands =
                         VkBufferMemoryBarrier(
                             src,
                             dst,
-                            VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+                            VkQueueFamilyIgnored, VkQueueFamilyIgnored,
                             b.Handle,
                             0UL,
                             uint64 b.Size
@@ -200,7 +200,7 @@ module BufferCommands =
                         VkBufferMemoryBarrier(
                             VkAccessFlags.TransferWriteBit ||| VkAccessFlags.HostWriteBit ||| VkAccessFlags.MemoryWriteBit ||| VkAccessFlags.ShaderWriteBit,
                             VkAccessFlags.TransferReadBit ||| VkAccessFlags.ShaderReadBit ||| VkAccessFlags.IndexReadBit ||| VkAccessFlags.VertexAttributeReadBit ||| VkAccessFlags.UniformReadBit,
-                            VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+                            VkQueueFamilyIgnored, VkQueueFamilyIgnored,
                             b.Handle,
                             0UL,
                             uint64 b.Size

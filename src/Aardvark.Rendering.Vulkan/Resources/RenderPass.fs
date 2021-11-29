@@ -93,7 +93,7 @@ module RenderPass =
             let! pDepthReference =
                 match depthAtt with
                 | Some (i, _) -> VkAttachmentReference(uint32 i, VkImageLayout.DepthStencilAttachmentOptimal)
-                | _ -> VkAttachmentReference(~~~0u, VkImageLayout.DepthStencilAttachmentOptimal)
+                | _ -> VkAttachmentReference(VkAttachmentUnused, VkImageLayout.DepthStencilAttachmentOptimal)
 
             let! pColorReferences = colorReferences
             let! pSubpassDescription =

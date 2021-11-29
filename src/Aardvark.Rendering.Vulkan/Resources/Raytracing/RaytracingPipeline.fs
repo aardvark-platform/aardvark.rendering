@@ -33,12 +33,10 @@ module RaytracingPipeline =
 
     let private pMain = CStr.malloc "main"
 
-    let private VkShaderUnused = ~~~0u
-
     let private getStageIndex (stage : Option<RaytracingStageInfo>) =
         match stage with
         | Some s -> s.Index
-        | _ -> VkShaderUnused
+        | _ -> VkShaderUnusedKhr
 
     let private getHitGroupType (group : HitGroup<'T>) =
         match group.Intersection with
@@ -70,12 +68,12 @@ module RaytracingPipeline =
                     | ShaderGroup.General s ->
                         VkRayTracingShaderGroupCreateInfoKHR(
                             VkRayTracingShaderGroupTypeKHR.General,
-                            s.Value.Index, VkShaderUnused, VkShaderUnused, VkShaderUnused, 0n
+                            s.Value.Index, VkShaderUnusedKhr, VkShaderUnusedKhr, VkShaderUnusedKhr, 0n
                         )
 
                     | ShaderGroup.HitGroup g ->
                         VkRayTracingShaderGroupCreateInfoKHR(
-                            getHitGroupType g, VkShaderUnused,
+                            getHitGroupType g, VkShaderUnusedKhr,
                             g.ClosestHit |> getStageIndex,
                             g.AnyHit |> getStageIndex,
                             g.Intersection |> getStageIndex, 0n

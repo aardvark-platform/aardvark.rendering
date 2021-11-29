@@ -2077,7 +2077,7 @@ module ``Image Command Extensions`` =
                         VkImageMemoryBarrier(
                             src, dst, 
                             layout, layout,
-                            VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+                            VkQueueFamilyIgnored, VkQueueFamilyIgnored,
                             img.Image.Handle,
                             img.VkImageSubresourceRange
                         )
@@ -2131,8 +2131,8 @@ module ``Image Command Extensions`` =
                                 dst,
                                 source,
                                 target,
-                                VK_QUEUE_FAMILY_IGNORED,
-                                VK_QUEUE_FAMILY_IGNORED,
+                                VkQueueFamilyIgnored,
+                                VkQueueFamilyIgnored,
                                 img.Image.Handle,
                                 img.VkImageSubresourceRange
                             )

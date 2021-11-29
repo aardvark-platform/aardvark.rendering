@@ -419,8 +419,8 @@ module ``Compute Commands`` =
                             VkImageMemoryBarrier(
                                 src, dst,
                                 VkImageLayout.General, VkImageLayout.General,
-                                VK_QUEUE_FAMILY_IGNORED,
-                                VK_QUEUE_FAMILY_IGNORED,
+                                VkQueueFamilyIgnored,
+                                VkQueueFamilyIgnored,
                                 img.Image.Handle,
                                 img.VkImageSubresourceRange
                             )
@@ -521,8 +521,8 @@ module ``Compute Commands`` =
                             dst,
                             source,
                             target,
-                            VK_QUEUE_FAMILY_IGNORED,
-                            VK_QUEUE_FAMILY_IGNORED,
+                            VkQueueFamilyIgnored,
+                            VkQueueFamilyIgnored,
                             img.Handle,
                             range.VkImageSubresourceRange
                         )
@@ -547,8 +547,8 @@ module ``Compute Commands`` =
                             dst,
                             source,
                             target,
-                            VK_QUEUE_FAMILY_IGNORED,
-                            VK_QUEUE_FAMILY_IGNORED,
+                            VkQueueFamilyIgnored,
+                            VkQueueFamilyIgnored,
                             range.Image.Handle,
                             range.VkImageSubresourceRange
                         )
@@ -566,7 +566,7 @@ module ``Compute Commands`` =
                         VkBufferMemoryBarrier(
                             src,
                             dst,
-                            VK_QUEUE_FAMILY_IGNORED, VK_QUEUE_FAMILY_IGNORED,
+                            VkQueueFamilyIgnored, VkQueueFamilyIgnored,
                             b.Handle,
                             0UL,
                             uint64 b.Size
@@ -600,8 +600,8 @@ module ``Compute Commands`` =
                             VkImageMemoryBarrier(
                                 src, dst,
                                 VkImageLayout.General, VkImageLayout.General,
-                                VK_QUEUE_FAMILY_IGNORED,
-                                VK_QUEUE_FAMILY_IGNORED,
+                                VkQueueFamilyIgnored,
+                                VkQueueFamilyIgnored,
                                 img.Image.Handle,
                                 img.VkImageSubresourceRange
                             )

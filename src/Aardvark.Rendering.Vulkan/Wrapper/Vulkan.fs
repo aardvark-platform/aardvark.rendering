@@ -14,6 +14,76 @@ open Aardvark.Rendering.Vulkan
 #nowarn "9"
 #nowarn "51"
 
+[<AutoOpen>]
+module Constants = 
+
+    [<Literal>]
+    let VkAttachmentUnused = 4294967295u
+
+    [<Literal>]
+    let VkFalse = 0
+
+    [<Literal>]
+    let VkLodClampNone = 1000.00000000f
+
+    [<Literal>]
+    let VkLuidSize = 8
+
+    [<Literal>]
+    let VkMaxDescriptionSize = 256
+
+    [<Literal>]
+    let VkMaxDeviceGroupSize = 32
+
+    [<Literal>]
+    let VkMaxDriverInfoSize = 256
+
+    [<Literal>]
+    let VkMaxDriverNameSize = 256
+
+    [<Literal>]
+    let VkMaxExtensionNameSize = 256
+
+    [<Literal>]
+    let VkMaxMemoryHeaps = 16
+
+    [<Literal>]
+    let VkMaxMemoryTypes = 32
+
+    [<Literal>]
+    let VkMaxPhysicalDeviceNameSize = 256
+
+    [<Literal>]
+    let VkQueueFamilyExternal = 4294967294u
+
+    [<Literal>]
+    let VkQueueFamilyForeignExt = 4294967293u
+
+    [<Literal>]
+    let VkQueueFamilyIgnored = 4294967295u
+
+    [<Literal>]
+    let VkRemainingArrayLayers = 4294967295u
+
+    [<Literal>]
+    let VkRemainingMipLevels = 4294967295u
+
+    [<Literal>]
+    let VkShaderUnusedKhr = 4294967295u
+
+    [<Literal>]
+    let VkSubpassExternal = 4294967295u
+
+    [<Literal>]
+    let VkTrue = 1
+
+    [<Literal>]
+    let VkUuidSize = 16
+
+    [<Literal>]
+    let VkWholeSize = 18446744073709551615UL
+
+
 [<Flags>]
 type VkQueryPoolCreateFlags = | None = 0
 

@@ -161,8 +161,6 @@ module private Utilities =
             failwith ("[Vulkan] " + str)
         ) fmt
 
-    let VK_QUEUE_FAMILY_IGNORED = ~~~0u
-
     module Map =
         let ofSeqDupl (s : seq<'a * 'b>) =
             let mutable res = Map.empty

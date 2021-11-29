@@ -22,28 +22,89 @@ module XmlStuff =
             | null -> None
             | e -> Some e.Value
 
-    let private numericValue = Regex @"^(?<value>.*?)(f|U|ULL)?$"
+    let private numericValue = Regex @"^(?<value>-?[0-9a-fA-F]*(\.[0-9]*)?)(f|U|ULL)?$"
 
-    let rec toInt32 (v : string) (b : int) =
+    type Numeric =
+        | Int32 of int32
+        | Int64 of int64
+        | UInt32 of uint32
+        | UInt64 of uint64
+        | Float32 of float32
+
+        member x.Negated =
+            match x with
+            | Int32 v -> Int32 ~~~v
+            | Int64 v -> Int64 ~~~v
+            | UInt32 v -> UInt32 ~~~v
+            | UInt64 v -> UInt64 ~~~v
+            | Float32 _ -> failwithf "Cannot negate float value"
+
+        override x.ToString() =
+            match x with
+            | Int32 v -> string v
+            | Int64 v -> string v + "L"
+            | UInt32 v -> string v + "u"
+            | UInt64 v -> string v + "UL"
+            | Float32 v -> sprintf "%.8ff" v
+
+        static member (-) (l : Numeric, r : Numeric) =
+            match l, r with
+            | Int32 l, Int32 r -> Int32 (l - r)
+            | Int64 l, Int32 r -> Int64 (l - int64 r)
+            | UInt32 l, Int32 r -> UInt32 (l - uint32 r)
+            | UInt64 l, Int32 r -> UInt64 (l - uint64 r)
+            | Float32 l, Int32 r -> Float32 (l - float32 r)
+
+            | Int64 l, Int64 r -> Int64 (l - r)
+            | UInt32 l, UInt32 r -> UInt32 (l - r)
+            | UInt64 l, UInt64 r -> UInt64 (l - r)
+            | Float32 l, Float32 r -> Float32 (l - r)
+
+            | _ -> failwithf "Cannot subtract %A and %A" l r
+
+    let rec toNumeric (radix : int) (v : string) : Numeric =
+        let v = v.Trim()
+
         if v.StartsWith "(" && v.EndsWith ")" then
-            toInt32 (v.Substring(1, v.Length-2)) b
+            v.Substring(1, v.Length-2) |> toNumeric radix
         elif v.StartsWith "~" then
-            ~~~(toInt32 (v.Substring(1)) b)
+            (toNumeric radix (v.Substring(1))).Negated
         elif v.StartsWith "0x" then
-            toInt32 (v.Substring(2)) 16
+            v.Substring(2) |> toNumeric 16
 
         else
             let m = numericValue.Match v
 
             if m.Success then
-                let v = m.Groups.["value"].Value
-                if v.Contains "." then
+                let value = m.Groups.["value"].Value
 
-                    System.Convert.ToSingle(v, System.Globalization.CultureInfo.InvariantCulture.NumberFormat) |> int
+                if v.EndsWith "f" then
+                    System.Convert.ToSingle(value, System.Globalization.CultureInfo.InvariantCulture.NumberFormat) |> Float32
+                elif v.EndsWith "U" then
+                    System.Convert.ToUInt32(value, radix) |> UInt32
+                elif v.EndsWith "ULL" then
+                    System.Convert.ToUInt64(value, radix) |> UInt64
                 else
-                    System.Convert.ToInt32(v, b)
+                    System.Convert.ToInt32(value, radix) |> Int32
             else
                 failwithf "not a number: %A" v
+
+    let rec toDefine (v : string) : string =
+        if v.StartsWith "(" && v.EndsWith ")" then
+            v.Substring(1, v.Length-2) |> toDefine
+        elif v.Contains("-") then
+            let values = v.Split('-') |> Array.map (toNumeric 10)
+            values |> Array.reduce (-) |> string
+        else
+            v |> toNumeric 10 |> string
+
+    let toInt32 (radix : int) (v : string) =
+        match v |> toNumeric radix with
+        | Int32 v -> v
+        | Int64 v -> int32 v
+        | UInt32 v -> int32 v
+        | UInt64 v -> int32 v
+        | Float32 v -> int32 v
 
     let extensionEnumValue (dir : Option<string>) (e : int) (offset : int) =
         match dir with
@@ -57,7 +118,7 @@ module XmlStuff =
         let rec f e =
             match attrib e "value", attrib e "bitpos", attrib e "alias" with
             | Some v, _, _ ->
-                Enum (toInt32 v 10)
+                Enum (v |> toInt32 10)
 
             | _, Some bp, _ ->
                 BitMask (System.Int32.Parse bp)
@@ -104,8 +165,8 @@ module XmlStuff =
 
                 match extnumber, attrib e "offset" with
                 | Some en, Some on ->
-                    let en = toInt32 en 10
-                    let on = toInt32 on 10
+                    let en = en |> toInt32 10
+                    let on = on |> toInt32 10
                     Ext (extensionEnumValue (attrib e "dir") en on)
 
                 | _ ->
@@ -643,7 +704,7 @@ module XmlReader =
                   let choices = e.Elements(xname "enum")
                   choices |> Seq.choose (fun c ->
                     match attrib c "name", attrib c "value" with
-                        | Some name, Some value -> Some(name, value)
+                        | Some name, Some value -> Some(name, toDefine value)
                         | _ -> None
                   )
               )
@@ -1103,11 +1164,14 @@ module FSharpWriter =
 ////        VK_STRUCTURE_TYPE_MIR_SURFACE_CREATE_INFO_KHR = 1000007000,
 ////        VK_STRUCTURE_TYPE_ANDROID_SURFACE_CREATE_INFO_KHR = 1000008000,
 ////        VK_STRUCTURE_TYPE_WIN32_SURFACE_CREATE_INFO_KHR = 1000009000,
-    let defines (map : Map<string, string>) =
-        printfn "module Defines = "
+    let apiConstants (map : Map<string, string>) =
+        printfn ""
+        printfn "[<AutoOpen>]"
+        printfn "module Constants = "
         for (n,v) in Map.toSeq map do
+            printfn ""
             printfn "    [<Literal>]"
-            let v = v.Replace("~", "~~~").Replace("U", "u").Replace("uLL", "UL").Replace("uL", "UL")
+            let n = n |> capsToCamelCase [] ""
             printfn "    let %s = %s" n v
         printfn ""
 
@@ -2050,6 +2114,7 @@ let run () =
     let exts = XmlReader.extensions definitions vk
 
     FSharpWriter.header()
+    FSharpWriter.apiConstants defines
     FSharpWriter.emptyBitfields emptyBitfields
     FSharpWriter.primitiveArrays()
     FSharpWriter.features vendorTags structureTypes features
