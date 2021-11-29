@@ -322,8 +322,13 @@ module ShaderProgram =
 
         let logs = System.Collections.Generic.Dictionary<ShaderStage, string>()
 
+        let shaders =
+            match iface.shaders with 
+            | GLSLProgramShaders.Graphics { stages = s } -> s
+            | _ -> MapExt.empty
+
         let binaries =
-            iface.shaders
+            shaders
                 |> MapExt.toArray
                 |> Array.map (fun (fshadeStage, shader) ->
                     let entry = shader.shaderEntry
@@ -345,7 +350,7 @@ module ShaderProgram =
                         | Some binary, log ->
                             let binary = GLSLang.GLSLang.optimizeDefault binary
                             logs.[stage] <- log
-                            stage, binary, iface.shaders.[fshadeStage]
+                            stage, binary, shaders.[fshadeStage]
                         | None, err ->
                             Log.error "[Vulkan] %A shader compilation failed: %A" stage err
                             failf "%A shader compilation failed: %A" stage err
@@ -610,11 +615,17 @@ module ShaderProgram =
         try
             let data : ShaderProgramData = pickler.UnPickle data
 
+            let shaders =
+                match data.iface.shaders with
+                | GLSLProgramShaders.Graphics { stages = s } -> s
+                | _ -> MapExt.empty
+
+
             let shaders = 
                 data.code 
                 |> Map.toArray 
                 |> Array.map (fun (stage, arr) -> 
-                    let iface = data.iface.shaders.[ShaderStage.toFShade stage]
+                    let iface = shaders.[ShaderStage.toFShade stage]
                     let module_ = device.CreateShaderModule(stage, arr, iface)
                     new Shader(module_, stage, iface)
                     

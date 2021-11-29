@@ -198,7 +198,7 @@ module private RuntimeCommands =
 
                 // replace all reads
                 let shader = 
-                    shader |> Shader.substituteReads (fun kind typ name index ->
+                    shader |> Shader.substituteReads (fun kind typ name index _ ->
                         match kind, index, Map.tryFind name set with
                             | ParameterKind.Uniform, None, Some desiredType ->
                                 assert(desiredType = typ)

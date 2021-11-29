@@ -77,7 +77,7 @@ module Instancing =
         let inlineTrafo (uniforms : Set<string>) (e : Effect) =
             getOrCreate uniforms e (fun uniforms e ->
                 let hasTrafo = Set.contains "ModelTrafo" uniforms
-                e |> Effect.substituteUniforms (fun name typ index ->
+                e |> Effect.substituteUniforms (fun name typ index _ ->
                     match index with
                         | None ->
                             match name with

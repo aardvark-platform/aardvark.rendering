@@ -1,3 +1,6 @@
+### 5.1.19
+- updated Base & FShade
+
 ### 5.1.18
 
 - disabled multisampling for text outline - fix for https://github.com/aardvark-platform/aardvark.rendering/issues/86

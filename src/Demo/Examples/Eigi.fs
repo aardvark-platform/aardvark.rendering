@@ -300,7 +300,7 @@ module Eigi =
             let mutable res = M44d.Zero
             let mutable wSum = 0.0
 
-            let iid = FShade.Imperative.ExpressionExtensions.ShaderIO.ReadInput<int>(Imperative.ParameterKind.Input, FShade.Intrinsics.InstanceId)
+            let iid = FShade.Imperative.ExpressionExtensions.ShaderIO.ReadInput<int>(Imperative.ParameterKind.Input, FShade.Intrinsics.InstanceId, None)
 
             let frame = (uniform.Time + uniform.TimeOffset) * uniform.Framerate
             let range = uniform.FrameRange

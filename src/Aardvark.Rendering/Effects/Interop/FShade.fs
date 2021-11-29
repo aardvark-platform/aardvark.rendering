@@ -254,7 +254,7 @@ module FShadeInterop =
                     let newInvocations = gs.shaderInvocations / deviceCount
 
                     let gs = 
-                        gs |> Shader.substituteReads (fun kind typ name index ->
+                        gs |> Shader.substituteReads (fun kind typ name index _ ->
                             match kind, index with
                                 | ParameterKind.Input, None when name = Intrinsics.InvocationId ->
                                     if newInvocations = 1 then
