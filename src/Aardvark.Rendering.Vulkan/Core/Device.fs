@@ -297,8 +297,9 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
 
 
     let memories = 
-        physical.MemoryTypes |> Array.map (fun t ->
-            new DeviceHeap(this, physical, t, t.heap)
+        physical.MemoryTypes |> Array.mapi (fun i t ->
+            let isHostMemory = (i = physical.HostMemory.index)
+            new DeviceHeap(this, physical, t, t.heap, isHostMemory)
         )
 
     let hostMemory = memories.[physical.HostMemory.index]
@@ -1812,9 +1813,9 @@ and Event internal(device : Device) =
         member x.Dispose() = x.Dispose()
 
 
-and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : MemoryInfo, heap : MemoryHeapInfo) as this =
+and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : MemoryInfo, heap : MemoryHeapInfo, isHostMemory : bool) as this =
     let hostVisible = memory.flags |> MemoryFlags.hostVisible
-    let manager = DeviceMemoryManager(this, heap.Capacity.Bytes, 128L <<< 20)
+    let manager = DeviceMemoryManager(this, 128L <<< 20, isHostMemory)
     let mask = 1u <<< memory.index
 
     let maxAllocationSize = physical.MaxAllocationSize
@@ -1957,18 +1958,10 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                 VkRaw.vkFreeMemory(device.Handle, ptr.Handle, NativePtr.zero)
                 nullptr <- None
             | None -> ()
-        
-    member x.Clear() =
-
-        match nullptr with
-            | Some ptr -> 
-                VkRaw.vkFreeMemory(device.Handle, ptr.Handle, NativePtr.zero)
-                nullptr <- None
-            | None -> ()
 
         manager.Clear()
 
-    member x.Copy() = new DeviceHeap(device, physical, memory, heap)
+    member x.Copy() = new DeviceHeap(device, physical, memory, heap, isHostMemory)
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -2052,7 +2045,7 @@ and DeviceFreeList() =
     member x.Clear() =
         store.Clear()
 
-and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSize : int64) =
+and DeviceMemoryManager internal(heap : DeviceHeap, blockSize : int64, keepReserveBlock : bool) =
     static let next (align : int64) (v : int64) =
         if v % align = 0L then v
         else v + (align - v % align)    
@@ -2164,7 +2157,7 @@ and DeviceMemoryManager internal(heap : DeviceHeap, virtualSize : int64, blockSi
 
 
 
-                if isFirst && isLast then
+                if isFirst && isLast && not keepReserveBlock then
                     assert (b.Offset = 0L && b.Size = b.Memory.Size)
                     blocks.Remove b.Memory |> ignore
                     Interlocked.Add(&allocatedMemory, -b.Memory.Size) |> ignore

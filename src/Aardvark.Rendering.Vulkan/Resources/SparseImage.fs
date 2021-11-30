@@ -777,7 +777,7 @@ module SparseTextureImplemetation =
                 transact (fun () -> texture.MarkOutdated())
                 device.Delete back
                 device.Delete front
-                memory.Clear()
+                memory.Dispose()
 
         member x.Size = size
         member x.MipMapLevels = levels
