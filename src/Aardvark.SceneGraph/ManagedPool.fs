@@ -448,12 +448,21 @@ type internal PoolResources =
         Disposables : List<IDisposable>
     }
 
-and ManagedDrawCall internal(call : DrawCallInfo, poolResources : PoolResources) =
+and ManagedDrawCall internal(call : DrawCallInfo, poolResources : voption<PoolResources>) =
+
     member x.Call = call
     member internal x.Resources = poolResources
 
+    new (call : DrawCallInfo) =
+        new ManagedDrawCall(call, ValueNone)
+
+    internal new (call : DrawCallInfo, poolResources : PoolResources) =
+        new ManagedDrawCall(call, ValueSome poolResources)
+
     member x.Dispose() =
-        poolResources.Pool.Free(x)
+        poolResources |> ValueOption.iter (fun r ->
+            r.Pool.Free(x)
+        )
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -487,10 +496,10 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
     let drawCalls = HashSet<ManagedDrawCall>()
 
     let free (mdc : ManagedDrawCall) =
-        for d in mdc.Resources.Disposables do d.Dispose()
-        vertexManager.Free mdc.Resources.VertexPtr
-        instanceManager.Free mdc.Resources.InstancePtr
-        indexManager.Free mdc.Resources.IndexPtr
+        for d in mdc.Resources.Value.Disposables do d.Dispose()
+        vertexManager.Free mdc.Resources.Value.VertexPtr
+        instanceManager.Free mdc.Resources.Value.InstancePtr
+        indexManager.Free mdc.Resources.Value.IndexPtr
 
     let clear() =
         for mdc in drawCalls do
@@ -822,6 +831,12 @@ type IRuntimePoolExtensions private() =
     [<Extension>]
     static member CreateDrawCallBuffer(this : IRuntime, indexed : bool) =
         new DrawCallBuffer(this, indexed)
+
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module ManagedDrawCall =
+
+    let empty = new ManagedDrawCall(DrawCallInfo.empty)
 
 [<AutoOpen>]
 module ManagedPoolSg =
