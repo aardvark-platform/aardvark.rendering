@@ -1,3 +1,6 @@
+### 5.1.20
+- deterministic Id for instanced-effects
+
 ### 5.1.19
 - updated Base & FShade
 

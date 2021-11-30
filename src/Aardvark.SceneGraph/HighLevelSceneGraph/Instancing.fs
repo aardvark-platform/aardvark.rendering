@@ -77,42 +77,49 @@ module Instancing =
         let inlineTrafo (uniforms : Set<string>) (e : Effect) =
             getOrCreate uniforms e (fun uniforms e ->
                 let hasTrafo = Set.contains "ModelTrafo" uniforms
-                e |> Effect.substituteUniforms (fun name typ index _ ->
-                    match index with
-                        | None ->
-                            match name with
-                                | "ModelTrafo"
-                                | "ModelViewTrafo"
-                                | "ModelViewProjTrafo" when hasTrafo ->
-                                    let o : Expr<M44d> = Expr.ReadInput(ParameterKind.Uniform, typ, name) |> Expr.Cast
-                                    let n : Expr<M44d> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafo) |> Expr.Cast
 
-                                    Some <@@  %o * %n @@>
+                let newEffect() = 
+                    e |> Effect.substituteUniforms (fun name typ index _ ->
+                        match index with
+                            | None ->
+                                match name with
+                                    | "ModelTrafo"
+                                    | "ModelViewTrafo"
+                                    | "ModelViewProjTrafo" when hasTrafo ->
+                                        let o : Expr<M44d> = Expr.ReadInput(ParameterKind.Uniform, typ, name) |> Expr.Cast
+                                        let n : Expr<M44d> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafo) |> Expr.Cast
+
+                                        Some <@@  %o * %n @@>
                                                 
-                                | "ModelTrafoInv"
-                                | "ModelViewTrafoInv"
-                                | "ModelViewProjTrafoInv" when hasTrafo ->
-                                    let o : Expr<M44d> = Expr.ReadInput(ParameterKind.Uniform, typ, name) |> Expr.Cast
-                                    let n : Expr<M44d> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafoInv) |> Expr.Cast
+                                    | "ModelTrafoInv"
+                                    | "ModelViewTrafoInv"
+                                    | "ModelViewProjTrafoInv" when hasTrafo ->
+                                        let o : Expr<M44d> = Expr.ReadInput(ParameterKind.Uniform, typ, name) |> Expr.Cast
+                                        let n : Expr<M44d> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafoInv) |> Expr.Cast
 
-                                    Some <@@  %n * %o @@>
+                                        Some <@@  %n * %o @@>
 
-                                | "NormalMatrix" when hasTrafo ->
-                                    let o : Expr<M33d> = Expr.ReadInput(ParameterKind.Uniform, typ, name) |> Expr.Cast
-                                    let n : Expr<M44d> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafoInv) |> Expr.Cast
+                                    | "NormalMatrix" when hasTrafo ->
+                                        let o : Expr<M33d> = Expr.ReadInput(ParameterKind.Uniform, typ, name) |> Expr.Cast
+                                        let n : Expr<M44d> = Expr.ReadInput(ParameterKind.Input, typ, string DefaultSemantic.InstanceTrafoInv) |> Expr.Cast
                                                     
-                                    Some <@@ %o * (m33d %n).Transposed @@>
+                                        Some <@@ %o * (m33d %n).Transposed @@>
 
 
-                                | _ ->
-                                    if Set.contains name uniforms then
-                                        let e = Expr.ReadInput(ParameterKind.Input, typ, name)
-                                        Some e
-                                    else
-                                        None
-                        | _ ->
-                            None
-                )
+                                    | _ ->
+                                        if Set.contains name uniforms then
+                                            let e = Expr.ReadInput(ParameterKind.Input, typ, name)
+                                            Some e
+                                        else
+                                            None
+                            | _ ->
+                                None
+                    )
+
+                let eid = uniforms |> String.concat ":" |> sprintf "%s_INST%s" e.Id
+
+                Effect(eid, lazy (newEffect().Shaders), [])
+
             )
        
 
