@@ -1,3 +1,6 @@
+### 5.1.21
+- fixed ComputeShader problem in Vulkan
+
 ### 5.1.20
 - deterministic Id for instanced-effects
 

@@ -88,21 +88,26 @@ module ShaderModule =
         }
         
     let ofGLSL (stage : ShaderStage) (info : FShade.GLSL.GLSLShader) (device : Device) =
-        match info.iface.shaders with
-        | FShade.GLSL.GLSLProgramShaders.Graphics { stages = shaders } ->
-            let siface = shaders.[ShaderStage.toFShade stage]
-            match GLSLang.GLSLang.tryCompile (glslangStage stage) siface.shaderEntry [string stage] info.code with
-                | Some binary, _ ->
-                    let binary = GLSLang.GLSLang.optimizeDefault binary
-                    let iface = Map.ofList [stage, siface]
-                    let handle = device |> createRaw binary
-                    let result = new ShaderModule(device, handle, stage, iface, binary)
-                    result
-                | None, err ->
-                    Log.error "[Vulkan] %A shader compilation failed: %A" stage err
-                    failf "%A shader compilation failed: %A" stage err
-        | _ ->
-            failf "not a graphics shader: %A" info
+        let siface = 
+            match info.iface.shaders with
+            | FShade.GLSL.GLSLProgramShaders.Graphics { stages = shaders } ->
+                shaders.[ShaderStage.toFShade stage]
+            | FShade.GLSL.GLSLProgramShaders.Compute c when stage = ShaderStage.Compute ->
+                c
+            | _ ->
+                failf "unsupported ShaderStage: %A" stage
+
+        match GLSLang.GLSLang.tryCompile (glslangStage stage) siface.shaderEntry [string stage] info.code with
+        | Some binary, _ ->
+            let binary = GLSLang.GLSLang.optimizeDefault binary
+            let iface = Map.ofList [stage, siface]
+            let handle = device |> createRaw binary
+            let result = new ShaderModule(device, handle, stage, iface, binary)
+            result
+        | None, err ->
+            Log.error "[Vulkan] %A shader compilation failed: %A" stage err
+            failf "%A shader compilation failed: %A" stage err
+            
             
 
     let ofBinaryWithInfo (stage : ShaderStage) (info : FShade.GLSL.GLSLShaderInterface) (binary : byte[]) (device : Device) =
