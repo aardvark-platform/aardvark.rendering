@@ -9,7 +9,7 @@ type RuntimeCommand =
     | RenderCmd of objects : aset<IRenderObject>
     | OrderedCmd of commands : alist<RuntimeCommand>
     | IfThenElseCmd of condition : aval<bool> * ifTrue : RuntimeCommand * ifFalse : RuntimeCommand
-    | ClearCmd of colors : Map<Symbol, aval<C4f>> * depth : Option<aval<float>> * stencil : Option<aval<uint32>>
+    | ClearCmd of values : aval<ClearValues>
     | DispatchCmd of shader : IComputeShader * groups : aval<V3i> * arguments : Map<string, obj>
     | GeometriesCmd of surface : Surface * pipeline : PipelineState * geometries : aset<Geometry>
     | LodTreeCmd of surface : Surface * pipeline : PipelineState * geometries : LodTreeLoader<Geometry>
@@ -23,8 +23,8 @@ type RuntimeCommand =
     static member Dispatch(shader : IComputeShader, groups : aval<V3i>, arguments : Map<string, obj>) =
         RuntimeCommand.DispatchCmd(shader, groups, arguments)
 
-    static member Clear(colors : Map<Symbol, aval<C4f>>, depth : Option<aval<float>>, stencil : Option<aval<uint32>>) =
-        RuntimeCommand.ClearCmd(colors, depth, stencil)
+    static member Clear(values : aval<ClearValues>) =
+        RuntimeCommand.ClearCmd(values)
 
     static member Ordered(commands : alist<RuntimeCommand>) =
         RuntimeCommand.OrderedCmd(commands)

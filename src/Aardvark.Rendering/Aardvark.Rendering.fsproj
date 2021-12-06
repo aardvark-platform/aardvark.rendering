@@ -16,6 +16,7 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="paket.references" />
+    <Compile Include="Common\ClearValues.fs" />
     <Compile Include="Common\FrameStatistics.fs" />
     <Compile Include="Common\DefaultSemantic.fs" />
     <Compile Include="Common\ComparisonFunction.fs" />
@@ -107,7 +108,6 @@
     <Compile Include="Runtime\Raytracing\RaytracingRuntime.fs" />
     <Compile Include="Runtime\BackendConfiguration.fs" />
     <Compile Include="Runtime\ResourceManager.fs" />
-    <Compile Include="Runtime\ClearValues.fs" />
     <Compile Include="Runtime\Runtime.fs" />
     <Compile Include="Runtime\RuntimeExtensions.fs" />
     <Compile Include="Runtime\RuntimeCommand.fs" />

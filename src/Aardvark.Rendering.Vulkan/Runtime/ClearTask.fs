@@ -5,7 +5,7 @@ open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open FSharp.Data.Adaptive
 
-type ClearTask(device : Device, renderPass : RenderPass, clearColors : aval<Map<int, C4f>>, clearDepth : aval<float option>, clearStencil : aval<uint32 option>) =
+type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValues>) =
     inherit AdaptiveObject()
 
     let id = newId()
@@ -32,9 +32,9 @@ type ClearTask(device : Device, renderPass : RenderPass, clearColors : aval<Map<
             let fbo = unbox<Framebuffer> outputs.framebuffer
             use token = device.Token
 
-            let colors = clearColors.GetValue caller
-            let depth = clearDepth.GetValue caller
-            let stencil = clearStencil.GetValue caller
+            let values = values.GetValue caller
+            let depth = values.Depth
+            let stencil = values.Stencil
 
             let vulkanQueries = queries.ToVulkanQuery()
 
@@ -45,14 +45,17 @@ type ClearTask(device : Device, renderPass : RenderPass, clearColors : aval<Map<
                     do! Command.Begin q
 
                 let views = fbo.ImageViews
-                for (index, color) in colors |> Map.toSeq do
-                    do! Command.ClearColor(views.[index], ImageAspect.Color, color)
+
+                for KeyValue(i, (sem, _)) in renderPass.ColorAttachments do
+                    match values.Colors.[sem] with
+                    | Some color -> do! Command.ClearColor(views.[i], ImageAspect.Color, color)
+                    | _ -> ()
 
                 if renderPassDepthAspect <> ImageAspect.None then
                     let view = views.[views.Length - 1]
                     match depth, stencil with
                     | Some d, Some s -> do! Command.ClearDepthStencil(view, renderPassDepthAspect, d, s)
-                    | Some d, None   -> do! Command.ClearDepthStencil(view, ImageAspect.Depth, d, 0u)
+                    | Some d, None   -> do! Command.ClearDepthStencil(view, ImageAspect.Depth, d, 0)
                     | None, Some s   -> do! Command.ClearDepthStencil(view, ImageAspect.Stencil, 0.0, s)
                     | None, None     -> ()
 

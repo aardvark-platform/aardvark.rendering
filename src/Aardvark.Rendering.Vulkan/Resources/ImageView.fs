@@ -62,12 +62,12 @@ module ImageViewCommandExtensions =
         static member TransformLayout(view : ImageView, target : VkImageLayout) =
             Command.TransformLayout(view.Image, view.MipLevelRange, view.ArrayRange, target)
 
-        static member ClearColor(view : ImageView, aspect : ImageAspect, color : C4f) =
+        static member inline ClearColor(view : ImageView, aspect : ImageAspect, color : ^Color) =
             let levels = view.MipLevelRange
             let slices = view.ArrayRange
             Command.ClearColor(view.Image.[aspect, levels.Min .. levels.Max, slices.Min .. slices.Max], color)
 
-        static member ClearDepthStencil(view : ImageView, aspect : ImageAspect, depth : float, stencil : uint32) =
+        static member inline ClearDepthStencil(view : ImageView, aspect : ImageAspect, depth : ^Depth, stencil : ^Stencil) =
             let levels = view.MipLevelRange
             let slices = view.ArrayRange
             Command.ClearDepthStencil(view.Image.[aspect, levels.Min .. levels.Max, slices.Min .. slices.Max], depth, stencil)

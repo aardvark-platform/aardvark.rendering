@@ -331,10 +331,10 @@ and MultiRuntime(runtimes : IRuntime[]) =
                 | _ ->
                     failwith ""
 
-        member x.CompileClear(signature, color, depth, stencil) =
+        member x.CompileClear(signature, values) =
             match signature with
                 | :? MultiFramebufferSignature as signature ->
-                    let tasks = Array.map2 (fun (r : IRuntime) (s : IFramebufferSignature) -> r.CompileClear(s, color, depth, stencil)) runtimes signature.Signatures
+                    let tasks = Array.map2 (fun (r : IRuntime) (s : IFramebufferSignature) -> r.CompileClear(s, values)) runtimes signature.Signatures
                     new MultiRenderTask(x, signature, tasks) :> IRenderTask
                 | _ ->
                     failwith ""
@@ -393,10 +393,10 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.Run (commands : list<ComputeCommand>, queries : IQuery) = failwith ""
         member x.Compile (commands : list<ComputeCommand>) = failwith ""
 
-        member x.Clear(fbo : IFramebuffer, clearColors : Map<Symbol,C4f>, depth : Option<float>, stencil : Option<int>) = failwith "not implemented"
+        member x.Clear(fbo : IFramebuffer, values : ClearValues) = failwith "not implemented"
 
-        member x.ClearColor(texture : IBackendTexture, color : C4f) = failwith "not implemented"
-        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<float>, stencil : Option<int>) = failwith "not implemented"
+        member x.ClearColor(texture : IBackendTexture, color : ClearColor) = failwith "not implemented"
+        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<ClearDepth>, stencil : Option<ClearStencil>) = failwith "not implemented"
 
         member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture = failwith "not implemented"
 

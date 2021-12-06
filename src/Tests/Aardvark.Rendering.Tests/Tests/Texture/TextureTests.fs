@@ -11,6 +11,7 @@ module ``Texture Tests`` =
         TextureDownload.tests
         TextureCreate.tests
         TextureCopy.tests
+        TextureClear.tests
     ]
 
     [<Tests>]

@@ -71,7 +71,7 @@ let main argv =
                 RenderCommand.Unordered [ box ]
                 RenderCommand.When(
                     clear,
-                    RenderCommand.Clear(1.0, 0u)
+                    RenderCommand.ClearDepthStencil(1.0, 0u)
                 )
                 RenderCommand.Unordered [ sphere ]
             ]

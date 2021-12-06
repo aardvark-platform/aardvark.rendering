@@ -2010,8 +2010,10 @@ module ``Image Command Extensions`` =
         static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout, dst : ImageSubresourceLayers, dstLayout : VkImageLayout, filter : VkFilter) =
             Command.Blit(src, srcLayout, Box3i(V3i.Zero, src.Size - V3i.III), dst, dstLayout, Box3i(V3i.Zero, dst.Size - V3i.III), filter)
 
+        static member inline ClearColor(img : ImageSubresourceRange, color : ^Color) =
+            Command.ClearColor(img, ClearColor.create color)
 
-        static member ClearColor(img : ImageSubresourceRange, color : C4f) =
+        static member ClearColor(img : ImageSubresourceRange, color : ClearColor) =
             if img.Image.IsNull then
                 Command.Nop
             else
@@ -2025,7 +2027,12 @@ module ``Image Command Extensions`` =
             
                         cmd.Enqueue (Command.TransformLayout(img.Image, VkImageLayout.TransferDstOptimal))
                     
-                        let clearValue = VkClearColorValue(float32 = color.ToV4f())
+                        let clearValue =
+                            if img.Image.Format |> VkFormat.toTextureFormat |> TextureFormat.isIntegerFormat then
+                                VkClearColorValue(int32 = color.Integer)
+                            else
+                                VkClearColorValue(float32 = color.Float)
+
                         let range = img.VkImageSubresourceRange
                         clearValue |> pin (fun pClear ->
                             range |> pin (fun pRange ->
@@ -2038,7 +2045,10 @@ module ``Image Command Extensions`` =
                         [img.Image]
                 }
 
-        static member ClearDepthStencil(img : ImageSubresourceRange, depth : float, stencil : uint32) =
+        static member inline ClearDepthStencil(img : ImageSubresourceRange, depth : ^Depth, stencil : ^Stencil) =
+            Command.ClearDepthStencil(img, ClearDepth.create depth, ClearStencil.create stencil)
+
+        static member ClearDepthStencil(img : ImageSubresourceRange, depth : ClearDepth, stencil : ClearStencil) =
             if img.Image.IsNull then
                 Command.Nop
             else
@@ -2051,7 +2061,7 @@ module ``Image Command Extensions`` =
                         let originalLayout = img.Image.Layout
                         cmd.Enqueue (Command.TransformLayout(img.Image, VkImageLayout.TransferDstOptimal))
                   
-                        let mutable clearValue = VkClearDepthStencilValue(float32 depth, stencil)
+                        let mutable clearValue = VkClearDepthStencilValue(depth.Value, stencil.Value)
                         let mutable range = img.VkImageSubresourceRange
                         clearValue |> pin (fun pClear ->
                             range |> pin (fun pRange ->

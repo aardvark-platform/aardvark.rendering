@@ -99,21 +99,41 @@ type IFramebufferRuntimeExtensions private() =
     // Clear
     // ================================================================================================================
 
-    /// Clear all color attachments, depth and stencil of a framebuffer object (each optional).
+    /// Clears the framebuffer with the given color.
     [<Extension>]
-    static member Clear(this : IFramebufferRuntime, fbo : IFramebuffer, color : Option<C4f>, depth : Option<float>, stencil : Option<int>) =
-        let clearColors =
-            match color with
-            | Some c ->
-                fbo.Signature.ColorAttachments |> Seq.map (fun x-> (fst x.Value, c)) |> Map.ofSeq
-            | None -> Map.empty
-        this.Clear(fbo, clearColors, depth, stencil)
+    static member inline Clear(this : IFramebufferRuntime, fbo : IFramebuffer, color : ^Color) =
+        let values = color |> (fun c -> clear { color c })
+        this.Clear(fbo, values)
 
-    /// Clear a specific color attachment of a framebuffer object with the given color.
+    /// Clears the framebuffer with the given color and depth.
     [<Extension>]
-    static member Clear(this : IFramebufferRuntime, fbo : IFramebuffer, name : Symbol, color : C4f) =
-        let clearColors = Map.ofSeq [(name, color) ]
-        this.Clear(fbo, clearColors, None, None)
+    static member inline Clear(this : IFramebufferRuntime, fbo : IFramebuffer, color : ^Color, depth : ^Depth) =
+        let values = (color, depth) ||> (fun c d -> clear { color c; depth d })
+        this.Clear(fbo, values)
+
+    /// Clears the framebuffer with the given color, depth and stencil values.
+    [<Extension>]
+    static member inline Clear(this : IFramebufferRuntime, fbo : IFramebuffer, color : ^Color, depth : ^Depth, stencil : ^Stencil) =
+        let values = (color, depth, stencil) |||> (fun c d s -> clear { color c; depth d; stencil s })
+        this.Clear(fbo, values)
+
+    /// Clears the framebuffer with the given depth value.
+    [<Extension>]
+    static member inline ClearDepth(this : IFramebufferRuntime, fbo : IFramebuffer, depth : ^Depth) =
+        let values = depth |> (fun d -> clear { depth d })
+        this.Clear(fbo, values)
+
+    /// Clears the framebuffer with the given stencil value.
+    [<Extension>]
+    static member inline ClearStencil(this : IFramebufferRuntime, fbo : IFramebuffer, stencil : ^Stencil) =
+        let values = stencil |> (fun s -> clear { stencil s })
+        this.Clear(fbo, values)
+
+    /// Clears the framebuffer with the given depth and stencil values.
+    [<Extension>]
+    static member inline ClearDepthStencil(this : IFramebufferRuntime, fbo : IFramebuffer, depth : ^Depth, stencil : ^Stencil) =
+        let values = (depth, stencil) ||> (fun d s -> clear { depth d; stencil s })
+        this.Clear(fbo, values)
 
 
 [<AutoOpen>]

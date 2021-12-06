@@ -40,5 +40,5 @@ and IFramebufferRuntime =
     /// Deletes the given framebuffer.
     abstract member DeleteFramebuffer : IFramebuffer -> unit
 
-    /// Clears the given color attachments, and (optionally) the depth and stencil attachments to the specified values.
-    abstract member Clear : fbo : IFramebuffer * clearColors : Map<Symbol, C4f> * depth : Option<float> * stencil : Option<int> -> unit
+    /// Clears the framebuffer with the given values.
+    abstract member Clear : fbo : IFramebuffer * values : ClearValues -> unit

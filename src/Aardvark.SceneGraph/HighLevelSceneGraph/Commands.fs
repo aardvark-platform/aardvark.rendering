@@ -4,6 +4,7 @@ open System
 open Aardvark.Base
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
+open FSharp.Data.Adaptive.Operators
 open Aardvark.SceneGraph
 
 type RenderGeometryConfig =
@@ -18,7 +19,7 @@ type RenderCommand =
     internal
         | REmpty
         | RUnorderedScenes of aset<ISg>
-        | RClear of colors : Map<Symbol, aval<C4f>> * depth : Option<aval<float>> * stencil : Option<aval<uint32>>
+        | RClear of values : aval<ClearValues>
         | RGeometries of config : RenderGeometryConfig * geometries : aset<IndexedGeometry>
         | ROrdered of alist<RenderCommand>
         | ROrderedConstant of list<RenderCommand>
@@ -27,31 +28,39 @@ type RenderCommand =
 
     static member Empty = REmpty
 
-    static member Clear(colors : Map<Symbol, aval<C4f>>, depth : Option<aval<float>>, stencil : Option<aval<uint32>>) = RClear(colors, depth, stencil)
-    static member Clear(colors : Map<Symbol, aval<C4f>>, depth : aval<float>, stencil : aval<uint32>) = RClear(colors, Some depth, Some stencil)
-    static member Clear(colors : Map<Symbol, aval<C4f>>, depth : aval<float>) = RClear(colors, Some depth, None)
-    static member Clear(colors : Map<Symbol, aval<C4f>>) = RClear(colors, None, None)
-    static member Clear(depth : aval<float>, stencil : aval<uint32>) = RClear(Map.empty, Some depth, Some stencil)
-    static member Clear(depth : aval<float>) = RClear(Map.empty, Some depth, None)
-    static member Clear(stencil : aval<uint32>) = RClear(Map.empty, None, Some stencil)
-    static member Clear(color : aval<C4f>, depth : Option<aval<float>>, stencil : Option<aval<uint32>>) = RClear(Map.ofList [DefaultSemantic.Colors, color], depth, stencil)
-    static member Clear(color : aval<C4f>, depth : aval<float>, stencil : aval<uint32>) = RClear(Map.ofList [DefaultSemantic.Colors, color], Some depth, Some stencil)
-    static member Clear(color : aval<C4f>, depth : aval<float>) = RClear(Map.ofList [DefaultSemantic.Colors, color], Some depth, None)
-    static member Clear(color : aval<C4f>) = RClear(Map.ofList [DefaultSemantic.Colors, color], None, None)
+    static member Clear(values : aval<ClearValues>) = RClear values
 
-    static member Clear(colors : Map<Symbol, C4f>, depth : Option<float>, stencil : Option<uint32>) = RClear(Map.map (fun _ -> AVal.constant) colors, Option.map AVal.constant depth, Option.map AVal.constant stencil)
-    static member Clear(colors : Map<Symbol, C4f>, depth : float, stencil : uint32) = RClear(Map.map (fun _ -> AVal.constant) colors, Some (AVal.constant depth), Some (AVal.constant stencil))
-    static member Clear(colors : Map<Symbol, C4f>, depth : float) = RClear(Map.map (fun _ -> AVal.constant) colors, Some (AVal.constant depth), None)
-    static member Clear(colors : Map<Symbol, C4f>) = RClear(Map.map (fun _ -> AVal.constant) colors, None, None)
-    static member Clear(depth : float, stencil : uint32) = RClear(Map.empty, Some (AVal.constant depth), Some (AVal.constant stencil))
-    static member Clear(depth : float) = RClear(Map.empty, Some (AVal.constant depth), None)
-    static member Clear(stencil : uint32) = RClear(Map.empty, None, Some (AVal.constant stencil))
-    static member Clear(color : C4f, depth : Option<float>, stencil : Option<uint32>) = RClear(Map.ofList [DefaultSemantic.Colors, AVal.constant color], Option.map AVal.constant depth, Option.map AVal.constant stencil)
-    static member Clear(color : C4f, depth : float, stencil : uint32) = RClear(Map.ofList [DefaultSemantic.Colors, AVal.constant color], Some (AVal.constant depth), Some (AVal.constant stencil))
-    static member Clear(color : C4f, depth : float) = RClear(Map.ofList [DefaultSemantic.Colors, AVal.constant color], Some (AVal.constant depth), None)
-    static member Clear(color : C4f) = RClear(Map.ofList [DefaultSemantic.Colors, AVal.constant color], None, None)
+    static member inline Clear(color : aval< ^Color>) =
+        let values = color |> AVal.map (fun c -> clear { color c })
+        RenderCommand.Clear(values)
 
+    static member inline Clear(color : aval< ^Color>, depth : aval< ^Depth>) =
+        let values = (color, depth) ||> AVal.map2 (fun c d -> clear { color c; depth d })
+        RenderCommand.Clear(values)
 
+    static member inline Clear(color : aval< ^Color>, depth : aval< ^Depth>, stencil : aval< ^Stencil>) =
+        let values = (color, depth, stencil) |||> AVal.map3 (fun c d s -> clear { color c; depth d; stencil s })
+        RenderCommand.Clear(values)
+
+    static member inline ClearDepth(depth : aval< ^Depth>) =
+        let values = depth |> AVal.map (fun d -> clear { depth d })
+        RenderCommand.Clear(values)
+
+    static member inline ClearStencil(stencil : aval< ^Stencil>) =
+        let values = stencil |> AVal.map (fun s -> clear { stencil s })
+        RenderCommand.Clear(values)
+
+    static member inline ClearDepthStencil(depth : aval< ^Depth>, stencil : aval< ^Stencil>) =
+        let values = (depth, stencil) ||> AVal.map2 (fun d s -> clear { depth d; stencil s })
+        RenderCommand.Clear(values)
+
+    static member Clear(values : ClearValues)                                      = RenderCommand.Clear(~~values)
+    static member inline Clear(color : ^Color)                                     = RenderCommand.Clear(~~color)
+    static member inline Clear(color : ^Color, depth : ^Depth)                     = RenderCommand.Clear(~~color, ~~depth)
+    static member inline Clear(color : ^Color, depth : ^Depth, stencil : ^Stencil) = RenderCommand.Clear(~~color, ~~depth, ~~stencil)
+    static member inline ClearDepth(depth : ^Depth)                                = RenderCommand.ClearDepth(~~depth)
+    static member inline ClearStencil(stencil : ^Stencil)                          = RenderCommand.ClearStencil(~~stencil)
+    static member inline ClearDepthStencil(depth : ^Depth, stencil : ^Stencil)     = RenderCommand.ClearDepthStencil(~~depth, ~~stencil)
 
     static member Unordered(l : seq<ISg>) = RUnorderedScenes(ASet.ofSeq l)
     static member Unordered(l : list<ISg>) = RUnorderedScenes(ASet.ofList l)
@@ -122,8 +131,8 @@ module RuntimeCommandSemantics =
                     let objects = scenes |> ASet.collect (fun s -> s.RenderObjects(scope))
                     RuntimeCommand.Render(objects)
 
-                | RenderCommand.RClear(colors, depth, stencil) ->
-                    RuntimeCommand.Clear(colors, depth, stencil)
+                | RenderCommand.RClear values ->
+                    RuntimeCommand.Clear(values)
 
                 | RenderCommand.RGeometries(config, geometries) ->
                     let effect =

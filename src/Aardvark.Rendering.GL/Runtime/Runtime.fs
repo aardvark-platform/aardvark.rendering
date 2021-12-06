@@ -183,7 +183,7 @@ type Runtime() =
         member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
         member x.ContextLock = ctx.ResourceLock :> IDisposable
         member x.CompileRender (signature, engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(signature, engine,set)
-        member x.CompileClear(signature, color, depth, stencil) = x.CompileClear(signature, color, depth, stencil)
+        member x.CompileClear(signature, values) = x.CompileClear(signature, values)
 
         ///NOTE: OpenGL does not care about
         member x.CreateBuffer(size : nativeint, usage : BufferUsage) = x.CreateBuffer(size) :> IBackendBuffer
@@ -260,7 +260,7 @@ type Runtime() =
                     ()
             }
 
-        member x.Clear(fbo : IFramebuffer, clearColors : Map<Symbol, C4f>, depth : Option<float>, stencil : Option<int>) =
+        member x.Clear(fbo : IFramebuffer, values : ClearValues) =
             use __ = ctx.ResourceLock
 
             let fbo = fbo |> unbox<Framebuffer>
@@ -268,28 +268,40 @@ type Runtime() =
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, handle)
             GL.Check "could not bind framebuffer"
 
+            let drawBuffers = DrawBuffers.ofSignature fbo.Signature
+            GL.DrawBuffers(drawBuffers.Length, drawBuffers);
+
             // assume user has not messed with gl state -> omit resetting color/depth/stencil mask
 
             // omit check if farmebuffer signature actually contains depth/stencil
             let mutable combinedClearMask = ClearBufferMask.None
-            match depth with
-            | Some d -> GL.ClearDepth(d)
+            match values.Depth with
+            | Some d -> GL.ClearDepth(float d)
                         combinedClearMask <- combinedClearMask ||| ClearBufferMask.DepthBufferBit
             | None -> ()
 
-            match stencil with
-            | Some s -> GL.ClearStencil(s)
+            match values.Stencil with
+            | Some s -> GL.ClearStencil(int s)
                         combinedClearMask <- combinedClearMask ||| ClearBufferMask.StencilBufferBit
             | None -> ()
 
             if fbo.Signature.ColorAttachments.Count = 1 then
-                let single = fbo.Signature.ColorAttachments |> Seq.head
-                let name = fst single.Value
-                match Map.tryFind name clearColors with
+                let _, (sem, att) = fbo.Signature.ColorAttachments |> Map.toList |> List.head
+
+                match values.Colors.[sem] with
                 | Some c ->
-                    GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 |> unbox)
-                    GL.ClearColor(c.R, c.G, c.B, c.A)
-                    GL.Clear(ClearBufferMask.ColorBufferBit ||| combinedClearMask)
+                    if att.format.IsIntegerFormat then
+                        // clear depth stencil if requested
+                        if combinedClearMask <> ClearBufferMask.None then
+                            GL.Clear(combinedClearMask)
+
+                        // clear color layer individually
+                        GL.ClearBuffer(ClearBuffer.Color, 0, c.Integer.ToArray())
+
+                    else
+                        GL.ClearColor(c.Float.X, c.Float.Y, c.Float.Z, c.Float.W)
+                        GL.Clear(ClearBufferMask.ColorBufferBit ||| combinedClearMask)
+
                 | None -> failwith "invalid target name"
             else
                 // clear depth stencil if requested
@@ -297,50 +309,21 @@ type Runtime() =
                     GL.Clear(combinedClearMask)
 
                 // clear each color layer individually
-                for x in fbo.Signature.ColorAttachments do
-                    let name = fst x.Value
-                    match Map.tryFind name clearColors with
+                for KeyValue(i, (sem, att)) in fbo.Signature.ColorAttachments do
+                    match values.Colors.[sem] with
                     | Some c ->
-                        GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 + x.Key |> unbox)
-                        GL.ClearColor(c.R, c.G, c.B, c.A)
-                        GL.Clear(ClearBufferMask.ColorBufferBit)
+                        if att.format.IsIntegerFormat then
+                            GL.ClearBuffer(ClearBuffer.Color, i, c.Integer.ToArray())
+                        else
+                            GL.ClearBuffer(ClearBuffer.Color, i, c.Float.ToArray())
+                        GL.Check "could not clear buffer"
                     | None -> ()
 
             GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
             GL.Check "could not unbind framebuffer"
 
-        member x.ClearColor(texture : IBackendTexture, color : C4f) =
-            use __ = ctx.ResourceLock
-
-            let fbo = GL.GenFramebuffer()
-            GL.Check "could not create framebuffer"
-
-            GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo)
-            GL.Check "could not bind framebuffer"
-
-            GL.FramebufferTexture(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, texture.Handle |> unbox<int>, 0)
-            GL.Check "could not attach framebuffer texture"
-
-            GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 |> unbox)
-            GL.ClearColor(color.R, color.G, color.B, color.A)
-            GL.Clear(ClearBufferMask.ColorBufferBit)
-
-            GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
-            GL.Check "could not unbind framebuffer"
-
-            GL.DeleteFramebuffer(fbo)
-            GL.Check "could not delete framebuffer"
-
-        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<float>, stencil : Option<int>) =
-
-            let binding = match (depth, stencil) with
-                          | Some x, Some y -> Some FramebufferAttachment.DepthStencilAttachment
-                          | Some x, None -> Some FramebufferAttachment.DepthAttachment
-                          | None, Some y -> Some FramebufferAttachment.StencilAttachment
-                          | _ -> None
-
-            match binding with
-            | Some b ->
+        member x.ClearColor(texture : IBackendTexture, color : ClearColor) =
+            if not <| (texture.Format.HasDepth || texture.Format.HasStencil) then
                 use __ = ctx.ResourceLock
 
                 let fbo = GL.GenFramebuffer()
@@ -349,21 +332,15 @@ type Runtime() =
                 GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo)
                 GL.Check "could not bind framebuffer"
 
-                GL.FramebufferTexture(FramebufferTarget.Framebuffer, b, texture.Handle |> unbox<int>, 0)
+                GL.FramebufferTexture(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, texture.Handle |> unbox<int>, 0)
                 GL.Check "could not attach framebuffer texture"
 
-                match (depth, stencil) with
-                | Some d, Some s ->
-                    GL.ClearDepth(d)
-                    GL.ClearStencil(s)
-                    GL.Clear(ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-                | Some d, None ->
-                    GL.ClearDepth(d)
-                    GL.Clear(ClearBufferMask.DepthBufferBit)
-                | None, Some s ->
-                    GL.ClearStencil(s)
-                    GL.Clear(ClearBufferMask.StencilBufferBit)
-                | _ -> ()
+                GL.DrawBuffer(DrawBufferMode.ColorAttachment0)
+                if texture.Format.IsIntegerFormat then
+                    GL.ClearBuffer(ClearBuffer.Color, 0, color.Integer.ToArray())
+                else
+                    GL.ClearBuffer(ClearBuffer.Color, 0, color.Float.ToArray())
+                GL.Check "could not clear buffer"
 
                 GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
                 GL.Check "could not unbind framebuffer"
@@ -371,7 +348,49 @@ type Runtime() =
                 GL.DeleteFramebuffer(fbo)
                 GL.Check "could not delete framebuffer"
 
-            | _ -> () // done
+        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<ClearDepth>, stencil : Option<ClearStencil>) =
+            if texture.Format.HasDepth || texture.Format.HasStencil then
+                let binding =
+                    match (depth, stencil) with
+                    | Some x, Some y -> Some FramebufferAttachment.DepthStencilAttachment
+                    | Some x, None -> Some FramebufferAttachment.DepthAttachment
+                    | None, Some y -> Some FramebufferAttachment.StencilAttachment
+                    | _ -> None
+
+                match binding with
+                | Some b ->
+                    use __ = ctx.ResourceLock
+
+                    let fbo = GL.GenFramebuffer()
+                    GL.Check "could not create framebuffer"
+
+                    GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo)
+                    GL.Check "could not bind framebuffer"
+
+                    GL.FramebufferTexture(FramebufferTarget.Framebuffer, b, texture.Handle |> unbox<int>, 0)
+                    GL.Check "could not attach framebuffer texture"
+
+                    match (depth, stencil) with
+                    | Some d, Some s ->
+                        GL.ClearDepth(float d)
+                        GL.ClearStencil(int s)
+                        GL.Clear(ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+                    | Some d, None ->
+                        GL.ClearDepth(float d)
+                        GL.Clear(ClearBufferMask.DepthBufferBit)
+                    | None, Some s ->
+                        GL.ClearStencil(int s)
+                        GL.Clear(ClearBufferMask.StencilBufferBit)
+                    | _ -> ()
+                    GL.Check "could not clear"
+
+                    GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+                    GL.Check "could not unbind framebuffer"
+
+                    GL.DeleteFramebuffer(fbo)
+                    GL.Check "could not delete framebuffer"
+
+                | _ -> () // done
 
         member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture =
             ctx.CreateTextureView(unbox<Texture> texture, levels, slices, isArray) :> IBackendTexture
@@ -571,16 +590,8 @@ type Runtime() =
     member x.CompileRender(fboSignature : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) : IRenderTask =
         x.CompileRenderInternal(fboSignature, AVal.constant engine, set)
 
-    member x.CompileClear(signature : IFramebufferSignature, color : aval<Map<Symbol, C4f>>, depth : aval<float option>, stencil : aval<int option>) : IRenderTask =
-        let clearValues =
-            color |> AVal.map (fun colors ->
-                signature.ColorAttachments |> Map.choose (fun _ (sem, _) ->
-                    colors |> Map.tryFind sem
-                )
-                |> Map.toList
-            )
-
-        new RenderTasks.ClearTask(x, signature, clearValues, depth, stencil, ctx) :> IRenderTask
+    member x.CompileClear(signature : IFramebufferSignature, values : aval<ClearValues>) : IRenderTask =
+        new RenderTasks.ClearTask(x, ctx, signature, values) :> IRenderTask
 
     member x.ResolveMultisamples(ms : IFramebufferOutput, srcOffset : V2i, ss : IBackendTexture, dstOffset : V2i, dstLayer : int, size : V2i, trafo : ImageTrafo) =
         Operators.using ctx.ResourceLock (fun _ ->

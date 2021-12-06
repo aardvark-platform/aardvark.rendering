@@ -1239,6 +1239,9 @@ module PreparedCommand =
                     o.Prepare(r, fboSignature) |> ofRenderObject true fboSignature x
                 | _ ->
                     failwithf "expected ILodRuntime for object: %A" o
+            
+            | :? CommandRenderObject when not Config.UseNewRenderTask ->
+                failwith "[GL] Render commands only supported with Config.UseNewRenderTask = true"
 
             | _ ->
                 failwithf "bad object: %A" o
@@ -1658,38 +1661,38 @@ module rec Command =
             dirty.Clear()
             ()
 
-    type ClearCommand(signature : IFramebufferSignature, colors : HashMap<Symbol, aval<C4f>>, depth : option<aval<float>>, stencil : option<aval<uint32>>) =
+    type ClearCommand(signature : IFramebufferSignature, values : aval<ClearValues>) =
         inherit Command()
 
         let mutable fragment : option<ProgramFragment> = None
 
-        let colors =
-            signature.ColorAttachments |> HashMap.ofMap |> HashMap.choose (fun _ (sem, _) ->
-                match HashMap.tryFind sem colors with
-                | Some color -> Some color
-                | None -> None
-            )
-
-        let compile (info : CompilerInfo) (s : IAssemblerStream) (p : IAdaptivePinning) =
-
+        let compile (info : CompilerInfo) (values : ClearValues) (s : IAssemblerStream) (p : IAdaptivePinning) =
+            
+            for KeyValue(i, (sem, att)) in signature.ColorAttachments do
+                match values.Colors.[sem] with
+                | Some color ->
+                    s.BeginCall(3)
+                    
+                    if att.format.IsIntegerFormat then
+                        let pValues = p.Pin (AVal.constant color.Integer)
+                        s.PushArg(NativePtr.toNativeInt pValues)
+                        s.PushArg(i)
+                        s.PushArg(int ClearBuffer.Color)
+                        s.Call(OpenGl.Pointers.ClearBufferiv)
+                    else
+                        let pValues = p.Pin (AVal.constant color.Float)
+                        s.PushArg(NativePtr.toNativeInt pValues)
+                        s.PushArg(i)
+                        s.PushArg(int ClearBuffer.Color)
+                        s.Call(OpenGl.Pointers.ClearBufferfv)  
+                        
+                | _ -> ()
+            
             let mutable flags = ClearBufferMask.None
 
-
-            for (i, c) in colors do
-                let pColor = p.Pin c
-
-                flags <- flags ||| ClearBufferMask.ColorBufferBit
-                s.BeginCall(4)
-                s.PushFloatArg (NativePtr.toNativeInt pColor + nativeint sizeof<float32> * 3n)
-                s.PushFloatArg (NativePtr.toNativeInt pColor + nativeint sizeof<float32> * 2n)
-                s.PushFloatArg (NativePtr.toNativeInt pColor + nativeint sizeof<float32> * 1n)
-                s.PushFloatArg (NativePtr.toNativeInt pColor + nativeint sizeof<float32> * 0n)
-                s.Call(OpenGl.Pointers.ClearColor)
-
-
-            match depth with
+            match values.Depth with
             | Some depth ->
-                let pDepth = p.Pin depth
+                let pDepth = p.Pin (AVal.constant (float depth))
                 flags <- flags ||| ClearBufferMask.DepthBufferBit
                 s.BeginCall(1)
                 s.PushDoubleArg (NativePtr.toNativeInt pDepth)
@@ -1697,12 +1700,11 @@ module rec Command =
             | None ->
                 ()
 
-            match stencil with
+            match values.Stencil with
             | Some stencil ->
-                let pStencil = p.Pin stencil
                 flags <- flags ||| ClearBufferMask.StencilBufferBit
                 s.BeginCall(1)
-                s.PushIntArg (NativePtr.toNativeInt pStencil)
+                s.PushArg (int stencil)
                 s.Call(OpenGl.Pointers.ClearStencil)
             | None ->
                 ()
@@ -1712,11 +1714,13 @@ module rec Command =
             s.Call(OpenGl.Pointers.Clear)
 
         override x.PerformUpdate(token : AdaptiveToken, program : FragmentProgram, info : CompilerInfo) =
+            let values = values.GetValue token
+
             match fragment with
             | Some f ->
-                ()
+                f.Mutate (compile info values)
             | None ->
-                let f = program.NewFragment (compile info)
+                let f = program.NewFragment (compile info values)
                 fragment <- Some f
                 program.First <- Some f
 
@@ -1803,8 +1807,8 @@ module rec Command =
             |> OrderedCommand
             :> Command
 
-        | RuntimeCommand.ClearCmd(colors, depth, stencil) ->
-            ClearCommand(fboSignature, HashMap.ofMap colors, depth, stencil)
+        | RuntimeCommand.ClearCmd values ->
+            ClearCommand(fboSignature, values)
             :> Command
 
         | RuntimeCommand.IfThenElseCmd(cond, ifTrue, ifFalse) ->

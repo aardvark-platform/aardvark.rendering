@@ -25,6 +25,7 @@ module TestApplication =
             Config.MajorVersion <- 4
             Config.MinorVersion <- 6
             Config.ErrorReporting <- ErrorReporting.Exception
+            Config.UseNewRenderTask <- true
 
             Toolkit.Init(ToolkitOptions(Backend = PlatformBackend.PreferNative)) |> ignore
 

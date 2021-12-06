@@ -602,6 +602,8 @@ module OpenGl =
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glClear.xml
         /// </summary>
         let Clear  = getProcAddress "glClear"
+        let ClearBufferiv  = getProcAddress "glClearBufferiv"
+        let ClearBufferfv  = getProcAddress "glClearBufferfv"
 
         /// <summary>
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glBindImageTexture.xml
@@ -764,6 +766,8 @@ module OpenGl =
               DrawElementsInstanced, "glDrawElementsInstanced"
               DrawArraysInstanced, "glDrawArraysInstanced"
               Clear, "glClear"
+              ClearBufferiv, "glClearBufferiv"
+              ClearBufferfv, "glClearBufferfv"
               BindImageTexture, "glBindImageTexture"
               ClearColor, "glClearColor"
               ClearDepth, "glClearDepth"
@@ -850,6 +854,8 @@ module OpenGl =
         let DrawElementsInstanced : int -> int -> int -> nativeint -> int -> unit = wrap Pointers.DrawElementsInstanced
         let DrawArraysInstanced : int -> int -> int -> int -> unit = wrap Pointers.DrawArraysInstanced
         let Clear : int -> unit = wrap Pointers.Clear
+        let ClearBufferiv : int -> int -> nativeint -> unit = wrap Pointers.ClearBufferiv
+        let ClearBufferfv : int -> int -> nativeint -> unit = wrap Pointers.ClearBufferfv
         let BindImageTexture : int -> int -> int -> int -> unit = wrap Pointers.BindImageTexture
         let VertexAttribPointer : int -> int -> int -> int -> int -> nativeint -> unit = wrap Pointers.VertexAttribPointer
         let VertexAttribDivisor : int -> int -> unit = wrap Pointers.VertexAttribDivisor

@@ -62,7 +62,9 @@ type ITextureRuntimeExtensions private() =
         else
             region
 
+    // ================================================================================================================
     // Create textures
+    // ================================================================================================================
 
     ///<summary>Creates a 1D texture.</summary>
     ///<param name="this">The runtime.</param>
@@ -144,7 +146,11 @@ type ITextureRuntimeExtensions private() =
                                        count : int) =
         this.CreateTextureArray(V3i(size, size, 1), TextureDimension.TextureCube, format, levels = levels, samples = 1, count = count)
 
+
+    // ================================================================================================================
     // PixVolume
+    // ================================================================================================================
+
     [<Extension>]
     static member Copy(this : ITextureRuntime, img : PixVolume, dst : ITextureSubResource, dstOffset : V3i, size : V3i) =
         img.Visit
@@ -199,7 +205,11 @@ type ITextureRuntimeExtensions private() =
         let size = V3i(min size.X imgSize.X, min size.Y imgSize.Y, min size.Z imgSize.Z)
         ITextureRuntimeExtensions.Copy(this.Texture.Runtime, value, this, minC, size)
 
+
+    // ================================================================================================================
     // PixImage
+    // ================================================================================================================
+
     [<Extension>]
     static member Copy(this : ITextureRuntime, img : PixImage, dst : ITextureSubResource, dstOffset : V3i, size : V2i) =
         img.Visit
@@ -293,7 +303,11 @@ type ITextureRuntimeExtensions private() =
     static member SetSlice(this : ITextureSubResource, minC : Option<V2i>, maxC : Option<V2i>, value : PixImage) =
         ITextureRuntimeExtensions.SetSlice(this, minC, maxC, 0, value)
 
+
+    // ================================================================================================================
     // Copies
+    // ================================================================================================================
+
     [<Extension>]
     static member Copy(this : ITextureRuntime, src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V2i) =
         this.Copy(src, srcOffset, dst, dstOffset, V3i(size, 1))
@@ -319,7 +333,11 @@ type ITextureRuntimeExtensions private() =
 
         this.Copy(src, V3i.Zero, dst, V3i.Zero, size)
 
+
+    // ================================================================================================================
     // CopyTo
+    // ================================================================================================================
+
     [<Extension>]
     static member CopyTo(src : ITextureSubResource, dst : PixImage) =
         src.Texture.Runtime.Copy(src, dst)
@@ -332,7 +350,10 @@ type ITextureRuntimeExtensions private() =
     static member CopyTo(src : IFramebufferOutput, dst : IFramebufferOutput) =
         src.Runtime.Copy(src, dst)
 
+
+    // ================================================================================================================
     // Download
+    // ================================================================================================================
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
     ///<param name="this">The runtime.</param>
@@ -438,7 +459,10 @@ type ITextureRuntimeExtensions private() =
     static member Download(this : ITextureRuntime, texture : IBackendTexture) =
         this.Download(texture, 0, 0, Box2i.Infinite)
 
-    // DownloadDepth
+
+    // ================================================================================================================
+    // Download depth
+    // ================================================================================================================
 
     ///<summary>Downloads depth data from the given texture to a float matrix.</summary>
     ///<param name="this">The runtime.</param>
@@ -491,7 +515,10 @@ type ITextureRuntimeExtensions private() =
     static member DownloadDepth(this : ITextureRuntime, texture : IBackendTexture) =
         this.DownloadDepth(texture, 0, 0, Box2i.Infinite)
 
-    // DownloadStencil
+
+    // ================================================================================================================
+    // Download stencil
+    // ================================================================================================================
 
     ///<summary>Downloads stencil data from the given texture to an integer matrix.</summary>
     ///<param name="this">The runtime.</param>
@@ -544,7 +571,10 @@ type ITextureRuntimeExtensions private() =
     static member DownloadStencil(this : ITextureRuntime, texture : IBackendTexture) =
         this.DownloadStencil(texture, 0, 0, Box2i.Infinite)
 
+
+    // ================================================================================================================
     // Upload
+    // ================================================================================================================
 
     ///<summary>Uploads data from a PixImage to the given texture.</summary>
     ///<param name="this">The runtime.</param>
@@ -574,10 +604,39 @@ type ITextureRuntimeExtensions private() =
         this.Upload(texture, 0, 0, V2i.Zero, source)
 
 
+    // ================================================================================================================
+    // Clear
+    // ================================================================================================================
+
+    /// Clears the given texture with the given color.
+    [<Extension>]
+    static member inline ClearColor(this : ITextureRuntime, texture : IBackendTexture, color : ^Color) =
+        this.ClearColor(texture, ClearColor.create color)
+
+    /// Clears the given texture with the given depth and stencil values.
+    [<Extension>]
+    static member inline ClearDepthStencil(this : ITextureRuntime, texture : IBackendTexture, depth: Option< ^Depth>, stencil : Option< ^Stencil>) =
+        let depth = depth |> Option.map ClearDepth.create
+        let stencil = stencil |> Option.map ClearStencil.create
+        this.ClearDepthStencil(texture, depth, stencil)
+
+    /// Clears the texture with the given clear values.
+    [<Extension>]
+    static member Clear(this : ITextureRuntime, texture : IBackendTexture, values : ClearValues) =
+        if texture.Format.HasDepth || texture.Format.HasStencil then
+            this.ClearDepthStencil(texture, values.Depth, values.Stencil)
+        else
+            match values.Colors.Default with
+            | Some color -> this.ClearColor(texture, color)
+            | _ -> ()
+
+
 [<AbstractClass; Sealed; Extension>]
 type IBackendTextureExtensions private() =
 
+    // ================================================================================================================
     // Download
+    // ================================================================================================================
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
     ///<param name="this">The texture.</param>
@@ -689,7 +748,10 @@ type IBackendTextureExtensions private() =
     static member Download(this : IBackendTexture) =
         this.Runtime.Download(this)
 
-    // DownloadDepth
+
+    // ================================================================================================================
+    // Download depth
+    // ================================================================================================================
 
     ///<summary>Downloads depth data from the given texture to a float matrix.</summary>
     ///<param name="this">The texture.</param>
@@ -744,7 +806,10 @@ type IBackendTextureExtensions private() =
     static member DownloadDepth(this : IBackendTexture) =
         this.Runtime.DownloadDepth(this)
 
-    // DownloadStencil
+
+    // ================================================================================================================
+    // Download stencil
+    // ================================================================================================================
 
     ///<summary>Downloads stencil data from the given texture to an integer matrix.</summary>
     ///<param name="this">The texture.</param>
@@ -799,7 +864,10 @@ type IBackendTextureExtensions private() =
     static member DownloadStencil(this : IBackendTexture) =
         this.Runtime.DownloadStencil(this)
 
+
+    // ================================================================================================================
     // Upload
+    // ================================================================================================================
 
     ///<summary>Uploads data from a PixImage to the given texture.</summary>
     ///<param name="this">The texture.</param>

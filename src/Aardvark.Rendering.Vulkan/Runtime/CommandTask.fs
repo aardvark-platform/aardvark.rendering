@@ -1175,7 +1175,7 @@ module private RuntimeCommands =
 
 
     /// Clearing the current Framebuffer using the supplied values
-    and ClearCommand(compiler : Compiler, colors : Map<Symbol, aval<C4f>>, depth : Option<aval<float>>, stencil : Option<aval<uint32>>) =
+    and ClearCommand(compiler : Compiler, values : aval<ClearValues>) =
         inherit PreparedCommand()
 
         override x.Compile(token, stream) =
@@ -1186,6 +1186,11 @@ module private RuntimeCommands =
             // check if the RenderPass actually has a depth-stencil attachment
             let hasDepth = Option.isSome compiler.renderPass.DepthStencilAttachment
 
+            let values = values.GetValue token
+            let depth = values.Depth
+            let stencil = values.Stencil
+            let colors = values.Colors
+
             // create an array containing the depth-clear (if any)
             let depthClears =
                 match compiler.renderPass.DepthStencilAttachment with
@@ -1193,20 +1198,15 @@ module private RuntimeCommands =
                         let id = 0u
                         match depth, stencil with
                             | Some d, Some s ->
-                                let d = d.GetValue token
-                                let s = s.GetValue token
-
                                 [|
                                     VkClearAttachment(
                                         VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit, 
                                         uint32 id,
-                                        VkClearValue(depthStencil = VkClearDepthStencilValue(float32 d, s))
+                                        VkClearValue(depthStencil = VkClearDepthStencilValue(float32 d, uint32 s))
                                     )
                                 |]
 
                             | Some d, None ->   
-                                let d = d.GetValue token
-                        
                                 [|
                                     VkClearAttachment(
                                         VkImageAspectFlags.DepthBit, 
@@ -1216,13 +1216,11 @@ module private RuntimeCommands =
                                 |]
                              
                             | None, Some s ->
-                                let s = s.GetValue token
-
                                 [|
                                     VkClearAttachment(
                                         VkImageAspectFlags.StencilBit, 
                                         uint32 id,
-                                        VkClearValue(depthStencil = VkClearDepthStencilValue(1.0f, s))
+                                        VkClearValue(depthStencil = VkClearDepthStencilValue(1.0f, uint32 s))
                                     )
                                 |]
 
@@ -1234,14 +1232,20 @@ module private RuntimeCommands =
 
             // create an array containing all color-clears
             let colorClears = 
-                compiler.renderPass.ColorAttachments |> Map.toSeq |> Seq.choose (fun (i,(n,_)) ->
-                    match Map.tryFind n colors with
-                        | Some value -> 
+                compiler.renderPass.ColorAttachments |> Map.toSeq |> Seq.choose (fun (i,(n,att)) ->
+                    match colors.[n] with
+                        | Some value ->
+                            let clear =
+                                if att.format.IsIntegerFormat then
+                                    VkClearColorValue(int32 = value.Integer)
+                                else
+                                    VkClearColorValue(float32 = value.Float)
+
                             let res = 
                                 VkClearAttachment(
                                     VkImageAspectFlags.ColorBit, 
                                     uint32 i,
-                                    VkClearValue(color = VkClearColorValue(float32 = value.GetValue(token).ToV4f()))
+                                    VkClearValue(color = clear)
                                 )
                             Some res
                         | None ->
@@ -2090,8 +2094,8 @@ module private RuntimeCommands =
                 new UnorderedRenderObjectCommand(x, objects)
                     :> PreparedCommand
 
-            | RuntimeCommand.ClearCmd(colors, depth, stencil) ->
-                new ClearCommand(x, colors, depth, stencil)
+            | RuntimeCommand.ClearCmd values ->
+                new ClearCommand(x, values)
                     :> PreparedCommand
 
             | RuntimeCommand.OrderedCmd commands ->

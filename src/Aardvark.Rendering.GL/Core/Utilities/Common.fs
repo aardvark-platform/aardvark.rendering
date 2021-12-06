@@ -229,3 +229,8 @@ module GLExtensions =
             GL.BindBuffer(OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
             for i in 0 .. 7 do
                 GL.BindBufferBase(OpenTK.Graphics.OpenGL4.BufferRangeTarget.UniformBuffer, i, 0)
+
+module internal DrawBuffers =
+
+    let ofSignature (signature : IFramebufferSignature) =
+        signature.ColorAttachments |> Map.toArray |> Array.map (fun (i, _) -> DrawBuffersEnum.ColorAttachment0 + unbox i)

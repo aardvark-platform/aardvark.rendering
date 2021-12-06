@@ -938,6 +938,9 @@ module RenderbufferFormat =
             RenderbufferFormat.Depth32fStencil8
         ]
 
+    let isIntegerFormat (format : RenderbufferFormat) =
+        format |> TextureFormat.ofRenderbufferFormat |> TextureFormat.isIntegerFormat
+
     /// Returns whether the given format is a depth format.
     let isDepth (fmt : RenderbufferFormat) =
         depthFormats.Contains fmt
@@ -963,6 +966,7 @@ module RenderbufferFormat =
 [<AutoOpen>]
 module RenderbufferFormatExtensions =
     type RenderbufferFormat with
+        member x.IsIntegerFormat = RenderbufferFormat.isIntegerFormat x
         member x.IsDepth = RenderbufferFormat.isDepth x
         member x.IsStencil = RenderbufferFormat.isStencil x
         member x.IsDepthStencil = RenderbufferFormat.isDepthStencil x

@@ -193,7 +193,10 @@ and ITextureRuntime =
     ///<param name="target">The matrix to copy the data to.</param>
     abstract member DownloadDepth : texture : IBackendTexture * level : int * slice : int * offset : V2i * target : Matrix<float32> -> unit
 
-    abstract member ClearColor : texture : IBackendTexture * color : C4f -> unit
-    abstract member ClearDepthStencil : texture : IBackendTexture * depth : Option<float> * stencil : Option<int> -> unit
+    /// Clears the given texture with the given color.
+    abstract member ClearColor : texture: IBackendTexture * color: ClearColor -> unit
+
+    /// Clears the given texture with the given depth and stencil values.
+    abstract member ClearDepthStencil : texture: IBackendTexture * depth: Option<ClearDepth> * stencil : Option<ClearStencil> -> unit
 
     abstract member CreateTextureView : texture : IBackendTexture * levels : Range1i * slices : Range1i * isArray : bool -> IBackendTexture

@@ -101,6 +101,14 @@ module PixData =
             Directory.CreateDirectory(dir) |> ignore
             img.SaveAsImage(Path.combine [dir; fileName])
 
+        let isColor (color : 'T[]) (pi : PixImage<'T>) =
+            for c in 0 .. pi.ChannelCount - 1 do
+                let data = pi.GetChannel(int64 c)
+
+                for x in 0 .. pi.Size.X - 1 do
+                    for y in 0 .. pi.Size.Y - 1 do
+                        Expect.equal data.[x, y] color.[c] "PixImage data mismatch"
+
         let compareWithComparer (comparer : 'T -> 'T -> string -> unit)
                                 (offset : V2i) (input : PixImage<'T>) (output : PixImage<'T>) =
             for x in 0 .. output.Size.X - 1 do

@@ -14,11 +14,41 @@ open FSharp.Data.Adaptive
 open OpenTK.Graphics.OpenGL4
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Rendering.GL
-
-
-
+open FShade
 
 module RenderTasks =
+
+    module private Framebuffer =
+
+        let draw (signature : IFramebufferSignature) (fbo : Framebuffer) (viewport : Box2i) (f : unit -> 'T) =
+            
+            let oldVp = Array.create 4 0
+            let mutable oldFbo = 0
+            GL.GetInteger(GetPName.Viewport, oldVp)
+            GL.GetInteger(GetPName.FramebufferBinding, &oldFbo)
+
+            GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo.Handle)
+            GL.Check "could not bind framebuffer"
+
+            GL.Viewport(viewport.Min.X, viewport.Min.Y, viewport.SizeX + 1, viewport.SizeY + 1)
+            GL.Check "could not set viewport"
+
+            try
+                if fbo.Handle = 0 then
+                    GL.DrawBuffer(DrawBufferMode.BackLeft)
+                else
+                    let drawBuffers = DrawBuffers.ofSignature signature
+                    GL.DrawBuffers(drawBuffers.Length, drawBuffers);
+                GL.Check "could not set draw buffers"
+
+                f()
+
+            finally
+                GL.BindFramebuffer(FramebufferTarget.Framebuffer, oldFbo)
+                GL.Check "could reset framebuffer"
+
+                GL.Viewport(oldVp.[0], oldVp.[1], oldVp.[2], oldVp.[3])
+                GL.Check "could reset viewport"
 
     [<AbstractClass>]
     type AbstractOpenGlRenderTask(manager : ResourceManager, fboSignature : IFramebufferSignature, config : aval<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) =
@@ -75,29 +105,6 @@ module RenderTasks =
                 | ValueSome ctx -> ctx.DebugOutputEnabled <- wasEnabled
                 | ValueNone -> Report.Warn("Still no active context handle in RenderTask.Run")
 
-        member private x.bindFbo (desc : OutputDescription) =
-            let fbo = desc.framebuffer |> unbox<Framebuffer>
-
-            let handle = fbo.Handle
-
-            if ExecutionContext.framebuffersSupported then
-                GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
-                GL.Check "could not bind framebuffer"
-
-                if handle = 0 then
-                    GL.DrawBuffer(DrawBufferMode.BackLeft)
-                else
-                    let drawBuffers = Array.init fboSignature.ColorAttachments.Count (fun index -> DrawBuffersEnum.ColorAttachment0 + unbox index)
-                    GL.DrawBuffers(drawBuffers.Length, drawBuffers);
-                GL.Check "could not set draw buffers"
-
-            elif handle <> 0 then
-                failwithf "cannot render to texture on this OpenGL driver"
-
-            GL.Viewport(desc.viewport.Min.X, desc.viewport.Min.Y, desc.viewport.SizeX + 1, desc.viewport.SizeY + 1)
-            GL.Check "could not set viewport"
-
-
         abstract member ProcessDeltas : AdaptiveToken * RenderToken -> unit
         abstract member UpdateResources : AdaptiveToken * RenderToken -> unit
         abstract member Perform : AdaptiveToken * RenderToken * Framebuffer * OutputDescription -> unit
@@ -151,26 +158,27 @@ module RenderTasks =
             x.ProcessDeltas(token, t)
             x.UpdateResources(token, t)
 
-            let debugState = x.pushDebugOutput(token)
-            x.bindFbo desc
+            Framebuffer.draw fboSignature fbo desc.viewport (fun _ ->
+                let debugState = x.pushDebugOutput(token)
 
-            renderTaskLock.Run (fun () ->
-                beforeRender.Trigger()
-                NativePtr.write runtimeStats V2i.Zero
+                renderTaskLock.Run (fun () ->
+                    beforeRender.Trigger()
+                    NativePtr.write runtimeStats V2i.Zero
 
-                queries.Begin()
+                    queries.Begin()
 
-                x.Perform(token, t, fbo, desc)
-                GL.Check "[RenderTask.Run] Perform"
+                    x.Perform(token, t, fbo, desc)
+                    GL.Check "[RenderTask.Run] Perform"
 
-                queries.End()
+                    queries.End()
    
-                afterRender.Trigger()
-                let rt = NativePtr.read runtimeStats
-                t.AddDrawCalls(rt.X, rt.Y)
-            )
+                    afterRender.Trigger()
+                    let rt = NativePtr.read runtimeStats
+                    t.AddDrawCalls(rt.X, rt.Y)
+                )
 
-            x.popDebugOutput(token, debugState)
+                x.popDebugOutput(token, debugState)
+            )
                             
             GL.BindVertexArray 0
             GL.BindBuffer(BufferTarget.DrawIndirectBuffer,0)
@@ -533,104 +541,81 @@ module RenderTasks =
                 )
             )
 
-    type ClearTask(runtime : IRuntime, fboSignature : IFramebufferSignature, color : aval<list<int * C4f>>(*color : aval<list<C4f option>>*), depth : aval<float option>, stencil : aval<int option>, ctx : Context) =
+    type ClearTask(runtime : IRuntime, ctx : Context, signature : IFramebufferSignature, values : aval<ClearValues>) =
         inherit AbstractRenderTask()
 
         override x.PerformUpdate(token, t) = ()
         override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription, queries : IQuery) =
-            let fbo = desc.framebuffer
+            let fbo = desc.framebuffer |> unbox<Framebuffer>
             Operators.using ctx.ResourceLock (fun _ ->
 
                 queries.Begin()
 
-                let old = Array.create 4 0
-                let mutable oldFbo = 0
-                GL.GetInteger(GetPName.Viewport, old)
-                GL.GetInteger(GetPName.FramebufferBinding, &oldFbo)
+                Framebuffer.draw signature fbo desc.viewport (fun _ ->
 
-                let fbo = fbo |> unbox<Framebuffer>
-                let handle = fbo.Handle
+                    let values = values.GetValue token
+                    let depthValue = values.Depth
+                    let stencilValue = values.Stencil
 
-                if ExecutionContext.framebuffersSupported then
-                    GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, handle)
-                    GL.Check "could not bind framebuffer"
-                elif handle <> 0 then
-                    failwithf "cannot render to texture on this OpenGL driver"
+                    // Sets clear values and returns mask
+                    let mutable depthStencilCleared = false
 
-                GL.Viewport(0, 0, fbo.Size.X, fbo.Size.Y)
-                GL.Check "could not bind framebuffer"
+                    let clearDepthStencil() =
+                        if depthStencilCleared then
+                            ClearBufferMask.None
 
-                let depthValue = depth.GetValue token
-                let stencilValue = stencil.GetValue token
-                let colorValues = color.GetValue token
+                        else
+                            depthStencilCleared <- true
 
-                // Set masks
-                colorValues |> List.iter (fun (i, _) ->
-                    GL.ColorMask(i, true, true, true, true)
-                )
-                GL.DepthMask(true)
-                GL.StencilMask(0xFFFFFFFFu)
+                            match depthValue, stencilValue with
+                            | Some d, Some s ->
+                                GL.ClearDepth(float d.Value)
+                                GL.ClearStencil(int s.Value)
+                                ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit
 
-                // Sets clear colors and returns mask
-                let clearDepthStencil() =
-                    match depthValue, stencilValue with
-                    | Some d, Some s ->
-                        GL.ClearDepth(d)
-                        GL.ClearStencil(s)
-                        ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit
+                            | Some d, None ->
+                                GL.ClearDepth(float d.Value)
+                                ClearBufferMask.DepthBufferBit
 
-                    | Some d, None ->
-                        GL.ClearDepth(d)
-                        ClearBufferMask.DepthBufferBit
+                            | None, Some s ->
+                                GL.ClearStencil(int s.Value)
+                                ClearBufferMask.StencilBufferBit
 
-                    | None, Some s ->
-                        GL.ClearStencil(s)
-                        ClearBufferMask.StencilBufferBit
+                            | _ ->
+                                ClearBufferMask.None
 
-                    | _ ->
-                        ClearBufferMask.None
+                    // Clear color attachments
+                    for KeyValue(i, (sem, att)) in signature.ColorAttachments do
+                        match values.Colors.[sem] with
+                        | Some c ->
+                            // If we have an integer format we cannot clear depth-stencil
+                            // at the same time...
+                            if att.format.IsIntegerFormat then
+                                GL.ClearBuffer(ClearBuffer.Color, i, c.Integer.ToArray())
+                                GL.Check "could not clear buffer"
+                            else
+                                let mask = clearDepthStencil()
+                                GL.ClearColor(c.Float.X, c.Float.Y, c.Float.Z, c.Float.W)
+                                GL.Clear(mask ||| ClearBufferMask.ColorBufferBit)
+                                GL.Check "could not clear"
 
-                // Minimizing the number of clears is a bit tricky
-                let rec clear (colors : list<int * C4f>) =
-                    match colors with
-                    | [(0, c)] ->
-                        let mask = clearDepthStencil()
-                        GL.ClearColor(c.R, c.G, c.B, c.A)
-                        GL.Clear(mask ||| ClearBufferMask.ColorBufferBit)
+                        | None ->
+                            ()
 
-                    | [(i, c)] ->
-                        let mask = clearDepthStencil()
-                        GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 + i |> unbox)
-                        GL.ClearColor(c.R, c.G, c.B, c.A)
-                        GL.Clear(mask ||| ClearBufferMask.ColorBufferBit)
-
-                    | (i, c)::xs ->
-                        GL.DrawBuffer(int DrawBufferMode.ColorAttachment0 + i |> unbox)
-                        GL.ClearColor(c.R, c.G, c.B, c.A)
-                        GL.Clear(ClearBufferMask.ColorBufferBit)
-                        clear xs
-
-                    | [] when depthValue.IsSome || stencilValue.IsSome ->
-                        let mask = clearDepthStencil()
+                    // Clear depth-stencil if it hasn't been cleared
+                    let mask = clearDepthStencil()
+                    if mask <> ClearBufferMask.None then
                         GL.Clear(mask)
-
-                    | [] -> ()
-
-                clear colorValues
-
-                if ExecutionContext.framebuffersSupported then
-                    GL.BindFramebuffer(OpenTK.Graphics.OpenGL4.FramebufferTarget.Framebuffer, oldFbo)
-
-                GL.Viewport(old.[0], old.[1], old.[2], old.[3])
-                GL.Check "could not bind framebuffer"
+                        GL.Check "could not clear"
+                )
 
                 queries.End()
             )
 
         override x.Release() =
-            color.Outputs.Remove x |> ignore
-            depth.Outputs.Remove x |> ignore
-        override x.FramebufferSignature = fboSignature |> Some
+            values.Outputs.Remove x |> ignore
+
+        override x.FramebufferSignature = signature |> Some
         override x.Runtime = runtime |> Some
 
         override x.Use f = lock x f

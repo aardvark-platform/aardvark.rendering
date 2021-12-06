@@ -228,17 +228,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let set = EffectDebugger.Hook set
         new CommandTask(manager, unbox renderPass, RuntimeCommand.Render set) :> IRenderTask
 
-    member x.CompileClear(signature : IFramebufferSignature, color : aval<Map<Symbol, C4f>>, depth : aval<float option>, stencil : aval<int option>) : IRenderTask =
-        let colors =
-            color |> AVal.map (fun colors ->
-                signature.ColorAttachments |> Map.choose (fun _ (sem, _) ->
-                    colors |> Map.tryFind sem
-                )
-            )
-
-        new ClearTask(device, unbox signature, colors, depth, stencil |> AVal.map (Option.map uint32)) :> IRenderTask
-
-
+    member x.CompileClear(signature : IFramebufferSignature, values : aval<ClearValues>) : IRenderTask =
+        new ClearTask(device, unbox signature, values) :> IRenderTask
 
     member x.CreateFramebufferSignature(attachments : Map<Symbol, AttachmentSignature>, layers : int, perLayer : Set<string>) =
         device.CreateRenderPass(attachments, layers, perLayer) :> IFramebufferSignature
@@ -627,7 +618,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.GenerateMipMaps(t) = x.GenerateMipMaps(t)
         member x.ContextLock = x.ContextLock
         member x.CompileRender (signature, engine, set) = x.CompileRender(signature, set)
-        member x.CompileClear(signature, color, depth, stencil) = x.CompileClear(signature, color, depth, stencil)
+        member x.CompileClear(signature, values) = x.CompileClear(signature, values)
 
         member x.PrepareSurface(signature, s) = x.PrepareSurface(signature, s)
         member x.DeleteSurface(s) = x.DeleteSurface(s)
@@ -678,13 +669,13 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             x.CopyAsync(src, srcOffset, dst, size)
 
 
-        member x.Clear(fbo : IFramebuffer, clearColors : Map<Symbol,C4f>, depth : Option<float>, stencil : Option<int>) =
+        member x.Clear(fbo : IFramebuffer, values : ClearValues) =
             failwith "not implemented"
 
-        member x.ClearColor(texture : IBackendTexture, color : C4f) =
+        member x.ClearColor(texture : IBackendTexture, color : ClearColor) =
             failwith "not implemented"
 
-        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<float>, stencil : Option<int>) =
+        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<ClearDepth>, stencil : Option<ClearStencil>) =
             failwith "not implemented"
 
         member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture =
