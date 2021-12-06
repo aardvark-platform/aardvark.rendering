@@ -88,10 +88,12 @@ let createInstanced (runtime : IRuntime) (signature : IFramebufferSignature) (ba
 
     // here we use low level draw call construction. Sg.instanced would work as well of course.
     let call = 
-        { DrawCallInfo.empty with
-            FaceVertexCount = geometry.IndexedAttributes.[DefaultSemantic.Positions].Length
-            InstanceCount = trafos.Length
-        }
+        DrawCallInfo(
+            FaceVertexCount = geometry.IndexedAttributes.[DefaultSemantic.Positions].Length, 
+            InstanceCount = trafos.Length,
+            FirstInstance = 0,
+            BaseVertex = 0
+        )
   
     let sg = 
         Sg.render IndexedGeometryMode.TriangleList call
@@ -125,11 +127,12 @@ let createIndirect (runtime : IRuntime) (signature : IFramebufferSignature) (bac
     let drawCallInfos =
         trafos 
         |> Array.mapi (fun i _ -> 
-                { DrawCallInfo.empty with
-                    FaceVertexCount = geometry.IndexedAttributes.[DefaultSemantic.Positions].Length
-                    InstanceCount = 1
-                    FirstInstance = i
-                }
+                DrawCallInfo(
+                    FaceVertexCount = geometry.IndexedAttributes.[DefaultSemantic.Positions].Length, 
+                    InstanceCount = 1, 
+                    FirstInstance = i,
+                    BaseVertex = 0
+                )
            )
                   
     // simply wrap the drawcall infos array into buffers

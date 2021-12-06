@@ -64,14 +64,16 @@ type DrawCallSet(collapseAdjacent : bool) =
             else all :> seq<_>
 
         drawRanges
-        |> Seq.map (fun range ->
-            { DrawCallInfo.empty with
-                FirstIndex = range.Min
-                FaceVertexCount = range.Size + 1
-                InstanceCount = 1
-            }
-        )
-        |> Seq.toArray
+            |> Seq.map (fun range ->
+                DrawCallInfo(
+                    FirstIndex = range.Min,
+                    FaceVertexCount = range.Size + 1,
+                    FirstInstance = 0,
+                    InstanceCount = 1,
+                    BaseVertex = 0
+                )
+               )
+            |> Seq.toArray
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module DrawCallSet =

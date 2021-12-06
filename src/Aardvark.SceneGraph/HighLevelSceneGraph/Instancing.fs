@@ -183,13 +183,13 @@ module Instancing =
                                             if c.InstanceCount > 1 || c.FirstInstance <> 0 then
                                                 failwithf "[Sg] cannot instance drawcall with %d instances" c.InstanceCount
                                             
-                                            {
-                                                FaceVertexCount = c.FaceVertexCount
-                                                FirstIndex = c.FirstIndex
-                                                FirstInstance = 0
-                                                InstanceCount = cnt
+                                            DrawCallInfo(
+                                                FaceVertexCount = c.FaceVertexCount,
+                                                FirstIndex = c.FirstIndex,
+                                                FirstInstance = 0,
+                                                InstanceCount = cnt,
                                                 BaseVertex = c.BaseVertex
-                                            }
+                                            )
                                         )
                                     ) dir cnt)
                             | _ ->

@@ -232,12 +232,12 @@ module Indirect =
                                 let uptr = uniformCache.Add(u)
 
                                 let call =
-                                    { DrawCallInfo.empty with
-                                        FaceVertexCount = int gptr.Size
-                                        FirstIndex = int gptr.Offset
-                                        FirstInstance = int uptr.Offset
+                                    DrawCallInfo(
+                                        FaceVertexCount = int gptr.Size,
+                                        FirstIndex = int gptr.Offset,
+                                        FirstInstance = int uptr.Offset,
                                         InstanceCount = int uptr.Size
-                                    }
+                                    )
 
                                 callCache.[(g,u)] <- call
 

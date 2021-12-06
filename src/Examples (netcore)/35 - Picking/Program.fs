@@ -174,11 +174,12 @@ module Scene =
 
         let indirectBuffer =
             Array.init count (fun i ->
-                { DrawCallInfo.empty with
-                    FaceVertexCount = geometry.FaceVertexCount
-                    InstanceCount = 1
-                    FirstInstance = i
-                }
+                DrawCallInfo(
+                    FaceVertexCount = geometry.FaceVertexCount,
+                    InstanceCount = 1,
+                    FirstInstance = i,
+                    BaseVertex = 0
+                )
             )
             |> IndirectBuffer.ofArray geometry.IsIndexed
 

@@ -698,13 +698,13 @@ type Air private() =
 
     static member DrawInstanced(instanceCount : int, offset : int, count : int, baseVertex : int) =
         let info =
-            {
-                FirstIndex = offset
-                FaceVertexCount = count
-                FirstInstance = 0
-                InstanceCount = instanceCount
+            DrawCallInfo(
+                FirstIndex = offset,
+                FaceVertexCount = count,
+                FirstInstance = 0,
+                InstanceCount = instanceCount,
                 BaseVertex = baseVertex
-            }
+            )
 
         Air.Draw(info)
 

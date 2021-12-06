@@ -345,13 +345,8 @@ let main argv =
                     let start = c * pointsPerCall
                     printfn "start: %d, count: %d" start pointsPerCall
                     let dci = 
-                        {
-                            BaseVertex = start
-                            FirstIndex = start
-                            FaceVertexCount = pointsPerCall
-                            FirstInstance = 0
-                            InstanceCount = 1
-                        }
+                        DrawCallInfo(BaseVertex = start, FirstIndex = start,
+                                        FaceVertexCount = pointsPerCall, FirstInstance = 0, InstanceCount = 1)
                     yield Sg.render IndexedGeometryMode.PointList dci
             |] |> Sg.ofArray
         ) 

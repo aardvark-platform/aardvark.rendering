@@ -165,13 +165,13 @@ module Sg =
                         shapes.concreteShapes |> Seq.map (ConcreteShape.shape >> cache.GetBufferRange)
                     )
                     |> Seq.mapi (fun i r ->
-                        {
-                            FirstIndex = r.Min
-                            FaceVertexCount = r.Size + 1
-                            FirstInstance = i
-                            InstanceCount = 1
+                        DrawCallInfo(
+                            FirstIndex = r.Min,
+                            FaceVertexCount = r.Size + 1,
+                            FirstInstance = i,
+                            InstanceCount = 1,
                             BaseVertex = 0
-                        }
+                        )
                     )
                     |> Seq.toArray
                     |> IndirectBuffer.ofArray false
@@ -287,14 +287,14 @@ module Sg =
                             |> List.toArray
                             |> Array.map (ConcreteShape.shape >> cache.GetBufferRange)
                             |> Array.mapi (fun i r ->
-                                {
-                                    FirstIndex = r.Min
-                                    FaceVertexCount = r.Size + 1
-                                    FirstInstance = i
-                                    InstanceCount = 1
+                                DrawCallInfo(
+                                    FirstIndex = r.Min,
+                                    FaceVertexCount = r.Size + 1,
+                                    FirstInstance = i,
+                                    InstanceCount = 1,
                                     BaseVertex = 0
-                                }
-                            )
+                                )
+                                )
                             |> IndirectBuffer.ofArray false
 
                     let trafoR0, trafoR1 =
@@ -407,13 +407,13 @@ module Sg =
             boundary.VertexAttributes <- cache.VertexBuffers
             let drawCall =
                 let range = cache.GetBufferRange Shape.Quad
-                {
-                    FirstIndex = range.Min
-                    FaceVertexCount = range.Size + 1
-                    FirstInstance = 0
-                    InstanceCount = 1
+                DrawCallInfo(
+                    FirstIndex = range.Min,
+                    FaceVertexCount = range.Size + 1,
+                    FirstInstance = 0,
+                    InstanceCount = 1,
                     BaseVertex = 0
-                }
+                )
 
             boundary.DrawCalls <- Direct ([drawCall] |> AVal.constant)
             boundary.Mode <- IndexedGeometryMode.TriangleList

@@ -392,13 +392,13 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 match ab.Data with
                 | :? (DrawCallInfo[]) as data -> 
                     let transformed = data |> Array.map (fun dc -> 
-                                {
-                                    FaceVertexCount = dc.FaceVertexCount
-                                    InstanceCount = dc.InstanceCount
-                                    FirstIndex = dc.FirstIndex
-                                    BaseVertex = dc.FirstInstance
+                                DrawCallInfo(
+                                    FaceVertexCount = dc.FaceVertexCount,
+                                    InstanceCount = dc.InstanceCount,
+                                    FirstIndex = dc.FirstIndex,
+                                    BaseVertex = dc.FirstInstance,
                                     FirstInstance = dc.BaseVertex
-                                })
+                                ))
                     ArrayBuffer(transformed) :> IBuffer
                 | _ -> failwith "[GL] IndirectBuffer data supposed to be DrawCallInfo[]"
             | :? SingleValueBuffer as sb -> failwith "TODO"

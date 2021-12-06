@@ -142,11 +142,9 @@ let main argv =
     let drawCallInfos = 
         [| 
             for r in packedGeometry.ranges do 
-                yield { FaceVertexCount = r.faceVertexCount
-                        BaseVertex = r.baseVertex
-                        FirstIndex = r.firstIndex
-                        FirstInstance = 0
-                        InstanceCount = trafos.Length }
+                yield DrawCallInfo(FaceVertexCount = r.faceVertexCount,
+                                   BaseVertex = r.baseVertex, FirstIndex = r.firstIndex,
+                                   FirstInstance = 0, InstanceCount = trafos.Length)
         |]
 
     // put draw call infos into buffer

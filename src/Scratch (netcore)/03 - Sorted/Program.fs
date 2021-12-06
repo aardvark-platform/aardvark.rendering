@@ -646,13 +646,13 @@ let ofIndexedGeometry2 (instanceCount : int) (g : IndexedGeometry) =
             null, g.IndexedAttributes.[DefaultSemantic.Positions].Length
             
     let call = 
-        {
-            FaceVertexCount = faceVertexCount
-            FirstIndex = 0
-            InstanceCount = instanceCount
-            FirstInstance = 0
+        DrawCallInfo(
+            FaceVertexCount = faceVertexCount,
+            FirstIndex = 0,
+            InstanceCount = instanceCount,
+            FirstInstance = 0,
             BaseVertex = 0
-        }
+        )
     let sg = Sg.VertexAttributeApplicator(attributes, Sg.RenderNode(call,g.Mode)) :> ISg
     if not (isNull index) then
         Sg.VertexIndexApplicator(BufferView.ofArray index, sg) :> ISg

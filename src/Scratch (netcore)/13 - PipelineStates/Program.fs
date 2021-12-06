@@ -155,10 +155,10 @@ let main argv =
     let quadFront, quadBack =
 
         let drawCall =
-            { DrawCallInfo.empty with
-                FaceVertexCount = 4
+            DrawCallInfo(
+                FaceVertexCount = 4,
                 InstanceCount = 1
-            }
+            )
 
         let posFront = [| V3f(-0.4,-0.4,0.0); V3f(0.4,-0.4,0.0); V3f(-0.4,0.4,0.0); V3f(0.4,0.4,0.0) |]
         let posBack  = [| V3f(-0.4,-0.4,0.0); V3f(-0.4,0.4,0.0); V3f(0.4,-0.4,0.0); V3f(0.4,0.4,0.0) |]

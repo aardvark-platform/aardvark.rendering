@@ -939,9 +939,12 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
     let initialCapacity = Fun.NextPowerOfTwo initialCapacity
     let adjust (call : DrawCallInfo) =
         if indexed then
-            { call with BaseVertex = call.FirstInstance; FirstInstance = call.BaseVertex }
+            let mutable c = call
+            Fun.Swap(&c.BaseVertex, &c.FirstInstance)
+            c
         else
-            call
+            let mutable c = call
+            c
 
     let drawIndices = Dict<DrawCallInfo, int>()
     let mutable capacity = initialCapacity
@@ -1025,10 +1028,10 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
         
     let pCall =
         NativePtr.allocArray [|
-            { DrawCallInfo.empty with
-                FaceVertexCount = 24
+            DrawCallInfo(
+                FaceVertexCount = 24,
                 InstanceCount = 0
-            }
+            )
         |]
 
     let boxDraw = 
@@ -1350,21 +1353,21 @@ type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<Inst
     member x.DrawCallInfo =
         match ib with
             | Some ib ->
-                {
-                    FaceVertexCount = fvc
-                    FirstIndex = int ib.Offset / Marshal.SizeOf(signature.indexType.Value)
-                    InstanceCount = int ub.Size
-                    FirstInstance = int ub.Offset
+                DrawCallInfo(
+                    FaceVertexCount = fvc,
+                    FirstIndex = int ib.Offset / Marshal.SizeOf(signature.indexType.Value),
+                    InstanceCount = int ub.Size,
+                    FirstInstance = int ub.Offset,
                     BaseVertex = int vb.Offset
-                }
+                )
 
             | None -> 
-                { DrawCallInfo.empty with
-                    FaceVertexCount = fvc
-                    FirstIndex = int vb.Offset
-                    InstanceCount = int ub.Size
+                DrawCallInfo(
+                    FaceVertexCount = fvc,
+                    FirstIndex = int vb.Offset,
+                    InstanceCount = int ub.Size,
                     FirstInstance = int ub.Offset
-                }
+                )
 
 
 type GeometryPool private(ctx : Context) =

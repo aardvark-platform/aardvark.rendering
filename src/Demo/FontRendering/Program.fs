@@ -930,11 +930,12 @@ let main argv =
         [|
             for i in 0..cnt-1 do
                 yield
-                    { DrawCallInfo.empty with
-                        FaceVertexCount = 1
-                        InstanceCount = 1
-                        FirstIndex = i
-                    }
+                    DrawCallInfo( 
+                        FaceVertexCount = 1,
+                        InstanceCount = 1,
+                        FirstIndex = i,
+                        FirstInstance = 0
+                    )
         |]
 
     let calls = AVal.init (randomCalls 990)

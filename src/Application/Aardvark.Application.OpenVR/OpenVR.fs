@@ -206,7 +206,7 @@ module RenderModels =
     let private modelCache = System.Collections.Concurrent.ConcurrentDictionary<string, Option<ISg>>()
 
     let toSg (m : RenderModel) =
-        let call = { DrawCallInfo.empty with FaceVertexCount = int m.TriangleCount * 3; InstanceCount = 1 }
+        let call = DrawCallInfo(FaceVertexCount = int m.TriangleCount * 3, InstanceCount = 1)
         let mode = IndexedGeometryMode.TriangleList
 
         let index = 

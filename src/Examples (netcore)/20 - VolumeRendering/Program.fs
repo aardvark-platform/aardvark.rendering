@@ -185,7 +185,7 @@ let main argv =
     let fvc = int64 volume.Size.X * int64 volume.Size.Y * int64 volume.Size.Z
     let factor = fvc / (256L * 256L * 256L)
 
-    let drawCall = { DrawCallInfo.empty with FaceVertexCount = (fvc / factor |> int); InstanceCount = 1 }
+    let drawCall = DrawCallInfo(FaceVertexCount = (fvc / factor |> int), InstanceCount = 1)
 
     let signature =
         win.Runtime.CreateFramebufferSignature [

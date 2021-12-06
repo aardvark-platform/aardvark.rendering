@@ -158,13 +158,13 @@ module RenderObjectSemantics =
                     if info.FaceVertexCount < 0 then
                         let! (count : int) = scope?FaceVertexCount
                         return
-                            [ {
-                                FirstIndex = info.FirstIndex
-                                FirstInstance = info.FirstInstance
-                                InstanceCount = info.InstanceCount
-                                FaceVertexCount = count
+                            [ DrawCallInfo(
+                                FirstIndex = info.FirstIndex,
+                                FirstInstance = info.FirstInstance,
+                                InstanceCount = info.InstanceCount,
+                                FaceVertexCount = count,
                                 BaseVertex = 0
-                            } ]
+                            ) ]
                     else
                         return [info]
                 }
@@ -197,13 +197,13 @@ module RenderObjectSemantics =
                 packer |> AVal.map (fun set ->
                     set |> Seq.toArray
                         |> Array.map (fun r ->
-                            {
-                                FirstIndex = r.Min
-                                FaceVertexCount = 1 + r.Size
-                                FirstInstance = 0
-                                InstanceCount = 1
+                            DrawCallInfo(
+                                FirstIndex = r.Min,
+                                FaceVertexCount = 1 + r.Size,
+                                FirstInstance = 0,
+                                InstanceCount = 1,
                                 BaseVertex = 0
-                            }
+                            )
                         )
 
 
