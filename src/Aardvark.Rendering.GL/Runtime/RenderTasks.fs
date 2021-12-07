@@ -557,56 +557,41 @@ module RenderTasks =
                     let depthValue = values.Depth
                     let stencilValue = values.Stencil
 
-                    // Sets clear values and returns mask
-                    let mutable depthStencilCleared = false
-
-                    let clearDepthStencil() =
-                        if depthStencilCleared then
-                            ClearBufferMask.None
-
-                        else
-                            depthStencilCleared <- true
-
-                            match depthValue, stencilValue with
-                            | Some d, Some s ->
-                                GL.ClearDepth(float d.Value)
-                                GL.ClearStencil(int s.Value)
-                                ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit
-
-                            | Some d, None ->
-                                GL.ClearDepth(float d.Value)
-                                ClearBufferMask.DepthBufferBit
-
-                            | None, Some s ->
-                                GL.ClearStencil(int s.Value)
-                                ClearBufferMask.StencilBufferBit
-
-                            | _ ->
-                                ClearBufferMask.None
-
                     // Clear color attachments
                     for KeyValue(i, (sem, att)) in signature.ColorAttachments do
                         match values.Colors.[sem] with
                         | Some c ->
-                            // If we have an integer format we cannot clear depth-stencil
-                            // at the same time...
                             if att.format.IsIntegerFormat then
                                 GL.ClearBuffer(ClearBuffer.Color, i, c.Integer.ToArray())
-                                GL.Check "could not clear buffer"
                             else
-                                let mask = clearDepthStencil()
-                                GL.ClearColor(c.Float.X, c.Float.Y, c.Float.Z, c.Float.W)
-                                GL.Clear(mask ||| ClearBufferMask.ColorBufferBit)
-                                GL.Check "could not clear"
+                                GL.ClearBuffer(ClearBuffer.Color, i, c.Float.ToArray())
+                            GL.Check "could not clear buffer"
 
                         | None ->
                             ()
 
-                    // Clear depth-stencil if it hasn't been cleared
-                    let mask = clearDepthStencil()
+                    // Clear depth-stencil if it necessary
+                    let mask =
+                        match depthValue, stencilValue with
+                        | Some d, Some s ->
+                            GL.ClearDepth(float d.Value)
+                            GL.ClearStencil(int s.Value)
+                            ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit
+
+                        | Some d, None ->
+                            GL.ClearDepth(float d.Value)
+                            ClearBufferMask.DepthBufferBit
+
+                        | None, Some s ->
+                            GL.ClearStencil(int s.Value)
+                            ClearBufferMask.StencilBufferBit
+
+                        | _ ->
+                            ClearBufferMask.None
+
                     if mask <> ClearBufferMask.None then
                         GL.Clear(mask)
-                        GL.Check "could not clear"
+                        GL.Check "could not clear depth stencil"
                 )
 
                 queries.End()

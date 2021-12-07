@@ -12,29 +12,33 @@ module TextureClear =
 
     module Cases =
 
-        let createAndClearColor (runtime : IRuntime) (format : TextureFormat) =
+        let inline createAndClearColor (runtime : IRuntime) (format : TextureFormat) (color : ^T) =
             let t = runtime.CreateTexture2D(V2i(256), format)
 
             try
-                runtime.ClearColor(t, V4i(-1))
+                runtime.ClearColor(t, color)
                 t.Download()
             finally
                 runtime.DeleteTexture(t)
 
+        let rgba8 (runtime : IRuntime) =
+            let data = createAndClearColor runtime TextureFormat.Rgba8 <| C3f(0.5)
+            data.AsPixImage<uint8>() |> PixImage.isColor (C4b(127uy).ToArray())
+
         let rgba32i (runtime : IRuntime) =
-            let data = createAndClearColor runtime TextureFormat.Rgba32i
+            let data = createAndClearColor runtime TextureFormat.Rgba32i <| V4i(-1)
             data.AsPixImage<int>() |> PixImage.isColor (V4i(-1).ToArray())
 
         let rgba32ui (runtime : IRuntime) =
-            let data = createAndClearColor runtime TextureFormat.Rgba32ui
+            let data = createAndClearColor runtime TextureFormat.Rgba32ui <| V4i(-1)
             data.AsPixImage<uint>() |> PixImage.isColor [| UInt32.MaxValue; UInt32.MaxValue; UInt32.MaxValue; UInt32.MaxValue |]
 
         let rgba16ui (runtime : IRuntime) =
-            let data = createAndClearColor runtime TextureFormat.Rgba16ui
+            let data = createAndClearColor runtime TextureFormat.Rgba16ui <| V4i(-1)
             data.AsPixImage<uint16>() |> PixImage.isColor [| UInt16.MaxValue; UInt16.MaxValue; UInt16.MaxValue; UInt16.MaxValue |]
 
         let rgba32f (runtime : IRuntime) =
-            let data = createAndClearColor runtime TextureFormat.Rgba32f
+            let data = createAndClearColor runtime TextureFormat.Rgba32f <| V4i(-1)
             data.AsPixImage<float32>() |> PixImage.isColor (V4f(-1).ToArray())
 
         let depthStencil (runtime : IRuntime) =
@@ -54,13 +58,15 @@ module TextureClear =
             let c1 = Sym.ofString "c1"
             let c2 = Sym.ofString "c2"
             let c3 = Sym.ofString "c3"
+            let c4 = Sym.ofString "c4"
 
             let formats =
                 Map.ofList [
                     c0, RenderbufferFormat.Rgba32f
                     c1, RenderbufferFormat.Rgba32i
                     c2, RenderbufferFormat.Rgba32ui
-                    c3, RenderbufferFormat.Rgba16i
+                    c3, RenderbufferFormat.Rgba8
+                    c4, RenderbufferFormat.Rgba16i
                     DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
                 ]
 
@@ -78,7 +84,9 @@ module TextureClear =
                 let clear =
                     clear {
                         color C3b.AliceBlue
+                        color (c0, C3us.Aquamarine)
                         color (c1, V4i(-1))
+                        color (c3, C3f(0.5))
                         depth 0.5
                         stencil 4
                     }
@@ -86,7 +94,7 @@ module TextureClear =
                 clearFramebuffer fbo clear
 
                 do
-                    let c = C3b.AliceBlue |> C4f
+                    let c = C3us.Aquamarine |> C4f
                     let pi = textures.[c0].Download().AsPixImage<float32>()
                     pi |> PixImage.isColor (c.ToArray())
 
@@ -100,8 +108,13 @@ module TextureClear =
                     pi |> PixImage.isColor (c.ToArray() |> Array.map uint32)
 
                 do
+                    let c = C4b(127uy)
+                    let pi = textures.[c3].Download().AsPixImage<uint8>()
+                    pi |> PixImage.isColor (c.ToArray())
+
+                do
                     let c = C3b.AliceBlue |> V4i
-                    let pi = textures.[c3].Download().AsPixImage<int16>()
+                    let pi = textures.[c4].Download().AsPixImage<int16>()
                     pi |> PixImage.isColor (c.ToArray() |> Array.map int16)
 
                 do
@@ -141,6 +154,7 @@ module TextureClear =
     let tests (backend : Backend) =        
         [
             if backend <> Backend.Vulkan then
+                "Color rgba8",                  Cases.rgba8
                 "Color rgba32i",                Cases.rgba32i
                 "Color rgba16ui",               Cases.rgba16ui
                 "Color rgba32ui",               Cases.rgba32ui
