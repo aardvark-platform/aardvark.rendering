@@ -1,3 +1,12 @@
+### 5.1.21
+- fixed ComputeShader problem in Vulkan
+
+### 5.1.20
+- deterministic Id for instanced-effects
+
+### 5.1.19
+- updated Base & FShade
+
 ### 5.1.18
 
 - disabled multisampling for text outline - fix for https://github.com/aardvark-platform/aardvark.rendering/issues/86

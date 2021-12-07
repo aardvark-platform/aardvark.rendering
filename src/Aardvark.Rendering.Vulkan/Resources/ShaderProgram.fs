@@ -322,6 +322,11 @@ module ShaderProgram =
 
         let logs = System.Collections.Generic.Dictionary<FShade.ShaderSlot, string>()
 
+        let shaders =
+            match iface.shaders with 
+            | GLSLProgramShaders.Graphics { stages = s } -> s
+            | _ -> MapExt.empty
+
         let binaries =
             iface.shaders.Slots
             |> MapExt.toArray

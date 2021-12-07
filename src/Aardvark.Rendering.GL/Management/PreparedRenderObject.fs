@@ -498,11 +498,10 @@ type NativeStats =
 module PreparedPipelineStateAssembler =
     
     let private usedClipPlanes (iface : GLSLProgramInterface) =
-        let candidates = [FShade.ShaderStage.Geometry; FShade.ShaderStage.TessEval; FShade.ShaderStage.Vertex ]
-
         match iface.shaders with
-        | GLSLProgramShaders.Graphics g ->
-            let beforeRasterize = candidates |> List.tryPick (fun s -> MapExt.tryFind s g.stages)
+        | GLSLProgramShaders.Graphics { stages = shaders } ->
+            let candidates = [FShade.ShaderStage.Geometry; FShade.ShaderStage.TessEval; FShade.ShaderStage.Vertex ]
+            let beforeRasterize = candidates |> List.tryPick (fun s -> MapExt.tryFind s shaders)
             match beforeRasterize with
             | Some shader ->
                 match MapExt.tryFind "gl_ClipDistance" shader.shaderBuiltInOutputs with
@@ -516,7 +515,6 @@ module PreparedPipelineStateAssembler =
                     Set.empty
             | None ->
                 Set.empty
-
         | _ ->
             Set.empty
 

@@ -30,6 +30,7 @@ module Effect =
 
     [<AutoOpen>]
     module private Shaders =
+        do Serializer.Init()
 
         type UniformScope with
             member x.OutputBuffer : Image2d<Formats.rgba32f> = uniform?OutputBuffer
@@ -206,7 +207,7 @@ module Effect =
         let chitSolidColor (color : C3d) (input : RayHitInput<Payload>) =
             let color = V3d color
 
-            closesthit {
+            closestHit {
                 let info = getGeometryInfo input
                 let indices = getIndices info input
 
@@ -225,7 +226,7 @@ module Effect =
             }
 
         let chitTextured (input : RayHitInput<Payload>) =
-            closesthit {
+            closestHit {
                 let info = getGeometryInfo input
                 let indices = getIndices info input
 
@@ -243,7 +244,7 @@ module Effect =
             }
 
         let chitSphere (input : RayHitInput<Payload>) =
-            closesthit {
+            closestHit {
                 let info = getGeometryInfo input
                 let position = input.ray.origin + input.hit.t * input.ray.direction
                 let center = input.objectSpace.objectToWorld.TransformPos uniform.SphereOffsets.[input.geometry.geometryIndex]
@@ -272,23 +273,22 @@ module Effect =
 
     let private hitGroupModel =
         hitgroup {
-            closesthit (chitSolidColor C3d.BurlyWood)
+            closestHit (chitSolidColor C3d.BurlyWood)
         }
 
     let private hitGroupFloor =
         hitgroup {
-            closesthit chitTextured
+            closestHit chitTextured
         }
 
     let private hitGroupSphere =
         hitgroup {
-            closesthit chitSphere
+            closestHit chitSphere
             intersection (intersectionSphere 0.2)
         }
 
-
     let main =
-        raytracing {
+        raytracingEffect {
             raygen rgenMain
             miss missSky
             miss (MissShader.Shadow, missShadow)

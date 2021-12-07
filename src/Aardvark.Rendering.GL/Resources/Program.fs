@@ -383,14 +383,14 @@ module ProgramExtensions =
                                 SupportedModes = supported
                                 Interface =
                                     {
-                                        inputs                  = []
-                                        outputs                 = []
-                                        samplers                = MapExt.empty
-                                        images                  = MapExt.empty
-                                        storageBuffers          = MapExt.empty
-                                        uniformBuffers          = MapExt.empty
-                                        accelerationStructures  = MapExt.empty
-                                        shaders                 = FShade.GLSL.GLSLProgramShaders.Graphics FShade.GLSL.GLSLGraphicsShaders.empty
+                                        inputs                      = []
+                                        outputs                     = []
+                                        samplers                    = MapExt.empty
+                                        images                      = MapExt.empty
+                                        storageBuffers              = MapExt.empty
+                                        uniformBuffers              = MapExt.empty
+                                        shaders                     = FShade.GLSL.GLSLProgramShaders.Graphics { stages = MapExt.empty }
+                                        accelerationStructures      = MapExt.empty
                                     }
                             }
 
