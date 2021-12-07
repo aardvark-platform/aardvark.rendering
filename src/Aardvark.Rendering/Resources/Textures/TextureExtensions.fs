@@ -152,7 +152,7 @@ type ITextureRuntimeExtensions private() =
     // ================================================================================================================
 
     [<Extension>]
-    static member Copy(this : ITextureRuntime, img : PixVolume, dst : ITextureSubResource, dstOffset : V3i, size : V3i) =
+    static member Upload(this : ITextureRuntime, img : PixVolume, dst : ITextureSubResource, dstOffset : V3i, size : V3i) =
         img.Visit
             { new PixVolumeVisitor<int>() with
                 member x.Visit(img : PixVolume<'a>, _) =
@@ -163,7 +163,11 @@ type ITextureRuntimeExtensions private() =
             } |> ignore
 
     [<Extension>]
-    static member Copy(this : ITextureRuntime, src : ITextureSubResource, srcOffset : V3i, dst : PixVolume, size : V3i) =
+    static member Upload(this : ITextureRuntime, img : PixVolume, dst : ITextureSubResource) =
+        this.Upload(img, dst, V3i.Zero, img.Size)
+
+    [<Extension>]
+    static member Download(this : ITextureRuntime, src : ITextureSubResource, srcOffset : V3i, dst : PixVolume, size : V3i) =
         dst.Visit
             { new PixVolumeVisitor<int>() with
                 member x.Visit(dst : PixVolume<'a>, _) =
@@ -174,12 +178,12 @@ type ITextureRuntimeExtensions private() =
             } |> ignore
 
     [<Extension>]
-    static member Copy(this : ITextureRuntime, img : PixVolume, dst : ITextureSubResource) =
-        ITextureRuntimeExtensions.Copy(this, img, dst, V3i.Zero, img.Size)
+    static member Download(this : ITextureRuntime, src : ITextureSubResource, dst : PixVolume) =
+        this.Download(src, V3i.Zero, dst, dst.Size)
 
     [<Extension>]
-    static member Copy(this : ITextureRuntime, src : ITextureSubResource, dst : PixVolume) =
-        ITextureRuntimeExtensions.Copy(this, src, V3i.Zero, dst, dst.Size)
+    static member Download(src : ITextureSubResource, dst : PixVolume) =
+        src.Texture.Runtime.Download(src, dst)
 
     [<Extension>]
     static member SetSlice(this : ITextureSubResource, minC : Option<V3i>, maxC : Option<V3i>, value : PixVolume) =
@@ -188,7 +192,7 @@ type ITextureRuntimeExtensions private() =
         let size = V3i.III + maxC - minC
         let imgSize = value.Size
         let size = V3i(min size.X imgSize.X, min size.Y imgSize.Y, min size.Z imgSize.Z)
-        ITextureRuntimeExtensions.Copy(this.Texture.Runtime, value, this, minC, size)
+        this.Texture.Runtime.Upload(value, this, minC, size)
 
     [<Extension>]
     static member SetSlice(this : ITextureSubResource, minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>, minZ : Option<int>, maxZ : Option<int>, value : PixVolume) =
@@ -203,7 +207,7 @@ type ITextureRuntimeExtensions private() =
         let size = V3i.III + maxC - minC
         let imgSize = value.Size
         let size = V3i(min size.X imgSize.X, min size.Y imgSize.Y, min size.Z imgSize.Z)
-        ITextureRuntimeExtensions.Copy(this.Texture.Runtime, value, this, minC, size)
+        this.Texture.Runtime.Upload(value, this, minC, size)
 
 
     // ================================================================================================================
@@ -211,7 +215,7 @@ type ITextureRuntimeExtensions private() =
     // ================================================================================================================
 
     [<Extension>]
-    static member Copy(this : ITextureRuntime, img : PixImage, dst : ITextureSubResource, dstOffset : V3i, size : V2i) =
+    static member Upload(this : ITextureRuntime, img : PixImage, dst : ITextureSubResource, dstOffset : V3i, size : V2i) =
         img.Visit
             { new PixImageVisitor<int>() with
                 member x.Visit(img : PixImage<'a>, _) =
@@ -234,11 +238,15 @@ type ITextureRuntimeExtensions private() =
             } |> ignore
 
     [<Extension>]
-    static member Copy(this : ITextureRuntime, img : PixImage, dst : ITextureSubResource, dstOffset : V2i, size : V2i) =
-        ITextureRuntimeExtensions.Copy(this, img, dst, V3i(dstOffset, 0), size)
+    static member Upload(this : ITextureRuntime, img : PixImage, dst : ITextureSubResource, dstOffset : V2i, size : V2i) =
+        this.Upload(img, dst, V3i(dstOffset, 0), size)
+    
+    [<Extension>]
+    static member Upload(this : ITextureRuntime, img : PixImage, dst : ITextureSubResource) =
+        this.Upload(img, dst, V3i.Zero, img.Size)
 
     [<Extension>]
-    static member Copy(this : ITextureRuntime, src : ITextureSubResource, srcOffset : V3i, dst : PixImage, size : V2i) =
+    static member Download(this : ITextureRuntime, src : ITextureSubResource, srcOffset : V3i, dst : PixImage, size : V2i) =
         dst.Visit
             { new PixImageVisitor<int>() with
                 member x.Visit(dst : PixImage<'a>, _) =
@@ -261,16 +269,16 @@ type ITextureRuntimeExtensions private() =
             } |> ignore
 
     [<Extension>]
-    static member Copy(this : ITextureRuntime, src : ITextureSubResource, srcOffset : V2i, dst : PixImage, size : V2i) =
-        ITextureRuntimeExtensions.Copy(this, src, V3i(srcOffset, 0), dst, size)
+    static member Download(this : ITextureRuntime, src : ITextureSubResource, srcOffset : V2i, dst : PixImage, size : V2i) =
+        this.Download(src, V3i(srcOffset, 0), dst, size)
 
     [<Extension>]
-    static member Copy(this : ITextureRuntime, img : PixImage, dst : ITextureSubResource) =
-        ITextureRuntimeExtensions.Copy(this, img, dst, V3i.Zero, img.Size)
+    static member Download(this : ITextureRuntime, src : ITextureSubResource, dst : PixImage) =
+        this.Download(src, V3i.Zero, dst, dst.Size)
 
     [<Extension>]
-    static member Copy(this : ITextureRuntime, src : ITextureSubResource, dst : PixImage) =
-        ITextureRuntimeExtensions.Copy(this, src, V3i.Zero, dst, dst.Size)
+    static member Download(src : ITextureSubResource, dst : PixImage) =
+        src.Texture.Runtime.Download(src, dst)
 
     [<Extension>]
     static member SetSlice(this : ITextureSubResource, minC : Option<V2i>, maxC : Option<V2i>, z : int, value : PixImage) =
@@ -279,7 +287,7 @@ type ITextureRuntimeExtensions private() =
         let size = V2i.II + maxC - minC
         let imgSize = value.Size
         let size = V2i(min size.X imgSize.X, min size.Y imgSize.Y)
-        ITextureRuntimeExtensions.Copy(this.Texture.Runtime, value, this, V3i(minC, z), size)
+        this.Texture.Runtime.Upload(value, this, V3i(minC, z), size)
 
     [<Extension>]
     static member SetSlice(this : ITextureSubResource, minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>, z : int, value : PixImage) =
@@ -293,15 +301,15 @@ type ITextureRuntimeExtensions private() =
         let size = V2i.II + maxC - minC
         let imgSize = value.Size
         let size = V2i(min size.X imgSize.X, min size.Y imgSize.Y)
-        ITextureRuntimeExtensions.Copy(this.Texture.Runtime, value, this, V3i(minC, z), size)
+        this.Texture.Runtime.Upload(value, this, V3i(minC, z), size)
 
     [<Extension>]
     static member SetSlice(this : ITextureSubResource, minX : Option<int>, maxX : Option<int>, minY : Option<int>, maxY : Option<int>, value : PixImage) =
-        ITextureRuntimeExtensions.SetSlice(this, minX, maxX, minY, maxY, 0, value)
+        this.SetSlice(minX, maxX, minY, maxY, 0, value)
 
     [<Extension>]
     static member SetSlice(this : ITextureSubResource, minC : Option<V2i>, maxC : Option<V2i>, value : PixImage) =
-        ITextureRuntimeExtensions.SetSlice(this, minC, maxC, 0, value)
+        this.SetSlice(minC, maxC, 0, value)
 
 
     // ================================================================================================================
@@ -333,23 +341,9 @@ type ITextureRuntimeExtensions private() =
 
         this.Copy(src, V3i.Zero, dst, V3i.Zero, size)
 
-
-    // ================================================================================================================
-    // CopyTo
-    // ================================================================================================================
-
-    [<Extension>]
-    static member CopyTo(src : ITextureSubResource, dst : PixImage) =
-        src.Texture.Runtime.Copy(src, dst)
-
-    [<Extension>]
-    static member CopyTo(src : ITextureSubResource, dst : PixVolume) =
-        src.Texture.Runtime.Copy(src, dst)
-
     [<Extension>]
     static member CopyTo(src : IFramebufferOutput, dst : IFramebufferOutput) =
         src.Runtime.Copy(src, dst)
-
 
     // ================================================================================================================
     // Download

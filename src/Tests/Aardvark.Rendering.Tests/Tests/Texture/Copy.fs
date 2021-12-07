@@ -63,7 +63,7 @@ module TextureCopy =
             data |> Array.iteri (fun slice ->
                 Array.iteri (fun level _ ->
                     let target = texture.[TextureAspect.Color, level, slice]
-                    runtime.Copy(data.[slice].[level], target)
+                    runtime.Upload(data.[slice].[level], target)
                 )
             )
 
@@ -98,7 +98,7 @@ module TextureCopy =
                         let levelSize = Fun.MipmapLevelSize(srcSize, srcLevel)
                         let target = dst.[TextureAspect.Color, dstLevel, dstSlice]
                         let result = PixVolume<byte>(Col.Format.RGBA, V3i(levelSize, 1, 1))
-                        runtime.Copy(target, result)
+                        runtime.Download(target, result)
 
                         Expect.equal (dst.GetSize(dstLevel)) data.[srcSlice].[srcLevel].Size "image size mismatch"
                         PixVolume.compare V3i.Zero data.[srcSlice].[srcLevel] result
@@ -174,7 +174,7 @@ module TextureCopy =
 
                     let target = dst.[TextureAspect.Color, dstLevel, dstSlice]
                     let result = PixVolume<byte>(Col.Format.RGBA, V3i(windowSize, 1, 1))
-                    runtime.Copy(target, V3i(dstOffset, 0, 0), result, result.Size)
+                    runtime.Download(target, V3i(dstOffset, 0, 0), result, result.Size)
 
                     PixVolume.compare (V3i(-srcOffset, 0, 0)) data.[srcSlice].[srcLevel] result
 
@@ -255,7 +255,7 @@ module TextureCopy =
 
                     let target = dst.[TextureAspect.Color, dstLevel, dstSlice]
                     let result = PixVolume<byte>(Col.Format.RGBA, V3i(copySize, 1, 1))
-                    runtime.Copy(target, V3i(dstOffset, 0, 0), result, result.Size)
+                    runtime.Download(target, V3i(dstOffset, 0, 0), result, result.Size)
 
                     PixVolume.compare (V3i(-srcOffset, 0, 0)) data.[srcSlice].[srcLevel] result
 
@@ -298,7 +298,7 @@ module TextureCopy =
 
                     let target = dst.[TextureAspect.Color, dstLevel, dstSlice]
                     let result = PixVolume<byte>(Col.Format.RGBA, V3i(copySize, 1, 1))
-                    runtime.Copy(target, V3i(dstOffset, 0, 0), result, result.Size)
+                    runtime.Download(target, V3i(dstOffset, 0, 0), result, result.Size)
 
                     PixVolume.compare (V3i(-srcOffset, 0, 0)) data.[srcSlice].[srcLevel] result
 
@@ -334,7 +334,7 @@ module TextureCopy =
 
                 let target = dst.[TextureAspect.Color, dstLevel, 0]
                 let result = PixVolume<byte>(Col.Format.RGBA, V3i(copySize, 1, 1))
-                runtime.Copy(target, V3i(dstOffset, 0, 0), result, result.Size)
+                runtime.Download(target, V3i(dstOffset, 0, 0), result, result.Size)
 
                 PixVolume.compare (V3i(-srcOffset, 0, 0)) data.[0].[srcLevel] result
 
