@@ -63,7 +63,7 @@ module TextureCopy =
             data |> Array.iteri (fun slice ->
                 Array.iteri (fun level _ ->
                     let target = texture.[TextureAspect.Color, level, slice]
-                    runtime.Upload(data.[slice].[level], target)
+                    target.Upload(data.[slice].[level])
                 )
             )
 
@@ -174,7 +174,7 @@ module TextureCopy =
 
                     let target = dst.[TextureAspect.Color, dstLevel, dstSlice]
                     let result = PixVolume<byte>(Col.Format.RGBA, V3i(windowSize, 1, 1))
-                    runtime.Download(target, V3i(dstOffset, 0, 0), result, result.Size)
+                    target.Download(result, V3i(dstOffset, 0, 0), result.Size)
 
                     PixVolume.compare (V3i(-srcOffset, 0, 0)) data.[srcSlice].[srcLevel] result
 
@@ -255,7 +255,7 @@ module TextureCopy =
 
                     let target = dst.[TextureAspect.Color, dstLevel, dstSlice]
                     let result = PixVolume<byte>(Col.Format.RGBA, V3i(copySize, 1, 1))
-                    runtime.Download(target, V3i(dstOffset, 0, 0), result, result.Size)
+                    target.Download(result, V3i(dstOffset, 0, 0), result.Size)
 
                     PixVolume.compare (V3i(-srcOffset, 0, 0)) data.[srcSlice].[srcLevel] result
 
@@ -298,7 +298,7 @@ module TextureCopy =
 
                     let target = dst.[TextureAspect.Color, dstLevel, dstSlice]
                     let result = PixVolume<byte>(Col.Format.RGBA, V3i(copySize, 1, 1))
-                    runtime.Download(target, V3i(dstOffset, 0, 0), result, result.Size)
+                    target.Download(result, V3i(dstOffset, 0, 0), result.Size)
 
                     PixVolume.compare (V3i(-srcOffset, 0, 0)) data.[srcSlice].[srcLevel] result
 
@@ -334,7 +334,7 @@ module TextureCopy =
 
                 let target = dst.[TextureAspect.Color, dstLevel, 0]
                 let result = PixVolume<byte>(Col.Format.RGBA, V3i(copySize, 1, 1))
-                runtime.Download(target, V3i(dstOffset, 0, 0), result, result.Size)
+                target.Download(result, V3i(dstOffset, 0, 0), result.Size)
 
                 PixVolume.compare (V3i(-srcOffset, 0, 0)) data.[0].[srcLevel] result
 
@@ -364,7 +364,7 @@ module TextureCopy =
             try
                 data |> Array.iteri (fun index mipmaps ->
                     mipmaps |> Array.iteri (fun level img ->
-                        runtime.Upload(src, level, index, img)
+                        src.Upload(img, level, index)
                     )
                 )
 
@@ -437,7 +437,7 @@ module TextureCopy =
 
             try
                 data |> CubeMap.iteri (fun side level img ->
-                    runtime.Upload(src, level, int side, img)
+                    src.Upload(img, level, int side)
                 )
 
                 runtime.Copy(src, 3, 1, dst, 3, 1, 3, 2)
@@ -477,7 +477,7 @@ module TextureCopy =
             try
                 data |> Array.iteri (fun index mipmaps ->
                     mipmaps |> CubeMap.iteri (fun side level img ->
-                        runtime.Upload(src, level, index * 6 + int side, img)
+                        src.Upload(img, level, index * 6 + int side)
                     )
                 )
 

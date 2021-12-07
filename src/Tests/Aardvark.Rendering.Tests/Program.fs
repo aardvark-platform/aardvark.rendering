@@ -252,7 +252,7 @@ module CSTest =
         ]
 
         let img = PixImage<byte>(Col.Format.RGBA, dst.Size.XY)
-        runtime.Download(dst, 0, 0, img)
+        dst.Download(img)
         img.SaveImageSharp @"C:\Users\Schorsch\Desktop\bla.png"
 
 

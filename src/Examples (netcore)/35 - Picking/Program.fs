@@ -402,7 +402,7 @@ let main argv =
 
                 // Download pixel
                 let pixel =
-                    let data = tex.Download(0, 0, Box2i.FromMinAndSize(pos, V2i.II)).AsPixImage<float32>()
+                    let data = tex.Download(Box2i.FromMinAndSize(pos, V2i.II)).AsPixImage<float32>()
                     data.GetMatrix<C4f>().[0, 0]
 
                 // Get id, depth and normal from pixel

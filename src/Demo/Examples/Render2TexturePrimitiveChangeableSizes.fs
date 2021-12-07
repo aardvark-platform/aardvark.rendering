@@ -82,7 +82,7 @@ module Render2TexturePrimiviteChangeableSize =
         open System.IO
 
         let pi = PixImage<byte>(Col.Format.BGRA, size) 
-        runtime.Download(colorOutput |> AVal.force, 0, 0, pi)
+        colorOutput.GetValue().Download(pi)
         let tempFileName = Path.ChangeExtension( Path.combine [__SOURCE_DIRECTORY__;  Path.GetTempFileName() ], ".bmp" )
         pi.SaveAsImage tempFileName
     

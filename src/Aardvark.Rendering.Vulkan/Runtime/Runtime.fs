@@ -164,7 +164,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         ) :> ISparseTexture<_>
 
 
-    member x.Download(t : IBackendTexture, level : int, slice : int, offset : V2i, target : PixImage) =
+    member x.Download(t : IBackendTexture, target : PixImage, level : int, slice : int, offset : V2i) =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset target.Size
@@ -172,7 +172,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let image = unbox<Image> t
         device.DownloadLevel(image.[ImageAspect.Color, level, slice], target, offset)
 
-    member x.Download(t : IBackendTexture, level : int, slice : int, offset : V3i, target : PixVolume) =
+    member x.Download(t : IBackendTexture, target : PixVolume, level : int, slice : int, offset : V3i) =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow level offset target.Size
@@ -180,7 +180,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let image = unbox<Image> t
         device.DownloadLevel(image.[ImageAspect.Color, level, slice], target, offset)
 
-    member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<int>) =
+    member x.DownloadStencil(t : IBackendTexture, target : Matrix<int>, level : int, slice : int, offset : V2i) =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
@@ -195,7 +195,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         failwith "Not implemented in Vulkan backend"
         //device.DownloadLevel(image.[ImageAspect.Stencil, level, slice], pix, offset)
 
-    member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
+    member x.DownloadDepth(t : IBackendTexture, target : Matrix<float32>, level : int, slice : int, offset : V2i) =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
@@ -210,7 +210,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         failwith "Not implemented in Vulkan backend"
         //device.DownloadLevel(image.[ImageAspect.Depth, level, slice], pix, offset)
 
-    member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) =
+    member x.Upload(t : IBackendTexture, source : PixImage, level : int, slice : int, offset : V2i) =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset source.Size
@@ -581,11 +581,11 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.Compile (commands : list<ComputeCommand>) =
             ComputeCommand.compile commands device
 
-        member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) =
-            x.Copy(src, fmt, dst, dstOffset, size)
+        member x.Upload<'a when 'a : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'a>, offset : V3i, size : V3i) =
+            x.Copy(source, source.Format, texture, offset, size)
 
-        member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) =
-            x.Copy(src, srcOffset, dst, fmt, size)
+        member x.Download<'a when 'a : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'a>, offset : V3i, size : V3i) =
+            x.Copy(texture, offset, target, target.Format, size)
 
         member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
             x.Copy(src, srcOffset, dst, dstOffset, size)
@@ -599,20 +599,20 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.CreateFramebufferSignature(a,b,c) = x.CreateFramebufferSignature(a,b,c)
         member x.DeleteFramebufferSignature(s) = x.DeleteFramebufferSignature(s)
 
-        member x.Download(t : IBackendTexture, level : int, slice : int, offset : V2i, target : PixImage) =
-            x.Download(t, level, slice, offset, target)
+        member x.Download(t : IBackendTexture, target : PixImage, level : int, slice : int, offset : V2i) =
+            x.Download(t, target, level, slice, offset)
 
-        member x.Download(t : IBackendTexture, level : int, slice : int, offset : V3i, target : PixVolume) =
-            x.Download(t, level, slice, offset, target)
+        member x.Download(t : IBackendTexture, target : PixVolume, level : int, slice : int, offset : V3i) =
+            x.Download(t, target, level, slice, offset)
 
-        member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) =
-            x.Upload(t, level, slice, offset, source)
+        member x.Upload(t : IBackendTexture, source : PixImage, level : int, slice : int, offset : V2i) =
+            x.Upload(t, source, level, slice, offset)
 
-        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
-            x.DownloadDepth(t, level, slice, offset, target)
+        member x.DownloadDepth(t : IBackendTexture, target : Matrix<float32>, level : int, slice : int, offset : V2i) =
+            x.DownloadDepth(t, target, level, slice, offset)
 
-        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<int>) =
-            x.DownloadStencil(t, level, slice, offset, target)
+        member x.DownloadStencil(t : IBackendTexture, target : Matrix<int>, level : int, slice : int, offset : V2i) =
+            x.DownloadStencil(t, target, level, slice, offset)
 
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t) = x.GenerateMipMaps(t)

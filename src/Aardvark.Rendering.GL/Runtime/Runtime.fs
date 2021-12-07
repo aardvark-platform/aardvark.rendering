@@ -104,21 +104,19 @@ type Runtime() =
 
         member x.DeviceCount = 1
 
-        member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format,
-                                              dst : ITextureSubResource, offset : V3i, size : V3i) : unit =
-            let level = dst.Level
-            let slice = dst.Slice
-            let dst = dst.Texture |> unbox<Texture>
+        member x.Upload<'a when 'a : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'a>, offset : V3i, size : V3i) : unit =
+            let level = texture.Level
+            let slice = texture.Slice
+            let dst = texture.Texture |> unbox<Texture>
 
-            ctx.Upload(dst, level, slice, offset, size, src)
+            ctx.Upload(dst, level, slice, offset, size, source)
   
-        member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, offset : V3i,
-                                              dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) : unit =
-            let level = src.Level
-            let slice = src.Slice
-            let src = src.Texture |> unbox<Texture>
+        member x.Download<'a when 'a : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'a>, offset : V3i, size : V3i) : unit =
+            let level = texture.Level
+            let slice = texture.Slice
+            let src = texture.Texture |> unbox<Texture>
 
-            ctx.Download(src, level, slice, offset, size, dst)
+            ctx.Download(src, level, slice, offset, size, target)
 
         member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) : unit =
 
@@ -164,20 +162,20 @@ type Runtime() =
         member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
             ()
 
-        member x.Download(t : IBackendTexture, level : int, slice : int, offset : V2i, target : PixImage) =
-            x.Download(t, level, slice, offset, target)
+        member x.Download(t : IBackendTexture, target : PixImage, level : int, slice : int, offset : V2i) =
+            x.Download(t, target, level, slice, offset)
 
-        member x.Download(t : IBackendTexture, level : int, slice : int, offset : V3i, target : PixVolume) =
-            x.Download(t, level, slice, offset, target)
+        member x.Download(t : IBackendTexture, target : PixVolume, level : int, slice : int, offset : V3i) =
+            x.Download(t, target, level, slice, offset)
 
-        member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) =
-            x.Upload(t, level, slice, offset, source)
+        member x.Upload(t : IBackendTexture, source : PixImage, level : int, slice : int, offset : V2i) =
+            x.Upload(t, source, level, slice, offset)
 
-        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<int>) =
-            x.DownloadStencil(t, level, slice, offset, target)
+        member x.DownloadStencil(t : IBackendTexture, target : Matrix<int>, level : int, slice : int, offset : V2i) =
+            x.DownloadStencil(t, target, level, slice, offset)
 
-        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
-            x.DownloadDepth(t, level, slice, offset, target)
+        member x.DownloadDepth(t : IBackendTexture, target : Matrix<float32>, level : int, slice : int, offset : V2i) =
+            x.DownloadDepth(t, target, level, slice, offset)
 
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
@@ -705,33 +703,33 @@ type Runtime() =
             | _ ->
                 failwithf "[GL] unsupported texture: %A" t
 
-    member x.Download(t : IBackendTexture, level : int, slice : int, offset : V2i, target : PixImage) =
+    member x.Download(t : IBackendTexture, target : PixImage, level : int, slice : int, offset : V2i) =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset target.Size
         ctx.Download(unbox<Texture> t, level, slice, offset, target)
 
-    member x.Download(t : IBackendTexture, level : int, slice : int, offset : V3i, target : PixVolume) : unit =
+    member x.Download(t : IBackendTexture, target : PixVolume, level : int, slice : int, offset : V3i) : unit =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow level offset target.Size
         ctx.Download(unbox<Texture> t, level, offset, target)
 
-    member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<int>) =
+    member x.DownloadStencil(t : IBackendTexture, target : Matrix<int>, level : int, slice : int, offset : V2i) =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
         t |> ResourceValidation.Textures.validateStencilFormat
         ctx.DownloadStencil(unbox<Texture> t, level, slice, offset, target)
 
-    member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) =
+    member x.DownloadDepth(t : IBackendTexture, target : Matrix<float32>, level : int, slice : int, offset : V2i) =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset (V2i target.Size)
         t |> ResourceValidation.Textures.validateDepthFormat
         ctx.DownloadDepth(unbox<Texture> t, level, slice, offset, target)
 
-    member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) =
+    member x.Upload(t : IBackendTexture, source : PixImage, level : int, slice : int, offset : V2i) =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
         t |> ResourceValidation.Textures.validateWindow2D level offset (V2i source.Size)

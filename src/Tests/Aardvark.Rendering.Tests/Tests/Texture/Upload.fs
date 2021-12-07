@@ -54,10 +54,10 @@ module TextureUpload =
 
             try
                 let target = texture.[TextureAspect.Color, level, slice]
-                runtime.Upload(data, target, regionOffset, regionSize)
+                target.Upload(data, regionOffset, regionSize)
 
                 let result = PixVolume<byte>(Col.Format.RGBA, regionSize)
-                runtime.Download(target, regionOffset, result, regionSize)
+                target.Download(result, regionOffset, regionSize)
 
                 PixVolume.compare V3i.Zero data result
 
@@ -115,8 +115,8 @@ module TextureUpload =
                     runtime.CreateTexture2D(size, fmt, levels = levels, samples = samples)
 
             try
-                runtime.Upload(texture, level, slice, region.Min, data)
-                let result = runtime.Download(texture, level, slice, region).AsPixImage<byte>()
+                texture.Upload(data, level, slice, region.Min)
+                let result = texture.Download(region, level, slice).AsPixImage<byte>()
 
                 PixImage.compare V2i.Zero data result
 
@@ -243,7 +243,7 @@ module TextureUpload =
             try
                 let result =
                     let pv = PixVolume<uint8>(Col.Format.RGBA, V3i(size, 1))
-                    runtime.Download(texture, 0, 0, pv)
+                    texture.Download(pv)
                     let volume = new Volume<uint8>(pv.Tensor4.Data, pv.Tensor4.Info.SubXYZVolume(0L));
                     PixImage<uint8>(Col.Format.RGBA, volume).AsPixImage<byte>()
 
@@ -317,10 +317,10 @@ module TextureUpload =
 
             try
                 let target = texture.[TextureAspect.Color, level, 0]
-                runtime.Upload(data, target, region.Min, region.Size)
+                target.Upload(data, region.Min, region.Size)
 
                 let result = PixVolume<byte>(Col.Format.RGBA, region.Size)
-                runtime.Download(texture, level, 0, region.Min, result)
+                texture.Download(result, level = level, offset = region.Min)
 
                 PixVolume.compare V3i.Zero data result
 
@@ -405,10 +405,10 @@ module TextureUpload =
 
             try
                 let target = texture.[TextureAspect.Color, level, slice]
-                runtime.Upload(data, target, regionOffset, regionSize)
+                target.Upload(data, regionOffset, regionSize)
 
                 let result = PixVolume<byte>(Col.Format.RGBA, regionSize)
-                runtime.Download(target, regionOffset, result, regionSize)
+                target.Download(result, regionOffset, regionSize)
 
                 PixVolume.compare V3i.Zero data result
 

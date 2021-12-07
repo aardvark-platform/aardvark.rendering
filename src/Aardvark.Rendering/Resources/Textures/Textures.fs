@@ -3,6 +3,7 @@
 open System
 open Aardvark.Base
 open FSharp.Data.Adaptive
+open System.Runtime.InteropServices
 
 type TextureAspect =
     | Color
@@ -131,9 +132,9 @@ and ITextureRuntime =
                            dst : IBackendTexture * dstBaseSlice : int * dstBaseLevel : int *
                            slices : int * levels : int -> unit
 
-    abstract member Copy : src : NativeTensor4<'a> * srcFormat : Col.Format * dst : ITextureSubResource * dstOffset : V3i * size : V3i -> unit
-    abstract member Copy : src : ITextureSubResource * srcOffset : V3i * dst : NativeTensor4<'a> * dstFormat : Col.Format * size : V3i -> unit
-    abstract member Copy : src : IFramebufferOutput * srcOffset : V3i * dst : IFramebufferOutput * dstOffset : V3i * size : V3i -> unit
+    abstract member Copy : src : IFramebufferOutput * srcOffset : V3i *
+                           dst : IFramebufferOutput * dstOffset : V3i *
+                           size : V3i -> unit
 
     abstract member DeleteTexture : IBackendTexture -> unit
 
@@ -155,43 +156,72 @@ and ITextureRuntime =
 
     ///<summary>Uploads data from a PixImage to the given texture.</summary>
     ///<param name="texture">The texture to update.</param>
+    ///<param name="source">The PixImage containing the data to upload.</param>
     ///<param name="level">The texture level to update.</param>
     ///<param name="slice">The texture slice to update.</param>
     ///<param name="offset">The minimum coordinate to update.</param>
-    ///<param name="source">The PixImage containing the data to upload.</param>
-    abstract member Upload : texture : IBackendTexture * level : int * slice : int * offset : V2i * source : PixImage -> unit
+    abstract member Upload : texture : IBackendTexture * source : PixImage * 
+                             [<Optional; DefaultParameterValue(0)>] level : int *
+                             [<Optional; DefaultParameterValue(0)>] slice : int *
+                             [<Optional; DefaultParameterValue(V2i())>] offset : V2i -> unit
 
-    ///<summary>Downloads color data from the given texture to a PixImage.</summary>
-    ///<param name="texture">The texture to download.</param>
-    ///<param name="level">The texture level to download.</param>
-    ///<param name="slice">The texture slice to download.</param>
+    ///<summary>Uploads data from a NativeTensor4 to the given texture sub resource.</summary>
+    ///<param name="texture">The texture to update.</param>
+    ///<param name="source">The NativeTensor4 containing the data to upload.</param>
     ///<param name="offset">The minimum coordinate to update.</param>
+    ///<param name="size">The size of the texture region to update.</param>
+    abstract member Upload : texture : ITextureSubResource * source : NativeTensor4<'T> * offset : V3i * size : V3i -> unit        
+
+    ///<summary>Downloads data from the given texture to a PixImage.</summary>
+    ///<param name="texture">The texture to download.</param>
     ///<param name="target">The PixImage to copy the data to.</param>
-    abstract member Download : texture : IBackendTexture * level : int * slice : int * offset : V2i * target : PixImage -> unit
+    ///<param name="level">The texture level to download. Default is 0.</param>
+    ///<param name="slice">The texture slice to download. Default is 0.</param>
+    ///<param name="offset">The minimum coordinate to download. Default is V2i.Zero.</param>
+    abstract member Download : texture : IBackendTexture * target : PixImage *
+                               [<Optional; DefaultParameterValue(0)>] level : int *
+                               [<Optional; DefaultParameterValue(0)>] slice : int *
+                               [<Optional; DefaultParameterValue(V2i())>] offset : V2i -> unit
 
     ///<summary>Downloads color data from the given texture to a PixVolume.</summary>
     ///<param name="texture">The texture to download.</param>
-    ///<param name="level">The texture level to download.</param>
-    ///<param name="slice">The texture slice to download.</param>
-    ///<param name="offset">The minimum coordinate to update.</param>
     ///<param name="target">The PixVolume to copy the data to.</param>
-    abstract member Download : texture : IBackendTexture * level : int * slice : int * offset : V3i * target : PixVolume -> unit
+    ///<param name="level">The texture level to download. Default is 0.</param>
+    ///<param name="slice">The texture slice to download. Default is 0.</param>
+    ///<param name="offset">The minimum coordinate to download. Default is V3i.Zero.</param>
+    abstract member Download : texture : IBackendTexture * target : PixVolume *
+                               [<Optional; DefaultParameterValue(0)>] level : int *
+                               [<Optional; DefaultParameterValue(0)>] slice : int *
+                               [<Optional; DefaultParameterValue(V3i())>] offset : V3i -> unit
+
+    ///<summary>Downloads color data from the given texture to a NativeTensor4.</summary>
+    ///<param name="texture">The texture to download.</param>
+    ///<param name="target">The NativeTensor4 to copy the data to.</param>
+    ///<param name="offset">The minimum coordinate to download.</param>
+    ///<param name="size">The size of the texture region to download.</param>
+    abstract member Download : texture : ITextureSubResource * target : NativeTensor4<'T> * offset : V3i * size : V3i -> unit
 
     ///<summary>Downloads stencil data from the given texture to an integer matrix.</summary>
     ///<param name="texture">The texture to download.</param>
-    ///<param name="level">The texture level to download.</param>
-    ///<param name="slice">The texture slice to download.</param>
-    ///<param name="offset">The minimum coordinate to update.</param>
     ///<param name="target">The matrix to copy the data to.</param>
-    abstract member DownloadStencil : texture : IBackendTexture * level : int * slice : int * offset : V2i * target : Matrix<int> -> unit
+    ///<param name="level">The texture level to download. Default is 0.</param>
+    ///<param name="slice">The texture slice to download. Default is 0.</param>
+    ///<param name="offset">The minimum coordinate to download. Default is V2i.Zero.</param>
+    abstract member DownloadStencil : texture : IBackendTexture * target : Matrix<int> *
+                                      [<Optional; DefaultParameterValue(0)>] level : int *
+                                      [<Optional; DefaultParameterValue(0)>] slice : int *
+                                      [<Optional; DefaultParameterValue(V2i())>] offset : V2i -> unit
 
     ///<summary>Downloads depth data from the given texture to a float matrix.</summary>
     ///<param name="texture">The texture to download.</param>
-    ///<param name="level">The texture level to download.</param>
-    ///<param name="slice">The texture slice to download.</param>
-    ///<param name="offset">The minimum coordinate to update.</param>
     ///<param name="target">The matrix to copy the data to.</param>
-    abstract member DownloadDepth : texture : IBackendTexture * level : int * slice : int * offset : V2i * target : Matrix<float32> -> unit
+    ///<param name="level">The texture level to download. Default is 0.</param>
+    ///<param name="slice">The texture slice to download. Default is 0.</param>
+    ///<param name="offset">The minimum coordinate to download. Default is V2i.Zero.</param>
+    abstract member DownloadDepth : texture : IBackendTexture * target : Matrix<float32> *
+                                    [<Optional; DefaultParameterValue(0)>] level : int *
+                                    [<Optional; DefaultParameterValue(0)>] slice : int *
+                                    [<Optional; DefaultParameterValue(V2i())>] offset : V2i -> unit
 
     /// Clears the given texture with the given color.
     abstract member ClearColor : texture: IBackendTexture * color: ClearColor -> unit

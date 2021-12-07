@@ -334,7 +334,7 @@ type ConjugateGradientSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Forma
     
     let createTexture (img : PixImage) =
         let t = runtime.CreateTexture2D(img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.empty, 1, 1)
-        runtime.Upload(t, 0, 0, img)
+        t.Upload(img)
         t
 
     member x.Tools = tools
@@ -700,7 +700,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
 
     let createTexture (img : PixImage) =
         let t = runtime.CreateTexture2D(img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.empty, 1, 1)
-        runtime.Upload(t, 0, 0, img)
+        t.Upload(img)
         t
 
     member x.Compile(term : Term<V2i>) =
@@ -891,7 +891,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
 
     member x.Download(t : ITextureSubResource) =
         let dst = PixImage.Create(TextureFormat.toDownloadFormat t.Texture.Format, int64 t.Size.X, int64 t.Size.Y)
-        runtime.Download(t.Texture, t.Level, t.Slice, dst)
+        t.Texture.Download(dst, t.Level, t.Slice)
         dst
 
     member private x.VCycle(inputs : Map<string, ITextureSubResource>, bPing : Map<string, ITextureSubResource>, bPong : Map<string, ITextureSubResource> , iter : int, level : int, size : V2i, inputSize : V2i, cfg : MultigridConfig) =
@@ -908,7 +908,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
                 inputs |> Map.iter (fun name t ->
                     if not (name.StartsWith "__") && Set.contains name needed then
                         let dst = PixImage<float32>(Col.Format.RGBA, t.Size.XY)
-                        runtime.Download(t.Texture, t.Level, t.Slice, dst)
+                        t.Texture.Download(dst, t.Level, t.Slice)
                         if name.StartsWith "b_" then
                             dst.GetMatrix<C4f>().SetMap(dst.GetMatrix<C4f>(), fun v -> ((v.ToV4f() + V4f.IIII) * 0.5f).ToC4f()) |> ignore
                         
@@ -918,7 +918,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
 
                 bPing |> Map.iter (fun name t ->
                     let dst = PixImage<float32>(Col.Format.RGBA, t.Size.XY)
-                    runtime.Download(t.Texture, t.Level, t.Slice, dst)
+                    t.Texture.Download(dst, t.Level, t.Slice)
                     dst.GetMatrix<C4f>().SetMap(dst.GetMatrix<C4f>(), fun v -> ((v.ToV4f() + V4f.IIII) * 0.5f).ToC4f()) |> ignore
                     let name = sprintf @"%d_%s_ping_%dx%d.jpg" iter name size.X size.Y
                     dst.SaveAsImage (Path.combine [path; name]) 
@@ -989,7 +989,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
                 let name = "x"
                 let t = inputs.[name]
                 let dst = PixImage<float32>(Col.Format.RGBA, t.Size.XY)
-                runtime.Download(t.Texture, t.Level, t.Slice, dst)
+                t.Texture.Download(dst, t.Level, t.Slice)
 
                 dst.GetMatrix<C4f>().SetMap(dst.GetMatrix<C4f>(), fun v -> ((v.ToV4f() + V4f.IIII) * 0.5f).ToC4f()) |> ignore
 
@@ -1011,14 +1011,14 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
 
     member this.CreateTexture(img : PixImage) =
         let res = runtime.CreateTexture2D(img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.empty, 1, 1)
-        runtime.Upload(res, 0, 0, img)
+        res.Upload(img)
         res
         
 
     member this.CreateTempTexture(img : PixImage) =
         let levels = 1 + int(Fun.Floor(Fun.Log2 (max img.Size.X img.Size.Y)))
         let res = runtime.CreateTexture2D(img.Size, TextureFormat.ofPixFormat img.PixFormat TextureParams.empty, levels, 1)
-        runtime.Upload(res, 0, 0, img)
+        res.Upload(img)
         res
 
     member x.Tools = cg.Tools
@@ -1117,7 +1117,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
                 | Some path -> 
                     let name = sprintf "%d_xsl.jpg" iter
                     let dst = PixImage<float32>(Col.Format.RGBA, xsl.Size.XY)
-                    runtime.Download(xsl.Texture, xsl.Level, xsl.Slice, dst)
+                    xsl.Texture.Download(dst, xsl.Level, xsl.Slice)
                     dst.SaveAsImage(Path.combine [path; name])
                 | None ->
                     ()
@@ -1433,7 +1433,7 @@ type DepthMapSolver(runtime : IRuntime, lambda : float, sigma : float) =
         try
             x.Solve(tv.[TextureAspect.Color, 0, 0], tw_v.[TextureAspect.Color, 0, 0], timage.[TextureAspect.Color, 0, 0], res.[TextureAspect.Color, 0, 0], cfg)
             let img = PixImage<float32>(Col.Format.Gray, v.Size)
-            runtime.Download(res, 0, 0, img)
+            res.Download(img)
             img
         finally
             runtime.DeleteTexture tv
@@ -1490,7 +1490,7 @@ type ImageResonstructionSolver(runtime : IRuntime) =
         try
             x.Solve(tinput.[TextureAspect.Color, 0, 0], tweight.[TextureAspect.Color, 0, 0], res.[TextureAspect.Color, 0, 0], cfg)
             let dst = PixImage<float32>(Col.Format.RGBA, input.Size)
-            runtime.Download(res, 0, 0, dst)
+            res.Download(dst)
             PixImage.toRGBAByteImage dst
         finally
             runtime.DeleteTexture tinput

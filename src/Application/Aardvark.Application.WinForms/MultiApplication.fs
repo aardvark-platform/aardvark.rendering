@@ -286,10 +286,10 @@ and MultiRuntime(runtimes : IRuntime[]) =
     interface IRuntime with
         member x.DeviceCount = runtimes |> Seq.map (fun r -> r.DeviceCount) |> Seq.min
 
-        member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) : unit =
+        member x.Upload<'a when 'a : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'a>, offset : V3i, size : V3i) : unit =
             failwith "not implemented"
 
-        member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) : unit =
+        member x.Download<'a when 'a : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'a>, offset : V3i, size : V3i) : unit =
             failwith "not implemented"
 
         member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) : unit =
@@ -314,11 +314,11 @@ and MultiRuntime(runtimes : IRuntime[]) =
                 | _ ->
                     ()
 
-        member x.Download(t : IBackendTexture, level : int, slice : int, offset : V2i, target : PixImage) : unit = failwith ""
-        member x.Download(t : IBackendTexture, level : int, slice : int, offset : V3i, target : PixVolume) : unit = failwith ""
-        member x.Upload(t : IBackendTexture, level : int, slice : int, offset : V2i, source : PixImage) = failwith ""
-        member x.DownloadDepth(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<float32>) = failwith ""
-        member x.DownloadStencil(t : IBackendTexture, level : int, slice : int, offset : V2i, target : Matrix<int>) = failwith ""
+        member x.Download(t : IBackendTexture, target : PixImage, level : int, slice : int, offset : V2i) : unit = failwith ""
+        member x.Download(t : IBackendTexture, target : PixVolume, level : int, slice : int, offset : V3i) : unit = failwith ""
+        member x.Upload(t : IBackendTexture, source : PixImage, level : int, slice : int, offset : V2i) = failwith ""
+        member x.DownloadDepth(t : IBackendTexture, target : Matrix<float32>, level : int, slice : int, offset : V2i) = failwith ""
+        member x.DownloadStencil(t : IBackendTexture, target : Matrix<int>, level : int, slice : int, offset : V2i) = failwith ""
 
         member x.ResolveMultisamples(source, target, trafo) = failwith ""
         member x.GenerateMipMaps(t) = failwith ""

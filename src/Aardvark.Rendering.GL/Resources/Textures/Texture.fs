@@ -106,13 +106,6 @@ module internal TextureUtilitiesAndExtensions =
     module TensorExtensions =
 
         type NativeTensor4<'T when 'T : unmanaged> with
-            member x.Format =
-                match x.Size.W with
-                | 1L -> Col.Format.Gray
-                | 2L -> Col.Format.GrayAlpha
-                | 3L -> Col.Format.RGB
-                | _  -> Col.Format.RGBA
-
             member x.PixFormat =
                 PixFormat(typeof<'T>, x.Format)
 

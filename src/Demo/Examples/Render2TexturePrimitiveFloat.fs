@@ -99,7 +99,7 @@ module Render2TexturePrimitiveFloat =
 
         let pi = PixImage<float32>(Col.Format.RGBA, size) 
         
-        runtime.Download(color, 0, 0, pi)
+        color.Download(pi)
 
         pi.Volume.Data |> Array.maxBy float32 |> printfn "max pixel %f"
 
