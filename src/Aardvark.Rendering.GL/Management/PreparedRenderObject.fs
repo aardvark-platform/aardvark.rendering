@@ -1589,7 +1589,7 @@ module rec Command =
         override x.PerformUpdate(token : AdaptiveToken, program : FragmentProgram, info : CompilerInfo) =
             let ops = reader.GetChanges token
 
-            for i, op in IndexListDelta.toSeq ops do
+            for i, op in ops do
                 let (l, s , r)  = IndexList.neighbours i state
                 match op with
                 | Set cmd ->

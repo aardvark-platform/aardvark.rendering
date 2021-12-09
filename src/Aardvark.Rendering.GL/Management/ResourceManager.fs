@@ -431,7 +431,10 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                                         let layoutedData = if indexed then transformIndirectData b.Buffer else b.Buffer
                                         bufferManager.Update(h.Buffer, layoutedData)
 
-                                GLIndirectBuffer(buffer, b.Count, b.Stride, b.Indexed, h.OwnResource)
+                                if h.Buffer = buffer && h.Count = b.Count && h.Stride = b.Stride then // OwnResource and Indexed cannot change
+                                    h // return old to remain reference equal -> will be counted as InPlaceUpdate (no real performance difference)
+                                else
+                                    GLIndirectBuffer(buffer, b.Count, b.Stride, b.Indexed, h.OwnResource)
 
             delete = fun h   -> if h.OwnResource then bufferManager.Delete(h.Buffer)
             info =   fun h   -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo
