@@ -762,7 +762,7 @@ module ManagedPoolSg =
 module ``Pool Semantics`` =
     [<Aardvark.Base.Rule>]
     type PoolSem() =
-        member x.RenderObjects(p : Sg.PoolNode, scope : Ag.Scope) =
+        member x.RenderObjects(p : Sg.PoolNode, scope : Ag.Scope) : aset<IRenderObject> =
             
             let pool = p.Pool
             
@@ -789,19 +789,13 @@ module ``Pool Semantics`` =
             
             let mutable ro = Unchecked.defaultof<RenderObject>
 
-            aset {
-                let! c = calls;
-                if c.Count > 0 then
-                    if ((ro :> obj) = null) then
-                        ro <- Aardvark.SceneGraph.Semantics.RenderObject.ofScope scope
-                        ro.Mode <- p.Mode
-                        ro.Indices <- Some pool.IndexBuffer
-                        ro.VertexAttributes <- pool.VertexAttributes
-                        ro.InstanceAttributes <- pool.InstanceAttributes
-                        ro.DrawCalls <- Indirect calls
-                    yield (ro :> IRenderObject)
-                else
-                    ro <- Unchecked.defaultof<RenderObject>
-            }
+            ro <- Aardvark.SceneGraph.Semantics.RenderObject.ofScope scope
+            ro.Mode <- p.Mode
+            ro.Indices <- Some pool.IndexBuffer
+            ro.VertexAttributes <- pool.VertexAttributes
+            ro.InstanceAttributes <- pool.InstanceAttributes
+            ro.DrawCalls <- Indirect calls
+
+            ASet.single (ro :> IRenderObject)
 
    
