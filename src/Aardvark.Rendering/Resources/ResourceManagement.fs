@@ -116,6 +116,8 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
     let lockObj = obj()
     let mutable wasDisposed = 0
 
+    let t = new Transaction() // reusable transaction
+
     let destroy(x : Resource<_,_>) =
         let alreadyDisposed = Interlocked.CompareExchange(&wasDisposed,1,0)
         if alreadyDisposed = 1 then failwithf "doubleFree"
@@ -137,7 +139,9 @@ type Resource<'h, 'v when 'v : unmanaged>(kind : ResourceKind) =
 
         handle.Level <- max (1 + x.Level) handle.Level
         if not (Unchecked.equals h handle.Value) then
-            transact (fun () -> handle.Value <- h)
+            useTransaction t (fun () -> handle.Value <- h)
+            t.Commit()
+            t.Dispose()
 
     let id = newId()
 
