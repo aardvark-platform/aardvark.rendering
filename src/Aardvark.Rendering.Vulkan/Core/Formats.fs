@@ -567,6 +567,42 @@ module VkFormat =
     let hasStencil (fmt : VkFormat) =
         stencilFormats.Contains fmt || depthStencilFormats.Contains fmt
 
+    let private srgbFormats =
+        HashSet.ofList [
+            VkFormat.R8Srgb
+            VkFormat.R8g8Srgb
+            VkFormat.R8g8b8Srgb
+            VkFormat.B8g8r8Srgb
+            VkFormat.R8g8b8a8Srgb
+            VkFormat.B8g8r8a8Srgb
+            VkFormat.A8b8g8r8SrgbPack32
+            VkFormat.Bc1RgbSrgbBlock
+            VkFormat.Bc1RgbaSrgbBlock
+            VkFormat.Bc2SrgbBlock
+            VkFormat.Bc3SrgbBlock
+            VkFormat.Bc7SrgbBlock
+            VkFormat.Etc2R8g8b8SrgbBlock
+            VkFormat.Etc2R8g8b8a1SrgbBlock
+            VkFormat.Etc2R8g8b8a8SrgbBlock
+            VkFormat.Astc44SrgbBlock
+            VkFormat.Astc54SrgbBlock
+            VkFormat.Astc55SrgbBlock
+            VkFormat.Astc65SrgbBlock
+            VkFormat.Astc66SrgbBlock
+            VkFormat.Astc85SrgbBlock
+            VkFormat.Astc86SrgbBlock
+            VkFormat.Astc88SrgbBlock
+            VkFormat.Astc105SrgbBlock
+            VkFormat.Astc106SrgbBlock
+            VkFormat.Astc108SrgbBlock
+            VkFormat.Astc1010SrgbBlock
+            VkFormat.Astc1210SrgbBlock
+            VkFormat.Astc1212SrgbBlock
+        ]
+
+    let isSrgb (fmt : VkFormat) =
+        srgbFormats.Contains fmt
+
     let toAspect (fmt : VkFormat) =
         if depthStencilFormats.Contains fmt then VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit
         elif depthFormats.Contains fmt then VkImageAspectFlags.DepthBit

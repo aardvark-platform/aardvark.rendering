@@ -263,7 +263,7 @@ module TextureDownload =
                 let side = CubeSide.PositiveY
                 let level = 1
                 let region = Box2i.FromMinAndSize(V2i(14, 18), V2i(10, 3))
-                let result = t.Download(region, level, int side).ToPixImage<byte>()
+                let result = t.Download(level, int side, region).ToPixImage<byte>()
 
                 let reference = data.[side, level].SubImage(region)
                 Expect.equal result.Size reference.Size "Unexpected texture size"
@@ -300,7 +300,7 @@ module TextureDownload =
                 let index = 1
                 let level = 2
                 let region = Box2i.FromMinAndSize(V2i(14, 18), V2i(10, 3))
-                let result = t.Download(region, level, index * 6 + int side).ToPixImage<byte>()
+                let result = t.Download(level, index * 6 + int side, region).ToPixImage<byte>()
 
                 let reference = data.[index].[side, level].SubImage(region)
                 Expect.equal result.Size reference.Size "Unexpected texture size"
@@ -456,7 +456,7 @@ module TextureDownload =
 
                 let t = runtime.CreateTexture(size, dimension, TextureFormat.Rgba32f, levels, 1)
                 try
-                    t.Download(region, level, slice) |> ignore
+                    t.Download(level, slice, region) |> ignore
                 finally
                     runtime.DeleteTexture(t)
 

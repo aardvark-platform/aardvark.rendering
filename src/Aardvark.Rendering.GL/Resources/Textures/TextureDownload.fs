@@ -119,7 +119,6 @@ module internal TextureDownloadImplementation =
 
                     NativeTensor4<'T>(NativePtr.ofNativeInt src, info)
 
-                let dst = dst.SubTensor4(V4i.Zero, V4i(size, channels))
                 NativeTensor4.copy srcTensor dst
 
             downloadGeneralPixelData texture level slice offset size pixelFormat pixelType copy
@@ -318,10 +317,15 @@ module ContextTextureDownloadExtensions =
 
         [<Extension>]
         static member DownloadStencil(this : Context, texture : Texture,
-                                      level : int, slice : int, offset : V2i, target : Matrix<int>) =
-            download texture level slice (V3i offset) (V3i target.Size) (fun level slice offset _ texture ->
+                                      level : int, slice : int, offset : V2i, size : V2i, target : Matrix<int>) =
+            download texture level slice offset.XYO size.XYI (fun level slice offset _ texture ->
                 Texture.downloadStencil texture level slice offset.XY target
             )
+
+        [<Extension>]
+        static member DownloadStencil(this : Context, texture : Texture,
+                                      level : int, slice : int, offset : V2i, target : Matrix<int>) =
+            this.DownloadStencil(texture, level, slice, offset, V2i target.Size, target)
 
         [<Extension>]
         static member DownloadStencil(this : Context, texture : Texture, level : int, slice : int, target : Matrix<int>) =
@@ -329,10 +333,15 @@ module ContextTextureDownloadExtensions =
 
         [<Extension>]
         static member DownloadDepth(this : Context, texture : Texture,
-                                    level : int, slice : int, offset : V2i, target : Matrix<float32>) =
-            download texture level slice (V3i offset) (V3i target.Size) (fun level slice offset _ texture ->
+                                    level : int, slice : int, offset : V2i, size : V2i, target : Matrix<float32>) =
+            download texture level slice offset.XYO size.XYI (fun level slice offset _ texture ->
                 Texture.downloadDepth texture level slice offset.XY target
             )
+
+        [<Extension>]
+        static member DownloadDepth(this : Context, texture : Texture,
+                                    level : int, slice : int, offset : V2i, target : Matrix<float32>) =
+           this.DownloadDepth(texture, level, slice, offset, V2i target.Size, target)
 
         [<Extension>]
         static member DownloadDepth(this : Context, texture : Texture, level : int, slice : int, target : Matrix<float32>) =

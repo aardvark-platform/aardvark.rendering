@@ -99,7 +99,6 @@ module internal TextureUploadImplementation =
 
                     NativeTensor4<'T>(NativePtr.ofNativeInt dst, info)
 
-                let src = src.SubTensor4(V4i.Zero, V4i(size, channels))
                 NativeTensor4.copy src dstTensor
 
             let pixelData =
@@ -454,7 +453,7 @@ module ContextTextureUploadExtensions =
                 // Multisampled texture requires blit
                 if texture.IsMultisampled then
                     useTemporaryAndBlit texture level slice offset.XY size.XY (fun temp ->
-                        Texture.uploadNativeTensor4 temp false 0 0 offset size source
+                        Texture.uploadNativeTensor4 temp false 0 0 V3i.Zero size source
                     )
 
                 // Upload directly

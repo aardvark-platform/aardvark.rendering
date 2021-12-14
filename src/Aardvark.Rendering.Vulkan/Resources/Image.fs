@@ -1,7 +1,6 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open System.Threading
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open Aardvark.Base
@@ -11,58 +10,8 @@ open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base.ReflectionHelpers
 
-
-
 #nowarn "9"
 // #nowarn "51"
-
-[<AbstractClass>]
-type private PixImageVisitor<'r>() =
-    static let table =
-        LookupTable.lookupTable [
-            typeof<int8>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int8>(unbox img, 127y))
-            typeof<uint8>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint8>(unbox img, 255uy))
-            typeof<int16>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int16>(unbox img, Int16.MaxValue))
-            typeof<uint16>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint16>(unbox img, UInt16.MaxValue))
-            typeof<int32>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int32>(unbox img, Int32.MaxValue))
-            typeof<uint32>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint32>(unbox img, UInt32.MaxValue))
-            typeof<int64>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<int64>(unbox img, Int64.MaxValue))
-            typeof<uint64>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<uint64>(unbox img, UInt64.MaxValue))
-            typeof<float16>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<float16>(unbox img, float16(Float32 = 1.0f)))
-            typeof<float32>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<float32>(unbox img, 1.0f))
-            typeof<float>, (fun (self : PixImageVisitor<'r>, img : PixImage) -> self.Visit<float>(unbox img, 1.0))
-        ]
-    abstract member Visit<'a when 'a : unmanaged> : PixImage<'a> * 'a -> 'r
-
-        
-
-
-    interface IPixImageVisitor<'r> with
-        member x.Visit<'a>(img : PixImage<'a>) =
-            table (typeof<'a>) (x, img)
-
-[<AbstractClass>]
-type private PixVolumeVisitor<'r>() =
-    static let table =
-        LookupTable.lookupTable [
-            typeof<int8>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<int8>(unbox img, 127y))
-            typeof<uint8>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<uint8>(unbox img, 255uy))
-            typeof<int16>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<int16>(unbox img, Int16.MaxValue))
-            typeof<uint16>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<uint16>(unbox img, UInt16.MaxValue))
-            typeof<int32>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<int32>(unbox img, Int32.MaxValue))
-            typeof<uint32>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<uint32>(unbox img, UInt32.MaxValue))
-            typeof<int64>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<int64>(unbox img, Int64.MaxValue))
-            typeof<uint64>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<uint64>(unbox img, UInt64.MaxValue))
-            typeof<float16>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<float16>(unbox img, float16(Float32 = 1.0f)))
-            typeof<float32>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<float32>(unbox img, 1.0f))
-            typeof<float>, (fun (self : PixVolumeVisitor<'r>, img : PixVolume) -> self.Visit<float>(unbox img, 1.0))
-        ]
-    abstract member Visit<'a when 'a : unmanaged> : PixVolume<'a> * 'a -> 'r
-
-    interface IPixVolumeVisitor<'r> with
-        member x.Visit<'a>(img : PixVolume<'a>) =
-            table (typeof<'a>) (x, img)
-
 
 // ===========================================================================================
 // Format Conversions
@@ -1098,46 +1047,40 @@ type TensorImage(buffer : Buffer, info : Tensor4Info, format : PixFormat, imageF
     abstract member Write : data : nativeint * rowSize : nativeint * format : Col.Format * trafo : ImageTrafo -> unit
     abstract member Read : data : nativeint * rowSize : nativeint * format : Col.Format * trafo : ImageTrafo -> unit
 
-    member x.Write(img : PixImage, beforeRead : ImageTrafo) =
+    member x.Write(img : PixImage, mirrorY : bool) =
         img.Visit { 
-            new PixImageVisitor<int>() with 
-                override __.Visit(img : PixImage<'a>, value : 'a) =
-                    let img = img.Transformed beforeRead |> unbox<PixImage<'a>>
+            new PixVisitors.PixImageVisitor() with 
+                override __.VisitUnit(img : PixImage<'T>) =
                     NativeVolume.using img.Volume (fun src ->
-                        x.Write(img.Format, src)
+                        x.Write(img.Format, if mirrorY then src.MirrorY() else src)
                     )
-                    1
         } |> ignore
 
-    member x.Read(img : PixImage, beforeWrite : ImageTrafo) =
+    member x.Read(img : PixImage, mirrorY : bool) =
         img.Visit { 
-            new PixImageVisitor<int>() with 
-                override __.Visit(img : PixImage<'a>, value : 'a) =
-                    let img = img.Transformed beforeWrite |> unbox<PixImage<'a>>
+            new PixVisitors.PixImageVisitor() with 
+                override __.VisitUnit(img : PixImage<'a>) =
                     NativeVolume.using img.Volume (fun dst ->
-                        x.Read(img.Format, dst)
+                        x.Read(img.Format, if mirrorY then dst.MirrorY() else dst)
                     )
-                    1
         } |> ignore
 
-    member x.Write(img : PixVolume) =
+    member x.Write(img : PixVolume, mirrorY : bool) =
         img.Visit { 
-            new PixVolumeVisitor<int>() with 
-                override __.Visit(img : PixVolume<'a>, value : 'a) =
+            new PixVisitors.PixVolumeVisitor() with 
+                override __.VisitUnit(img : PixVolume<'a>) =
                     NativeTensor4.using img.Tensor4 (fun src ->
-                        x.Write(img.Format, src)
+                        x.Write(img.Format, if mirrorY then src.MirrorY() else src)
                     )
-                    1
         } |> ignore
 
-    member x.Read(img : PixVolume) =
+    member x.Read(img : PixVolume, mirrorY : bool) =
         img.Visit { 
-            new PixVolumeVisitor<int>() with 
-                override __.Visit(img : PixVolume<'a>, value : 'a) =
+            new PixVisitors.PixVolumeVisitor() with 
+                override __.VisitUnit(img : PixVolume<'a>) =
                     NativeTensor4.using img.Tensor4 (fun dst ->
-                        x.Read(img.Format, dst)
+                        x.Read(img.Format, if mirrorY then dst.MirrorY() else dst)
                     )
-                    1
         } |> ignore
 
     member x.Dispose() =
@@ -1273,7 +1216,7 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
         if typeof<'a> = typeof<'x> then
             let src = unbox<NativeVolume<'a>> volume
             
-            let srcTensor = src.ToXYWTensor4()
+            let srcTensor = src.ToXYWTensor4'()
             tensor.Mapped (fun dst ->
                 copy srcTensor fmt dst format
             )
@@ -1301,7 +1244,7 @@ type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4
     override x.Read(fmt : Col.Format, dst : NativeVolume<'x>) : unit =
         if typeof<'a> = typeof<'x> then
             let dst = unbox<NativeVolume<'a>> dst
-            let dstTensor = dst.ToXYWTensor4()
+            let dstTensor = dst.ToXYWTensor4'()
             tensor.Mapped (fun src ->
                 copy src format dstTensor fmt
             )
@@ -1410,12 +1353,12 @@ module TensorImage =
 
     let ofPixImage (img : PixImage) (srgb : bool) (device : Device) =
         let dst = createUntyped (V3i(img.Size.X, img.Size.Y, 1)) img.PixFormat srgb device
-        dst.Write(img, ImageTrafo.MirrorY)
+        dst.Write(img, true)
         dst
 
     let ofPixVolume (img : PixVolume) (srgb : bool) (device : Device) =
         let dst = createUntyped (V3i(img.Size.X, img.Size.Y, 1)) img.PixFormat srgb device
-        dst.Write(img)
+        dst.Write(img, true)
         dst
 
 [<AutoOpen>]
@@ -2533,7 +2476,6 @@ module Image =
         let generateMipMaps =
             uploadLevels < mipMapLevels
 
-        //create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : TextureFormat) (usage : VkImageUsageFlags) (device : Device) =
         let image = 
             create 
                 (V3i(size.X, size.Y, 1)) 
@@ -2546,8 +2488,8 @@ module Image =
         let tempImages = 
             List.init uploadLevels (fun level ->
                 let data = pi.ImageArray.[level]
-                let temp = device.CreateTensorImage(V3i(data.Size.X, data.Size.Y, 1), expectedFormat, info.wantSrgb)
-                temp.Write(data, ImageTrafo.MirrorY)
+                let temp = device.CreateTensorImage(data.Size.XYI, expectedFormat, info.wantSrgb)
+                temp.Write(data, true)
                 temp
             )
 
@@ -2622,8 +2564,7 @@ module Image =
                 device
 
         let temp = device.CreateTensorImage(pi.Size, expectedFormat, info.wantSrgb)
-        temp.Write(pi)
-
+        temp.Write(pi, true)
         
         match device.UploadMode with
             | UploadMode.Async ->
@@ -2695,7 +2636,6 @@ module Image =
         let generateMipMaps =
             uploadLevels < mipMapLevels
 
-        //create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : TextureFormat) (usage : VkImageUsageFlags) (device : Device) =
         let image = 
             create 
                 (V3i(size.X, size.Y, 1)) 
@@ -2710,7 +2650,7 @@ module Image =
                 List.init 6 (fun face ->
                     let data = pi.MipMapArray.[face].ImageArray.[level]
                     let temp = device.CreateTensorImage(V3i(data.Size.X, data.Size.Y, 1), expectedFormat, info.wantSrgb)
-                    temp.Write(data, ImageTrafo.MirrorY)
+                    temp.Write(data, true)
                     temp
                 )
             )
@@ -3088,11 +3028,14 @@ module Image =
         | _ ->
             failf "unsupported texture-type: %A" t
 
-    let private downloadLevel (src : ImageSubresource) (writeToDst : TensorImage -> unit) (dstSize : V3i) (srcOffset : V3i) (device : Device) =
+    let downloadLevel (offset : V3i) (size : V3i) (src : ImageSubresource) (dst : NativeTensor4<'T>) (device : Device) =
         let format = src.Image.Format
-        let sourcePixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
+        let srcPixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
 
-        let temp = device.CreateTensorImage(dstSize, sourcePixFormat, false)
+        let dst = dst.SubTensor4(V4l.Zero, V4l(V3l size, dst.SW)).MirrorY()
+        let srcOffset = V3i(offset.X, src.Size.Y - offset.Y - int dst.SY, offset.Z) // flip y-offset
+
+        let temp = device.CreateTensorImage(V3i dst.Size, srcPixFormat, VkFormat.isSrgb src.Image.Format)
 
         let resolve() =
             let srcImg = src.Image
@@ -3125,38 +3068,30 @@ module Image =
                 command {
                     do! cmdResolve
                     do! Command.TransformLayout(srcResolved.Image, VkImageLayout.TransferSrcOptimal)
-                    do! Command.Copy(srcResolved, srcOffset, temp, dstSize)
+                    do! Command.Copy(srcResolved, srcOffset, temp, size)
                     do! Command.TransformLayout(srcResolved.Image, layout)
                 }
 
             device.GraphicsFamily.RunSynchronously(cmd)
-            writeToDst temp
+            temp.Read(dst.Format, dst)
         finally
             temp.Dispose()
             if srcResolved <> src then
                 srcResolved.Image.Dispose()
 
-    let downloadLevel2d (offset : V2i) (src : ImageSubresource) (dst : PixImage) (device : Device) =
-        let write (buffer : TensorImage) = buffer.Read(dst, ImageTrafo.MirrorY)
-        let size = V3i(dst.Size, 1)
-        let offset = V3i(offset.X, src.Size.Y - offset.Y - dst.Size.Y, 0) // flip y-offset
-        downloadLevel src write size offset device
-
-    let downloadLevel3d (offset : V3i) (src : ImageSubresource) (dst : PixVolume) (device : Device) =
-        let write (buffer : TensorImage) = buffer.Read(dst)
-        downloadLevel src write dst.Size offset device
-
-    let uploadLevel (offset : V2i) (src : PixImage) (dst : ImageSubresource) (device : Device) =
+    let uploadLevel (offset : V3i) (size : V3i) (src : NativeTensor4<'T>) (dst : ImageSubresource) (device : Device) =
         if dst.Image.Samples > 1 then
             raise <| InvalidOperationException("Cannot upload to multisampled image")
 
         let format = dst.Image.Format
         let dstPixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
 
-        let offset = V3i(offset.X, dst.Size.Y - offset.Y - src.Size.Y, 0) // flip y-offset
+        let src = src.SubTensor4(V4l.Zero, V4l(V3l size, src.SW)).MirrorY()
+        let offset = V3i(offset.X, dst.Size.Y - offset.Y - int src.SY, offset.Z) // flip y-offset
 
-        let temp = device.CreateTensorImage(V3i(src.Size, 1), dstPixFormat, false)
-        temp.Write(src, ImageTrafo.MirrorY)
+        let temp = device.CreateTensorImage(V3i src.Size, dstPixFormat, VkFormat.isSrgb dst.Image.Format)
+        temp.Write(src.Format, src)
+
         let layout = dst.Image.Layout
         device.eventually {
             try
@@ -3198,16 +3133,12 @@ type ContextImageExtensions private() =
         this.CreateImage(size, mipMapLevels, count, samples, dim, fmt, usage)
 
     [<Extension>]
-    static member inline UploadLevel(this : Device, dst : ImageSubresource, src : PixImage, offset : V2i) =
-        this |> Image.uploadLevel offset src dst
+    static member inline UploadLevel(this : Device, dst : ImageSubresource, src : NativeTensor4<'T>, offset : V3i, size : V3i) =
+        this |> Image.uploadLevel offset size src dst
 
     [<Extension>]
-    static member inline DownloadLevel(this : Device, src : ImageSubresource, dst : PixImage, offset : V2i) = 
-        this |> Image.downloadLevel2d offset src dst
-
-    [<Extension>]
-    static member inline DownloadLevel(this : Device, src : ImageSubresource, dst : PixVolume, offset : V3i) =
-        this |> Image.downloadLevel3d offset src dst
+    static member inline DownloadLevel(this : Device, src : ImageSubresource, dst : NativeTensor4<'T>, offset : V3i, size : V3i) = 
+        this |> Image.downloadLevel offset size src dst
 
 [<AutoOpen>]
 module private ImageRanges =

@@ -163,23 +163,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             maxMemory
         ) :> ISparseTexture<_>
 
-
-    member x.Download(t : IBackendTexture, target : PixImage, level : int, slice : int, offset : V2i) =
-        t |> ResourceValidation.Textures.validateLevel level
-        t |> ResourceValidation.Textures.validateSlice slice
-        t |> ResourceValidation.Textures.validateWindow2D level offset target.Size
-
-        let image = unbox<Image> t
-        device.DownloadLevel(image.[ImageAspect.Color, level, slice], target, offset)
-
-    member x.Download(t : IBackendTexture, target : PixVolume, level : int, slice : int, offset : V3i) =
-        t |> ResourceValidation.Textures.validateLevel level
-        t |> ResourceValidation.Textures.validateSlice slice
-        t |> ResourceValidation.Textures.validateWindow level offset target.Size
-
-        let image = unbox<Image> t
-        device.DownloadLevel(image.[ImageAspect.Color, level, slice], target, offset)
-
     member x.DownloadStencil(t : IBackendTexture, target : Matrix<int>, level : int, slice : int, offset : V2i) =
         t |> ResourceValidation.Textures.validateLevel level
         t |> ResourceValidation.Textures.validateSlice slice
@@ -209,14 +192,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         failwith "Not implemented in Vulkan backend"
         //device.DownloadLevel(image.[ImageAspect.Depth, level, slice], pix, offset)
-
-    member x.Upload(t : IBackendTexture, source : PixImage, level : int, slice : int, offset : V2i) =
-        t |> ResourceValidation.Textures.validateLevel level
-        t |> ResourceValidation.Textures.validateSlice slice
-        t |> ResourceValidation.Textures.validateWindow2D level offset source.Size
-
-        let image = unbox<Image> t
-        device.UploadLevel(image.[ImageAspect.Color, level, slice], source, offset)
 
     member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) =
         manager.PrepareRenderObject(unbox fboSignature, rj) :> IPreparedRenderObject
@@ -455,44 +430,22 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
 
     // upload
-    member x.Copy<'a when 'a : unmanaged>(src : NativeTensor4<'a>, fmt : Col.Format, dst : ITextureSubResource, dstOffset : V3i, size : V3i) =
-        let srgb = TextureFormat.isSrgb (unbox (int dst.Format))
-        use temp = device |> TensorImage.create<'a> size fmt srgb
+    member x.Upload<'a when 'a : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'a>, offset : V3i, size : V3i) =
+        texture.Texture |> ResourceValidation.Textures.validateLevel texture.Level
+        texture.Texture |> ResourceValidation.Textures.validateSlice texture.Slice
+        texture.Texture |> ResourceValidation.Textures.validateWindow texture.Level offset size
 
-        let src = src.SubTensor4(V4l.Zero, V4l(int64 size.X, int64 size.Y, int64 size.Z, src.SW)).MirrorY()
-        temp.Write(fmt, src)
-
-        let dstOffset = V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
-
-
-        let dst = ImageSubresource.ofTextureSubResource dst
-        let dstImage = dst.Image
-
-        let oldLayout = dstImage.Layout
-        device.perform {
-            do! Command.TransformLayout(dstImage, VkImageLayout.TransferDstOptimal)
-            do! Command.Copy(temp, dst, dstOffset, size)
-            do! Command.TransformLayout(dstImage, oldLayout)
-        }
+        let image = ImageSubresource.ofTextureSubResource texture
+        device.UploadLevel(image, source, offset, size)
 
     // download
-    member x.Copy<'a when 'a : unmanaged>(src : ITextureSubResource, srcOffset : V3i, dst : NativeTensor4<'a>, fmt : Col.Format, size : V3i) =
-        let srgb = TextureFormat.isSrgb (unbox (int src.Format))
-        use temp = device |> TensorImage.create<'a> size fmt srgb
+    member x.Download<'a when 'a : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'a>, offset : V3i, size : V3i) =
+        texture.Texture |> ResourceValidation.Textures.validateLevel texture.Level
+        texture.Texture |> ResourceValidation.Textures.validateSlice texture.Slice
+        texture.Texture |> ResourceValidation.Textures.validateWindow texture.Level offset size
 
-        let srcOffset = V3i(srcOffset.X, src.Size.Y - (srcOffset.Y + size.Y), srcOffset.Z)
-        let src = ImageSubresource.ofTextureSubResource src
-        let srcImage = src.Image
-
-        let oldLayout = srcImage.Layout
-        device.perform {
-            do! Command.TransformLayout(srcImage, VkImageLayout.TransferSrcOptimal)
-            do! Command.Copy(src, srcOffset, temp, size)
-            do! Command.TransformLayout(srcImage, oldLayout)
-        }
-
-        let dst = dst.SubTensor4(V4l.Zero, V4l(int64 size.X, int64 size.Y, int64 size.Z, dst.SW)).MirrorY()
-        temp.Read(fmt, dst)
+        let image = ImageSubresource.ofTextureSubResource texture
+        device.DownloadLevel(image, target, offset, size)
 
     // copy
     member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
@@ -582,10 +535,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
             ComputeCommand.compile commands device
 
         member x.Upload<'a when 'a : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'a>, offset : V3i, size : V3i) =
-            x.Copy(source, source.Format, texture, offset, size)
+            x.Upload(texture, source, offset, size)
 
         member x.Download<'a when 'a : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'a>, offset : V3i, size : V3i) =
-            x.Copy(texture, offset, target, target.Format, size)
+            x.Download(texture, target, offset, size)
 
         member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
             x.Copy(src, srcOffset, dst, dstOffset, size)
@@ -598,15 +551,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.CreateFramebufferSignature(a,b,c) = x.CreateFramebufferSignature(a,b,c)
         member x.DeleteFramebufferSignature(s) = x.DeleteFramebufferSignature(s)
-
-        member x.Download(t : IBackendTexture, target : PixImage, level : int, slice : int, offset : V2i) =
-            x.Download(t, target, level, slice, offset)
-
-        member x.Download(t : IBackendTexture, target : PixVolume, level : int, slice : int, offset : V3i) =
-            x.Download(t, target, level, slice, offset)
-
-        member x.Upload(t : IBackendTexture, source : PixImage, level : int, slice : int, offset : V2i) =
-            x.Upload(t, source, level, slice, offset)
 
         member x.DownloadDepth(t : IBackendTexture, target : Matrix<float32>, level : int, slice : int, offset : V2i) =
             x.DownloadDepth(t, target, level, slice, offset)

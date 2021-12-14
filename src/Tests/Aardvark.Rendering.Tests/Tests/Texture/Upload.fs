@@ -116,7 +116,7 @@ module TextureUpload =
 
             try
                 texture.Upload(data, level, slice, region.Min)
-                let result = texture.Download(region, level, slice).AsPixImage<byte>()
+                let result = texture.Download(level, slice, region).AsPixImage<byte>()
 
                 PixImage.compare V2i.Zero data result
 
@@ -223,7 +223,8 @@ module TextureUpload =
             uploadAndDownloadPixTexture2D runtime size 1 TextureParams.srgb
 
         let pixTexture2DMipmapped (provideMipmap : bool) (runtime : IRuntime) =
-            let size = V2i(435, 231)
+            let size = V2i(128)
+            //let size = V2i(435, 231)
             let levels = if provideMipmap then Fun.MipmapLevels(size) else 1
             uploadAndDownloadPixTexture2D runtime size levels TextureParams.mipmapped
 
@@ -469,6 +470,9 @@ module TextureUpload =
                 for slice = 0 to 5 do
                     for level = 0 to expectedLevels - 1 do
                         let result = runtime.Download(texture, level = level, slice = slice).AsPixImage<byte>()
+                        let name = sprintf "%d_level_%d.png" slice level
+                        result |> PixImage.saveToDesktop name
+
                         Expect.equal result.Size (Fun.MipmapLevelSize(V2i(size), level)) "image size mismatch"
                         if level < levels then
                             PixImage.compare V2i.Zero data.[slice].[level] result
