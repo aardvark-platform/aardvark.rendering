@@ -292,9 +292,9 @@ let main argv =
     // default color and depth attachments, and additionally the pick buffer.
     let offscreenSignature =
         runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples }
-            DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
-            DefaultSemantic.PickData, { format = RenderbufferFormat.Rgba32f; samples = samples }
+            DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = samples }
+            DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = samples }
+            DefaultSemantic.PickData, { format = TextureFormat.Rgba32f; samples = samples }
         ]
 
     use offscreenTask =
@@ -374,7 +374,7 @@ let main argv =
     // Therefore, we use a fragment shader to extract the first sample.
     let resolvePickSignature =
         runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba32f; samples = 1 }
+            DefaultSemantic.Colors, { format = TextureFormat.Rgba32f; samples = 1 }
         ]
 
     use resolvePickTask =

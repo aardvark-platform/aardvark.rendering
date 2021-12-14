@@ -135,9 +135,9 @@ module WeightedBlended =
 
     [<AutoOpen>]
     module private Utility =
-        let createAttachment (runtime : IRuntime) (format : RenderbufferFormat) (samples : int) (size : aval<V2i>) =
+        let createAttachment (runtime : IRuntime) (format : TextureFormat) (samples : int) (size : aval<V2i>) =
             runtime.CreateTextureAttachment(
-                runtime.CreateTexture2D(size, TextureFormat.ofRenderbufferFormat format, samples = samples)
+                runtime.CreateTexture2D(size, format, samples = samples)
             )
 
     type Technique(runtime : IRuntime, framebuffer : FramebufferInfo, scene : Scene) =
@@ -149,34 +149,34 @@ module WeightedBlended =
         // Ideally we'd want to use the regular framebuffer directly...
         let offscreenPass =
             runtime.CreateFramebufferSignature(samples, [
-                DefaultSemantic.Colors, RenderbufferFormat.Rgba8
-                DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
             ])
 
         // Framebuffer for the transparency pass, reusing the depth buffer from
         // the opaque geometry pass.
         let transparentPass =
             runtime.CreateFramebufferSignature(samples, [
-                DefaultSemantic.Accum, RenderbufferFormat.Rgba16f
-                DefaultSemantic.Revealage, RenderbufferFormat.R32f
-                DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+                DefaultSemantic.Accum, TextureFormat.Rgba16f
+                DefaultSemantic.Revealage, TextureFormat.R32f
+                DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
             ])
 
         let depthBuffer =
             runtime.CreateRenderbufferAttachment(
-                runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, samples)
+                runtime.CreateRenderbuffer(size, TextureFormat.Depth24Stencil8, samples)
             )
 
         let offscreenFbo =
             runtime.CreateFramebuffer(offscreenPass, Map.ofList [
-                DefaultSemantic.Colors, createAttachment runtime RenderbufferFormat.Rgba8 samples size
+                DefaultSemantic.Colors, createAttachment runtime TextureFormat.Rgba8 samples size
                 DefaultSemantic.Depth, depthBuffer
             ])
 
         let transparentFbo =
             runtime.CreateFramebuffer(transparentPass, Map.ofList [
-                DefaultSemantic.Accum, createAttachment runtime RenderbufferFormat.Rgba16f samples size
-                DefaultSemantic.Revealage, createAttachment runtime RenderbufferFormat.R32f samples size
+                DefaultSemantic.Accum, createAttachment runtime TextureFormat.Rgba16f samples size
+                DefaultSemantic.Revealage, createAttachment runtime TextureFormat.R32f samples size
                 DefaultSemantic.Depth, depthBuffer
             ])
 

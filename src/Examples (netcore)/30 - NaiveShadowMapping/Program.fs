@@ -192,7 +192,7 @@ let main argv =
 
     let signature = 
            win.Runtime.CreateFramebufferSignature [
-               DefaultSemantic.Depth, { format = RenderbufferFormat.DepthComponent32; samples = 1 }
+               DefaultSemantic.Depth, { format = TextureFormat.DepthComponent32; samples = 1 }
            ]
 
     let shadowDepth =

@@ -16,8 +16,8 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
         match renderPass.DepthStencilAttachment with
         | Some (_, signature) ->
             let depth, stencil =
-                RenderbufferFormat.hasDepth signature.format,
-                RenderbufferFormat.hasStencil signature.format
+                TextureFormat.hasDepth signature.format,
+                TextureFormat.hasStencil signature.format
 
             match depth, stencil with
             | true,  true  -> ImageAspect.DepthStencil

@@ -33,8 +33,8 @@ let main argv =
     // in order to render something to texture, we need to specify how the framebuffer should look like
     let signature =
         runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
-            DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+            DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = 1 }
+            DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
         ]
 
     // our render target needs a size. Since aardvark is cool this size can be dynamic of course

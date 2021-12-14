@@ -42,18 +42,18 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
     let depthStencilFormat =
         match Config.DepthBits, Config.StencilBits with
         | 0, 0 -> None
-        | 16, 0 -> Some RenderbufferFormat.DepthComponent16
-        | 24, 0 -> Some RenderbufferFormat.DepthComponent24
-        | 32, 0 -> Some RenderbufferFormat.DepthComponent32
-        | 24, 8 -> Some RenderbufferFormat.Depth24Stencil8
-        | 32, 8 -> Some RenderbufferFormat.Depth32fStencil8
+        | 16, 0 -> Some TextureFormat.DepthComponent16
+        | 24, 0 -> Some TextureFormat.DepthComponent24
+        | 32, 0 -> Some TextureFormat.DepthComponent32
+        | 24, 8 -> Some TextureFormat.Depth24Stencil8
+        | 32, 8 -> Some TextureFormat.Depth32fStencil8
         | _ -> failwith "invalid depth-stencil mode"
 
     let fboSignature =
         let depthStencilAtt =
             depthStencilFormat |> Option.map (fun f -> DefaultSemantic.Depth, f) |> Option.toList
 
-        runtime.CreateFramebufferSignature(samples, [DefaultSemantic.Colors, RenderbufferFormat.Rgba8] @ depthStencilAtt)
+        runtime.CreateFramebufferSignature(samples, [DefaultSemantic.Colors, TextureFormat.Rgba8] @ depthStencilAtt)
 
     let mutable contextHandle : ContextHandle = null
     let defaultFramebuffer =
@@ -61,7 +61,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
             ctx, fboSignature,
             (fun _ -> 0),
             ignore,
-            [0, DefaultSemantic.Colors, Renderbuffer(ctx, 0, V2i.Zero, RenderbufferFormat.Rgba8, samples, 0L) :> IFramebufferOutput], None
+            [0, DefaultSemantic.Colors, Renderbuffer(ctx, 0, V2i.Zero, TextureFormat.Rgba8, samples, 0L) :> IFramebufferOutput], None
         )
 
     let mutable framebuffer : option<Texture * Texture * Framebuffer * option<Texture * Framebuffer>> = None

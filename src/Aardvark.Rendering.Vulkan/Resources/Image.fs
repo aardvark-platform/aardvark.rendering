@@ -193,26 +193,6 @@ module ``Image Format Extensions`` =
             LookupTable.lookupTable [
                 TextureFormat.Bgr8, create r g b i
                 TextureFormat.Bgra8, create r g b a
-                TextureFormat.DualAlpha4Sgis, create r g z i
-                TextureFormat.DualAlpha8Sgis, create r g z i
-                TextureFormat.DualAlpha16Sgis, create r g z i
-                TextureFormat.DualLuminance4Sgis, create r g z i
-                TextureFormat.DualLuminance8Sgis, create r g z i
-                TextureFormat.DualLuminance16Sgis, create r g z i
-                TextureFormat.DualIntensity4Sgis, create r g z i
-                TextureFormat.DualIntensity8Sgis, create r g z i
-                TextureFormat.DualIntensity16Sgis, create r g z i
-                TextureFormat.QuadAlpha4Sgis, create r g b a
-                TextureFormat.QuadAlpha8Sgis, create r g b a
-                TextureFormat.QuadLuminance4Sgis, create r g b a
-                TextureFormat.QuadLuminance8Sgis, create r g b a
-                TextureFormat.QuadIntensity4Sgis, create r g b a
-                TextureFormat.QuadIntensity8Sgis, create r g b a
-                TextureFormat.DepthComponent, create r r r i
-                TextureFormat.Rgb, create r g b i
-                TextureFormat.Rgba, create r g b a
-                TextureFormat.Luminance, create r r r i
-                TextureFormat.LuminanceAlpha, create r r r g
                 TextureFormat.Rgb5, create r g b i
                 TextureFormat.Rgb8, create r g b i
                 TextureFormat.Rgb10, create r g b i
@@ -225,7 +205,6 @@ module ``Image Format Extensions`` =
                 TextureFormat.DepthComponent16, create r r r i
                 TextureFormat.DepthComponent24, create r r r i
                 TextureFormat.DepthComponent32, create r r r i
-                TextureFormat.CompressedRg, create r g z i
                 TextureFormat.R8, create r z z i
                 TextureFormat.R16, create r z z i
                 TextureFormat.Rg8, create r g z i
@@ -246,19 +225,6 @@ module ``Image Format Extensions`` =
                 TextureFormat.Rg16ui, create r g z i
                 TextureFormat.Rg32i, create r g z i
                 TextureFormat.Rg32ui, create r g z i
-                TextureFormat.RgbIccSgix, create r g b i
-                TextureFormat.RgbaIccSgix, create r g b a
-                TextureFormat.AlphaIccSgix, create z z z r
-                TextureFormat.LuminanceIccSgix, create r r r i
-                TextureFormat.IntensityIccSgix, create r r r i
-                TextureFormat.LuminanceAlphaIccSgix, create r r r g
-                TextureFormat.R5G6B5IccSgix, create r g b i
-                TextureFormat.Alpha16IccSgix, create z z z r
-                TextureFormat.Luminance16IccSgix, create r r r i
-                TextureFormat.Intensity16IccSgix, create r r r i
-                TextureFormat.CompressedRgb, create r g b i
-                TextureFormat.CompressedRgba, create r g b a
-                TextureFormat.DepthStencil, create r r r i
                 TextureFormat.Rgba32f, create r g b a
                 TextureFormat.Rgb32f, create r g b i
                 TextureFormat.Rgba16f, create r g b a
@@ -266,16 +232,8 @@ module ``Image Format Extensions`` =
                 TextureFormat.Depth24Stencil8, create r r r i
                 TextureFormat.R11fG11fB10f, create b g r i
                 TextureFormat.Rgb9E5, create b g r i
-                TextureFormat.Srgb, create r g b i
                 TextureFormat.Srgb8, create r g b i
-                TextureFormat.SrgbAlpha, create r g b a
                 TextureFormat.Srgb8Alpha8, create r g b a
-                TextureFormat.SluminanceAlpha, create r r r g
-                TextureFormat.Sluminance8Alpha8, create r r r g
-                TextureFormat.Sluminance, create r r r i
-                TextureFormat.Sluminance8, create r r r i
-                TextureFormat.CompressedSrgb, create r g b i
-                TextureFormat.CompressedSrgbAlpha, create r g b a
                 TextureFormat.DepthComponent32f, create r r r i
                 TextureFormat.Depth32fStencil8, create r r r i
                 TextureFormat.Rgba32ui, create r g b a
@@ -290,7 +248,6 @@ module ``Image Format Extensions`` =
                 TextureFormat.Rgb16i, create r g b i
                 TextureFormat.Rgba8i, create r g b a
                 TextureFormat.Rgb8i, create r g b i
-                TextureFormat.Float32UnsignedInt248Rev, create r r r i
                 TextureFormat.CompressedRgbaBptcUnorm, create r g b a
                 TextureFormat.CompressedRgbBptcSignedFloat, create r g b a
                 TextureFormat.CompressedRgbBptcUnsignedFloat, create r g b a
@@ -394,7 +351,7 @@ type Image =
             member x.Runtime = x.Device.Runtime :> ITextureRuntime
             member x.Size = x.Size.XY
             member x.Samples = x.Samples
-            member x.Format = VkFormat.toTextureFormat x.Format |> TextureFormat.toRenderbufferFormat
+            member x.Format = VkFormat.toTextureFormat x.Format
             member x.Handle = x.Handle :> obj
 
         member x.IsNull = x.Handle.IsNull
@@ -3125,11 +3082,6 @@ type ContextImageExtensions private() =
     [<Extension>]
     static member inline CreateImage(this : Device, size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : TextureFormat, usage : VkImageUsageFlags) =
         let fmt = VkFormat.ofTextureFormat fmt
-        this.CreateImage(size, mipMapLevels, count, samples, dim, fmt, usage)
-
-    [<Extension>]
-    static member inline CreateImage(this : Device, size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : RenderbufferFormat, usage : VkImageUsageFlags) =
-        let fmt = VkFormat.ofRenderbufferFormat fmt
         this.CreateImage(size, mipMapLevels, count, samples, dim, fmt, usage)
 
     [<Extension>]

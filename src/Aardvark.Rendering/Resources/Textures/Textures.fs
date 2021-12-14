@@ -76,7 +76,7 @@ type IBackendTexture =
 
 and IFramebufferOutput =
     abstract member Runtime : ITextureRuntime
-    abstract member Format : RenderbufferFormat
+    abstract member Format : TextureFormat
     abstract member Samples : int
     abstract member Size : V2i
 
@@ -143,7 +143,7 @@ and ITextureRuntime =
     ///<param name="format">The desired renderbuffer format.</param>
     ///<param name="samples">The number of samples.</param>
     ///<exception cref="ArgumentException">if <paramref name="samples"/> is less than 1.</exception>
-    abstract member CreateRenderbuffer : size : V2i * format : RenderbufferFormat * samples : int -> IRenderbuffer
+    abstract member CreateRenderbuffer : size : V2i * format : TextureFormat * samples : int -> IRenderbuffer
     abstract member DeleteRenderbuffer : IRenderbuffer -> unit
 
     abstract member CreateStreamingTexture : mipMaps : bool -> IStreamingTexture

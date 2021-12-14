@@ -40,7 +40,7 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
     let mutable currentFormat = PixFormat(typeof<obj>, Col.Format.RGBA)
     let mutable currentSize = -V2i.II
 
-    let mutable textureFormat = TextureFormat.Alpha
+    let mutable textureFormat = TextureFormat.R8
     let mutable pixelType = PixelType.UnsignedByte
     let mutable pixelFormat = PixelFormat.Alpha
     let mutable channels = 0
@@ -220,7 +220,7 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
         pboSize <- 0n
         currentFormat <- PixFormat(typeof<obj>, Col.Format.RGBA)
         currentSize <- -V2i.II
-        textureFormat <- TextureFormat.Alpha
+        textureFormat <- TextureFormat.R8
         pixelType <- PixelType.UnsignedByte
         pixelFormat <- PixelFormat.Alpha
         channels <- 0
@@ -331,7 +331,7 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
 
     let mutable currentFormat = PixFormat(typeof<obj>, Col.Format.RGBA)
     let mutable currentSize = -V2i.II
-    let mutable textureFormat = TextureFormat.Alpha
+    let mutable textureFormat = TextureFormat.R8
     let mutable pixelType = PixelType.UnsignedByte
     let mutable pixelFormat = PixelFormat.Alpha
     let mutable channels = 0
@@ -465,7 +465,7 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
         ctx.Delete(texture)
         currentFormat <- PixFormat(typeof<obj>, Col.Format.RGBA)
         currentSize <- -V2i.II
-        textureFormat <- TextureFormat.Alpha
+        textureFormat <- TextureFormat.R8
         pixelType <- PixelType.UnsignedByte
         pixelFormat <- PixelFormat.Alpha
         channels <- 0

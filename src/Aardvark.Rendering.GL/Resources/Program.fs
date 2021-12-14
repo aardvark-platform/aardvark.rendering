@@ -428,7 +428,7 @@ module ProgramExtensions =
         {
             device      : string
             id          : string
-            outputs     : Map<string, int * RenderbufferFormat>
+            outputs     : Map<string, int * TextureFormat>
             layered     : Set<string>
             layerCount  : int
         }

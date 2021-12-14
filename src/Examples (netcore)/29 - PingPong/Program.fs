@@ -52,12 +52,12 @@ let main argv =
     // the signature describes the formats and of all render targets which are subsequently used for rendering)
     let signature =
         runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba32f; samples = 1 }
-            DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+            DefaultSemantic.Colors, { format = TextureFormat.Rgba32f; samples = 1 }
+            DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
         ]
 
     let color = [| runtime.CreateTexture2D(size, TextureFormat.Rgba32f, 1, 1); runtime.CreateTexture2D(size, TextureFormat.Rgba32f, 1, 1) |]
-    let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
+    let depth = runtime.CreateRenderbuffer(size, TextureFormat.Depth24Stencil8, 1)
 
     // Create a framebuffer matching signature and capturing the render to texture targets
     let fbos = 

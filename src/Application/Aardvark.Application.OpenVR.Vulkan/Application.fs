@@ -81,8 +81,8 @@ type VulkanVRApplicationLayered(samples : int, debug : DebugConfig option, adjus
     let renderPass = 
         device.CreateRenderPass(
             Map.ofList [
-                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples }
-                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
+                DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = samples }
+                DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = samples }
             ],
             2,
             Set.ofList [

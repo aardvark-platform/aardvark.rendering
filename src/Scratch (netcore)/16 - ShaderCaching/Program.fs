@@ -23,14 +23,14 @@ let main argv =
 
     let sig1 =
         runtime.CreateFramebufferSignature(1, [
-            DefaultSemantic.Colors, RenderbufferFormat.Rgba8
-            DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+            DefaultSemantic.Colors, TextureFormat.Rgba8
+            DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
         ])
 
     let sig2 =
         runtime.CreateFramebufferSignature(1, [
-            DefaultSemantic.Colors, RenderbufferFormat.Rgba8
-            DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+            DefaultSemantic.Colors, TextureFormat.Rgba8
+            DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
         ])
 
     let effect =

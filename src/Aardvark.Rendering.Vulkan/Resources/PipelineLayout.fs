@@ -32,35 +32,35 @@ module VkShaderStageFlags =
         ]
         
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module RenderbufferFormat =
+module TextureFormat =
     open FShade.GLSL
 
     let ofGLSLType =
         LookupTable.lookupTable [   
-            Int(true, 8),           RenderbufferFormat.R8i
-            Vec(2, Int(true, 8)),   RenderbufferFormat.Rg8i
-            Vec(3, Int(true, 8)),   RenderbufferFormat.Rgb8i
-            Vec(4, Int(true, 8)),   RenderbufferFormat.Rgba8i
+            Int(true, 8),           TextureFormat.R8i
+            Vec(2, Int(true, 8)),   TextureFormat.Rg8i
+            Vec(3, Int(true, 8)),   TextureFormat.Rgb8i
+            Vec(4, Int(true, 8)),   TextureFormat.Rgba8i
 
-            Int(true, 16),          RenderbufferFormat.R16i
-            Vec(2, Int(true, 16)),  RenderbufferFormat.Rg16i
-            Vec(3, Int(true, 16)),  RenderbufferFormat.Rgb16i
-            Vec(4, Int(true, 16)),  RenderbufferFormat.Rgba16i
+            Int(true, 16),          TextureFormat.R16i
+            Vec(2, Int(true, 16)),  TextureFormat.Rg16i
+            Vec(3, Int(true, 16)),  TextureFormat.Rgb16i
+            Vec(4, Int(true, 16)),  TextureFormat.Rgba16i
 
-            Int(true, 32),          RenderbufferFormat.R32i
-            Vec(2, Int(true, 32)),  RenderbufferFormat.Rg32i
-            Vec(3, Int(true, 32)),  RenderbufferFormat.Rgb32i
-            Vec(4, Int(true, 32)),  RenderbufferFormat.Rgba32i
-            
-            Float(32),              RenderbufferFormat.R32f
-            Vec(2, Float(32)),      RenderbufferFormat.Rg32f
-            Vec(3, Float(32)),      RenderbufferFormat.Rgb32f
-            Vec(4, Float(32)),      RenderbufferFormat.Rgba32f
+            Int(true, 32),          TextureFormat.R32i
+            Vec(2, Int(true, 32)),  TextureFormat.Rg32i
+            Vec(3, Int(true, 32)),  TextureFormat.Rgb32i
+            Vec(4, Int(true, 32)),  TextureFormat.Rgba32i
 
-            Float(64),              RenderbufferFormat.R32f
-            Vec(2, Float(64)),      RenderbufferFormat.Rg32f
-            Vec(3, Float(64)),      RenderbufferFormat.Rgb32f
-            Vec(4, Float(64)),      RenderbufferFormat.Rgba32f
+            Float(32),              TextureFormat.R32f
+            Vec(2, Float(32)),      TextureFormat.Rg32f
+            Vec(3, Float(32)),      TextureFormat.Rgb32f
+            Vec(4, Float(32)),      TextureFormat.Rgba32f
+
+            Float(64),              TextureFormat.R32f
+            Vec(2, Float(64)),      TextureFormat.Rg32f
+            Vec(3, Float(64)),      TextureFormat.Rgb32f
+            Vec(4, Float(64)),      TextureFormat.Rgba32f
         ]
 
 
@@ -84,7 +84,7 @@ type PipelineLayout =
             member x.ColorAttachments = 
                 let a : AttachmentSignature = failwith ""
                 x.PipelineInfo.pOutputs 
-                    |> List.map (fun p -> p.paramLocation, (Symbol.Create p.paramSemantic, { samples = 1; format = RenderbufferFormat.ofGLSLType p.paramType })) 
+                    |> List.map (fun p -> p.paramLocation, (Symbol.Create p.paramSemantic, { samples = 1; format = TextureFormat.ofGLSLType p.paramType })) 
                     |> Map.ofList
             member x.Runtime = Unchecked.defaultof<_>
             member x.StencilAttachment = None

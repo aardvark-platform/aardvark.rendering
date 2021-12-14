@@ -146,24 +146,24 @@ module FShadeInterop =
 
     let private typeToFormat =
         LookupTable.lookupTable [
-            typeof<int>, RenderbufferFormat.R32i
-            typeof<V2i>, RenderbufferFormat.Rg32i
-            typeof<V3i>, RenderbufferFormat.Rgb32i
-            typeof<V4i>, RenderbufferFormat.Rgba32i
+            typeof<int>, TextureFormat.R32i
+            typeof<V2i>, TextureFormat.Rg32i
+            typeof<V3i>, TextureFormat.Rgb32i
+            typeof<V4i>, TextureFormat.Rgba32i
 
-            typeof<C3f>, RenderbufferFormat.Rgb32f
-            typeof<C4f>, RenderbufferFormat.Rgba32f
+            typeof<C3f>, TextureFormat.Rgb32f
+            typeof<C4f>, TextureFormat.Rgba32f
             
-            typeof<C3b>, RenderbufferFormat.Rgb8
-            typeof<C4b>, RenderbufferFormat.Rgba8
+            typeof<C3b>, TextureFormat.Rgb8
+            typeof<C4b>, TextureFormat.Rgba8
 
-            typeof<C3us>, RenderbufferFormat.Rgb16
-            typeof<C4us>, RenderbufferFormat.Rgba16
+            typeof<C3us>, TextureFormat.Rgb16
+            typeof<C4us>, TextureFormat.Rgba16
 
-            typeof<float>, RenderbufferFormat.R32f
-            typeof<V2d>, RenderbufferFormat.Rg32f
-            typeof<V3d>, RenderbufferFormat.Rgb32f
-            typeof<V4d>, RenderbufferFormat.Rgba32f
+            typeof<float>, TextureFormat.R32f
+            typeof<V2d>, TextureFormat.Rg32f
+            typeof<V3d>, TextureFormat.Rgb32f
+            typeof<V4d>, TextureFormat.Rgba32f
         ]
         
 
@@ -171,72 +171,67 @@ module FShadeInterop =
 
     let private formatToType =
         LookupTable.lookupTable [
-            RenderbufferFormat.DepthComponent, typeof<float>
-            RenderbufferFormat.R3G3B2, typeof<V3d>
-            RenderbufferFormat.Rgb4, typeof<V3d>
-            RenderbufferFormat.Rgb5, typeof<V3d>
-            RenderbufferFormat.Rgb8, typeof<V3d>
-            RenderbufferFormat.Rgb10, typeof<V3d>
-            RenderbufferFormat.Rgb12, typeof<V3d>
-            RenderbufferFormat.Rgb16, typeof<V3d>
-            RenderbufferFormat.Rgba2, typeof<V4d>
-            RenderbufferFormat.Rgba4, typeof<V4d>
-            RenderbufferFormat.Rgba8, typeof<V4d>
-            RenderbufferFormat.Rgb10A2, typeof<V4d>
-            RenderbufferFormat.Rgba12, typeof<V4d>
-            RenderbufferFormat.Rgba16, typeof<V4d>
-            RenderbufferFormat.DepthComponent16, typeof<float>
-            RenderbufferFormat.DepthComponent24, typeof<float>
-            RenderbufferFormat.DepthComponent32, typeof<float>
-            RenderbufferFormat.R8, typeof<float>
-            RenderbufferFormat.R16, typeof<float>
-            RenderbufferFormat.Rg8, typeof<V2d>
-            RenderbufferFormat.Rg16, typeof<V2d>
-            RenderbufferFormat.R16f, typeof<float>
-            RenderbufferFormat.R32f, typeof<float>
-            RenderbufferFormat.Rg16f, typeof<V2d>
-            RenderbufferFormat.Rg32f, typeof<V2d>
-            RenderbufferFormat.R8i, typeof<int>
-            RenderbufferFormat.R8ui, typeof<int>
-            RenderbufferFormat.R16i, typeof<int>
-            RenderbufferFormat.R16ui, typeof<int>
-            RenderbufferFormat.R32i, typeof<int>
-            RenderbufferFormat.R32ui, typeof<int>
-            RenderbufferFormat.Rg8i, typeof<V2i>
-            RenderbufferFormat.Rg8ui, typeof<V2i>
-            RenderbufferFormat.Rg16i, typeof<V2i>
-            RenderbufferFormat.Rg16ui, typeof<V2i>
-            RenderbufferFormat.Rg32i, typeof<V2i>
-            RenderbufferFormat.Rg32ui, typeof<V2i>
-            RenderbufferFormat.DepthStencil, typeof<float>
-            RenderbufferFormat.Rgba32f, typeof<V4d>
-            RenderbufferFormat.Rgb32f, typeof<V3d>
-            RenderbufferFormat.Rgba16f, typeof<V4d>
-            RenderbufferFormat.Rgb16f, typeof<V3d>
-            RenderbufferFormat.Depth24Stencil8, typeof<float>
-            RenderbufferFormat.R11fG11fB10f, typeof<V3d>
-            RenderbufferFormat.Rgb9E5, typeof<V3d>
-            RenderbufferFormat.Srgb8, typeof<V3d>
-            RenderbufferFormat.Srgb8Alpha8, typeof<V4d>
-            RenderbufferFormat.DepthComponent32f, typeof<float>
-            RenderbufferFormat.Depth32fStencil8, typeof<float>
-            RenderbufferFormat.StencilIndex1, typeof<int>
-            RenderbufferFormat.StencilIndex4, typeof<int>
-            RenderbufferFormat.StencilIndex8, typeof<int>
-            RenderbufferFormat.StencilIndex16, typeof<int>
-            RenderbufferFormat.Rgba32ui, typeof<V4i>
-            RenderbufferFormat.Rgb32ui, typeof<V3i>
-            RenderbufferFormat.Rgba16ui, typeof<V4i>
-            RenderbufferFormat.Rgb16ui, typeof<V3i>
-            RenderbufferFormat.Rgba8ui, typeof<V4i>
-            RenderbufferFormat.Rgb8ui, typeof<V3i>
-            RenderbufferFormat.Rgba32i, typeof<V4i>
-            RenderbufferFormat.Rgb32i, typeof<V3i>
-            RenderbufferFormat.Rgba16i, typeof<V4i>
-            RenderbufferFormat.Rgb16i, typeof<V3i>
-            RenderbufferFormat.Rgba8i, typeof<V4i>
-            RenderbufferFormat.Rgb8i, typeof<V3i>
-            RenderbufferFormat.Rgb10A2ui, typeof<V4i>
+            TextureFormat.R3G3B2, typeof<V3d>
+            TextureFormat.Rgb4, typeof<V3d>
+            TextureFormat.Rgb5, typeof<V3d>
+            TextureFormat.Rgb8, typeof<V3d>
+            TextureFormat.Rgb10, typeof<V3d>
+            TextureFormat.Rgb12, typeof<V3d>
+            TextureFormat.Rgb16, typeof<V3d>
+            TextureFormat.Rgba2, typeof<V4d>
+            TextureFormat.Rgba4, typeof<V4d>
+            TextureFormat.Rgba8, typeof<V4d>
+            TextureFormat.Rgb10A2, typeof<V4d>
+            TextureFormat.Rgba12, typeof<V4d>
+            TextureFormat.Rgba16, typeof<V4d>
+            TextureFormat.DepthComponent16, typeof<float>
+            TextureFormat.DepthComponent24, typeof<float>
+            TextureFormat.DepthComponent32, typeof<float>
+            TextureFormat.R8, typeof<float>
+            TextureFormat.R16, typeof<float>
+            TextureFormat.Rg8, typeof<V2d>
+            TextureFormat.Rg16, typeof<V2d>
+            TextureFormat.R16f, typeof<float>
+            TextureFormat.R32f, typeof<float>
+            TextureFormat.Rg16f, typeof<V2d>
+            TextureFormat.Rg32f, typeof<V2d>
+            TextureFormat.R8i, typeof<int>
+            TextureFormat.R8ui, typeof<int>
+            TextureFormat.R16i, typeof<int>
+            TextureFormat.R16ui, typeof<int>
+            TextureFormat.R32i, typeof<int>
+            TextureFormat.R32ui, typeof<int>
+            TextureFormat.Rg8i, typeof<V2i>
+            TextureFormat.Rg8ui, typeof<V2i>
+            TextureFormat.Rg16i, typeof<V2i>
+            TextureFormat.Rg16ui, typeof<V2i>
+            TextureFormat.Rg32i, typeof<V2i>
+            TextureFormat.Rg32ui, typeof<V2i>
+            TextureFormat.Rgba32f, typeof<V4d>
+            TextureFormat.Rgb32f, typeof<V3d>
+            TextureFormat.Rgba16f, typeof<V4d>
+            TextureFormat.Rgb16f, typeof<V3d>
+            TextureFormat.Depth24Stencil8, typeof<float>
+            TextureFormat.R11fG11fB10f, typeof<V3d>
+            TextureFormat.Rgb9E5, typeof<V3d>
+            TextureFormat.Srgb8, typeof<V3d>
+            TextureFormat.Srgb8Alpha8, typeof<V4d>
+            TextureFormat.DepthComponent32f, typeof<float>
+            TextureFormat.Depth32fStencil8, typeof<float>
+            TextureFormat.StencilIndex8, typeof<int>
+            TextureFormat.Rgba32ui, typeof<V4i>
+            TextureFormat.Rgb32ui, typeof<V3i>
+            TextureFormat.Rgba16ui, typeof<V4i>
+            TextureFormat.Rgb16ui, typeof<V3i>
+            TextureFormat.Rgba8ui, typeof<V4i>
+            TextureFormat.Rgb8ui, typeof<V3i>
+            TextureFormat.Rgba32i, typeof<V4i>
+            TextureFormat.Rgb32i, typeof<V3i>
+            TextureFormat.Rgba16i, typeof<V4i>
+            TextureFormat.Rgb16i, typeof<V3i>
+            TextureFormat.Rgba8i, typeof<V4i>
+            TextureFormat.Rgb8i, typeof<V3i>
+            TextureFormat.Rgb10A2ui, typeof<V4i>
         ]
 
     [<GLSLIntrinsic("gl_DeviceIndex", "GL_EXT_device_group")>]
@@ -423,30 +418,6 @@ module FShadeInterop =
 
     type FShadeSurface private(effect : FShadeEffect) =
         static let surfaceCache = System.Collections.Concurrent.ConcurrentDictionary<string, FShadeSurface>()
-
-        let uniforms = SymDict.empty
-        let samplerStates = SymDict.empty
-
-        static let formatToExpectedType (format : RenderbufferFormat) : Type =
-            let cf = RenderbufferFormat.toColFormat format
-
-            match cf with
-                | Col.Format.Gray -> typeof<float>
-                | Col.Format.NormalUV -> typeof<V2d>
-                | Col.Format.RGB -> typeof<V3d>
-                | Col.Format.RGBA -> typeof<V4d>
-                | _ -> failwithf "unsupported Col.Format: %A" cf
-
-        static let defaultSemanticTypes =
-            Dict.ofList [   
-                DefaultSemantic.Colors, typeof<V4d>
-                DefaultSemantic.Depth, typeof<float>
-                DefaultSemantic.Normals, typeof<V3d>
-                DefaultSemantic.DiffuseColorUTangents, typeof<V3d>
-                DefaultSemantic.DiffuseColorVTangents, typeof<V3d>
-                DefaultSemantic.DiffuseColorCoordinates, typeof<V2d>
-                DefaultSemantic.Positions, typeof<V4d>
-            ]
 
         static member Get(e : FShadeEffect) =
             surfaceCache.GetOrAdd(e.Id, fun _ -> FShadeSurface(e))

@@ -338,11 +338,11 @@
 //    let depthSignature =
 //        match Config.DepthBits, Config.StencilBits with
 //            | 0, 0 -> None
-//            | 16, 0 -> Some { format = RenderbufferFormat.DepthComponent16; samples = samples }
-//            | 24, 0 -> Some { format = RenderbufferFormat.DepthComponent24; samples = samples }
-//            | 32, 0 -> Some { format = RenderbufferFormat.DepthComponent32; samples = samples }
-//            | 24, 8 -> Some { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
-//            | 32, 8 -> Some { format = RenderbufferFormat.Depth32fStencil8; samples = samples }
+//            | 16, 0 -> Some { format = TextureFormat.DepthComponent16; samples = samples }
+//            | 24, 0 -> Some { format = TextureFormat.DepthComponent24; samples = samples }
+//            | 32, 0 -> Some { format = TextureFormat.DepthComponent32; samples = samples }
+//            | 24, 8 -> Some { format = TextureFormat.Depth24Stencil8; samples = samples }
+//            | 32, 8 -> Some { format = TextureFormat.Depth32fStencil8; samples = samples }
 //            | _ -> failwith "invalid depth-stencil mode"
 
 //    let fboSignature =
@@ -364,7 +364,7 @@
 //            else Set.empty
 //        FramebufferSignature(
 //            runtime,
-//            Map.ofList [0, (DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples })],
+//            Map.ofList [0, (DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = samples })],
 //            Map.empty,
 //            depthSignature,
 //            None,
@@ -381,7 +381,7 @@
 //            ctx, fboSignature, 
 //            (fun _ -> 0), 
 //            ignore, 
-//            [0, DefaultSemantic.Colors, Renderbuffer(ctx, 0, V2i.Zero, RenderbufferFormat.Rgba8, samples, 0L) :> IFramebufferOutput], None
+//            [0, DefaultSemantic.Colors, Renderbuffer(ctx, 0, V2i.Zero, TextureFormat.Rgba8, samples, 0L) :> IFramebufferOutput], None
 //        ) 
 //    let mutable defaultOutput = defaultFramebuffer |> OutputDescription.ofFramebuffer
 

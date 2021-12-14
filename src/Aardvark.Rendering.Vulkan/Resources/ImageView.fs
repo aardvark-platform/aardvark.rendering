@@ -28,7 +28,7 @@ type ImageView =
 
         interface IFramebufferOutput with
             member x.Runtime = x.Device.Runtime :> ITextureRuntime
-            member x.Format = VkFormat.toTextureFormat x.Image.Format |> TextureFormat.toRenderbufferFormat
+            member x.Format = VkFormat.toTextureFormat x.Image.Format
             member x.Samples = x.Image.Samples
             member x.Size = 
                 let s = x.Image.Size

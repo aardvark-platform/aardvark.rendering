@@ -79,18 +79,11 @@ type Framebuffer(ctx : Context, signature : IFramebufferSignature, create : Aard
 
 //    static member Default (ctx : Context, size : V2i, samples : int) =
 //        let bindings = [0,DefaultSemantic.Colors,Texture(ctx, 0, TextureDimension.Texture2D, 1, samples, V3i(size.X, size.Y, 1), 1, ChannelType.RGBA8).Output 0 :> IFramebufferOutput]
-//        let depth = Renderbuffer(ctx, 0, V2i.II, RenderbufferFormat.Depth24Stencil8, 1) :> IFramebufferOutput
+//        let depth = Renderbuffer(ctx, 0, V2i.II, TextureFormat.Depth24Stencil8, 1) :> IFramebufferOutput
 //        new Framebuffer(ctx, (fun _ -> 0), (fun _ -> ()), bindings, Some depth)
 
 [<AutoOpen>]
 module FramebufferExtensions =
-
-    let private depthStencilFormats =
-        HashSet.ofList [
-            RenderbufferFormat.Depth24Stencil8
-            RenderbufferFormat.Depth32fStencil8
-            RenderbufferFormat.DepthStencil
-        ]
 
     let private destroy (handle : int) =
         GL.DeleteFramebuffer handle
@@ -155,7 +148,7 @@ module FramebufferExtensions =
         // attach depth
         match depth with
             | Some o ->
-                if depthStencilFormats.Contains o.Format then
+                if o.Format.IsDepthStencil then
                     attach o FramebufferAttachment.DepthStencilAttachment
                 else
                     attach o FramebufferAttachment.DepthAttachment

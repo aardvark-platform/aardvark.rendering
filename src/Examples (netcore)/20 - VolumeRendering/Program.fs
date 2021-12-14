@@ -189,7 +189,7 @@ let main argv =
 
     let signature =
         win.Runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, RenderbufferFormat.R32f
+            DefaultSemantic.Colors, TextureFormat.R32f
         ]
 
     let scatterTexture = win.Runtime.CreateTexture2D(V2i(256,1024), TextureFormat.R32f, 1, 1)

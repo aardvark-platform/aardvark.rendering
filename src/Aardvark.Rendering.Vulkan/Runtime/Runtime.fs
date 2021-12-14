@@ -286,11 +286,11 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         ResourceValidation.Textures.validateCreationParamsArray dim size levels samples count
         x.CreateTextureInner(size, dim, format, levels, samples, count)
 
-    member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
+    member x.CreateRenderbuffer(size : V2i, format : TextureFormat, samples : int) : IRenderbuffer =
         if samples < 1 then raise <| ArgumentException("[Renderbuffer] samples must be greater than 0")
 
         let isDepth =
-            RenderbufferFormat.hasDepth format || RenderbufferFormat.hasStencil format
+            format.HasDepth || format.HasStencil
 
         let layout =
             if isDepth then VkImageLayout.DepthStencilAttachmentOptimal

@@ -46,7 +46,7 @@ let main argv =
 
     let signature =
         runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+            DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = 1 }
         ]
 
     let size = AVal.init 1024

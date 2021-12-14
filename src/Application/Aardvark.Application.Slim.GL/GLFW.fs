@@ -900,8 +900,8 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
 
     let signature =
         app.Runtime.CreateFramebufferSignature(samples, [
-            DefaultSemantic.Colors, RenderbufferFormat.Rgba8
-            DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+            DefaultSemantic.Colors, TextureFormat.Rgba8
+            DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
         ])
 
     let currentSize =
@@ -1085,7 +1085,7 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
             app.Context, signature, 
             (fun _ -> 0), 
             ignore, 
-            [0, DefaultSemantic.Colors, Aardvark.Rendering.GL.Renderbuffer(app.Context, 0, V2i.Zero, RenderbufferFormat.Rgba8, samples, 0L) :> IFramebufferOutput], None
+            [0, DefaultSemantic.Colors, Aardvark.Rendering.GL.Renderbuffer(app.Context, 0, V2i.Zero, TextureFormat.Rgba8, samples, 0L) :> IFramebufferOutput], None
         ) 
 
     let mutable frameCount = 0

@@ -219,11 +219,11 @@ let main argv =
 
     let signature =
         runtime.CreateFramebufferSignature(8, [
-            Semantic.Color0, RenderbufferFormat.Rgba8
-            Semantic.Color1, RenderbufferFormat.Rgba8
-            Semantic.Color2, RenderbufferFormat.Rgba8
-            Semantic.Color3, RenderbufferFormat.Rgba8
-            DefaultSemantic.Stencil, RenderbufferFormat.StencilIndex8
+            Semantic.Color0, TextureFormat.Rgba8
+            Semantic.Color1, TextureFormat.Rgba8
+            Semantic.Color2, TextureFormat.Rgba8
+            Semantic.Color3, TextureFormat.Rgba8
+            DefaultSemantic.Stencil, TextureFormat.StencilIndex8
         ])
 
     use task =

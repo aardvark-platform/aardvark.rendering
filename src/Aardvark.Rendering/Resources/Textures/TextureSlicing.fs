@@ -39,7 +39,7 @@ module ``IBackendTexture Slicing Extensions`` =
         interface IFramebufferOutput with
             member x.Runtime = tex.Runtime
             member x.Size = x.Size.XY
-            member x.Format = unbox (int tex.Format)
+            member x.Format = tex.Format
             member x.Samples = tex.Samples
 
         interface ITextureLevel with
@@ -73,7 +73,7 @@ module ``IBackendTexture Slicing Extensions`` =
 
         interface IFramebufferOutput with
             member x.Runtime = tex.Runtime
-            member x.Format = unbox (int tex.Format)
+            member x.Format = tex.Format
             member x.Samples = tex.Samples
             member x.Size = x.Size.XY
 

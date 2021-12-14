@@ -79,7 +79,7 @@ module internal TextureUtilitiesAndExtensions =
 
         let texSizeInBytes (size : V3i, t : TextureFormat, samples : int, levels : int) =
             let pixelCount = (int64 size.X) * (int64 size.Y) * (int64 size.Z) * (int64 samples)
-            let mutable size = pixelCount * (int64 (InternalFormat.getSizeInBits (unbox (int t)))) / 8L
+            let mutable size = pixelCount * (int64 t.PixelSizeInBits) / 8L
             let mutable temp = size
             for i in 1..levels-1 do
                 temp <- temp >>> 2

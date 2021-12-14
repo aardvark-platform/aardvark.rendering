@@ -7,172 +7,96 @@ open Aardvark.Rendering
 module VkFormat =
     let ofTextureFormat =
         LookupTable.lookupTable [
-            TextureFormat.Bgr8, VkFormat.B8g8r8Unorm
-            TextureFormat.Bgra8, VkFormat.B8g8r8a8Unorm
-
-
-            TextureFormat.DepthComponent, VkFormat.D24UnormS8Uint
-            TextureFormat.Alpha, VkFormat.R8Unorm
-            TextureFormat.Rgb, VkFormat.R8g8b8Unorm
-            TextureFormat.Rgba, VkFormat.R8g8b8a8Unorm
-            TextureFormat.Luminance, VkFormat.R8Unorm
-            TextureFormat.LuminanceAlpha, VkFormat.R8g8Unorm
-            TextureFormat.Rgb4, VkFormat.R4g4b4a4UnormPack16
-            TextureFormat.Rgb5, VkFormat.R5g5b5a1UnormPack16
-            TextureFormat.Rgb8, VkFormat.R8g8b8Unorm
-            TextureFormat.Rgb10, VkFormat.A2b10g10r10UnormPack32
-            TextureFormat.Rgb16, VkFormat.R16g16b16Uint
-            TextureFormat.Rgba4, VkFormat.R4g4b4a4UnormPack16
-            TextureFormat.Rgb5A1, VkFormat.R5g5b5a1UnormPack16
-            TextureFormat.Rgba8, VkFormat.R8g8b8a8Unorm
-            TextureFormat.Rgb10A2, VkFormat.A2r10g10b10UnormPack32
-            TextureFormat.Rgba16, VkFormat.R16g16b16a16Unorm
-            TextureFormat.DualAlpha4Sgis, VkFormat.R4g4UnormPack8
-            TextureFormat.DualAlpha8Sgis, VkFormat.R8g8Unorm
-            TextureFormat.DualAlpha16Sgis, VkFormat.R16g16Unorm
-            TextureFormat.DualLuminance4Sgis, VkFormat.R4g4UnormPack8
-            TextureFormat.DualLuminance8Sgis, VkFormat.R8g8Unorm
-            TextureFormat.DualLuminance16Sgis, VkFormat.R16g16Unorm
-            TextureFormat.DualIntensity4Sgis, VkFormat.R4g4UnormPack8
-            TextureFormat.DualIntensity8Sgis, VkFormat.R8g8Unorm
-            TextureFormat.DualIntensity16Sgis, VkFormat.R16g16Unorm
-            TextureFormat.DualLuminanceAlpha4Sgis, VkFormat.R4g4UnormPack8
-            TextureFormat.DualLuminanceAlpha8Sgis, VkFormat.R8g8Unorm
-            TextureFormat.QuadAlpha4Sgis, VkFormat.R4g4b4a4UnormPack16
-            TextureFormat.QuadAlpha8Sgis, VkFormat.R8g8b8a8Unorm
-            TextureFormat.QuadLuminance4Sgis, VkFormat.R4g4b4a4UnormPack16
-            TextureFormat.QuadLuminance8Sgis, VkFormat.R8g8b8a8Unorm
-            TextureFormat.QuadIntensity4Sgis, VkFormat.R4g4b4a4UnormPack16
-            TextureFormat.QuadIntensity8Sgis, VkFormat.R8g8b8a8Unorm
-            TextureFormat.DepthComponent16, VkFormat.D16Unorm
-            TextureFormat.DepthComponent24, VkFormat.D24UnormS8Uint
-            TextureFormat.DepthComponent32, VkFormat.D32SfloatS8Uint
-//                TextureFormat.CompressedRed, VkFormat.
-//                TextureFormat.CompressedRg, VkFormat.
-            TextureFormat.R8, VkFormat.R8Unorm
-            TextureFormat.R16, VkFormat.R16Unorm
-            TextureFormat.Rg8, VkFormat.R8g8Unorm
-            TextureFormat.Rg16, VkFormat.R16g16Unorm
-            TextureFormat.R16f, VkFormat.R16Sfloat
-            TextureFormat.R32f, VkFormat.R32Sfloat
-            TextureFormat.Rg16f, VkFormat.R16g16Sfloat
-            TextureFormat.Rg32f, VkFormat.R32g32Sfloat
-            TextureFormat.R8i, VkFormat.R8Sint
-            TextureFormat.R8ui, VkFormat.R8Uint
-            TextureFormat.R16i, VkFormat.R16Sint
-            TextureFormat.R16ui, VkFormat.R16Uint
-            TextureFormat.R32i, VkFormat.R32Sint
-            TextureFormat.R32ui, VkFormat.R32Uint
-            TextureFormat.Rg8i, VkFormat.R8g8Sint
-            TextureFormat.Rg8ui, VkFormat.R8g8Uint
-            TextureFormat.Rg16i, VkFormat.R16g16Sint
-            TextureFormat.Rg16ui, VkFormat.R16g16Uint
-            TextureFormat.Rg32i, VkFormat.R32g32Sint
-            TextureFormat.Rg32ui, VkFormat.R32g32Uint
-
-
+            TextureFormat.Bgr8,                           VkFormat.B8g8r8Unorm
+            TextureFormat.Bgra8,                          VkFormat.B8g8r8a8Unorm
+            TextureFormat.R3G3B2,                         VkFormat.Undefined
+            TextureFormat.Rgb4,                           VkFormat.R4g4b4a4UnormPack16
+            TextureFormat.Rgb5,                           VkFormat.R5g5b5a1UnormPack16
+            TextureFormat.Rgb8,                           VkFormat.R8g8b8Unorm
+            TextureFormat.Rgb10,                          VkFormat.A2b10g10r10UnormPack32
+            TextureFormat.Rgb12,                          VkFormat.Undefined
+            TextureFormat.Rgb16,                          VkFormat.R16g16b16Unorm
+            TextureFormat.Rgba2,                          VkFormat.Undefined
+            TextureFormat.Rgba4,                          VkFormat.R4g4b4a4UnormPack16
+            TextureFormat.Rgb5A1,                         VkFormat.R5g5b5a1UnormPack16
+            TextureFormat.Rgba8,                          VkFormat.R8g8b8a8Unorm
+            TextureFormat.Rgb10A2,                        VkFormat.A2b10g10r10UnormPack32
+            TextureFormat.Rgba12,                         VkFormat.Undefined
+            TextureFormat.Rgba16,                         VkFormat.R16g16b16a16Unorm
+            TextureFormat.R8,                             VkFormat.R8Unorm
+            TextureFormat.R16,                            VkFormat.R16Unorm
+            TextureFormat.Rg8,                            VkFormat.R8g8Unorm
+            TextureFormat.Rg16,                           VkFormat.R16g16Unorm
+            TextureFormat.R16f,                           VkFormat.R16Sfloat
+            TextureFormat.R32f,                           VkFormat.R32Sfloat
+            TextureFormat.Rg16f,                          VkFormat.R16g16Sfloat
+            TextureFormat.Rg32f,                          VkFormat.R32g32Sfloat
+            TextureFormat.R8i,                            VkFormat.R8Sint
+            TextureFormat.R8ui,                           VkFormat.R8Uint
+            TextureFormat.R16i,                           VkFormat.R16Sint
+            TextureFormat.R16ui,                          VkFormat.R16Uint
+            TextureFormat.R32i,                           VkFormat.R32Sint
+            TextureFormat.R32ui,                          VkFormat.R32Uint
+            TextureFormat.Rg8i,                           VkFormat.R8g8Sint
+            TextureFormat.Rg8ui,                          VkFormat.R8g8Uint
+            TextureFormat.Rg16i,                          VkFormat.R16g16Sint
+            TextureFormat.Rg16ui,                         VkFormat.R16g16Uint
+            TextureFormat.Rg32i,                          VkFormat.R32g32Sint
+            TextureFormat.Rg32ui,                         VkFormat.R32g32Uint
+            TextureFormat.Rgba32f,                        VkFormat.R32g32b32a32Sfloat
+            TextureFormat.Rgb32f,                         VkFormat.R32g32b32Sfloat
+            TextureFormat.Rgba16f,                        VkFormat.R16g16b16a16Sfloat
+            TextureFormat.Rgb16f,                         VkFormat.R16g16b16Sfloat
+            TextureFormat.R11fG11fB10f,                   VkFormat.B10g11r11UfloatPack32
+            TextureFormat.Rgb9E5,                         VkFormat.E5b9g9r9UfloatPack32
+            TextureFormat.Srgb8,                          VkFormat.R8g8b8Srgb
+            TextureFormat.Srgb8Alpha8,                    VkFormat.R8g8b8a8Srgb
+            TextureFormat.Rgba32ui,                       VkFormat.R32g32b32a32Uint
+            TextureFormat.Rgb32ui,                        VkFormat.R32g32b32Uint
+            TextureFormat.Rgba16ui,                       VkFormat.R16g16b16a16Uint
+            TextureFormat.Rgb16ui,                        VkFormat.R16g16b16Uint
+            TextureFormat.Rgba8ui,                        VkFormat.R8g8b8a8Uint
+            TextureFormat.Rgb8ui,                         VkFormat.R8g8b8Uint
+            TextureFormat.Rgba32i,                        VkFormat.R32g32b32a32Sint
+            TextureFormat.Rgb32i,                         VkFormat.R32g32b32Sint
+            TextureFormat.Rgba16i,                        VkFormat.R16g16b16a16Sint
+            TextureFormat.Rgb16i,                         VkFormat.R16g16b16Sint
+            TextureFormat.Rgba8i,                         VkFormat.R8g8b8a8Sint
+            TextureFormat.Rgb8i,                          VkFormat.R8g8b8Sint
+            TextureFormat.R8Snorm,                        VkFormat.R8Snorm
+            TextureFormat.Rg8Snorm,                       VkFormat.R8g8Snorm
+            TextureFormat.Rgb8Snorm,                      VkFormat.R8g8b8Snorm
+            TextureFormat.Rgba8Snorm,                     VkFormat.R8g8b8a8Snorm
+            TextureFormat.R16Snorm,                       VkFormat.R16Snorm
+            TextureFormat.Rg16Snorm,                      VkFormat.R16g16Snorm
+            TextureFormat.Rgb16Snorm,                     VkFormat.R16g16b16Snorm
+            TextureFormat.Rgba16Snorm,                    VkFormat.R16g16b16a16Snorm
+            TextureFormat.Rgb10A2ui,                      VkFormat.A2b10g10r10UintPack32
+            TextureFormat.DepthComponent16,               VkFormat.D16Unorm
+            TextureFormat.DepthComponent24,               VkFormat.X8D24UnormPack32
+            TextureFormat.DepthComponent32,               VkFormat.D32Sfloat
+            TextureFormat.DepthComponent32f,              VkFormat.D32Sfloat
+            TextureFormat.Depth24Stencil8,                VkFormat.D24UnormS8Uint
+            TextureFormat.Depth32fStencil8,               VkFormat.D32SfloatS8Uint
+            TextureFormat.StencilIndex8,                  VkFormat.S8Uint
+   
             // TODO: check
-            TextureFormat.CompressedRgbS3tcDxt1Ext, VkFormat.Bc1RgbUnormBlock
-            TextureFormat.CompressedRgbaS3tcDxt1Ext, VkFormat.Bc1RgbaUnormBlock
-            TextureFormat.CompressedRgbaS3tcDxt3Ext, VkFormat.Bc2UnormBlock
-            TextureFormat.CompressedRgbaS3tcDxt5Ext, VkFormat.Bc3UnormBlock
-
-//                TextureFormat.CompressedRgbS3tcDxt1Ext, VkFormat.
-//                TextureFormat.CompressedRgbaS3tcDxt1Ext, VkFormat.
-//                TextureFormat.CompressedRgbaS3tcDxt3Ext, VkFormat.
-//                TextureFormat.CompressedRgbaS3tcDxt5Ext, VkFormat.
-//                TextureFormat.RgbIccSgix, VkFormat.
-//                TextureFormat.RgbaIccSgix, VkFormat.
-//                TextureFormat.AlphaIccSgix, VkFormat.
-//                TextureFormat.LuminanceIccSgix, VkFormat.
-//                TextureFormat.IntensityIccSgix, VkFormat.
-//                TextureFormat.LuminanceAlphaIccSgix, VkFormat.
-//                TextureFormat.R5G6B5IccSgix, VkFormat.
-//                TextureFormat.R5G6B5A8IccSgix, VkFormat.
-//                TextureFormat.Alpha16IccSgix, VkFormat.
-//                TextureFormat.Luminance16IccSgix, VkFormat.
-//                TextureFormat.Intensity16IccSgix, VkFormat.
-//                TextureFormat.Luminance16Alpha8IccSgix, VkFormat.
-//                TextureFormat.CompressedAlpha, VkFormat.
-//                TextureFormat.CompressedLuminance, VkFormat.
-//                TextureFormat.CompressedLuminanceAlpha, VkFormat.
-//                TextureFormat.CompressedIntensity, VkFormat.
-//                TextureFormat.CompressedRgb, VkFormat.
-//                TextureFormat.CompressedRgba, VkFormat.
-            TextureFormat.DepthStencil, VkFormat.D24UnormS8Uint
-            TextureFormat.Rgba32f, VkFormat.R32g32b32a32Sfloat
-            TextureFormat.Rgb32f, VkFormat.R32g32b32Sfloat
-            TextureFormat.Rgba16f, VkFormat.R16g16b16a16Sfloat
-            TextureFormat.Rgb16f, VkFormat.R16g16b16Sfloat
-            TextureFormat.Depth24Stencil8, VkFormat.D24UnormS8Uint
-//                TextureFormat.R11fG11fB10f, VkFormat.R11
-//                TextureFormat.Rgb9E5, VkFormat.
-            TextureFormat.Srgb, VkFormat.R8g8b8Srgb
-            TextureFormat.Srgb8, VkFormat.R8g8b8Srgb
-            TextureFormat.SrgbAlpha, VkFormat.R8g8b8a8Srgb
-            TextureFormat.Srgb8Alpha8, VkFormat.R8g8b8a8Srgb
-//                TextureFormat.SluminanceAlpha, VkFormat.
-//                TextureFormat.Sluminance8Alpha8, VkFormat.
-//                TextureFormat.Sluminance, VkFormat.
-//                TextureFormat.Sluminance8, VkFormat.
-//                TextureFormat.CompressedSrgb, VkFormat.
-//                TextureFormat.CompressedSrgbAlpha, VkFormat.
-//                TextureFormat.CompressedSluminance, VkFormat.
-//                TextureFormat.CompressedSluminanceAlpha, VkFormat.
-//                TextureFormat.CompressedSrgbS3tcDxt1Ext, VkFormat.
-//                TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext, VkFormat.
-//                TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext, VkFormat.
-//                TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext, VkFormat.
-            TextureFormat.StencilIndex8, VkFormat.S8Uint
-            TextureFormat.DepthComponent32f, VkFormat.D32Sfloat
-            TextureFormat.Depth32fStencil8, VkFormat.D32SfloatS8Uint
-            TextureFormat.Rgba32ui, VkFormat.R32g32b32a32Uint
-            TextureFormat.Rgb32ui, VkFormat.R32g32b32Uint
-            TextureFormat.Rgba16ui, VkFormat.R16g16b16a16Uint
-            TextureFormat.Rgb16ui, VkFormat.R16g16b16Uint
-            TextureFormat.Rgba8ui, VkFormat.R8g8b8a8Uint
-            TextureFormat.Rgb8ui, VkFormat.R8g8b8Uint
-            TextureFormat.Rgba32i, VkFormat.R32g32b32a32Sint
-            TextureFormat.Rgb32i, VkFormat.R32g32b32Sint
-            TextureFormat.Rgba16i, VkFormat.R16g16b16a16Sint
-            TextureFormat.Rgb16i, VkFormat.R16g16b16Sint
-            TextureFormat.Rgba8i, VkFormat.R8g8b8a8Sint
-            TextureFormat.Rgb8i, VkFormat.R8g8b8Sint
-            TextureFormat.Float32UnsignedInt248Rev, VkFormat.D24UnormS8Uint
-//                TextureFormat.CompressedRedRgtc1, VkFormat.
-//                TextureFormat.CompressedSignedRedRgtc1, VkFormat.
-//                TextureFormat.CompressedRgRgtc2, VkFormat.
-//                TextureFormat.CompressedSignedRgRgtc2, VkFormat.
-//                TextureFormat.CompressedRgbaBptcUnorm, VkFormat.
-//                TextureFormat.CompressedRgbBptcSignedFloat, VkFormat.
-//                TextureFormat.CompressedRgbBptcUnsignedFloat, VkFormat.
-            TextureFormat.R8Snorm, VkFormat.R8Snorm
-            TextureFormat.Rg8Snorm, VkFormat.R8g8Snorm
-            TextureFormat.Rgb8Snorm, VkFormat.R8g8b8Snorm
-            TextureFormat.Rgba8Snorm, VkFormat.R8g8b8a8Snorm
-            TextureFormat.R16Snorm, VkFormat.R16Snorm
-            TextureFormat.Rg16Snorm, VkFormat.R16g16Snorm
-            TextureFormat.Rgb16Snorm, VkFormat.R16g16b16Snorm
-            TextureFormat.Rgba16Snorm, VkFormat.R16g16b16a16Snorm
-            TextureFormat.Rgb10A2ui, VkFormat.A2b10g10r10UintPack32
-//                TextureFormat.One, VkFormat.
-//                TextureFormat.Two, VkFormat.
-//                TextureFormat.Three, VkFormat.
-//                TextureFormat.Four, VkFormat.
-
+            TextureFormat.CompressedRgbS3tcDxt1,          VkFormat.Bc1RgbUnormBlock
+            TextureFormat.CompressedRgbaS3tcDxt1,         VkFormat.Bc1RgbaUnormBlock
+            TextureFormat.CompressedRgbaS3tcDxt3,         VkFormat.Bc2UnormBlock
+            TextureFormat.CompressedRgbaS3tcDxt5,         VkFormat.Bc3UnormBlock
+            TextureFormat.CompressedSrgbS3tcDxt1,         VkFormat.Undefined
+            TextureFormat.CompressedSrgbAlphaS3tcDxt1,    VkFormat.Undefined
+            TextureFormat.CompressedSrgbAlphaS3tcDxt3,    VkFormat.Undefined
+            TextureFormat.CompressedSrgbAlphaS3tcDxt5,    VkFormat.Undefined
+            TextureFormat.CompressedRedRgtc1,             VkFormat.Undefined
+            TextureFormat.CompressedSignedRedRgtc1,       VkFormat.Undefined
+            TextureFormat.CompressedRgRgtc2,              VkFormat.Undefined
+            TextureFormat.CompressedSignedRgRgtc2,        VkFormat.Undefined
+            TextureFormat.CompressedRgbaBptcUnorm,        VkFormat.Undefined
+            TextureFormat.CompressedRgbBptcSignedFloat,   VkFormat.Undefined
+            TextureFormat.CompressedRgbBptcUnsignedFloat, VkFormat.Undefined
         ]
-
-    let ofRenderbufferFormat (fmt : RenderbufferFormat) =
-        let stencilFormats =
-            LookupTable.lookupTable' [
-                RenderbufferFormat.StencilIndex1, VkFormat.S8Uint
-                RenderbufferFormat.StencilIndex4, VkFormat.S8Uint
-                RenderbufferFormat.StencilIndex8, VkFormat.S8Uint
-            ]
-
-        fmt |> stencilFormats |> Option.defaultWith (fun _ ->
-            fmt |> RenderbufferFormat.toTextureFormat |> ofTextureFormat
-        )
 
     let toTextureFormat =
         let unknown = unbox<TextureFormat> 0
@@ -181,9 +105,9 @@ module VkFormat =
             VkFormat.R4g4UnormPack8, unknown
             VkFormat.R4g4b4a4UnormPack16, TextureFormat.Rgba4
             VkFormat.B4g4r4a4UnormPack16, unknown
-            VkFormat.R5g6b5UnormPack16, TextureFormat.R5G6B5IccSgix
+            VkFormat.R5g6b5UnormPack16, unknown
             VkFormat.B5g6r5UnormPack16, unknown
-            VkFormat.R5g5b5a1UnormPack16, TextureFormat.R5G6B5A8IccSgix
+            VkFormat.R5g5b5a1UnormPack16, unknown
             VkFormat.B5g5r5a1UnormPack16, unknown
             VkFormat.A1r5g5b5UnormPack16, unknown
             VkFormat.R8Unorm, TextureFormat.R8
@@ -552,10 +476,6 @@ module VkFormat =
             VkFormat.Astc1212UnormBlock, 0
             VkFormat.Astc1212SrgbBlock, 0
         ]
-
-    let toRenderbufferFormat (fmt : VkFormat) =
-        fmt |> toTextureFormat |> int |> unbox<RenderbufferFormat>
-
 
     let private depthFormats = HashSet.ofList [ VkFormat.D16Unorm; VkFormat.D32Sfloat; VkFormat.X8D24UnormPack32 ]
     let private stencilFormats = HashSet.ofList [ VkFormat.S8Uint ]

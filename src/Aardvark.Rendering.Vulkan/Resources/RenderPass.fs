@@ -26,13 +26,13 @@ type RenderPass =
         member x.DepthAttachment =
             x.DepthStencilAttachment
             |> Option.map snd
-            |> Option.filter (AttachmentSignature.format >> RenderbufferFormat.hasDepth)
+            |> Option.filter (AttachmentSignature.format >> TextureFormat.hasDepth)
 
         // Use stencil slot only if pure stencil attachment
         member x.StencilAttachment =
             x.DepthStencilAttachment
             |> Option.map snd
-            |> Option.filter (AttachmentSignature.format >> RenderbufferFormat.isStencil)
+            |> Option.filter (AttachmentSignature.format >> TextureFormat.isStencil)
 
         member x.ColorAttachmentCount =
             Map.count x.ColorAttachments
@@ -123,7 +123,7 @@ module RenderPass =
 
                     VkAttachmentDescription(
                         VkAttachmentDescriptionFlags.None,
-                        VkFormat.ofRenderbufferFormat a.format,
+                        VkFormat.ofTextureFormat a.format,
                         unbox<VkSampleCountFlags> a.samples,
 
                         loadOp,
@@ -148,7 +148,7 @@ module RenderPass =
             let depthAttachmentDescription =
                 match depthAtt with
                 | Some (_, a) ->
-                    let format = VkFormat.ofRenderbufferFormat a.format
+                    let format = VkFormat.ofTextureFormat a.format
 
                     let format =
                         match tryFindFormat format with

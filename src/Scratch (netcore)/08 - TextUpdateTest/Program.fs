@@ -78,12 +78,12 @@ let main argv =
     let color = runtime.CreateTexture2D(size, TextureFormat.Rgba8, 1, 1)
     let prepare = 
 
-        let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
+        let depth = runtime.CreateRenderbuffer(size, TextureFormat.Depth24Stencil8, 1)
 
         let signature =
             runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
-                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+                DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = 1 }
+                DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
             ]
 
         let fbo = 

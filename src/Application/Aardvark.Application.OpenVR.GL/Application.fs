@@ -75,8 +75,8 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
     let framebufferSignature = 
         runtime.CreateFramebufferSignature(
             SymDict.ofList [
-                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = samples }
-                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = samples }
+                DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = samples }
+                DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = samples }
             ],
             2,
             Set.ofList [

@@ -74,9 +74,9 @@ let main argv =
     let signature = 
         win.Runtime.CreateFramebufferSignature(
             [
-                DefaultSemantic.Colors, RenderbufferFormat.Rgba8
-                Sym.ofString "WPos"  , RenderbufferFormat.Rgba32f
-                DefaultSemantic.Depth,  RenderbufferFormat.Depth24Stencil8
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                Sym.ofString "WPos"  , TextureFormat.Rgba32f
+                DefaultSemantic.Depth,  TextureFormat.Depth24Stencil8
             ])
 
     let pass0 = 

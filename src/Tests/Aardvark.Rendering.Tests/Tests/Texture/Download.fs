@@ -68,7 +68,7 @@ module TextureDownload =
             let size = data.Size
             let samples = 8
 
-            let signature = runtime.CreateFramebufferSignature(samples, [DefaultSemantic.Colors, RenderbufferFormat.Rgba32f])
+            let signature = runtime.CreateFramebufferSignature(samples, [DefaultSemantic.Colors, TextureFormat.Rgba32f])
             let colorTexture = runtime.CreateTexture2D(size, TextureFormat.Rgba32f, 1, samples)
             let framebuffer = runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, colorTexture.GetOutputView()])
 
@@ -322,7 +322,7 @@ module TextureDownload =
             interface IDisposable with
                 member x.Dispose() = x.Dispose()
 
-        let private renderTo (runtime : IRuntime) (attachments : seq<Symbol * RenderbufferFormat>) =
+        let private renderTo (runtime : IRuntime) (attachments : seq<Symbol * TextureFormat>) =
             let signature =
                  runtime.CreateFramebufferSignature(attachments)
 
@@ -356,7 +356,7 @@ module TextureDownload =
                 }
             }
 
-        let private renderToStencil (runtime : IRuntime) (format : RenderbufferFormat) (size : V2i) (f : IBackendTexture -> 'T) =
+        let private renderToStencil (runtime : IRuntime) (format : TextureFormat) (size : V2i) (f : IBackendTexture -> 'T) =
             use task =
                 let atts = [ DefaultSemantic.Stencil, format ]
                 renderTo runtime atts
@@ -371,7 +371,7 @@ module TextureDownload =
             finally
                 buffer.Release()
 
-        let private renderToDepth (runtime : IRuntime) (format : RenderbufferFormat) (size : V2i)
+        let private renderToDepth (runtime : IRuntime) (format : TextureFormat) (size : V2i)
                                   (f : IBackendTexture -> 'T) =
             use task =
                 let atts = [ DefaultSemantic.Depth, format ]
@@ -387,7 +387,7 @@ module TextureDownload =
             finally
                 buffer.Release()
 
-        let textureDepthComponent (format : RenderbufferFormat) (runtime : IRuntime) =
+        let textureDepthComponent (format : TextureFormat) (runtime : IRuntime) =
             let size = V2i(256)
 
             renderToDepth runtime format size (fun buffer ->
@@ -398,15 +398,15 @@ module TextureDownload =
                 Expect.isLessThan (Array.min depthResult.Data) 1.0f "All depth one"
             )
 
-        let textureDepthComponent16 = textureDepthComponent RenderbufferFormat.DepthComponent16
-        let textureDepthComponent24 = textureDepthComponent RenderbufferFormat.DepthComponent24
-        let textureDepthComponent32 = textureDepthComponent RenderbufferFormat.DepthComponent32
-        let textureDepthComponent32f = textureDepthComponent RenderbufferFormat.DepthComponent32f
+        let textureDepthComponent16 = textureDepthComponent TextureFormat.DepthComponent16
+        let textureDepthComponent24 = textureDepthComponent TextureFormat.DepthComponent24
+        let textureDepthComponent32 = textureDepthComponent TextureFormat.DepthComponent32
+        let textureDepthComponent32f = textureDepthComponent TextureFormat.DepthComponent32f
 
         let textureDepth24Stencil8 (runtime : IRuntime) =
             let size = V2i(256)
 
-            renderToDepth runtime RenderbufferFormat.Depth24Stencil8 size (fun buffer ->
+            renderToDepth runtime TextureFormat.Depth24Stencil8 size (fun buffer ->
                 let depthResult = runtime.DownloadDepth(buffer)
 
                 Expect.equal (V2i depthResult.Size) size "Unexpected depth texture size"
@@ -422,7 +422,7 @@ module TextureDownload =
         let textureDepth32fStencil8 (runtime : IRuntime) =
             let size = V2i(256)
 
-            renderToDepth runtime RenderbufferFormat.Depth32fStencil8 size (fun buffer ->
+            renderToDepth runtime TextureFormat.Depth32fStencil8 size (fun buffer ->
                 let depthResult = runtime.DownloadDepth(buffer)
 
                 Expect.equal (V2i depthResult.Size) size "Unexpected depth texture size"
@@ -438,7 +438,7 @@ module TextureDownload =
         let textureStencilIndex8 (runtime : IRuntime) =
             let size = V2i(256)
 
-            renderToStencil runtime RenderbufferFormat.StencilIndex8 size (fun buffer ->
+            renderToStencil runtime TextureFormat.StencilIndex8 size (fun buffer ->
                 let stencilResult = runtime.DownloadStencil(buffer)
 
                 Expect.equal (V2i stencilResult.Size) size "Unexpected stencil texture size"

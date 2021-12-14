@@ -10,7 +10,7 @@ open System.Runtime.InteropServices
 [<AutoOpen>]
 module private AdaptiveRenderbufferTypes =
 
-    type AdaptiveRenderbuffer(runtime : ITextureRuntime, format : aval<RenderbufferFormat>, samples : aval<int>, size : aval<V2i>) =
+    type AdaptiveRenderbuffer(runtime : ITextureRuntime, format : aval<TextureFormat>, samples : aval<int>, size : aval<V2i>) =
         inherit AdaptiveResource<IRenderbuffer>()
 
         let mutable handle : Option<IRenderbuffer> = None
@@ -77,7 +77,7 @@ type ITextureRuntimeAdaptiveRenderbufferExtensions private() =
     ///<param name="format">The desired renderbuffer format.</param>
     ///<param name="samples">The number of samples.</param>
     [<Extension>]
-    static member CreateRenderbuffer(this : ITextureRuntime, size : aval<V2i>, format : RenderbufferFormat, samples : aval<int>) =
+    static member CreateRenderbuffer(this : ITextureRuntime, size : aval<V2i>, format : TextureFormat, samples : aval<int>) =
         AdaptiveRenderbuffer(this, ~~format, samples, size) :> IAdaptiveResource<_>
 
     ///<summary>Creates an adaptive renderbuffer.</summary>
@@ -86,7 +86,7 @@ type ITextureRuntimeAdaptiveRenderbufferExtensions private() =
     ///<param name="format">The desired renderbuffer format.</param>
     ///<param name="samples">The number of samples. Default is 1.</param>
     [<Extension>]
-    static member CreateRenderbuffer(this : ITextureRuntime, size : aval<V2i>, format : RenderbufferFormat,
+    static member CreateRenderbuffer(this : ITextureRuntime, size : aval<V2i>, format : TextureFormat,
                                      [<Optional; DefaultParameterValue(1)>] samples : int) =
         AdaptiveRenderbuffer(this, ~~format, ~~samples, size) :> IAdaptiveResource<_>
 

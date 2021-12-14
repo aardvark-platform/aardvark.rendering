@@ -37,7 +37,7 @@ type IFramebufferRuntimeExtensions private() =
 
     /// Creates a framebuffer signature with the given attachment formats and number of samples.
     [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, samples : int, attachments : Map<Symbol, RenderbufferFormat>, layers : int, perLayerUniforms : Set<string>) =
+    static member CreateFramebufferSignature(this : IFramebufferRuntime, samples : int, attachments : Map<Symbol, TextureFormat>, layers : int, perLayerUniforms : Set<string>) =
         this.CreateFramebufferSignature(
             attachments |> Map.map (fun _ f -> { format = f; samples = samples }),
             layers, perLayerUniforms
@@ -45,12 +45,12 @@ type IFramebufferRuntimeExtensions private() =
 
     /// Creates a framebuffer signature with the given attachment formats and number of samples.
     [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, samples : int, attachments : seq<Symbol * RenderbufferFormat>, layers : int, perLayerUniforms : Set<string>) =
+    static member CreateFramebufferSignature(this : IFramebufferRuntime, samples : int, attachments : seq<Symbol * TextureFormat>, layers : int, perLayerUniforms : Set<string>) =
         this.CreateFramebufferSignature(samples, Map.ofSeq attachments, layers, perLayerUniforms)
 
     /// Creates a framebuffer signature with the given attachment formats and number of samples.
     [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, attachments : Map<Symbol, RenderbufferFormat>, layers : int, perLayerUniforms : Set<string>) =
+    static member CreateFramebufferSignature(this : IFramebufferRuntime, attachments : Map<Symbol, TextureFormat>, layers : int, perLayerUniforms : Set<string>) =
         this.CreateFramebufferSignature(
             attachments |> Map.map (fun _ f -> { format = f; samples = 1 }),
             layers, perLayerUniforms
@@ -58,27 +58,27 @@ type IFramebufferRuntimeExtensions private() =
 
     /// Creates a framebuffer signature with the given attachment formats and number of samples.
     [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, attachments : seq<Symbol * RenderbufferFormat>, layers : int, perLayerUniforms : Set<string>) =
+    static member CreateFramebufferSignature(this : IFramebufferRuntime, attachments : seq<Symbol * TextureFormat>, layers : int, perLayerUniforms : Set<string>) =
         this.CreateFramebufferSignature(Map.ofSeq attachments, layers, perLayerUniforms)
 
     /// Creates a framebuffer signature with the given attachment formats and number of samples.
     [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, samples : int, attachments : Map<Symbol, RenderbufferFormat>) =
+    static member CreateFramebufferSignature(this : IFramebufferRuntime, samples : int, attachments : Map<Symbol, TextureFormat>) =
         this.CreateFramebufferSignature(samples, attachments, 1, Set.empty)
 
     /// Creates a framebuffer signature with the given attachment formats and number of samples.
     [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, samples : int, attachments : seq<Symbol * RenderbufferFormat>) =
+    static member CreateFramebufferSignature(this : IFramebufferRuntime, samples : int, attachments : seq<Symbol * TextureFormat>) =
         this.CreateFramebufferSignature(samples, attachments, 1, Set.empty)
 
     /// Creates a framebuffer signature with the given attachment formats and number of samples.
     [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, attachments : Map<Symbol, RenderbufferFormat>) =
+    static member CreateFramebufferSignature(this : IFramebufferRuntime, attachments : Map<Symbol, TextureFormat>) =
         this.CreateFramebufferSignature(attachments, 1, Set.empty)
 
     /// Creates a framebuffer signature with the given attachment formats and number of samples.
     [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, attachments : seq<Symbol * RenderbufferFormat>) =
+    static member CreateFramebufferSignature(this : IFramebufferRuntime, attachments : seq<Symbol * TextureFormat>) =
         this.CreateFramebufferSignature(attachments, 1, Set.empty)
 
 
@@ -140,7 +140,7 @@ type IFramebufferRuntimeExtensions private() =
 module IFramebufferSignatureExtensions =
 
     let private signatureAssignableFrom (mine : AttachmentSignature) (other : AttachmentSignature) =
-        RenderbufferFormat.toColFormat mine.format = RenderbufferFormat.toColFormat other.format
+        TextureFormat.toColFormat mine.format = TextureFormat.toColFormat other.format
 
     let private colorsAssignableFrom (mine : Map<int, Symbol * AttachmentSignature>) (other : Map<int, Symbol * AttachmentSignature>) =
         mine |> Map.forall (fun id (sem, signature) ->

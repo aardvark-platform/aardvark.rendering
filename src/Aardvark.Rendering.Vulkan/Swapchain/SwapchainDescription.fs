@@ -196,15 +196,15 @@ module SwapchainDescription =
                 | Some depthFormat ->
                     device.CreateRenderPass(
                         Map.ofList [
-                            DefaultSemantic.Colors, { format = VkFormat.toRenderbufferFormat colorFormat; samples = samples }
-                            DefaultSemantic.Depth, { format = VkFormat.toRenderbufferFormat depthFormat; samples = samples }
+                            DefaultSemantic.Colors, { format = VkFormat.toTextureFormat colorFormat; samples = samples }
+                            DefaultSemantic.Depth, { format = VkFormat.toTextureFormat depthFormat; samples = samples }
                         ],
                         1, Set.empty
                     )
                 | None ->
                     device.CreateRenderPass(
                         Map.ofList [
-                            DefaultSemantic.Colors, { format = VkFormat.toRenderbufferFormat colorFormat; samples = samples }
+                            DefaultSemantic.Colors, { format = VkFormat.toTextureFormat colorFormat; samples = samples }
                         ],
                         1, Set.empty
                     )

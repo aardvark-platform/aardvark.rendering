@@ -33,7 +33,7 @@ module Sharing =
                 x.SizeInBytes <- 0n
 
     type RefCountedTexture(ctx, create : unit -> Texture, destroy : unit -> unit) =
-        inherit Texture(ctx, 0, TextureDimension.Texture2D, 0, 0, V3i.Zero, None, TextureFormat.Rgba, 0L)
+        inherit Texture(ctx, 0, TextureDimension.Texture2D, 0, 0, V3i.Zero, None, TextureFormat.Rgba8, 0L)
 
         let mutable refCount = 0
 
@@ -108,7 +108,7 @@ module Sharing =
     type TextureManager(ctx : Context, active : bool) =
         let cache = ConcurrentDictionary<ITexture, RefCountedTexture>()
 
-        let nullTex = Texture(ctx, 0, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba, 0L)
+        let nullTex = Texture(ctx, 0, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L)
 
         let get (b : ITexture) =
             cache.GetOrAdd(b, fun v -> 

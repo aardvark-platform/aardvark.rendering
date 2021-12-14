@@ -21,12 +21,6 @@ module private DXSharingHelpers =
     [<DllImport("user32.dll", CallingConvention = CallingConvention.Cdecl); SuppressUnmanagedCodeSecurity>]
     extern nativeint GetDesktopWindow()
 
-    let renderbufferFormat =
-        LookupTable.lookupTable [
-            SharpDX.Direct3D9.Format.A8R8G8B8, RenderbufferFormat.Rgba8
-            SharpDX.Direct3D9.Format.A8B8G8R8, RenderbufferFormat.Rgba8
-        ]
-
 
 type WglDxShareDevice =
     struct
@@ -224,7 +218,7 @@ module WGLDXContextExtensions =
 
     let private shareContexts = System.Runtime.CompilerServices.ConditionalWeakTable<Context, ShareContext>()
 
-    type D3DRenderbuffer(ctx : ShareContext, resolveBuffer : int, renderBuffer : int, size : V2i, fmt : RenderbufferFormat, samples : int, dxSurface : SharpDX.Direct3D9.Surface, shareHandle : WglDxShareHandle) =
+    type D3DRenderbuffer(ctx : ShareContext, resolveBuffer : int, renderBuffer : int, size : V2i, fmt : TextureFormat, samples : int, dxSurface : SharpDX.Direct3D9.Surface, shareHandle : WglDxShareHandle) =
         inherit Aardvark.Rendering.GL.Renderbuffer(ctx.Context, renderBuffer, size, fmt, samples, 0L)
         let mutable shareHandle = shareHandle
 
@@ -309,8 +303,8 @@ module WGLDXContextExtensions =
 
     let private dxFormat =
         LookupTable.lookupTable [
-            RenderbufferFormat.Rgba8, SharpDX.Direct3D9.Format.A8R8G8B8
-            RenderbufferFormat.Depth24Stencil8, SharpDX.Direct3D9.Format.D24S8
+            TextureFormat.Rgba8, SharpDX.Direct3D9.Format.A8R8G8B8
+            TextureFormat.Depth24Stencil8, SharpDX.Direct3D9.Format.D24S8
         ]
 
     type Context with
@@ -324,7 +318,7 @@ module WGLDXContextExtensions =
                         c
             )
         
-        member x.CreateD3DRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) =
+        member x.CreateD3DRenderbuffer(size : V2i, format : TextureFormat, samples : int) =
             use __ = x.ResourceLock
 
             let dxFormat = dxFormat format
@@ -383,7 +377,7 @@ module WGLDXContextExtensions =
 //            Log.start "shared renderbuffer %d" b
 //            Log.line "size:     %A (%A)" ssize size
 //            Log.line "samples:  %A (%A)" ssamples samples
-//            Log.line "format:   %A (%A)" (unbox<RenderbufferFormat> sfmt) format
+//            Log.line "format:   %A (%A)" (unbox<TextureFormat> sfmt) format
 //            Log.stop()
 
 
@@ -421,8 +415,8 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
 
     let signature =
         runtime.CreateFramebufferSignature(samples, [
-            DefaultSemantic.Colors, RenderbufferFormat.Rgba8
-            DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+            DefaultSemantic.Colors, TextureFormat.Rgba8
+            DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
         ])
 
     let startTime = DateTime.Now
@@ -446,21 +440,21 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
             let backBuffer =
                 match color with
                     | None -> 
-                        ctx.CreateD3DRenderbuffer(size, RenderbufferFormat.Rgba8, samples)
+                        ctx.CreateD3DRenderbuffer(size, TextureFormat.Rgba8, samples)
                     | Some o when o.Size = size -> o
                     | Some o ->
                         o.Dispose()
-                        ctx.CreateD3DRenderbuffer(size, RenderbufferFormat.Rgba8, samples)
+                        ctx.CreateD3DRenderbuffer(size, TextureFormat.Rgba8, samples)
 
             color <- Some backBuffer
 
             let depthBuffer =
                 match depth with
                     | None ->
-                        ctx.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, samples)
+                        ctx.CreateRenderbuffer(size, TextureFormat.Depth24Stencil8, samples)
                     | Some d when d.Size <> size ->
                         ctx.Delete d
-                        ctx.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, samples)
+                        ctx.CreateRenderbuffer(size, TextureFormat.Depth24Stencil8, samples)
                     | Some d ->
                         d
 

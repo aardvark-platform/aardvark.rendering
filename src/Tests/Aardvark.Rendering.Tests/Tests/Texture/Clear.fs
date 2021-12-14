@@ -62,19 +62,19 @@ module TextureClear =
 
             let formats =
                 Map.ofList [
-                    c0, RenderbufferFormat.Rgba32f
-                    c1, RenderbufferFormat.Rgba32i
-                    c2, RenderbufferFormat.Rgba32ui
-                    c3, RenderbufferFormat.Rgba8
-                    c4, RenderbufferFormat.Rgba16i
-                    DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+                    c0, TextureFormat.Rgba32f
+                    c1, TextureFormat.Rgba32i
+                    c2, TextureFormat.Rgba32ui
+                    c3, TextureFormat.Rgba8
+                    c4, TextureFormat.Rgba16i
+                    DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
                 ]
 
             let signature =
                 runtime.CreateFramebufferSignature(formats)
 
             let textures =
-                formats |> Map.map (fun _ fmt -> runtime.CreateTexture2D(V2i(256), TextureFormat.ofRenderbufferFormat fmt))
+                formats |> Map.map (fun _ fmt -> runtime.CreateTexture2D(V2i(256), fmt))
 
             let fbo =
                 let attachments = textures |> Map.map (fun _ tex -> tex.GetOutputView())

@@ -233,7 +233,7 @@ type Runtime() =
             x.CreateFramebuffer(signature, bindings) :> _
 
 
-        member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : IRenderbuffer =
+        member x.CreateRenderbuffer(size : V2i, format : TextureFormat, samples : int) : IRenderbuffer =
             x.CreateRenderbuffer(size, format, samples) :> IRenderbuffer
 
 
@@ -603,7 +603,7 @@ type Runtime() =
 
             match ms with
             | :? Renderbuffer as ms ->
-                if TextureFormat.hasDepth (RenderbufferFormat.toTextureFormat ms.Format) then srcAtt <- FramebufferAttachment.DepthStencilAttachment
+                if TextureFormat.hasDepth ms.Format then srcAtt <- FramebufferAttachment.DepthStencilAttachment
                 GL.FramebufferRenderbuffer(FramebufferTarget.ReadFramebuffer, srcAtt, RenderbufferTarget.Renderbuffer, ms.Handle)
                 GL.Check "could not set read framebuffer texture"
 
@@ -760,7 +760,7 @@ type Runtime() =
         ctx.CreateTexture(size, dim, format, count, levels, samples)
 
 
-    member x.CreateRenderbuffer(size : V2i, format : RenderbufferFormat, samples : int) : Renderbuffer =
+    member x.CreateRenderbuffer(size : V2i, format : TextureFormat, samples : int) : Renderbuffer =
         if samples < 1 then raise <| ArgumentException("[Renderbuffer] samples must be greater than 0")
         ctx.CreateRenderbuffer(size, format, samples)
 

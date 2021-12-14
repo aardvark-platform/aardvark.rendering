@@ -123,8 +123,8 @@ let main argv =
     // something changes in pointScene and updated whenever subsequent passes need it.
     let singleSampledSignature = 
         win.Runtime.CreateFramebufferSignature(1, [
-            DefaultSemantic.Colors, RenderbufferFormat.Rgba8; 
-            DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+            DefaultSemantic.Colors, TextureFormat.Rgba8; 
+            DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
            ]
         )
 

@@ -37,15 +37,15 @@ module Render2TexturePrimitiveFloat =
 
     let size = V2i(256,256)
     let color = runtime.CreateTexture2D(size, TextureFormat.Rgba32f, 1, 1)
-    let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
+    let depth = runtime.CreateRenderbuffer(size, TextureFormat.Depth24Stencil8, 1)
 
     // Signatures are required to compile render tasks. Signatures can be seen as the `type` of a framebuffer
     // It describes the instances which can be used to exectute the render task (in other words
     // the signature describes the formats and of all render targets which are subsequently used for rendering)
     let signature =
         runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba32f; samples = 1 }
-            DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+            DefaultSemantic.Colors, { format = TextureFormat.Rgba32f; samples = 1 }
+            DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
         ]
 
     // Create a framebuffer matching signature and capturing the render to texture targets

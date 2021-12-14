@@ -57,8 +57,8 @@ module RandomCubesPerformanceTest =
 
         let signature =
             app.Runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, RenderbufferFormat.Rgba8
-                DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
             ]
 
         let fbo = app.Runtime.CreateFramebuffer(signature, AVal.constant (V2i(1024, 1024)))
@@ -208,8 +208,8 @@ module RenderTaskPerformance =
 
         let framebuffers =
             [| for i in 0 .. 6 do 
-                let color = app.Runtime.CreateRenderbuffer(win.Sizes.GetValue(),RenderbufferFormat.Rgba8,1) :> IFramebufferOutput
-                let depth = app.Runtime.CreateRenderbuffer(win.Sizes.GetValue(),RenderbufferFormat.Depth24Stencil8, 1) :> IFramebufferOutput
+                let color = app.Runtime.CreateRenderbuffer(win.Sizes.GetValue(),TextureFormat.Rgba8,1) :> IFramebufferOutput
+                let depth = app.Runtime.CreateRenderbuffer(win.Sizes.GetValue(),TextureFormat.Depth24Stencil8, 1) :> IFramebufferOutput
                 yield
                     app.Runtime.CreateFramebuffer(
                         win.FramebufferSignature, [
@@ -262,12 +262,12 @@ module StartupPerformance =
         let cameraProj = Frustum.perspective 60.0 0.1 1000.0 1.0
                 
         let colorBuffer = app.Runtime.CreateTexture2D(V2i(1024, 1024), TextureFormat.Rgba8, 1, 1)
-        let depthBuffer = app.Runtime.CreateRenderbuffer(V2i(1024, 1024), RenderbufferFormat.Depth24Stencil8, 1)
+        let depthBuffer = app.Runtime.CreateRenderbuffer(V2i(1024, 1024), TextureFormat.Depth24Stencil8, 1)
 
         let fboSig = 
             app.Runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
-                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+                DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = 1 }
+                DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
             ]
 
 
@@ -387,12 +387,12 @@ module IsActiveFlagPerformance =
         let cameraProj = Frustum.perspective 60.0 0.1 1000.0 1.0
                 
         let colorBuffer = app.Runtime.CreateTexture2D(V2i(1024, 1024), TextureFormat.Rgba8, 1, 1)
-        let depthBuffer = app.Runtime.CreateRenderbuffer(V2i(1024, 1024), RenderbufferFormat.Depth24Stencil8, 1)
+        let depthBuffer = app.Runtime.CreateRenderbuffer(V2i(1024, 1024), TextureFormat.Depth24Stencil8, 1)
 
         let fboSig = 
             app.Runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
-                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+                DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = 1 }
+                DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
             ]
 
 

@@ -571,36 +571,6 @@ type IndexManager(ctx : Context, chunkSize : int, usedMemory : ref<int64>, total
 open Aardvark.Geometry
 module AtlasTextureUpload = 
     open OpenTK.Graphics.OpenGL4
-    let compressedFormats =
-        Aardvark.Base.HashSet.ofList [
-            TextureFormat.CompressedRed
-            TextureFormat.CompressedRg
-            TextureFormat.CompressedRgbS3tcDxt1Ext
-            TextureFormat.CompressedRgbaS3tcDxt1Ext
-            TextureFormat.CompressedRgbaS3tcDxt3Ext
-            TextureFormat.CompressedRgbaS3tcDxt5Ext
-            TextureFormat.CompressedAlpha
-            TextureFormat.CompressedLuminance
-            TextureFormat.CompressedLuminanceAlpha
-            TextureFormat.CompressedIntensity
-            TextureFormat.CompressedRgb
-            TextureFormat.CompressedRgba
-            TextureFormat.CompressedSrgb
-            TextureFormat.CompressedSrgbAlpha
-            TextureFormat.CompressedSluminance
-            TextureFormat.CompressedSluminanceAlpha
-            TextureFormat.CompressedSrgbS3tcDxt1Ext
-            TextureFormat.CompressedSrgbAlphaS3tcDxt1Ext
-            TextureFormat.CompressedSrgbAlphaS3tcDxt3Ext
-            TextureFormat.CompressedSrgbAlphaS3tcDxt5Ext
-            TextureFormat.CompressedRedRgtc1
-            TextureFormat.CompressedSignedRedRgtc1
-            TextureFormat.CompressedRgRgtc2
-            TextureFormat.CompressedSignedRgRgtc2
-            TextureFormat.CompressedRgbaBptcUnorm
-            TextureFormat.CompressedRgbBptcSignedFloat
-            TextureFormat.CompressedRgbBptcUnsignedFloat
-        ]
 
     type ITextureFormatVisitor<'r> =
         abstract member Accept<'a when 'a : unmanaged> : Col.Format * int -> 'r
@@ -623,9 +593,8 @@ module AtlasTextureUpload =
 
 
     let upload (texture : Texture) (bounds : Box2i) (image : INativeTexture) (rotated : bool) =
-        let isCompressed = compressedFormats.Contains image.Format
 
-        if isCompressed then
+        if image.Format.IsCompressed then
             failwith ""
         else
             let ctx = texture.Context

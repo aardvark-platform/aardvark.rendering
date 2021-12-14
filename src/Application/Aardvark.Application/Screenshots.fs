@@ -19,7 +19,7 @@ module Screenshot =
         let depth = 
             match signature.DepthAttachment with
                 | Some depth -> depth.format
-                | None -> RenderbufferFormat.DepthComponent32
+                | None -> TextureFormat.DepthComponent32
 
         //use lock = runtime.ContextLock
         let color = runtime.CreateRenderbuffer(size, color.format, samples)

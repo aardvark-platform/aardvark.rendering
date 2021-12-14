@@ -59,7 +59,7 @@
 
 //        let fbos =
 //            runtime.CreateFramebufferSignature [
-//                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
+//                DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = 1 }
 //            ]
 
 //        let tex = runtime.CreateTexture(checkerBoardImage.Size, TextureFormat.Rgba8, 1, 1, 1)
@@ -342,13 +342,13 @@
 //        let size = V2i(1024,768)
         
 //        let color = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
-//        let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
+//        let depth = runtime.CreateRenderbuffer(size, TextureFormat.Depth24Stencil8, 1)
 
 
 //        let signature =
 //            runtime.CreateFramebufferSignature [
-//                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
-//                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+//                DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = 1 }
+//                DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
 //            ]
 
 //        let fbo = 
@@ -405,14 +405,14 @@
 //        let size = V2i(1024,768)
 //        let color = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
 //        let normals = runtime.CreateTexture(size, TextureFormat.Rgba32f, 1, 1, 1)
-//        let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
+//        let depth = runtime.CreateRenderbuffer(size, TextureFormat.Depth24Stencil8, 1)
 
 
 //        let signature =
 //            runtime.CreateFramebufferSignature [
-//                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
-//                DefaultSemantic.Normals, { format = RenderbufferFormat.Rgba32f; samples = 1 }
-//                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+//                DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = 1 }
+//                DefaultSemantic.Normals, { format = TextureFormat.Rgba32f; samples = 1 }
+//                DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
 //            ]
 
 //        let fbo = 
@@ -505,15 +505,15 @@
 
 //        let signature =
 //            runtime.CreateFramebufferSignature [
-//                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
-//                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+//                DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = 1 }
+//                DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
 //            ]
 
 //        let clear = runtime.CompileClear(signature, ~~C4f.Black, ~~1.0)
 //        let task = runtime.CompileRender(signature, sg)
 
 //        let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 2, 1, 1)
-//        let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
+//        let depth = runtime.CreateRenderbuffer(screen, TextureFormat.Depth24Stencil8, 1)
 
 //        let fbo = 
 //            runtime.CreateFramebuffer(
@@ -619,11 +619,11 @@
 //        )
 
 //        let color = runtime.CreateTexture(screen, TextureFormat.Rgba8, 1, 1, 1)
-//        let depth = runtime.CreateRenderbuffer(screen, RenderbufferFormat.Depth24Stencil8, 1)
+//        let depth = runtime.CreateRenderbuffer(screen, TextureFormat.Depth24Stencil8, 1)
 
 //        let signature =
 //            runtime.CreateFramebufferSignature [
-//                DefaultSemantic.Colors, RenderbufferFormat.ofTextureFormat color.Format
+//                DefaultSemantic.Colors, TextureFormat.ofTextureFormat color.Format
 //                DefaultSemantic.Depth, depth.Format
 //            ]
 
@@ -752,13 +752,13 @@
         
 //        let color0 = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
 //        let color1 = runtime.CreateTexture(size, TextureFormat.Rgba8, 1, 1, 1)
-//        let depth = runtime.CreateRenderbuffer(size, RenderbufferFormat.Depth24Stencil8, 1)
+//        let depth = runtime.CreateRenderbuffer(size, TextureFormat.Depth24Stencil8, 1)
 
 
 //        let signature =
 //            runtime.CreateFramebufferSignature [
-//                DefaultSemantic.Colors, { format = RenderbufferFormat.Rgba8; samples = 1 }
-//                DefaultSemantic.Depth, { format = RenderbufferFormat.Depth24Stencil8; samples = 1 }
+//                DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = 1 }
+//                DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
 //            ]
 
 //        let fbo0 = 
