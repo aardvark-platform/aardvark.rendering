@@ -233,4 +233,9 @@ module GLExtensions =
 module internal DrawBuffers =
 
     let ofSignature (signature : IFramebufferSignature) =
-        signature.ColorAttachments |> Map.toArray |> Array.map (fun (i, _) -> DrawBuffersEnum.ColorAttachment0 + unbox i)
+        Array.init signature.ColorAttachmentSlots (fun i ->
+            if signature.ColorAttachments.ContainsKey i then
+                DrawBuffersEnum.ColorAttachment0 + unbox i
+            else
+                DrawBuffersEnum.None
+        )
