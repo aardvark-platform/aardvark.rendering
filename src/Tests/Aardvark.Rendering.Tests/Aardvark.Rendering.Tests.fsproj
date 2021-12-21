@@ -21,13 +21,15 @@
     <Compile Include="Scratch\MultiStageAgTest.fs" />
     <Compile Include="Tests\Application.fs" />
     <Compile Include="Tests\Common.fs" />
-    <Compile Include="Tests\Texture\Utilities.fs" />
+    <Compile Include="Tests\Utilities.fs" />
     <Compile Include="Tests\Texture\Clear.fs" />
     <Compile Include="Tests\Texture\Copy.fs" />
     <Compile Include="Tests\Texture\Create.fs" />
     <Compile Include="Tests\Texture\Upload.fs" />
     <Compile Include="Tests\Texture\Download.fs" />
     <Compile Include="Tests\Texture\TextureTests.fs" />
+    <Compile Include="Tests\Rendering\Signatures.fs" />
+    <Compile Include="Tests\Rendering\RenderingTests.fs" />
     <Compile Include="Tests\SgTest.fs" />
     <Compile Include="Tests\CompactSetTests.fs" />
     <Compile Include="Program.fs" />

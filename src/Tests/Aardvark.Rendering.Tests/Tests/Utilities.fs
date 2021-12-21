@@ -1,4 +1,4 @@
-﻿namespace Aardvark.Rendering.Tests.Texture
+﻿namespace Aardvark.Rendering.Tests
 
 open System
 open System.IO
@@ -9,7 +9,7 @@ open Expecto
 [<AutoOpen>]
 module PixData =
 
-    let rng = RandomSystem(1)
+    let private rng = RandomSystem(1)
 
     module PixVolume =
 
@@ -143,7 +143,7 @@ module PixData =
 
 
 [<AutoOpen>]
-module ``Texture Test Utilities`` =
+module ``Test Utilities`` =
 
     type IBackendTexture with
         member x.Clear(color : C4b) = x.Runtime.Upload(x, PixImage.solid x.Size.XY color)
