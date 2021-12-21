@@ -217,14 +217,14 @@ let main argv =
 
         [ maskSg; mainSg ] |> Sg.ofList
 
-    let signature =
-        runtime.CreateFramebufferSignature(8, [
+    use signature =
+        runtime.CreateFramebufferSignature([
             Semantic.Color0, TextureFormat.Rgba8
             Semantic.Color1, TextureFormat.Rgba8
             Semantic.Color2, TextureFormat.Rgba8
             Semantic.Color3, TextureFormat.Rgba8
-            DefaultSemantic.Stencil, TextureFormat.StencilIndex8
-        ])
+            DefaultSemantic.DepthStencil, TextureFormat.StencilIndex8
+        ], 8)
 
     use task =
         quadsSg
@@ -254,7 +254,5 @@ let main argv =
     // show the window
     win.RenderTask <- finalTask
     win.Run()
-
-    runtime.DeleteFramebufferSignature(signature)
 
     0

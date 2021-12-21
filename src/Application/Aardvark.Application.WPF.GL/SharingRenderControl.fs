@@ -414,10 +414,10 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
     let mutable cursor = Cursor.Default
 
     let signature =
-        runtime.CreateFramebufferSignature(samples, [
+        runtime.CreateFramebufferSignature([
             DefaultSemantic.Colors, TextureFormat.Rgba8
-            DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
-        ])
+            DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
+        ], samples)
 
     let startTime = DateTime.Now
     let sw = System.Diagnostics.Stopwatch.StartNew()

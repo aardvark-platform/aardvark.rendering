@@ -50,10 +50,10 @@ let main argv =
     // Signatures are required to compile render tasks. Signatures can be seen as the `type` of a framebuffer
     // It describes the instances which can be used to exectute the render task (in other words
     // the signature describes the formats and of all render targets which are subsequently used for rendering)
-    let signature =
+    use signature =
         runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, { format = TextureFormat.Rgba32f; samples = 1 }
-            DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
+            DefaultSemantic.Colors, TextureFormat.Rgba32f
+            DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
         ]
 
     let color = [| runtime.CreateTexture2D(size, TextureFormat.Rgba32f, 1, 1); runtime.CreateTexture2D(size, TextureFormat.Rgba32f, 1, 1) |]
@@ -66,7 +66,7 @@ let main argv =
                 signature, 
                 Map.ofList [
                     DefaultSemantic.Colors, e.GetOutputView()
-                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
+                    DefaultSemantic.DepthStencil, (depth :> IFramebufferOutput)
                 ]
             )
         )

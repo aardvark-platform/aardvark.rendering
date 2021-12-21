@@ -182,8 +182,8 @@ type Swapchain(device : Device, description : SwapchainDescription) =
         let framebuffer =
             let attachments =
                 match depthView with
-                    | Some depthView -> Map.ofList [ DefaultSemantic.Colors, colorView; DefaultSemantic.Depth, depthView]
-                    | None -> Map.ofList [ DefaultSemantic.Colors, colorView ]
+                | Some depthView -> Map.ofList [ DefaultSemantic.Colors, colorView; DefaultSemantic.DepthStencil, depthView]
+                | None -> Map.ofList [ DefaultSemantic.Colors, colorView ]
 
             device.CreateFramebuffer(renderPass, attachments)
 
@@ -227,7 +227,6 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 framebuffer |> Option.iter (fun framebuffer ->
                     framebuffer.Attachments |> Map.iter (fun _ v ->
                         v.Image.Dispose()
-                        v.Dispose()
                     )
                     framebuffer.Dispose()
                 )
@@ -268,7 +267,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 update() 
                 let framebuffer = framebuffer.Value
                 let colorView = framebuffer.Attachments.[DefaultSemantic.Colors]
-                let depthView = Map.tryFind DefaultSemantic.Depth framebuffer.Attachments
+                let depthView = Map.tryFind DefaultSemantic.DepthStencil framebuffer.Attachments
 
                 // resolve(renderView, resolveView)
                 // blit(resolveView, transformView)
@@ -385,7 +384,6 @@ type Swapchain(device : Device, description : SwapchainDescription) =
             framebuffer |> Option.iter (fun framebuffer ->
                 framebuffer.Attachments |> Map.iter (fun _ v ->
                     v.Image.Dispose()
-                    v.Dispose()
                 )
                 framebuffer.Dispose()
             )

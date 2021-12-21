@@ -263,7 +263,7 @@ module Shadows =
 
     let signature = 
         win.Runtime.CreateFramebufferSignature [
-            DefaultSemantic.Depth, { format = TextureFormat.DepthComponent32; samples = 1 }
+            DefaultSemantic.DepthStencil, TextureFormat.DepthComponent32
         ]
  
     let shadowDepth =

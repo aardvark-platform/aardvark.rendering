@@ -206,34 +206,44 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.CompileClear(signature : IFramebufferSignature, values : aval<ClearValues>) : IRenderTask =
         new ClearTask(device, unbox signature, values) :> IRenderTask
 
-    member x.CreateFramebufferSignature(attachments : Map<Symbol, AttachmentSignature>, layers : int, perLayer : Set<string>) =
-        device.CreateRenderPass(attachments, layers, perLayer) :> IFramebufferSignature
+    member x.CreateFramebufferSignature(colorAttachments : Map<int, AttachmentSignature>,
+                                        depthStencilAttachment : Option<TextureFormat>,
+                                        samples : int, layers : int, perLayerUniforms : seq<string>) =
+        ResourceValidation.Framebuffers.validateSignatureParams colorAttachments depthStencilAttachment samples layers
 
-    member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
-        Disposable.dispose(unbox<RenderPass> signature)
+        let perLayerUniforms =
+            if perLayerUniforms = null then Set.empty
+            else Set.ofSeq perLayerUniforms
+
+        device.CreateRenderPass(
+            colorAttachments, depthStencilAttachment,
+            samples, layers, perLayerUniforms
+        )
+        :> IFramebufferSignature
 
     member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : IFramebuffer =
+        ResourceValidation.Framebuffers.validateAttachments signature bindings
+
+        let createImageView (name : Symbol) (output : IFramebufferOutput) =
+            match output with
+            | :? Image as img ->
+                device.CreateOutputImageView(img, 0, 1, 0, 1)
+
+            | :? ITextureLevel as l ->
+                let image = unbox<Image> l.Texture
+                device.CreateOutputImageView(image, l.Levels, l.Slices)
+
+            | _ -> failf "invalid framebuffer attachment %A: %A" name output
+
         let views =
-            bindings |> Map.map (fun s o ->
-                match o with
-                | :? Image as img ->
-                    device.CreateOutputImageView(img, 0, 1, 0, 1)
-
-                | :? ITextureLevel as l ->
-                    let image = unbox<Image> l.Texture
-                    device.CreateOutputImageView(image, l.Levels, l.Slices)
-
-                | _ -> failf "invalid framebuffer attachment %A: %A" s o
+            bindings |> Map.choose (fun s o ->
+                if signature.Contains s then
+                    Some <| createImageView s o
+                else
+                    None
             )
 
         device.CreateFramebuffer(unbox signature, views) :> IFramebuffer
-
-    member x.DeleteFramebuffer(fbo : IFramebuffer) =
-        let fbo = unbox<Framebuffer> fbo
-        fbo.Attachments |> Map.iter (fun _ v -> v.Dispose())
-        fbo.Dispose()
-
-
 
     member x.PrepareSurface (signature : IFramebufferSignature, surface : ISurface) =
         device.CreateShaderProgram(unbox<RenderPass> signature, surface) :> IBackendSurface
@@ -549,8 +559,10 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
         member x.ResourceManager = failf "not implemented"
 
-        member x.CreateFramebufferSignature(a,b,c) = x.CreateFramebufferSignature(a,b,c)
-        member x.DeleteFramebufferSignature(s) = x.DeleteFramebufferSignature(s)
+        member x.CreateFramebufferSignature(colorAttachments : Map<int, AttachmentSignature>,
+                                            depthStencilAttachment : Option<TextureFormat>,
+                                            samples : int, layers : int, perLayerUniforms : seq<string>) =
+            x.CreateFramebufferSignature(colorAttachments, depthStencilAttachment, samples, layers, perLayerUniforms)
 
         member x.DownloadDepth(t : IBackendTexture, target : Matrix<float32>, level : int, slice : int, offset : V2i) =
             x.DownloadDepth(t, target, level, slice, offset)
@@ -573,7 +585,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.DeleteBuffer(b) = x.DeleteBuffer(b)
 
         member x.DeleteRenderbuffer(b) = x.DeletRenderbuffer(b)
-        member x.DeleteFramebuffer(f) = x.DeleteFramebuffer(f)
 
         member x.CreateStreamingTexture(mipMap) = x.CreateStreamingTexture(mipMap)
         member x.DeleteStreamingTexture(t) = x.DeleteStreamingTexture(t)

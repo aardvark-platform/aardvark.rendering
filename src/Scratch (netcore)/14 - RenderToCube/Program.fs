@@ -44,9 +44,9 @@ let main argv =
 
     let runtime = win.Runtime
 
-    let signature =
+    use signature =
         runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = 1 }
+            DefaultSemantic.Colors, TextureFormat.Rgba8
         ]
 
     let size = AVal.init 1024
@@ -88,6 +88,5 @@ let main argv =
     win.Run(preventDisposal = true)
 
     tasks |> CubeMap.iter Disposable.dispose
-    runtime.DeleteFramebufferSignature(signature)
 
     0

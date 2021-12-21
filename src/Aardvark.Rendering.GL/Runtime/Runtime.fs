@@ -155,18 +155,16 @@ type Runtime() =
 
         member x.ResourceManager = manager :> IResourceManager
 
-        member x.CreateFramebufferSignature(attachments : Map<Symbol, AttachmentSignature>, layers : int, perLayer : Set<string>) =
-            x.CreateFramebufferSignature(attachments, layers, perLayer)
-
+        member x.CreateFramebufferSignature(colorAttachments : Map<int, AttachmentSignature>,
+                                            depthStencilAttachment : Option<TextureFormat>,
+                                            samples : int, layers : int, perLayerUniforms : seq<string>) =
+            x.CreateFramebufferSignature(colorAttachments, depthStencilAttachment, samples, layers, perLayerUniforms)
 
         member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) =
             x.CreateTexture(size, dim, format, levels, samples) :> IBackendTexture
 
         member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) =
             x.CreateTextureArray(size, dim, format, levels, samples, count) :> IBackendTexture
-
-        member x.DeleteFramebufferSignature(signature : IFramebufferSignature) =
-            ()
 
         member x.DownloadStencil(t : IBackendTexture, target : Matrix<int>, level : int, slice : int, offset : V2i) =
             x.DownloadStencil(t, target, level, slice, offset)
@@ -216,11 +214,6 @@ type Runtime() =
             match b with
                 | :? Aardvark.Rendering.GL.Renderbuffer as b -> ctx.Delete b
                 | _ -> failwithf "unsupported renderbuffer-type: %A" b
-
-        member x.DeleteFramebuffer(f : IFramebuffer) =
-            match f with
-                | :? Aardvark.Rendering.GL.Framebuffer as b -> ctx.Delete b
-                | _ -> failwithf "unsupported framebuffer-type: %A" f
 
         member x.CreateStreamingTexture mipMaps = x.CreateStreamingTexture mipMaps
         member x.DeleteStreamingTexture tex = x.DeleteStreamingTexture tex
@@ -281,11 +274,11 @@ type Runtime() =
             | None -> ()
 
             if fbo.Signature.ColorAttachments.Count = 1 then
-                let _, (sem, att) = fbo.Signature.ColorAttachments |> Map.toList |> List.head
+                let _, att = fbo.Signature.ColorAttachments |> Map.toList |> List.head
 
-                match values.Colors.[sem] with
+                match values.Colors.[att.Name] with
                 | Some c ->
-                    if att.format.IsIntegerFormat then
+                    if att.Format.IsIntegerFormat then
                         // clear depth stencil if requested
                         if combinedClearMask <> ClearBufferMask.None then
                             GL.Clear(combinedClearMask)
@@ -304,10 +297,10 @@ type Runtime() =
                     GL.Clear(combinedClearMask)
 
                 // clear each color layer individually
-                for KeyValue(i, (sem, att)) in fbo.Signature.ColorAttachments do
-                    match values.Colors.[sem] with
+                for KeyValue(i, att) in fbo.Signature.ColorAttachments do
+                    match values.Colors.[att.Name] with
                     | Some c ->
-                        if att.format.IsIntegerFormat then
+                        if att.Format.IsIntegerFormat then
                             GL.ClearBuffer(ClearBuffer.Color, i, c.Integer.ToArray())
                         else
                             GL.ClearBuffer(ClearBuffer.Color, i, c.Float.ToArray())
@@ -479,35 +472,25 @@ type Runtime() =
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
 
-    member x.CreateFramebufferSignature(attachments : Map<Symbol, AttachmentSignature>, layers : int, perLayer : Set<string>) =
-        let depth =
-            Map.tryFind DefaultSemantic.Depth attachments
+    member x.CreateFramebufferSignature(colorAttachments : Map<int, AttachmentSignature>,
+                                        depthStencilAttachment : Option<TextureFormat>,
+                                        samples : int, layers : int, perLayerUniforms : seq<string>) =
+        ResourceValidation.Framebuffers.validateSignatureParams colorAttachments depthStencilAttachment samples layers
 
-        let stencil =
-            Map.tryFind DefaultSemantic.Stencil attachments
-
-        let indexedColors =
-            attachments
-                |> Map.remove DefaultSemantic.Depth
-                |> Map.remove DefaultSemantic.Stencil
-                |> Map.toList
-                |> List.sortWith (fun (a,_) (b,_) ->
-                    if a = DefaultSemantic.Colors then Int32.MinValue
-                    elif b = DefaultSemantic.Colors then Int32.MaxValue
-                    else String.Compare(a.ToString(), b.ToString())
-                   )
-                |> List.mapi (fun i t -> (i, t))
-                |> Map.ofList
+        let perLayerUniforms =
+            if perLayerUniforms = null then Set.empty
+            else Set.ofSeq perLayerUniforms
 
         { new Object() with
-            member _.ToString() = sprintf "{ ColorAttachments = %A; DepthAttachment = %A; StencilAttachment = %A }" indexedColors depth stencil
+            member _.ToString() = sprintf "{ ColorAttachments = %A; DepthStencilAttachment = %A }" colorAttachments depthStencilAttachment
           interface IFramebufferSignature with
             member _.Runtime = x :> IFramebufferRuntime
-            member _.ColorAttachments = indexedColors
-            member _.DepthAttachment = depth
-            member _.StencilAttachment = stencil
+            member _.Samples = samples
+            member _.ColorAttachments = colorAttachments
+            member _.DepthStencilAttachment = depthStencilAttachment
             member _.LayerCount = layers
-            member _.PerLayerUniforms = perLayer }
+            member _.PerLayerUniforms = perLayerUniforms 
+            member _.Dispose() = () }
 
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
@@ -714,42 +697,22 @@ type Runtime() =
         t |> ResourceValidation.Textures.validateDepthFormat
         ctx.DownloadDepth(unbox<Texture> t, level, slice, offset, target)
 
-    member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) : Framebuffer =
+    member x.CreateFramebuffer(signature : IFramebufferSignature, bindings : Map<Symbol, IFramebufferOutput>) =
+        ResourceValidation.Framebuffers.validateAttachments signature bindings
 
         let colors =
             signature.ColorAttachments
-                |> Map.toList
-                |> List.map (fun (i,(s,desc)) ->
-                    let b = bindings.[s]
-                    if b.Format <> desc.format || b.Samples <> desc.samples then
-                        failwithf "incompatible ColorAttachment: expected (%A, %A) but got: (%A, %A)" desc.format desc.samples b.Format b.Samples
-                    (i, s, bindings.[s])
-                   )
+            |> Map.toList
+            |> List.map (fun (i, att) ->
+                i, att.Name, bindings.[att.Name]
+            )
 
-        let depth =
-            match signature.DepthAttachment with
-                | Some desc ->
-                    let b = bindings.[DefaultSemantic.Depth]
-                    if b.Format <> desc.format || b.Samples <> desc.samples then
-                        failwithf "incompatible DepthAttachment: expected (%A, %A) but got: (%A, %A)" desc.format desc.samples b.Format b.Samples
+        let depthStencil =
+            signature.DepthStencilAttachment |> Option.map (fun _ ->
+                bindings.[DefaultSemantic.DepthStencil]
+            )
 
-                    Some b
-                | None ->
-                    None
-
-        let stencil =
-            match signature.StencilAttachment with
-                | Some desc ->
-                    let b = bindings.[DefaultSemantic.Stencil]
-                    if b.Format <> desc.format || b.Samples <> desc.samples then
-                        failwithf "incompatible StencilAttachment: expected (%A, %A) but got: (%A, %A)" desc.format desc.samples b.Format b.Samples
-
-                    Some b
-                | None ->
-                    None
-
-        ctx.CreateFramebuffer(signature, colors, depth, stencil)
-
+        ctx.CreateFramebuffer(signature, colors, depthStencil)
 
     member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) =
         ResourceValidation.Textures.validateCreationParams dim size levels samples

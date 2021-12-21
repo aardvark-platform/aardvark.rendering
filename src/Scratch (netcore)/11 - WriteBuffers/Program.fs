@@ -55,7 +55,7 @@ let main argv =
             do! Shader.texCoordColor
         }
         |> Sg.pass pass0
-        |> Sg.writeBuffers' (Set.singleton DefaultSemantic.Colors)
+        |> Sg.writeBuffers' (Set.singleton <| WriteBuffer.Color DefaultSemantic.Colors)
         |> Sg.andAlso someText
         |> Sg.andAlso box
 

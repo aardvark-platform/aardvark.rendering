@@ -72,7 +72,7 @@ module RenderTasks =
                 runtimeStats = runtimeStats
                 currentContext = currentContext
                 contextHandle = contextHandle
-                drawBufferCount = fboSignature.ColorAttachments.Count
+                drawBufferCount = fboSignature.ColorAttachmentSlots
                 usedTextureSlots = RefRef CountingHashSet.empty
                 usedUniformBufferSlots = RefRef CountingHashSet.empty
                 structuralChange = structureChanged
@@ -558,10 +558,10 @@ module RenderTasks =
                     let stencilValue = values.Stencil
 
                     // Clear color attachments
-                    for KeyValue(i, (sem, att)) in signature.ColorAttachments do
-                        match values.Colors.[sem] with
+                    for KeyValue(i, att) in signature.ColorAttachments do
+                        match values.Colors.[att.Name] with
                         | Some c ->
-                            if att.format.IsIntegerFormat then
+                            if att.Format.IsIntegerFormat then
                                 GL.ClearBuffer(ClearBuffer.Color, i, c.Integer.ToArray())
                             else
                                 GL.ClearBuffer(ClearBuffer.Color, i, c.Float.ToArray())

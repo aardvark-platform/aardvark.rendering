@@ -731,8 +731,8 @@ let main argv =
             // since for some effects it is not desireable to write certain pixel-outputs
             // one can change the current WriteBuffers using a list of written semantics
             do! Air.WriteBuffers [
-                    DefaultSemantic.Depth
-                    DefaultSemantic.Colors
+                    WriteBuffer.Depth
+                    WriteBuffer.Color DefaultSemantic.Colors
                 ]
 
             // topology can be set separately (not by the DrawCall)

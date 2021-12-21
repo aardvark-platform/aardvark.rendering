@@ -44,8 +44,8 @@ module Render2TexturePrimitiveFloat =
     // the signature describes the formats and of all render targets which are subsequently used for rendering)
     let signature =
         runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, { format = TextureFormat.Rgba32f; samples = 1 }
-            DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
+            DefaultSemantic.Colors, TextureFormat.Rgba32f
+            DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
         ]
 
     // Create a framebuffer matching signature and capturing the render to texture targets
@@ -54,7 +54,7 @@ module Render2TexturePrimitiveFloat =
             signature, 
             Map.ofList [
                 DefaultSemantic.Colors, color.GetOutputView()
-                DefaultSemantic.Depth, (depth :> IFramebufferOutput)
+                DefaultSemantic.DepthStencil, (depth :> IFramebufferOutput)
             ]
         )
   

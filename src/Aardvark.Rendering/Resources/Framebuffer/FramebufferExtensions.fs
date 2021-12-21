@@ -2,6 +2,9 @@
 
 open Aardvark.Base
 open System.Runtime.CompilerServices
+open System.Runtime.InteropServices
+open System
+
 
 [<AbstractClass; Sealed; Extension>]
 type IFramebufferRuntimeExtensions private() =
@@ -10,89 +13,78 @@ type IFramebufferRuntimeExtensions private() =
     // CreateFramebufferSignature
     // ================================================================================================================
 
-    /// Creates a framebuffer signature with the given attachment signatures.
+    ///<summary>Creates a framebuffer signature with the given attachment signatures.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="attachments">The color and (optional) depth-stencil attachment signatures.</param>
+    ///<param name="samples">The number of samples. Default is 1.</param>
+    ///<param name="layers">The number of layers. Default is 1.</param>
+    ///<param name="perLayerUniforms">The names of per-layer uniforms. Default is null.</param>
     [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, attachments : SymbolDict<AttachmentSignature>, layers : int, perLayerUniforms : Set<string>) =
-        this.CreateFramebufferSignature(SymDict.toMap attachments, layers, perLayerUniforms)
+    static member CreateFramebufferSignature(this : IFramebufferRuntime,
+                                             attachments : Map<Symbol, TextureFormat>,
+                                             [<Optional; DefaultParameterValue(1)>] samples : int,
+                                             [<Optional; DefaultParameterValue(1)>] layers : int,
+                                             [<Optional; DefaultParameterValue(null : seq<string>)>] perLayerUniforms : seq<string>) =
+        let colorAttachments =
+            attachments
+            |> Map.toList
+            |> List.filter (fst >> (<>) DefaultSemantic.DepthStencil)
+            |> List.mapi (fun i (n, f) -> i, { Name = n; Format = f })
+            |> Map.ofList
 
-    /// Creates a framebuffer signature with the given attachment signatures.
+        let depthStencilAttachment =
+            attachments |> Map.tryFind DefaultSemantic.DepthStencil
+
+        this.CreateFramebufferSignature(colorAttachments, depthStencilAttachment, samples, layers, perLayerUniforms)
+
+    ///<summary>Creates a framebuffer signature with the given attachment signatures.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="attachments">The color and (optional) depth-stencil attachment signatures.</param>
+    ///<param name="samples">The number of samples. Default is 1.</param>
+    ///<param name="layers">The number of layers. Default is 1.</param>
+    ///<param name="perLayerUniforms">The names of per-layer uniforms. Default is null.</param>
     [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, attachments : seq<Symbol * AttachmentSignature>, layers : int, perLayerUniforms : Set<string>) =
-        this.CreateFramebufferSignature(Map.ofSeq attachments, layers, perLayerUniforms)
+    static member CreateFramebufferSignature(this : IFramebufferRuntime,
+                                             attachments : SymbolDict<TextureFormat>,
+                                             [<Optional; DefaultParameterValue(1)>] samples : int,
+                                             [<Optional; DefaultParameterValue(1)>] layers : int,
+                                             [<Optional; DefaultParameterValue(null : seq<string>)>] perLayerUniforms : seq<string>) =
+        let atts = attachments |> Seq.map (fun x -> x.Key, x.Value) |> Map.ofSeq
+        this.CreateFramebufferSignature(atts, samples, layers, perLayerUniforms)
 
-    /// Creates a framebuffer signature with the given attachment signatures.
+    ///<summary>Creates a framebuffer signature with the given attachment signatures.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="attachments">The color and (optional) depth-stencil attachment signatures. The order is not preserved.</param>
+    ///<param name="samples">The number of samples. Default is 1.</param>
+    ///<param name="layers">The number of layers. Default is 1.</param>
+    ///<param name="perLayerUniforms">The names of per-layer uniforms. Default is null.</param>
     [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, attachments : Map<Symbol, AttachmentSignature>) =
-        this.CreateFramebufferSignature(attachments, 1, Set.empty)
+    static member CreateFramebufferSignature(this : IFramebufferRuntime,
+                                             attachments : seq<Symbol * TextureFormat>,
+                                             [<Optional; DefaultParameterValue(1)>] samples : int,
+                                             [<Optional; DefaultParameterValue(1)>] layers : int,
+                                             [<Optional; DefaultParameterValue(null : seq<string>)>] perLayerUniforms : seq<string>) =
+        this.CreateFramebufferSignature(Map.ofSeq attachments, samples, layers, perLayerUniforms)
 
-    /// Creates a framebuffer signature with the given attachment signatures.
-    [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, attachments : SymbolDict<AttachmentSignature>) =
-        this.CreateFramebufferSignature(SymDict.toMap attachments)
-
-    /// Creates a framebuffer signature with the given attachment signatures.
-    [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, attachments : seq<Symbol * AttachmentSignature>) =
-        this.CreateFramebufferSignature(Map.ofSeq attachments)
-
-    /// Creates a framebuffer signature with the given attachment formats and number of samples.
-    [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, samples : int, attachments : Map<Symbol, TextureFormat>, layers : int, perLayerUniforms : Set<string>) =
-        this.CreateFramebufferSignature(
-            attachments |> Map.map (fun _ f -> { format = f; samples = samples }),
-            layers, perLayerUniforms
-        )
-
-    /// Creates a framebuffer signature with the given attachment formats and number of samples.
-    [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, samples : int, attachments : seq<Symbol * TextureFormat>, layers : int, perLayerUniforms : Set<string>) =
-        this.CreateFramebufferSignature(samples, Map.ofSeq attachments, layers, perLayerUniforms)
-
-    /// Creates a framebuffer signature with the given attachment formats and number of samples.
-    [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, attachments : Map<Symbol, TextureFormat>, layers : int, perLayerUniforms : Set<string>) =
-        this.CreateFramebufferSignature(
-            attachments |> Map.map (fun _ f -> { format = f; samples = 1 }),
-            layers, perLayerUniforms
-        )
-
-    /// Creates a framebuffer signature with the given attachment formats and number of samples.
-    [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, attachments : seq<Symbol * TextureFormat>, layers : int, perLayerUniforms : Set<string>) =
-        this.CreateFramebufferSignature(Map.ofSeq attachments, layers, perLayerUniforms)
-
-    /// Creates a framebuffer signature with the given attachment formats and number of samples.
-    [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, samples : int, attachments : Map<Symbol, TextureFormat>) =
-        this.CreateFramebufferSignature(samples, attachments, 1, Set.empty)
-
-    /// Creates a framebuffer signature with the given attachment formats and number of samples.
-    [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, samples : int, attachments : seq<Symbol * TextureFormat>) =
-        this.CreateFramebufferSignature(samples, attachments, 1, Set.empty)
-
-    /// Creates a framebuffer signature with the given attachment formats and number of samples.
-    [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, attachments : Map<Symbol, TextureFormat>) =
-        this.CreateFramebufferSignature(attachments, 1, Set.empty)
-
-    /// Creates a framebuffer signature with the given attachment formats and number of samples.
-    [<Extension>]
-    static member CreateFramebufferSignature(this : IFramebufferRuntime, attachments : seq<Symbol * TextureFormat>) =
-        this.CreateFramebufferSignature(attachments, 1, Set.empty)
-
+    [<Extension; Obsolete("Use IFramebufferSignature.Dispose()")>]
+    static member DeleteFramebufferSignature(this : IFramebufferRuntime, signature : IFramebufferSignature) =
+        signature.Dispose()
 
     // ================================================================================================================
     // CreateFramebuffer
     // ================================================================================================================
 
-    /// Creates a framebuffer of the given signature and with the given attachments.
+    ///<summary>Creates a framebuffer with the given attachments.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="signature">The signature of the framebuffer to create.</param>
+    ///<param name="attachments">The attachments. Attachments with name DefaultSemantic.DepthStencil are used as depth-stencil attachment.</param>
     [<Extension>]
     static member CreateFramebuffer(this : IFramebufferRuntime, signature : IFramebufferSignature, attachments : seq<Symbol * IFramebufferOutput>) =
-        this.CreateFramebuffer(
-            signature,
-            Map.ofSeq attachments
-        )
+        this.CreateFramebuffer(signature, Map.ofSeq attachments)
+
+    [<Extension; Obsolete("Use IFramebuffer.Dispose()")>]
+    static member DeleteFramebuffer(this : IFramebufferRuntime, framebuffer : IFramebuffer) =
+        framebuffer.Dispose()
 
 
     // ================================================================================================================
@@ -139,27 +131,59 @@ type IFramebufferRuntimeExtensions private() =
 [<AutoOpen>]
 module IFramebufferSignatureExtensions =
 
-    let private signatureAssignableFrom (mine : AttachmentSignature) (other : AttachmentSignature) =
-        TextureFormat.toColFormat mine.format = TextureFormat.toColFormat other.format
-
-    let private colorsAssignableFrom (mine : Map<int, Symbol * AttachmentSignature>) (other : Map<int, Symbol * AttachmentSignature>) =
-        mine |> Map.forall (fun id (sem, signature) ->
-            match Map.tryFind id other with
-            | Some (otherSem, otherSig) when sem = otherSem ->
-                signatureAssignableFrom signature otherSig
+    let private colorsAssignableFrom (mine : Map<int, AttachmentSignature>) (other : Map<int, AttachmentSignature>) =
+        mine |> Map.forall (fun slot mine ->
+            match Map.tryFind slot other with
+            | Some other when mine.Name = other.Name ->
+                mine.Format = other.Format
             | None -> true
             | _ -> false
         )
 
-    let private depthAssignableFrom (mine : Option<AttachmentSignature>) (other : Option<AttachmentSignature>) =
+    let private depthAssignableFrom (mine : Option<TextureFormat>) (other : Option<TextureFormat>) =
         match mine, other with
-        | Some mine, Some other -> signatureAssignableFrom mine other
+        | Some mine, Some other -> mine = other
+        | None, Some _ -> false
         | _ -> true
+
+    type IFramebufferSignature with
+
+        /// Returns the number of color attachment slots used by the signature
+        /// (i.e. the maximum slot + 1 or 0 if there are no color attachments).
+        member x.ColorAttachmentSlots =
+            match x.ColorAttachments |> Map.toArray |> Array.tryLast with
+            | Some (slot, _) -> slot + 1
+            | _ -> 0
 
     [<AbstractClass; Sealed; Extension>]
     type IFramebufferSignatureExtensions private() =
 
-        /// Checks if the signature is assignable from the other signature (i.e. it is a subset of the other signature).
+        /// Returns whether the signature contains an attachment with given name.
+        /// If semantic is DefaultSemantic.DepthStencil, returns if a depth-stencil attachment is present.
+        [<Extension>]
+        static member Contains(this : IFramebufferSignature, semantic : Symbol) =
+            if semantic = DefaultSemantic.DepthStencil then
+                this.DepthStencilAttachment.IsSome
+            else
+                this.ColorAttachments |> Map.exists (fun _ att -> att.Name = semantic)
+
+
+        /// Gets the semantics of the signature attachments as a set.
+        /// If a depth-stencil attachment is present, the returned set contains DefaultSemantic.DepthStencil.
+        [<Extension>]
+        static member GetSemantics(this : IFramebufferSignature) =
+            let colors =
+                this.ColorAttachments
+                |> Map.toList
+                |> List.map (snd >> AttachmentSignature.name)
+                |> Set.ofList
+
+            if this.DepthStencilAttachment.IsSome then
+                colors |> Set.add DefaultSemantic.DepthStencil
+            else
+                colors
+
+        /// Checks if the signature is assignable from the other signature.
         [<Extension>]
         static member IsAssignableFrom (this : IFramebufferSignature, other : IFramebufferSignature) =
             if LanguagePrimitives.PhysicalEquality this other then
@@ -167,8 +191,8 @@ module IFramebufferSignatureExtensions =
             else
                 this.LayerCount = other.LayerCount &&
                 this.PerLayerUniforms = other.PerLayerUniforms &&
-                colorsAssignableFrom this.ColorAttachments other.ColorAttachments
-                // TODO: check depth and stencil (cumbersome for combined DepthStencil attachments)
+                colorsAssignableFrom this.ColorAttachments other.ColorAttachments &&
+                depthAssignableFrom this.DepthStencilAttachment other.DepthStencilAttachment
 
         /// Creates a framebuffer of the given signature and with the given attachments.
         [<Extension>]

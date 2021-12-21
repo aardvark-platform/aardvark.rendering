@@ -122,9 +122,9 @@ let main argv =
     // from the rendering we get an aval<ITexture> which will be outOfDate whenever
     // something changes in pointScene and updated whenever subsequent passes need it.
     let singleSampledSignature = 
-        win.Runtime.CreateFramebufferSignature(1, [
+        win.Runtime.CreateFramebufferSignature([
             DefaultSemantic.Colors, TextureFormat.Rgba8; 
-            DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
+            DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
            ]
         )
 

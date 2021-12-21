@@ -51,8 +51,8 @@ module Render2TextureComposable =
 
     let signature =
         runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = 1 }
-            DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
+            DefaultSemantic.Colors, TextureFormat.Rgba8
+            DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
         ]
         
     let task = runtime.CompileRender(signature, render2TextureSg)

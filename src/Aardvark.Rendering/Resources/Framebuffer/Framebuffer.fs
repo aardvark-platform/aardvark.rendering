@@ -3,17 +3,33 @@
 open System
 open Aardvark.Base
 open FSharp.Data.Adaptive
+open System.Runtime.InteropServices
+
+/// Describes the signature of a color attachment.
+[<Struct; CLIMutable>]
+type AttachmentSignature =
+    {
+        /// Name of the attachment.
+        Name : Symbol
+
+        /// Format of the attachment.
+        Format : TextureFormat
+    }
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module AttachmentSignature =
+    let name (att : AttachmentSignature) = att.Name
+    let format (att : AttachmentSignature) = att.Format
 
 [<AllowNullLiteral>]
 type IFramebufferSignature =
+    inherit IDisposable
     abstract member Runtime : IFramebufferRuntime
-    abstract member ColorAttachments : Map<int, Symbol * AttachmentSignature>
-    abstract member DepthAttachment : Option<AttachmentSignature>
-    abstract member StencilAttachment : Option<AttachmentSignature>
-
+    abstract member Samples : int
+    abstract member ColorAttachments : Map<int, AttachmentSignature>
+    abstract member DepthStencilAttachment : Option<TextureFormat>
     abstract member LayerCount : int
     abstract member PerLayerUniforms : Set<string>
-
 
 and IFramebuffer =
     inherit IDisposable
@@ -28,17 +44,22 @@ and IFramebufferRuntime =
 
     abstract member DeviceCount : int
 
-    /// Creates a framebuffer signature with the given attachment signatures.
-    abstract member CreateFramebufferSignature : attachments : Map<Symbol, AttachmentSignature> * layers : int * perLayerUniforms : Set<string> -> IFramebufferSignature
+    ///<summary>Creates a framebuffer signature with the given attachment signatures.</summary>
+    ///<param name="colorAttachments">The color attachment signatures. The keys determine the slot of the corrsponding attachment.</param>
+    ///<param name="depthStencilAttachment">The optional depth-stencil attachment signature.</param>
+    ///<param name="samples">The number of samples. Default is 1.</param>
+    ///<param name="layers">The number of layers. Default is 1.</param>
+    ///<param name="perLayerUniforms">The names of per-layer uniforms. Default is null.</param>
+    abstract member CreateFramebufferSignature : colorAttachments : Map<int, AttachmentSignature> *
+                                                 depthStencilAttachment : Option<TextureFormat> *
+                                                 [<Optional; DefaultParameterValue(1)>] samples : int *
+                                                 [<Optional; DefaultParameterValue(1)>] layers : int *
+                                                 [<Optional; DefaultParameterValue(null : seq<string>)>] perLayerUniforms : seq<string> -> IFramebufferSignature
 
-    /// Deletes the given framebuffer signature.
-    abstract member DeleteFramebufferSignature : IFramebufferSignature -> unit
-
-    /// Creates a framebuffer of the given signature and with the given attachments.
+    ///<summary>Creates a framebuffer with the given attachments.</summary>
+    ///<param name="signature">The signature of the framebuffer to create.</param>
+    ///<param name="attachments">The attachments. Attachments with name DefaultSemantic.DepthStencil are used as depth-stencil attachment.</param>
     abstract member CreateFramebuffer : signature : IFramebufferSignature * attachments : Map<Symbol, IFramebufferOutput> -> IFramebuffer
-
-    /// Deletes the given framebuffer.
-    abstract member DeleteFramebuffer : IFramebuffer -> unit
 
     /// Clears the framebuffer with the given values.
     abstract member Clear : fbo : IFramebuffer * values : ClearValues -> unit

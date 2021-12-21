@@ -228,7 +228,7 @@ module VkFormat =
             VkFormat.D16Unorm, TextureFormat.DepthComponent16
             VkFormat.X8D24UnormPack32, TextureFormat.DepthComponent24
             VkFormat.D32Sfloat, TextureFormat.DepthComponent32f
-            VkFormat.S8Uint, unknown
+            VkFormat.S8Uint, TextureFormat.StencilIndex8
             VkFormat.D16UnormS8Uint, unknown
             VkFormat.D24UnormS8Uint, TextureFormat.Depth24Stencil8
             VkFormat.D32SfloatS8Uint, TextureFormat.Depth32fStencil8

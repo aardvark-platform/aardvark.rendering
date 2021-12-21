@@ -47,13 +47,18 @@ type MultiRenderTask(runtime : MultiRuntime, signature : IFramebufferSignature, 
 
 and MultiFramebufferSignature(runtime : IRuntime, signatures : IFramebufferSignature[]) =
     member x.Signatures = signatures
+
+    member x.Dispose() =
+        signatures |> Array.iter Disposable.dispose
+
     interface IFramebufferSignature with
+        member x.Runtime = runtime :> IFramebufferRuntime
+        member x.Samples = signatures.[0].Samples
         member x.ColorAttachments = signatures.[0].ColorAttachments
-        member x.DepthAttachment = signatures.[0].DepthAttachment
-        member x.StencilAttachment = signatures.[0].StencilAttachment
+        member x.DepthStencilAttachment = signatures.[0].DepthStencilAttachment
         member x.LayerCount = signatures.[0].LayerCount
         member x.PerLayerUniforms = signatures.[0].PerLayerUniforms
-        member x.Runtime = runtime :> IFramebufferRuntime
+        member x.Dispose() = x.Dispose()
 
 //type MultiBlock<'a>(blocks : Management.Block<'a>[]) =
 //    inherit Management.Block<'a>(blocks.[0].Parent, blocks.[0].Offset, blocks.[0].Size, blocks.[1].IsFree, null, null)
@@ -151,7 +156,7 @@ and SplitControl(runtime : IRuntime, count : int, samples : int) as this =
 
     let time = lazy (NAryTimeMod (controls |> Array.map (fun c -> c.Time)) :> aval<_>)
 
-    let signature = lazy (MultiFramebufferSignature(runtime, controls |> Array.map (fun c -> c.FramebufferSignature)))
+    let signature = lazy (new MultiFramebufferSignature(runtime, controls |> Array.map (fun c -> c.FramebufferSignature)))
 
     let mutable task = RenderTask.empty
 
@@ -302,17 +307,9 @@ and MultiRuntime(runtimes : IRuntime[]) =
 
         member x.ResourceManager = failwith "not implemented"
 
-        member x.CreateFramebufferSignature(a,b,c) =
-            let res = runtimes |> Array.map (fun r -> r.CreateFramebufferSignature(a,b,c))
-            MultiFramebufferSignature(x, res) :> IFramebufferSignature
-
-        member x.DeleteFramebufferSignature(s) =
-            match s with
-                | :? MultiFramebufferSignature as s ->
-                    for (r, s) in Array.zip runtimes s.Signatures do
-                        r.DeleteFramebufferSignature s
-                | _ ->
-                    ()
+        member x.CreateFramebufferSignature(color, depthStencil, samples, layers, perLayerUniforms) =
+            let res = runtimes |> Array.map (fun r -> r.CreateFramebufferSignature(color, depthStencil, samples, layers, perLayerUniforms))
+            new MultiFramebufferSignature(x, res) :> IFramebufferSignature
 
         member x.DownloadDepth(t : IBackendTexture, target : Matrix<float32>, level : int, slice : int, offset : V2i) = failwith ""
         member x.DownloadStencil(t : IBackendTexture, target : Matrix<int>, level : int, slice : int, offset : V2i) = failwith ""
@@ -345,7 +342,6 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.DeleteBuffer(b) = failwith ""
 
         member x.DeleteRenderbuffer(b) = failwith ""
-        member x.DeleteFramebuffer(f) = failwith ""
 
         member x.CreateStreamingTexture(mipMap) = failwith ""
         member x.DeleteStreamingTexture(t) = failwith ""

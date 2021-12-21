@@ -3,15 +3,10 @@
 open Aardvark.Base
 open Aardvark.Rendering
 open FShade
-open System.Collections.Concurrent
 open System.Runtime.CompilerServices
-open System.Collections.Generic
 open Microsoft.FSharp.Quotations
-open Microsoft.FSharp.Quotations.Patterns
 open FSharp.Data.Adaptive
 open System
-
-
 
 type PositionAttribute() = inherit SemanticAttribute(DefaultSemantic.Positions.ToString())
 type TexCoordAttribute() = inherit SemanticAttribute(DefaultSemantic.DiffuseColorCoordinates.ToString())
@@ -143,31 +138,6 @@ module FShadeInterop =
             DefaultSemantic.Normals, typeof<V3d>
             DefaultSemantic.Positions, typeof<V4d>
         ]
-
-    let private typeToFormat =
-        LookupTable.lookupTable [
-            typeof<int>, TextureFormat.R32i
-            typeof<V2i>, TextureFormat.Rg32i
-            typeof<V3i>, TextureFormat.Rgb32i
-            typeof<V4i>, TextureFormat.Rgba32i
-
-            typeof<C3f>, TextureFormat.Rgb32f
-            typeof<C4f>, TextureFormat.Rgba32f
-            
-            typeof<C3b>, TextureFormat.Rgb8
-            typeof<C4b>, TextureFormat.Rgba8
-
-            typeof<C3us>, TextureFormat.Rgb16
-            typeof<C4us>, TextureFormat.Rgba16
-
-            typeof<float>, TextureFormat.R32f
-            typeof<V2d>, TextureFormat.Rg32f
-            typeof<V3d>, TextureFormat.Rgb32f
-            typeof<V4d>, TextureFormat.Rgba32f
-        ]
-        
-
-        
 
     let private formatToType =
         LookupTable.lookupTable [
@@ -302,16 +272,11 @@ module FShadeInterop =
                 else
                     failwithf "[FShade] cannot render to %d layers using %d devices" layerCount deviceCount
 
-
-
     type AttachmentSignature with
-        member x.GetType(name : Symbol) =
-            match builtInTypes.TryGetValue name with
-                | (true, t) -> t
-                | _ -> formatToType x.format
-                        
-        static member ofType (t : Type) =
-            { format = typeToFormat t; samples = 1 }
+        member x.Type =
+            match builtInTypes.TryGetValue x.Name with
+            | (true, t) -> t
+            | _ -> formatToType x.Format
 
     type SamplerState with
         member x.SamplerState = toSamplerState x
@@ -331,9 +296,9 @@ module FShadeInterop =
     // Used as part of the key in shader caches
     type FramebufferLayout =
         {
-            ColorAttachments : Map<int, Symbol * AttachmentSignature>
-            DepthAttachment : Option<AttachmentSignature>
-            StencilAttachment : Option<AttachmentSignature>
+            Samples : int
+            ColorAttachments : Map<int, AttachmentSignature>
+            DepthStencilAttachment : Option<TextureFormat>
             LayerCount : int
             PerLayerUniforms : Set<string>
         }
@@ -341,12 +306,9 @@ module FShadeInterop =
         member x.EffectConfig(depthRange : Range1d, flip : bool) =
             let outputs =
                 x.ColorAttachments
-                    |> Map.toList
-                    |> List.map (fun (slot, (name, att)) ->
-                        match builtInTypes.TryGetValue name with
-                            | (true, t) -> (string name, t, slot)
-                            | _ -> (string name, formatToType att.format, slot)
-                       )
+                |> Map.toList
+                |> List.map (fun (slot, att) -> string att.Name, att.Type, slot)
+
             { EffectConfig.ofList outputs with
                 depthRange = depthRange
                 flipHandedness = flip
@@ -356,12 +318,8 @@ module FShadeInterop =
         member x.Link(effect : Effect, deviceCount : int, depthRange : Range1d, flip : bool, top : IndexedGeometryMode) =
             let outputs =
                 x.ColorAttachments
-                    |> Map.toList
-                    |> List.map (fun (slot, (name, att)) ->
-                        match builtInTypes.TryGetValue name with
-                            | (true, t) -> (string name, t, slot)
-                            | _ -> (string name, formatToType att.format, slot)
-                       )
+                |> Map.toList
+                |> List.map (fun (slot, att) -> string att.Name, att.Type, slot)
 
             let top = toInputTopology top
 
@@ -393,27 +351,18 @@ module FShadeInterop =
                 else
                     effect |> Effect.toModule config
 
-        member x.ExtractSemantics() =
-            let colors = x.ColorAttachments |> Map.toSeq |> Seq.map (fun (k,(i,s)) -> (k,i)) |> Seq.toList
-            match x.DepthAttachment with
-                | None ->
-                    colors
-                | Some d ->
-                    (-1, DefaultSemantic.Depth) :: colors
-
     type IFramebufferSignature with
         member x.Layout : FramebufferLayout =
             {
+                Samples = x.Samples
                 ColorAttachments = x.ColorAttachments
-                DepthAttachment = x.DepthAttachment
-                StencilAttachment = x.StencilAttachment
+                DepthStencilAttachment = x.DepthStencilAttachment
                 LayerCount = x.LayerCount
                 PerLayerUniforms = x.PerLayerUniforms
             }
 
         member x.EffectConfig(depthRange : Range1d, flip : bool) = x.Layout.EffectConfig(depthRange, flip)
         member x.Link(effect : Effect, depthRange : Range1d, flip : bool, top : IndexedGeometryMode) = x.Layout.Link(effect, x.Runtime.DeviceCount, depthRange, flip, top)
-        member x.ExtractSemantics() = x.Layout.ExtractSemantics()
 
 
     type FShadeSurface private(effect : FShadeEffect) =

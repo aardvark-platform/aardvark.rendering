@@ -1028,9 +1028,6 @@ module PreparedObjectInfo =
 
         GL.Check "[Prepare] VAO"
 
-        let attachments = fboSignature.ColorAttachments |> Map.toList
-        let attachmentCount = if attachments.Length > 0 then 1 + (attachments |> List.map (fun (i,_) -> i) |> List.max) else 0
-
         let isActive = x.CreateIsActive rj.IsActive
         let beginMode = x.CreateBeginMode(program.Handle, rj.Mode)
         let drawCalls = match rj.DrawCalls with
@@ -1666,12 +1663,12 @@ module rec Command =
 
         let compile (info : CompilerInfo) (values : ClearValues) (s : IAssemblerStream) (p : IAdaptivePinning) =
             
-            for KeyValue(i, (sem, att)) in signature.ColorAttachments do
-                match values.Colors.[sem] with
+            for KeyValue(i, att) in signature.ColorAttachments do
+                match values.Colors.[att.Name] with
                 | Some color ->
                     s.BeginCall(3)
                     
-                    if att.format.IsIntegerFormat then
+                    if att.Format.IsIntegerFormat then
                         let pValues = p.Pin (AVal.constant color.Integer)
                         s.PushArg(NativePtr.toNativeInt pValues)
                         s.PushArg(i)

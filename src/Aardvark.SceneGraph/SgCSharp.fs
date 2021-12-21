@@ -250,13 +250,13 @@ type SceneGraphExtensions =
 
     // Write buffers
     [<Extension>]
-    static member WriteBuffers(sg : ISg, bufferIdentifiers : aval<Symbol seq>) : ISg = sg |> Sg.writeBuffers (bufferIdentifiers |> AVal.map Set.ofSeq)
+    static member WriteBuffers(sg : ISg, bufferIdentifiers : aval<WriteBuffer seq>) : ISg = sg |> Sg.writeBuffers (bufferIdentifiers |> AVal.map Set.ofSeq)
 
     [<Extension>]
-    static member WriteBuffers(sg : ISg, bufferIdentifiers : seq<Symbol>) : ISg = sg |> Sg.writeBuffers' (Set.ofSeq bufferIdentifiers)
+    static member WriteBuffers(sg : ISg, bufferIdentifiers : seq<WriteBuffer>) : ISg = sg |> Sg.writeBuffers' (Set.ofSeq bufferIdentifiers)
 
     [<Extension>]
-    static member WriteBuffers(sg : ISg, [<ParamArray>] bufferIdentifiers: Symbol[]) : ISg = sg |> Sg.writeBuffers' (Set.ofArray bufferIdentifiers)
+    static member WriteBuffers(sg : ISg, [<ParamArray>] bufferIdentifiers: WriteBuffer[]) : ISg = sg |> Sg.writeBuffers' (Set.ofArray bufferIdentifiers)
 
 
     [<Extension>]

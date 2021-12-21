@@ -13,6 +13,17 @@ open FSharp.Data.Adaptive.Operators
 #nowarn "9"
 #nowarn "51"
 
+[<RequireQualifiedAccess>]
+type WriteBuffer =
+    | Color of Symbol
+    | Depth
+    | Stencil
+
+    static member Colors([<ParamArray>] names : Symbol[]) =
+        names |> Array.map WriteBuffer.Color
+
+    static member op_Explicit(name : Symbol) = WriteBuffer.Color name
+
 [<AutoOpen>]
 module SgFSharp =
 
@@ -127,7 +138,6 @@ module SgFSharp =
                     let r = Converter.GetDimension(t), arr
                     arrayCache.Add(arr, r)
                     r
-
 
     module Sg =
         open SgFSharpHelpers
@@ -594,20 +604,24 @@ module SgFSharp =
         // ================================================================================================================
 
         /// Toggles color, depth and stencil writes according to the given set of symbols.
-        let writeBuffers (buffers : aval<Set<Symbol>>) =
+        let writeBuffers (buffers : aval<Set<WriteBuffer>>) =
 
             let depthEnable =
-                buffers |> AVal.map (Set.contains DefaultSemantic.Depth)
+                buffers |> AVal.map (Set.contains WriteBuffer.Depth)
 
             let stencilEnable =
-                buffers |> AVal.map (Set.contains DefaultSemantic.Stencil)
+                buffers |> AVal.map (Set.contains WriteBuffer.Stencil)
+
+            let colors =
+                let get = function WriteBuffer.Color sem -> Some sem | _ -> None
+                buffers |> AVal.map (Set.toList >> List.choose get >> Set.ofList)
 
             depthWrite depthEnable
             >> stencilWrite stencilEnable
-            >> colorOutput buffers
+            >> colorOutput colors
 
         /// Toggles color, depth and stencil writes according to the given set of symbols.
-        let writeBuffers' (buffers : Set<Symbol>) =
+        let writeBuffers' (buffers : Set<WriteBuffer>) =
             writeBuffers (~~buffers)
 
         // ================================================================================================================

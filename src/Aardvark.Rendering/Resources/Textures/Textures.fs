@@ -5,20 +5,6 @@ open Aardvark.Base
 open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 
-type TextureAspect =
-    | Color
-    | Depth
-    | Stencil
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module TextureAspect =
-
-    /// Returns the aspect corresponding to the given format.
-    let ofTextureFormat (format : TextureFormat) =
-        if TextureFormat.hasDepth format then TextureAspect.Depth
-        else TextureAspect.Color
-
-
 [<AllowNullLiteral>]
 type ITexture =
     abstract member WantMipMaps : bool

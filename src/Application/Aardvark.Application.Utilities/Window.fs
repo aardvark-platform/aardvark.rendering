@@ -451,19 +451,19 @@ module Utilities =
         let monoSignature =
             runtime.CreateFramebufferSignature(
                 SymDict.ofList [
-                    DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = samples }
-                    DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = samples }
+                    DefaultSemantic.Colors, TextureFormat.Rgba8
+                    DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
                 ],
-                1, 
-                Set.empty
+                samples
             )  
 
         let signature =
             runtime.CreateFramebufferSignature(
                 SymDict.ofList [
-                    DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = samples }
-                    DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = samples }
+                    DefaultSemantic.Colors, TextureFormat.Rgba8
+                    DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
                 ],
+                samples,
                 2, 
                 Set.ofList [
                     "ProjTrafo"; 
@@ -494,7 +494,7 @@ module Utilities =
         let framebuffer =
             runtime.CreateFramebuffer(signature, [
                 DefaultSemantic.Colors, runtime.CreateTextureAttachment(colors)
-                DefaultSemantic.Depth, runtime.CreateTextureAttachment(depth)
+                DefaultSemantic.DepthStencil, runtime.CreateTextureAttachment(depth)
             ])
 
         let initialView = 
@@ -601,8 +601,7 @@ module Utilities =
 
                 override x.Release() =
                     //win.Dispose() <- todo make this disposable
-                    runtime.DeleteFramebufferSignature signature
-        
+                    signature.Dispose()     
                     app.Dispose()
         
 

@@ -67,7 +67,7 @@ module TextureClear =
                     c2, TextureFormat.Rgba32ui
                     c3, TextureFormat.Rgba8
                     c4, TextureFormat.Rgba16i
-                    DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
+                    DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
                 ]
 
             let signature =
@@ -118,16 +118,16 @@ module TextureClear =
                     pi |> PixImage.isColor (c.ToArray() |> Array.map int16)
 
                 do
-                    let depth = textures.[DefaultSemantic.Depth].DownloadDepth()
+                    let depth = textures.[DefaultSemantic.DepthStencil].DownloadDepth()
                     depth.Data |> Array.iter (fun x -> Expect.floatClose Accuracy.medium (float x) 0.5 "Depth data mismatch")
 
                 do
-                    let stencil = textures.[DefaultSemantic.Depth].DownloadStencil()
+                    let stencil = textures.[DefaultSemantic.DepthStencil].DownloadStencil()
                     stencil.Data |> Array.iter (fun x -> Expect.equal x 4 "Stencil data mismatch")       
 
             finally
-                runtime.DeleteFramebuffer(fbo)
-                runtime.DeleteFramebufferSignature(signature)
+                fbo.Dispose()
+                signature.Dispose()
                 textures |> Map.iter (fun _ t -> runtime.DeleteTexture t)
             
 

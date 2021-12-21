@@ -14,18 +14,8 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
 
     let renderPassDepthAspect =
         match renderPass.DepthStencilAttachment with
-        | Some (_, signature) ->
-            let depth, stencil =
-                TextureFormat.hasDepth signature.format,
-                TextureFormat.hasStencil signature.format
-
-            match depth, stencil with
-            | true,  true  -> ImageAspect.DepthStencil
-            | true,  false -> ImageAspect.Depth
-            | false, true  -> ImageAspect.Stencil
-            | false, false -> ImageAspect.None
-        | _ ->
-            ImageAspect.None
+        | Some format -> ImageAspect.ofTextureAspects format.Aspects
+        | _ -> ImageAspect.None
 
     member x.Run(caller : AdaptiveToken, t : RenderToken, outputs : OutputDescription, queries : IQuery) =
         x.EvaluateAlways caller (fun caller ->
@@ -44,15 +34,13 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
                 for q in vulkanQueries do
                     do! Command.Begin q
 
-                let views = fbo.ImageViews
-
-                for KeyValue(i, (sem, _)) in renderPass.ColorAttachments do
-                    match values.Colors.[sem] with
-                    | Some color -> do! Command.ClearColor(views.[i], ImageAspect.Color, color)
+                for KeyValue(_, att) in renderPass.ColorAttachments do
+                    match values.Colors.[att.Name] with
+                    | Some color -> do! Command.ClearColor(fbo.Attachments.[att.Name], ImageAspect.Color, color)
                     | _ -> ()
 
                 if renderPassDepthAspect <> ImageAspect.None then
-                    let view = views.[views.Length - 1]
+                    let view = fbo.Attachments.[DefaultSemantic.DepthStencil]
                     match depth, stencil with
                     | Some d, Some s -> do! Command.ClearDepthStencil(view, renderPassDepthAspect, d, s)
                     | Some d, None   -> do! Command.ClearDepthStencil(view, ImageAspect.Depth, d, 0)

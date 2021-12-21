@@ -840,20 +840,28 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-    member x.CreateBlendModes(signature : IFramebufferSignature, mode : aval<BlendMode>, attachments : aval<Map<Symbol, BlendMode>>) =
-        let config = { signature = signature; defaultValue = mode; attachments = attachments }
+    member private x.CreatePerAttachmentValues<'T, 'U>(cache : ConcurrentDictionary<AttachmentConfig<'T>, aval<'U[]>>, mapping : 'T -> 'U,
+                                                       signature : IFramebufferSignature, def : aval<'T>, attachments : aval<Map<Symbol, 'T>>) =
+        let config = { signature = signature; defaultValue = def; attachments = attachments }
 
-        let value =
-            blendModeConfigCache.GetOrAdd(config, fun cfg ->
-                let attachments = cfg.signature.ColorAttachments
-                let arr = Array.zeroCreate attachments.Count
+        cache.GetOrAdd(config, fun cfg ->
+            let attachments = cfg.signature.ColorAttachments
+            let slots = cfg.signature.ColorAttachmentSlots
 
-                AVal.map2 (fun def att ->
-                    for (i, (s, _)) in Map.toSeq attachments do
-                        arr.[i] <- att |> Map.tryFind s |> Option.defaultValue def |> ctx.ToBlendMode
-                    arr
-                ) cfg.defaultValue cfg.attachments
+            (cfg.defaultValue, cfg.attachments) ||> AVal.map2 (fun def modes ->
+                Array.init slots (fun i ->
+                    attachments
+                    |> Map.tryFind i
+                    |> Option.bind (fun att -> modes |> Map.tryFind att.Name)
+                    |> Option.defaultValue def
+                    |> mapping          
+                )
             )
+        )
+
+    member x.CreateBlendModes(signature : IFramebufferSignature, mode : aval<BlendMode>, attachments : aval<Map<Symbol, BlendMode>>) =
+        let value =
+            x.CreatePerAttachmentValues(blendModeConfigCache, ctx.ToBlendMode, signature, mode, attachments)
 
         blendModeCache.GetOrCreate(value, fun () -> {
             create = fun b      -> NativePtr.allocArray b
@@ -865,19 +873,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         })
 
     member x.CreateColorMasks(signature : IFramebufferSignature, mask : aval<ColorMask>, attachments : aval<Map<Symbol, ColorMask>>) =
-        let config = { signature = signature; defaultValue = mask; attachments = attachments }
-
         let value =
-            colorMaskConfigCache.GetOrAdd(config, fun cfg ->
-                let attachments = cfg.signature.ColorAttachments
-                let arr = Array.zeroCreate attachments.Count
-
-                AVal.map2 (fun def att ->
-                    for (i, (s, _)) in Map.toSeq attachments do
-                        arr.[i] <- att |> Map.tryFind s |> Option.defaultValue def |> ctx.ToColorMask
-                    arr
-                ) cfg.defaultValue cfg.attachments
-            )
+            x.CreatePerAttachmentValues(colorMaskConfigCache, ctx.ToColorMask, signature, mask, attachments)
 
         colorMaskCache.GetOrCreate(value, fun () -> {
             create = fun b      -> NativePtr.allocArray b

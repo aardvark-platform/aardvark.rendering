@@ -50,7 +50,14 @@ type ImageView =
                 let d = 1 <<< x.MipLevelRange.Min
                 V3i(max 1 (s.X / d), max 1 (s.Y / d), max 1 (s.Z / d))
 
-        new(device : Device, handle : VkImageView, img, viewType, levelRange, arrayRange, resolved) = { inherit Resource<_>(device, handle); Image = img; ImageViewType = viewType; MipLevelRange = levelRange; ArrayRange = arrayRange; IsResolved = resolved }
+        new(device : Device, handle : VkImageView, img, viewType, levelRange, arrayRange, resolved) =
+            { inherit Resource<_>(device, handle);
+                Image = img;
+                ImageViewType = viewType;
+                MipLevelRange = levelRange;
+                ArrayRange = arrayRange;
+                IsResolved = resolved
+            }
     end
 
 

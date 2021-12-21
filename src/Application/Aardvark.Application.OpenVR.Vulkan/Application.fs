@@ -80,10 +80,9 @@ type VulkanVRApplicationLayered(samples : int, debug : DebugConfig option, adjus
 
     let renderPass = 
         device.CreateRenderPass(
-            Map.ofList [
-                DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = samples }
-                DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = samples }
-            ],
+            [{ Name = DefaultSemantic.Colors; Format = TextureFormat.Rgba8 }],
+            Some TextureFormat.Depth24Stencil8,
+            samples,
             2,
             Set.ofList [
                 "ViewTrafo"; "ProjTrafo"; 
@@ -124,7 +123,7 @@ type VulkanVRApplicationLayered(samples : int, debug : DebugConfig option, adjus
                     do! StereoShader.hiddenAreaFragment
                 }
                 |> Sg.stencilMode' writeStencil
-                |> Sg.writeBuffers' (Set.ofList [DefaultSemantic.Stencil])
+                |> Sg.writeBuffers' (Set.ofList [WriteBuffer.Stencil])
 
         hiddenTask <- RuntimeCommand.Render(sg.RenderObjects(Ag.Scope.Root))
 
@@ -217,7 +216,7 @@ type VulkanVRApplicationLayered(samples : int, debug : DebugConfig option, adjus
                 renderPass, 
                 Map.ofList [
                     DefaultSemantic.Colors, cView
-                    DefaultSemantic.Depth, dView
+                    DefaultSemantic.DepthStencil, dView
                 ]
             )
 
@@ -356,7 +355,7 @@ type VulkanVRApplicationLayered(samples : int, debug : DebugConfig option, adjus
     override x.Release() = 
         // delete views
         fbo.Attachments.[DefaultSemantic.Colors].Dispose()
-        fbo.Attachments.[DefaultSemantic.Depth].Dispose()
+        fbo.Attachments.[DefaultSemantic.DepthStencil].Dispose()
 
         // delete FBOs
         fbo.Dispose()

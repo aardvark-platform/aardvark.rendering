@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering
 
+open System
 open Aardvark.Base
 
 module DefaultSemantic =
@@ -32,8 +33,14 @@ module DefaultSemantic =
     let AreaSum = Sym.ofString "AreaSum"
 
     // Various
-    let Depth = Sym.ofString "Depth"
-    let Stencil = Sym.ofString "Stencil"
+    let DepthStencil = Sym.ofString "DepthStencil"
+
+    [<Obsolete("Use DefaultSemantic.DepthStencil instead. This is just an alias.")>]
+    let Depth = DepthStencil
+
+    [<Obsolete("Use DefaultSemantic.DepthStencil instead. This is just an alias.")>]
+    let Stencil = DepthStencil
+
     let ImageOutput = Sym.ofString "ImageOutput"
     let InstanceTrafo = Sym.ofString "InstanceTrafo"
     let InstanceTrafoInv = Sym.ofString "InstanceTrafoInv"

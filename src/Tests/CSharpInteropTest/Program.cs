@@ -51,13 +51,23 @@ namespace CSharpInteropTest
             
             ISg sg = new Sg.RenderNode(0, IndexedGeometryMode.PointList);
 
-            var test = 
-                    sg 
+            WriteBuffer[] buffers =
+                WriteBuffer.Colors(
+                        DefaultSemantic.Colors,
+                        DefaultSemantic.Positions
+                )
+                .WithAdded(WriteBuffer.Stencil)
+                .WithAdded((WriteBuffer)DefaultSemantic.AmbientColorTexture);
+
+            var test =
+                    sg
                     .VertexAttribute(DefaultSemantic.Positions, adaptiveBuffer)
                     .VertexAttribute(DefaultSemantic.Positions, adaptiveArray)
                     .VertexAttribute(DefaultSemantic.Positions, new V3f[10])
                     .VertexAttribute(DefaultSemantic.Positions, (Array)new V4f[10])
-                    .VertexIndices(geo.IndexArray);
+                    .VertexIndices(geo.IndexArray)
+                    .WriteBuffers(buffers)
+                    .WriteBuffers(WriteBuffer.Stencil);
         }
     }
 }

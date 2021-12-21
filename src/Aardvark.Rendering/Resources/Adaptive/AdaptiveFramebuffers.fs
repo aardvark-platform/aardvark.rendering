@@ -27,7 +27,7 @@ module private AdaptiveFramebufferTypes =
 
         override x.Destroy() =
             for (KeyValue (_, att)) in attachments do att.Release()
-            handle |> Option.iter (fun (fbo, _) -> runtime.DeleteFramebuffer fbo)
+            handle |> Option.iter (fun (fbo, _) -> fbo.Dispose())
             handle <- None
 
         override x.Compute(token : AdaptiveToken, t : RenderToken) =
@@ -40,7 +40,7 @@ module private AdaptiveFramebufferTypes =
                     h
                 else
                     t.ReplacedResource(ResourceKind.Framebuffer)
-                    runtime.DeleteFramebuffer(h)
+                    h.Dispose()
                     create signature att
 
             | None ->
@@ -75,7 +75,7 @@ module private AdaptiveFramebufferTypes =
             for att in inputs do att.Release()
 
             for (fbo, _) in handles do
-                runtime.DeleteFramebuffer(fbo)
+                fbo.Dispose()
 
             handles <- CubeMap.empty
 
@@ -101,7 +101,7 @@ module private AdaptiveFramebufferTypes =
                         h
                     else
                         rt.ReplacedResource(ResourceKind.Framebuffer)
-                        runtime.DeleteFramebuffer(h)
+                        h.Dispose()
                         create face level signature att
             )
 
@@ -143,16 +143,14 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
     static member CreateFramebuffer(this : IFramebufferRuntime,
                                     signature : IFramebufferSignature,
                                     color : Option<#aval<IFramebufferOutput>>,
-                                    depth : Option<#aval<IFramebufferOutput>>,
-                                    stencil : Option<#aval<IFramebufferOutput>>) =
+                                    depthStencil : Option<#aval<IFramebufferOutput>>) =
 
         let inline add sem opt dict =
             opt |> Option.iter (fun x -> dict |> SymDict.add sem (x :> aval<_>))
 
         let atts = SymDict.empty
         atts |> add DefaultSemantic.Colors color
-        atts |> add DefaultSemantic.Depth depth
-        atts |> add DefaultSemantic.Stencil stencil
+        atts |> add DefaultSemantic.DepthStencil depthStencil
 
         this.CreateFramebuffer(signature, SymDict.toMap atts)
 
@@ -161,34 +159,30 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
     [<Extension>]
     static member CreateFramebuffer (this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<V2i>, writeOnly : Set<Symbol>) =
 
-        let inline createAttachment (sem : Symbol) (att : AttachmentSignature) =
+        let inline createAttachment (sem : Symbol) (format : TextureFormat) =
             if writeOnly |> Set.contains sem then
-                let rb = this.CreateRenderbuffer(size, att.format, att.samples)
+                let rb = this.CreateRenderbuffer(size, format, signature.Samples)
                 this.CreateRenderbufferAttachment(rb) :> aval<_>
             else
-                let tex = this.CreateTexture2D(size, att.format, samples = att.samples)
+                let tex = this.CreateTexture2D(size, format, samples = signature.Samples)
                 this.CreateTextureAttachment(tex, 0) :> aval<_>
 
         let atts = SymDict.empty
 
-        signature.DepthAttachment |> Option.iter (fun d ->
-            atts.[DefaultSemantic.Depth] <- createAttachment DefaultSemantic.Depth d
+        signature.DepthStencilAttachment |> Option.iter (fun d ->
+            atts.[DefaultSemantic.DepthStencil] <- createAttachment DefaultSemantic.DepthStencil d
         )
 
-        signature.StencilAttachment |> Option.iter (fun s ->
-            atts.[DefaultSemantic.Stencil] <- createAttachment DefaultSemantic.Stencil s
-        )
-
-        for (_, (sem, att)) in Map.toSeq signature.ColorAttachments do
-            atts.[sem] <- createAttachment sem att
+        for KeyValue(_, att) in signature.ColorAttachments do
+            atts.[att.Name] <- createAttachment att.Name att.Format
 
         this.CreateFramebuffer(signature, SymDict.toMap atts)
 
     /// Creates a framebuffer of the given signature for the given adaptive size.
-    /// Textures are used for all attachments except depth and stencil.
+    /// Textures are used for all attachments except depth-stencil.
     [<Extension>]
     static member CreateFramebuffer (this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<V2i>) : IAdaptiveResource<IFramebuffer> =
-        this.CreateFramebuffer(signature, size, Set.ofList [DefaultSemantic.Depth; DefaultSemantic.Stencil])
+        this.CreateFramebuffer(signature, size, Set.ofList [DefaultSemantic.DepthStencil])
 
 
     // ================================================================================================================
@@ -221,18 +215,18 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
         let textures = SymDict.empty
         let renderBuffers = SymDict.empty
 
-        let createAttachment (sem : Symbol) (face : CubeSide) (level : int) (att : AttachmentSignature) =
+        let createAttachment (sem : Symbol) (face : CubeSide) (level : int) (format : TextureFormat) =
             if writeOnly |> Set.contains sem then
                 let rb =
                     renderBuffers.GetOrCreate(sem, fun _ ->
-                        this.CreateRenderbuffer(size |> AVal.map V2i, att.format, att.samples)
+                        this.CreateRenderbuffer(size |> AVal.map V2i, format, signature.Samples)
                     )
 
                 this.CreateRenderbufferAttachment(rb) :> aval<_>
             else
                 let tex =
                     textures.GetOrCreate(sem, fun _ ->
-                        this.CreateTextureCube(size, att.format, levels)
+                        this.CreateTextureCube(size, format, levels)
                     )
 
                 this.CreateTextureAttachment(tex, int face, level) :> aval<_>
@@ -241,16 +235,12 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
             CubeMap.init levels (fun face level ->
                 let atts = SymDict.empty
 
-                signature.DepthAttachment |> Option.iter (fun d ->
-                    atts.[DefaultSemantic.Depth] <- createAttachment DefaultSemantic.Depth face level d
+                signature.DepthStencilAttachment |> Option.iter (fun d ->
+                    atts.[DefaultSemantic.DepthStencil] <- createAttachment DefaultSemantic.DepthStencil face level d
                 )
 
-                signature.StencilAttachment |> Option.iter (fun s ->
-                    atts.[DefaultSemantic.Stencil] <- createAttachment DefaultSemantic.Stencil face level s
-                )
-
-                for (_, (sem, att)) in Map.toSeq signature.ColorAttachments do
-                    atts.[sem] <- createAttachment sem face level att
+                for KeyValue(_, att) in signature.ColorAttachments do
+                    atts.[att.Name] <- createAttachment att.Name face level att.Format
 
                 atts |> SymDict.toMap
             )
@@ -258,10 +248,10 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
         this.CreateFramebufferCube(signature, attachments)
 
     /// Creates a cube framebuffer of the given signature for the given adaptive size and number of levels.
-    /// Textures are used for all attachments except depth and stencil.
+    /// Textures are used for all attachments except depth-stencil.
     [<Extension>]
     static member CreateFramebufferCube(this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<int>, levels : int) =
-        this.CreateFramebufferCube(signature, size, levels, Set.ofList [DefaultSemantic.Depth; DefaultSemantic.Stencil])
+        this.CreateFramebufferCube(signature, size, levels, Set.ofList [DefaultSemantic.DepthStencil])
 
     /// Creates a cube framebuffer of the given signature for the given adaptive size.
     /// writeOnly indicates which attachments can be represented as render buffers instead of textures.

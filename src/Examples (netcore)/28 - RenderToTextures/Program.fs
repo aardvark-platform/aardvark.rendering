@@ -71,12 +71,12 @@ let main argv =
     let color = C4b.Red
     let size = V2i(512,512) |> cval
 
-    let signature = 
+    use signature = 
         win.Runtime.CreateFramebufferSignature(
             [
                 DefaultSemantic.Colors, TextureFormat.Rgba8
                 Sym.ofString "WPos"  , TextureFormat.Rgba32f
-                DefaultSemantic.Depth,  TextureFormat.Depth24Stencil8
+                DefaultSemantic.DepthStencil,  TextureFormat.Depth24Stencil8
             ])
 
     let pass0 = 
@@ -95,7 +95,7 @@ let main argv =
             |> Sg.compile win.Runtime signature
             |> RenderTask.renderSemantics (
                     Set.ofList [
-                        DefaultSemantic.Depth
+                        DefaultSemantic.DepthStencil
                         DefaultSemantic.Colors
                         Sym.ofString "WPos"]
                ) size

@@ -1194,63 +1194,62 @@ module private RuntimeCommands =
             // create an array containing the depth-clear (if any)
             let depthClears =
                 match compiler.renderPass.DepthStencilAttachment with
-                    | Some (id,_) ->
-                        let id = 0u
-                        match depth, stencil with
-                            | Some d, Some s ->
-                                [|
-                                    VkClearAttachment(
-                                        VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit, 
-                                        uint32 id,
-                                        VkClearValue(depthStencil = VkClearDepthStencilValue(float32 d, uint32 s))
-                                    )
-                                |]
+                | Some _ ->
+                    match depth, stencil with
+                    | Some d, Some s ->
+                        [|
+                            VkClearAttachment(
+                                VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit, 
+                                0u,
+                                VkClearValue(depthStencil = VkClearDepthStencilValue(float32 d, uint32 s))
+                            )
+                        |]
 
-                            | Some d, None ->   
-                                [|
-                                    VkClearAttachment(
-                                        VkImageAspectFlags.DepthBit, 
-                                        uint32 id,
-                                        VkClearValue(depthStencil = VkClearDepthStencilValue(float32 d, 0u))
-                                    )
-                                |]
+                    | Some d, None ->   
+                        [|
+                            VkClearAttachment(
+                                VkImageAspectFlags.DepthBit, 
+                                0u,
+                                VkClearValue(depthStencil = VkClearDepthStencilValue(float32 d, 0u))
+                            )
+                        |]
                              
-                            | None, Some s ->
-                                [|
-                                    VkClearAttachment(
-                                        VkImageAspectFlags.StencilBit, 
-                                        uint32 id,
-                                        VkClearValue(depthStencil = VkClearDepthStencilValue(1.0f, uint32 s))
-                                    )
-                                |]
+                    | None, Some s ->
+                        [|
+                            VkClearAttachment(
+                                VkImageAspectFlags.StencilBit, 
+                                0u,
+                                VkClearValue(depthStencil = VkClearDepthStencilValue(1.0f, uint32 s))
+                            )
+                        |]
 
-                            | None, None ->
-                                [||]
-                    | _ -> 
-                        // if the RenderPass does not contain a depth-stencil attachment we can't clear it
+                    | None, None ->
                         [||]
+                | _ -> 
+                    // if the RenderPass does not contain a depth-stencil attachment we can't clear it
+                    [||]
 
             // create an array containing all color-clears
             let colorClears = 
-                compiler.renderPass.ColorAttachments |> Map.toSeq |> Seq.choose (fun (i,(n,att)) ->
-                    match colors.[n] with
-                        | Some value ->
-                            let clear =
-                                if att.format.IsIntegerFormat then
-                                    VkClearColorValue(int32 = value.Integer)
-                                else
-                                    VkClearColorValue(float32 = value.Float)
+                compiler.renderPass.ColorAttachments |> Map.toArray |> Array.choose (fun (i, att) ->
+                    match colors.[att.Name] with
+                    | Some value ->
+                        let clear =
+                            if att.Format.IsIntegerFormat then
+                                VkClearColorValue(int32 = value.Integer)
+                            else
+                                VkClearColorValue(float32 = value.Float)
 
-                            let res = 
-                                VkClearAttachment(
-                                    VkImageAspectFlags.ColorBit, 
-                                    uint32 i,
-                                    VkClearValue(color = clear)
-                                )
-                            Some res
-                        | None ->
-                            None
-                ) |> Seq.toArray
+                        let res = 
+                            VkClearAttachment(
+                                VkImageAspectFlags.ColorBit, 
+                                uint32 i,
+                                VkClearValue(color = clear)
+                            )
+                        Some res
+                    | None ->
+                        None
+                )
 
             // submit the clear to the stream (after resetting it)
             stream.Clear()
@@ -2262,11 +2261,13 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
             q.Begin cmd
 
         cmd.enqueue {
-            let oldLayouts = Array.zeroCreate fbo.ImageViews.Length
-            for i in 0 .. fbo.ImageViews.Length - 1 do
-                let view = fbo.ImageViews.[i]
+            let views = Map.toArray fbo.Attachments
+            let oldLayouts = Array.zeroCreate views.Length
+
+            for i in 0 .. views.Length - 1 do
+                let sem, view = views.[i]
                 oldLayouts.[i] <- view.Image.Layout
-                if VkFormat.hasDepth view.Image.Format || VkFormat.hasStencil view.Image.Format then
+                if sem = DefaultSemantic.DepthStencil then
                     do! Command.TransformLayout(view, VkImageLayout.DepthStencilAttachmentOptimal)
                 else
                     do! Command.TransformLayout(view, VkImageLayout.ColorAttachmentOptimal)
@@ -2276,16 +2277,14 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
             do! Command.EndPass
 
             if ranges.Length > 1 then
-                let deviceCount = int device.AllCount
-
-                for (sem,a) in Map.toSeq fbo.Attachments do
+                for (_, view) in views do
                     transact (fun () ->
-                        let v = a.Image.Version
+                        let v = view.Image.Version
                         lock v (fun () -> v.Value <- v.Value + 1)
                     )
 
-            for i in 0 .. fbo.ImageViews.Length - 1 do
-                let view = fbo.ImageViews.[i]
+            for i in 0 .. views.Length - 1 do
+                let _, view = views.[i]
                 do! Command.TransformLayout(view, oldLayouts.[i])
         }
 

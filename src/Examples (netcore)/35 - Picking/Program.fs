@@ -290,12 +290,12 @@ let main argv =
 
     // First we render the scene into an offscreen buffer, which has the
     // default color and depth attachments, and additionally the pick buffer.
-    let offscreenSignature =
-        runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = samples }
-            DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = samples }
-            DefaultSemantic.PickData, { format = TextureFormat.Rgba32f; samples = samples }
-        ]
+    use offscreenSignature =
+        runtime.CreateFramebufferSignature([
+            DefaultSemantic.Colors, TextureFormat.Rgba8
+            DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
+            DefaultSemantic.PickData, TextureFormat.Rgba32f
+        ], samples)
 
     use offscreenTask =
         let cubes =
@@ -372,9 +372,9 @@ let main argv =
     // Before we can use the pick buffer for our lookups we first need to resolve it (in case it is multisampled)
     // However, using a normal resolve would average our samples resulting in possibly invalid IDs.
     // Therefore, we use a fragment shader to extract the first sample.
-    let resolvePickSignature =
+    use resolvePickSignature =
         runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, { format = TextureFormat.Rgba32f; samples = 1 }
+            DefaultSemantic.Colors, TextureFormat.Rgba32f
         ]
 
     use resolvePickTask =
@@ -442,7 +442,5 @@ let main argv =
 
     // Cleanup
     pickTexture.Release()
-    runtime.DeleteFramebufferSignature(offscreenSignature)
-    runtime.DeleteFramebufferSignature(resolvePickSignature)
 
     0

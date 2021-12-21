@@ -700,8 +700,8 @@ module ShaderProgram =
             match device.ShaderCachePath with
                 | Some shaderCachePath ->
                     let fileName = 
-                        let colors = key.layout.ColorAttachments |> Map.map (fun _ (a,b) -> a.ToString())
-                        let depth = key.layout.DepthAttachment
+                        let colors = key.layout.ColorAttachments |> Map.map (fun _ att -> att.Name.ToString())
+                        let depth = key.layout.DepthStencilAttachment
                         if key.layout.LayerCount > 1 then
                             hashFileName (key.effect.Id, key.topology, colors, depth, key.layout.LayerCount, key.layout.PerLayerUniforms)
                         else

@@ -1720,9 +1720,9 @@ type ResourceManager(user : IResourceUser, device : Device) =
                     fshadeThingCache.GetOrAdd((signature, compile) :> obj, fun _ ->
                         let outputs =
                             signature.ColorAttachments
-                                |> Map.toList
-                                |> List.map (fun (idx, (name, att)) -> string name, (att.GetType name, idx))
-                                |> Map.ofList
+                            |> Map.toList
+                            |> List.map (fun (idx, att) -> string att.Name, (att.Type, idx))
+                            |> Map.ofList
 
                         let layout, module_ =
                             compile {
@@ -1833,20 +1833,19 @@ type ResourceManager(user : IResourceUser, device : Device) =
                                    globalMask : aval<ColorMask>, attachmentMask : aval<Map<Symbol, ColorMask>>,
                                    globalBlend : aval<BlendMode>, attachmentBlend : aval<Map<Symbol, BlendMode>>,
                                    blendConstant : aval<C4f>) =
+        let slots = pass.ColorAttachmentSlots
 
         let getAttachmentStates fallback values =
             adaptive {
                 let! values = values
                 let! fallback = fallback
 
-                let arr = Array.zeroCreate pass.ColorAttachmentCount
-
-                pass.ColorAttachments
-                |> Seq.iter (fun (KeyValue(i, (s, _))) ->
-                    arr.[i] <- values |> Map.tryFind s |> Option.defaultValue fallback
+                return Array.init slots (fun i ->
+                    pass.ColorAttachments
+                    |> Map.tryFind i
+                    |> Option.bind (fun att -> values |> Map.tryFind att.Name)
+                    |> Option.defaultValue fallback
                 )
-
-                return arr
             }
 
         colorBlendStateCache.GetOrCreate(
@@ -1859,15 +1858,10 @@ type ResourceManager(user : IResourceUser, device : Device) =
         )
 
     member x.CreateMultisampleState(pass : RenderPass, multisample : aval<bool>) =
-        let anyAttachment =
-            match pass.ColorAttachments |> Map.toSeq |> Seq.tryHead with
-            | Some (_,(_,a)) -> a
-            | None -> pass.DepthStencilAttachment |> Option.map snd |> Option.get
-
         multisampleCache.GetOrCreate(
             [pass :> obj; multisample :> obj],
             fun cache key ->
-                new MultisampleStateResource(cache, key, anyAttachment.samples, multisample)
+                new MultisampleStateResource(cache, key, pass.Samples, multisample)
         )
 
     member x.CreatePipeline(program         : IResourceLocation<ShaderProgram>,

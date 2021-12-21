@@ -1,6 +1,5 @@
 ﻿namespace Aardvark.Rendering
 
-open System
 open Aardvark.Base
 open FSharp.Data.Adaptive
 
@@ -107,11 +106,10 @@ type TextureFormat =
     | CompressedRgbBptcSignedFloat = 36494
     | CompressedRgbBptcUnsignedFloat = 36495
 
-type AttachmentSignature =
-    {
-        format : TextureFormat
-        samples : int
-    }
+type TextureAspect =
+    | Color
+    | Depth
+    | Stencil
 
 type TextureParams =
     {
@@ -187,6 +185,14 @@ module TextureFormat =
     /// either a stencil for a combined depth-stencil format).
     let hasStencil (fmt : TextureFormat) =
         isStencil fmt || isDepthStencil fmt
+
+    /// Returns the aspects of the given texture format.
+    let toAspects (fmt : TextureFormat) : Set<TextureAspect> =
+        if isDepthStencil fmt then [ Depth; Stencil ]
+        elif isDepth fmt then [ Depth ]
+        elif isStencil fmt then [ Stencil ]
+        else [ Color ]
+        |> Set.ofList
 
     let ofPixFormat =
 
@@ -616,6 +622,7 @@ module TextureFormatExtensions =
         member x.IsDepthStencil = TextureFormat.isDepthStencil x
         member x.HasDepth = TextureFormat.hasDepth x
         member x.HasStencil = TextureFormat.hasStencil x
+        member x.Aspects = TextureFormat.toAspects x
         member x.PixelSizeInBits = TextureFormat.pixelSizeInBits x
         member x.PixelSizeInBytes = TextureFormat.pixelSizeInBytes x
 
@@ -679,15 +686,3 @@ module PixFormat =
 
     let pixelSizeInBytes (fmt : PixFormat) =
         typeSize fmt.Type * channels fmt.Format
-
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module AttachmentSignature =
-
-    /// Returns the format of the given attachment signature.
-    let format (signature : AttachmentSignature) =
-        signature.format
-
-    /// Returns the sample count of the given attachment signature.
-    let samples (signature : AttachmentSignature) =
-        signature.samples

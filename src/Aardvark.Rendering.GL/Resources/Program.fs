@@ -611,7 +611,7 @@ module ProgramExtensions =
                                 {   // NOTE: Profile mask can be None, Core or Compatibility, shaders are not necessary compatible between those
                                     device      = driver.vendor + "_" + driver.renderer + "_" + driver.versionString + "/" + driver.profileMask.ToString() 
                                     id          = key.id
-                                    outputs     = key.layout.ColorAttachments |> Map.toList |> List.map (fun (id,(name, s)) -> string name, (id, s.format)) |> Map.ofList
+                                    outputs     = key.layout.ColorAttachments |> Map.toList |> List.map (fun (id, att) -> string att.Name, (id, att.Format)) |> Map.ofList
                                     layered     = key.layout.PerLayerUniforms
                                     layerCount  = key.layout.LayerCount
                                 }

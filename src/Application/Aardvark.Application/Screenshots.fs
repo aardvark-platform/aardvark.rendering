@@ -14,15 +14,13 @@ module Screenshot =
         let runtime = task.Runtime.Value
         let signature = task.FramebufferSignature.Value
 
-        let (_,color) = signature.ColorAttachments |> Map.find 0
+        let (_, color) = signature.ColorAttachments |> Map.toArray |> Array.head
 
-        let depth = 
-            match signature.DepthAttachment with
-                | Some depth -> depth.format
-                | None -> TextureFormat.DepthComponent32
+        let depth =
+            signature.DepthStencilAttachment |> Option.defaultValue TextureFormat.DepthComponent32
 
         //use lock = runtime.ContextLock
-        let color = runtime.CreateRenderbuffer(size, color.format, samples)
+        let color = runtime.CreateRenderbuffer(size, color.Format, samples)
         let depth = runtime.CreateRenderbuffer(size, depth, samples)
         use clear = runtime.CompileClear(signature, ~~C4f(0.0f,0.0f,0.0f,0.0f), ~~1.0)
 
@@ -31,7 +29,7 @@ module Screenshot =
                 signature,
                 Map.ofList [
                     DefaultSemantic.Colors, (color :> IFramebufferOutput)
-                    DefaultSemantic.Depth, (depth :> IFramebufferOutput)
+                    DefaultSemantic.DepthStencil, (depth :> IFramebufferOutput)
                 ]
             ) 
         let desc = OutputDescription.ofFramebuffer fbo

@@ -67,7 +67,6 @@ module TextureFormat =
 type PipelineLayout =
     class
         inherit Resource<VkPipelineLayout>
-
         val public DescriptorSetLayouts : array<DescriptorSetLayout>
         val public PipelineInfo : PipelineInfo
         val public LayerCount : int
@@ -80,20 +79,14 @@ type PipelineLayout =
             VkRaw.vkDestroyPipelineLayout(x.Device.Handle, x.Handle, NativePtr.zero)
             x.Handle <- VkPipelineLayout.Null
 
-        interface IFramebufferSignature with
-            member x.ColorAttachments = 
-                let a : AttachmentSignature = failwith ""
-                x.PipelineInfo.pOutputs 
-                    |> List.map (fun p -> p.paramLocation, (Symbol.Create p.paramSemantic, { samples = 1; format = TextureFormat.ofGLSLType p.paramType })) 
-                    |> Map.ofList
-            member x.Runtime = Unchecked.defaultof<_>
-            member x.StencilAttachment = None
-            member x.DepthAttachment = None
-            member x.LayerCount = x.LayerCount
-            member x.PerLayerUniforms = x.PerLayerUniforms
 
         new(device, handle, descriptorSetLayouts, info, layerCount : int, perLayer : Set<string>) = 
-            { inherit Resource<_>(device, handle); DescriptorSetLayouts = descriptorSetLayouts; PipelineInfo = info; LayerCount = layerCount; PerLayerUniforms = perLayer }
+            { inherit Resource<_>(device, handle);
+                DescriptorSetLayouts = descriptorSetLayouts;
+                PipelineInfo = info;
+                LayerCount = layerCount;
+                PerLayerUniforms = perLayer
+            }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

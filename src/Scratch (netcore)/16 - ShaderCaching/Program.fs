@@ -21,16 +21,16 @@ let main argv =
     // create a game window (better for measuring fps)
     use win = app.CreateGameWindow(samples = 8)
 
-    let sig1 =
-        runtime.CreateFramebufferSignature(1, [
+    use sig1 =
+        runtime.CreateFramebufferSignature([
             DefaultSemantic.Colors, TextureFormat.Rgba8
-            DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
+            DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
         ])
 
-    let sig2 =
-        runtime.CreateFramebufferSignature(1, [
+    use sig2 =
+        runtime.CreateFramebufferSignature([
             DefaultSemantic.Colors, TextureFormat.Rgba8
-            DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
+            DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
         ])
 
     let effect =
@@ -46,7 +46,5 @@ let main argv =
 
     runtime.DeleteSurface(s1)
     runtime.DeleteSurface(s2)
-    runtime.DeleteFramebufferSignature(sig1)
-    runtime.DeleteFramebufferSignature(sig2)
 
     0

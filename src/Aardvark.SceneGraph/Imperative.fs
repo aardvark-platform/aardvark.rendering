@@ -623,16 +623,19 @@ type Air private() =
     // ================================================================================================================
     // WriteBuffers
     // ================================================================================================================
-    static member WriteBuffers(buffers : list<Symbol>) =
+    static member WriteBuffers(buffers : list<WriteBuffer>) =
         let depthEnable =
-            buffers |> List.contains DefaultSemantic.Depth
+            buffers |> List.contains WriteBuffer.Depth
 
         let stencilEnable =
-            buffers |> List.contains DefaultSemantic.Stencil
+            buffers |> List.contains WriteBuffer.Stencil
 
         let colorEnable =
             buffers
-            |> List.map (fun s -> s, true)
+            |> List.choose (function
+                | WriteBuffer.Color s -> Some (s, true)
+                | _ -> None
+            )
             |> Map.ofList
 
         air {
@@ -641,9 +644,6 @@ type Air private() =
             do! Air.ColorWrites colorEnable
             do! Air.ColorWrite false
         }
-
-    static member WriteBuffers(buffers : list<string>) =
-        buffers |> List.map Symbol.Create |> Air.WriteBuffers
 
     static member WriteAllBuffers() =
         air {

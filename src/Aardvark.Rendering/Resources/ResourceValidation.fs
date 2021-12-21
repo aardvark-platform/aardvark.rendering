@@ -2,7 +2,6 @@
 
 open System
 open Aardvark.Base
-open FSharp.Data.Adaptive
 
 module ResourceValidation =
 
@@ -213,3 +212,76 @@ module ResourceValidation =
 
             if not <| hasStencil texture then
                 Utils.failf dimension "image does not have a stencil component"
+
+    module Framebuffers =
+
+        module private Utils =
+            let failf format =
+                Printf.ksprintf (fun str ->
+                     let message = sprintf "[Framebuffer] %s" str
+                     raise <| ArgumentException(message)
+                 ) format
+
+        let private validSampleCounts = Set.ofList [ 1; 2; 4; 8; 16; 32; 64 ]
+
+        /// Raises and ArgumentException if the given signature parameters are invalid.
+        let validateSignatureParams (colorAttachments : Map<int, AttachmentSignature>)
+                                    (depthStencilAttachment : Option<TextureFormat>)
+                                    (samples : int) (layers : int) =
+
+            for KeyValue(slot, att) in colorAttachments do
+                if slot < 0 then
+                    Utils.failf "color attachment slot must not be negative (is %d for %A)" slot att.Name
+
+            colorAttachments
+            |> Map.toList
+            |> List.groupBy (fun (_, att) -> att.Name)
+            |> List.iter (fun (name, atts) ->      
+                if atts.Length > 1 then
+                    let slots = atts |> List.map fst
+                    Utils.failf "color attachments must not have the same name (attachments in slots %A have name %A)" slots name
+            )
+
+            match depthStencilAttachment with
+            | Some fmt when not (fmt.HasDepth || fmt.HasStencil) ->
+                Utils.failf "depth-stencil attachment format must be a depth, stencil, or combined depth-stencil format (got %A)" fmt
+
+            | _ -> ()
+                                    
+            if not <| validSampleCounts.Contains samples then
+                Utils.failf "samples must be one of %A but got %d" validSampleCounts samples
+
+            if layers < 1 then
+                Utils.failf "layers must be greater than zero"
+
+        
+        /// Raises and ArgumentException if the given attachments do not fit the signature.
+        let validateAttachments (signature : IFramebufferSignature) (bindings : Map<Symbol, IFramebufferOutput>) =
+
+            for KeyValue(_, att) in signature.ColorAttachments do
+                match bindings |> Map.tryFind att.Name with
+                | Some b ->
+                    if b.Format <> att.Format then
+                        Utils.failf "expected color attachment %A to have format %A, but has format %A" att.Name att.Format b.Format
+
+                    if b.Samples <> signature.Samples then
+                        Utils.failf "all attachments must have a sample count of %d (%A has %d)" signature.Samples att.Name b.Samples 
+
+                | _ ->
+                    Utils.failf "missing color attachment %A with format %A" att.Name att.Format
+
+            match signature.DepthStencilAttachment with
+            | Some format ->
+                match bindings |> Map.tryFind DefaultSemantic.DepthStencil with
+                | Some b ->
+                    if b.Format <> format then
+                        Utils.failf "expected depth-stencil attachment to have format %A, but has format %A" format b.Format
+
+                    if b.Samples <> signature.Samples then
+                        Utils.failf "all attachments must have a sample count of %d (depth-stencil attachment has %d)" signature.Samples b.Samples 
+
+                | _ ->
+                    Utils.failf "missing depth-stencil attachment with format %A" format
+
+            | None ->
+                ()

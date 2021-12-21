@@ -148,19 +148,19 @@ module WeightedBlended =
         // We create a separate framebuffer so we have access to the depth buffer.
         // Ideally we'd want to use the regular framebuffer directly...
         let offscreenPass =
-            runtime.CreateFramebufferSignature(samples, [
+            runtime.CreateFramebufferSignature([
                 DefaultSemantic.Colors, TextureFormat.Rgba8
-                DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
-            ])
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
+            ], samples)
 
         // Framebuffer for the transparency pass, reusing the depth buffer from
         // the opaque geometry pass.
         let transparentPass =
-            runtime.CreateFramebufferSignature(samples, [
+            runtime.CreateFramebufferSignature([
                 DefaultSemantic.Accum, TextureFormat.Rgba16f
                 DefaultSemantic.Revealage, TextureFormat.R32f
-                DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
-            ])
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
+            ], samples)
 
         let depthBuffer =
             runtime.CreateRenderbufferAttachment(
@@ -170,14 +170,14 @@ module WeightedBlended =
         let offscreenFbo =
             runtime.CreateFramebuffer(offscreenPass, Map.ofList [
                 DefaultSemantic.Colors, createAttachment runtime TextureFormat.Rgba8 samples size
-                DefaultSemantic.Depth, depthBuffer
+                DefaultSemantic.DepthStencil, depthBuffer
             ])
 
         let transparentFbo =
             runtime.CreateFramebuffer(transparentPass, Map.ofList [
                 DefaultSemantic.Accum, createAttachment runtime TextureFormat.Rgba16f samples size
                 DefaultSemantic.Revealage, createAttachment runtime TextureFormat.R32f samples size
-                DefaultSemantic.Depth, depthBuffer
+                DefaultSemantic.DepthStencil, depthBuffer
             ])
 
         // Renders the opaque scene to the regular (offscreen) framebuffer.
@@ -263,8 +263,8 @@ module WeightedBlended =
             transparentTask.Dispose()
             compositeTask.Dispose()
             opaqueTask.Dispose()
-            runtime.DeleteFramebufferSignature offscreenPass
-            runtime.DeleteFramebufferSignature transparentPass
+            offscreenPass.Dispose()
+            transparentPass.Dispose()
 
         interface ITechnique with
             member x.Name = "Weighted Blended OIT"

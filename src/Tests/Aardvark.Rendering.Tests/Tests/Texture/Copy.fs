@@ -387,7 +387,7 @@ module TextureCopy =
             let size = data.Size
             let samples = 8
 
-            let signature = runtime.CreateFramebufferSignature(samples, [DefaultSemantic.Colors, TextureFormat.Rgba8])
+            let signature = runtime.CreateFramebufferSignature([DefaultSemantic.Colors, TextureFormat.Rgba8], samples)
             let src = runtime.CreateTexture2D(size, TextureFormat.Rgba8, levels = 1, samples = samples)
             let dst = runtime.CreateTexture2D(size, TextureFormat.Rgba8, levels = 1, samples = if resolve then 1 else samples)
             let framebuffer = runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, src.GetOutputView()])
@@ -414,10 +414,10 @@ module TextureCopy =
                 PixImage.compare V2i.Zero data result
 
             finally
-                runtime.DeleteFramebuffer(framebuffer)
+                framebuffer.Dispose()
                 runtime.DeleteTexture(src)
                 runtime.DeleteTexture(dst)
-                runtime.DeleteFramebufferSignature(signature)
+                signature.Dispose()
 
 
         let textureCubeMipmapped (runtime : IRuntime) =

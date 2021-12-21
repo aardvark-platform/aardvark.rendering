@@ -15,13 +15,14 @@ type Framebuffer =
         inherit Resource<VkFramebuffer>
         val public Size : V2i
         val public RenderPass : RenderPass
-        val public ImageViews : ImageView[]
         val public Attachments : Map<Symbol, ImageView>
 
         override x.Destroy() =
             if x.Device.Handle <> 0n && x.Handle.IsValid then
                 VkRaw.vkDestroyFramebuffer(x.Device.Handle, x.Handle, NativePtr.zero)
                 x.Handle <- VkFramebuffer.Null
+            
+            x.Attachments |> Map.iter (fun _ v -> v.Dispose())
 
         interface IFramebuffer with
             member x.Signature = x.RenderPass :> IFramebufferSignature
@@ -29,7 +30,12 @@ type Framebuffer =
             member x.Size = x.Size
             member x.Attachments = x.Attachments |> Map.map (fun _ v -> v :> IFramebufferOutput)
 
-        new(device : Device, handle : VkFramebuffer, pass : RenderPass, size : V2i, att : Map<Symbol, ImageView>, color) = { inherit Resource<_>(device, handle); RenderPass = pass; Size = size; Attachments = att; ImageViews = color }
+        new(device : Device, handle : VkFramebuffer, pass : RenderPass, size : V2i, att : Map<Symbol, ImageView>) =
+            { inherit Resource<_>(device, handle);
+                RenderPass = pass;
+                Size = size;
+                Attachments = att;
+            }
     end
 
 
@@ -40,36 +46,29 @@ module Framebuffer =
         if Map.isEmpty views then
             failf "cannot create empty framebuffer"
 
-
-        let attachmentSems =
-            let add sym att map =
-                if Option.isSome att then
-                    let idx = Map.count map
-                    map |> Map.add idx sym
-                else
-                    map
-
-            pass.ColorAttachments |> Map.map (fun _ (sem, _) -> sem)
-            |> add DefaultSemantic.Depth pass.DepthAttachment
-            |> add DefaultSemantic.Stencil pass.StencilAttachment
-
         let mutable minSize = V2i(Int32.MaxValue, Int32.MaxValue)
         let mutable minLayers = Int32.MaxValue
-        let attachments = 
-            attachmentSems
-                |> Map.toArray
-                |> Array.map (fun (idx, sem) ->
-                    match Map.tryFind sem views with
-                        | Some view -> 
-                            let s = view.Image.Size.XY / (1 <<< view.MipLevelRange.Max)
-                            minSize <- V2i(min minSize.X s.X, min minSize.Y s.Y)
-                            minLayers <- min minLayers (1 + view.ArrayRange.Max - view.ArrayRange.Min)
-                            view
-                        | _ -> failf "missing framebuffer attachment %A/%A" idx sem
-                )
+
+        let attachments =
+            pass.Attachments
+            |> Array.map (fun sem ->
+                match Map.tryFind sem views with
+                | Some view -> 
+                    let s = view.Image.Size.XY / (1 <<< view.MipLevelRange.Max)
+                    minSize <- V2i(min minSize.X s.X, min minSize.Y s.Y)
+                    minLayers <- min minLayers (1 + view.ArrayRange.Max - view.ArrayRange.Min)
+                    sem, view
+                | _ -> failf "missing framebuffer attachment %A" sem
+            )
+
+        let attachmentMap =
+            attachments |> Map.ofArray
+
+        let attachmentArray =
+            attachments |> Array.map snd
 
         native {
-            let! pAttachments = attachments |> Array.map (fun a -> a.Handle)
+            let! pAttachments = attachmentArray |> Array.map (fun a -> a.Handle)
             let! pInfo =
                 VkFramebufferCreateInfo(
                     VkFramebufferCreateFlags.None,
@@ -84,12 +83,8 @@ module Framebuffer =
             VkRaw.vkCreateFramebuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create framebuffer"
 
-            let real =
-                let sems = attachmentSems |> Map.toSeq |> Seq.map snd |> Set.ofSeq
-                views |> Map.filter (fun k _ -> Set.contains k sems)
-
             let handle = NativePtr.read pHandle
-            return new Framebuffer(device, handle, pass, minSize, real, attachments)
+            return new Framebuffer(device, handle, pass, minSize, attachmentMap)
         }
 
 [<AbstractClass; Sealed; Extension>]

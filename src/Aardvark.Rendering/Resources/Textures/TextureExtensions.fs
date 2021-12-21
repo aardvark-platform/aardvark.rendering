@@ -764,6 +764,27 @@ type IBackendTextureExtensions private() =
     /// In case the texture is an array or a cube and slice is negative, all items or faces are selected as texture layers.
     ///</summary>
     ///<param name="texture">The texture.</param>
+    ///<param name="aspect">The aspect of the texture.</param>
+    ///<param name="level">The level for the output view. Default is 0.</param>
+    ///<param name="slice">The slice for the output view or -1 for all slices. Default is -1.</param>
+    ///<param name="offset">The minimum coordinate to download. Default is V3i.Zero.</param>
+    ///<param name="size">The size of the texture region to download or V3i.Zero for the target size. Default is V3i.Zero.</param>
+    [<Extension>]
+    static member GetOutputView(texture : IBackendTexture, aspect : TextureAspect,
+                                [<Optional; DefaultParameterValue(0)>] level : int,
+                                [<Optional; DefaultParameterValue(-1)>] slice : int) =
+        if slice < 0 then
+            texture.[aspect, level] :> IFramebufferOutput
+        else
+            texture.[aspect, level, slice] :> IFramebufferOutput
+
+    ///<summary>
+    /// Creates an output view of the texture with the given level and slice.
+    /// In case the texture is an array or a cube and slice is negative, all items or faces are selected as texture layers.
+    /// If the texture format is a depth-stencil format, the depth aspect is selected.
+    ///</summary>
+    ///<param name="texture">The texture.</param>
+    ///<param name="aspect">The aspect of the texture.</param>
     ///<param name="level">The level for the output view. Default is 0.</param>
     ///<param name="slice">The slice for the output view or -1 for all slices. Default is -1.</param>
     ///<param name="offset">The minimum coordinate to download. Default is V3i.Zero.</param>
@@ -771,9 +792,10 @@ type IBackendTextureExtensions private() =
     [<Extension>]
     static member GetOutputView(texture : IBackendTexture,
                                 [<Optional; DefaultParameterValue(0)>] level : int,
-                                [<Optional; DefaultParameterValue(-1)>] slice : int) =
-        let aspect = TextureAspect.ofTextureFormat texture.Format
-        if slice < 0 then
-            texture.[aspect, level] :> IFramebufferOutput
-        else
-            texture.[aspect, level, slice] :> IFramebufferOutput
+                                [<Optional; DefaultParameterValue(-1)>] slice : int) =      
+        let aspect =
+            let aspects = texture.Format.Aspects
+            if Set.count aspects = 1 then Set.minElement aspects
+            else TextureAspect.Depth
+
+        texture.GetOutputView(aspect, level, slice)

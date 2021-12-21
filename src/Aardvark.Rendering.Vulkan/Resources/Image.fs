@@ -3103,6 +3103,11 @@ module private ImageRanges =
                 TextureAspect.Stencil, ImageAspect.Stencil
             ]
             
+        let ofTextureAspects (aspects : Set<TextureAspect>) =
+            if aspects.Count = 1 then ofTextureAspect aspects.MinimumElement
+            elif aspects = Set.ofList [ Depth; Stencil] then ImageAspect.DepthStencil
+            else ImageAspect.None
+
     module ImageSubresource =
         let ofTextureSubResource (src : ITextureSubResource) =
             let srcAspect = ImageAspect.ofTextureAspect src.Aspect

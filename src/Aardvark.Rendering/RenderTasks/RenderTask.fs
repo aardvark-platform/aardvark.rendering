@@ -93,18 +93,7 @@ module RenderTask =
     let renderSemanticsWithClear (output : Set<Symbol>) (size : aval<V2i>) (clearValues : ClearValues) (task : IRenderTask) =
         let runtime = task.Runtime.Value
         let signature = task.FramebufferSignature.Value
-
-        // Gather all attachments to determine which ones are not requested as output
-        let attachments =
-            let color =
-                signature.ColorAttachments |> Map.toList |> List.map (snd >> fst)
-
-            let depth, stencil =
-                signature.DepthAttachment |> (function None -> [] | _ -> [DefaultSemantic.Depth]),
-                signature.StencilAttachment |> (function None -> [] | _ -> [DefaultSemantic.Stencil])
-
-            [color; depth; stencil]
-            |> List.concat |> Set.ofList
+        let attachments = signature.GetSemantics()
 
         let fbo = runtime.CreateFramebuffer(signature, size, Set.difference attachments output)
         let res = task.RenderTo(fbo, clearValues)
@@ -125,44 +114,23 @@ module RenderTask =
         task |> renderToColorWithClear size defaultClearValues
 
 
-    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Depth as texture.
+    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.DepthStencil as texture.
     /// The resulting framebuffer is cleared according to the given clear values before the render task is executed.
     let renderToDepthWithClear (size : aval<V2i>) (clearValues : ClearValues) (task : IRenderTask) =
-        task |> renderSemanticsWithClear (Set.singleton DefaultSemantic.Depth) size clearValues |> Map.find DefaultSemantic.Depth
+        task |> renderSemanticsWithClear (Set.singleton DefaultSemantic.DepthStencil) size clearValues |> Map.find DefaultSemantic.DepthStencil
 
-    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Depth as texture.
+    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.DepthStencil as texture.
     let renderToDepth (size : aval<V2i>) (task : IRenderTask) =
         task |> renderToDepthWithClear size defaultClearValues
 
 
-    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Stencil as texture.
-    /// The resulting framebuffer is cleared according to the given clear values before the render task is executed.
-    let renderToStencilWithClear (size : aval<V2i>) (clearValues : ClearValues) (task : IRenderTask) =
-        task |> renderSemanticsWithClear (Set.singleton DefaultSemantic.Stencil) size clearValues |> Map.find DefaultSemantic.Stencil
-
-    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Stencil as texture.
-    let renderToStencil (size : aval<V2i>) (task : IRenderTask) =
-        task |> renderToStencilWithClear size defaultClearValues
-
-
-    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Depth and DefaultSemantic.Stencil as textures.
-    /// The resulting framebuffer is cleared according to the given clear values before the render task is executed.
-    let renderToDepthAndStencilWithClear (size : aval<V2i>) (clearValues : ClearValues) (task : IRenderTask) =
-        let map = task |> renderSemanticsWithClear (Set.singleton DefaultSemantic.Depth) size clearValues
-        (Map.find DefaultSemantic.Depth map, Map.find DefaultSemantic.Stencil map)
-
-    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Depth and DefaultSemantic.Stencil as textures.
-    let renderToDepthAndStencil (size : aval<V2i>) (task : IRenderTask) =
-        task |> renderToDepthAndStencilWithClear size defaultClearValues
-
-
-    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Colors and DefaultSemantic.Depth as textures.
+    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Colors and DefaultSemantic.DepthStencil as textures.
     /// The resulting framebuffer is cleared according to the given clear values before the render task is executed.
     let renderToColorAndDepthWithClear (size : aval<V2i>) (clearValues : ClearValues) (task : IRenderTask) =
-        let map = task |> renderSemanticsWithClear (Set.ofList [DefaultSemantic.Depth; DefaultSemantic.Colors]) size clearValues
-        (Map.find DefaultSemantic.Colors map, Map.find DefaultSemantic.Depth map)
+        let map = task |> renderSemanticsWithClear (Set.ofList [DefaultSemantic.DepthStencil; DefaultSemantic.Colors]) size clearValues
+        (Map.find DefaultSemantic.Colors map, Map.find DefaultSemantic.DepthStencil map)
 
-    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Colors and DefaultSemantic.Depth as textures.
+    /// Runs a render task for the given adaptive size and returns the output for DefaultSemantic.Colors and DefaultSemantic.DepthStencil as textures.
     let renderToColorAndDepth (size : aval<V2i>) (task : IRenderTask) =
         task |> renderToColorAndDepthWithClear size defaultClearValues
 
@@ -197,18 +165,7 @@ module RenderTask =
         let task = tasks.Data.[0]
         let runtime = task.Runtime.Value
         let signature = task.FramebufferSignature.Value
-
-        // Gather all attachments to determine which ones are not requested as output
-        let attachments =
-            let color =
-                signature.ColorAttachments |> Map.toList |> List.map (snd >> fst)
-
-            let depth, stencil =
-                signature.DepthAttachment |> (function None -> [] | _ -> [DefaultSemantic.Depth]),
-                signature.StencilAttachment |> (function None -> [] | _ -> [DefaultSemantic.Stencil])
-
-            [color; depth; stencil]
-            |> List.concat |> Set.ofList
+        let attachments = signature.GetSemantics()
 
         let fbo = runtime.CreateFramebufferCube(signature, size, tasks.Levels, Set.difference attachments output)
         let res = tasks.RenderTo(fbo, clearValues)
@@ -293,27 +250,27 @@ module RenderTask =
 
 
     /// Runs mipmap cube render tasks for the given adaptive size.
-    /// Returns the output for DefaultSemantic.Depth as texture.
+    /// Returns the output for DefaultSemantic.DepthStencil as texture.
     /// The resulting framebuffers are cleared according to the given clear values before the render tasks are executed.
     let renderToDepthCubeMipWithClear (size : aval<int>) (clearValues : CubeMap<ClearValues>) (tasks : CubeMap<IRenderTask>) =
-        tasks |> renderSemanticsCubeMipWithClear (Set.singleton DefaultSemantic.Depth) size clearValues |> Map.find DefaultSemantic.Depth
+        tasks |> renderSemanticsCubeMipWithClear (Set.singleton DefaultSemantic.DepthStencil) size clearValues |> Map.find DefaultSemantic.DepthStencil
 
     /// Runs mipmap cube render tasks for the given adaptive size.
-    /// Returns the output for DefaultSemantic.Depth as texture.
+    /// Returns the output for DefaultSemantic.DepthStencil as texture.
     /// The resulting framebuffers are cleared according to the given clear values before the render tasks are executed.
     let renderToDepthCubeMipWithUniformClear (size : aval<int>) (clearValues : ClearValues) (tasks : CubeMap<IRenderTask>) =
         let clear = CubeMap.single tasks.Levels clearValues
         tasks |> renderToDepthCubeMipWithClear size clear
 
     /// Runs mipmap cube render tasks for the given adaptive size.
-    /// Returns the output for DefaultSemantic.Depth as texture.
+    /// Returns the output for DefaultSemantic.DepthStencil as texture.
     let renderToDepthCubeMip (size : aval<int>) (tasks : CubeMap<IRenderTask>) =
         let clear = CubeMap.single tasks.Levels defaultClearValues
         tasks |> renderToDepthCubeMipWithClear size clear
 
 
     /// Runs cube render tasks for the given adaptive size.
-    /// Returns the output for DefaultSemantic.Depth as texture.
+    /// Returns the output for DefaultSemantic.DepthStencil as texture.
     /// The resulting framebuffers are cleared according to the given clear values before the render tasks are executed.
     let renderToDepthCubeWithClear (size : aval<int>) (clearValues : CubeSide -> ClearValues) (tasks : CubeSide -> IRenderTask) =
         let clear = CubeMap.init 1 (fun face _ -> clearValues face)
@@ -321,14 +278,14 @@ module RenderTask =
         tasks |> renderToDepthCubeMipWithClear size clear
 
     /// Runs cube render tasks for the given adaptive size.
-    /// Returns the output for DefaultSemantic.Depth as texture.
+    /// Returns the output for DefaultSemantic.DepthStencil as texture.
     /// The resulting framebuffers are cleared according to the given clear values before the render tasks are executed.
     let renderToDepthCubeWithUniformClear (size : aval<int>) (clearValues : ClearValues) (tasks : CubeSide -> IRenderTask) =
         let clear = fun _ -> clearValues
         tasks |> renderToDepthCubeWithClear size clear
 
     /// Runs cube render tasks for the given adaptive size.
-    /// Returns the output for DefaultSemantic.Depth as texture.
+    /// Returns the output for DefaultSemantic.DepthStencil as texture.
     let renderToDepthCube (size : aval<int>) (tasks : CubeSide -> IRenderTask) =
         let clear = fun _ -> defaultClearValues
         tasks |> renderToDepthCubeWithClear size clear

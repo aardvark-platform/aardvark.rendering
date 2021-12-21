@@ -899,10 +899,10 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
     let mouse = Aardvark.Application.EventMouse(true)
 
     let signature =
-        app.Runtime.CreateFramebufferSignature(samples, [
+        app.Runtime.CreateFramebufferSignature([
             DefaultSemantic.Colors, TextureFormat.Rgba8
-            DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
-        ])
+            DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
+        ], samples)
 
     let currentSize =
         let mutable s = V2i.Zero

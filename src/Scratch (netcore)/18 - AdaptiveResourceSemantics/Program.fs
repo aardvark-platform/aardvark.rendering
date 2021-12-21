@@ -127,10 +127,10 @@ let main argv =
 
     let runtime = win.Runtime
 
-    let signature =
+    use signature =
         runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = 1 }
-            DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
+            DefaultSemantic.Colors, TextureFormat.Rgba8
+            DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
         ]
 
     use task =
@@ -198,7 +198,5 @@ let main argv =
 
     win.Scene <- sg
     win.Run(preventDisposal = true)
-
-    runtime.DeleteFramebufferSignature(signature)
 
     0

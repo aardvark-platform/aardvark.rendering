@@ -68,10 +68,10 @@ let main argv =
     // Note that there is also a WPF binding for OpenGL. For more complex GUIs however,
     // we recommend using aardvark-media anyways..
     //let win = app.CreateGameWindow(1)
-    let signature =
+    use signature =
         app.Runtime.CreateFramebufferSignature [
             DefaultSemantic.Colors, TextureFormat.Rgba8
-            DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
+            DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
         ]
         
     let sw = System.Diagnostics.Stopwatch.StartNew()

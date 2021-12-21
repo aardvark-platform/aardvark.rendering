@@ -58,7 +58,7 @@ module RandomCubesPerformanceTest =
         let signature =
             app.Runtime.CreateFramebufferSignature [
                 DefaultSemantic.Colors, TextureFormat.Rgba8
-                DefaultSemantic.Depth, TextureFormat.Depth24Stencil8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
             ]
 
         let fbo = app.Runtime.CreateFramebuffer(signature, AVal.constant (V2i(1024, 1024)))
@@ -214,7 +214,7 @@ module RenderTaskPerformance =
                     app.Runtime.CreateFramebuffer(
                         win.FramebufferSignature, [
                                 DefaultSemantic.Colors, color
-                                DefaultSemantic.Depth, depth
+                                DefaultSemantic.DepthStencil, depth
                             ]
                         )
              |]
@@ -266,15 +266,15 @@ module StartupPerformance =
 
         let fboSig = 
             app.Runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = 1 }
-                DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
             ]
 
 
         let fbo = 
             app.Runtime.CreateFramebuffer(fboSig, [
                                             DefaultSemantic.Colors, colorBuffer.GetOutputView()
-                                            DefaultSemantic.Depth, depthBuffer :> IFramebufferOutput
+                                            DefaultSemantic.DepthStencil, depthBuffer :> IFramebufferOutput
                                         ])
 
         let effect = 
@@ -391,15 +391,15 @@ module IsActiveFlagPerformance =
 
         let fboSig = 
             app.Runtime.CreateFramebufferSignature [
-                DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = 1 }
-                DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
             ]
 
 
         let fbo = 
             app.Runtime.CreateFramebuffer(fboSig, [
                                             DefaultSemantic.Colors, colorBuffer.GetOutputView()
-                                            DefaultSemantic.Depth, depthBuffer :> IFramebufferOutput
+                                            DefaultSemantic.DepthStencil, depthBuffer :> IFramebufferOutput
                                         ])
 
         let bla (v : Effects.Vertex)= 

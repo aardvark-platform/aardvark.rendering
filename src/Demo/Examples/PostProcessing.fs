@@ -147,7 +147,10 @@ module PostProcessing =
     // something changes in pointScene and updated whenever subsequent passes need it.
 
     let signature = //win.FramebufferSignature
-        win.Runtime.CreateFramebufferSignature(8, [DefaultSemantic.Colors, TextureFormat.Rgba8; DefaultSemantic.Depth, TextureFormat.Depth24Stencil8])
+        win.Runtime.CreateFramebufferSignature([
+            DefaultSemantic.Colors, TextureFormat.Rgba8
+            DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
+        ], 8)
 
     let mainTask =
         pointSg

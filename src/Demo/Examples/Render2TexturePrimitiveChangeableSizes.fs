@@ -49,13 +49,13 @@ module Render2TexturePrimiviteChangeableSize =
     // the signature describes the formats and of all render targets which are subsequently used for rendering)
     let signature =
         runtime.CreateFramebufferSignature [
-            DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = 1 }
-            DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
+            DefaultSemantic.Colors, TextureFormat.Rgba8
+            DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
         ]
 
     // Create a framebuffer matching signature and capturing the render to texture targets
     let fbo = 
-        runtime.CreateFramebuffer(signature, Some color, Some depth, None)
+        runtime.CreateFramebuffer(signature, Some color, Some depth)
 
     let colorOutput =
         fbo |> RenderTask.getResult DefaultSemantic.Colors

@@ -75,9 +75,10 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
     let framebufferSignature = 
         runtime.CreateFramebufferSignature(
             SymDict.ofList [
-                DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = samples }
-                DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = samples }
+                DefaultSemantic.Colors, TextureFormat.Rgba8
+                DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
             ],
+            samples,
             2,
             Set.ofList [
                 "ViewTrafo"; "ProjTrafo"; 
@@ -124,7 +125,7 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
                     do! StereoShader.hiddenAreaFragment
                 }
                 |> Sg.stencilMode' writeStencil
-                |> Sg.writeBuffers' (Set.ofList [DefaultSemantic.Stencil])
+                |> Sg.writeBuffers' (Set.ofList [WriteBuffer.Stencil])
 
         hiddenTask <- runtime.CompileRender(framebufferSignature, sg.RenderObjects(Ag.Scope.Root))
         
@@ -177,7 +178,7 @@ type OpenGlVRApplicationLayered(samples : int, debug : bool, adjustSize : V2i ->
                     framebufferSignature,
                     [
                         DefaultSemantic.Colors, nTex.[TextureAspect.Color, 0, *] :> IFramebufferOutput
-                        DefaultSemantic.Depth, nDepth.[TextureAspect.Depth, 0, *] :> IFramebufferOutput
+                        DefaultSemantic.DepthStencil, nDepth.[TextureAspect.Depth, 0, *] :> IFramebufferOutput
                     ]
                 )
             

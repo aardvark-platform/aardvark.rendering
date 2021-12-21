@@ -191,23 +191,12 @@ module SwapchainDescription =
         let blitTrafo           = ImageTrafo.compose mode.ImageTrafo (ImageTrafo.inverse presentTrafo)
         let samples             = mode.Samples
 
-        let renderPass = 
-            match depthFormat with
-                | Some depthFormat ->
-                    device.CreateRenderPass(
-                        Map.ofList [
-                            DefaultSemantic.Colors, { format = VkFormat.toTextureFormat colorFormat; samples = samples }
-                            DefaultSemantic.Depth, { format = VkFormat.toTextureFormat depthFormat; samples = samples }
-                        ],
-                        1, Set.empty
-                    )
-                | None ->
-                    device.CreateRenderPass(
-                        Map.ofList [
-                            DefaultSemantic.Colors, { format = VkFormat.toTextureFormat colorFormat; samples = samples }
-                        ],
-                        1, Set.empty
-                    )
+        let renderPass =
+            device.CreateRenderPass(
+                [ { Name = DefaultSemantic.Colors; Format = VkFormat.toTextureFormat colorFormat} ],
+                depthFormat |> Option.map VkFormat.toTextureFormat,
+                samples, 1, Set.empty
+            )
 
         {
             renderPass = renderPass
