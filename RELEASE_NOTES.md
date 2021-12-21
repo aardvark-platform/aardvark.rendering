@@ -1,3 +1,6 @@
+### 5.1.22
+- [ManagedPool] no removal of empty PoolNodes from set of RenderObjects: dependency on IndirectBuffer input was causing performance issues when marking/re-evaluating complete set of RenderObjects
+
 ### 5.1.21
 - fixed ComputeShader problem in Vulkan
 

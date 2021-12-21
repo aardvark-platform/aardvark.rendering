@@ -469,8 +469,8 @@ module ColorBlendState =
     let private toVkColorComponentFlags (mask : ColorMask) =
         [
             if (mask &&& ColorMask.Red) <> ColorMask.None then VkColorComponentFlags.RBit
-            if (mask &&& ColorMask.Blue) <> ColorMask.None then VkColorComponentFlags.GBit
-            if (mask &&& ColorMask.Green) <> ColorMask.None then VkColorComponentFlags.BBit
+            if (mask &&& ColorMask.Green) <> ColorMask.None then VkColorComponentFlags.GBit
+            if (mask &&& ColorMask.Blue) <> ColorMask.None then VkColorComponentFlags.BBit
             if (mask &&& ColorMask.Alpha) <> ColorMask.None then VkColorComponentFlags.ABit
         ]
         |> List.fold (|||) VkColorComponentFlags.None
