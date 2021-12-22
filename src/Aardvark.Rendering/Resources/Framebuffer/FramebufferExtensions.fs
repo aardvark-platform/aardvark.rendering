@@ -131,20 +131,18 @@ type IFramebufferRuntimeExtensions private() =
 [<AutoOpen>]
 module IFramebufferSignatureExtensions =
 
-    let private colorsAssignableFrom (mine : Map<int, AttachmentSignature>) (other : Map<int, AttachmentSignature>) =
+    let private colorsAssignableTo (mine : Map<int, AttachmentSignature>) (other : Map<int, AttachmentSignature>) =
         mine |> Map.forall (fun slot mine ->
             match Map.tryFind slot other with
-            | Some other when mine.Name = other.Name ->
-                mine.Format = other.Format
-            | None -> true
+            | Some other -> mine = other
             | _ -> false
         )
 
-    let private depthAssignableFrom (mine : Option<TextureFormat>) (other : Option<TextureFormat>) =
+    let private depthAssignableTo (mine : Option<TextureFormat>) (other : Option<TextureFormat>) =
         match mine, other with
         | Some mine, Some other -> mine = other
-        | None, Some _ -> false
-        | _ -> true
+        | Some _, None -> false
+        | None, _ -> true
 
     type IFramebufferSignature with
 
@@ -167,7 +165,6 @@ module IFramebufferSignatureExtensions =
             else
                 this.ColorAttachments |> Map.exists (fun _ att -> att.Name = semantic)
 
-
         /// Gets the semantics of the signature attachments as a set.
         /// If a depth-stencil attachment is present, the returned set contains DefaultSemantic.DepthStencil.
         [<Extension>]
@@ -183,16 +180,29 @@ module IFramebufferSignatureExtensions =
             else
                 colors
 
-        /// Checks if the signature is assignable from the other signature.
+        /// Checks if the signature is compatible with the given signature (i.e. they are equivalent).
         [<Extension>]
-        static member IsAssignableFrom (this : IFramebufferSignature, other : IFramebufferSignature) =
+        static member IsCompatibleWith (this : IFramebufferSignature, other : IFramebufferSignature) =
             if LanguagePrimitives.PhysicalEquality this other then
                 true
             else
                 this.LayerCount = other.LayerCount &&
                 this.PerLayerUniforms = other.PerLayerUniforms &&
-                colorsAssignableFrom this.ColorAttachments other.ColorAttachments &&
-                depthAssignableFrom this.DepthStencilAttachment other.DepthStencilAttachment
+                this.ColorAttachments = other.ColorAttachments &&
+                this.DepthStencilAttachment = other.DepthStencilAttachment
+
+        /// Check if the output with the signature is assignable to the given framebuffer.
+        /// Each color and depth output must have a counter part in the framebuffer, layer count and uniforms,
+        /// and sample count must match.
+        [<Extension>]
+        static member IsAssignableTo (this : IFramebufferSignature, fbo : IFramebuffer) =
+            if LanguagePrimitives.PhysicalEquality this fbo.Signature then
+                true
+            else
+                this.LayerCount = fbo.Signature.LayerCount &&
+                this.PerLayerUniforms = fbo.Signature.PerLayerUniforms &&
+                colorsAssignableTo this.ColorAttachments fbo.Signature.ColorAttachments &&
+                depthAssignableTo this.DepthStencilAttachment fbo.Signature.DepthStencilAttachment
 
         /// Creates a framebuffer of the given signature and with the given attachments.
         [<Extension>]

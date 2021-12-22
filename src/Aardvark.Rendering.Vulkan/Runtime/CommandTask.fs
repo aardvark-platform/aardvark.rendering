@@ -2178,6 +2178,8 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
             | :? Framebuffer as fbo -> fbo
             | fbo -> failwithf "unsupported framebuffer: %A" fbo
 
+        renderPass |> RenderPass.validateCompability fbo
+
         let ranges =
             let range =
                 {

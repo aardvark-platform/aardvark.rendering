@@ -9,42 +9,40 @@ type AListRenderTask(tasks : alist<IRenderTask>) as this =
     let content = SortedDictionary<Index, IRenderTask>()
 
     let reader = tasks.GetReader()
-    let mutable signature : Option<IFramebufferSignature> = None
-    let mutable runtime = None
     let tasks = ReferenceCountingSet()
+
+    let mutable signature : Option<IFramebufferSignature> = None
+
+    let updateSignature() =
+        signature <-
+            Seq.toArray tasks
+            |> Array.choose (fun (t : IRenderTask) -> t.FramebufferSignature)
+            |> FramebufferSignature.combineMany
 
     let set (i : Index) (t : IRenderTask) =
         match content.TryGetValue i with
-            | (true, old) ->
-                if tasks.Remove old then
-                    old.Dispose()
-            | _ ->
-                ()
+        | (true, old) ->
+            if tasks.Remove old then
+                old.Dispose()
+        | _ ->
+            ()
 
         content.[i] <- t
         if tasks.Add t then
-            match t.Runtime with
-                | Some r -> runtime <- Some r
-                | None -> ()
-
-            let innerSig = t.FramebufferSignature
-
-            match signature, innerSig with
-                | Some s, Some i ->
-                    if not (s.IsAssignableFrom i) then
-                        failwithf "cannot compose RenderTasks with different FramebufferSignatures: %A vs. %A" signature innerSig
-                | _-> signature <- innerSig
+            updateSignature()
 
     let remove (i : Index) =
         match content.TryGetValue i with
-            | (true, old) ->
+        | (true, old) ->
 
-                if tasks.Remove old then
-                    old.Dispose()
+            if tasks.Remove old then
+                old.Dispose()
 
-                content.Remove i |> ignore
-            | _ ->
-                ()
+            content.Remove i |> ignore
+            updateSignature()
+
+        | _ ->
+            ()
 
     let processDeltas(token : AdaptiveToken) =
         // TODO: EvaluateAlways should ensure that self is OutOfDate since
@@ -100,5 +98,7 @@ type AListRenderTask(tasks : alist<IRenderTask>) as this =
         tasks.Clear()
 
     override x.Runtime =
-        lock this (fun () -> processDeltas(AdaptiveToken.Top))
-        runtime
+        lock this (fun () ->
+            processDeltas(AdaptiveToken.Top)
+            tasks |> Seq.tryPick (fun t -> t.Runtime)
+        )

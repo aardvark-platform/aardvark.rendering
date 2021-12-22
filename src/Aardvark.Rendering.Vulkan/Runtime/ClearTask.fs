@@ -20,6 +20,8 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
     member x.Run(caller : AdaptiveToken, t : RenderToken, outputs : OutputDescription, queries : IQuery) =
         x.EvaluateAlways caller (fun caller ->
             let fbo = unbox<Framebuffer> outputs.framebuffer
+            renderPass |> RenderPass.validateCompability fbo
+
             use token = device.Token
 
             let values = values.GetValue caller

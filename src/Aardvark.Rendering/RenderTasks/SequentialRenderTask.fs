@@ -2,20 +2,30 @@
 
 open FSharp.Data.Adaptive
 
+module private FramebufferSignature =
+
+    /// Combines many signatures into a single one.
+    /// If the input is empty, returns None.
+    /// If the signatures are incompatible (i.e. not all equivalent), returns None.
+    /// Returns the first signature otherwise.
+    let combineMany (signatures : IFramebufferSignature[]) =
+        if signatures.Length = 0 then None
+        else
+            let s0 = signatures.[0]
+
+            if signatures.Length = 1 || signatures |> Array.forall (fun s -> s.IsCompatibleWith s0) then
+                Some s0
+            else
+                None
+
 type SequentialRenderTask(tasks : IRenderTask[]) =
     inherit AbstractRenderTask()
 
     let signature =
         lazy (
-            let signatures = tasks |> Array.choose (fun t -> t.FramebufferSignature)
-
-            if signatures.Length = 0 then None
-            elif signatures.Length = 1 then Some signatures.[0]
-            else
-                let s0 = signatures.[0]
-                let all = signatures |> Array.forall (fun s -> s0.IsAssignableFrom s0)
-                if all then Some s0
-                else failwithf "cannot compose RenderTasks with different FramebufferSignatures: %A" signatures
+            tasks
+            |> Array.choose (fun t -> t.FramebufferSignature)
+            |> FramebufferSignature.combineMany
         )
 
     let runtime = tasks |> Array.tryPick (fun t -> t.Runtime)

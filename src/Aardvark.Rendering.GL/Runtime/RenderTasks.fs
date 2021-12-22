@@ -51,11 +51,11 @@ module RenderTasks =
                 GL.Check "could reset viewport"
 
     [<AbstractClass>]
-    type AbstractOpenGlRenderTask(manager : ResourceManager, fboSignature : IFramebufferSignature, config : aval<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) =
+    type AbstractOpenGlRenderTask(manager : ResourceManager, signature : IFramebufferSignature, config : aval<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) =
         inherit AbstractRenderTask()
         let ctx = manager.Context
         let renderTaskLock = RenderTaskLock()
-        let manager = ResourceManager(manager, Some (fboSignature, renderTaskLock), shareTextures, shareBuffers)
+        let manager = ResourceManager(manager, Some (signature, renderTaskLock), shareTextures, shareBuffers)
         let structureChanged = AVal.custom ignore
         let runtimeStats = NativePtr.alloc 1
         let resources = new Aardvark.Rendering.ResourceInputSet()
@@ -72,7 +72,7 @@ module RenderTasks =
                 runtimeStats = runtimeStats
                 currentContext = currentContext
                 contextHandle = contextHandle
-                drawBufferCount = fboSignature.ColorAttachmentSlots
+                drawBufferCount = signature.ColorAttachmentSlots
                 usedTextureSlots = RefRef CountingHashSet.empty
                 usedUniformBufferSlots = RefRef CountingHashSet.empty
                 structuralChange = structureChanged
@@ -134,13 +134,13 @@ module RenderTasks =
                 isDisposed <- true
                 currentContext.Outputs.Clear()
                 x.Release2()
-        override x.FramebufferSignature = Some fboSignature
+        override x.FramebufferSignature = Some signature
         override x.Runtime = Some ctx.Runtime
         override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription, queries : IQuery) =
 
             let fbo = desc.framebuffer // TODO: fix outputdesc
-            if not <| fboSignature.IsAssignableFrom fbo.Signature then
-                failwithf "incompatible FramebufferSignature\nexpected: %A but got: %A" fboSignature fbo.Signature
+            if not <| signature.IsAssignableTo fbo then
+                failwithf "incompatible FramebufferSignature\nrender task has signature:\n%A\nframebuffer signature is:\n%A" signature fbo.Signature
 
             use __ = ctx.ResourceLock
             GL.Check "[RenderTask.Run] Entry"
@@ -158,7 +158,7 @@ module RenderTasks =
             x.ProcessDeltas(token, t)
             x.UpdateResources(token, t)
 
-            Framebuffer.draw fboSignature fbo desc.viewport (fun _ ->
+            Framebuffer.draw signature fbo desc.viewport (fun _ ->
                 let debugState = x.pushDebugOutput(token)
 
                 renderTaskLock.Run (fun () ->
@@ -547,6 +547,10 @@ module RenderTasks =
         override x.PerformUpdate(token, t) = ()
         override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription, queries : IQuery) =
             let fbo = desc.framebuffer |> unbox<Framebuffer>
+
+            if not <| signature.IsAssignableTo fbo then
+                failwithf "incompatible FramebufferSignature\nrender task has signature:\n%A\nframebuffer signature is:\n%A" signature fbo.Signature
+
             Operators.using ctx.ResourceLock (fun _ ->
 
                 queries.Begin()
