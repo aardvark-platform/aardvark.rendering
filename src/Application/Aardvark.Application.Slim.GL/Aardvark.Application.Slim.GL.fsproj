@@ -25,14 +25,12 @@
   </Target>
   <ItemGroup>
     <None Include="paket.references" />
-    <EmbeddedResource Include="resources\aardvark.png" />
-    <Compile Include="GLFW.fs" />
-    <Compile Include="GameWindow.fs" />
     <Compile Include="Application.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />
     <ProjectReference Include="..\..\Aardvark.Rendering.GL\Aardvark.Rendering.GL.fsproj" />
+    <ProjectReference Include="..\Aardvark.Application.Slim\Aardvark.Application.Slim.fsproj" />
     <ProjectReference Include="..\Aardvark.Application\Aardvark.Application.fsproj" />
   </ItemGroup>
   <Import Project="..\..\..\.paket\Paket.Restore.targets" />

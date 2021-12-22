@@ -1,20 +1,23 @@
-﻿namespace Glfw
+﻿namespace Aardvark.Glfw
 
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 open Aardvark.Rendering
 open System.Threading
+open System.Threading.Tasks
 open Silk.NET.GLFW
-open OpenTK.Graphics.OpenGL4
 open System.Runtime.InteropServices
 open FSharp.Control
 open FSharp.Data.Adaptive
 
-type Cursor = Aardvark.Application.Cursor
+type private IGamepad = Aardvark.Application.IGamepad
+type private GamepadButton = Aardvark.Application.GamepadButton
+type private Cursor = Aardvark.Application.Cursor
 
 #nowarn "9"
+#nowarn "51"
 
-module private Translations =
+module Translations =
 
     type K = Silk.NET.GLFW.Keys
     type A = Aardvark.Application.Keys
@@ -237,12 +240,12 @@ module MissingGlfwFunctions =
 
     let private getWindowScale (glfw : Glfw) =
         scaleDict.GetOrAdd(glfw, fun glfw ->
-            let m = glfw.Library.LoadFunction "glfwGetWindowContentScale"
+            let m = glfw.Context.GetProcAddress "glfwGetWindowContentScale"
             Marshal.GetDelegateForFunctionPointer(m, typeof<GetWindowContentScaleDel>) |> unbox<GetWindowContentScaleDel>
         )
     let private getKeyName (glfw : Glfw) =
         keyNameDict.GetOrAdd(glfw, fun glfw ->
-            let m = glfw.Library.LoadFunction "glfwGetKeyName"
+            let m = glfw.Context.GetProcAddress "glfwGetKeyName"
             Marshal.GetDelegateForFunctionPointer(m, typeof<GetKeyNameDel>) |> unbox<GetKeyNameDel>
         )
 
@@ -265,111 +268,12 @@ module MissingGlfwFunctions =
 
                 System.Text.Encoding.UTF8.GetString(l.ToArray())
 
-module internal OpenTKContext = 
-    open System.Runtime.InteropServices
-    open System.Reflection
-    open OpenTK
-    open OpenTK.Graphics
-    open OpenTK.Platform
-    open OpenTK.Graphics.OpenGL4
-
-    type MyWindowInfo(win : nativeptr<WindowHandle>) =
-        let mutable win = win
-        interface IWindowInfo with
-            member x.Dispose(): unit = 
-                win <- NativePtr.zero
-
-            member x.Handle: nativeint = 
-                NativePtr.toNativeInt win
-    
-    [<AllowNullLiteral>]
-    type MyGraphicsContext(glfw : Glfw, win : nativeptr<WindowHandle>) as this =
-        //[<System.ThreadStaticAttribute; DefaultValue>]
-        //static val mutable private CurrentContext : OpenTK.ContextHandle
-
-        let mutable win = win
-
-        static let addContext = typeof<GraphicsContext>.GetMethod("AddContext", BindingFlags.NonPublic ||| BindingFlags.Static)
-        static let remContext = typeof<GraphicsContext>.GetMethod("RemoveContext", BindingFlags.NonPublic ||| BindingFlags.Static)
-
-        let handle = ContextHandle(NativePtr.toNativeInt win)
-        static let mutable inited = false
-        do 
-            if not inited then
-                inited <- true
-                let get = GraphicsContext.GetCurrentContextDelegate(fun () -> ContextHandle(NativePtr.toNativeInt (glfw.GetCurrentContext())))
-                let t = typeof<GraphicsContext>
-                let f = t.GetField("GetCurrentContext", BindingFlags.NonPublic ||| BindingFlags.Static)
-                f.SetValue(null, get)
-
-        do addContext.Invoke(null, [| this :> obj |]) |> ignore
-
-        member x.LoadAll(): unit = 
-            let t = typeof<OpenTK.Graphics.OpenGL4.GL>
-            let m = t.GetMethod("LoadEntryPoints", BindingFlags.NonPublic ||| BindingFlags.Instance)
-            let gl = OpenTK.Graphics.OpenGL4.GL()
-            m.Invoke(gl, null) |> ignore
-
-            let t = typeof<OpenTK.Graphics.OpenGL.GL>
-            let m = t.GetMethod("LoadEntryPoints", BindingFlags.NonPublic ||| BindingFlags.Instance)
-            let gl = OpenTK.Graphics.OpenGL.GL()
-            m.Invoke(gl, null) |> ignore
-        
-        interface IGraphicsContext with
-            member x.Dispose(): unit = 
-                remContext.Invoke(null, [| x :> obj |]) |> ignore
-                win <- NativePtr.zero
-                ()
-
-            member x.ErrorChecking
-                with get () = false
-                and set _ = ()
-
-            member x.GraphicsMode = 
-                GraphicsMode.Default
-
-            member x.IsCurrent =
-                glfw.GetCurrentContext() = win
-            member x.IsDisposed: bool = 
-                win = NativePtr.zero
-            member x.LoadAll() = x.LoadAll()
-            member x.MakeCurrent(window: IWindowInfo): unit = 
-                if isNull window then 
-                    if OpenTK.Graphics.GraphicsContext.CurrentContextHandle <> handle then
-                        failwith "overriding context"
-                    glfw.MakeContextCurrent(NativePtr.zero)
-                else 
-                    if OpenTK.Graphics.GraphicsContext.CurrentContextHandle.Handle <> 0n then
-                        failwith "overriding context"
-                    glfw.MakeContextCurrent(win)
-
-            member x.SwapBuffers(): unit = 
-                glfw.SwapBuffers(win)
-            member x.SwapInterval
-                with get() = 0
-                and set v = ()
-            member x.Update(window: IWindowInfo): unit = 
-                ()
-
-        interface IGraphicsContextInternal with
-            member x.Context: ContextHandle = 
-                handle
-            member x.GetAddress(name : string): nativeint = 
-                glfw.GetProcAddress name
-            member x.GetAddress(name: nativeint): nativeint = 
-                let str = Marshal.PtrToStringAnsi name
-                glfw.GetProcAddress str
-            member x.Implementation: IGraphicsContext = 
-                x :> _
-            member x.LoadAll() = x.LoadAll()
-        
-
-type internal WindowEvent =
+type WindowEvent =
     | Resize
     | Run of action : (unit -> unit)
 
 
-type KeyEvent internal(key : Aardvark.Application.Keys, scanCode : int, action : InputAction, modifiers : KeyModifiers, keyName : string) =
+type KeyEvent(key : Aardvark.Application.Keys, scanCode : int, action : InputAction, modifiers : KeyModifiers, keyName : string) =
     member x.Key = key
     member x.ScanCode = scanCode
     member x.Name = keyName  
@@ -406,7 +310,7 @@ type ResizeEvent(framebufferSize : V2i, physicalSize : V2i, windowSize : V2i) =
     override x.ToString() = 
         sprintf "Resize { framebuffer: %A; physical: %A; window: %A }" framebufferSize physicalSize windowSize
 
-type MouseEvent internal(button : Aardvark.Application.MouseButtons, position: V2d, action : InputAction, modifiers : KeyModifiers) =
+type MouseEvent(button : Aardvark.Application.MouseButtons, position: V2d, action : InputAction, modifiers : KeyModifiers) =
     member x.Button = button
     member x.Alt = int (modifiers &&& KeyModifiers.Alt) <> 0
     member x.Shift = int (modifiers &&& KeyModifiers.Shift) <> 0
@@ -438,8 +342,6 @@ type WindowState =
     | Invisible = 3
 
 
-open System.Threading.Tasks
-
 
 type WindowConfig =
     {
@@ -455,33 +357,19 @@ type WindowConfig =
         samples : int
     }    
 
-module private FramebufferInfo =
-    open OpenTK.Graphics.OpenGL4
 
-    let print() =
-        let d = OpenTK.Graphics.OpenGL4.GL.GetFramebufferAttachmentParameter(FramebufferTarget.Framebuffer, FramebufferAttachment.Depth, FramebufferParameterName.FramebufferAttachmentDepthSize)
-        let s = OpenTK.Graphics.OpenGL4.GL.GetFramebufferAttachmentParameter(FramebufferTarget.Framebuffer, FramebufferAttachment.Depth, FramebufferParameterName.FramebufferAttachmentStencilSize)
-
-        let r = OpenTK.Graphics.OpenGL4.GL.GetFramebufferAttachmentParameter(FramebufferTarget.Framebuffer, FramebufferAttachment.BackLeft, FramebufferParameterName.FramebufferAttachmentRedSize)
-        let g = OpenTK.Graphics.OpenGL4.GL.GetFramebufferAttachmentParameter(FramebufferTarget.Framebuffer, FramebufferAttachment.BackLeft, FramebufferParameterName.FramebufferAttachmentGreenSize)
-        let b = OpenTK.Graphics.OpenGL4.GL.GetFramebufferAttachmentParameter(FramebufferTarget.Framebuffer, FramebufferAttachment.BackLeft, FramebufferParameterName.FramebufferAttachmentBlueSize)
-        let a = OpenTK.Graphics.OpenGL4.GL.GetFramebufferAttachmentParameter(FramebufferTarget.Framebuffer, FramebufferAttachment.BackLeft, FramebufferParameterName.FramebufferAttachmentAlphaSize)
-
-        Report.Begin(4, "backbuffer")
-        Report.Line(4, sprintf "color: R%dG%dB%dA%d" r g b a)
-        Report.Line(4, sprintf "depth: D%dS%d" d s)
-        Report.End(4) |> ignore
-
-
-module internal IconLoader = 
+module IconLoader = 
     
     type private Self = Self
     let private getIcon'() = 
         let sizes = Array.sortDescending [| 16; 24; 32; 48; 64; 128; 256 |]
         let ass = typeof<Self>.Assembly
         let name = ass.GetManifestResourceNames() |> Array.find (fun n -> n.EndsWith "aardvark.png")
-        let img = (ass.GetManifestResourceStream name |> PixImage.Create).ToPixImage<byte>(Col.Format.RGBA)
 
+        let img = 
+            use src = ass.GetManifestResourceStream name
+            PixImageSharp.Create(src).ToPixImage<byte>(Col.Format.RGBA)
+        
         let levels =
             let mutable last = img
             sizes |> Array.map (fun s ->
@@ -508,26 +396,168 @@ module internal IconLoader =
             Log.warn "could not load icon. %A" e.Message
             None
 
-module Config =
-    let mutable hideCocoaMenuBar = false
 
-[<Sealed>]
-type Application(runtime : IRuntime) =
+type GlfwGamepad() =
+    let a = cval false
+    let b = cval false
+    let x = cval false
+    let y = cval false
+    let ls = cval false
+    let rs = cval false
+    let lsh = cval false
+    let rsh = cval false
+
+    let pl = cval false
+    let pr = cval false
+    let pu = cval false
+    let pd = cval false
+    let select = cval false
+    let start = cval false
+
+    let down = EventSource<GamepadButton>()
+    let up = EventSource<GamepadButton>()
+
+    let left = cval V2d.Zero
+    let right = cval V2d.Zero
+    let leftTrigger = cval 0.0
+    let rightTrigger = cval 0.0
+
+    let buttons =
+        [|
+            GamepadButton.A
+            GamepadButton.B
+            GamepadButton.Unknown
+            GamepadButton.X
+            GamepadButton.Y
+            GamepadButton.Unknown
+            GamepadButton.LeftShoulder; GamepadButton.RightShoulder
+            GamepadButton.Unknown; GamepadButton.Unknown; GamepadButton.Unknown
+            GamepadButton.Start
+            GamepadButton.Unknown
+            GamepadButton.LeftStick; GamepadButton.RightStick
+            GamepadButton.Unknown
+            GamepadButton.Select
+            GamepadButton.CrossUp; GamepadButton.CrossRight; GamepadButton.CrossDown; GamepadButton.CrossLeft
+
+        |]
+
+    let changeables =
+        [|
+            a; b
+            cval false
+            x; y
+            cval false
+            lsh; rsh
+            cval false; cval false; cval false
+            start; 
+            cval false
+            ls; rs
+            cval false
+            select
+            pu; pr; pd; pl
+        |]
+
+
+    member _.Update(glfw : Glfw, id : int) =
+        let mutable cnt = 0
+        let ptr = glfw.GetJoystickButtons(id, &cnt)
+
+        let inline trigger (index : int) (state : bool) =
+            if index < buttons.Length then
+                let b = buttons.[index]
+                if b <> GamepadButton.Unknown then
+                    let o = changeables.[index]
+                    if o.Value <> state then
+                        o.Value <- state
+                        if state then down.Emit(b) else up.Emit(b)
+
+        for i in 0 .. cnt - 1 do
+            trigger i (NativePtr.get ptr i <> 0uy)
+
+        let axes = glfw.GetJoystickAxes(id, &cnt)
+        let mutable vl = V2d.Zero
+        let mutable vr = V2d.Zero
+        let mutable vlt = 0.0
+        let mutable vrt = 0.0
+
+        for i in 0 .. cnt - 1 do
+            let v = NativePtr.get axes i
+            match i with
+            | 0 -> vl.X <- float v
+            | 1 -> vl.Y <- float -v
+            | 2 -> vr.X <- float v
+            | 3 -> vr.Y <- float -v
+            | 4 -> vrt <- float v * 0.5 + 0.5
+            | 5 -> vlt <- float v * 0.5 + 0.5
+            | _ -> Log.warn "bad axis %d: %.3f" i v
+
+        let vl = 
+            if Vec.length vl > 0.1 then vl
+            else V2d.Zero
+
+        let vr = 
+            if Vec.length vr > 0.1 then vr
+            else V2d.Zero
+
+        left.Value <- vl
+        right.Value <- vr
+        leftTrigger.Value <- vlt
+        rightTrigger.Value <- vrt
+
+    interface IGamepad with
+        member __.Down = down :> Aardvark.Base.IEvent<_>
+        member __.Up = up :> Aardvark.Base.IEvent<_>
+        member __.A = a :> aval<_>
+        member __.B = b :> aval<_>
+        member __.X = x :> aval<_>
+        member __.Y = y :> aval<_>
+        member __.LeftStick = left :> aval<_>
+        member __.RightStick = right :> aval<_>
+        member __.LeftTrigger = leftTrigger :> aval<_>
+        member __.RightTrigger = rightTrigger :> aval<_>
+        member __.LeftShoulder = lsh :> aval<_>
+        member __.RightShoulder = rsh :> aval<_>
+        member __.Select = select :> aval<_>
+        member __.Start = start :> aval<_>
+        member __.CrossUp = pu :> aval<_>
+        member __.CrossDown = pd :> aval<_>
+        member __.CrossLeft = pl :> aval<_>
+        member __.CrossRight = pr :> aval<_>
+        member __.LeftStickDown = ls :> aval<_>
+        member __.RightStickDown = rs :> aval<_>
+
+type ISwapchain =
+    inherit System.IDisposable
+    abstract Size : V2i
+    abstract Run : IRenderTask -> unit
+
+type IWindowSurface =
+    inherit System.IDisposable
+    abstract Signature : IFramebufferSignature
+    abstract CreateSwapchain : V2i -> ISwapchain
+    abstract Handle : obj
+
+type IWindowInterop =
+    abstract Boot : Glfw -> unit
+    abstract CreateSurface : IRuntime * WindowConfig * Glfw * nativeptr<WindowHandle> -> IWindowSurface
+    abstract WindowHints : WindowConfig * Glfw -> unit
+
+
+type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop, hideCocoaMenuBar : bool) =
     [<System.ThreadStatic; DefaultValue>]
     static val mutable private IsMainThread_ : bool
 
-    let mutable ctx = Unchecked.defaultof<Aardvark.Rendering.GL.Context>
-
     let glfw = Glfw.GetApi()
     do 
-        if Config.hideCocoaMenuBar then
+        if hideCocoaMenuBar then
             Log.line "hiding cocoa menubar"
             glfw.InitHint(Silk.NET.GLFW.InitHint.CocoaMenubar, false) // glfwInitHint(GLFW_COCOA_MENUBAR, GLFW_FALSE);
         
         if not (glfw.Init()) then  
             failwith "GLFW init failed"
 
-    let mutable lastWindow = None
+        interop.Boot glfw
+
     let queue = System.Collections.Concurrent.ConcurrentQueue<unit -> unit>()
 
     let existingWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()
@@ -537,81 +567,22 @@ type Application(runtime : IRuntime) =
     let aardvarkIcon = IconLoader.getIcon()
                 
 
-
-
-    let openglVersion =
-        let defaultVersion = System.Version(GL.Config.MajorVersion, GL.Config.MinorVersion)
-
-        let versions =
-            [
-                System.Version(4,6)
-                System.Version(4,5)
-                System.Version(4,4)
-                System.Version(4,3)
-                System.Version(4,2)
-                System.Version(4,1)
-                System.Version(4,0)
-                System.Version(3,3)
-            ]
-
-        let startAt =
-            match versions |> List.tryFindIndex ((=) defaultVersion) with
-            | Some idx -> idx
-            | _ ->
-                Log.warn "OpenGL version %A is invalid" defaultVersion
-                0
-
-        let best = 
-            versions
-            |> List.skip startAt
-            |> List.tryFind (fun v -> 
-                glfw.DefaultWindowHints()
-                glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.OpenGL)
-                glfw.WindowHint(WindowHintInt.ContextVersionMajor, v.Major)
-                glfw.WindowHint(WindowHintInt.ContextVersionMinor, v.Minor)
-                glfw.WindowHint(WindowHintBool.OpenGLForwardCompat, true)
-                glfw.WindowHint(WindowHintOpenGlProfile.OpenGlProfile, OpenGlProfile.Core)
-                glfw.WindowHint(WindowHintBool.Visible, false)
-
-                let w = 
-                    try glfw.CreateWindow(1, 1, "", NativePtr.zero, NativePtr.zero)
-                    with _ -> NativePtr.zero
-
-                if w = NativePtr.zero then
-                    Log.warn "OpenGL %A not working" v
-                    false
-                else
-                    glfw.DestroyWindow(w)
-                    Log.line "OpenGL %A working" v
-                    true
-
-            )
-        match best with
-        | Some b -> b
-        | None -> failwith "no compatible OpenGL version found"
-
-
-
-
     member x.Runtime = runtime
-    member x.Context 
-        with get() = ctx
-        and internal set c = ctx <- c
 
-    member internal x.AddExistingWindow(w : Window) =
+    member x.AddExistingWindow(w : Window) =
         existingWindows.Add w |> ignore
         glfw.PostEmptyEvent()
 
-    member internal x.RemoveExistingWindow(w : Window) =
+    member x.RemoveExistingWindow(w : Window) =
         existingWindows.Remove w |> ignore
         visibleWindows.Remove w |> ignore
         glfw.PostEmptyEvent()
 
-    member internal x.AddVisibleWindow(w : Window) =
+    member x.AddVisibleWindow(w : Window) =
         visibleWindows.Add w |> ignore
         glfw.PostEmptyEvent()
 
-    member internal x.RemoveVisibleWindow(w : Window) =
+    member x.RemoveVisibleWindow(w : Window) =
         visibleWindows.Remove w |> ignore
         glfw.PostEmptyEvent()
 
@@ -675,44 +646,10 @@ type Application(runtime : IRuntime) =
             if old <> NativePtr.zero then
                 glfw.MakeContextCurrent(NativePtr.zero)
 
-            let mutable glContext = false
             let mutable parent : nativeptr<WindowHandle> = NativePtr.zero
             glfw.DefaultWindowHints()
 
-            if cfg.opengl then
-                glContext <- true
-                glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.OpenGL)
-                glfw.WindowHint(WindowHintInt.ContextVersionMajor, openglVersion.Major)
-                glfw.WindowHint(WindowHintInt.ContextVersionMinor, openglVersion.Minor)
-                glfw.WindowHint(WindowHintInt.DepthBits, 24)
-                glfw.WindowHint(WindowHintInt.StencilBits, 8)
-
-
-                let m = glfw.GetPrimaryMonitor()
-                let mode = glfw.GetVideoMode(m) |> NativePtr.read
-                glfw.WindowHint(WindowHintInt.RedBits, 8)
-                glfw.WindowHint(WindowHintInt.GreenBits, 8)
-                glfw.WindowHint(WindowHintInt.BlueBits, 8)
-                glfw.WindowHint(WindowHintInt.AlphaBits, 8)
-                glfw.WindowHint(WindowHintInt.RefreshRate, mode.RefreshRate)
-                glfw.WindowHint(WindowHintOpenGlProfile.OpenGlProfile, OpenGlProfile.Core)
-                glfw.WindowHint(WindowHintRobustness.ContextRobustness, Robustness.LoseContextOnReset)
-                glfw.WindowHint(WindowHintBool.OpenGLForwardCompat, true)
-                glfw.WindowHint(WindowHintBool.DoubleBuffer, true)
-                glfw.WindowHint(WindowHintBool.OpenGLDebugContext, false)
-                glfw.WindowHint(WindowHintBool.ContextNoError, true)
-                glfw.WindowHint(WindowHintBool.SrgbCapable, false)
-                if RuntimeInformation.IsOSPlatform(OSPlatform.OSX) then
-                    glfw.WindowHint(unbox<WindowHintBool> 0x00023001, cfg.physicalSize)
-
-                glfw.WindowHint(unbox<WindowHintBool> 0x0002200C, true)
-                glfw.WindowHint(WindowHintInt.Samples, cfg.samples)
-
-                match lastWindow with
-                | Some l -> parent <- l
-                | None -> ()
-            else
-                glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.NoApi)
+            interop.WindowHints(cfg, glfw)
 
             glfw.WindowHint(WindowHintBool.TransparentFramebuffer, cfg.transparent)
             glfw.WindowHint(WindowHintBool.Visible, false)
@@ -720,35 +657,12 @@ type Application(runtime : IRuntime) =
             glfw.WindowHint(WindowHintInt.RefreshRate, 0)
             glfw.WindowHint(WindowHintBool.FocusOnShow, cfg.focus)
 
-
             let win = glfw.CreateWindow(cfg.width, cfg.height, cfg.title, NativePtr.zero, parent)
             if win = NativePtr.zero then failwith "GLFW could not create window"
             
-            glfw.MakeContextCurrent(NativePtr.zero)
-            if glContext then 
-                if Option.isNone lastWindow then lastWindow <- Some win
-
-            let ctx =
-                if glContext then new OpenTKContext.MyGraphicsContext(glfw, win) :> OpenTK.Graphics.IGraphicsContextInternal        
-                else null
-
-            let info =
-                new OpenTKContext.MyWindowInfo(win)
-
-            if not (isNull ctx) then  
-                glfw.MakeContextCurrent(win)
-                ctx.LoadAll()          
-                glfw.SwapInterval(if cfg.vsync then 1 else 0)
-
-                FramebufferInfo.print()
-                glfw.MakeContextCurrent(NativePtr.zero)
-
-            if old <> NativePtr.zero then
-                glfw.MakeContextCurrent old
-
-            let w = new Window(x, win, cfg.title, cfg.vsync, unbox ctx, info, cfg.samples)
-
-
+            let surface = interop.CreateSurface(runtime, cfg, glfw, win)
+        
+            let w = new Window(x, win, cfg.title, cfg.vsync, surface, cfg.samples)
 
             match aardvarkIcon with
             | Some icon -> w.Icon <- Some icon
@@ -764,7 +678,7 @@ type Application(runtime : IRuntime) =
         for w in ws do w.IsVisible <- true
 
         while existingWindows.Count > 0 do
-            if wait then glfw.WaitEvents()
+            if wait then glfw.WaitEventsTimeout(0.01)
             else glfw.PollEvents()
 
             let mutable action = Unchecked.defaultof<unit -> unit>
@@ -772,13 +686,17 @@ type Application(runtime : IRuntime) =
                 try action()
                 with _ -> ()
 
+            for e in existingWindows do
+                e.Update()
+
             wait <- true
             for w in visibleWindows do
                 let v = w.Redraw()
                 if v then wait <- false
 
+    new(runtime, swap) = Application(runtime, swap, false)
 
-and Window internal(app : Application, win : nativeptr<WindowHandle>, title : string, enableVSync : bool, ctx : OpenTK.Graphics.IGraphicsContext, info : OpenTK.Platform.IWindowInfo, samples : int) as this =
+and Window(app : Application, win : nativeptr<WindowHandle>, title : string, enableVSync : bool, surface : IWindowSurface, samples : int) as this =
     static let keyNameCache = System.Collections.Concurrent.ConcurrentDictionary<Keys * int, string>()
 
     let glfw = app.Glfw
@@ -898,11 +816,11 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
     let keyboard = Aardvark.Application.EventKeyboard()
     let mouse = Aardvark.Application.EventMouse(true)
 
-    let signature =
-        app.Runtime.CreateFramebufferSignature(samples, [
-            DefaultSemantic.Colors, RenderbufferFormat.Rgba8
-            DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
-        ])
+    // let signature =
+    //     app.Runtime.CreateFramebufferSignature(samples, [
+    //         DefaultSemantic.Colors, RenderbufferFormat.Rgba8
+    //         DefaultSemantic.Depth, RenderbufferFormat.Depth24Stencil8
+    //     ])
 
     let currentSize =
         let mutable s = V2i.Zero
@@ -1057,6 +975,66 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
                 mouseLeave.Trigger(getMousePosition())
         ))    
 
+
+    let gamepads, updateGamepads =
+        let mutable state : GamepadState = GamepadState()
+        let connected = 
+            let init (id : int, _) =
+                let g = GlfwGamepad()
+                g.Update(glfw, id)
+                g
+
+            let update (g : GlfwGamepad) (id : int, _) =
+                g.Update(glfw, id)
+                g
+
+            FSharp.Data.Traceable.ChangeableModelMap<string, int * _, GlfwGamepad, IGamepad>(
+                HashMap.empty,
+                init, update,
+                (fun g -> g :> IGamepad)
+            )
+        
+        let mutable state = HashMap.empty
+        let mutable guids = HashMap.empty
+        
+        let mutable unique = 0
+        let update() =
+            transact (fun () ->
+                let uid = Interlocked.Increment &unique
+                state |> HashMap.map (fun _ v -> v, uid) |> connected.Update
+            )
+
+        let callback =
+            glfw.SetJoystickCallback(GlfwCallbacks.JoystickCallback(fun id c ->
+                match c with
+                | ConnectedState.Connected ->
+                    let guid = glfw.GetJoystickGUID(id)
+                    state <- HashMap.add guid id state
+                    guids <- HashMap.add id guid guids
+                    update()
+                | _ ->
+                    match HashMap.tryRemove id guids with
+                    | Some (guid, rest) ->
+                        guids <- rest
+                        state <- HashMap.remove guid state
+                        update()
+                    | None ->
+                        ()
+            ))
+
+
+        for i in 0 .. 15 do
+            if glfw.JoystickPresent(i) then
+                let guid = glfw.GetJoystickGUID i
+                state <- HashMap.add guid i state
+                guids <- HashMap.add i guid guids
+
+        update()
+
+
+        connected :> amap<_,_>, update
+
+
     let time =
         let start = System.DateTime.Now
         let sw = System.Diagnostics.Stopwatch.StartNew()
@@ -1078,25 +1056,21 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
             glfw.PostEmptyEvent()
         )
 
-    let ctxHandle = Aardvark.Rendering.GL.ContextHandle(ctx, info)
-
-    let defaultFramebuffer = 
-        new Aardvark.Rendering.GL.Framebuffer(
-            app.Context, signature, 
-            (fun _ -> 0), 
-            ignore, 
-            [0, DefaultSemantic.Colors, Aardvark.Rendering.GL.Renderbuffer(app.Context, 0, V2i.Zero, RenderbufferFormat.Rgba8, samples, 0L) :> IFramebufferOutput], None
-        ) 
-
     let mutable frameCount = 0
     let mutable totalTime = MicroTime.Zero
     let mutable totalGpuTime = MicroTime.Zero
     let sw = System.Diagnostics.Stopwatch()
 
-    let mutable queryObjects : option<struct(int * int)> = None
-
     let mutable glfwCursor = NativePtr.zero<Silk.NET.GLFW.Cursor>
     let mutable cursor = Cursor.Default
+
+    // let device = app.Runtime.Device
+    // let graphicsMode = GraphicsMode(Col.Format.BGRA, 8, 24, 8, 2, 1, ImageTrafo.MirrorY, vsync)
+    // let mutable description = device.CreateSwapchainDescription(surface, graphicsMode)
+
+    let mutable swapchain : option<ISwapchain> = None
+
+    member x.Surface = surface
 
     member x.Cursor
         with get() = cursor
@@ -1129,7 +1103,7 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
 
                                 use pImg = 
                                     fixed [| 
-                                        Image(
+                                        Silk.NET.GLFW.Image(
                                             Width = img.Size.X,
                                             Height = img.Size.Y,
                                             Pixels = dst
@@ -1148,7 +1122,7 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
 
     member x.AfterRender = afterRender.Publish
     member x.BeforeRender = beforeRender.Publish
-    member x.FramebufferSignature  = signature
+    member x.FramebufferSignature  = surface.Signature
     member x.RenderTask
         with get () = renderTask
         and set (v: IRenderTask) = 
@@ -1171,7 +1145,8 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
     member x.Time = time
     member x.Keyboard = keyboard :> Aardvark.Application.IKeyboard
     member x.Mouse = mouse :> Aardvark.Application.IMouse
-    
+    member x.Gamepads = gamepads :> amap<_,_>
+
     member x.SubSampling
         with get() = 1.0
         and set v = if v <> 1.0 then failwithf "[GLFW] SubSampling not implemented"
@@ -1216,9 +1191,6 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
     interface System.IDisposable with
         member x.Dispose() = x.Dispose()
 
-
-    member x.Context = ctx
-    member x.WindowInfo = info
 
     [<CLIEvent>]
     member x.WindowStateChanged = stateChanged.Publish
@@ -1422,7 +1394,7 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
                     ) |> ignore
                     dst
 
-                let rec mipMaps (acc : System.Collections.Generic.List<Image>) (i : int) (img : PixImage[]) =
+                let rec mipMaps (acc : System.Collections.Generic.List<Silk.NET.GLFW.Image>) (i : int) (img : PixImage[]) =
                     if i >= img.Length then
                         let arr = acc.ToArray()
                         use img = fixed arr
@@ -1430,7 +1402,7 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
                     else
                         let mat = toMatrix (img.[i].ToPixImage<byte>())
                         use pdata = fixed mat.Data
-                        acc.Add(Image(Width = int mat.Size.X, Height = int mat.Size.Y, Pixels = NativePtr.cast pdata))
+                        acc.Add(Silk.NET.GLFW.Image(Width = int mat.Size.X, Height = int mat.Size.Y, Pixels = NativePtr.cast pdata))
 
                         mipMaps acc (i+1) img                       
 
@@ -1507,95 +1479,41 @@ and Window internal(app : Application, win : nativeptr<WindowHandle>, title : st
                 if v then glfw.PostEmptyEvent()
                 else ()
 
-    member private x.NewFrame (t : MicroTime, gpu : MicroTime) = 
-        frameCount <- frameCount + 1
-        totalTime <- totalTime + t
-        totalGpuTime <- totalGpuTime + gpu
-        if frameCount > 50 then
-            averageFrameTime <- totalTime / frameCount
-            averageGpuTime <- totalGpuTime / frameCount
-            if showFrameTime then
-                if measureGpuTime then
-                    let r = 100.0 * (averageGpuTime / averageFrameTime)
-                    currentTitle <- sprintf "%s (%A/%.1f%%)" title averageFrameTime r
-                    glfw.SetWindowTitle(win, currentTitle)
-                else
-                    currentTitle <- sprintf "%s (%A)" title averageFrameTime
-                    glfw.SetWindowTitle(win, currentTitle)
-                    
-            elif title <> currentTitle then
-                glfw.SetWindowTitle(win, title)
-                
-            //x.Title <- sprintf "Aardvark rocks \\o/ (%.3f fps)" fps
-            frameCount <- 0
-            totalTime <- MicroTime.Zero
-            totalGpuTime <- MicroTime.Zero
-        ()
-
-    member internal x.Redraw() : bool =
+    member x.Redraw() : bool =
         if renderContinuous || damaged then
-            let mutable gpuTime = MicroTime.Zero
             sw.Restart()
             try
                 damaged <- false
-                if not (isNull ctx) then
-                    use __ = app.Context.RenderingLock ctxHandle
-                    
-                    let mutable startQuery = 0
-                    let mutable endQuery = 0
-                    if measureGpuTime then
-                        let struct(s, e) = 
-                            match queryObjects with
-                            | Some t -> t
-                            | None ->
-                                let arr = [|0; 0|]
-                                GL.GenQueries(2, arr)
-                                queryObjects <- Some(struct(arr.[0], arr.[1]))
-                                struct(arr.[0], arr.[1])
+                if vsync <> enableVSync then
+                    vsync <- enableVSync
+                    if enableVSync then glfw.SwapInterval(1)
+                    else glfw.SwapInterval(0)
 
-                        GL.QueryCounter(s, QueryCounterTarget.Timestamp)
-                        startQuery <- s
-                        endQuery <- e
+                beforeRender.Trigger()
+                let s = x.FramebufferSize
+                match swapchain with
+                | Some ch when ch.Size = s -> 
+                    ch.Run renderTask
+                | _ ->
+                    match swapchain with
+                    | Some o -> o.Dispose()
+                    | None -> ()
 
-                    if vsync <> enableVSync then
-                        vsync <- enableVSync
-                        if enableVSync then glfw.SwapInterval(1)
-                        else glfw.SwapInterval(0)
+                    let swap = surface.CreateSwapchain(s)
+                    swapchain <- Some swap
+                    swap.Run renderTask
 
-                    beforeRender.Trigger()
-                    let s = x.FramebufferSize
-                    defaultFramebuffer.Size <- s
-                    let output = OutputDescription.ofFramebuffer defaultFramebuffer
-
-                    GL.ColorMask(true, true, true, true)
-                    GL.DepthMask(true)
-                    GL.Viewport(0, 0, s.X, s.Y)
-                    GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
-                    GL.ClearDepth(1.0)
-                    GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
-
-                    renderTask.Run(AdaptiveToken.Top, RenderToken.Empty, output)
-                    
-                    if measureGpuTime then
-                        GL.QueryCounter(endQuery, QueryCounterTarget.Timestamp)
-                        let mutable startTime = 0L
-                        let mutable stopTime = 0L
-                        GL.GetQueryObject(startQuery, GetQueryObjectParam.QueryResult, &startTime)
-                        GL.GetQueryObject(endQuery, GetQueryObjectParam.QueryResult, &stopTime)
-                        gpuTime <- MicroTime.FromNanoseconds (stopTime - startTime)
-
-                    glfw.SwapBuffers(win)      
-                    renderContinuous || renderTask.OutOfDate
-                else
-                    renderContinuous || renderTask.OutOfDate
+                renderContinuous || renderTask.OutOfDate
             finally 
                 afterRender.Trigger()  
                 transact time.MarkOutdated  
 
                 sw.Stop()
-                x.NewFrame(sw.MicroTime, gpuTime)
         else
             renderContinuous || renderTask.OutOfDate
+
+    member x.Update() =
+        updateGamepads()
 
     member x.Run() =
         app.Run x          

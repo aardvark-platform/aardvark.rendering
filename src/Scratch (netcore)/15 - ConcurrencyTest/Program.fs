@@ -28,7 +28,7 @@ let main argv =
 
     Aardvark.Init()
 
-    use app = new VulkanApplication(debug = Vulkan.DebugConfig.Default)
+    use app = new VulkanApplication([], Some Vulkan.DebugConfig.Default)
     //GL.Config.UseNewRenderTask <- true
     //use app = new OpenGlApplication()
     let win = app.CreateGameWindow(1)
