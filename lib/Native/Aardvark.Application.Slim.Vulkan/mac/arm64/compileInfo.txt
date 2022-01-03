@@ -1,0 +1,2 @@
+Built from glow repo: 6876cf8d7e0e70dc3e4d7b0224d08312c9f78099
+GLFW Version: 3.4
