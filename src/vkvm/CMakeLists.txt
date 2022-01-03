@@ -25,8 +25,10 @@ set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 add_library(vkvm SHARED commands.h vkvm.h vkvm.cpp commands.cpp)
+
 find_package(Vulkan REQUIRED)
 target_include_directories(${PROJECT_NAME} PUBLIC ${Vulkan_INCLUDE_DIRS})
+target_include_directories(${PROJECT_NAME} PUBLIC "$ENV{VULKAN_SDK}/Include/vulkan")
 target_link_libraries(${PROJECT_NAME} Vulkan::Vulkan)
 
 install(TARGETS vkvm DESTINATION ${OS}/${ARCH})
