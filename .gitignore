@@ -57,3 +57,4 @@ src/Aardvark.Rendering.Interactive/bin/
 *.sln.DotSettings.user
 /src/GLVM/build/
 **/.vscode/
+/src/vkvm/build/
