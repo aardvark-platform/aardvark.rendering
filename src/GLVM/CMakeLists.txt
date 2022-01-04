@@ -30,7 +30,7 @@ add_library(glvm SHARED State.h glvm.h glvm.cpp State.cpp)
 
 find_package(OpenGL REQUIRED)
 include_directories( ${OPENGL_INCLUDE_DIRS} )
-target_link_libraries(glvm ${OPENGL_opengl_LIBRARY} )
+target_link_libraries(glvm ${OPENGL_LIBRARIES} )
 
 install(TARGETS glvm DESTINATION ${OS}/${ARCH})
 
