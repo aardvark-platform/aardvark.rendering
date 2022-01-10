@@ -470,8 +470,6 @@ module TextureUpload =
                 for slice = 0 to 5 do
                     for level = 0 to expectedLevels - 1 do
                         let result = runtime.Download(texture, level = level, slice = slice).AsPixImage<byte>()
-                        let name = sprintf "%d_level_%d.png" slice level
-                        result |> PixImage.saveToDesktop name
 
                         Expect.equal result.Size (Fun.MipmapLevelSize(V2i(size), level)) "image size mismatch"
                         if level < levels then

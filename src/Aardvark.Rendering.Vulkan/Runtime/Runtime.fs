@@ -462,8 +462,17 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         let src = ImageSubresourceLayers.ofFramebufferOutput src
         let dst = ImageSubresourceLayers.ofFramebufferOutput dst
 
-        let srcOffset = V3i(srcOffset.X, src.Size.Y - (srcOffset.Y + size.Y), srcOffset.Z)
-        let dstOffset = V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
+        let srcOffset =
+            if src.Image.IsCubeOr2D then
+                V3i(srcOffset.X, src.Size.Y - (srcOffset.Y + size.Y), srcOffset.Z)
+            else
+                srcOffset
+
+        let dstOffset =
+            if dst.Image.IsCubeOr2D then
+                V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
+            else
+                dstOffset
 
         let srcLayout = src.Image.Layout
         let dstLayout = dst.Image.Layout

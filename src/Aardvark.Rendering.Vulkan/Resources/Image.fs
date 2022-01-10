@@ -2192,6 +2192,14 @@ module ``Image Command Extensions`` =
                 Command.nop
 
 
+[<AutoOpen>]
+module private ImageExtensions = 
+
+    type Image with
+        member x.IsCubeOr2D =
+            match x.Dimension with
+            | TextureDimension.Texture2D | TextureDimension.TextureCube -> true
+            | _ -> false
 
 // ===========================================================================================
 // Image functions
@@ -2521,7 +2529,7 @@ module Image =
                 device
 
         let temp = device.CreateTensorImage(pi.Size, expectedFormat, info.wantSrgb)
-        temp.Write(pi, true)
+        temp.Write(pi, false)
         
         match device.UploadMode with
             | UploadMode.Async ->
@@ -2989,8 +2997,12 @@ module Image =
         let format = src.Image.Format
         let srcPixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
 
-        let dst = dst.SubTensor4(V4l.Zero, V4l(V3l size, dst.SW)).MirrorY()
-        let srcOffset = V3i(offset.X, src.Size.Y - offset.Y - int dst.SY, offset.Z) // flip y-offset
+        let dst, srcOffset =
+            if src.Image.IsCubeOr2D then
+                dst.SubTensor4(V4l.Zero, V4l(V3l size, dst.SW)).MirrorY(),
+                V3i(offset.X, src.Size.Y - offset.Y - int dst.SY, offset.Z) // flip y-offset
+            else
+                dst, offset
 
         let temp = device.CreateTensorImage(V3i dst.Size, srcPixFormat, VkFormat.isSrgb src.Image.Format)
 
@@ -3043,8 +3055,12 @@ module Image =
         let format = dst.Image.Format
         let dstPixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
 
-        let src = src.SubTensor4(V4l.Zero, V4l(V3l size, src.SW)).MirrorY()
-        let offset = V3i(offset.X, dst.Size.Y - offset.Y - int src.SY, offset.Z) // flip y-offset
+        let src, offset =
+            if dst.Image.IsCubeOr2D then
+                src.SubTensor4(V4l.Zero, V4l(V3l size, src.SW)).MirrorY(),
+                V3i(offset.X, dst.Size.Y - offset.Y - int src.SY, offset.Z) // flip y-offset
+            else
+                src, offset
 
         let temp = device.CreateTensorImage(V3i src.Size, dstPixFormat, VkFormat.isSrgb dst.Image.Format)
         temp.Write(src.Format, src)
