@@ -24,8 +24,8 @@ module TestApplication =
         let create() =
             Config.MajorVersion <- 4
             Config.MinorVersion <- 6
-            Config.ErrorReporting <- ErrorReporting.Exception
-            Config.UseNewRenderTask <- true
+            RuntimeConfig.ErrorReporting <- ErrorReporting.Exception
+            RuntimeConfig.UseNewRenderTask <- true
 
             Toolkit.Init(ToolkitOptions(Backend = PlatformBackend.PreferNative)) |> ignore
 

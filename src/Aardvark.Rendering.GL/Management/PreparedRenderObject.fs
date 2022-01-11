@@ -1235,8 +1235,8 @@ module PreparedCommand =
                 | _ ->
                     failwithf "expected ILodRuntime for object: %A" o
             
-            | :? CommandRenderObject when not Config.UseNewRenderTask ->
-                failwith "[GL] Render commands only supported with Config.UseNewRenderTask = true"
+            | :? CommandRenderObject when not RuntimeConfig.UseNewRenderTask ->
+                failwith "[GL] Render commands only supported with RuntimeConfig.UseNewRenderTask = true"
 
             | _ ->
                 failwithf "bad object: %A" o

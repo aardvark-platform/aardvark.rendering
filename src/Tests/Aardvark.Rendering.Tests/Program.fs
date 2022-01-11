@@ -152,7 +152,7 @@ let testDownloadSlice() =
     ()
 
 let testTextureCubeArray() =
-    Config.ErrorReporting <- ErrorReporting.Exception
+    RuntimeConfig.ErrorReporting <- ErrorReporting.Exception
     let app = new OpenGlApplication(false, true)
     let runtime = app.Runtime
     let texRt = runtime :> ITextureRuntime
@@ -183,7 +183,7 @@ let testTextureCubeArray() =
     
 
 let testCopySlice() = 
-    Config.ErrorReporting <- ErrorReporting.Exception
+    RuntimeConfig.ErrorReporting <- ErrorReporting.Exception
     let app = new OpenGlApplication(false, true)
     let runtime = app.Runtime
     let texRt = runtime :> ITextureRuntime

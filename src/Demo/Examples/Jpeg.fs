@@ -27,7 +27,7 @@ module Jpeg =
         
         use app = new Aardvark.Application.WinForms.OpenGlApplication(true)
 
-        Aardvark.Rendering.GL.Config.CheckErrors <- true
+        GL.RuntimeConfig.ErrorReporting <- GL.ErrorReporting.Log
         let runtime = app.Runtime
 
         use comp = new JpegCompressor(runtime)

@@ -8,7 +8,7 @@ open System
 [<EntryPoint>]
 let main argv = 
     // first we need to initialize Aardvark's core components
-    Aardvark.Rendering.GL.Config.UseNewRenderTask <- true
+    Aardvark.Rendering.GL.RuntimeConfig.UseNewRenderTask <- true
 
     Aardvark.Init()
 

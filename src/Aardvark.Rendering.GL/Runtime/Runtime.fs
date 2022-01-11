@@ -538,7 +538,7 @@ type Runtime() =
         let shareTextures = eng.sharing &&& ResourceSharing.Textures <> ResourceSharing.None
         let shareBuffers = eng.sharing &&& ResourceSharing.Buffers <> ResourceSharing.None
 
-        if Config.UseNewRenderTask then
+        if RuntimeConfig.UseNewRenderTask then
             new RenderTasks.NewRenderTask(manager, fboSignature, set, engine, shareTextures, shareBuffers) :> IRenderTask
         else
             new RenderTasks.RenderTask(manager, fboSignature, set, engine, shareTextures, shareBuffers) :> IRenderTask

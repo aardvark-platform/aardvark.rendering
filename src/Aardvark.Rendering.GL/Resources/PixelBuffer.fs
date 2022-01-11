@@ -46,7 +46,7 @@ module internal PixelBuffer =
             NativePtr.free ptr
 
     let using (target : BufferTarget) (flags : BufferStorageFlags) (sizeInBytes : nativeint) (f : PixelBuffer -> 'T) =
-        if Config.UsePixelBufferObjects then usingNative target flags sizeInBytes f
+        if RuntimeConfig.UsePixelBufferObjects then usingNative target flags sizeInBytes f
         else usingHost sizeInBytes f
 
     let pack (sizeInBytes : nativeint) (f : PixelBuffer -> 'T) =

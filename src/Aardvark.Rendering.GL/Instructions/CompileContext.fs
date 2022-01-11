@@ -24,7 +24,7 @@ module ExecutionContext =
     /// determines whether the current OpenGL implementation supports sampler objects
     /// </summary>
     let samplersSupported = 
-        Config.enableSamplersIfPossible && OpenGl.Pointers.BindSampler <> 0n
+        OpenGl.Pointers.BindSampler <> 0n
     
     // NOT USED !? is OpenGL 3.0
     ///// <summary>

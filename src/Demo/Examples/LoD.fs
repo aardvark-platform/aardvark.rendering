@@ -341,7 +341,7 @@ module LoD =
     let run() =
         //Aardvark.Rendering.Interactive.FsiSetup.init (Path.combine [__SOURCE_DIRECTORY__; ".."; ".."; ".."; "bin";"Debug"])
         //Interactive.Renderer <- RendererConfiguration.Vulkan
-        Aardvark.Rendering.GL.Config.CheckErrors <- true
+        GL.RuntimeConfig.ErrorReporting <- GL.ErrorReporting.Log
         Interactive.SceneGraph <- final
         Interactive.RunMainLoop()
 

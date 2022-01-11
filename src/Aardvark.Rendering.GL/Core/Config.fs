@@ -51,17 +51,6 @@ module Config =
     let mutable NumberOfResourceContexts = 2
 
     /// <summary>
-    /// Use the "new" RenderTask OpenGL RenderTask supporting RuntimeCommands (5.1.0)
-    /// </summary>
-    let mutable UseNewRenderTask = false
-
-    /// <summary>
-    /// Use pixel buffer objects for texture uploads and downloads.
-    /// </summary>
-    let mutable UsePixelBufferObjects =
-        not <| RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
-
-    /// <summary>
     /// The number of bits used for color values in default contexts
     /// </summary>
     let BitsPerPixel = 32
@@ -90,15 +79,6 @@ module Config =
     /// </summary>
     let mutable DepthRange = DepthRange.MinusOneToOne
 
-    [<Obsolete("Use ErrorReporting instead")>]
-    let mutable CheckErrors = false
-
-    let mutable ErrorReporting = ErrorReporting.Disabled
-
-    //let enableVertexArrayObjectsIfPossible = true // not implemented or deprecated?
-    let enableSamplersIfPossible = true
-    //let enableUniformBuffersIfPossible = true // not implemented or deprecated?
-
 module RuntimeConfig =
 
     /// ResourceSet.Update and Program.Run use a GL fence sync if true.
@@ -113,6 +93,22 @@ module RuntimeConfig =
 
     let mutable PrintShaderCode = true
 
+    /// <summary>
+    /// Use the "new" RenderTask OpenGL RenderTask supporting RuntimeCommands (5.1.0)
+    /// </summary>
+    let mutable UseNewRenderTask = false
+
+    /// <summary>
+    /// Use pixel buffer objects for texture uploads and downloads.
+    /// </summary>
+    let mutable UsePixelBufferObjects =
+        not <| RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
+
+    /// <summary>
+    /// Determines if and how API errors are checked and reported.
+    /// </summary>
+    let mutable ErrorReporting = ErrorReporting.Disabled
+
 [<AutoOpen>]
 module Error =
 
@@ -121,7 +117,7 @@ module Error =
 
     type GL with
         static member Check str =
-            let mode = if Config.CheckErrors then ErrorReporting.Log else Config.ErrorReporting
+            let mode = RuntimeConfig.ErrorReporting
 
             if mode <> ErrorReporting.Disabled then
                 let err = GL.GetError()
