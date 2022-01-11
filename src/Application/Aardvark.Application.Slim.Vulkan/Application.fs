@@ -39,7 +39,6 @@ module private Vulkan =
 
         let surface = Aardvark.Rendering.Vulkan.KHRSurface.VkSurfaceKHR(surf.Handle)
         let surf = new Aardvark.Rendering.Vulkan.Surface(runtime.Device, surface)
-        surf.AddReference()
 
         let description =
             let graphicsMode = GraphicsMode(Col.Format.BGRA, 8, 24, 8, 2, cfg.samples, ImageTrafo.MirrorY, cfg.vsync)
@@ -53,10 +52,10 @@ module private Vulkan =
                 { new ISwapchain with
                     override this.Dispose() = 
                         swap.Dispose()
-                    override this.Run(task: Aardvark.Rendering.IRenderTask)  = 
+                    override this.Run(task : IRenderTask, query : IQuery)  = 
                         swap.RenderFrame (fun fbo ->
                             let output = OutputDescription.ofFramebuffer fbo
-                            task.Run(AdaptiveToken.Top, RenderToken.Empty, output)
+                            task.Run(AdaptiveToken.Top, RenderToken.Empty, output, query)
                         )
                     override x.Size = size
                 }

@@ -529,7 +529,7 @@ type GlfwGamepad() =
 type ISwapchain =
     inherit System.IDisposable
     abstract Size : V2i
-    abstract Run : IRenderTask -> unit
+    abstract Run : IRenderTask * IQuery -> unit
 
 type IWindowSurface =
     inherit System.IDisposable
@@ -558,6 +558,7 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
 
         interop.Boot glfw
 
+    let mutable lastWindow : nativeptr<WindowHandle> option = None
     let queue = System.Collections.Concurrent.ConcurrentQueue<unit -> unit>()
 
     let existingWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()
@@ -646,7 +647,9 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
             if old <> NativePtr.zero then
                 glfw.MakeContextCurrent(NativePtr.zero)
 
-            let mutable parent : nativeptr<WindowHandle> = NativePtr.zero
+            let parent =
+                lastWindow |> Option.defaultValue NativePtr.zero
+
             glfw.DefaultWindowHints()
 
             interop.WindowHints(cfg, glfw)
@@ -659,6 +662,8 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
 
             let win = glfw.CreateWindow(cfg.width, cfg.height, cfg.title, NativePtr.zero, parent)
             if win = NativePtr.zero then failwith "GLFW could not create window"
+
+            lastWindow <- Some win
             
             let surface = interop.CreateSurface(runtime, cfg, glfw, win)
         
@@ -704,7 +709,6 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
     let mutable windowScale = V2d.II
     let mutable damaged = true
     let mutable title = title
-    let mutable currentTitle = title
     let mutable icon : option<PixImageMipMap> = None
     let mutable lastMousePosition = V2d.Zero
     let mutable enableVSync = enableVSync
@@ -1044,10 +1048,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
 
     let mutable isDisposed = false
     let mutable beforeFullScreen = Box2i.FromMinAndSize(V2i.Zero, V2i(1024, 768))
-    let mutable averageFrameTime = MicroTime.Zero
-    let mutable averageGpuTime = MicroTime.Zero
     let mutable renderContinuous = false
-    let mutable measureGpuTime = true
 
     let mutable renderTask : IRenderTask = RenderTask.empty
     let mutable renderTaskSub = 
@@ -1059,7 +1060,14 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
     let mutable frameCount = 0
     let mutable totalTime = MicroTime.Zero
     let mutable totalGpuTime = MicroTime.Zero
+    let mutable averageFrameTime = MicroTime.Zero
+    let mutable averageGpuTime = MicroTime.Zero
+    let mutable measureGpuTime = true
+    let mutable formattedTime = None
+
     let sw = System.Diagnostics.Stopwatch()
+
+    let mutable gpuQuery : Option<ITimeQuery> = None
 
     let mutable glfwCursor = NativePtr.zero<Silk.NET.GLFW.Cursor>
     let mutable cursor = Cursor.Default
@@ -1069,6 +1077,34 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
     // let mutable description = device.CreateSwapchainDescription(surface, graphicsMode)
 
     let mutable swapchain : option<ISwapchain> = None
+
+    let refreshTitle() =
+        let title =
+            match formattedTime with
+            | Some t when showFrameTime -> sprintf "%s %s" title t
+            | _ -> title
+
+        glfw.SetWindowTitle(win, title)
+
+    let updateTime (total : MicroTime) (gpu : MicroTime) =
+        frameCount <- frameCount + 1
+        totalTime <- totalTime + total
+        totalGpuTime <- totalGpuTime + gpu
+        if frameCount > 50 then
+            averageFrameTime <- totalTime / frameCount
+            averageGpuTime <- totalGpuTime / frameCount
+
+            if measureGpuTime then
+                let r = 100.0 * (averageGpuTime / averageFrameTime)
+                formattedTime <- Some <| sprintf "(%A/%.1f%%)" averageFrameTime r
+            else
+                formattedTime <- Some <| sprintf "(%A)" averageFrameTime
+
+            frameCount <- 0
+            totalTime <- MicroTime.Zero
+            totalGpuTime <- MicroTime.Zero
+
+            refreshTitle()
 
     member x.Surface = surface
 
@@ -1184,8 +1220,17 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
             app.Post (fun () -> 
                 glfw.HideWindow(win)
                 glfw.DestroyWindow(win)
-                //ctx.Dispose()
-                //info.Dispose()
+
+                swapchain |> Option.iter Disposable.dispose
+                swapchain <- None
+
+                surface.Dispose()
+
+                renderTask.Dispose()
+                renderTask <- RenderTask.empty
+
+                gpuQuery |> Option.iter Disposable.dispose
+                gpuQuery <- None
             )
 
     interface System.IDisposable with
@@ -1332,7 +1377,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
             x.Invoke(fun () ->
                 if title <> t then
                     title <- t
-                    glfw.SetWindowTitle(win, t)
+                    refreshTitle()
             ) 
 
     member x.Focus() = 
@@ -1459,10 +1504,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
         and set v =
             if v <> showFrameTime then
                 showFrameTime <- v
-                x.Invoke(fun () ->
-                    glfw.SetWindowTitle(win, title)
-                    currentTitle <- title
-                )
+                x.Invoke refreshTitle
 
     member x.AverageFrameTime = averageFrameTime
     member x.AverageGPUFrameTime = averageGpuTime
@@ -1489,11 +1531,21 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                     if enableVSync then glfw.SwapInterval(1)
                     else glfw.SwapInterval(0)
 
+                let queries =
+                    if measureGpuTime then
+                        let query =
+                            gpuQuery |> Option.defaultWith app.Runtime.CreateTimeQuery
+
+                        gpuQuery <- Some query
+                        query :> IQuery
+                    else
+                        Queries.none
+
                 beforeRender.Trigger()
                 let s = x.FramebufferSize
                 match swapchain with
                 | Some ch when ch.Size = s -> 
-                    ch.Run renderTask
+                    ch.Run(renderTask, queries)
                 | _ ->
                     match swapchain with
                     | Some o -> o.Dispose()
@@ -1501,14 +1553,23 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
 
                     let swap = surface.CreateSwapchain(s)
                     swapchain <- Some swap
-                    swap.Run renderTask
+                    swap.Run(renderTask, queries)
 
                 renderContinuous || renderTask.OutOfDate
             finally 
                 afterRender.Trigger()  
                 transact time.MarkOutdated  
 
+                let gpuTime =
+                    if measureGpuTime then
+                        gpuQuery
+                        |> Option.bind (fun q -> q.TryGetResult true)
+                        |> Option.defaultValue MicroTime.Zero
+                    else
+                        MicroTime.Zero
+
                 sw.Stop()
+                updateTime sw.MicroTime gpuTime
         else
             renderContinuous || renderTask.OutOfDate
 
