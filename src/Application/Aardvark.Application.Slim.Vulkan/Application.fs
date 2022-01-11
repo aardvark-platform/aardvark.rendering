@@ -52,10 +52,10 @@ module private Vulkan =
                 { new ISwapchain with
                     override this.Dispose() = 
                         swap.Dispose()
-                    override this.Run(task: Aardvark.Rendering.IRenderTask)  = 
+                    override this.Run(task : IRenderTask, query : IQuery)  = 
                         swap.RenderFrame (fun fbo ->
                             let output = OutputDescription.ofFramebuffer fbo
-                            task.Run(AdaptiveToken.Top, RenderToken.Empty, output)
+                            task.Run(AdaptiveToken.Top, RenderToken.Empty, output, query)
                         )
                     override x.Size = size
                 }

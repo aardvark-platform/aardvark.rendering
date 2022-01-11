@@ -181,7 +181,7 @@ module private OpenGL =
         { new ISwapchain with
             override this.Dispose() = 
                 ()
-            override this.Run(task: Aardvark.Rendering.IRenderTask)  = 
+            override this.Run(task : IRenderTask, query : IQuery)  = 
                 using (runtime.Context.RenderingLock ctx) (fun _ ->
                     let output = OutputDescription.ofFramebuffer defaultFramebuffer
 
@@ -192,7 +192,7 @@ module private OpenGL =
                     GL.ClearDepth(1.0)
                     GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
 
-                    task.Run(AdaptiveToken.Top, RenderToken.Empty, output)
+                    task.Run(AdaptiveToken.Top, RenderToken.Empty, output, query)
 
                     glfw.SwapBuffers(win)
                 )
