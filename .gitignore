@@ -55,3 +55,6 @@ src/Aardvark.Rendering.Interactive/bin/
 .DS_Store
 **/.idea
 *.sln.DotSettings.user
+/src/GLVM/build/
+**/.vscode/
+/src/vkvm/build/

@@ -1,8 +1,9 @@
+arch = $(shell uname -m)
 
 all: deploy 
 
 deploy: glvm.dylib
-	mkdir -p "../../lib/Native/Aardvark.Rendering.GL/mac/AMD64/" && cp glvm.dylib ../../lib/Native/Aardvark.Rendering.GL/mac/AMD64/glvm.dylib
+	mkdir -p "../../lib/Native/Aardvark.Rendering.GL/mac/$(arch)/" && cp glvm.dylib ../../lib/Native/Aardvark.Rendering.GL/mac/$(arch)/glvm.dylib
 	mkdir -p "../../bin/Debug/netcoreapp3.0/" && cp glvm.dylib ../../bin/Debug/netcoreapp3.0/glvm.dylib
 	mkdir -p "../../bin/Release/netcoreapp3.0/" && cp glvm.dylib ../../bin/Release/netcoreapp3.0/glvm.dylib
 	mkdir -p "../../bin/Debug/netcoreapp3.1/" && cp glvm.dylib ../../bin/Debug/netcoreapp3.1/glvm.dylib

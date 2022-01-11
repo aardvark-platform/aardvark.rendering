@@ -40,24 +40,10 @@ module AVal =
         withLast (fun o n a -> f o (n - o) a) state
 
     let withTime (f : DateTime -> DateTime -> 'a -> 'a) (state : aval<DateTime>)  : AdaptiveFunc<'a> =
-
-        let oldState = ref <| DateTime.Now
-
-        let res =
-            AdaptiveFunc<'a>(fun res value ->
-                let s = state.GetValue res
-                let newA = f !oldState s value
-                oldState := s 
-                newA
-            )
-        lock state (fun () ->
-            state.Outputs.Add res |> ignore
-        )
-
-        res       
+        withLast f state
 
     let inline stepTime (f : DateTime -> TimeSpan -> 'a -> 'a) (state : aval<DateTime>) : AdaptiveFunc<'a> =
-        withTime (fun o n a -> f o (n - o) a) state
+        step f state
 
     let rec private int (initial : aval<'a>) (controllers : list<aval<AdaptiveFunc<'a>>>): aval<'a> =
         match controllers with
