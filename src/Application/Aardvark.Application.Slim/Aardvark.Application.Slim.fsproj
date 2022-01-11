@@ -13,7 +13,8 @@
     <OutputPath>..\..\..\bin\Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <Compile Include="Window.fs" />
+    <EmbeddedResource Include="resources\aardvark.png" />
+    <Compile Include="GLFW.fs" />
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />

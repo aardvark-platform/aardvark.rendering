@@ -18,6 +18,7 @@
     <Compile Include="IO\Keys.fs" />
     <Compile Include="IO\Keyboard.fs" />
     <Compile Include="IO\Mouse.fs" />
+    <Compile Include="IO\Gamepad.fs" />
     <Compile Include="Cursor.fs" />
     <Compile Include="IMessageLoop.fs" />
     <Compile Include="IRenderControl.fs" />

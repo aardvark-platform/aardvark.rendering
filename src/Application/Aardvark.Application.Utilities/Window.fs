@@ -191,7 +191,7 @@ module Utilities =
             member x.Mouse = x.Mouse
             member x.DropFiles =
                 match win with
-                | :? Glfw.Window as w -> w.DropFiles
+                | :? Aardvark.Glfw.Window as w -> w.DropFiles
                 | _ ->
                     { new IEvent<_,_> with
                         member x.AddHandler(_) = ()
@@ -392,7 +392,11 @@ module Utilities =
                 | Backend.GL -> 
                     new OpenGlApplication(cfg.deviceKind = DeviceKind.Dedicated, enableDebug) :> IApplication
                 | Backend.Vulkan -> 
-                    let app = new VulkanApplication(enableDebug, chooseDevice cfg) 
+                    VulkanApplication.SetDeviceChooser(fun ds ->
+                        let res = chooseDevice cfg (Array.toList ds)
+                        Array.IndexOf(ds, res)
+                    )
+                    let app = new VulkanApplication(enableDebug) 
                     if enableDebug then
                         app.Runtime.DebugVerbosity <- toMessageSeverity cfg.debug
                     app :> IApplication
