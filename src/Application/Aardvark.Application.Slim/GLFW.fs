@@ -1189,8 +1189,14 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
             app.Post (fun () -> 
                 glfw.HideWindow(win)
                 glfw.DestroyWindow(win)
-                //ctx.Dispose()
-                //info.Dispose()
+
+                swapchain |> Option.iter Disposable.dispose
+                swapchain <- None
+
+                surface.Dispose()
+
+                renderTask.Dispose()
+                renderTask <- RenderTask.empty
             )
 
     interface System.IDisposable with

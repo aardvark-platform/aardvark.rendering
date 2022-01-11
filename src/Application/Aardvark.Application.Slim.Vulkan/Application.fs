@@ -39,7 +39,6 @@ module private Vulkan =
 
         let surface = Aardvark.Rendering.Vulkan.KHRSurface.VkSurfaceKHR(int64 surf.Handle)
         let surf = new Aardvark.Rendering.Vulkan.Surface(runtime.Device, surface)
-        surf.AddReference()
 
         let description =
             let graphicsMode = GraphicsMode(Col.Format.BGRA, 8, 24, 8, 2, cfg.samples, ImageTrafo.MirrorY, cfg.vsync)
