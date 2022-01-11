@@ -558,6 +558,7 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
 
         interop.Boot glfw
 
+    let mutable lastWindow : nativeptr<WindowHandle> option = None
     let queue = System.Collections.Concurrent.ConcurrentQueue<unit -> unit>()
 
     let existingWindows = System.Collections.Concurrent.ConcurrentHashSet<Window>()
@@ -646,7 +647,9 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
             if old <> NativePtr.zero then
                 glfw.MakeContextCurrent(NativePtr.zero)
 
-            let mutable parent : nativeptr<WindowHandle> = NativePtr.zero
+            let parent =
+                lastWindow |> Option.defaultValue NativePtr.zero
+
             glfw.DefaultWindowHints()
 
             interop.WindowHints(cfg, glfw)
@@ -659,6 +662,8 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
 
             let win = glfw.CreateWindow(cfg.width, cfg.height, cfg.title, NativePtr.zero, parent)
             if win = NativePtr.zero then failwith "GLFW could not create window"
+
+            lastWindow <- Some win
             
             let surface = interop.CreateSurface(runtime, cfg, glfw, win)
         
