@@ -326,17 +326,17 @@ type InstanceExtensions private() =
         }
 
     static let getAdapter (instance : Instance) =
-        lock table (fun () ->
-            match table.TryGetValue instance with
-                | (true, adapter) -> adapter
-                | _ ->
-                    if List.contains Instance.Extensions.DebugUtils instance.EnabledExtensions then
+        if instance.DebugEnabled then
+            lock table (fun () ->
+                match table.TryGetValue instance with
+                    | (true, adapter) -> adapter
+                    | _ ->
                         let adapter = new DebugReportAdapter(instance)
                         table.Add(instance, Some adapter)
                         Some adapter
-                    else
-                        None
-        )
+            )
+        else
+            None
 
     static let registerDebugTrace instance handle =
         match getAdapter instance with

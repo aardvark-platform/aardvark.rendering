@@ -961,9 +961,7 @@ and [<AbstractClass>] Resource<'T when 'T : unmanaged and 'T : equality> =
             base.IsValid && x.handle <> Unchecked.defaultof<_>
 
         new(device : Device, handle : 'T, refCount : int) =
-            #if DEBUG
             handle |> pin device.Instance.RegisterDebugTrace
-            #endif
             { inherit Resource(device, refCount); handle = handle }
 
         new(device : Device, handle : 'T) =
@@ -1412,9 +1410,7 @@ and CommandPool internal(device : Device, familyIndex : int, queueFamily : Devic
             )
         )
 
-    #if DEBUG
     do device.Instance.RegisterDebugTrace(handle.Handle)
-    #endif
 
     internal new(device : Device, familyIndex : int, queueFamily : DeviceQueueFamily) =
         new CommandPool(device, familyIndex, queueFamily, CommandPoolFlags.None)
@@ -1464,9 +1460,7 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
             return !!pHandle
         }
 
-    #if DEBUG
     do device.Instance.RegisterDebugTrace(handle)
-    #endif
 
     let mutable commands = 0
     let mutable recording = false
@@ -1646,9 +1640,7 @@ and Fence internal(device : Device, signaled : bool) =
                 |> check "could not create fence"
         }
 
-    #if DEBUG
     do device.Instance.RegisterDebugTrace(pFence)
-    #endif
 
     member x.Device = device
     member x.Handle = NativePtr.read pFence
@@ -1741,9 +1733,7 @@ and Semaphore internal(device : Device) =
             )
         )
 
-    #if DEBUG
     do device.Instance.RegisterDebugTrace(handle.Handle)
-    #endif
 
     member x.Device = device
     member x.Handle = handle
@@ -1775,9 +1765,7 @@ and Event internal(device : Device) =
             )
         )
 
-    #if DEBUG
     do device.Instance.RegisterDebugTrace(handle.Handle)
-    #endif
 
     member x.Device = device
     member x.Handle = handle
@@ -2179,9 +2167,7 @@ and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int
     let mutable handle = handle
     let mutable size = size
 
-    #if DEBUG
     do if handle <> VkDeviceMemory.Null then heap.Device.Instance.RegisterDebugTrace(handle.Handle)
-    #endif
 
     static member Null = nullptr
 

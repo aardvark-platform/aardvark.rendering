@@ -86,6 +86,10 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
         enabledLayers, enabledExtensions
 
     let layers, extensions = filterLayersAndExtensions (layers, extensions)
+
+    let debugEnabled =
+        extensions |> List.contains EXTDebugReport.Name &&
+        extensions |> List.contains EXTDebugUtils.Name    
     
     let appName = CStr.malloc "Aardvark"
 
@@ -185,6 +189,8 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
         
     member x.EnabledLayers = layers
     member x.EnabledExtensions = extensions
+
+    member x.DebugEnabled = debugEnabled
 
     member x.Handle = instance
 
