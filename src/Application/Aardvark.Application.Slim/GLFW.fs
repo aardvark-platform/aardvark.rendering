@@ -1217,10 +1217,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
         if not isDisposed then
             isDisposed <- true
             app.RemoveExistingWindow x
-            app.Post (fun () -> 
-                glfw.HideWindow(win)
-                glfw.DestroyWindow(win)
-
+            app.Post (fun () ->
                 swapchain |> Option.iter Disposable.dispose
                 swapchain <- None
 
@@ -1231,6 +1228,9 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
 
                 gpuQuery |> Option.iter Disposable.dispose
                 gpuQuery <- None
+
+                glfw.HideWindow(win)
+                glfw.DestroyWindow(win)
             )
 
     interface System.IDisposable with

@@ -63,6 +63,10 @@ type InternalQuery(ctx : Context, count : int) =
         use __ = ctx.RenderingLock owner.Value
         base.TryGetResults()
 
+    override x.Dispose() =
+        use __ = ctx.RenderingLock owner.Value
+        base.Dispose()
+
 
 [<RequireQualifiedAccess>]
 type QueryType =
