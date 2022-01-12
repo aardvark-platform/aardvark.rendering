@@ -550,24 +550,27 @@ module RenderTasks =
                         | None ->
                             ()
 
-                    // Clear depth-stencil if it necessary
+                    // Clear depth-stencil if it necessary         
                     let mask =
-                        match depthValue, stencilValue with
-                        | Some d, Some s ->
-                            GL.ClearDepth(float d.Value)
-                            GL.ClearStencil(int s.Value)
-                            ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit
+                        let depthMask =
+                            match signature.DepthStencilAttachment, depthValue with
+                            | Some fmt, Some value when fmt.HasDepth ->
+                                GL.ClearDepth(float value)
+                                ClearBufferMask.DepthBufferBit
 
-                        | Some d, None ->
-                            GL.ClearDepth(float d.Value)
-                            ClearBufferMask.DepthBufferBit
+                            | _ ->
+                                ClearBufferMask.None
 
-                        | None, Some s ->
-                            GL.ClearStencil(int s.Value)
-                            ClearBufferMask.StencilBufferBit
+                        let stencilMask =
+                            match signature.DepthStencilAttachment, stencilValue with
+                            | Some fmt, Some value when fmt.HasStencil ->
+                                GL.ClearStencil(int value)
+                                ClearBufferMask.StencilBufferBit
 
-                        | _ ->
-                            ClearBufferMask.None
+                            | _ ->
+                                ClearBufferMask.None
+
+                        depthMask ||| stencilMask
 
                     if mask <> ClearBufferMask.None then
                         GL.Clear(mask)
