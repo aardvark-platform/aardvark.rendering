@@ -24,13 +24,12 @@ module TestApplication =
         let create() =
             Config.MajorVersion <- 4
             Config.MinorVersion <- 6
-            RuntimeConfig.ErrorReporting <- ErrorReporting.Exception
             RuntimeConfig.UseNewRenderTask <- true
 
             Toolkit.Init(ToolkitOptions(Backend = PlatformBackend.PreferNative)) |> ignore
 
-            let runtime = new Runtime()
-            let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create true)
+            let runtime = new Runtime(DebugLevel.Normal)
+            let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create runtime.DebugLevel)
 
             runtime.Initialize(ctx)
 

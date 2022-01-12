@@ -216,7 +216,6 @@ let main argv =
         backend Backend.GL
         display Display.Mono
         debug true
-        verbosity DebugVerbosity.Warning
         samples 1
     }
 

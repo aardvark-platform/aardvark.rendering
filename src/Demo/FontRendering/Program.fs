@@ -922,8 +922,6 @@ let main argv =
         )
     )
 
-    let config = { BackendConfiguration.Default with useDebugOutput = true }
-
     let calls = AVal.init 999
     
     let randomCalls(cnt : int) =
@@ -981,7 +979,7 @@ let main argv =
             |> Sg.projTrafo (win.Sizes |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 100.0 (float s.X / float s.Y) |> Frustum.projTrafo))
 
 
-    let main = app.Runtime.CompileRender(win.FramebufferSignature, config, sg) //|> DefaultOverlays.withStatistics
+    let main = app.Runtime.CompileRender(win.FramebufferSignature, sg) //|> DefaultOverlays.withStatistics
     //let clear = app.Runtime.CompileClear(win.FramebufferSignature, AVal.constant C4f.Black)
 
     //win.Keyboard.Press.Values.Add (fun c ->

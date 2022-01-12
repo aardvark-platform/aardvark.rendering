@@ -289,6 +289,8 @@ and MultiRuntime(runtimes : IRuntime[]) =
     member x.Runtimes : IRuntime[] = runtimes
 
     interface IRuntime with
+        member x.DebugLevel = runtimes |> Array.map (fun r -> r.DebugLevel) |> Array.max
+
         member x.DeviceCount = runtimes |> Seq.map (fun r -> r.DeviceCount) |> Seq.min
 
         member x.Upload<'a when 'a : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'a>, offset : V3i, size : V3i) : unit =
@@ -317,10 +319,10 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.ResolveMultisamples(source, target, trafo) = failwith ""
         member x.GenerateMipMaps(t) = failwith ""
         member x.ContextLock = { new IDisposable with member x.Dispose() = () }
-        member x.CompileRender (signature, engine, set) =
+        member x.CompileRender (signature, set, debug) =
             match signature with
                 | :? MultiFramebufferSignature as signature ->
-                    let tasks = Array.map2 (fun (r : IRuntime) (s : IFramebufferSignature) -> r.CompileRender(s, engine, set)) runtimes signature.Signatures
+                    let tasks = Array.map2 (fun (r : IRuntime) (s : IFramebufferSignature) -> r.CompileRender(s, set, debug)) runtimes signature.Signatures
                     new MultiRenderTask(x, signature, tasks) :> IRenderTask
                 | _ ->
                     failwith ""

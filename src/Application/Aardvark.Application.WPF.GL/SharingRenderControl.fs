@@ -390,7 +390,7 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
     inherit UserControl()
 
     let ctx = runtime.Context
-    let handle = ContextHandleOpenTK.create(false)
+    let handle = ContextHandleOpenTK.create runtime.DebugLevel
 
     let img = System.Windows.Interop.D3DImage()
     let content = Windows.Controls.Image(Source = img)

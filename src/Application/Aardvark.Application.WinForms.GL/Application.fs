@@ -7,22 +7,27 @@ open Aardvark.Rendering
 open Aardvark.Rendering.GL
 open Aardvark.Application
 
-type OpenGlApplication(forceNvidia : bool, enableDebug : bool, shaderCachePath : Option<string>) =
+type OpenGlApplication(forceNvidia : bool, debug : DebugLevel, shaderCachePath : Option<string>) =
     do if forceNvidia then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
        OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
        try 
         Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException)
        with e -> Report.Warn("Could not set UnhandledExceptionMode.")
 
-    let runtime = new Runtime()
-    let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create enableDebug)
+    let runtime = new Runtime(debug)
+    let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create debug)
 
     do ctx.ShaderCachePath <- shaderCachePath
-       runtime.Initialize(ctx, true, true)
+       runtime.Initialize(ctx)
  
-    new() = new OpenGlApplication(true, false)
-    new(enableDebug) = new OpenGlApplication(true, enableDebug)
-    new(forceNvidia, enableDebug) = new OpenGlApplication(forceNvidia, enableDebug, Context.DefaultShaderCachePath)
+    new(forceNvidia : bool, debug : bool, shaderCachePath : Option<string>) =
+        new OpenGlApplication(forceNvidia, DebugLevel.ofBool debug, shaderCachePath)
+
+    new() = new OpenGlApplication(true, DebugLevel.None)
+    new(debug : DebugLevel) = new OpenGlApplication(true, debug)
+    new(debug : bool) = new OpenGlApplication(true, debug)
+    new(forceNvidia, debug : DebugLevel) = new OpenGlApplication(forceNvidia, debug, Context.DefaultShaderCachePath)
+    new(forceNvidia, debug : bool) = new OpenGlApplication(forceNvidia, debug, Context.DefaultShaderCachePath)
 
     member x.Context = ctx
     member x.Runtime = runtime
@@ -35,7 +40,7 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool, shaderCachePath :
     member x.Initialize(ctrl : IRenderControl, samples : int) = 
         match ctrl with
             | :? RenderControl as ctrl ->
-                ctrl.Implementation <- new OpenGlRenderControl(runtime, enableDebug, samples)
+                ctrl.Implementation <- new OpenGlRenderControl(runtime, debug, samples)
             | _ ->
                 failwithf "unknown control type: %A" ctrl
 

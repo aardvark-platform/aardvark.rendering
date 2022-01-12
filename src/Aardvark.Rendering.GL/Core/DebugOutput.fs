@@ -5,7 +5,26 @@ open System.Runtime.InteropServices
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
+open Aardvark.Rendering
 open Aardvark.Rendering.GL
+
+[<AutoOpen>]
+module Error =
+
+    exception OpenGLException of ec : ErrorCode * msg : string with
+        override x.Message = sprintf "%A: %s" x.ec x.msg
+
+    type GL with
+        static member Check str =
+            let mode = RuntimeConfig.ErrorReporting
+
+            if mode <> ErrorReporting.Disabled then
+                let err = GL.GetError()
+                if err <> ErrorCode.NoError then
+                    Report.Error("{0}: {1}", err, str)
+
+                    if mode = ErrorReporting.Exception then
+                        raise <| OpenGLException(err, sprintf "%A" str)
 
 [<AutoOpen>]
 module private IGraphicsContextDebugExtensions =
@@ -58,7 +77,24 @@ type internal DebugOutput =
 
 module internal DebugOutput =
 
-    let tryInitialize() =
+    module private DebugSeverityControl =
+        let All =
+            [ DebugSeverityControl.DebugSeverityNotification;
+              DebugSeverityControl.DebugSeverityLow;
+              DebugSeverityControl.DebugSeverityMedium;
+              DebugSeverityControl.DebugSeverityHigh ]
+
+    let private enableMessages (severities : List<DebugSeverityControl>) =
+
+        let enable (enabled : bool) (severity : DebugSeverityControl) =
+            let arr : uint32[] = null
+            GL.DebugMessageControl(DebugSourceControl.DontCare, DebugTypeControl.DontCare, severity, 0, arr, enabled)
+            GL.Check "glDebugMessageControl failed"
+
+        enable false DebugSeverityControl.DontCare
+        severities |> List.iter (enable true)
+       
+    let tryInitialize (level : DebugLevel) =
         let ctx = GraphicsContext.CurrentContext |> unbox<IGraphicsContextInternal>
 
         match ctx.TryGetAddress("glDebugMessageCallback") with
@@ -75,9 +111,14 @@ module internal DebugOutput =
             // Set messages
             Report.BeginTimed(4, "[GL] debug message control")
 
-            let arr : uint32[] = null
-            GL.DebugMessageControl(DebugSourceControl.DontCare, DebugTypeControl.DontCare, DebugSeverityControl.DontCare, 0, arr, true)
-            GL.Check "glDebugMessageControl failed"
+            let severities =
+                match level with
+                | DebugLevel.Minimal -> [ DebugSeverityControl.DebugSeverityHigh ]
+                | DebugLevel.Normal -> [ DebugSeverityControl.DebugSeverityHigh; DebugSeverityControl.DebugSeverityMedium; DebugSeverityControl.DebugSeverityLow ]
+                | DebugLevel.Full -> DebugSeverityControl.All
+                | _ -> []
+
+            enableMessages severities
 
             Report.End(4) |> ignore
 

@@ -56,7 +56,7 @@ module HelloWorld =
                |> Sg.viewTrafo (viewTrafo   |> AVal.map CameraView.viewTrafo )
                |> Sg.projTrafo (perspective |> AVal.map Frustum.projTrafo    )
 
-        let task = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Default, sg.RenderObjects(Ag.Scope.Root))
+        let task = app.Runtime.CompileRender(win.FramebufferSignature, sg.RenderObjects(Ag.Scope.Root))
 
         win.RenderTask <- task //|> DefaultOverlays.withStatistics
         win.Run()

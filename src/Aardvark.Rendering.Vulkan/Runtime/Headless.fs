@@ -2,8 +2,9 @@
 
 open System
 open Aardvark.Base
+open Aardvark.Rendering
 
-type HeadlessVulkanApplication(debug : DebugConfig option, instanceExtensions : list<string>, deviceExtensions : PhysicalDevice -> list<string>) =
+type HeadlessVulkanApplication(debug : DebugLevel, instanceExtensions : list<string>, deviceExtensions : PhysicalDevice -> list<string>) =
     let requestedExtensions =
         [
             yield! instanceExtensions
@@ -14,14 +15,14 @@ type HeadlessVulkanApplication(debug : DebugConfig option, instanceExtensions : 
 
             yield! Instance.Extensions.Raytracing
 
-            if debug.IsSome then
+            if debug > DebugLevel.None then
                 yield Instance.Extensions.DebugReport
                 yield Instance.Extensions.DebugUtils
         ]
 
     let requestedLayers =
         [
-            if debug.IsSome then
+            if debug > DebugLevel.None then
                 yield Instance.Layers.Validation
                 yield Instance.Layers.AssistantLayer
         ]
@@ -60,9 +61,9 @@ type HeadlessVulkanApplication(debug : DebugConfig option, instanceExtensions : 
         physicalDevice.CreateDevice(requestedExtensions @ devExt)
 
     // create a runtime
-    let runtime = new Runtime(device, false, false, debug)
+    let runtime = new Runtime(device, debug)
 
-    let defaultCachePath =
+    do
         let dir =
             Path.combine [
                 CachingProperties.CacheDirectory
@@ -70,7 +71,6 @@ type HeadlessVulkanApplication(debug : DebugConfig option, instanceExtensions : 
                 "Vulkan"
             ]
         runtime.ShaderCachePath <- Some dir
-        dir
 
     member x.Dispose() =
         runtime.Dispose()
@@ -83,10 +83,10 @@ type HeadlessVulkanApplication(debug : DebugConfig option, instanceExtensions : 
     member x.Runtime = runtime
 
     new(debug : bool, instanceExtensions : list<string>, deviceExtensions : PhysicalDevice -> list<string>) =
-        new HeadlessVulkanApplication((if debug then Some DebugConfig.Default else None), instanceExtensions, deviceExtensions)
+        new HeadlessVulkanApplication(DebugLevel.ofBool debug, instanceExtensions, deviceExtensions)
 
-    new() = new HeadlessVulkanApplication(None, [], fun _ -> [])
-    new(debug : DebugConfig) = new HeadlessVulkanApplication(Some debug, [], fun _ -> [])
+    new() = new HeadlessVulkanApplication(DebugLevel.None, [], fun _ -> [])
+    new(debug : DebugLevel) = new HeadlessVulkanApplication(debug, [], fun _ -> [])
     new(debug : bool) = new HeadlessVulkanApplication(debug, [], fun _ -> [])
 
     interface IDisposable with

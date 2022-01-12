@@ -13,21 +13,8 @@ open System.Diagnostics
 open System.Collections.Generic
 #nowarn "9"
 
-type DebugConfig =
-    {
-        /// Indicates whether stack traces of (almost) all vulkan handles are stored to
-        /// print the origin of objects in debug messages. Note: Impacts performance significantly.
-        traceHandles : bool
-    }
 
-    static member Default =
-        { traceHandles = false }
-
-    static member TraceHandles =
-        { DebugConfig.Default with traceHandles = true }
-
-
-type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug : DebugConfig option) as this =
+type Runtime(device : Device, debug : DebugLevel) as this =
     let instance = device.Instance
     do device.Runtime <- this
 
@@ -39,99 +26,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     let manager = new ResourceManager(noUser, device)
 
-//    let allPools = System.Collections.Generic.List<DescriptorPool>()
-//    let threadedPools =
-//        new ThreadLocal<DescriptorPool>(fun _ ->
-//            let p = device.CreateDescriptorPool(1 <<< 18, 1 <<< 18)
-//            lock allPools (fun () -> allPools.Add p)
-//            p
-//        )
-//
-//    do device.OnDispose.Add (fun _ ->
-//        allPools |> Seq.iter device.Delete
-//        allPools.Clear()
-//    )
-
-    static let shaderStages =
-        LookupTable.lookupTable [
-            FShade.ShaderStage.Vertex, Aardvark.Rendering.ShaderStage.Vertex
-            FShade.ShaderStage.TessControl, Aardvark.Rendering.ShaderStage.TessControl
-            FShade.ShaderStage.TessEval, Aardvark.Rendering.ShaderStage.TessEval
-            FShade.ShaderStage.Geometry, Aardvark.Rendering.ShaderStage.Geometry
-            FShade.ShaderStage.Fragment, Aardvark.Rendering.ShaderStage.Fragment
-        ]
-
-    #if false
-    let seen = System.Collections.Concurrent.ConcurrentHashSet()
-
-    let debugBreak (str : string) =
-        if Debugger.IsAttached then
-            let stack = StackTrace().GetFrames() |> Array.toList |> List.map (fun f -> f.GetMethod().MetadataToken)
-            if seen.Add ((stack, str)) then
-                Debugger.Break()
-    #else
-    let debugBreak (str : string) = ()
-    #endif
-
-
-    let ignored : HashSet<Guid> =
-        Aardvark.Base.HashSet.empty
-
-    let debugBreak (msg : DebugMessage) =
-        if msg.severity = MessageSeverity.Error then
-            Debugger.Launch() |> ignore
-
-        if Debugger.IsAttached then
-            Debugger.Break()
-
-    let debugMessage (msg : DebugMessage) =
-        if device.DebugReportActive then
-            if not (ignored.Contains msg.id) then
-                let str = msg.layerPrefix + ": " + msg.message
-                match msg.severity with
-                | MessageSeverity.Error ->
-                    Report.Error("[Vulkan] {0}", str)
-                    debugBreak msg
-
-                | MessageSeverity.Warning ->
-                    Report.Warn("[Vulkan] {0}", str)
-
-                | MessageSeverity.Information ->
-                    Report.Line("[Vulkan] {0}", str)
-
-                | _ ->
-                    Report.Line("[Vulkan] DEBUG: {0}", str)
-
-    let debugSummary() =
-        if device.DebugReportActive then
-            let messages = instance.DebugSummary.messageCounts
-
-            if not messages.IsEmpty then
-                let summary =
-                    messages
-                    |> Seq.map (fun (KeyValue(s, n)) -> sprintf "%A: %d" s n)
-                    |> Seq.reduce (fun a b -> a + ", " + b)
-
-                Report.Begin("[Vulkan] Message summary")
-                Report.Line(2, summary)
-                Report.End() |> ignore
-
     // install debug output to file (and errors/warnings to console)
-    let debugSubscription =
-        match debug with
-        | Some debug ->
-            let res =
-                instance.DebugMessages.Subscribe {
-                    new IObserver<_> with
-                        member x.OnNext(msg) = debugMessage msg
-                        member x.OnCompleted() = debugSummary()
-                        member x.OnError _ = ()
-                }
-            instance.SetDebugTracingEnabled(debug.traceHandles)
-            instance.RaiseDebugMessage(MessageSeverity.Information, "Enabled debug report")
-            res
-        | _ ->
-            { new IDisposable with member x.Dispose() = () }
+    let debugSubscription = instance.SetupDebugMessageOutput debug
 
     let onDispose = Event<unit>()
 
@@ -146,9 +42,6 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
     member x.Device = device
     member x.ResourceManager = manager
     member x.ContextLock = device.Token :> IDisposable
-    member x.DebugVerbosity
-        with get() = instance.DebugVerbosity
-        and set v = instance.DebugVerbosity <- v
 
     member x.CreateStreamingTexture (mipMaps : bool) = failf "not implemented"
     member x.DeleteStreamingTexture (texture : IStreamingTexture) = failf "not implemented"
@@ -534,6 +427,8 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
 
     interface IRuntime with
 
+        member x.DebugLevel = debug
+
         member x.DeviceCount = device.PhysicalDevices.Length
 
         member x.MaxLocalSize = device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize
@@ -582,7 +477,7 @@ type Runtime(device : Device, shareTextures : bool, shareBuffers : bool, debug :
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t) = x.GenerateMipMaps(t)
         member x.ContextLock = x.ContextLock
-        member x.CompileRender (signature, engine, set) = x.CompileRender(signature, set)
+        member x.CompileRender (signature, set, debug) = x.CompileRender(signature, set)
         member x.CompileClear(signature, values) = x.CompileClear(signature, values)
 
         member x.PrepareSurface(signature, s) = x.PrepareSurface(signature, s)

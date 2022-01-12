@@ -16,7 +16,6 @@ type Interactive private() =
 
     static let emptySg = Sg.ofList []
     static let mutable samples = 1
-    static let mutable config = { BackendConfiguration.Default with useDebugOutput = true }
 
     static let sg = AVal.init emptySg
     static let window = new SimpleRenderWindow()
@@ -56,9 +55,9 @@ type Interactive private() =
             let task = 
                 match renderer with
                     | Vulkan -> 
-                        app.Runtime.CompileRender(window.FramebufferSignature, config, Sg.dynamic sg) 
+                        app.Runtime.CompileRender(window.FramebufferSignature, Sg.dynamic sg) 
                     | GL -> 
-                        app.Runtime.CompileRender(window.FramebufferSignature, config, Sg.dynamic sg) // |> DefaultOverlays.withStatistics
+                        app.Runtime.CompileRender(window.FramebufferSignature, Sg.dynamic sg) // |> DefaultOverlays.withStatistics
         
             window.RenderTask <- task
             window.Show()
@@ -76,10 +75,6 @@ type Interactive private() =
     static member Samples 
         with get () = samples
         and set v = samples <- v
-
-    static member BackendConfiguration 
-        with get () = config
-        and set v = config <- v
 
     static member Runtime = getApp().Runtime
     static member Keyboard = window.Keyboard

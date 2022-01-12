@@ -53,8 +53,6 @@ module RandomCubesPerformanceTest =
                     DefaultSurfaces.constantColor (C4f(1.0,1.0,1.0,0.2)) |> toEffect 
                 ]
 
-        let config = BackendConfiguration.Native
-
         let signature =
             app.Runtime.CreateFramebufferSignature [
                 DefaultSemantic.Colors, TextureFormat.Rgba8
@@ -69,7 +67,7 @@ module RandomCubesPerformanceTest =
         let task = 
             RenderTask.ofList [
                 app.Runtime.CompileClear(signature, AVal.constant C4f.Black, AVal.constant 1.0)
-                app.Runtime.CompileRender(signature, config, sg.RenderObjects(Ag.Scope.Root))
+                app.Runtime.CompileRender(signature, sg.RenderObjects(Ag.Scope.Root))
             ]
 
         for i in 1..10 do
@@ -135,8 +133,7 @@ module RandomCubesPerformanceTest =
                     DefaultSurfaces.constantColor (C4f(1.0,1.0,1.0,0.2)) |> toEffect 
                 ]
 
-        let config = BackendConfiguration.Native
-        win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, config, sg.RenderObjects(Ag.Scope.Root))
+        win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, sg.RenderObjects(Ag.Scope.Root))
 
         win.Run()
 
@@ -219,11 +216,10 @@ module RenderTaskPerformance =
                         )
              |]
 
-        let config = BackendConfiguration.Native
         let r = System.Random()
         let renderTasks = 
             [ for i in 0 .. 10 do
-                let task = app.Runtime.CompileRender(win.FramebufferSignature, config, renderObjects)
+                let task = app.Runtime.CompileRender(win.FramebufferSignature, renderObjects)
                 yield task, framebuffers.[r.Next(framebuffers.Length-1)]
             ]
 
@@ -282,7 +278,7 @@ module StartupPerformance =
                 app.Runtime.PrepareEffect(fboSig, [ DefaultSurfaces.trafo |> toEffect; DefaultSurfaces.constantColor (C4f(1.0,1.0,1.0,0.2)) |> toEffect ]) :> ISurface
             )
 
-        let test (n : int, cfg : BackendConfiguration) =
+        let test (n : int) =
 
             Report.BeginTimed("{0} objects one-shot rendering", n)
 
@@ -319,7 +315,7 @@ module StartupPerformance =
 
             printfn "start your engine!!!"
             Console.ReadLine() |> ignore
-            let renderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofHashSet preparedRenderObjects)
+            let renderTask = app.Runtime.CompileRender(fboSig, ASet.ofHashSet preparedRenderObjects)
             let sw = System.Diagnostics.Stopwatch()
             Report.BeginTimed("Preparing Task")
             sw.Start()
@@ -342,28 +338,16 @@ module StartupPerformance =
             Report.Line()
 
             sw.Elapsed.TotalSeconds
-
-        let config = BackendConfiguration.Native
-        
-        let config = 
-            match wantedConfig with
-                | 0 -> BackendConfiguration.Native
-                //| 1 -> BackendConfiguration.NativeUnoptimized
-                //| 2 -> BackendConfiguration.UnmanagedOptimized
-                //| 3 -> BackendConfiguration.UnmanagedUnoptimized
-                //| 4 -> BackendConfiguration.ManagedOptimized
-                //| 5 -> BackendConfiguration.ManagedUnoptimized
-                | _ -> failwith "unknown config"
-    
+          
 
         if true then
-            let initialRun = test(n, config)
+            let initialRun = test(n)
 
             Console.SetOut(out)
             printfn "%d;%d;%f" wantedConfig n initialRun
 
         else 
-            test(50000, config) |> ignore
+            test(50000) |> ignore
 
 module IsActiveFlagPerformance = 
     
@@ -410,7 +394,7 @@ module IsActiveFlagPerformance =
 
         let effect = app.Runtime.PrepareEffect(fboSig, [ DefaultSurfaces.trafo |> toEffect; bla |> toEffect ]) :> ISurface
 
-        let test (n : int, cfg : BackendConfiguration) =
+        let test (n : int) =
 
             Report.BeginTimed("{0} objects one-shot rendering", n)
 
@@ -454,11 +438,11 @@ module IsActiveFlagPerformance =
             printfn "start your engine!!!"
             //Console.ReadLine() |> ignore
 
-            let secondRenderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofHashSet preparedRenderObjects)
+            let secondRenderTask = app.Runtime.CompileRender(fboSig, ASet.ofHashSet preparedRenderObjects)
             secondRenderTask.Run(RenderToken.Empty, fbo)
             secondRenderTask.Dispose()
 
-            let renderTask = app.Runtime.CompileRender(fboSig, cfg, ASet.ofHashSet preparedRenderObjects)
+            let renderTask = app.Runtime.CompileRender(fboSig, ASet.ofHashSet preparedRenderObjects)
             
 
             let sw = System.Diagnostics.Stopwatch()
@@ -482,7 +466,7 @@ module IsActiveFlagPerformance =
 
         
         let n = 50000
-        let renderFrame,isActiveFlags = test (n, BackendConfiguration.Native)
+        let renderFrame,isActiveFlags = test (n)
 
         let path = "isActivePerformance4.Managed.csv"
         if System.IO.File.Exists(path) |> not then

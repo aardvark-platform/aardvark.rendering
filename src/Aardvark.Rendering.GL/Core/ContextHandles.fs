@@ -3,11 +3,13 @@
 open System
 open System.Threading
 open System.Collections.Concurrent
+open System.Runtime.InteropServices
 open OpenTK
 open OpenTK.Platform
 open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
+open Aardvark.Rendering
 open Aardvark.Rendering.GL
 
 type ContextErrorEventArgs(msg : string) =
@@ -22,6 +24,18 @@ type ContextErrorEventArgs(msg : string) =
 
 type ContextErrorEventHandler =
     delegate of obj * ContextErrorEventArgs -> unit
+
+
+[<AutoOpen>]
+module ContextHandleGLExtensions =
+    type GL with
+        static member SetDefaultStates() =
+            GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
+            GL.Enable(EnableCap.TextureCubeMapSeamless)
+            GL.Disable(EnableCap.PolygonSmooth)
+            GL.Hint(HintTarget.FragmentShaderDerivativeHint, HintMode.Nicest)
+            if Config.DepthRange = DepthRange.ZeroToOne then
+                GL.ClipControl(ClipOrigin.LowerLeft, ClipDepthMode.ZeroToOne)
 
 /// <summary>
 /// a handle represents a GL context which can be made current and released
@@ -134,14 +148,17 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                 finally
                     x.ReleaseCurrent()
 
-    // Installs debug callback if not yet installed (context is assumed to be current)
-    member x.AttachDebugOutputIfNeeded(enable : bool) =
-        debugOutput <-
-            if enable && debugOutput.IsNone then
-                x.Use (fun _ ->
-                    match DebugOutput.tryInitialize() with
+    /// Sets default API states and initializes the debug output if required.
+    member x.Initialize (debug : DebugLevel, [<Optional; DefaultParameterValue(true)>] setDefaultStates : bool) =
+        x.Use (fun _ ->  
+            if setDefaultStates then
+                GL.SetDefaultStates()
+
+            debugOutput <-
+                if debug > DebugLevel.None && debugOutput.IsNone then
+                    match DebugOutput.tryInitialize debug with
                     | Some dbg ->
-                        let dbg = dbg |> DebugOutput.enable false
+                        let dbg = dbg |> DebugOutput.enable RuntimeConfig.DebugOutputSynchronous
 
                         let str = "debug output enabled"
                         GL.DebugMessageInsert(DebugSourceExternal.DebugSourceApplication, DebugType.DebugTypeOther, 1234,
@@ -152,23 +169,9 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                     | _ ->
                         Log.warn "Failed to initialize debug output"
                         None
-                )
-            else
-                debugOutput
-
-    member x.AttachDebugOutputIfNeeded() =
-        x.AttachDebugOutputIfNeeded true
-
-    member x.DebugOutputEnabled
-        with get() =
-            debugOutput |> Option.map (DebugOutput.isEnabled) |> Option.defaultValue false
-
-        and set (value : bool) =
-            if value then
-                x.AttachDebugOutputIfNeeded()
-                debugOutput <- debugOutput |> Option.map (DebugOutput.enable false)
-            else
-                debugOutput <- debugOutput |> Option.map DebugOutput.disable
+                else
+                    debugOutput
+        )
 
     member x.Dispose() =
         debugOutput |> Option.iter (fun dbg -> dbg.Dispose())
@@ -209,17 +212,6 @@ module ContextHandle =
     /// </summary>
     let releaseCurrent (ctx : ContextHandle) = ctx.ReleaseCurrent()
 
-    /// Initialize global GL config state
-    let initGlConfig() =
-        GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
-        GL.Enable(EnableCap.TextureCubeMapSeamless)
-        GL.Disable(EnableCap.PolygonSmooth)
-        GL.Hint(HintTarget.FragmentShaderDerivativeHint, HintMode.Nicest)
-        if Config.DepthRange = DepthRange.ZeroToOne then
-            GL.ClipControl(ClipOrigin.LowerLeft, ClipDepthMode.ZeroToOne)
-
-
-
 module ContextHandleOpenTK =
     
     let private windows = System.Collections.Concurrent.ConcurrentDictionary<ContextHandle, NativeWindow>()
@@ -227,7 +219,7 @@ module ContextHandleOpenTK =
     /// <summary>
     /// creates a new context using the default configuration
     /// </summary>
-    let create (enableDebug : bool) =
+    let create (debug : DebugLevel) =
         let window, context =
             let prev = ContextHandle.Current
 
@@ -238,7 +230,7 @@ module ContextHandleOpenTK =
             let ctx = context |> unbox<IGraphicsContextInternal>
             ctx.LoadAll()
 
-            ContextHandle.initGlConfig()
+            GL.SetDefaultStates()
 
             // unbind created context and optionally restore previous
             match prev with 
@@ -249,14 +241,11 @@ module ContextHandleOpenTK =
     
         
         let handle = new ContextHandle(context, window.WindowInfo)
-
-        if enableDebug then
-            handle.AttachDebugOutputIfNeeded(true)
+        handle.Initialize(debug, setDefaultStates = false)
 
         // add the window to the windows-table to save it from being
         // garbage collected.
         if not <| windows.TryAdd(handle, window) then failwith "failed to add new context to live-set"
-    
     
         handle
 

@@ -54,7 +54,7 @@ module Shader =
                 }
         }
 
-let createNaive (runtime : IRuntime) (signature : IFramebufferSignature) (backendConfiguration : BackendConfiguration) 
+let createNaive (runtime : IRuntime) (signature : IFramebufferSignature)
                 (viewTrafo : aval<Trafo3d>) (projTrafo : aval<Trafo3d>) 
                 (geometry : IndexedGeometry) (trafos : Trafo3d[]) =
 
@@ -77,12 +77,12 @@ let createNaive (runtime : IRuntime) (signature : IFramebufferSignature) (backen
             |> Sg.projTrafo projTrafo
 
     Log.startTimed "[naive] compile scene"
-    let r = runtime.CompileRender(signature, backendConfiguration, sg)
+    let r = runtime.CompileRender(signature, sg)
     r.PrepareForRender()
     Log.stop()
     r
 
-let createInstanced (runtime : IRuntime) (signature : IFramebufferSignature) (backendConfiguration : BackendConfiguration) 
+let createInstanced (runtime : IRuntime) (signature : IFramebufferSignature)
                     (viewTrafo : aval<Trafo3d>) (projTrafo : aval<Trafo3d>) 
                     (geometry : IndexedGeometry) (trafos : Trafo3d[]) =
 
@@ -112,13 +112,13 @@ let createInstanced (runtime : IRuntime) (signature : IFramebufferSignature) (ba
             |> Sg.projTrafo projTrafo
 
     Log.startTimed "[instanced] compile scene"
-    let r = runtime.CompileRender(signature, backendConfiguration, sg)
+    let r = runtime.CompileRender(signature, sg)
     r.PrepareForRender()
     Log.stop()
     r
 
 
-let createIndirect (runtime : IRuntime) (signature : IFramebufferSignature) (backendConfiguration : BackendConfiguration)  
+let createIndirect (runtime : IRuntime) (signature : IFramebufferSignature)
                    (viewTrafo : aval<Trafo3d>) (projTrafo : aval<Trafo3d>) 
                    (geometry : IndexedGeometry) (trafos : Trafo3d[]) =
 
@@ -154,12 +154,12 @@ let createIndirect (runtime : IRuntime) (signature : IFramebufferSignature) (bac
             |> Sg.projTrafo projTrafo
         
     Log.startTimed "[custom indirect buffer] compile scene"
-    let r = runtime.CompileRender(signature, backendConfiguration, sg)
+    let r = runtime.CompileRender(signature, sg)
     r.PrepareForRender()
     Log.stop()
     r
 
-let renderObjectBased (runtime : IRuntime) (signature : IFramebufferSignature) (backendConfiguration : BackendConfiguration) 
+let renderObjectBased (runtime : IRuntime) (signature : IFramebufferSignature)
                       (viewTrafo : aval<Trafo3d>) (projTrafo : aval<Trafo3d>) 
                       (geometry : IndexedGeometry) (trafos : Trafo3d[])  =
 
@@ -202,7 +202,7 @@ let renderObjectBased (runtime : IRuntime) (signature : IFramebufferSignature) (
         )
 
     Log.startTimed "[custom render objects] compile scene"
-    let r = runtime.CompileRender(signature, backendConfiguration, ASet.ofArray renderObjects)
+    let r = runtime.CompileRender(signature, ASet.ofArray renderObjects)
     r.PrepareForRender()
     Log.stop()
     r
@@ -245,17 +245,15 @@ let main argv =
         |]
 
     // create render tasks for all previously mentioned variants
-    let config = BackendConfiguration.Default
     let geometry = Primitives.unitBox 
     let viewTrafo = cameraView |> AVal.map CameraView.viewTrafo
     let projTrafo = frustum |> AVal.map Frustum.projTrafo
 
     let variants = 
         [|
-            createInstanced runtime win.FramebufferSignature config viewTrafo projTrafo geometry trafos
-            createIndirect runtime win.FramebufferSignature config viewTrafo projTrafo geometry trafos
-            renderObjectBased runtime win.FramebufferSignature config viewTrafo projTrafo geometry trafos
-            renderObjectBased runtime win.FramebufferSignature BackendConfiguration.Native viewTrafo projTrafo geometry trafos
+            createInstanced runtime win.FramebufferSignature viewTrafo projTrafo geometry trafos
+            createIndirect runtime win.FramebufferSignature viewTrafo projTrafo geometry trafos
+            renderObjectBased runtime win.FramebufferSignature viewTrafo projTrafo geometry trafos
             // naive sg is slow for such big scenes:
             //createNaive app.Runtime win.FramebufferSignature BackendConfiguration.NativeOptimized viewTrafo projTrafo geometry trafos
         |]
@@ -264,8 +262,7 @@ let main argv =
         [|
             "instanced"
             "multidraw"
-            "renderobj (fragments)"
-            "renderobj (switch)"
+            "renderobj"
         |]
 
 

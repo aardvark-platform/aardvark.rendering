@@ -106,7 +106,6 @@
     <Compile Include="Pipeline\Raytracing\TraceInstance.fs" />
     <Compile Include="Pipeline\Raytracing\RaytracingPipelineState.fs" />
     <Compile Include="Runtime\Raytracing\RaytracingRuntime.fs" />
-    <Compile Include="Runtime\BackendConfiguration.fs" />
     <Compile Include="Runtime\ResourceManager.fs" />
     <Compile Include="Runtime\Runtime.fs" />
     <Compile Include="Runtime\RuntimeExtensions.fs" />

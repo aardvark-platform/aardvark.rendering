@@ -58,7 +58,7 @@ module StereoShader =
 type private DummyObject() =
     inherit AdaptiveObject()
 
-type VulkanVRApplicationLayered(samples : int, debug : DebugConfig option, adjustSize : V2i -> V2i) as this  =
+type VulkanVRApplicationLayered(samples : int, debug : DebugLevel, adjustSize : V2i -> V2i) as this  =
     inherit VrRenderer(adjustSize)
     
     let app = new HeadlessVulkanApplication(debug, this.GetVulkanInstanceExtensions(), fun d -> this.GetVulkanDeviceExtensions d.Handle)
@@ -134,19 +134,19 @@ type VulkanVRApplicationLayered(samples : int, debug : DebugConfig option, adjus
     
     let queue = device.GraphicsFamily.Queues |> List.head
     
-    new(samples, debug, adjustSize) = new VulkanVRApplicationLayered(samples, (if debug then Some DebugConfig.Default else None), adjustSize)
+    new(samples, debug, adjustSize) = new VulkanVRApplicationLayered(samples, DebugLevel.ofBool debug, adjustSize)
 
-    new(samples, adjustSize) = new VulkanVRApplicationLayered(samples, None, adjustSize)
-    new(debug : DebugConfig, adjustSize) = new VulkanVRApplicationLayered(1, Some debug, adjustSize)
+    new(samples, adjustSize) = new VulkanVRApplicationLayered(samples, DebugLevel.None, adjustSize)
+    new(debug : DebugLevel, adjustSize) = new VulkanVRApplicationLayered(1, debug, adjustSize)
     new(debug : bool, adjustSize) = new VulkanVRApplicationLayered(1, debug, adjustSize)
-    new(adjustSize) = new VulkanVRApplicationLayered(1, None, adjustSize)
+    new(adjustSize) = new VulkanVRApplicationLayered(1, DebugLevel.None, adjustSize)
     
     new(samples, debug : bool) = new VulkanVRApplicationLayered(samples, debug, id)
-    new(samples, debug : DebugConfig) = new VulkanVRApplicationLayered(samples, Some debug, id)
-    new(samples) = new VulkanVRApplicationLayered(samples, None, id)
-    new(debug : DebugConfig) = new VulkanVRApplicationLayered(1, Some debug, id)
+    new(samples, debug : DebugLevel) = new VulkanVRApplicationLayered(samples, debug, id)
+    new(samples) = new VulkanVRApplicationLayered(samples, DebugLevel.None, id)
+    new(debug : DebugLevel) = new VulkanVRApplicationLayered(1, debug, id)
     new(debug : bool) = new VulkanVRApplicationLayered(1, debug, id)
-    new() = new VulkanVRApplicationLayered(1, None, id)
+    new() = new VulkanVRApplicationLayered(1, DebugLevel.None, id)
 
     member x.Version = version
     member x.Texture = tex
@@ -269,7 +269,6 @@ type VulkanVRApplicationLayered(samples : int, debug : DebugConfig option, adjus
         }
 
     override x.Render() = 
-        device.DebugReportActive <- true
         swTotal.Start()
         let output = OutputDescription.ofFramebuffer fbo
 
@@ -340,7 +339,6 @@ type VulkanVRApplicationLayered(samples : int, debug : DebugConfig option, adjus
 
         transact (fun () -> time.MarkOutdated(); version.Value <- version.Value + 1)
         swTotal.Stop()
-        device.DebugReportActive <- false
 
     override x.AfterSubmit() =
         device.perform {

@@ -7,6 +7,36 @@ open FSharp.Data.Adaptive
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.Control
 
+/// Determines the detail of debugging information gathered and how it is reported.
+type DebugLevel =
+
+    /// No debugging is performed.
+    | None = 0
+
+    /// Minimal debugging is performed, errors and warnings from API calls are logged.
+    // GL: Enables GL.Check with logging
+    // Verbosity: Warning
+    | Minimal = 1
+
+    /// More detailed information is logged, an expection is raised when an error occurs.
+    // GL: Enables GL.Check with exceptions
+    // Verbosity: Information
+    | Normal = 2
+
+    /// Full debug information is gathered. This may impact performance significantly.
+    // GL: Enables GL.Check with exceptions
+    // Vulkan: Enables handle tracing
+    // Render tasks: Compiled with debug = true
+    // Verbosity: Debug
+    | Full = 3
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module DebugLevel =
+    
+    let ofBool (enable : bool) =
+        if enable then DebugLevel.Normal else DebugLevel.None
+
+    
 type IRenderTask =
     inherit IDisposable
     inherit IAdaptiveObject
@@ -25,6 +55,8 @@ and IRuntime =
     inherit IQueryRuntime
     inherit IRaytracingRuntime
 
+    abstract member DebugLevel : DebugLevel
+
     abstract member OnDispose : IEvent<unit>
     abstract member ResourceManager : IResourceManager
 
@@ -39,7 +71,9 @@ and IRuntime =
     abstract member CompileClear : signature : IFramebufferSignature * values : aval<ClearValues> -> IRenderTask
 
     /// Compiles a render task for the given render objects.
-    abstract member CompileRender : signature : IFramebufferSignature * BackendConfiguration * aset<IRenderObject> -> IRenderTask
+    abstract member CompileRender : signature : IFramebufferSignature *
+                                    objects : aset<IRenderObject> *
+                                    debug : bool -> IRenderTask
 
     abstract member CreateGeometryPool : Map<Symbol, Type> -> IGeometryPool
 

@@ -11,6 +11,7 @@ open System.Runtime.CompilerServices
 open System.Threading
 open System.Collections.Concurrent
 open Aardvark.Base
+open Aardvark.Rendering
 open Microsoft.FSharp.NativeInterop
 open EXTDebugReport
 open EXTDebugUtils
@@ -366,12 +367,6 @@ type InstanceExtensions private() =
         | Some a -> a.Verbosity
         | _ -> MessageSeverity.Error
 
-    [<Extension>]
-    static member SetDebugVerbosity(this : Instance, v : MessageSeverity) =
-        match getAdapter this with
-        | Some a -> a.Verbosity <- v
-        | _ -> ()
-
     /// Returns whether object tracing is enabled.
     [<Extension>]
     static member GetDebugTracingEnabled(this : Instance) =
@@ -379,11 +374,28 @@ type InstanceExtensions private() =
         | Some a -> a.TracingEnabled
         | _ -> false
 
-    /// Enables or disables object tracing.
+    /// Sets the debug level
     [<Extension>]
-    static member SetDebugTracingEnabled(this : Instance, enabled : bool) =
+    static member SetDebugLevel(this : Instance, level : DebugLevel) =
         match getAdapter this with
-        | Some a -> a.TracingEnabled <- enabled
+        | Some a ->
+            match level with
+            | DebugLevel.Full ->
+                a.TracingEnabled <- true
+                a.Verbosity <- MessageSeverity.Debug
+
+            | DebugLevel.Normal ->
+                a.TracingEnabled <- false
+                a.Verbosity <- MessageSeverity.Information
+
+            | DebugLevel.Minimal ->
+                a.TracingEnabled <- false
+                a.Verbosity <- MessageSeverity.Warning
+
+            | _ ->
+                a.TracingEnabled <- false
+                a.Verbosity <- MessageSeverity.Error
+                
         | _ -> ()
 
     /// Adds the object with the given handle for tracing its origin, which is displayed
@@ -413,16 +425,68 @@ type InstanceExtensions private() =
 
 [<AutoOpen>]
 module ``FSharp Style Debug Extensions`` =
+
+    [<AutoOpen>]
+    module private Output =
+
+        let debugBreak (level : DebugLevel) (msg : DebugMessage) =
+            if level >= DebugLevel.Normal then
+                if msg.severity = MessageSeverity.Error then
+                    Debugger.Launch() |> ignore
+
+                if Debugger.IsAttached then
+                    Debugger.Break()
+
+        let debugMessage (onError : DebugMessage -> unit) (msg : DebugMessage) =
+            let str = msg.layerPrefix + ": " + msg.message
+            match msg.severity with
+            | MessageSeverity.Error ->
+                Report.Error("[Vulkan] {0}", str)
+                onError msg
+
+            | MessageSeverity.Warning ->
+                Report.Warn("[Vulkan] {0}", str)
+
+            | MessageSeverity.Information ->
+                Report.Line("[Vulkan] {0}", str)
+
+            | _ ->
+                Report.Line("[Vulkan] DEBUG: {0}", str)
+
+        let printDebugSummary (summary : DebugSummary) =
+            let messages = summary.messageCounts
+
+            if not messages.IsEmpty then
+                let summary =
+                    messages
+                    |> Seq.map (fun (KeyValue(s, n)) -> sprintf "%A: %d" s n)
+                    |> Seq.reduce (fun a b -> a + ", " + b)
+
+                Report.Begin("[Vulkan] Message summary")
+                Report.Line(2, summary)
+                Report.End() |> ignore
+
     type Instance with
         member x.DebugMessages = x.GetDebugMessageObservable()
 
         member x.DebugSummary = x.GetDebugSummary()
 
-        member x.DebugVerbosity
-            with get() = x.GetDebugVerbosity()
-            and set v = x.SetDebugVerbosity(v)
+        member x.DebugVerbosity = x.GetDebugVerbosity()
 
-        member x.DebugTracingEnabled
-            with get() = x.GetDebugTracingEnabled()
-            and set v = x.SetDebugTracingEnabled(v)
+        member x.DebugTracingEnabled = x.GetDebugTracingEnabled()
+
+        member x.SetupDebugMessageOutput(level : DebugLevel) =
+            if level > DebugLevel.None then
+                let res =
+                    x.DebugMessages.Subscribe {
+                        new IObserver<_> with
+                            member _.OnNext(msg) = msg |> debugMessage (debugBreak level)
+                            member _.OnCompleted() = printDebugSummary x.DebugSummary
+                            member _.OnError _ = ()
+                    }
+                x.RaiseDebugMessage(MessageSeverity.Information, "Enabled debug report")
+                x.SetDebugLevel(level)
+                res
+            else
+                { new IDisposable with member x.Dispose() = () }
 

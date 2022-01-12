@@ -51,7 +51,7 @@ module RenderTasks =
                 GL.Check "could reset viewport"
 
     [<AbstractClass>]
-    type AbstractOpenGlRenderTask(manager : ResourceManager, signature : IFramebufferSignature, config : aval<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) =
+    type AbstractOpenGlRenderTask(manager : ResourceManager, signature : IFramebufferSignature, shareTextures : bool, shareBuffers : bool) =
         inherit AbstractRenderTask()
         let ctx = manager.Context
         let renderTaskLock = RenderTaskLock()
@@ -91,29 +91,12 @@ module RenderTasks =
         member x.StructureChanged() =
             transact (fun () -> structureChanged.MarkOutdated())
 
-        member private x.pushDebugOutput(token : AdaptiveToken) =
-            let c = config.GetValue token
-            match ContextHandle.Current with
-                | ValueSome ctx -> let oldState = ctx.DebugOutputEnabled // get manually tracked state of GL.IsEnabled EnableCap.DebugOutput
-                                   ctx.DebugOutputEnabled <- c.useDebugOutput
-                                   oldState
-                | ValueNone -> Report.Warn("No active context handle in RenderTask.Run")
-                               false
-            
-        member private x.popDebugOutput(token : AdaptiveToken, wasEnabled : bool) =
-            match ContextHandle.Current with
-                | ValueSome ctx -> ctx.DebugOutputEnabled <- wasEnabled
-                | ValueNone -> Report.Warn("Still no active context handle in RenderTask.Run")
-
         abstract member ProcessDeltas : AdaptiveToken * RenderToken -> unit
         abstract member UpdateResources : AdaptiveToken * RenderToken -> unit
         abstract member Perform : AdaptiveToken * RenderToken * Framebuffer * OutputDescription -> unit
         abstract member Update :  AdaptiveToken * RenderToken -> unit
         abstract member Release2 : unit -> unit
 
-
-
-        member x.Config = config
         member x.Context = ctx
         member x.Scope = { scope with task = x }
         member x.RenderTaskLock = renderTaskLock
@@ -159,8 +142,6 @@ module RenderTasks =
             x.UpdateResources(token, t)
 
             Framebuffer.draw signature fbo desc.viewport (fun _ ->
-                let debugState = x.pushDebugOutput(token)
-
                 renderTaskLock.Run (fun () ->
                     beforeRender.Trigger()
                     NativePtr.write runtimeStats V2i.Zero
@@ -176,8 +157,6 @@ module RenderTasks =
                     let rt = NativePtr.read runtimeStats
                     t.AddDrawCalls(rt.X, rt.Y)
                 )
-
-                x.popDebugOutput(token, debugState)
             )
                             
             GL.BindVertexArray 0
@@ -271,16 +250,15 @@ module RenderTasks =
             
 
 
-    type StaticOrderSubTask(ctx : Context, scope : CompilerInfo, config : aval<BackendConfiguration>) =
+    type StaticOrderSubTask(ctx : Context, scope : CompilerInfo, debug : bool) =
         inherit AbstractSubTask()
         let objects : cset<PreparedCommand> = cset [new EpilogCommand(ctx) :> PreparedCommand]
 
         let mutable hasProgram = false
-        let mutable currentConfig = BackendConfiguration.Default
         let mutable program : NativeRenderProgram = Unchecked.defaultof<_>
 
 
-        let reinit (self : StaticOrderSubTask) (config : BackendConfiguration) =
+        let reinit (self : StaticOrderSubTask) =
             // if the config changed or we never compiled a program
             // we need to do something
             if not hasProgram then
@@ -325,17 +303,15 @@ module RenderTasks =
                 // create the new program
                 let newProgram = 
                     Log.line "using optimized native program"
-                    new NativeRenderProgram(comparer, scope, objects, config.execution = ExecutionEngine.Debug) 
+                    new NativeRenderProgram(comparer, scope, objects, debug) 
 
 
                 // finally we store the current config/ program and set hasProgram to true
                 program <- newProgram
                 hasProgram <- true
-                currentConfig <- config
 
         override x.Update(token, t) =
-            let config = config.GetValue token
-            reinit x config
+            reinit x
 
             //TODO
             let programStats = x.ProgramUpdate (t, fun () -> program.Update AdaptiveToken.Top)
@@ -371,8 +347,8 @@ module RenderTasks =
 
 
     
-    type NewRenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, config : aval<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
-        inherit AbstractOpenGlRenderTask(man, fboSignature, config, shareTextures, shareBuffers)
+    type NewRenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, shareTextures : bool, shareBuffers : bool) as this =
+        inherit AbstractOpenGlRenderTask(man, fboSignature, shareTextures, shareBuffers)
         
         let primitivesGenerated = OpenGlQuery(QueryTarget.PrimitivesGenerated)
 
@@ -419,8 +395,8 @@ module RenderTasks =
 
 
 
-    type RenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, config : aval<BackendConfiguration>, shareTextures : bool, shareBuffers : bool) as this =
-        inherit AbstractOpenGlRenderTask(man, fboSignature, config, shareTextures, shareBuffers)
+    type RenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, shareTextures : bool, shareBuffers : bool, debug : bool) as this =
+        inherit AbstractOpenGlRenderTask(man, fboSignature, shareTextures, shareBuffers)
         
         let ctx = man.Context
         let inputSet = InputSet(this) 
@@ -455,11 +431,11 @@ module RenderTasks =
                     let task = 
                         match pass.Order with
                             | RenderPassOrder.Arbitrary ->
-                                new StaticOrderSubTask(ctx, this.Scope, this.Config) :> AbstractSubTask
+                                new StaticOrderSubTask(ctx, this.Scope, debug) :> AbstractSubTask
 
                             | order ->
                                 Log.warn "[GL] no sorting"
-                                new StaticOrderSubTask(ctx, this.Scope, this.Config) :> AbstractSubTask //new CameraSortedSubTask(order, this) :> AbstractSubTask
+                                new StaticOrderSubTask(ctx, this.Scope, debug) :> AbstractSubTask //new CameraSortedSubTask(order, this) :> AbstractSubTask
 
                     subtasks <- Map.add pass task subtasks
                     task

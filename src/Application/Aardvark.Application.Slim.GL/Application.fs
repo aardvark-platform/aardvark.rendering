@@ -282,12 +282,12 @@ module private OpenGL =
                 glfw.WindowHint(WindowHintInt.Samples, cfg.samples)
         }
 
-type OpenGlApplication(forceNvidia : bool, enableDebug : bool, shaderCachePath : Option<string>) =
+type OpenGlApplication(forceNvidia : bool, debug : DebugLevel, shaderCachePath : Option<string>) =
     do if forceNvidia then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
        // hs, 01-02.2021, this should NOT be necessary in slim. 
        //OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
        
-    let runtime = new Runtime()
+    let runtime = new Runtime(debug)
     let glfw = Application(runtime, OpenGL.interop, false)
     
     let windowConfig =
@@ -307,27 +307,25 @@ type OpenGlApplication(forceNvidia : bool, enableDebug : bool, shaderCachePath :
     let createContext() =
         let w = glfw.CreateWindow windowConfig
         let h = w.Surface.Handle :?> Aardvark.Rendering.GL.ContextHandle
-        if enableDebug then h.AttachDebugOutputIfNeeded()
-        let o = ContextHandle.Current
-        h.MakeCurrent()
-
-        ContextHandle.initGlConfig()
-
-        h.ReleaseCurrent()
-        match o with
-        | ValueSome o -> o.MakeCurrent()
-        | ValueNone -> ()
+        h.Initialize(debug)
         glfw.RemoveExistingWindow w
         h
 
     let ctx = new Context(runtime, fun () -> glfw.Invoke createContext)
 
     do ctx.ShaderCachePath <- shaderCachePath
-       runtime.Initialize(ctx, true, true)
+       runtime.Initialize(ctx)
  
-    new(enableDebug) = new OpenGlApplication(true, enableDebug)
-    new() = new OpenGlApplication(true, false)
-    new(forceNvidia, enableDebug) = new OpenGlApplication(forceNvidia, enableDebug, Context.DefaultShaderCachePath)
+    new(forceNvidia, debug, shaderCachePath) =
+        new OpenGlApplication(forceNvidia, DebugLevel.ofBool debug, shaderCachePath)
+
+    new(forceNvidia, debug : DebugLevel) = new OpenGlApplication(forceNvidia, debug, Context.DefaultShaderCachePath)
+    new(forceNvidia, debug : bool) = new OpenGlApplication(forceNvidia, DebugLevel.ofBool debug, Context.DefaultShaderCachePath)
+
+    new(debug : DebugLevel) = new OpenGlApplication(true, debug)
+    new(debug : bool) = new OpenGlApplication(true, DebugLevel.ofBool debug)
+
+    new() = new OpenGlApplication(true, DebugLevel.None)
 
     member x.Context = ctx
     member x.Runtime = runtime

@@ -124,7 +124,6 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     
     let mutable shaderCachePath : Option<string> = None
     let mutable validateShaderCaches = false
-    let mutable debugReportActive = true
 
     let allIndicesArr = 
         [|
@@ -324,10 +323,6 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
         )
 
     member x.CopyEngine = copyEngine.Value
-
-    member x.DebugReportActive 
-        with get() = debugReportActive
-        and set v = debugReportActive <- v
 
     member x.ValidateShaderCaches
         with get() = validateShaderCaches

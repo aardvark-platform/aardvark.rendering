@@ -13,7 +13,7 @@ open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
 open Aardvark.Application
 
-type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
+type OpenGlRenderControl(runtime : Runtime, debug : DebugLevel, samples : int) =
     inherit GLControl(
         Graphics.GraphicsMode(
             OpenTK.Graphics.ColorFormat(Config.BitsPerPixel),
@@ -257,7 +257,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
 
         base.OnHandleCreated(e) // creates the graphics context of the control and performs MakeCurrent -> NOTE: during this call rendering in other threads can break resource sharing
 
-        ContextHandle.initGlConfig()
+        GL.SetDefaultStates()
 
 
     member x.Render() =
@@ -266,7 +266,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         if loaded then
             if isNull contextHandle || contextHandle.Handle.IsDisposed then
                 contextHandle <- new ContextHandle(base.Context, base.WindowInfo)
-                contextHandle.AttachDebugOutputIfNeeded(enableDebug)
+                contextHandle.Initialize(debug, setDefaultStates = false)
                 initial <- true
 
             beforeRender.Trigger()
@@ -389,5 +389,7 @@ type OpenGlRenderControl(runtime : Runtime, enableDebug : bool, samples : int) =
         member x.BeforeRender = beforeRender.Publish
         member x.AfterRender = afterRender.Publish
 
-    new(runtime : Runtime, enableDebug : bool) = new OpenGlRenderControl(runtime, enableDebug, 1)
+    new(runtime : Runtime, debug : bool, samples : int) = new OpenGlRenderControl(runtime, DebugLevel.ofBool debug, samples)
+    new(runtime : Runtime, debug : DebugLevel) = new OpenGlRenderControl(runtime, debug, 1)
+    new(runtime : Runtime, debug : bool) = new OpenGlRenderControl(runtime, debug, 1)
 

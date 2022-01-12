@@ -6,6 +6,7 @@ open System.Collections.Concurrent
 open Aardvark.Application
 open Aardvark.Rendering.Vulkan
 open Aardvark.Base
+open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 
@@ -87,7 +88,7 @@ module VisualDeviceChooser =
 
 
 
-type VulkanApplication(debug : DebugConfig option, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
+type VulkanApplication(debug : DebugLevel, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
     let requestedExtensions =
         [
             yield Instance.Extensions.Surface
@@ -102,14 +103,14 @@ type VulkanApplication(debug : DebugConfig option, chooseDevice : list<PhysicalD
 
             yield! Instance.Extensions.Raytracing
 
-            if debug.IsSome then
+            if debug > DebugLevel.None then
                 yield Instance.Extensions.DebugReport
                 yield Instance.Extensions.DebugUtils
         ]
 
     let requestedLayers =
         [
-            if debug.IsSome then
+            if debug > DebugLevel.None then
                 yield Instance.Layers.Validation
                 yield Instance.Layers.AssistantLayer
         ]
@@ -146,9 +147,9 @@ type VulkanApplication(debug : DebugConfig option, chooseDevice : list<PhysicalD
         physicalDevice.CreateDevice(enabledExtensions)
 
     // create a runtime
-    let runtime = new Runtime(device, false, false, debug)
+    let runtime = new Runtime(device, debug)
 
-    let defaultCachePath =
+    do
         let dir =
             Path.combine [
                 CachingProperties.CacheDirectory
@@ -156,7 +157,6 @@ type VulkanApplication(debug : DebugConfig option, chooseDevice : list<PhysicalD
                 "Vulkan"
             ]
         runtime.ShaderCachePath <- Some dir
-        dir
 
     let canCreateRenderControl =
         List.contains Instance.Extensions.SwapChain device.EnabledExtensions
@@ -198,10 +198,11 @@ type VulkanApplication(debug : DebugConfig option, chooseDevice : list<PhysicalD
 
         member x.Dispose() = x.Dispose()
 
-    new(debug : bool, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
-        new VulkanApplication((if debug then Some DebugConfig.Default else None), chooseDevice)
 
-    new(debug : DebugConfig) = new VulkanApplication(Some debug, VisualDeviceChooser.run)
+    new(debug : bool, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
+        new VulkanApplication(DebugLevel.ofBool debug, chooseDevice)
+
+    new(debug : DebugLevel)  = new VulkanApplication(debug, VisualDeviceChooser.run)
     new(debug : bool)        = new VulkanApplication(debug, VisualDeviceChooser.run)
-    new(chooser)             = new VulkanApplication(None, chooser)
-    new()                    = new VulkanApplication(None, VisualDeviceChooser.run)
+    new(chooser)             = new VulkanApplication(DebugLevel.None, chooser)
+    new()                    = new VulkanApplication(DebugLevel.None, VisualDeviceChooser.run)

@@ -11,8 +11,8 @@ open OpenTK.Graphics.OpenGL4
 open Aardvark.Application.Slim
 
 let testCompile() =
-    use runtime = new Runtime()
-    let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create false)
+    use runtime = new Runtime(DebugLevel.None)
+    let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create runtime.DebugLevel)
     runtime.Initialize(ctx)
 
     let signature =
@@ -104,7 +104,7 @@ let testCompile() =
         Log.startTimed "compile %d" cnt
         let sw = System.Diagnostics.Stopwatch.StartNew()
         //let task = runtime.Compile(signature, commands)
-        let task = runtime.CompileRender(signature, BackendConfiguration.Default, set)
+        let task = runtime.CompileRender(signature, set)
         task.Run(RenderToken.Empty, fbo)
         sw.Stop()
         Log.stop()
@@ -152,8 +152,7 @@ let testDownloadSlice() =
     ()
 
 let testTextureCubeArray() =
-    RuntimeConfig.ErrorReporting <- ErrorReporting.Exception
-    let app = new OpenGlApplication(false, true)
+    let app = new OpenGlApplication(false, DebugLevel.Normal)
     let runtime = app.Runtime
     let texRt = runtime :> ITextureRuntime
 
@@ -183,8 +182,7 @@ let testTextureCubeArray() =
     
 
 let testCopySlice() = 
-    RuntimeConfig.ErrorReporting <- ErrorReporting.Exception
-    let app = new OpenGlApplication(false, true)
+    let app = new OpenGlApplication(false, DebugLevel.Normal)
     let runtime = app.Runtime
     let texRt = runtime :> ITextureRuntime
     let texSrc = texRt.CreateTexture2DArray(V2i(222,333), TextureFormat.Rgba8, 1, 1, 2)

@@ -6,22 +6,11 @@ open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
 open FSharp.Data.Adaptive
 open FShade
-open Microsoft.FSharp.NativeInterop
 open Aardvark.Rendering.GL
 
 #nowarn "9"
 
-module private Align =
-    let next (a : int) (v : int) =
-        if v % a = 0 then v
-        else (1 + v / a) * a
-
-    let next2 (a : int) (v : V2i) =
-        V2i(next a v.X, next a v.Y)
-
-type Runtime() =
-
-    static let versionRx = System.Text.RegularExpressions.Regex @"([0-9]+\.)*[0-9]+"
+type Runtime(debug : DebugLevel) =
 
     let mutable ctx : Context = Unchecked.defaultof<_>
     let mutable manager : ResourceManager = Unchecked.defaultof<_>
@@ -32,12 +21,20 @@ type Runtime() =
 
     member x.Context = ctx
 
-    member x.Initialize(context : Context, shareTextures : bool, shareBuffers : bool) =
+    member x.DebugLevel = debug
+
+    member x.Initialize(context : Context) =
            if ctx <> null then
                Log.warn "Runtime already initialized"
 
            ctx <- context
-           manager <- ResourceManager(context, None, shareTextures, shareBuffers)
+           manager <- ResourceManager(context, None, true, true)
+
+           RuntimeConfig.ErrorReporting <-
+               match debug with
+               | DebugLevel.Full | DebugLevel.Normal -> ErrorReporting.Exception
+               | DebugLevel.Minimal -> ErrorReporting.Log
+               | _ -> ErrorReporting.Disabled
 
            Operators.using context.ResourceLock (fun _ ->
 
@@ -68,13 +65,11 @@ type Runtime() =
                        failwith "Essentinal OpenGL procedure missing"
 
                    OpenGl.Unsafe.ActiveTexture (int OpenTK.Graphics.OpenGL4.TextureUnit.Texture0)
-                   OpenTK.Graphics.OpenGL4.GL.Check "first GL call failed"
+                   GL.Check "first GL call failed"
 
                finally
                    Log.stop()
            )
-
-    member x.Initialize(context : Context) = x.Initialize(context, true, true)
 
     member x.Dispose() =
         if ctx <> null then
@@ -101,6 +96,8 @@ type Runtime() =
             new LodRenderer(ctx, x.ResourceManager, preparedState, config, data) :> IPreparedRenderObject
 
     interface IRuntime with
+
+        member x.DebugLevel = x.DebugLevel
 
         member x.DeviceCount = 1
 
@@ -175,7 +172,7 @@ type Runtime() =
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
         member x.ContextLock = ctx.ResourceLock :> IDisposable
-        member x.CompileRender (signature, engine : BackendConfiguration, set : aset<IRenderObject>) = x.CompileRender(signature, engine,set)
+        member x.CompileRender (signature, set : aset<IRenderObject>, debug : bool) = x.CompileRender(signature, set, debug)
         member x.CompileClear(signature, values) = x.CompileClear(signature, values)
 
         ///NOTE: OpenGL does not care about
@@ -532,41 +529,18 @@ type Runtime() =
             | _ ->
                 failwithf "unsupported streaming texture: %A" t
 
-    member private x.CompileRenderInternal (fboSignature : IFramebufferSignature, engine : aval<BackendConfiguration>, set : aset<IRenderObject>) =
+    member private x.CompileRender (signature : IFramebufferSignature, set : aset<IRenderObject>, debug : bool) =
         let set = EffectDebugger.Hook set
-        let eng = engine.GetValue()
-        let shareTextures = eng.sharing &&& ResourceSharing.Textures <> ResourceSharing.None
-        let shareBuffers = eng.sharing &&& ResourceSharing.Buffers <> ResourceSharing.None
+        let shareTextures = RuntimeConfig.ShareTexturesBetweenTasks
+        let shareBuffers = RuntimeConfig.ShareBuffersBetweenTasks
 
         if RuntimeConfig.UseNewRenderTask then
-            new RenderTasks.NewRenderTask(manager, fboSignature, set, engine, shareTextures, shareBuffers) :> IRenderTask
+            new RenderTasks.NewRenderTask(manager, signature, set, shareTextures, shareBuffers) :> IRenderTask
         else
-            new RenderTasks.RenderTask(manager, fboSignature, set, engine, shareTextures, shareBuffers) :> IRenderTask
+            new RenderTasks.RenderTask(manager, signature, set, shareTextures, shareBuffers, debug) :> IRenderTask
 
-    member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) : IPreparedRenderObject =
-        PreparedCommand.ofRenderObject fboSignature manager rj :> IPreparedRenderObject
-        //match rj with
-        //     | :? RenderTaskObject as t -> t :> IPreparedRenderObject
-        //     | :? RenderObject as rj -> manager.Prepare(fboSignature, rj) :> IPreparedRenderObject
-        //     | :? MultiRenderObject as rj ->
-        //        let all =
-        //            rj.Children
-        //                |> List.map (fun ro -> x.PrepareRenderObject(fboSignature, ro))
-        //                |> List.collect (fun o ->
-        //                    match o with
-        //                        | :? PreparedMultiRenderObject as s -> s.Children
-        //                        | _ -> [unbox<PreparedRenderObject> o]
-        //                )
-        //        new PreparedMultiRenderObject(all) :> IPreparedRenderObject
-
-        //     | :? PreparedRenderObject | :? PreparedMultiRenderObject -> failwith "tried to prepare prepared render object"
-        //     | _ -> failwith "unknown render object type"
-
-    member x.CompileRender(fboSignature : IFramebufferSignature, engine : aval<BackendConfiguration>, set : aset<IRenderObject>) : IRenderTask =
-        x.CompileRenderInternal(fboSignature, engine, set)
-
-    member x.CompileRender(fboSignature : IFramebufferSignature, engine : BackendConfiguration, set : aset<IRenderObject>) : IRenderTask =
-        x.CompileRenderInternal(fboSignature, AVal.constant engine, set)
+    member x.PrepareRenderObject(signature : IFramebufferSignature, rj : IRenderObject) : IPreparedRenderObject =
+        PreparedCommand.ofRenderObject signature manager rj :> IPreparedRenderObject
 
     member x.CompileClear(signature : IFramebufferSignature, values : aval<ClearValues>) : IRenderTask =
         new RenderTasks.ClearTask(x, ctx, signature, values) :> IRenderTask

@@ -80,7 +80,7 @@ module private Vulkan =
                 glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.NoApi)
         }
 
-type VulkanApplication(userExt : list<string>, debug : option<DebugConfig>) =    
+type VulkanApplication(userExt : list<string>, debug : DebugLevel) =    
     static let surfaceExtensions = 
         let all = Instance.GlobalExtensions
         all
@@ -122,13 +122,16 @@ type VulkanApplication(userExt : list<string>, debug : option<DebugConfig>) =
         }
     
     new(userExt : list<string>, debug : bool) =
-        new VulkanApplication(userExt, if debug then Some DebugConfig.Default else None)
+        new VulkanApplication(userExt, DebugLevel.ofBool debug)
+
+    new(debug : DebugLevel) =
+        new VulkanApplication([], debug)
     
     new(debug : bool) =
-        new VulkanApplication([], if debug then Some DebugConfig.Default else None)
+        new VulkanApplication([], debug)
     
     new() =
-        new VulkanApplication([], None)
+        new VulkanApplication([], DebugLevel.None)
     
     static member SetDeviceChooser(chooser : PhysicalDevice[] -> int) =
         Aardvark.Rendering.Vulkan.CustomDeviceChooser.Register(fun ds ->

@@ -11,18 +11,20 @@ open FSharp.Data.Adaptive
 [<AbstractClass; Sealed; Extension>]
 type SceneGraphRuntimeExtensions private() =
 
-    [<Extension>]
-    static member CompileRender (x : IRuntime, signature : IFramebufferSignature, engine : BackendConfiguration, s : ISg) =
-        let app = Sg.DynamicNode(AVal.constant s)
-        app?Runtime <- x
-        let jobs : aset<IRenderObject> = app.RenderObjects(Ag.Scope.Root)
-        // TODO: fix overlays
-        //let overlays = app.OverlayTasks() |> ASet.sortBy fst |> AList.map snd |> RenderTask.ofAList
-        x.CompileRender(signature, engine, jobs)
+    static let toRenderObjects (runtime : IRuntime) (sg : ISg) =
+        let app = Sg.DynamicNode(AVal.constant sg)
+        app?Runtime <- runtime
+        app.RenderObjects(Ag.Scope.Root)
 
     [<Extension>]
-    static member CompileRender (x : IRuntime, signature : IFramebufferSignature, s : ISg) =
-        SceneGraphRuntimeExtensions.CompileRender(x, signature, BackendConfiguration.Default, s)
+    static member CompileRender(this : IRuntime, signature : IFramebufferSignature, sg : ISg, debug : bool) =
+        let ro = sg |> toRenderObjects this
+        this.CompileRender(signature, ro, debug)
+
+    [<Extension>]
+    static member CompileRender(this : IRuntime, signature : IFramebufferSignature, sg : ISg) =
+        let ro = sg |> toRenderObjects this
+        this.CompileRender(signature, ro)
 
 [<AutoOpen>]
 module RuntimeSgExtensions =
@@ -31,5 +33,5 @@ module RuntimeSgExtensions =
         let compile (runtime : IRuntime) (signature : IFramebufferSignature) (sg : ISg) =
             runtime.CompileRender(signature, sg)
 
-        let compile' (runtime : IRuntime) (signature : IFramebufferSignature) (config : BackendConfiguration) (sg : ISg) =
-            runtime.CompileRender(signature, config, sg)
+        let compile' (runtime : IRuntime) (signature : IFramebufferSignature) (debug : bool) (sg : ISg) =
+            runtime.CompileRender(signature, sg, debug)

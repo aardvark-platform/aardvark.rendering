@@ -275,7 +275,7 @@ let main argv =
 
     // uncomment/comment to switch between the backends
     //use app = new VulkanApplication(debug = true)
-    use app = new OpenGlApplication()
+    use app = new OpenGlApplication(DebugLevel.Normal)
     let runtime = app.Runtime :> IRuntime
     let samples = 8
 

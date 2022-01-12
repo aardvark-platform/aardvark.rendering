@@ -275,7 +275,7 @@ let main argv =
                 |> Sg.texture (Symbol.Create "SingleTexture") textureSingleMod
 
 
-    let rt = app.Runtime.CompileRender(win.FramebufferSignature, BackendConfiguration.Native, sg)
+    let rt = app.Runtime.CompileRender(win.FramebufferSignature, sg)
 
     let sw = Stopwatch()
 

@@ -28,13 +28,6 @@ type Display =
     | Stereo
     | OpenVR
 
-type DebugVerbosity =
-    | None = 0
-    | Error = 1
-    | Warning = 2
-    | Information = 3
-    | Debug = 4
-
 type DeviceKind =
     | None          = 0x0
     | Unknown       = 0x1
@@ -47,7 +40,7 @@ type RenderConfig =
         app             : Option<IApplication>
         backend         : Backend
         showHelp        : bool
-        debug           : DebugVerbosity
+        debug           : DebugLevel
         samples         : int
         display         : Display
         scene           : ISg
@@ -55,6 +48,20 @@ type RenderConfig =
         initialCamera   : Option<CameraView>
         initialSpeed    : Option<float>
     }
+
+    static member internal Default =
+        {
+            app = None
+            backend = Backend.GL
+            debug = DebugLevel.None
+            samples = 8
+            display = Display.Mono
+            scene = Sg.empty
+            deviceKind = DeviceKind.Dedicated
+            initialCamera = None
+            initialSpeed = None
+            showHelp = true
+        }
 
 [<AutoOpen>]
 module ``FShade Extensions`` =
@@ -348,15 +355,7 @@ module Utilities =
             let sg = sg |> Sg.viewTrafo view |> Sg.projTrafo proj
             Sg.ofList [sg; overlay]
 
-    let private toMessageSeverity =
-        LookupTable.lookupTable [
-            DebugVerbosity.Debug, MessageSeverity.Debug
-            DebugVerbosity.Information, MessageSeverity.Information
-            DebugVerbosity.Warning, MessageSeverity.Warning
-            DebugVerbosity.Error, MessageSeverity.Error
-        ]
-
-    let c (debug : bool) (backend : Backend)  =
+    let c (debug : DebugLevel) (backend : Backend)  =
         match backend with
             | Backend.GL -> new OpenGlApplication(debug) :> IApplication
             | Backend.Vulkan -> new VulkanApplication(debug) :> IApplication
@@ -387,19 +386,16 @@ module Utilities =
         | Some app -> 
             app
         | None -> 
-            let enableDebug = cfg.debug <> DebugVerbosity.None
             match cfg.backend with
-                | Backend.GL -> 
-                    new OpenGlApplication(cfg.deviceKind = DeviceKind.Dedicated, enableDebug) :> IApplication
-                | Backend.Vulkan -> 
-                    VulkanApplication.SetDeviceChooser(fun ds ->
-                        let res = chooseDevice cfg (Array.toList ds)
-                        Array.IndexOf(ds, res)
-                    )
-                    let app = new VulkanApplication(enableDebug) 
-                    if enableDebug then
-                        app.Runtime.DebugVerbosity <- toMessageSeverity cfg.debug
-                    app :> IApplication
+            | Backend.GL -> 
+                new OpenGlApplication(cfg.deviceKind = DeviceKind.Dedicated, cfg.debug) :> IApplication
+            | Backend.Vulkan -> 
+                VulkanApplication.SetDeviceChooser(fun ds ->
+                    let res = chooseDevice cfg (Array.toList ds)
+                    Array.IndexOf(ds, res)
+                )
+                let app = new VulkanApplication(cfg.debug) 
+                app :> IApplication
 
     let createGameWindow (app : IApplication) (cfg : RenderConfig) =
         match app with
@@ -616,11 +612,7 @@ module Utilities =
     let private createOpenVR (cfg : RenderConfig) =
         match cfg.backend with
             | Backend.Vulkan ->
-                let enableDebug = cfg.debug <> DebugVerbosity.None
-                let app = new VulkanVRApplicationLayered(cfg.samples, enableDebug)
-                if enableDebug then
-                    app.Runtime.DebugVerbosity <- toMessageSeverity cfg.debug
-
+                let app = new VulkanVRApplicationLayered(cfg.samples, cfg.debug)
                 let hmdLocation = app.Hmd.MotionState.Pose |> AVal.map (fun t -> t.Forward.C3.XYZ)
 
 
@@ -649,8 +641,7 @@ module Utilities =
                 } :> ISimpleRenderWindow
 
             | Backend.GL -> 
-                let enableDebug = cfg.debug <> DebugVerbosity.None
-                let app = new OpenGlVRApplicationLayered(cfg.samples, enableDebug)
+                let app = new OpenGlVRApplicationLayered(cfg.samples, cfg.debug)
 
                 let hmdLocation = app.Hmd.MotionState.Pose |> AVal.map (fun t -> t.Forward.C3.XYZ)
 
@@ -694,16 +685,10 @@ module Utilities =
 
     let run (display : Display) (backend : Backend) (scene : ISg) =
         runConfig {
-            app = None
-            scene = scene
-            display = display
-            backend = backend
-            debug = DebugVerbosity.Warning
-            samples = 8
-            deviceKind = DeviceKind.Dedicated
-            initialCamera = None
-            initialSpeed  = None
-            showHelp = true
+            RenderConfig.Default with
+                scene = scene
+                display = display
+                backend = backend
         }
 
 [<AutoOpen>]
@@ -763,7 +748,7 @@ module ``Render Utilities`` =
                 else
                     true
             Log.line "[Application] debug: %A" state
-            cfg <- { cfg with debug = if state then DebugVerbosity.Information else DebugVerbosity.None }
+            cfg <- { cfg with debug = DebugLevel.ofBool state }
 
         let m = dedicatedRX.Match args
         if m.Success then
@@ -778,19 +763,7 @@ module ``Render Utilities`` =
         cfg
 
     type ShowBuilder() =
-        member x.Yield(()) =
-            {
-                app = None
-                backend = Backend.Vulkan
-                debug = DebugVerbosity.Warning
-                samples = 8
-                display = Display.Mono
-                scene = Sg.empty
-                deviceKind = DeviceKind.Dedicated
-                initialCamera = None
-                initialSpeed = None
-                showHelp = true
-            }
+        member x.Yield(()) = RenderConfig.Default
             
         [<CustomOperation("app")>]
         member x.Application(s : RenderConfig, a : IApplication) =
@@ -805,17 +778,16 @@ module ``Render Utilities`` =
             { s with backend = b }
 
         [<CustomOperation("debug")>]
+        member x.Debug(s : RenderConfig, d : DebugLevel) =
+            { s with debug = d }
+
         member x.Debug(s : RenderConfig, d : bool) =
-            { s with debug = if d then DebugVerbosity.Warning else DebugVerbosity.None }
+            { s with debug = DebugLevel.ofBool d }
             
         [<CustomOperation("device")>]
         member x.DeviceKind(s : RenderConfig, k : DeviceKind) =
             { s with deviceKind = k }
             
-        [<CustomOperation("verbosity")>]
-        member x.Verbosity(s : RenderConfig, d : DebugVerbosity) =
-            { s with debug = d }
-
         [<CustomOperation("samples")>]
         member x.Samples(state : RenderConfig, s : int) =
             { state with samples = s }
@@ -841,19 +813,7 @@ module ``Render Utilities`` =
 
     type WindowBuilder() =
 
-        member x.Yield(()) =
-            {
-                app = None
-                backend = Backend.GL
-                debug = DebugVerbosity.Warning
-                samples = 8
-                deviceKind = DeviceKind.Dedicated
-                display = Display.Mono
-                scene = Sg.empty
-                initialCamera = None
-                initialSpeed = None
-                showHelp = true
-            }
+        member x.Yield(()) = RenderConfig.Default
             
         [<CustomOperation("app")>]
         member x.Application(s : RenderConfig, a : IApplication) =
@@ -868,16 +828,15 @@ module ``Render Utilities`` =
             { s with backend = b }
             
         [<CustomOperation("debug")>]
+        member x.Debug(s : RenderConfig, d : DebugLevel) =
+            { s with debug = d }
+
         member x.Debug(s : RenderConfig, d : bool) =
-            { s with debug = if d then DebugVerbosity.Warning else DebugVerbosity.None }
+            { s with debug = DebugLevel.ofBool d }
             
         [<CustomOperation("device")>]
         member x.DeviceKind(s : RenderConfig, k : DeviceKind) =
             { s with deviceKind = k }
-
-        [<CustomOperation("verbosity")>]
-        member x.Verbosity(s : RenderConfig, d : DebugVerbosity) =
-            { s with debug = d }
 
         [<CustomOperation("samples")>]
         member x.Samples(state : RenderConfig, s : int) =
