@@ -703,7 +703,7 @@ module SgFSharp =
         /// The name can be a string or Symbol.
         let inline vertexArray (name : ^Name) (value : System.Array) (sg : ISg) =
             let sym = name |> Symbol.convert Symbol.Converters.untyped
-            let view = BufferView(~~(ArrayBuffer value :> IBuffer), value.GetType().GetElementType())
+            let view = BufferView(value)
             Sg.VertexAttributeApplicator(Map.ofList [sym, view], ~~sg) :> ISg
 
         /// Provides a vertex attribute with the given name by supplying a single value.

@@ -183,36 +183,21 @@ module Scene =
             )
             |> IndirectBuffer.ofArray geometry.IsIndexed
 
-        let makeBufferView (f : 'T -> 'U) (data : aval<'T[]>) =
-            let buffer =
-                data |> AVal.map (fun data ->
-                    let array = data |> Array.map f
-                    ArrayBuffer array :> IBuffer
-                )
-
-            BufferView(buffer, typeof<'U>)
-
-        let instanceIndex =
-            ids |> AVal.constant |> makeBufferView id
-
-        let instanceColor =
-            colors rnd |> AVal.constant |> makeBufferView id
-
         let instanceTrafo =
-            trafos |> makeBufferView (Trafo.forward >> M44f)
+            trafos |> AVal.map (Array.map (Trafo.forward >> M44f))
 
         let instanceTrafoInv =
-            trafos |> makeBufferView (Trafo.backward >> M44f)
+            trafos |> AVal.map (Array.map (Trafo.backward >> M44f))
 
         let sg =
             Sg.indirectDraw geometry.Mode ~~indirectBuffer
             |> Sg.indexArray geometry.IndexArray
             |> Sg.vertexArray DefaultSemantic.Positions geometry.IndexedAttributes.[DefaultSemantic.Positions]
             |> Sg.vertexArray DefaultSemantic.Normals geometry.IndexedAttributes.[DefaultSemantic.Normals]
-            |> Sg.instanceBuffer DefaultSemantic.CustomId instanceIndex
-            |> Sg.instanceBuffer DefaultSemantic.Colors instanceColor
-            |> Sg.instanceBuffer DefaultSemantic.InstanceTrafo instanceTrafo
-            |> Sg.instanceBuffer DefaultSemantic.InstanceTrafoInv instanceTrafoInv
+            |> Sg.instanceAttribute' DefaultSemantic.CustomId ids
+            |> Sg.instanceAttribute' DefaultSemantic.Colors (colors rnd)
+            |> Sg.instanceAttribute DefaultSemantic.InstanceTrafo instanceTrafo
+            |> Sg.instanceAttribute DefaultSemantic.InstanceTrafoInv instanceTrafoInv
 
         let projTrafo =
             win.Sizes |> AVal.map (fun s ->

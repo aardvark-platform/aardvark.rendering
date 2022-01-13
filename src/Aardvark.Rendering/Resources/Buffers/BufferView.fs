@@ -5,7 +5,7 @@ open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 open Aardvark.Base
 
-type BufferView(b : aval<IBuffer>, elementType : Type, offset : int, stride : int) =
+type BufferView(b : aval<IBuffer>, elementType : Type, [<Optional; DefaultParameterValue(0)>] offset : int, [<Optional; DefaultParameterValue(0)>] stride : int) =
     let singleValue =
         match b with
         | :? SingleValueBuffer as nb -> Some nb.Value
@@ -18,11 +18,12 @@ type BufferView(b : aval<IBuffer>, elementType : Type, offset : int, stride : in
     member x.SingleValue = singleValue
     member x.IsSingleValue = Option.isSome singleValue
 
-    new(b : aval<IBuffer>, elementType : Type, offset : int) =
-        BufferView(b, elementType, offset, 0)
+    new(b : IBuffer, elementType : Type, [<Optional; DefaultParameterValue(0)>] offset : int, [<Optional; DefaultParameterValue(0)>] stride : int) =
+        BufferView(AVal.constant b, elementType, offset, stride)
 
-    new(b : aval<IBuffer>, elementType : Type) =
-        BufferView(b, elementType, 0, 0)
+    new(arr : System.Array, [<Optional; DefaultParameterValue(0)>] offset : int, [<Optional; DefaultParameterValue(0)>] stride : int) =
+        let t = arr.GetType().GetElementType()
+        BufferView(ArrayBuffer arr, t, offset, stride)
 
     override x.GetHashCode() =
         HashCode.Combine(b.GetHashCode(), elementType.GetHashCode(), offset.GetHashCode(), stride.GetHashCode())
@@ -37,8 +38,7 @@ type BufferView(b : aval<IBuffer>, elementType : Type, offset : int, stride : in
 module BufferView =
 
     let ofArray (arr : Array) =
-        let t = arr.GetType().GetElementType()
-        BufferView(AVal.constant (ArrayBuffer arr :> IBuffer), t)
+        BufferView(arr)
 
     [<AbstractClass>]
     type private Reader() =
