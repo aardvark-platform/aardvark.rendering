@@ -82,19 +82,19 @@ module FramebufferExtensions =
     let private init (bindings : list<int * Symbol * IFramebufferOutput>) (depthStencil : Option<IFramebufferOutput>) (c : ContextHandle) : int =
 
         let mutable oldFbo = 0
-        GL.GetInteger(GetPName.FramebufferBinding, &oldFbo)
+        GL.GetInteger(GetPName.DrawFramebufferBinding, &oldFbo)
 
         let handle = GL.GenFramebuffer()
         GL.Check "could not create framebuffer"
 
-        GL.BindFramebuffer(FramebufferTarget.Framebuffer, handle)
+        GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, handle)
         GL.Check "could not bind framebuffer"
 
         let attach (o : IFramebufferOutput) (attachment) =
             match o with
 
             | :? Renderbuffer as o ->
-                GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, attachment, RenderbufferTarget.Renderbuffer, o.Handle)
+                GL.FramebufferRenderbuffer(FramebufferTarget.DrawFramebuffer, attachment, RenderbufferTarget.Renderbuffer, o.Handle)
                 GL.Check "could not attach renderbuffer"
 
             | :? ITextureLevel as r ->
@@ -108,7 +108,7 @@ module FramebufferExtensions =
                     if baseSlice <> 0 || slices <> (if o.Dimension = TextureDimension.TextureCube then 6 * o.Count else o.Count) then // TODO: Is it possible to bind a cubemap array as texture layers?
                         failwith "sub-layers not supported atm."
   
-                    GL.FramebufferTexture(FramebufferTarget.Framebuffer, attachment, o.Handle, level)
+                    GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, attachment, o.Handle, level)
                     GL.Check "could not attach texture"
 
                 else
@@ -118,13 +118,13 @@ module FramebufferExtensions =
                         if o.IsArray then
                             failwith "cubemaparray currently not implemented"
                         else
-                            GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, target, o.Handle, level)
+                            GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, attachment, target, o.Handle, level)
                         GL.Check "could not attach texture"
                     | _ ->
                         if o.IsArray then
-                            GL.FramebufferTextureLayer(FramebufferTarget.Framebuffer, attachment, o.Handle, level, baseSlice)
+                            GL.FramebufferTextureLayer(FramebufferTarget.DrawFramebuffer, attachment, o.Handle, level, baseSlice)
                         else
-                            GL.FramebufferTexture2D(FramebufferTarget.Framebuffer, attachment, (if o.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), o.Handle, level)
+                            GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, attachment, (if o.IsMultisampled then TextureTarget.Texture2DMultisample else TextureTarget.Texture2D), o.Handle, level)
                         GL.Check "could not attach texture"
 
             | v ->
@@ -148,11 +148,11 @@ module FramebufferExtensions =
             ()
 
         // check framebuffer
-        let status = GL.CheckFramebufferStatus(FramebufferTarget.Framebuffer)
+        let status = GL.CheckFramebufferStatus(FramebufferTarget.DrawFramebuffer)
         GL.Check "could not get framebuffer status"
 
         // unbind
-        GL.BindFramebuffer(FramebufferTarget.Framebuffer, oldFbo)
+        GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, oldFbo)
         GL.Check "could not unbind framebuffer"
 
         if status <> FramebufferErrorCode.FramebufferComplete then

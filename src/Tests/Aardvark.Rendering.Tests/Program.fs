@@ -120,8 +120,8 @@ let clearTexture(runtime : Aardvark.Rendering.GL.Runtime, texture : IBackendText
 
         // create temporary fbo
         let fbo = GL.GenFramebuffer()
-        GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo)
-        GL.FramebufferTexture(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, unbox<int> texture.Handle, level)
+        GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo)
+        GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, unbox<int> texture.Handle, level)
         GL.Check "[GL] ClearTexture: could not create FramebufferTexture"
         
         // perform clear
@@ -130,7 +130,7 @@ let clearTexture(runtime : Aardvark.Rendering.GL.Runtime, texture : IBackendText
         GL.Check "[GL] ClearTexture: could not clear texture"
 
         // unbind and delete of fbo
-        GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+        GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
         GL.Check "[GL] ClearTexture: could not unbind Framebuffer"
         GL.DeleteFramebuffer(fbo)
         GL.Check "[GL] ClearTexture: could not delete FramebufferTexture"

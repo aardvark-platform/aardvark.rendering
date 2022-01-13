@@ -177,6 +177,14 @@ module internal TextureUtilitiesAndExtensions =
                 failwithf "framebuffer incomplete: %A" error
 
         let temporary (target : FramebufferTarget) (f : int -> 'T) =
+            let binding =
+                if target = FramebufferTarget.ReadFramebuffer then
+                    GetPName.ReadFramebufferBinding
+                else
+                    GetPName.DrawFramebufferBinding
+
+            let old = GL.GetInteger(binding)
+
             let fbo = GL.GenFramebuffer()
             GL.Check "could not create framebuffer"
 
@@ -186,7 +194,7 @@ module internal TextureUtilitiesAndExtensions =
             try
                 f fbo
             finally
-                GL.BindFramebuffer(target, 0)
+                GL.BindFramebuffer(target, old)
                 GL.DeleteFramebuffer(fbo)
 
 

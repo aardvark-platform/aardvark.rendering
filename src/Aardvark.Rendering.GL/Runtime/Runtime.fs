@@ -248,9 +248,11 @@ type Runtime(debug : DebugLevel) =
         member x.Clear(fbo : IFramebuffer, values : ClearValues) =
             use __ = ctx.ResourceLock
 
+            let old = GL.GetInteger(GetPName.DrawFramebufferBinding)
+
             let fbo = fbo |> unbox<Framebuffer>
             let handle = fbo.Handle
-            GL.BindFramebuffer(FramebufferTarget.Framebuffer, handle)
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, handle)
             GL.Check "could not bind framebuffer"
 
             let drawBuffers = DrawBuffers.ofSignature fbo.Signature
@@ -304,20 +306,22 @@ type Runtime(debug : DebugLevel) =
                         GL.Check "could not clear buffer"
                     | None -> ()
 
-            GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0);
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, old);
             GL.Check "could not unbind framebuffer"
 
         member x.ClearColor(texture : IBackendTexture, color : ClearColor) =
             if not <| (texture.Format.HasDepth || texture.Format.HasStencil) then
                 use __ = ctx.ResourceLock
 
+                let old = GL.GetInteger(GetPName.DrawFramebufferBinding)
+
                 let fbo = GL.GenFramebuffer()
                 GL.Check "could not create framebuffer"
 
-                GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo)
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo)
                 GL.Check "could not bind framebuffer"
 
-                GL.FramebufferTexture(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, texture.Handle |> unbox<int>, 0)
+                GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, texture.Handle |> unbox<int>, 0)
                 GL.Check "could not attach framebuffer texture"
 
                 GL.DrawBuffer(DrawBufferMode.ColorAttachment0)
@@ -327,7 +331,7 @@ type Runtime(debug : DebugLevel) =
                     GL.ClearBuffer(ClearBuffer.Color, 0, color.Float.ToArray())
                 GL.Check "could not clear buffer"
 
-                GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, old)
                 GL.Check "could not unbind framebuffer"
 
                 GL.DeleteFramebuffer(fbo)
@@ -346,13 +350,15 @@ type Runtime(debug : DebugLevel) =
                 | Some b ->
                     use __ = ctx.ResourceLock
 
+                    let old = GL.GetInteger(GetPName.DrawFramebufferBinding)
+
                     let fbo = GL.GenFramebuffer()
                     GL.Check "could not create framebuffer"
 
-                    GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo)
+                    GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo)
                     GL.Check "could not bind framebuffer"
 
-                    GL.FramebufferTexture(FramebufferTarget.Framebuffer, b, texture.Handle |> unbox<int>, 0)
+                    GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, b, texture.Handle |> unbox<int>, 0)
                     GL.Check "could not attach framebuffer texture"
 
                     match (depth, stencil) with
@@ -369,7 +375,7 @@ type Runtime(debug : DebugLevel) =
                     | _ -> ()
                     GL.Check "could not clear"
 
-                    GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+                    GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, old)
                     GL.Check "could not unbind framebuffer"
 
                     GL.DeleteFramebuffer(fbo)
@@ -547,8 +553,8 @@ type Runtime(debug : DebugLevel) =
 
     member x.ResolveMultisamples(ms : IFramebufferOutput, srcOffset : V2i, ss : IBackendTexture, dstOffset : V2i, dstLayer : int, size : V2i, trafo : ImageTrafo) =
         Operators.using ctx.ResourceLock (fun _ ->
-            let mutable oldFbo = 0
-            GL.GetInteger(GetPName.FramebufferBinding, &oldFbo);
+            let oldRead = GL.GetInteger(GetPName.ReadFramebufferBinding)
+            let oldDraw = GL.GetInteger(GetPName.DrawFramebufferBinding)
 
             let targetTex = ss |> unbox<Texture>
             let readFbo = GL.GenFramebuffer()
@@ -623,12 +629,10 @@ type Runtime(debug : DebugLevel) =
             GL.FramebufferTexture(FramebufferTarget.ReadFramebuffer, srcAtt, 0, 0)
             GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, srcAtt, 0, 0)
 
-            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
-            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, oldRead)
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, oldDraw)
             GL.DeleteFramebuffer readFbo
             GL.DeleteFramebuffer drawFbo
-
-            GL.BindFramebuffer(FramebufferTarget.Framebuffer,oldFbo)
             GL.Check "error cleanup"
         )
 

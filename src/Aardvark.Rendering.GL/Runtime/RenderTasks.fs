@@ -25,9 +25,9 @@ module RenderTasks =
             let oldVp = Array.create 4 0
             let mutable oldFbo = 0
             GL.GetInteger(GetPName.Viewport, oldVp)
-            GL.GetInteger(GetPName.FramebufferBinding, &oldFbo)
+            GL.GetInteger(GetPName.DrawFramebufferBinding, &oldFbo)
 
-            GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo.Handle)
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo.Handle)
             GL.Check "could not bind framebuffer"
 
             GL.Viewport(viewport.Min.X, viewport.Min.Y, viewport.SizeX + 1, viewport.SizeY + 1)
@@ -44,7 +44,7 @@ module RenderTasks =
                 f()
 
             finally
-                GL.BindFramebuffer(FramebufferTarget.Framebuffer, oldFbo)
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, oldFbo)
                 GL.Check "could reset framebuffer"
 
                 GL.Viewport(oldVp.[0], oldVp.[1], oldVp.[2], oldVp.[3])

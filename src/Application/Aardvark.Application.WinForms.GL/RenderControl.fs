@@ -304,7 +304,7 @@ type OpenGlRenderControl(runtime : Runtime, debug : DebugLevel, samples : int) =
                     defaultFramebuffer.Size <- screenSize
                     //defaultOutput <- { defaultOutput with viewport = Box2i(V2i.OO, defaultFramebuffer.Size - V2i.II) }
 
-                    GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo.Handle)
+                    GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo.Handle)
                     GL.ColorMask(true, true, true, true)
                     GL.DepthMask(true)
                     GL.StencilMask(0xFFFFFFFFu)
@@ -312,9 +312,8 @@ type OpenGlRenderControl(runtime : Runtime, debug : DebugLevel, samples : int) =
                     GL.ClearColor(0.0f, 0.0f, 0.0f, 1.0f)
                     GL.ClearDepth(1.0)
                     GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
+                    GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
 
-
-                    GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
                     //EvaluationUtilities.evaluateTopLevel(fun () ->
                     t.Run(AdaptiveToken.Top, RenderToken.Empty, OutputDescription.ofFramebuffer fbo)
                     blit()

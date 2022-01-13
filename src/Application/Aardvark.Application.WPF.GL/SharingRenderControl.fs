@@ -464,11 +464,11 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
             GL.Check "could not create frambuffer"
 
             // create the framebuffer
-            GL.BindFramebuffer(FramebufferTarget.Framebuffer, fbo)
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo)
             GL.Check "could not bind frambuffer"
-            GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, backBuffer.Handle)
+            GL.FramebufferRenderbuffer(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, RenderbufferTarget.Renderbuffer, backBuffer.Handle)
             GL.Check "could not attach color to frambuffer"
-            GL.FramebufferRenderbuffer(FramebufferTarget.Framebuffer, FramebufferAttachment.DepthStencilAttachment, RenderbufferTarget.Renderbuffer, depthBuffer.Handle)
+            GL.FramebufferRenderbuffer(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.DepthStencilAttachment, RenderbufferTarget.Renderbuffer, depthBuffer.Handle)
             GL.Check "could not attach depth to frambuffer"
         
             // clear the framebuffer
@@ -482,7 +482,7 @@ type OpenGlSharingRenderControl(runtime : Runtime, samples : int) as this =
             GL.Check "could not clear framebuffer"
 
             // unbind the framebuffer
-            GL.BindFramebuffer(FramebufferTarget.Framebuffer, 0)
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
             GL.Check "could not unbind frambuffer"
             
             // render to the framebuffer
