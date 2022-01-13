@@ -18,7 +18,7 @@ type DebugLevel =
     // Verbosity: Warning
     | Minimal = 1
 
-    /// More detailed information is logged, an expection is raised when an error occurs.
+    /// More detailed information is logged, an exception is raised when an error occurs.
     // GL: Enables GL.Check with exceptions
     // Verbosity: Information
     | Normal = 2

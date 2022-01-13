@@ -50,10 +50,10 @@ module internal PixelBuffer =
         else usingHost sizeInBytes f
 
     let pack (sizeInBytes : nativeint) (f : PixelBuffer -> 'T) =
-        using BufferTarget.PixelPackBuffer BufferStorageFlags.MapReadBit sizeInBytes f
+        using BufferTarget.PixelPackBuffer (BufferStorageFlags.MapReadBit ||| BufferStorageFlags.ClientStorageBit) sizeInBytes f
 
     let unpack (sizeInBytes : nativeint) (f : PixelBuffer -> 'T) =
-        using BufferTarget.PixelUnpackBuffer BufferStorageFlags.MapWriteBit sizeInBytes f
+        using BufferTarget.PixelUnpackBuffer (BufferStorageFlags.MapWriteBit ||| BufferStorageFlags.ClientStorageBit) sizeInBytes f
 
     let mapped (access : BufferAccess) (f : nativeint -> 'T) = function
         | PixelBuffer.Native target ->
