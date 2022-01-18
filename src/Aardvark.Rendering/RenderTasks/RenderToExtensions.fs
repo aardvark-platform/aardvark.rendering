@@ -26,7 +26,7 @@ module private AdaptiveRenderToTypes =
         override x.Compute(t : AdaptiveToken, rt : RenderToken) =
             let fbo = target.GetValue(t, rt)
             let task = task.GetValue(t, rt)
-            task.Run(t, rt, OutputDescription.ofFramebuffer fbo, queries)
+            task.Run(t, rt.WithQuery queries, OutputDescription.ofFramebuffer fbo)
             fbo
 
         override x.Create() =
@@ -76,7 +76,7 @@ module private AdaptiveRenderToTypes =
             let tasks = tasks.GetValue(t, rt)
 
             tasks |> CubeMap.iter2 (fun fbo task ->
-                task.Run(t, rt, OutputDescription.ofFramebuffer fbo, queries)
+                task.Run(t, rt.WithQuery queries, OutputDescription.ofFramebuffer fbo)
             ) fbos
 
             fbos

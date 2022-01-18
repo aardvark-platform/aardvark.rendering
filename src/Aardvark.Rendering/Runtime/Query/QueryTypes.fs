@@ -5,18 +5,6 @@ open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open Aardvark.Base
 
-/// Interface for GPU queries.
-type IQuery =
-
-    /// Resets the query manually.
-    abstract member Reset : unit -> unit
-
-    /// Prepares the query to be used.
-    abstract member Begin : unit -> unit
-
-    /// Finishes the query.
-    abstract member End : unit -> unit
-
 /// Typed interface for GPU queries.
 type IQuery<'a, 'b> =
     inherit IQuery

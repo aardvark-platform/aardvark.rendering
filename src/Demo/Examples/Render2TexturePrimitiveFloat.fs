@@ -86,8 +86,8 @@ module Render2TexturePrimitiveFloat =
     let clear = runtime.CompileClear(signature, ~~C4f(0.0,0.0,0.0,0.0), ~~0.0)
 
     // Run the render task imperatively
-    clear.Run(null, fbo |> OutputDescription.ofFramebuffer) |> ignore
-    task.Run(null, fbo |> OutputDescription.ofFramebuffer) |> ignore
+    clear.Run(fbo |> OutputDescription.ofFramebuffer) |> ignore
+    task.Run(fbo |> OutputDescription.ofFramebuffer) |> ignore
 
     // this module demonstrates how to read back textures. In order to see the result,
     // a form containing the readback result is shown

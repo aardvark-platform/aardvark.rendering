@@ -268,7 +268,7 @@ let main argv =
     use task =
         let rnd = System.Random()
         RenderTask.ofList [
-            if jitterFrames then RenderTask.custom (fun (a,rt,ot,q) -> Thread.Sleep(rnd.Next(0,100))) else RenderTask.empty
+            if jitterFrames then RenderTask.custom (fun (a,rt,ot) -> Thread.Sleep(rnd.Next(0,100))) else RenderTask.empty
             win.Runtime.CompileRender(signature,sg)
         ]
 

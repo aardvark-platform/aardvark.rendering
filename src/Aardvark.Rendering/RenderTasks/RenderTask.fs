@@ -8,10 +8,10 @@ module RenderTask =
 
     let empty = EmptyRenderTask.Instance
 
-    let ofAFun (f : afun<AdaptiveToken * RenderToken * OutputDescription * IQuery, unit>) =
+    let ofAFun (f : afun<AdaptiveToken * RenderToken * OutputDescription, unit>) =
         new CustomRenderTask(f) :> IRenderTask
 
-    let custom (f : AdaptiveToken * RenderToken * OutputDescription * IQuery -> unit) =
+    let custom (f : AdaptiveToken * RenderToken * OutputDescription -> unit) =
         new CustomRenderTask(AFun.create f) :> IRenderTask
 
     let before (f : unit -> unit) (t : IRenderTask) =
@@ -36,11 +36,11 @@ module RenderTask =
         | _ ->
             new BeforeAfterRenderTask(None, Some f, t) :> IRenderTask
 
-    let ofMod (m : aval<IRenderTask>) : IRenderTask =
-        new ModRenderTask(m) :> IRenderTask
+    let ofAVal (m : aval<IRenderTask>) : IRenderTask =
+        new AdaptiveRenderTask(m) :> IRenderTask
 
     let bind (f : 'a -> IRenderTask) (m : aval<'a>) : IRenderTask =
-        new ModRenderTask(AVal.map f m) :> IRenderTask
+        new AdaptiveRenderTask(AVal.map f m) :> IRenderTask
 
     let ofSeq (s : seq<IRenderTask>) =
         new SequentialRenderTask(Seq.toArray s) :> IRenderTask
@@ -294,7 +294,7 @@ module RenderTask =
     let log fmt =
         Printf.kprintf (fun str ->
             let task =
-                custom (fun (self, token, out, queries) ->
+                custom (fun (self, token, out) ->
                     Log.line "%s" str
                 )
 
@@ -314,7 +314,7 @@ module ``RenderTask Builder`` =
 
         member x.Bind(f : unit -> unit, c : unit -> Result) : Result =
             let task =
-                RenderTask.custom (fun (self, token, out, queries) ->
+                RenderTask.custom (fun (self, token, out) ->
                     f()
                 )
             (AList.single task)::c()
@@ -332,7 +332,7 @@ module ``RenderTask Builder`` =
             alist.YieldFrom(l)::c()
 
         member x.Bind(m : aval<IRenderTask>, c : unit -> Result) =
-            let head = m |> RenderTask.ofMod |> alist.Yield
+            let head = m |> RenderTask.ofAVal |> alist.Yield
             head::c()
 
         member x.Combine(l : Result, r : Result) =

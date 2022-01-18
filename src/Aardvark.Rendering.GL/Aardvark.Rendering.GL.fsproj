@@ -87,7 +87,6 @@
     <Compile Include="Runtime\Query\OcclusionQuery.fs" />
     <Compile Include="Runtime\Query\GeometryQuery.fs" />
     <Compile Include="Runtime\Query\PipelineQuery.fs" />
-    <Compile Include="Runtime\Statistics.fs" />
     <Compile Include="Runtime\RenderTasks.fs" />
     <Compile Include="Runtime\Compute.fs" />
     <Compile Include="Runtime\GeometryPool.fs" />

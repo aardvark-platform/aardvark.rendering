@@ -102,15 +102,19 @@ module RenderTasks =
         member x.RenderTaskLock = renderTaskLock
         member x.ResourceManager = manager
 
-        override x.PerformUpdate(token, t) =
+        override x.PerformUpdate(token, renderToken) =
             use ct = ctx.ResourceLock
-            x.ProcessDeltas(token, t)
-            x.UpdateResources(token, t)
+
+            renderToken.Query.Begin()
+
+            x.ProcessDeltas(token, renderToken)
+            x.UpdateResources(token, renderToken)
 
             renderTaskLock.Run (fun () ->
-                x.Update(token, t)
+                x.Update(token, renderToken)
             )
 
+            renderToken.Query.End()
 
         override x.Release() =
             if not isDisposed then
@@ -119,7 +123,7 @@ module RenderTasks =
                 x.Release2()
         override x.FramebufferSignature = Some signature
         override x.Runtime = Some ctx.Runtime
-        override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription, queries : IQuery) =
+        override x.Perform(token : AdaptiveToken, renderToken : RenderToken, desc : OutputDescription) =
 
             let fbo = desc.framebuffer // TODO: fix outputdesc
             if not <| signature.IsAssignableTo fbo then
@@ -138,29 +142,29 @@ module RenderTasks =
                     | :? Framebuffer as fbo -> fbo
                     | _ -> failwithf "unsupported framebuffer: %A" fbo
 
-            x.ProcessDeltas(token, t)
-            x.UpdateResources(token, t)
+            renderToken.Query.Begin()
+
+            x.ProcessDeltas(token, renderToken)
+            x.UpdateResources(token, renderToken)
 
             Framebuffer.draw signature fbo desc.viewport (fun _ ->
                 renderTaskLock.Run (fun () ->
                     beforeRender.Trigger()
-                    NativePtr.write runtimeStats V2i.Zero
+                    NativePtr.write runtimeStats V2i.Zero       
 
-                    queries.Begin()
-
-                    x.Perform(token, t, fbo, desc)
+                    x.Perform(token, renderToken, fbo, desc)
                     GL.Check "[RenderTask.Run] Perform"
-
-                    queries.End()
    
                     afterRender.Trigger()
                     let rt = NativePtr.read runtimeStats
-                    t.AddDrawCalls(rt.X, rt.Y)
+                    renderToken.AddDrawCalls(rt.X, rt.Y)
                 )
             )
                             
             GL.BindVertexArray 0
-            GL.BindBuffer(BufferTarget.DrawIndirectBuffer,0)
+            GL.BindBuffer(BufferTarget.DrawIndirectBuffer, 0)
+
+            renderToken.Query.End()
 
     [<AbstractClass>]
     type AbstractSubTask() =
@@ -168,10 +172,9 @@ module RenderTasks =
 
         let programUpdateWatch  = Stopwatch()
         let sortWatch           = Stopwatch()
-        //let runWatch            = OpenGlStopwatch()
 
-        member x.ProgramUpdate (t : RenderToken, f : unit -> 'a) =
-            if RenderToken.isEmpty t then
+        member x.ProgramUpdate (renderToken : RenderToken, f : unit -> 'a) =
+            if renderToken.Statistics.IsNone then
                 f()
             else
                 programUpdateWatch.Restart()
@@ -179,8 +182,8 @@ module RenderTasks =
                 programUpdateWatch.Stop()
                 res
 
-        member x.Sorting (t : RenderToken, f : unit -> 'a) =
-            if RenderToken.isEmpty t then
+        member x.Sorting (renderToken : RenderToken, f : unit -> 'a) =
+            if renderToken.Statistics.IsNone then
                 f()
             else
                 sortWatch.Restart()
@@ -197,19 +200,16 @@ module RenderTasks =
         abstract member Add : PreparedCommand -> unit
         abstract member Remove : PreparedCommand -> unit
 
-        member x.Run(token : AdaptiveToken, t : RenderToken, output : OutputDescription) =
+        member x.Run(token : AdaptiveToken, renderToken : RenderToken, output : OutputDescription) =
 
-            x.Perform(token, t)
-            if RenderToken.isEmpty t then
+            x.Perform(token, renderToken)
+            if renderToken.Statistics.IsNone then
                 nop
             else
                 lazy (
-                    t.AddSubTask(
+                    renderToken.AddSubTask(
                         MicroTime sortWatch.Elapsed,
-                        MicroTime programUpdateWatch.Elapsed,
-                        MicroTime.Zero, MicroTime.Zero
-                        //runWatch.ElapsedGPU,
-                        //runWatch.ElapsedCPU
+                        MicroTime programUpdateWatch.Elapsed
                     )
                 )
 
@@ -310,18 +310,18 @@ module RenderTasks =
                 program <- newProgram
                 hasProgram <- true
 
-        override x.Update(token, t) =
+        override x.Update(token, renderToken) =
             reinit x
 
             //TODO
-            let programStats = x.ProgramUpdate (t, fun () -> program.Update AdaptiveToken.Top)
+            let programStats = x.ProgramUpdate (renderToken, fun () -> program.Update AdaptiveToken.Top)
             ()
 
-        override x.Perform(token, t) =
-            x.Update(token, t) |> ignore
-            x.Execution (t, fun () -> program.Run())
+        override x.Perform(token, renderToken) =
+            x.Update(token, renderToken) |> ignore
+            x.Execution (renderToken, fun () -> program.Run())
             let ic = program.Stats.InstructionCount
-            t.AddInstructions(ic, 0) // don't know active
+            renderToken.AddInstructions(ic, 0) // don't know active
                
 
         override x.Dispose() =
@@ -349,8 +349,6 @@ module RenderTasks =
     
     type NewRenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, shareTextures : bool, shareBuffers : bool) as this =
         inherit AbstractOpenGlRenderTask(man, fboSignature, shareTextures, shareBuffers)
-        
-        let primitivesGenerated = OpenGlQuery(QueryTarget.PrimitivesGenerated)
 
         let rec hook (r : IRenderObject) =
             match r with
@@ -363,36 +361,28 @@ module RenderTasks =
         
         override x.Use(action : unit -> 'a) = action()
 
-        override x.ProcessDeltas(token : AdaptiveToken, rt : RenderToken) =
-            x.Resources.Update(token, rt)
+        override x.ProcessDeltas(token : AdaptiveToken, renderToken : RenderToken) =
+            x.Resources.Update(token, renderToken)
             mainCommand.Update(token, x.Scope)
             
-        override x.Update(token : AdaptiveToken, rt : RenderToken) =
-            x.Resources.Update(token, rt)
+        override x.Update(token : AdaptiveToken, renderToken : RenderToken) =
+            x.Resources.Update(token, renderToken)
             mainCommand.Update(token, x.Scope)
             
-        override x.UpdateResources(token : AdaptiveToken, rt : RenderToken) =
-            x.Resources.Update(token, rt)
+        override x.UpdateResources(token : AdaptiveToken, renderToken : RenderToken) =
+            x.Resources.Update(token, renderToken)
             mainCommand.Update(token, x.Scope)
 
             
         override x.Release2() =
             mainCommand.Free(x.Scope)
 
-        override x.Perform(token : AdaptiveToken, rt : RenderToken, fbo : Framebuffer, output : OutputDescription) =
-            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then
-                primitivesGenerated.Restart()
-
+        override x.Perform(token : AdaptiveToken, renderToken : RenderToken, fbo : Framebuffer, output : OutputDescription) =
             mainCommand.Update(token, x.Scope)
             mainCommand.Run()
 
             if RuntimeConfig.SyncUploadsAndFrames then
                 GL.Sync()
-            
-            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then 
-                primitivesGenerated.Stop()
-                rt.AddPrimitiveCount(primitivesGenerated.Value)
-
 
 
     type RenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, shareTextures : bool, shareBuffers : bool, debug : bool) as this =
@@ -400,12 +390,9 @@ module RenderTasks =
         
         let ctx = man.Context
         let inputSet = InputSet(this) 
-        //let resourceUpdateWatch = OpenGlStopwatch()
         let structuralChange = AVal.init ()
         let deltaWatch = Stopwatch()
-        let subTaskResults = List<Lazy<unit>>()
-        
-        let primitivesGenerated = OpenGlQuery(QueryTarget.PrimitivesGenerated)
+        let subTaskResults = List<Lazy<unit>>()     
         
         let add (self : RenderTask) (ro : PreparedCommand) = 
             let all = ro.Resources
@@ -440,7 +427,7 @@ module RenderTasks =
                     subtasks <- Map.add pass task subtasks
                     task
 
-        override x.ProcessDeltas(token, t) =
+        override x.ProcessDeltas(token, renderToken) =
             deltaWatch.Restart()
             
             let deltas = preparedObjectReader.GetChanges token
@@ -465,35 +452,25 @@ module RenderTasks =
                                     
             if added > 0 || removed > 0 then
                 Log.line "[GL] RenderObjects: +%d/-%d (%dms)" added removed deltaWatch.ElapsedMilliseconds
-            t.RenderObjectDeltas(added, removed)
+            renderToken.RenderObjectDeltas(added, removed)
 
 
-        override x.UpdateResources(token,t) =
-            x.Resources.Update(token, t)
+        override x.UpdateResources(token, renderToken) =
+            x.Resources.Update(token, renderToken)
 
 
-        override x.Perform(token : AdaptiveToken, rt : RenderToken, fbo : Framebuffer, output : OutputDescription) =
-            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then
-                primitivesGenerated.Restart()
-
+        override x.Perform(token : AdaptiveToken, renderToken : RenderToken, fbo : Framebuffer, output : OutputDescription) =
             subtasks |> Map.iter (fun _ t ->
-                    let s = t.Run(token,rt, output)
+                    let s = t.Run(token, renderToken, output)
                     subTaskResults.Add(s)
                 )
 
             if RuntimeConfig.SyncUploadsAndFrames then
                 GL.Sync()
-            
-            if not RuntimeConfig.SupressGLTimers && RenderToken.isValid rt then 
-                primitivesGenerated.Stop()
-                for l in subTaskResults do l.Value
-                rt.AddPrimitiveCount(primitivesGenerated.Value)
 
-            subTaskResults.Clear()
-
-        override x.Update(token, rt) = 
+        override x.Update(token, renderToken) = 
             subtasks |> Map.iter (fun _ t ->
-                    t.Update(token, rt)
+                    t.Update(token, renderToken)
                 )
 
         override x.Release2() =
@@ -521,7 +498,7 @@ module RenderTasks =
         inherit AbstractRenderTask()
 
         override x.PerformUpdate(token, t) = ()
-        override x.Perform(token : AdaptiveToken, t : RenderToken, desc : OutputDescription, queries : IQuery) =
+        override x.Perform(token : AdaptiveToken, renderToken : RenderToken, desc : OutputDescription) =
             let fbo = desc.framebuffer |> unbox<Framebuffer>
 
             if not <| signature.IsAssignableTo fbo then
@@ -529,7 +506,7 @@ module RenderTasks =
 
             Operators.using ctx.ResourceLock (fun _ ->
 
-                queries.Begin()
+                renderToken.Query.Begin()
 
                 Framebuffer.draw signature fbo desc.viewport (fun _ ->
 
@@ -577,7 +554,7 @@ module RenderTasks =
                         GL.Check "could not clear depth stencil"
                 )
 
-                queries.End()
+                renderToken.Query.End()
             )
 
         override x.Release() =

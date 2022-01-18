@@ -1,5 +1,18 @@
 ﻿namespace Aardvark.Rendering
 
+/// Interface for GPU queries.
+type IQuery =
+
+    /// Resets the query manually.
+    abstract member Reset : unit -> unit
+
+    /// Prepares the query to be used.
+    abstract member Begin : unit -> unit
+
+    /// Finishes the query.
+    abstract member End : unit -> unit
+
+
 /// Struct for combining multiple queries into a single one.
 [<Struct>]
 type Queries(queries : list<IQuery>) =

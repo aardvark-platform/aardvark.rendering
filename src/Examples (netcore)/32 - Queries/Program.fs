@@ -279,13 +279,11 @@ let main argv =
     // queries are used by passing them to Run() of a render task or compute program.
     // here we use RenderTask.custom to run the scene task manually.
     use task =
-        RenderTask.custom (fun (_, rt, o, q) ->
-            // Run() takes a single IQuery as parameter.
+        RenderTask.custom (fun (_, rt, o) ->
+            // IRenderTask.Run() takes a single RenderToken with an IQuery member as parameter.
             // in order to pass multiple queries we have to build a Queries struct.
-            // here we also include the query that is passed from outside the custom render task (e.g. the window
-            // system passes a time query to compute the GPU usage and shows it in the title bar)
             let queries =
-                Queries.single q
+                Queries.empty
                 |> Queries.add timeQuery
                 |> Queries.add pipelineQuery
                 |> Queries.add occlusionQuery
@@ -294,7 +292,12 @@ let main argv =
             // are used. If we are only interested in the statistics of a single render task, these calls can be omitted.
             queries.Begin()
 
-            sceneTask.Run(rt, o, queries)
+            // pass the queries to the render task by adding it to the queries in the render token.
+            // the input render token may already contain queries (e.g. the window
+            // system passes a time query to compute the GPU usage and shows it in the title bar)
+            sceneTask.Run(rt |> RenderToken.withQuery queries, o)
+
+            // queries can be passed directly to compute programs.
             computeProgram.Run(queries)
 
             queries.End()

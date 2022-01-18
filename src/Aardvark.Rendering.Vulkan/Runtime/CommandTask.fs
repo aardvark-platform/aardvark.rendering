@@ -2168,10 +2168,10 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
     override x.Use(f : unit -> 'r) =
         f()
 
-    override x.Perform(token : AdaptiveToken, rt : RenderToken, desc : OutputDescription, queries : IQuery) =
+    override x.Perform(token : AdaptiveToken, renderToken : RenderToken, desc : OutputDescription) =
         x.OutOfDate <- true
 
-        let vulkanQueries = queries.ToVulkanQuery()
+        let vulkanQueries = renderToken.Query.ToVulkanQuery()
 
         let fbo =
             match desc.framebuffer with
@@ -2255,7 +2255,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
         tt.Sync()
 
-        queries.Begin()
+        renderToken.Query.Begin()
 
         cmd.Begin(renderPass, CommandBufferUsage.OneTimeSubmit)
 
@@ -2295,6 +2295,6 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
         cmd.End()
 
-        queries.End()
+        renderToken.Query.End()
 
         device.GraphicsFamily.RunSynchronously cmd

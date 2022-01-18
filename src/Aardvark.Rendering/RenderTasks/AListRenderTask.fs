@@ -75,21 +75,26 @@ type AListRenderTask(tasks : alist<IRenderTask>) as this =
         lock this (fun () -> processDeltas(AdaptiveToken.Top))
         signature
 
-    override x.PerformUpdate(token, rt) =
+    override x.PerformUpdate(token, renderToken) =
         processDeltas token
-        for t in reader.State do
-            t.Update(token, rt)
 
-    override x.Perform(token, rt, fbo, queries) =
+        renderToken.Query.Begin()
+
+        for t in reader.State do
+            t.Update(token, renderToken)
+
+        renderToken.Query.End()
+
+    override x.Perform(token, renderToken, fbo) =
         processDeltas(token)
 
-        queries.Begin()
+        renderToken.Query.Begin()
 
         // TODO: order may be invalid
         for t in reader.State do
-            t.Run(token, rt, fbo, queries)
+            t.Run(token, renderToken, fbo)
 
-        queries.End()
+        renderToken.Query.End()
 
     override x.Release() =
         reader.Outputs.Remove this |> ignore

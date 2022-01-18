@@ -55,7 +55,8 @@ module private Vulkan =
                     override this.Run(task : IRenderTask, query : IQuery)  = 
                         swap.RenderFrame (fun fbo ->
                             let output = OutputDescription.ofFramebuffer fbo
-                            task.Run(AdaptiveToken.Top, RenderToken.Empty, output, query)
+                            let rt = RenderToken.Empty |> RenderToken.withQuery query
+                            task.Run(AdaptiveToken.Top, rt, output)
                         )
                     override x.Size = size
                 }

@@ -17,7 +17,7 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
         | Some format -> ImageAspect.ofTextureAspects format.Aspects
         | _ -> ImageAspect.None
 
-    member x.Run(caller : AdaptiveToken, t : RenderToken, outputs : OutputDescription, queries : IQuery) =
+    member x.Run(caller : AdaptiveToken, renderToken : RenderToken, outputs : OutputDescription) =
         x.EvaluateAlways caller (fun caller ->
             let fbo = unbox<Framebuffer> outputs.framebuffer
             renderPass |> RenderPass.validateCompability fbo
@@ -28,9 +28,9 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
             let depth = values.Depth
             let stencil = values.Stencil
 
-            let vulkanQueries = queries.ToVulkanQuery()
+            let vulkanQueries = renderToken.Query.ToVulkanQuery()
 
-            queries.Begin()
+            renderToken.Query.Begin()
 
             token.enqueue {
                 for q in vulkanQueries do
@@ -53,7 +53,7 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
                     do! Command.End q
             }
 
-            queries.End()
+            renderToken.Query.End()
 
             token.Sync()
         )
@@ -61,7 +61,7 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
     interface IRenderTask with
         member x.Id = id
         member x.Update(c, t) = ()
-        member x.Run(c,t,o,q) = x.Run(c,t,o,q)
+        member x.Run(c,t,o) = x.Run(c,t,o)
         member x.Dispose() =
             cmd.Dispose()
             pool.Dispose()

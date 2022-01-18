@@ -72,8 +72,8 @@ module Render2TexturePrimiviteChangeableSize =
     let clear = runtime.CompileClear(signature, ~~C4f.Red, ~~1.0)
 
     // Run the render task imperatively
-    clear.Run(null, AVal.force fbo |> OutputDescription.ofFramebuffer) |> ignore
-    task.Run(null,  AVal.force fbo |> OutputDescription.ofFramebuffer) |> ignore
+    clear.Run(AVal.force fbo |> OutputDescription.ofFramebuffer) |> ignore
+    task.Run(AVal.force fbo |> OutputDescription.ofFramebuffer) |> ignore
 
     // this module demonstrates how to read back textures. In order to see the result,
     // a form containing the readback result is shown

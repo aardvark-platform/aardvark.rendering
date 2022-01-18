@@ -224,14 +224,14 @@ module RenderTaskPerformance =
             ]
 
         let customTask = 
-            RenderTask.custom (fun (s,t,output,queries) ->
-                queries.Begin()
+            RenderTask.custom (fun (s,t,output) ->
+                t.Query.Begin()
 
                 for i in 0 .. 100 do
                     for (r,fbo) in renderTasks do
-                        r.Run(t, output.framebuffer, queries)
+                        r.Run(s, t, output)
 
-                queries.End()
+                t.Query.End()
             )
 
         win.RenderTask <- customTask
@@ -328,11 +328,11 @@ module StartupPerformance =
             Report.End() |> ignore
 
             Report.BeginTimed("RenderTask Execution 2")
-            let rs = RenderToken()
+            let rs = RenderToken.Zero
             renderTask.Run(rs, fbo)
             Report.End() |> ignore
 
-            Report.Line("Stats: DC={0} Instr={1} Prim={2}", rs.DrawCallCount, rs.TotalInstructions, rs.PrimitiveCount)
+            Report.Line("Stats: DC={0} Instr={1}", rs.DrawCallCount, rs.TotalInstructions)
 
             Report.End() |> ignore
             Report.Line()

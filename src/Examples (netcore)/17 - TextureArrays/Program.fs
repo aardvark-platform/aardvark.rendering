@@ -284,12 +284,12 @@ let main argv =
             member x.FramebufferSignature = rt.FramebufferSignature
             member x.Runtime = rt.Runtime
             member x.PerformUpdate (a,b) = rt.Update(a,b)
-            member x.Perform (t,a,b,q) = 
+            member x.Perform (t,a,b) = 
                 sw.Restart()
                 let stats = RenderToken.Zero
                 use __ = app.Runtime.Context.ResourceLock
                 OpenTK.Graphics.OpenGL4.GL.Enable(OpenTK.Graphics.OpenGL4.EnableCap.ClipDistance0)
-                rt.Run(t,stats,b,q)
+                rt.Run(t,stats,b)
                 sw.Stop()
                 if sw.Elapsed.TotalSeconds > 0.1 then 
                     Log.warn "long frame: %A" sw.MicroTime

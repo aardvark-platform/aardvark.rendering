@@ -16,8 +16,10 @@
   </PropertyGroup>
   <ItemGroup>
     <None Include="paket.references" />
+    <Compile Include="Common\Queries.fs" />
     <Compile Include="Common\ClearValues.fs" />
     <Compile Include="Common\FrameStatistics.fs" />
+    <Compile Include="Common\RenderToken.fs" />
     <Compile Include="Common\DefaultSemantic.fs" />
     <Compile Include="Common\ComparisonFunction.fs" />
     <Compile Include="Utilities\Locks\ColoredLock.fs" />
@@ -96,7 +98,6 @@
     <Compile Include="Runtime\Lod\LodRuntime.fs" />
     <Compile Include="Runtime\Query\QueryTypes.fs" />
     <Compile Include="Runtime\Query\QueryRuntime.fs" />
-    <Compile Include="Runtime\Query\Queries.fs" />
     <Compile Include="Runtime\Query\QueryHandle.fs" />
     <Compile Include="Runtime\Query\MultiQuery.fs" />
     <Compile Include="Runtime\Query\ConcurrentQuery.fs" />
@@ -113,7 +114,7 @@
     <Compile Include="RenderTasks\AbstractRenderTask.fs" />
     <Compile Include="RenderTasks\EmptyRenderTask.fs" />
     <Compile Include="RenderTasks\SequentialRenderTask.fs" />
-    <Compile Include="RenderTasks\ModRenderTask.fs" />
+    <Compile Include="RenderTasks\AdaptiveRenderTask.fs" />
     <Compile Include="RenderTasks\AListRenderTask.fs" />
     <Compile Include="RenderTasks\CustomRenderTask.fs" />
     <Compile Include="RenderTasks\FinalizerRenderTask.fs" />

@@ -143,8 +143,8 @@ module Program =
         )
 
         use task =
-            RenderTask.custom (fun (t, rt, desc, q) ->
-                techniques.[technique.Value].Task.Run(t, rt, desc, q)
+            RenderTask.custom (fun (t, rt, desc) ->
+                techniques.[technique.Value].Task.Run(t, rt, desc)
             )
 
         let puller =

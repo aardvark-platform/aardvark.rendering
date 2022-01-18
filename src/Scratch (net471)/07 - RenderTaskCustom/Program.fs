@@ -42,9 +42,9 @@ let main argv =
 
     
     let renderTask =
-        RenderTask.custom (fun (self,token,outputDesc,queries) -> 
+        RenderTask.custom (fun (self,token,outputDesc) -> 
             let sw = Stopwatch.StartNew()
-            renderTask.Run(self, token, outputDesc,queries)
+            renderTask.Run(self, token, outputDesc)
             Log.line "RenderTime: %dms" sw.ElapsedMilliseconds
         )
         

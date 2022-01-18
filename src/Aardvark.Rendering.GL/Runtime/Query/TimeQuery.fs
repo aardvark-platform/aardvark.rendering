@@ -8,7 +8,7 @@ type TimeQuery(ctx : Context) =
     inherit Query(ctx, QueryTarget.Timestamp, 2)
 
     let compute (data : uint64[]) =
-        (data.[1] - data.[0]) |> int64 |> MicroTime.FromNanoseconds
+        (data.[1] - data.[0]) |> MicroTime.ofNanoseconds
 
     override x.BeginQuery(query : InternalQuery) =
         GL.QueryCounter(query.NativeHandles.[0], QueryCounterTarget.Timestamp)

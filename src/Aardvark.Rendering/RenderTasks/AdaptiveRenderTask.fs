@@ -2,12 +2,12 @@
 
 open FSharp.Data.Adaptive
 
-type ModRenderTask(input : aval<IRenderTask>) =
+type AdaptiveRenderTask(input : aval<IRenderTask>) =
     inherit AbstractRenderTask()
     let mutable inner : Option<IRenderTask> = None
 
-    let updateInner t (x : AdaptiveToken) =
-        let ni = input.GetValue(x, t)
+    let updateInner (token : AdaptiveToken) (renderToken : RenderToken) =
+        let ni = input.GetValue(token, renderToken)
 
         match inner with
             | Some oi when oi = ni -> ()
@@ -16,7 +16,7 @@ type ModRenderTask(input : aval<IRenderTask>) =
                     | Some oi -> oi.Dispose()
                     | _ -> ()
 
-                match x.Caller with
+                match token.Caller with
                 | Some caller -> ni.Outputs.Add caller |> ignore
                 | None -> ()
 
@@ -34,20 +34,20 @@ type ModRenderTask(input : aval<IRenderTask>) =
         let v = input.GetValue (AdaptiveToken.Top.WithCaller x)
         v.FramebufferSignature
 
-    override x.PerformUpdate(token, t) =
-        let ni = updateInner t token
-        ni.Update(token, t)
+    override x.PerformUpdate(token, renderToken) =
+        let ni = updateInner token renderToken
+        ni.Update(token, renderToken)
 
-    override x.Perform(token, t, fbo, queries) =
-        let ni = updateInner t token
-        ni.Run(token, t, fbo, queries)
+    override x.Perform(token, renderToken, fbo) =
+        let ni = updateInner token renderToken
+        ni.Run(token, renderToken, fbo)
 
     override x.Release() =
         input.Outputs.Remove x |> ignore
         match inner with
-            | Some i ->
-                i.Dispose()
-                inner <- None
-            | _ -> ()
+        | Some i ->
+            i.Dispose()
+            inner <- None
+        | _ -> ()
 
     override x.Runtime = input.GetValue(AdaptiveToken.Top.WithCaller x).Runtime

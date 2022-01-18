@@ -38,11 +38,11 @@ type MultiRenderTask(runtime : MultiRuntime, signature : IFramebufferSignature, 
         member x.FrameId = tasks |> Seq.map (fun t -> t.FrameId) |> Seq.max
         member x.FramebufferSignature = Some signature
         member x.Runtime = Some (runtime :> IRuntime)
-        member x.Run(t,rt,o,q) =
+        member x.Run(t,rt,o) =
             x.EvaluateAlways t (fun t ->
                 let current = o.framebuffer.Signature.Runtime
                 let index = runtime.Runtimes.IndexOf (current :?> IRuntime)
-                tasks.[index].Run(t, rt, o, q)
+                tasks.[index].Run(t, rt, o)
             )
 
 and MultiFramebufferSignature(runtime : IRuntime, signatures : IFramebufferSignature[]) =

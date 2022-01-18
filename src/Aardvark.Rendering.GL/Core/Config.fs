@@ -82,9 +82,6 @@ module RuntimeConfig =
     /// This flag improves timings for GPU uploads but also incurs a (possible) performance
     /// penalty as well as incompatibility on some drivers.
     let mutable SyncUploadsAndFrames = false
-  
-    /// If true, no OpenGL queries take place, i.e. no primitive counting etc.
-    let mutable SupressGLTimers = false
 
     let mutable SupressSparseBuffers = false
 
