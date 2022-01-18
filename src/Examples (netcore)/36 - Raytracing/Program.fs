@@ -544,10 +544,8 @@ let main argv =
 
     use renderTask =
         RenderTask.custom (fun (t, rt, fbo) ->
-            rt.Query.Begin()
             traceTask.Run(t, rt.Query)
             fullscreenTask.Run(t, rt, fbo)
-            rt.Query.End()
         )
 
     win.Keyboard.KeyDown(Keys.Enter).Values.Add(fun _ ->

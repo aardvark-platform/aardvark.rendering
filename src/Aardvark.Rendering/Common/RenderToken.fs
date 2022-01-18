@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering
 
+open System
 open System.Runtime.CompilerServices
 open Aardvark.Base
 
@@ -63,6 +64,24 @@ module RenderToken =
 
 [<AbstractClass; Sealed; Extension>]
 type RenderTokenExtensions private() =
+
+    /// Begins the queries of the token and returns an IDisposable that
+    /// ends the queries when disposed.
+    [<Extension>]
+    static member inline Use(this : RenderToken) =
+        this.Query.Begin()
+
+        { new IDisposable with
+            member x.Dispose() = this.Query.End() }
+
+    /// Begins the queries of the token, evaluates the given function, and
+    /// finally ends the queries.
+    [<Extension>]
+    static member inline Use(this : RenderToken, f : unit -> 'T) =
+        this.Query.Begin()
+        let result = f()
+        this.Query.End()
+        result
 
     [<Extension>]
     static member WithQuery(this : RenderToken, query : IQuery) =

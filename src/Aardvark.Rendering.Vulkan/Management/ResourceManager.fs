@@ -40,7 +40,7 @@ type MutableResourceDescription<'a, 'b> =
 
 type IResourceLocation =
     inherit IAdaptiveResource
-    abstract member Update : AdaptiveToken -> ResourceInfo<obj>
+    abstract member Update : AdaptiveToken * RenderToken -> ResourceInfo<obj>
     abstract member ReferenceCount : int
     abstract member Key : list<obj>
     abstract member Owner : IResourceCache
@@ -49,7 +49,7 @@ type IResourceLocation =
 and IResourceLocation<'a> =
     inherit IResourceLocation
     inherit IAdaptiveResource<'a>
-    abstract member Update : AdaptiveToken -> ResourceInfo<'a>
+    abstract member Update : AdaptiveToken * RenderToken -> ResourceInfo<'a>
 
 and IResourceUser =
     abstract member AddLocked       : ILockedResource -> unit
@@ -71,7 +71,7 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
 
     abstract member Create : unit -> unit
     abstract member Destroy : unit -> unit
-    abstract member GetHandle : AdaptiveToken -> ResourceInfo<'a>
+    abstract member GetHandle : AdaptiveToken * RenderToken -> ResourceInfo<'a>
 
     member x.RefCount = refCount
 
@@ -102,43 +102,43 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
                 x.OutOfDate <- true
         )
 
-    member x.Update(token : AdaptiveToken) =
+    member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
         x.EvaluateAlways token (fun token ->
             if refCount <= 0 then failwithf "[Resource] no ref count"
-            x.GetHandle token
+            x.GetHandle(token, renderToken)
         )
 
-    member x.GetValue(token : AdaptiveToken) =
-        x.Update(token).handle
+    member x.GetValue(token : AdaptiveToken, renderToken : RenderToken) =
+        x.Update(token, renderToken).handle
 
     interface IAdaptiveValue with
         member x.Accept(visitor) = visitor.Visit(x)
-        member x.GetValueUntyped(token) = x.GetValue(token) :> obj
+        member x.GetValueUntyped(token) = x.GetValue(token, RenderToken.Empty) :> obj
         member x.ContentType = typeof<'a>
 
     interface IAdaptiveValue<'a> with
-        member x.GetValue(token) = x.GetValue(token)
+        member x.GetValue(token) = x.GetValue(token, RenderToken.Empty)
 
     interface IAdaptiveResource with
         member x.Acquire() = x.Acquire()
         member x.Release() = x.Release()
         member x.ReleaseAll() = x.ReleaseAll()
-        member x.GetValue(token, _) = x.GetValue(token) :> obj
+        member x.GetValue(token, renderToken) = x.GetValue(token, renderToken) :> obj
 
     interface IAdaptiveResource<'a> with
-        member x.GetValue(token, _) = x.GetValue(token)
+        member x.GetValue(token, renderToken) = x.GetValue(token, renderToken)
 
     interface IResourceLocation with
         member x.ReferenceCount = refCount
-        member x.Update t =
-            let res = x.Update t
+        member x.Update(t, rt) =
+            let res = x.Update(t, rt)
             { handle = res :> obj; version = res.version }
 
         member x.Owner = owner
         member x.Key = key
 
     interface IResourceLocation<'a> with
-        member x.Update t = x.Update t
+        member x.Update(t, rt) = x.Update(t, rt)
 
 type private DummyResourceCache() =
     interface IResourceCache with
@@ -181,8 +181,8 @@ type ImmutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, 
 
     let mutable handle : Option<'a * 'h> = None
 
-    let recreate (token : AdaptiveToken) =
-        let n = input.GetValue token
+    let recreate (token : AdaptiveToken) (renderToken : RenderToken) =
+        let n = input.GetValue(token, renderToken)
 
         match handle with
             | Some(o,h) when Unchecked.equals o n ->
@@ -239,9 +239,9 @@ type ImmutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, 
                 ()
         input.Release()
 
-    override x.GetHandle(token : AdaptiveToken) =
+    override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
         if x.OutOfDate then
-            let handle = recreate token
+            let handle = recreate token renderToken
             { handle = handle; version = 0 }
         else
             match handle with
@@ -273,8 +273,8 @@ type MutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, in
 
 
 
-    let update (token : AdaptiveToken) =
-        let n = input.GetValue token
+    let update (token : AdaptiveToken) (renderToken : RenderToken) =
+        let n = input.GetValue(token, renderToken)
 
         match handle with
             | None ->
@@ -307,9 +307,9 @@ type MutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, in
                 ()
         input.Release()
 
-    override x.GetHandle(token : AdaptiveToken) =
+    override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
         if x.OutOfDate then
-            let handle = update token
+            let handle = update token renderToken
             { handle = handle; version = version }
         else
             match handle with
@@ -324,7 +324,7 @@ type AbstractPointerResource<'a when 'a : unmanaged>(owner : IResourceCache, key
     let mutable version = 0
     let mutable hasHandle = false
 
-    abstract member Compute : AdaptiveToken -> 'a
+    abstract member Compute : AdaptiveToken * RenderToken -> 'a
     abstract member Free : 'a -> unit
     default x.Free _ = ()
 
@@ -348,9 +348,9 @@ type AbstractPointerResource<'a when 'a : unmanaged>(owner : IResourceCache, key
             NativePtr.free ptr
             hasHandle <- false
 
-    override x.GetHandle(token : AdaptiveToken) =
+    override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
         if x.OutOfDate then
-            let value = x.Compute token
+            let value = x.Compute(token, renderToken)
             if hasHandle then
                 let v = NativePtr.read ptr
                 x.Free v
@@ -370,7 +370,7 @@ type AbstractPointerResourceWithEquality<'a when 'a : unmanaged>(owner : IResour
     let mutable version = 0
     let mutable hasHandle = false
 
-    abstract member Compute : AdaptiveToken -> 'a
+    abstract member Compute : AdaptiveToken * RenderToken -> 'a
     abstract member Free : 'a -> unit
     default x.Free _ = ()
 
@@ -389,9 +389,9 @@ type AbstractPointerResourceWithEquality<'a when 'a : unmanaged>(owner : IResour
             NativePtr.free ptr
             hasHandle <- false
 
-    override x.GetHandle(token : AdaptiveToken) =
+    override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
         if x.OutOfDate then
-            let value = x.Compute token
+            let value = x.Compute(token, renderToken)
             if hasHandle then
                 let v = NativePtr.read ptr
                 if Unchecked.equals v value then
@@ -531,7 +531,7 @@ module Resources =
                 ()
             input.Release()
 
-        override x.GetHandle(token : AdaptiveToken) =
+        override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
                 let handle = update token
                 { handle = handle; version = version }
@@ -567,7 +567,7 @@ module Resources =
                 handle.Dispose()
                 handle <- Unchecked.defaultof<_>
 
-        override x.GetHandle(token : AdaptiveToken) =
+        override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
                 for (m,w) in writers do
                     w.Write(token, m, handle.Storage.Pointer)
@@ -613,9 +613,9 @@ module Resources =
         override x.Destroy() =
             modifier.Release()
 
-        override x.GetHandle(token : AdaptiveToken) =
+        override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
-                let f = modifier.GetValue(token)
+                let f = modifier.GetValue(token, renderToken)
                 cache <- Some (state |> f name)
 
             match cache with
@@ -637,10 +637,10 @@ module Resources =
             sampler.Release()
             imageView.Release()
 
-        override x.GetHandle(token : AdaptiveToken) =
+        override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
-                let v = imageView.Update(token)
-                let s = sampler.Update(token)
+                let v = imageView.Update(token, renderToken)
+                let s = sampler.Update(token, renderToken)
                 cache <- Some (v, s)
 
             match cache with
@@ -680,7 +680,7 @@ module Resources =
 
             reader <- Unchecked.defaultof<_>
 
-        override x.GetHandle(token : AdaptiveToken) =
+        override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
 
                 let deltas = reader.GetChanges token
@@ -730,8 +730,8 @@ module Resources =
             base.Destroy()
             program.Release()
 
-        override x.Compute(token) =
-            let p = program.Update token
+        override x.Compute(token, renderToken) =
+            let p = program.Update(token, renderToken)
             let res = input |> InputAssemblyState.ofIndexedGeometryMode p.handle.HasTessellation
 
             VkPipelineInputAssemblyStateCreateInfo(
@@ -749,8 +749,8 @@ module Resources =
             NativePtr.free state.pVertexAttributeDescriptions
             NativePtr.free state.pVertexBindingDescriptions
 
-        override x.Compute(token) =
-            let state = input.GetValue token
+        override x.Compute(token, renderToken) =
+            let state = input.GetValue(token, renderToken)
 
             let inputs = prog.pInputs |> List.sortBy (fun p -> p.paramLocation)
 
@@ -811,14 +811,14 @@ module Resources =
                                    stencilModeB : aval<StencilMode>, stencilMaskB : aval<StencilMask>) =
         inherit AbstractPointerResourceWithEquality<VkPipelineDepthStencilStateCreateInfo>(owner, key)
 
-        override x.Compute(token) =
-            let depthTest = depthTest.GetValue token
-            let depthWrite = depthWrite.GetValue token
+        override x.Compute(token, renderToken) =
+            let depthTest = depthTest.GetValue(token, renderToken)
+            let depthWrite = depthWrite.GetValue(token, renderToken)
 
-            let stencilMaskF = stencilMaskF.GetValue token
-            let stencilModeF = stencilModeF.GetValue token
-            let stencilMaskB = stencilMaskB.GetValue token
-            let stencilModeB = stencilModeB.GetValue token
+            let stencilMaskF = stencilMaskF.GetValue(token, renderToken)
+            let stencilModeF = stencilModeF.GetValue(token, renderToken)
+            let stencilMaskB = stencilMaskB.GetValue(token, renderToken)
+            let stencilModeB = stencilModeB.GetValue(token, renderToken)
 
             let depth = DepthState.create depthWrite depthTest
             let stencil = StencilState.create stencilMaskF stencilMaskB stencilModeF stencilModeB
@@ -845,13 +845,13 @@ module Resources =
         override x.Free(info : VkPipelineRasterizationStateCreateInfo) =
             Marshal.FreeHGlobal info.pNext
 
-        override x.Compute(token) =
-            let depthClamp = depthClamp.GetValue token
-            let bias = depthBias.GetValue token
-            let cull = cull.GetValue token
-            let front = frontFace.GetValue token
-            let fill = fill.GetValue token
-            let conservativeRaster = conservativeRaster.GetValue token
+        override x.Compute(token, renderToken) =
+            let depthClamp = depthClamp.GetValue(token, renderToken)
+            let bias = depthBias.GetValue(token, renderToken)
+            let cull = cull.GetValue(token, renderToken)
+            let front = frontFace.GetValue(token, renderToken)
+            let fill = fill.GetValue(token, renderToken)
+            let conservativeRaster = conservativeRaster.GetValue (token, renderToken)
             let state = RasterizerState.create conservativeRaster depthClamp bias cull front fill
 
             let conservativeRaster =
@@ -886,10 +886,10 @@ module Resources =
         override x.Free(h : VkPipelineColorBlendStateCreateInfo) =
             NativePtr.free h.pAttachments
 
-        override x.Compute(token) =
-            let writeMasks = writeMasks.GetValue token
-            let blendModes = blendModes.GetValue token
-            let blendConstant = blendConstant.GetValue token
+        override x.Compute(token, renderToken) =
+            let writeMasks = writeMasks.GetValue(token, renderToken)
+            let blendModes = blendModes.GetValue(token, renderToken)
+            let blendConstant = blendConstant.GetValue(token, renderToken)
 
             let state = ColorBlendState.create writeMasks blendModes blendConstant
             let pAttStates = NativePtr.alloc writeMasks.Length
@@ -923,7 +923,7 @@ module Resources =
     type MultisampleStateResource(owner : IResourceCache, key : list<obj>, samples : int, enable : aval<bool>) =
         inherit AbstractPointerResourceWithEquality<VkPipelineMultisampleStateCreateInfo>(owner, key)
 
-        override x.Compute(token) =
+        override x.Compute(token, renderToken) =
             //let enable = enable.GetValue token
 
             // TODO: Cannot disable MSAA here...
@@ -946,8 +946,8 @@ module Resources =
         override x.Free(call : DrawCall) =
             call.Dispose()
 
-        override x.Compute(token) =
-            let calls = calls.GetValue token
+        override x.Compute(token, renderToken) =
+            let calls = calls.GetValue(token, renderToken)
             DrawCall.Direct(indexed, List.toArray calls)
 
 
@@ -1000,7 +1000,7 @@ module Resources =
                 handle <- None
             | _ -> ()
 
-        override x.GetHandle(token : AdaptiveToken) =
+        override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
 
                 let bindings =
@@ -1010,23 +1010,23 @@ module Resources =
                             let handle =
                                 match b with
                                     | :? UniformBufferResource as b -> b.Handle
-                                    | b -> b.Update(AdaptiveToken.Top).handle
+                                    | b -> b.Update(AdaptiveToken.Top, renderToken).handle
 
                             UniformBuffer(slot,  handle)
 
                         | AdaptiveStorageImage(slot,v) ->
-                            let image = v.Update(token).handle
+                            let image = v.Update(token, renderToken).handle
                             StorageImage(slot, image)
 
                         | AdaptiveStorageBuffer(slot, b) ->
-                            let buffer = b.Update(token).handle
+                            let buffer = b.Update(token, renderToken).handle
                             StorageBuffer(slot, buffer, 0L, buffer.Size)
 
                         | AdaptiveCombinedImageSampler(slot, arr) ->
                             let arr =
-                                arr.Update(token).handle
+                                arr.Update(token, renderToken).handle
                                 |> Array.map (fun (i, r) ->
-                                    let (v, s) = r.Update(token).handle
+                                    let (v, s) = r.Update(token, renderToken).handle
                                     i, v.Image.SamplerLayout, v, s
                                 )
 
@@ -1034,10 +1034,9 @@ module Resources =
 
 
                         | AdaptiveAccelerationStructure(slot, a) ->
-                            let accel = a.Update(token).handle
+                            let accel = a.Update(token, renderToken).handle
                             AccelerationStructure(slot, accel)
                     )
-
 
                 let handle =
                     match handle with
@@ -1092,8 +1091,8 @@ module Resources =
             depthStencil.Release()
             multisample.Release()
 
-        override x.Compute(token : AdaptiveToken) =
-            let program = program.Update token
+        override x.Compute(token : AdaptiveToken, renderToken : RenderToken) =
+            let program = program.Update(token, renderToken)
 
             let prog = program.handle
             let device = prog.Device
@@ -1141,12 +1140,12 @@ module Resources =
 
                     // TODO: tessellation input-patch-size
 
-                    let inputState = inputState.Update(token) |> ignore; inputState.Pointer
-                    let inputAssembly = inputAssembly.Update(token) |> ignore; inputAssembly.Pointer
-                    let rasterizerState = rasterizerState.Update(token) |> ignore; rasterizerState.Pointer
-                    let depthStencil = depthStencil.Update(token) |> ignore; depthStencil.Pointer
-                    let colorBlendState = colorBlendState.Update(token) |> ignore; colorBlendState.Pointer
-                    let multisample = multisample.Update(token) |> ignore; multisample.Pointer
+                    let inputState = inputState.Update(token, renderToken) |> ignore; inputState.Pointer
+                    let inputAssembly = inputAssembly.Update(token, renderToken) |> ignore; inputAssembly.Pointer
+                    let rasterizerState = rasterizerState.Update(token, renderToken) |> ignore; rasterizerState.Pointer
+                    let depthStencil = depthStencil.Update(token, renderToken) |> ignore; depthStencil.Pointer
+                    let colorBlendState = colorBlendState.Update(token, renderToken) |> ignore; colorBlendState.Pointer
+                    let multisample = multisample.Update(token, renderToken) |> ignore; multisample.Pointer
 
                     let basePipeline, derivativeFlag =
                         if not x.HasHandle then
@@ -1198,8 +1197,8 @@ module Resources =
             base.Destroy()
             calls.Release()
 
-        override x.Compute(token : AdaptiveToken) =
-            let calls = calls.Update token
+        override x.Compute(token : AdaptiveToken, renderToken : RenderToken) =
+            let calls = calls.Update(token, renderToken)
             let call = DrawCall.Indirect(indexed, calls.handle.Handle, calls.handle.Count)
             call
 
@@ -1219,8 +1218,8 @@ module Resources =
             base.Destroy()
             for (b,_) in buffers do b.Release()
 
-        override x.Compute(token : AdaptiveToken) =
-            let calls = buffers |> List.map (fun (b,o) -> b.Update(token).handle.Handle, o) //calls.Update token
+        override x.Compute(token : AdaptiveToken, renderToken : RenderToken) =
+            let calls = buffers |> List.map (fun (b,o) -> b.Update(token, renderToken).handle.Handle, o) //calls.Update token
 
             if calls <> last then last <- calls
             else x.NoChange()
@@ -1248,7 +1247,7 @@ module Resources =
             match target with
                 | Some t -> t.Dispose(); target <- None
                 | None -> ()
-        override x.Compute(token : AdaptiveToken) =
+        override x.Compute(token : AdaptiveToken, renderToken : RenderToken) =
             let mutable changed = false
             let target =
                 match target with
@@ -1257,8 +1256,9 @@ module Resources =
                         let t = new DescriptorSetBinding(layout.Handle, 0, sets.Length)
                         target <- Some t
                         t
+
             for i in 0 .. sets.Length - 1 do
-                let info = sets.[i].Update(token)
+                let info = sets.[i].Update(token, renderToken)
                 NativePtr.set target.Sets i info.handle.Handle
                 if info.version <> setVersions.[i] then
                     setVersions.[i] <- info.version
@@ -1283,9 +1283,8 @@ module Resources =
             base.Destroy()
             index.Release()
 
-        override x.Compute(token : AdaptiveToken) =
-            let index = index.Update token
-
+        override x.Compute(token : AdaptiveToken, renderToken : RenderToken) =
+            let index = index.Update(token, renderToken)
             let ibo = IndexBufferBinding(index.handle.Handle, indexType)
             ibo
 
@@ -1310,9 +1309,9 @@ module Resources =
             | None -> ()
             image.Release()
 
-        override x.GetHandle(token : AdaptiveToken) =
+        override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
-                let image = image.Update token
+                let image = image.Update(token, renderToken)
                 if image.handle.IsNull then failwith ""
                 let contentVersion = image.handle.Version.GetValue token
 
@@ -1355,9 +1354,9 @@ module Resources =
                 | None -> ()
             image.Release()
 
-        override x.GetHandle(token : AdaptiveToken) =
+        override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
-                let image = image.Update token
+                let image = image.Update(token, renderToken)
                 let contentVersion = image.handle.Version.GetValue token
 
                 let isIdentical =
@@ -1385,8 +1384,8 @@ module Resources =
     type IsActiveResource(owner : IResourceCache, key : list<obj>, input : aval<bool>) =
         inherit AbstractPointerResourceWithEquality<int>(owner, key)
 
-        override x.Compute (token : AdaptiveToken) =
-            if input.GetValue token then 1 else 0
+        override x.Compute (token : AdaptiveToken, renderToken : RenderToken) =
+            if input.GetValue(token, renderToken) then 1 else 0
 
     module Raytracing =
         open Aardvark.Rendering.Raytracing
@@ -1416,10 +1415,10 @@ module Resources =
 
                 instanceBuffer.Release()
 
-            override x.GetHandle(token : AdaptiveToken) =
+            override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
                 if x.OutOfDate then
-                    let buffer = instanceBuffer.GetValue(token)
-                    let count = instanceCount.GetValue(token)
+                    let buffer = instanceBuffer.GetValue(token, renderToken)
+                    let count = instanceCount.GetValue(token, renderToken)
                     let data = AccelerationStructureData.Instances { Buffer = buffer; Count = uint32 count }
 
                     match handle with
@@ -1467,9 +1466,9 @@ module Resources =
             override x.Destroy() =
                 destroy()
 
-            override x.GetHandle(token : AdaptiveToken) =
+            override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
                 if x.OutOfDate then
-                    let depth = maxRecursionDepth.GetValue(token) |> min recursionDepthLimit
+                    let depth = maxRecursionDepth.GetValue(token, renderToken) |> min recursionDepthLimit
                     let description = { Program = program; MaxRecursionDepth = uint32 depth }
 
                     match handle with
@@ -1513,10 +1512,10 @@ module Resources =
                 destroy()
                 pipeline.Release()
 
-            override x.GetHandle(token : AdaptiveToken) =
+            override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
                 if x.OutOfDate then
-                    let pipeline = pipeline.Update(token)
-                    let configs = hitConfigs.GetValue(token)
+                    let pipeline = pipeline.Update(token, renderToken)
+                    let configs = hitConfigs.GetValue(token, renderToken)
 
                     match handle with
                     | Some tbl ->
@@ -1677,7 +1676,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
             { new UncachedResourceLocation<ShaderProgram>() with
                 override x.Create () = ()
                 override x.Destroy () = program.Dispose()
-                override x.GetHandle t = { handle = program; version = 0 }
+                override x.GetHandle(t, rt) = { handle = program; version = 0 }
             } :> IResourceLocation<_>
         resource.Acquire()
 
@@ -1694,7 +1693,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
             { new UncachedResourceLocation<ShaderProgram>() with
                 override x.Create () = ()
                 override x.Destroy () = program.Dispose()
-                override x.GetHandle t = { handle = program; version = 0 }
+                override x.GetHandle(t, rt) = { handle = program; version = 0 }
             } :> IResourceLocation<_>
         resource.Acquire()
 
@@ -1981,9 +1980,9 @@ type ResourceLocationReader(resource : IResourceLocation) =
             resource.Outputs.Remove x |> ignore
         )
 
-    member x.Update(token : AdaptiveToken) =
+    member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
         x.EvaluateIfNeeded token false (fun t ->
-            let info = resource.Update(t)
+            let info = resource.Update(t, renderToken)
             if info.version <> lastVersion then
                 lastVersion <- info.version
                 changable
@@ -2052,7 +2051,7 @@ type ResourceLocationSet(user : IResourceUser) =
             lock r r.Release
             x.RemoveInput r
 
-    member x.Update(token : AdaptiveToken) =
+    member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
         x.EvaluateAlways token (fun t ->
             x.OutOfDate <- true
 
@@ -2066,7 +2065,7 @@ type ResourceLocationSet(user : IResourceUser) =
                 | Some set ->
                     let mutable changed = changed
                     for r in set do
-                        let c = r.Update(t)
+                        let c = r.Update(t, renderToken)
                         changed <- changed || c
 
                     run changed

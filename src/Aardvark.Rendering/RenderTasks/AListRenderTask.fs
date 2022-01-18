@@ -78,23 +78,15 @@ type AListRenderTask(tasks : alist<IRenderTask>) as this =
     override x.PerformUpdate(token, renderToken) =
         processDeltas token
 
-        renderToken.Query.Begin()
-
         for t in reader.State do
             t.Update(token, renderToken)
-
-        renderToken.Query.End()
 
     override x.Perform(token, renderToken, fbo) =
         processDeltas(token)
 
-        renderToken.Query.Begin()
-
         // TODO: order may be invalid
         for t in reader.State do
             t.Run(token, renderToken, fbo)
-
-        renderToken.Query.End()
 
     override x.Release() =
         reader.Outputs.Remove this |> ignore

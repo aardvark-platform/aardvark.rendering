@@ -81,6 +81,8 @@ type AbstractRenderTask() =
     member x.Run(token : AdaptiveToken, renderToken : RenderToken, out : OutputDescription) =
         lock resourcesInUse (fun _ ->
             x.EvaluateAlways token (fun token ->
+                use __ = renderToken.Use()
+
                 x.OutOfDate <- true
                 x.UseValues(token, out, fun token ->
                     x.Perform(token, renderToken, out)
@@ -92,6 +94,8 @@ type AbstractRenderTask() =
     member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
         lock resourcesInUse (fun _ ->
             x.EvaluateAlways token (fun token ->
+                use __ = renderToken.Use()
+
                 if x.OutOfDate then
                     x.PerformUpdate(token, renderToken)
             )

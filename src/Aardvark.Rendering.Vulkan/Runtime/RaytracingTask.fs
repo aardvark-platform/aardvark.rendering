@@ -134,8 +134,11 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
             use tt = device.Token
 
+            let rt = RenderToken.Empty |> RenderToken.withQuery queries
+            use __ = rt.Use()
+
             let resourcesChanged =
-                resources.Update(token)
+                resources.Update(token, rt)
 
             tt.Sync()
 
@@ -154,10 +157,9 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
                     Log.line "[Raytracing] recompile commands: %s" cause
 
 
-            let pipeline = preparedPipeline.Pipeline.Update(token)
-            let descriptorSets = preparedPipeline.DescriptorSets.Update(token)
+            let pipeline = preparedPipeline.Pipeline.Update(token, rt)
+            let descriptorSets = preparedPipeline.DescriptorSets.Update(token, rt)
 
-            queries.Begin()
             cmd.Begin(CommandBufferUsage.OneTimeSubmit)
 
             for q in vulkanQueries do
@@ -174,7 +176,6 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
                 q.End cmd
 
             cmd.End()
-            queries.End()
 
             device.ComputeFamily.RunSynchronously(cmd)
         )

@@ -595,7 +595,7 @@ module private RuntimeCommands =
                 buffer |> Map.iter (fun _ b -> b.Dispose())
                 buffer <- Map.empty
 
-            override x.GetHandle(token : AdaptiveToken) =
+            override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
                 use t = device.Token
                 for d in lock dead (fun () -> consumeList dead) do d.Dispose()
 
@@ -1463,7 +1463,7 @@ module private RuntimeCommands =
             if async then
                 let updateResources = pg.pgResources |> List.filter (fun r -> r.ReferenceCount = 0)
                 for r in pg.pgResources do r.Acquire()
-                for r in updateResources do r.Update(AdaptiveToken.Top) |> ignore
+                for r in updateResources do r.Update(AdaptiveToken.Top, RenderToken.Empty) |> ignore
             else
                 for r in pg.pgResources do compiler.resources.Add r
                 
@@ -2219,7 +2219,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
             )
 
         let resourcesChanged =
-            resources.Update(token)
+            resources.Update(token, renderToken)
 
         let framebufferChanged =
             if lastFramebuffer <> Some fbo then
@@ -2254,8 +2254,6 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
             inner.End()
 
         tt.Sync()
-
-        renderToken.Query.Begin()
 
         cmd.Begin(renderPass, CommandBufferUsage.OneTimeSubmit)
 
@@ -2294,7 +2292,5 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
             q.End cmd
 
         cmd.End()
-
-        renderToken.Query.End()
 
         device.GraphicsFamily.RunSynchronously cmd

@@ -23,14 +23,13 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
             renderPass |> RenderPass.validateCompability fbo
 
             use token = device.Token
+            use __ = renderToken.Use()
 
-            let values = values.GetValue caller
+            let values = values.GetValue(caller, renderToken)
             let depth = values.Depth
             let stencil = values.Stencil
 
             let vulkanQueries = renderToken.Query.ToVulkanQuery()
-
-            renderToken.Query.Begin()
 
             token.enqueue {
                 for q in vulkanQueries do
@@ -52,8 +51,6 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
                 for q in vulkanQueries do
                     do! Command.End q
             }
-
-            renderToken.Query.End()
 
             token.Sync()
         )

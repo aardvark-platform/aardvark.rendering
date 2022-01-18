@@ -110,10 +110,8 @@ let main argv =
             let target = fbos.[(currentTexture.Value+1)%2]
             // manually clear and render to target
             let output = OutputDescription.ofFramebuffer target
-            token.Query.Begin()
             clear.Run(self, token, output)
             task.Run(self, token, output)
-            token.Query.End()
         )
 
     // just visualize using fullscreen quad

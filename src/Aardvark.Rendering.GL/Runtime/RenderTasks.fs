@@ -105,16 +105,12 @@ module RenderTasks =
         override x.PerformUpdate(token, renderToken) =
             use ct = ctx.ResourceLock
 
-            renderToken.Query.Begin()
-
             x.ProcessDeltas(token, renderToken)
             x.UpdateResources(token, renderToken)
 
             renderTaskLock.Run (fun () ->
                 x.Update(token, renderToken)
             )
-
-            renderToken.Query.End()
 
         override x.Release() =
             if not isDisposed then
@@ -142,8 +138,6 @@ module RenderTasks =
                     | :? Framebuffer as fbo -> fbo
                     | _ -> failwithf "unsupported framebuffer: %A" fbo
 
-            renderToken.Query.Begin()
-
             x.ProcessDeltas(token, renderToken)
             x.UpdateResources(token, renderToken)
 
@@ -163,8 +157,6 @@ module RenderTasks =
                             
             GL.BindVertexArray 0
             GL.BindBuffer(BufferTarget.DrawIndirectBuffer, 0)
-
-            renderToken.Query.End()
 
     [<AbstractClass>]
     type AbstractSubTask() =
@@ -505,9 +497,6 @@ module RenderTasks =
                 failwithf "incompatible FramebufferSignature\nrender task has signature:\n%A\nframebuffer signature is:\n%A" signature fbo.Signature
 
             Operators.using ctx.ResourceLock (fun _ ->
-
-                renderToken.Query.Begin()
-
                 Framebuffer.draw signature fbo desc.viewport (fun _ ->
 
                     let values = values.GetValue token
@@ -553,8 +542,6 @@ module RenderTasks =
                         GL.Clear(mask)
                         GL.Check "could not clear depth stencil"
                 )
-
-                renderToken.Query.End()
             )
 
         override x.Release() =

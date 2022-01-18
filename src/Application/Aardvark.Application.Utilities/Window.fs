@@ -570,16 +570,14 @@ module Utilities =
                     member x.Runtime = Some win.Runtime
                     member x.PerformUpdate (_,_) = ()
                     member x.Perform (t,rt,_) = 
-                        let fbo = framebuffer.GetValue t
+                        let fbo = framebuffer.GetValue(t, rt)
                         let output = OutputDescription.ofFramebuffer fbo
 
                         let c = colors.GetValue t |> unbox<IBackendTexture>
                         let r = resolved.GetValue t |> unbox<IBackendTexture>
 
-                        rt.Query.Begin()
                         clearTask.Run(t, rt, output)
                         stereoTask.Run(t, rt, output)
-                        rt.Query.End()
 
                         runtime.Copy(c, 0, 0, r, 0, 0, 2, 1)
 

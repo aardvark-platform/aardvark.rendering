@@ -292,7 +292,7 @@ let main argv =
             // are used. If we are only interested in the statistics of a single render task, these calls can be omitted.
             queries.Begin()
 
-            // pass the queries to the render task by adding it to the queries in the render token.
+            // pass the queries to the render task by adding them to the queries in the render token.
             // the input render token may already contain queries (e.g. the window
             // system passes a time query to compute the GPU usage and shows it in the title bar)
             sceneTask.Run(rt |> RenderToken.withQuery queries, o)
