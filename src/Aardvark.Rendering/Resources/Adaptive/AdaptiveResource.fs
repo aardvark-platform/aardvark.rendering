@@ -137,46 +137,151 @@ module private AdaptiveResourceImplementations =
     let private cheapEqual (x : 'T) (y : 'T) =
         ShallowEqualityComparer<'T>.Instance.Equals(x, y)
 
+    type Caster<'T1, 'T2> private() =
+        static let cast =
+            if typeof<'T2>.IsAssignableFrom typeof<'T1> then
+                Some (fun (a : 'T1) -> unbox<'T2> a)
+            else
+                None
 
-    type AdaptiveValueWrapper<'T>(value : aval<'T>, inputs : IAdaptiveValue list) =
-        inherit DecoratorObject(value)
+        static member Lambda = 
+            match cast with
+            | Some cast -> cast
+            | None -> raise <| InvalidCastException()
 
-        new(value : aval<'T>, input : IAdaptiveValue) =
-            AdaptiveValueWrapper(value, [input])
+    type MapNonAdaptiveResource<'T1, 'T2>(mapping : 'T1 -> 'T2, input : aval<'T1>) =
+        inherit DecoratorObject(input)
 
-        new(value : aval<'T>, input1 : IAdaptiveValue, input2 : IAdaptiveValue) =
-            AdaptiveValueWrapper(value, [input1; input2])
+        member x.Mapping = mapping
+        member x.Input = input
 
-        new(value : aval<'T>, input1 : IAdaptiveValue, input2 : IAdaptiveValue, input3 : IAdaptiveValue) =
-            AdaptiveValueWrapper(value, [input1; input2; input3])
+        override x.GetHashCode() =
+            hash (DefaultEquality.hash mapping, DefaultEquality.hash input)
 
-        member x.Value = value
-
-        override x.GetHashCode() = value.GetHashCode()
-        override x.Equals(o) =
+        override x.Equals o =
             match o with
-            | :? AdaptiveValueWrapper<'T> as other ->
-                DefaultEquality.equals value other.Value
+            | :? MapNonAdaptiveResource<'T1, 'T2> as o -> 
+                DefaultEquality.equals mapping o.Mapping &&
+                DefaultEquality.equals input o.Input
             | _ ->
                 false
 
+        member x.GetValue(t, rt) =
+            x.EvaluateAlways t (fun _ -> input.GetValue(t, rt) |> mapping)
+
+        member x.GetValue(t) =
+            x.GetValue(t, RenderToken.Empty)
+
         interface IAdaptiveValue with
             member x.Accept (v : IAdaptiveValueVisitor<'R>) = v.Visit x
-            member x.ContentType = typeof<'T>
-            member x.GetValueUntyped(t) = x.EvaluateAlways t (fun t -> value.GetValue(t) :> obj)
+            member x.ContentType = typeof<'T2>
+            member x.GetValueUntyped(t) = x.GetValue(t) :> obj
 
-        interface IAdaptiveValue<'T> with
-            member x.GetValue(t) = x.EvaluateAlways t value.GetValue
+        interface IAdaptiveValue<'T2> with
+            member x.GetValue(t) = x.GetValue(t)
 
         interface IAdaptiveResource with
-            member x.Acquire() = inputs |> List.iter (fun i -> i.Acquire())
-            member x.Release() = inputs |> List.iter (fun i -> i.Release())
-            member x.ReleaseAll() = inputs |> List.iter (fun i -> i.ReleaseAll())
-            member x.GetValue(c,t) = value.GetValue(c,t) :> obj
+            member x.Acquire() = input.Acquire()
+            member x.Release() = input.Release()
+            member x.ReleaseAll() = input.ReleaseAll()
+            member x.GetValue(c, t) = x.GetValue(c, t) :> obj
 
+        interface IAdaptiveResource<'T2> with
+            member x.GetValue(c, t) = x.GetValue(c, t)
+
+    [<AbstractClass>]
+    type AdaptiveResourceWrapper<'T>(inputs : IAdaptiveValue list) =
+        inherit AdaptiveObject()
+
+        let mutable cache = Unchecked.defaultof<'T>
+
+        new(input : IAdaptiveValue) = AdaptiveResourceWrapper<'T>([input])
+
+        abstract member Compute : AdaptiveToken * RenderToken -> 'T
+    
+        member x.Acquire()    = inputs |> List.iter (fun r -> r.Acquire())
+        member x.Release()    = inputs |> List.iter (fun r -> r.Release())
+        member x.ReleaseAll() = inputs |> List.iter (fun r -> r.ReleaseAll())
+
+        member x.GetValue(token : AdaptiveToken, rt : RenderToken) =
+            x.EvaluateAlways token (fun token ->
+                if x.OutOfDate then
+                    cache <- x.Compute (token, rt)
+                cache
+            )
+    
+        member x.GetValue(token : AdaptiveToken) =
+            x.GetValue(token, RenderToken.Empty)
+    
+        interface IAdaptiveValue with
+            member x.IsConstant = false
+            member x.ContentType = typeof<'T>
+            member x.GetValueUntyped(c) = x.GetValue(c) :> obj
+            member x.Accept (v : IAdaptiveValueVisitor<'R>) = v.Visit x
+    
+        interface IAdaptiveValue<'T> with
+            member x.GetValue(c) = x.GetValue(c)
+    
+        interface IAdaptiveResource with
+            member x.Acquire() = x.Acquire()
+            member x.Release() = x.Release()
+            member x.ReleaseAll() = x.ReleaseAll()
+            member x.GetValue(c,t) = x.GetValue(c, t) :> obj
+    
         interface IAdaptiveResource<'T> with
-            member x.GetValue(c,t) = value.GetValue(c,t)
+            member x.GetValue(c,t) = x.GetValue(c, t)
 
+    type MapResource<'T1, 'T2>(mapping : 'T1 -> 'T2, input : aval<'T1>) =
+        inherit AdaptiveResourceWrapper<'T2>(input)
+
+        let mutable cache : ValueOption<struct ('T1 * 'T2)> = ValueNone
+        
+        override x.Compute(t : AdaptiveToken, rt : RenderToken) =
+            let i = input.GetValue(t, rt)
+            match cache with
+            | ValueSome (struct (a, b)) when cheapEqual a i ->
+                b
+            | _ ->
+                let b = mapping i
+                cache <- ValueSome(struct (i, b))
+                b
+
+    type Map2Resource<'T1, 'T2, 'T3>(mapping : 'T1 -> 'T2 -> 'T3, a : aval<'T1>, b : aval<'T2>) =
+        inherit AdaptiveResourceWrapper<'T3>([a :> IAdaptiveValue; b :> IAdaptiveValue])
+
+        let mapping = OptimizedClosures.FSharpFunc<'T1, 'T2, 'T3>.Adapt(mapping)
+        let mutable cache: ValueOption<struct ('T1 * 'T2 * 'T3)> = ValueNone
+
+        override x.Compute (t : AdaptiveToken, rt : RenderToken) =
+            use __ = rt.Use()
+            let a = a.GetValue(t, rt)
+            let b = b.GetValue(t, rt)
+            match cache with
+            | ValueSome(struct (oa, ob, oc)) when cheapEqual oa a && cheapEqual ob b ->
+                oc
+            | _ ->
+                let c = mapping.Invoke (a, b)
+                cache <- ValueSome(struct (a, b, c))
+                c
+
+    type Map3Resource<'T1, 'T2, 'T3, 'T4>(mapping: 'T1 -> 'T2 -> 'T3 -> 'T4, a: aval<'T1>, b: aval<'T2>, c: aval<'T3>) =
+        inherit AdaptiveResourceWrapper<'T4>([a :> IAdaptiveValue; b :> IAdaptiveValue; c :> IAdaptiveValue])
+
+        let mapping = OptimizedClosures.FSharpFunc<'T1, 'T2, 'T3, 'T4>.Adapt(mapping)
+        let mutable cache: ValueOption<struct ('T1 * 'T2 * 'T3 * 'T4)> = ValueNone
+
+        override x.Compute (t : AdaptiveToken, rt : RenderToken) =
+            use __ = rt.Use()
+            let a = a.GetValue(t, rt)
+            let b = b.GetValue(t, rt)
+            let c = c.GetValue(t, rt)
+            match cache with
+            | ValueSome (struct (oa, ob, oc, od)) when cheapEqual oa a && cheapEqual ob b && cheapEqual oc c ->
+                od
+            | _ ->
+                let d = mapping.Invoke (a, b, c)
+                cache <- ValueSome (struct (a, b, c, d))
+                d
 
     type ConstantResource<'T>(create : unit -> 'T, destroy : 'T -> unit) =
         inherit AdaptiveResource<'T>()
@@ -200,8 +305,7 @@ module private AdaptiveResourceImplementations =
                 handle <- ValueSome h
                 h
 
-
-    [<AbstractClass; StructuredFormatDisplay("{AsString}")>]
+    [<AbstractClass>]
     type AbstractBind<'Input, 'T>(mapping : 'Input -> aval<'T>) =
         inherit AdaptiveObject()
 
@@ -215,14 +319,6 @@ module private AdaptiveResourceImplementations =
         abstract member InputEquals : 'Input * 'Input -> bool
         abstract member IsInput : IAdaptiveObject -> bool
         abstract member GetInput : AdaptiveToken * RenderToken -> 'Input
-
-        member private x.AsString =
-            if x.OutOfDate then sprintf "aval*(%A)" valueCache
-            else sprintf "aval(%A)" valueCache
-
-        override x.ToString() =
-            if x.OutOfDate then String.Format("aval*({0})", valueCache)
-            else String.Format("aval({0})", valueCache)
 
         member x.ReleaseResult(release : aval<'T> -> unit) =
             lock x (fun _ ->
@@ -374,56 +470,52 @@ module AdaptiveResource =
 
     /// Returns a new adaptive resource that adaptively applies the mapping function to the given adaptive inputs.
     let map (mapping : 'T1 -> 'T2) (value : aval<'T1>) =
-        let mapped = value |> AVal.map mapping
-
         if value :? IAdaptiveResource then
-            AdaptiveValueWrapper(mapped, value) :> aval<_>
+            MapResource(mapping, value) :> aval<_>
         else
-            mapped
+            value |> AVal.map mapping
 
     /// Returns a new adaptive resource that applies the mapping function whenever a value is demanded.
     /// This is useful when applying very cheap mapping functions (like unbox, fst, etc.)
     /// WARNING: the mapping function will also be called for unchanged inputs.
     let mapNonAdaptive (mapping : 'T1 -> 'T2) (value : aval<'T1>) =
-        let mapped = value |> AVal.mapNonAdaptive mapping
-
         if value :? IAdaptiveResource then
-            AdaptiveValueWrapper(mapped, value) :> aval<_>
+            MapNonAdaptiveResource(mapping, value) :> aval<_>
         else
-            mapped
+            value |> AVal.mapNonAdaptive mapping
 
     /// Casts the given adaptive resource to the specified type. Raises InvalidCastException *immediately*
     /// when the specified cast is not valid (similar to Seq.cast).
     let cast<'T> (value : IAdaptiveValue) =
-        let mapped = value |> AVal.cast<'T>
+        match value with
+        | :? IAdaptiveResource<'T> as r -> r :> aval<_>
+        | :? IAdaptiveResource ->
+            value.Accept {
+                new IAdaptiveValueVisitor<aval<'T>> with
+                    member x.Visit (value : aval<'U>) =
+                        MapNonAdaptiveResource(Caster<'U, 'T>.Lambda, value) :> aval<_>
+            }
 
-        if value :? IAdaptiveResource then
-            AdaptiveValueWrapper(mapped, value) :> aval<_>
-        else
-            mapped
+        | _ -> value |> AVal.cast<'T>
 
     /// Returns a new adaptive resource that adaptively applies the mapping function to the given adaptive inputs.
     let map2 (mapping : 'T1 -> 'T2 -> 'T3) (value1 : aval<'T1>) (value2 : aval<'T2>) =
-        let mapped = AVal.map2 mapping value1 value2
-
         if value1 :? IAdaptiveResource || value2 :? IAdaptiveResource then
-            AdaptiveValueWrapper(mapped, value1, value2) :> aval<_>
+            Map2Resource(mapping, value1, value2) :> aval<_>
         else
-            mapped
+            AVal.map2 mapping value1 value2
 
     /// Returns a new adaptive value that adaptively applies the mapping function to the given adaptive inputs.
     let map3 (mapping : 'T1 -> 'T2 -> 'T3 -> 'T4) (value1 : aval<'T1>) (value2 : aval<'T2>) (value3 : aval<'T3>) =
-        let mapped = AVal.map3 mapping value1 value2 value3
-
         if value1 :? IAdaptiveResource || value2 :? IAdaptiveResource || value3 :? IAdaptiveResource then
-            AdaptiveValueWrapper(mapped, value1, value2, value3) :> aval<_>
+            Map3Resource(mapping, value1, value2, value3) :> aval<_>
         else
-            mapped
+            AVal.map3 mapping value1 value2 value3
 
     /// Returns a new adaptive resource that adaptively applies the mapping function to the given
     /// input and adaptively depends on the resulting adaptive value.
     /// The resulting adaptive resource will hold the latest value of the aval<_> returned by mapping.
-    let bind (mapping: 'T1 -> aval<'T2>) (value: aval<'T1>) =
+    let bind (mapping : 'T1 -> aval<'T2>) (value : aval<'T1>) =
         if value.IsConstant then
             value |> AVal.force |> mapping
         else

@@ -31,7 +31,7 @@ let main argv =
     use app = new VulkanApplication(DebugLevel.Normal)
     //GL.Config.UseNewRenderTask <- true
     //use app = new OpenGlApplication()
-    let win = app.CreateGameWindow(1)
+    use win = app.CreateGameWindow(1)
 
     let signature = win.FramebufferSignature
         //win.Runtime.CreateFramebufferSignature [
