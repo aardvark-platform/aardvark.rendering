@@ -27,7 +27,7 @@ type QueryHandle(handle : int) =
         GL.Check "could not retrieve query status"
 
         if value > 0L then
-            GL.GetQueryObject(h, GetQueryObjectParam.QueryResultNoWait, &value)
+            GL.GetQueryObject(h, GetQueryObjectParam.QueryResult, &value)
             GL.Check "could not retrieve query result"
 
             Some (uint64 value)
