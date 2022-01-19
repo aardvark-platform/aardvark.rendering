@@ -30,8 +30,9 @@
     <Compile Include="Tests\Texture\TextureTests.fs" />
     <Compile Include="Tests\Rendering\Signatures.fs" />
     <Compile Include="Tests\Rendering\RenderingTests.fs" />
-    <Compile Include="Tests\SgTest.fs" />
-    <Compile Include="Tests\CompactSetTests.fs" />
+    <Compile Include="Tests\Other\SgTest.fs" />
+    <Compile Include="Tests\Other\CompactSetTests.fs" />
+    <Compile Include="Tests\Other\AdaptiveResourceTest.fs" />
     <Compile Include="Program.fs" />
     <None Include="paket.references" />
   </ItemGroup>

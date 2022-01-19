@@ -41,7 +41,6 @@ module SgFSharp =
 
             // Note: we need these caches because of the AVal.maps below
             let bufferCache = ConditionalWeakTable<IAdaptiveValue, BufferView>()
-            let textureCache = ConditionalWeakTable<IAdaptiveValue, aval<ITexture>>()
 
             let bufferOfArray (m : aval<'a[]>) =
                 match bufferCache.TryGetValue m with
@@ -73,14 +72,6 @@ module SgFSharp =
 
                     let r =  BufferView(b, typeof<M44f>)
                     bufferCache.Add(m, r)
-                    r
-
-            let textureOfGeneric (t : aval<#ITexture>) =
-                match textureCache.TryGetValue t with
-                | (true, r) -> r
-                | _ ->
-                    let r = t |> AdaptiveResource.cast<ITexture>
-                    textureCache.Add(t, r)
                     r
 
         // Utilities for interleaved vertex attributes
@@ -202,18 +193,14 @@ module SgFSharp =
 
 
         let inline private textureAux< ^Conv, ^Name, 'Texture when 'Texture :> ITexture and (^Conv or ^Name) : (static member GetSymbol : ^Name -> Symbol)>
-                                      (name : ^Name) (value : aval<'Texture>) =
-            let sym = ((^Conv or ^Name) : (static member GetSymbol : ^Name -> Symbol) (name))
-
-            if typeof<'Texture> = typeof<ITexture> then
-                sym, value :?> aval<ITexture>
-            else
-                sym, Caching.textureOfGeneric value
+                                      (name : ^Name) =
+            ((^Conv or ^Name) : (static member GetSymbol : ^Name -> Symbol) (name))
 
         /// Sets the given texture to the slot with the given name.
         /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
         let inline texture (name : ^Name) (tex : aval< 'Texture>) (sg : ISg) =
-            let sym, value = textureAux<Symbol.Converters.TypedConverter<ITexture>, ^Name, 'Texture> name tex
+            let sym = textureAux<Symbol.Converters.TypedConverter<ITexture>, ^Name, 'Texture> name
+            let value = tex |> AdaptiveResource.cast<ITexture> // No caching required, since equality is preserved
             Sg.TextureApplicator(sym, value, sg) :> ISg
 
         /// Sets the given texture to the slot with the given name.
