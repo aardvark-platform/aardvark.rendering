@@ -218,8 +218,11 @@ module private OpenGL =
             glfw.MakeContextCurrent(win)
             let current = glfw.GetCurrentContext() 
             let mutable desc = Unchecked.defaultof<_>
-            glfw.GetError(&desc) |> Log.warn "%A"
-            Log.warn "worked: %A" (current = win)
+            let error = glfw.GetError(&desc)
+            if error <> Silk.NET.GLFW.ErrorCode.NoError then
+                Log.error "[GLFW] error after making trying to make context current: %A" error
+            if current <> win then
+                Log.error "[GLFW] could not make context current"
             ctx.LoadAll()          
             glfw.SwapInterval(if cfg.vsync then 1 else 0)
 
