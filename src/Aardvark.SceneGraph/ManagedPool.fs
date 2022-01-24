@@ -450,7 +450,12 @@ type internal PoolResources =
 
 and ManagedDrawCall internal(call : DrawCallInfo, poolResources : voption<PoolResources>) =
 
-    member x.Call = call
+    let mutable call = call
+
+    member x.Call
+        with get() = call
+        and set(dc) = call <- dc
+
     member internal x.Resources = poolResources
 
     new (call : DrawCallInfo) =

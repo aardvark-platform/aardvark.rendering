@@ -70,151 +70,154 @@ type TraceObject =
         Mask         : aval<VisibilityMask>
     }
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module TraceObject =
+[<AutoOpen>]
+module TraceObjectFSharp =
 
-    // TODO: Remove once this is moved to base
-    module Utilities =
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module TraceObject =
 
-        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-        module Map =
-            let mapKeys (mapping : 'T -> 'U) (map : Map<'T, 'V>) =
-                map |> Map.toList |> List.map (fun (k, v) -> mapping k, v) |> Map.ofList
+        // TODO: Remove once this is moved to base
+        module Utilities =
 
-        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-        module List =
-            let updateByIndex (index : int) (mapping : 'T -> 'T) (list : 'T list) =
-                list |> List.mapi (fun i v -> if i <> index then v else mapping v)
+            [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+            module Map =
+                let mapKeys (mapping : 'T -> 'U) (map : Map<'T, 'V>) =
+                    map |> Map.toList |> List.map (fun (k, v) -> mapping k, v) |> Map.ofList
 
-    open Utilities
+            [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+            module List =
+                let updateByIndex (index : int) (mapping : 'T -> 'T) (list : 'T list) =
+                    list |> List.mapi (fun i v -> if i <> index then v else mapping v)
 
-    let ofAdaptiveGeometry (geometry : AdaptiveTraceGeometry) =
-        { Geometry           = geometry
-          Usage              = AccelerationStructureUsage.Static
-          VertexAttributes   = Map.empty |> List.replicate geometry.Count
-          GeometryAttributes = Map.empty |> List.replicate geometry.Count
-          InstanceAttributes = Map.empty
-          HitGroups          = AVal.constant []
-          Transform          = AVal.constant Trafo3d.Identity
-          Culling            = AVal.constant CullMode.Disabled
-          GeometryMode       = AVal.constant GeometryMode.Default
-          Mask               = AVal.constant VisibilityMask.All }
+        open Utilities
 
-    let ofGeometry (geometry : TraceGeometry) =
-        geometry |> AdaptiveTraceGeometry.constant |> ofAdaptiveGeometry
+        let ofAdaptiveGeometry (geometry : AdaptiveTraceGeometry) =
+            { Geometry           = geometry
+              Usage              = AccelerationStructureUsage.Static
+              VertexAttributes   = Map.empty |> List.replicate geometry.Count
+              GeometryAttributes = Map.empty |> List.replicate geometry.Count
+              InstanceAttributes = Map.empty
+              HitGroups          = AVal.constant []
+              Transform          = AVal.constant Trafo3d.Identity
+              Culling            = AVal.constant CullMode.Disabled
+              GeometryMode       = AVal.constant GeometryMode.Default
+              Mask               = AVal.constant VisibilityMask.All }
 
-
-    let usage (usage : AccelerationStructureUsage) (obj : TraceObject) =
-        { obj with Usage = usage }
-
-
-    let inline vertexAttributes (attributes : Map< ^Name, BufferView> seq) (obj : TraceObject) =
-        let conv = Symbol.convert Symbol.Converters.untyped
-        let attributes = attributes |> Seq.toList |> List.map (Map.mapKeys conv)
-        { obj with VertexAttributes = attributes }
-
-    let inline vertexAttribute (name : ^Name) (values : seq<BufferView>) (obj : TraceObject) =
-        let sym = name |> Symbol.convert Symbol.Converters.untyped
-        let values = Array.ofSeq values
-
-        (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
-            { inst with VertexAttributes = inst.VertexAttributes |> List.updateByIndex geometry (Map.add sym value)}
-        )
+        let ofGeometry (geometry : TraceGeometry) =
+            geometry |> AdaptiveTraceGeometry.constant |> ofAdaptiveGeometry
 
 
-    let inline instanceAttributes (attributes : Map< ^Name, IAdaptiveValue>) (obj : TraceObject) =
-        let conv = Symbol.convert Symbol.Converters.untyped
-        let attributes = attributes |> Map.toList |> List.map (fun (k, v) -> conv k, v) |> Map.ofList
-        { obj with InstanceAttributes = attributes }
-
-    let inline instanceAttribute (name : ^Name) (value : IAdaptiveValue) (obj : TraceObject) =
-        let sym = name |> Symbol.convert Symbol.Converters.untyped
-        { obj with InstanceAttributes = obj.InstanceAttributes |> Map.add sym value }
-
-    let inline instanceAttribute' (name : ^Name) (value : 'T) (obj : TraceObject) =
-        let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
-        let value = AVal.constant value :> IAdaptiveValue
-        { obj with InstanceAttributes = obj.InstanceAttributes |> Map.add sym value }
+        let usage (usage : AccelerationStructureUsage) (obj : TraceObject) =
+            { obj with Usage = usage }
 
 
-    let inline geometryAttributes (attributes : Map< ^Name, IAdaptiveValue> seq) (obj : TraceObject) =
-        let conv = Symbol.convert Symbol.Converters.untyped
-        let attributes = attributes |> Seq.toList |> List.map (Map.mapKeys conv)
-        { obj with GeometryAttributes = attributes }
+        let inline vertexAttributes (attributes : Map< ^Name, BufferView> seq) (obj : TraceObject) =
+            let conv = Symbol.convert Symbol.Converters.untyped
+            let attributes = attributes |> Seq.toList |> List.map (Map.mapKeys conv)
+            { obj with VertexAttributes = attributes }
 
-    let inline geometryAttribute (name : ^Name) (values : seq<IAdaptiveValue>) (obj : TraceObject) =
-        let sym = name |> Symbol.convert Symbol.Converters.untyped
-        let values = Array.ofSeq values
+        let inline vertexAttribute (name : ^Name) (values : seq<BufferView>) (obj : TraceObject) =
+            let sym = name |> Symbol.convert Symbol.Converters.untyped
+            let values = Array.ofSeq values
 
-        (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
-            { inst with GeometryAttributes = inst.GeometryAttributes |> List.updateByIndex geometry (Map.add sym value)}
-        )
-
-    let inline geometryAttribute' (name : ^Name) (values : seq<'T>) (obj : TraceObject) =
-        let values = values |> Array.ofSeq |> Array.map (fun x -> AVal.constant x :> IAdaptiveValue)
-        obj |> geometryAttribute name values
+            (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
+                { inst with VertexAttributes = inst.VertexAttributes |> List.updateByIndex geometry (Map.add sym value)}
+            )
 
 
-    let hitGroups (hitConfig : aval<HitConfig>) (obj : TraceObject) =
-        { obj with HitGroups = hitConfig }
+        let inline instanceAttributes (attributes : Map< ^Name, IAdaptiveValue>) (obj : TraceObject) =
+            let conv = Symbol.convert Symbol.Converters.untyped
+            let attributes = attributes |> Map.toList |> List.map (fun (k, v) -> conv k, v) |> Map.ofList
+            { obj with InstanceAttributes = attributes }
 
-    let hitGroups' (hitConfig : HitConfig) (obj : TraceObject) =
-        obj |> hitGroups (AVal.constant hitConfig)
+        let inline instanceAttribute (name : ^Name) (value : IAdaptiveValue) (obj : TraceObject) =
+            let sym = name |> Symbol.convert Symbol.Converters.untyped
+            { obj with InstanceAttributes = obj.InstanceAttributes |> Map.add sym value }
 
-    let hitGroup (group : aval<Symbol>) (obj : TraceObject) =
-        let groups = group |> AVal.map List.singleton
-        obj  |> hitGroups groups
-
-    let hitGroup' (group : Symbol) (obj : TraceObject) =
-        obj |> hitGroups' [group]
-
-
-    let transform (trafo : aval<Trafo3d>) (obj : TraceObject) =
-        { obj with Transform = trafo }
-
-    let transform' (trafo : Trafo3d) (obj : TraceObject) =
-        obj |> transform (AVal.constant trafo)
+        let inline instanceAttribute' (name : ^Name) (value : 'T) (obj : TraceObject) =
+            let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
+            let value = AVal.constant value :> IAdaptiveValue
+            { obj with InstanceAttributes = obj.InstanceAttributes |> Map.add sym value }
 
 
-    let culling (mode : aval<CullMode>) (obj : TraceObject) =
-        { obj with Culling = mode }
+        let inline geometryAttributes (attributes : Map< ^Name, IAdaptiveValue> seq) (obj : TraceObject) =
+            let conv = Symbol.convert Symbol.Converters.untyped
+            let attributes = attributes |> Seq.toList |> List.map (Map.mapKeys conv)
+            { obj with GeometryAttributes = attributes }
 
-    let culling' (mode : CullMode) (obj : TraceObject) =
-        obj |> culling (AVal.constant mode)
+        let inline geometryAttribute (name : ^Name) (values : seq<IAdaptiveValue>) (obj : TraceObject) =
+            let sym = name |> Symbol.convert Symbol.Converters.untyped
+            let values = Array.ofSeq values
 
+            (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
+                { inst with GeometryAttributes = inst.GeometryAttributes |> List.updateByIndex geometry (Map.add sym value)}
+            )
 
-    let geometryMode (mode : aval<GeometryMode>) (obj : TraceObject) =
-        { obj with GeometryMode = mode }
-
-    let geometryMode' (mode : GeometryMode) (obj : TraceObject) =
-        obj |> geometryMode (AVal.constant mode)
-
-
-    let mask (value : aval<VisibilityMask>) (obj : TraceObject) =
-        { obj with Mask = value }
-
-    let mask' (value : VisibilityMask) (obj : TraceObject) =
-        obj |> mask (AVal.constant value)
+        let inline geometryAttribute' (name : ^Name) (values : seq<'T>) (obj : TraceObject) =
+            let values = values |> Array.ofSeq |> Array.map (fun x -> AVal.constant x :> IAdaptiveValue)
+            obj |> geometryAttribute name values
 
 
-    let ofIndexedGeometry (flags : aval<GeometryFlags>) (trafo : aval<Trafo3d>) (geometry : IndexedGeometry) =
-        let g = geometry.ToNonStripped()
+        let hitGroups (hitConfig : aval<HitConfig>) (obj : TraceObject) =
+            { obj with HitGroups = hitConfig }
 
-        let attributes =
-            g.IndexedAttributes |> SymDict.toMap |> Map.map (fun _ -> BufferView.ofArray)
+        let hitGroups' (hitConfig : HitConfig) (obj : TraceObject) =
+            obj |> hitGroups (AVal.constant hitConfig)
 
-        let ag =
-            TriangleMesh.ofIndexedGeometry g
-            |> AdaptiveTriangleMesh.constant
-            |> AdaptiveTriangleMesh.transform trafo
-            |> AdaptiveTriangleMesh.flags flags
-            |> AdaptiveTraceGeometry.ofTriangleMesh
+        let hitGroup (group : aval<Symbol>) (obj : TraceObject) =
+            let groups = group |> AVal.map List.singleton
+            obj  |> hitGroups groups
 
-        ofAdaptiveGeometry ag
-        |> vertexAttributes [| attributes |]
+        let hitGroup' (group : Symbol) (obj : TraceObject) =
+            obj |> hitGroups' [group]
 
-    let ofIndexedGeometry' (flags : GeometryFlags) (trafo : Trafo3d) (geometry : IndexedGeometry) =
-        geometry |> ofIndexedGeometry (AVal.constant flags) (AVal.constant trafo)
+
+        let transform (trafo : aval<Trafo3d>) (obj : TraceObject) =
+            { obj with Transform = trafo }
+
+        let transform' (trafo : Trafo3d) (obj : TraceObject) =
+            obj |> transform (AVal.constant trafo)
+
+
+        let culling (mode : aval<CullMode>) (obj : TraceObject) =
+            { obj with Culling = mode }
+
+        let culling' (mode : CullMode) (obj : TraceObject) =
+            obj |> culling (AVal.constant mode)
+
+
+        let geometryMode (mode : aval<GeometryMode>) (obj : TraceObject) =
+            { obj with GeometryMode = mode }
+
+        let geometryMode' (mode : GeometryMode) (obj : TraceObject) =
+            obj |> geometryMode (AVal.constant mode)
+
+
+        let mask (value : aval<VisibilityMask>) (obj : TraceObject) =
+            { obj with Mask = value }
+
+        let mask' (value : VisibilityMask) (obj : TraceObject) =
+            obj |> mask (AVal.constant value)
+
+
+        let ofIndexedGeometry (flags : aval<GeometryFlags>) (trafo : aval<Trafo3d>) (geometry : IndexedGeometry) =
+            let g = geometry.ToNonStripped()
+
+            let attributes =
+                g.IndexedAttributes |> SymDict.toMap |> Map.map (fun _ -> BufferView.ofArray)
+
+            let ag =
+                TriangleMesh.ofIndexedGeometry g
+                |> AdaptiveTriangleMesh.constant
+                |> AdaptiveTriangleMesh.transform trafo
+                |> AdaptiveTriangleMesh.flags flags
+                |> AdaptiveTraceGeometry.ofTriangleMesh
+
+            ofAdaptiveGeometry ag
+            |> vertexAttributes [| attributes |]
+
+        let ofIndexedGeometry' (flags : GeometryFlags) (trafo : Trafo3d) (geometry : IndexedGeometry) =
+            geometry |> ofIndexedGeometry (AVal.constant flags) (AVal.constant trafo)
 
 
 [<AutoOpen>]

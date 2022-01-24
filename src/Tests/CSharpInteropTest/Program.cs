@@ -28,6 +28,9 @@ namespace CSharpInteropTest
 
             runtime.ClearDepth(fbo, 1.0);
 
+            ManagedDrawCall mdc = null;
+            mdc.Call = new DrawCallInfo();
+
             var colorsMap =
                 new[] {
                     Tuple.Create(DefaultSemantic.Colors, C4b.Turquoise),
