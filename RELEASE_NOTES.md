@@ -1,3 +1,8 @@
+### 5.2.0-prerelease0002
+- improved C# interop for ClearValues
+- added setter for Call of ManagedDrawCall
+- made texture clear API consistent with framebuffer clearing
+
 ### 5.2.0-prerelease0001
 - Initial prerelease for 5.2
 
