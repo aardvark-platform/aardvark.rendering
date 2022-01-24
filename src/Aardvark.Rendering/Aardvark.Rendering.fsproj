@@ -18,6 +18,7 @@
     <None Include="paket.references" />
     <Compile Include="Common\Queries.fs" />
     <Compile Include="Common\ClearValues.fs" />
+    <Compile Include="Common\ClearValuesCSharp.fs" />
     <Compile Include="Common\FrameStatistics.fs" />
     <Compile Include="Common\RenderToken.fs" />
     <Compile Include="Common\DefaultSemantic.fs" />
@@ -56,6 +57,7 @@
     <Compile Include="Resources\Textures\DefaultTextures.fs" />
     <Compile Include="Resources\Framebuffer\Framebuffer.fs" />
     <Compile Include="Resources\Framebuffer\FramebufferExtensions.fs" />
+    <Compile Include="Resources\Framebuffer\FramebufferExtensionsCSharp.fs" />
     <Compile Include="Resources\Framebuffer\OutputDescription.fs" />
     <Compile Include="Resources\Raytracing\AccelerationStructure.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveResource.fs" />
@@ -110,6 +112,7 @@
     <Compile Include="Runtime\ResourceManager.fs" />
     <Compile Include="Runtime\Runtime.fs" />
     <Compile Include="Runtime\RuntimeExtensions.fs" />
+    <Compile Include="Runtime\RuntimeExtensionsCSharp.fs" />
     <Compile Include="Runtime\RuntimeCommand.fs" />
     <Compile Include="RenderTasks\AbstractRenderTask.fs" />
     <Compile Include="RenderTasks\EmptyRenderTask.fs" />

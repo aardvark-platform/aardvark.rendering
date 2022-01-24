@@ -14,7 +14,6 @@ type RenderGeometryConfig =
         perGeometryUniforms : Map<string, Type>
     }
 
-
 type RenderCommand =
     internal
         | REmpty
@@ -29,38 +28,7 @@ type RenderCommand =
     static member Empty = REmpty
 
     static member Clear(values : aval<ClearValues>) = RClear values
-
-    static member inline Clear(color : aval< ^Color>) =
-        let values = color |> AVal.map (fun c -> clear { color c })
-        RenderCommand.Clear(values)
-
-    static member inline Clear(color : aval< ^Color>, depth : aval< ^Depth>) =
-        let values = (color, depth) ||> AVal.map2 (fun c d -> clear { color c; depth d })
-        RenderCommand.Clear(values)
-
-    static member inline Clear(color : aval< ^Color>, depth : aval< ^Depth>, stencil : aval< ^Stencil>) =
-        let values = (color, depth, stencil) |||> AVal.map3 (fun c d s -> clear { color c; depth d; stencil s })
-        RenderCommand.Clear(values)
-
-    static member inline ClearDepth(depth : aval< ^Depth>) =
-        let values = depth |> AVal.map (fun d -> clear { depth d })
-        RenderCommand.Clear(values)
-
-    static member inline ClearStencil(stencil : aval< ^Stencil>) =
-        let values = stencil |> AVal.map (fun s -> clear { stencil s })
-        RenderCommand.Clear(values)
-
-    static member inline ClearDepthStencil(depth : aval< ^Depth>, stencil : aval< ^Stencil>) =
-        let values = (depth, stencil) ||> AVal.map2 (fun d s -> clear { depth d; stencil s })
-        RenderCommand.Clear(values)
-
-    static member Clear(values : ClearValues)                                      = RenderCommand.Clear(~~values)
-    static member inline Clear(color : ^Color)                                     = RenderCommand.Clear(~~color)
-    static member inline Clear(color : ^Color, depth : ^Depth)                     = RenderCommand.Clear(~~color, ~~depth)
-    static member inline Clear(color : ^Color, depth : ^Depth, stencil : ^Stencil) = RenderCommand.Clear(~~color, ~~depth, ~~stencil)
-    static member inline ClearDepth(depth : ^Depth)                                = RenderCommand.ClearDepth(~~depth)
-    static member inline ClearStencil(stencil : ^Stencil)                          = RenderCommand.ClearStencil(~~stencil)
-    static member inline ClearDepthStencil(depth : ^Depth, stencil : ^Stencil)     = RenderCommand.ClearDepthStencil(~~depth, ~~stencil)
+    static member Clear(values : ClearValues)       = RenderCommand.Clear(~~values)
 
     static member Unordered(l : seq<ISg>) = RUnorderedScenes(ASet.ofSeq l)
     static member Unordered(l : list<ISg>) = RUnorderedScenes(ASet.ofList l)
@@ -97,6 +65,42 @@ type RenderCommand =
         else
             ROrdered cmds
 
+[<AutoOpen>]
+module RenderCommandFSharpExtensions =
+
+    // These extensions use SRTPs so MUST NOT be exposed to C#
+    type RenderCommand with
+
+        static member inline Clear(color : aval< ^Color>) =
+            let values = color |> AVal.map (fun c -> clear { color c })
+            RenderCommand.Clear(values)
+
+        static member inline Clear(color : aval< ^Color>, depth : aval< ^Depth>) =
+            let values = (color, depth) ||> AVal.map2 (fun c d -> clear { color c; depth d })
+            RenderCommand.Clear(values)
+
+        static member inline Clear(color : aval< ^Color>, depth : aval< ^Depth>, stencil : aval< ^Stencil>) =
+            let values = (color, depth, stencil) |||> AVal.map3 (fun c d s -> clear { color c; depth d; stencil s })
+            RenderCommand.Clear(values)
+
+        static member inline ClearDepth(depth : aval< ^Depth>) =
+            let values = depth |> AVal.map (fun d -> clear { depth d })
+            RenderCommand.Clear(values)
+
+        static member inline ClearStencil(stencil : aval< ^Stencil>) =
+            let values = stencil |> AVal.map (fun s -> clear { stencil s })
+            RenderCommand.Clear(values)
+
+        static member inline ClearDepthStencil(depth : aval< ^Depth>, stencil : aval< ^Stencil>) =
+            let values = (depth, stencil) ||> AVal.map2 (fun d s -> clear { depth d; stencil s })
+            RenderCommand.Clear(values)
+
+        static member inline Clear(color : ^Color)                                     = RenderCommand.Clear(~~color)
+        static member inline Clear(color : ^Color, depth : ^Depth)                     = RenderCommand.Clear(~~color, ~~depth)
+        static member inline Clear(color : ^Color, depth : ^Depth, stencil : ^Stencil) = RenderCommand.Clear(~~color, ~~depth, ~~stencil)
+        static member inline ClearDepth(depth : ^Depth)                                = RenderCommand.ClearDepth(~~depth)
+        static member inline ClearStencil(stencil : ^Stencil)                          = RenderCommand.ClearStencil(~~stencil)
+        static member inline ClearDepthStencil(depth : ^Depth, stencil : ^Stencil)     = RenderCommand.ClearDepthStencil(~~depth, ~~stencil)
 
 [<AutoOpen>]
 module ``Sg RuntimeCommand Extensions`` =
@@ -178,4 +182,3 @@ module RuntimeCommandSemantics =
 
             let obj = CommandRenderObject(pass, scope, runtimeCommand)
             ASet.single (obj :> IRenderObject)
-

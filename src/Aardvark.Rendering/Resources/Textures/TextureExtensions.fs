@@ -96,6 +96,26 @@ module TensorExtensions =
             | 3L -> Col.Format.RGB
             | _  -> Col.Format.RGBA
 
+[<AutoOpen>]
+module ITextureRuntimeFSharpExtensions =
+
+    // These extensions use SRTPs so MUST NOT be exposed to C#
+    type ITextureRuntime with
+
+        // ================================================================================================================
+        // Clear
+        // ================================================================================================================
+
+        /// Clears the given texture with the given color.
+        member inline x.ClearColor(texture : IBackendTexture, color : ^Color) =
+            x.ClearColor(texture, ClearColor.create color)
+
+        /// Clears the given texture with the given depth and stencil values.
+        member inline x.ClearDepthStencil(texture : IBackendTexture, depth: Option< ^Depth>, stencil : Option< ^Stencil>) =
+            let depth = depth |> Option.map ClearDepth.create
+            let stencil = stencil |> Option.map ClearStencil.create
+            x.ClearDepthStencil(texture, depth, stencil)
+
 
 [<AbstractClass; Sealed; Extension>]
 type ITextureRuntimeExtensions private() =
@@ -475,18 +495,6 @@ type ITextureRuntimeExtensions private() =
     // ================================================================================================================
     // Clear
     // ================================================================================================================
-
-    /// Clears the given texture with the given color.
-    [<Extension>]
-    static member inline ClearColor(this : ITextureRuntime, texture : IBackendTexture, color : ^Color) =
-        this.ClearColor(texture, ClearColor.create color)
-
-    /// Clears the given texture with the given depth and stencil values.
-    [<Extension>]
-    static member inline ClearDepthStencil(this : ITextureRuntime, texture : IBackendTexture, depth: Option< ^Depth>, stencil : Option< ^Stencil>) =
-        let depth = depth |> Option.map ClearDepth.create
-        let stencil = stencil |> Option.map ClearStencil.create
-        this.ClearDepthStencil(texture, depth, stencil)
 
     /// Clears the texture with the given clear values.
     [<Extension>]

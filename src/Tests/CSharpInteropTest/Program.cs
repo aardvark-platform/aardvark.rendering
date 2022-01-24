@@ -21,23 +21,28 @@ namespace CSharpInteropTest
             IFramebufferSignature signature = null;
             FSharpMap<Symbol, IAdaptiveValue<IFramebufferOutput>> attachments = null;
             IBackendTexture texture = null;
+            IFramebuffer fbo = null;
             runtime.CreateFramebuffer(signature, attachments);
             runtime.CompileClear(signature, C4b.White);
             runtime.ClearColor(texture, C3b.White);
 
+            runtime.ClearDepth(fbo, 1.0);
+
             var colorsMap =
-                MapModule.OfArray(new[] {
-                    Tuple.Create(DefaultSemantic.Colors, (ClearColor) C3b.Turquoise),
-                    Tuple.Create(DefaultSemantic.Normals, (ClearColor) V4f.Zero),
-                });
+                new[] {
+                    Tuple.Create(DefaultSemantic.Colors, C4b.Turquoise),
+                    Tuple.Create(DefaultSemantic.Normals, C4b.Zero),
+                };
+
+            runtime.Clear(fbo, Clear.Colors(colorsMap).Depth(1.0));
 
             ClearValues values =
-                ClearValues.Empty
+                Clear.Empty
                 .Color(C3us.Azure)
                 .Colors(colorsMap)
                 .Color(DefaultSemantic.Positions, V3f.Zero)
                 .Color(DefaultSemantic.DiffuseColorUTangents, V3d.Zero)
-                .Depth(1.0)
+                .Depth(1.0m)
                 .Stencil(0);
 
             Console.WriteLine("Hello World!");

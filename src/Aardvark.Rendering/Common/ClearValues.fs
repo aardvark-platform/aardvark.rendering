@@ -196,15 +196,13 @@ type ClearValues =
         Stencil : Option<ClearStencil>
     }
 
-    static member Empty =
-        { Colors  = ClearColors.empty
-          Depth   = None
-          Stencil = None }
-
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ClearValues =
 
-    let empty = ClearValues.Empty
+    let empty =
+        { Colors  = ClearColors.empty
+          Depth   = None
+          Stencil = None }
 
     /// Sets a default clear color.
     let inline color (color : ^Color) (values : ClearValues) =
@@ -259,37 +257,3 @@ module ``Clear Utlities`` =
 
     /// Computational expression to define clear values
     let clear = ClearValuesBuilder()
-
-
-namespace Aardvark.Rendering.CSharp
-
-open Aardvark.Base
-open Aardvark.Rendering
-open System.Runtime.CompilerServices
-
-[<Extension; AbstractClass; Sealed>]
-type ClearValuesExtensions =
-
-    [<Extension>]
-    static member Color(values : ClearValues, color : ClearColor) =
-        values |> ClearValues.color color
-
-    [<Extension>]
-    static member Color(values : ClearValues, semantic : Symbol, color : ClearColor) =
-        values |> ClearValues.color' semantic color
-
-    [<Extension>]
-    static member Colors(values : ClearValues, colors : Map<Symbol, ClearColor>) =
-        values |> ClearValues.colors colors
-
-    [<Extension>]
-    static member Colors(values : ClearValues, colors : seq<Symbol * ClearColor>) =
-        values |> ClearValues.colors (Map.ofSeq colors)
-
-    [<Extension>]
-    static member Depth(values : ClearValues, depth : ClearDepth) =
-        values |> ClearValues.depth depth
-
-    [<Extension>]
-    static member Stencil(values : ClearValues, stencil : ClearStencil) =
-        values |> ClearValues.stencil stencil

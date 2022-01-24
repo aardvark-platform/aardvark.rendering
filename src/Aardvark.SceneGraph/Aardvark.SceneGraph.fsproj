@@ -32,6 +32,7 @@
     <Compile Include="Semantics\Environment.fs" />
     <Compile Include="HighLevelSceneGraph\LodTree.fs" />
     <Compile Include="HighLevelSceneGraph\Commands.fs" />
+    <Compile Include="HighLevelSceneGraph\CommandsCSharp.fs" />
     <Compile Include="HighLevelSceneGraph\Lod.fs" />
     <Compile Include="HighLevelSceneGraph\Culling.fs" />
     <Compile Include="HighLevelSceneGraph\Picking.fs" />
