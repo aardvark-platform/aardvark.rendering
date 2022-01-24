@@ -450,11 +450,7 @@ type internal PoolResources =
 
 and ManagedDrawCall internal(call : DrawCallInfo, poolResources : voption<PoolResources>) =
 
-    let mutable call = call
-
-    member x.Call
-        with get() = call
-        and set(dc) = call <- dc
+    member x.Call = call
 
     member internal x.Resources = poolResources
 
@@ -535,32 +531,41 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
                     clear()
         )
 
-    member x.Add(g : AdaptiveGeometry) =
+    ///<summary>Adds the given geometry to the pool and returns a managed draw call.</summary>
+    ///<param name="geometry">The geometry to add.</param>
+    member x.Add(geometry : AdaptiveGeometry) =
+        x.Add(geometry, 0, geometry.FaceVertexCount)
+
+    ///<summary>Adds the given geometry to the pool and returns a managed draw call.</summary>
+    ///<param name="geometry">The geometry to add.</param>
+    ///<param name="indexOffset">An offset added to the FirstIndex field of the resulting draw call.</param>
+    ///<param name="faceVertexCount">The face vertex count of the resulting draw call.</param>
+    member x.Add(geometry : AdaptiveGeometry, indexOffset : int, faceVertexCount : int) =
         lock x (fun () ->
             let ds = List()
-            let fvc = g.FaceVertexCount
-            let vertexCount = g.VertexCount
+            let fvc = geometry.FaceVertexCount
+            let vertexCount = geometry.VertexCount
             
             
-            let vertexPtr = vertexManager.Alloc(g.VertexAttributes, vertexCount)
+            let vertexPtr = vertexManager.Alloc(geometry.VertexAttributes, vertexCount)
             let vertexRange = Range1l(int64 vertexPtr.Offset, int64 vertexPtr.Offset + int64 vertexCount - 1L)
             for (k,t) in vertexBufferTypes do
                 let target = vertexBuffers.[k]
-                match Map.tryFind k g.VertexAttributes with
+                match Map.tryFind k geometry.VertexAttributes with
                     | Some v -> target.Add(vertexRange, v) |> ds.Add
                     | None -> target.Set(vertexRange, zero)
             
-            let instancePtr = instanceManager.Alloc(g.InstanceAttributes, 1)
+            let instancePtr = instanceManager.Alloc(geometry.InstanceAttributes, 1)
             let instanceIndex = int instancePtr.Offset
             for (k,t) in uniformTypes do
                 let target = instanceBuffers.[k]
-                match Map.tryFind k g.InstanceAttributes with
+                match Map.tryFind k geometry.InstanceAttributes with
                     | Some v -> target.Add(instanceIndex, v) |> ds.Add
                     | None -> target.Set(Range1l(int64 instanceIndex, int64 instanceIndex), zero)
 
-            let isNew, indexPtr = indexManager.TryAlloc((g.Indices, fvc), fvc)
+            let isNew, indexPtr = indexManager.TryAlloc((geometry.Indices, fvc), fvc)
             let indexRange = Range1l(int64 indexPtr.Offset, int64 indexPtr.Offset + int64 fvc - 1L)
-            match g.Indices with
+            match geometry.Indices with
                 | Some v -> indexBuffer.Add(indexRange, v) |> ds.Add
                 | None ->
                     if isNew then
@@ -579,8 +584,8 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
 
             let call =
                 DrawCallInfo(
-                    FaceVertexCount = fvc,
-                    FirstIndex = int indexPtr.Offset,
+                    FaceVertexCount = faceVertexCount,
+                    FirstIndex = int indexPtr.Offset + indexOffset,
                     FirstInstance = int instancePtr.Offset,
                     InstanceCount = 1,
                     BaseVertex = int vertexPtr.Offset
