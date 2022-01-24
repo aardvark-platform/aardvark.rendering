@@ -125,7 +125,7 @@ type DevicePreparedRenderObjectExtensions private() =
                     | SamplerParameter sam ->
                         match sam.samplerTextures with
                         | [] ->
-                            Log.warn "could not get sampler information for: %A" sam
+                            Log.error "[Vulkan] could not get sampler information for: %A" sam
                             None
 
                         | descriptions ->
@@ -140,7 +140,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                         let vs = this.CreateImageSampler(sam.samplerType, tex, s)
                                         Some(i, vs)
                                     | _ ->
-                                        Log.warn "[Vulkan] could not find texture: %A" textureName
+                                        Log.error "[Vulkan] could not find texture: %A" textureName
                                         None
                                 )
 

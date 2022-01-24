@@ -237,10 +237,10 @@ module PreparedPipelineState =
                                     | :? aval<ITexture> as value -> x.CreateTexture(value)
                                     | :? aval<IBackendTexture> as value -> x.CreateTexture'(value)
                                     | _ -> 
-                                        Log.line "[GL] invalid texture type: %s %s -> expecting aval<ITexture> or aval<IBackendTexture>" texName (tex.GetType().Name)
+                                        Log.error "[GL] invalid texture type: %s %s -> expecting aval<ITexture> or aval<IBackendTexture>" texName (tex.GetType().Name)
                                         x.CreateTexture(helper.NullTexture)
                                 | None -> 
-                                    Log.line "[GL] texture uniform \"%s\" not found" texName
+                                    Log.error "[GL] texture uniform \"%s\" not found" texName
                                     x.CreateTexture(helper.NullTexture)
 
                             Some struct(Range1i(u.samplerBinding), (SingleBinding (texRes, samRes)))
@@ -289,7 +289,7 @@ module PreparedPipelineState =
 
                                                 Some arrayBinding
                                             | _ -> 
-                                                Log.warn "[GL] invalid texture type %s: %s -> expecting aval<ITexture[]>" pre (texArr.GetType().Name)
+                                                Log.error "[GL] invalid texture type %s: %s -> expecting aval<ITexture[]>" pre (texArr.GetType().Name)
                                                 None
 
                                         | _ -> // could not find texture array uniform -> try individual
@@ -314,10 +314,10 @@ module PreparedPipelineState =
                                                 | :? aval<ITexture> as value -> Some (x.CreateTexture(value))
                                                 | :? aval<IBackendTexture> as value -> Some (x.CreateTexture'(value))
                                                 | _ -> 
-                                                    Log.line "[GL] invalid texture type: %s %s -> expecting aval<ITexture> or aval<IBackendTexture>" texName (tex.GetType().Name)
+                                                    Log.error "[GL] invalid texture type: %s %s -> expecting aval<ITexture> or aval<IBackendTexture>" texName (tex.GetType().Name)
                                                     None
                                             | None -> 
-                                                    Log.line "[GL] texture uniform \"%s\" not found" texName
+                                                    Log.error "[GL] texture uniform \"%s\" not found" texName
                                                     None
 
                                         match texRes with
