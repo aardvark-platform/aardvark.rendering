@@ -185,6 +185,7 @@ module IFramebufferSignatureExtensions =
             if LanguagePrimitives.PhysicalEquality this other then
                 true
             else
+                this.Samples = other.Samples &&
                 this.LayerCount = other.LayerCount &&
                 this.PerLayerUniforms = other.PerLayerUniforms &&
                 this.ColorAttachments = other.ColorAttachments &&
@@ -198,6 +199,7 @@ module IFramebufferSignatureExtensions =
             if LanguagePrimitives.PhysicalEquality this fbo.Signature then
                 true
             else
+                this.Samples = fbo.Signature.Samples &&
                 this.LayerCount = fbo.Signature.LayerCount &&
                 this.PerLayerUniforms = fbo.Signature.PerLayerUniforms &&
                 colorsAssignableTo this.ColorAttachments fbo.Signature.ColorAttachments &&
