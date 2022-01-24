@@ -24,7 +24,7 @@ namespace CSharpInteropTest
             IFramebuffer fbo = null;
             runtime.CreateFramebuffer(signature, attachments);
             runtime.CompileClear(signature, C4b.White);
-            runtime.ClearColor(texture, C3b.White);
+            runtime.Clear(texture, C3b.White);
 
             runtime.ClearDepth(fbo, 1.0);
 

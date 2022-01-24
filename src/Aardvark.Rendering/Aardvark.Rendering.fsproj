@@ -54,6 +54,7 @@
     <Compile Include="Resources\Textures\PixTexture3d.fs" />
     <Compile Include="Resources\Textures\PixTextureCube.fs" />
     <Compile Include="Resources\Textures\TextureExtensions.fs" />
+    <Compile Include="Resources\Textures\TextureExtensionsCSharp.fs" />
     <Compile Include="Resources\Textures\DefaultTextures.fs" />
     <Compile Include="Resources\Framebuffer\Framebuffer.fs" />
     <Compile Include="Resources\Framebuffer\FramebufferExtensions.fs" />

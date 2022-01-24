@@ -16,7 +16,7 @@ module TextureClear =
             let t = runtime.CreateTexture2D(V2i(256), format)
 
             try
-                runtime.ClearColor(t, color)
+                runtime.Clear(t, color)
                 t.Download()
             finally
                 runtime.DeleteTexture(t)
@@ -45,7 +45,7 @@ module TextureClear =
             let t = runtime.CreateTexture2D(V2i(256), TextureFormat.Depth24Stencil8)
 
             try
-                runtime.ClearDepthStencil(t, Some 0.5, Some 3)
+                runtime.ClearDepthStencil(t, 0.5, 3)
                 let depth, stencil = t.DownloadDepth(), t.DownloadStencil()
 
                 depth.Data |> Array.iter (fun x -> Expect.floatClose Accuracy.medium (float x) 0.5 "Depth data mismatch")

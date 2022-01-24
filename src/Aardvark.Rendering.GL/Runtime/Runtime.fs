@@ -309,38 +309,20 @@ type Runtime(debug : DebugLevel) =
             GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, old);
             GL.Check "could not unbind framebuffer"
 
-        member x.ClearColor(texture : IBackendTexture, color : ClearColor) =
-            if not <| (texture.Format.HasDepth || texture.Format.HasStencil) then
-                use __ = ctx.ResourceLock
+        member x.Clear(texture : IBackendTexture, values : ClearValues) =
+            use __ = ctx.ResourceLock
 
-                let old = GL.GetInteger(GetPName.DrawFramebufferBinding)
+            let old = GL.GetInteger(GetPName.DrawFramebufferBinding)
 
-                let fbo = GL.GenFramebuffer()
-                GL.Check "could not create framebuffer"
+            let fbo = GL.GenFramebuffer()
+            GL.Check "could not create framebuffer"
 
-                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo)
-                GL.Check "could not bind framebuffer"
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo)
+            GL.Check "could not bind framebuffer"
 
-                GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, texture.Handle |> unbox<int>, 0)
-                GL.Check "could not attach framebuffer texture"
-
-                GL.DrawBuffer(DrawBufferMode.ColorAttachment0)
-                if texture.Format.IsIntegerFormat then
-                    GL.ClearBuffer(ClearBuffer.Color, 0, color.Integer.ToArray())
-                else
-                    GL.ClearBuffer(ClearBuffer.Color, 0, color.Float.ToArray())
-                GL.Check "could not clear buffer"
-
-                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, old)
-                GL.Check "could not unbind framebuffer"
-
-                GL.DeleteFramebuffer(fbo)
-                GL.Check "could not delete framebuffer"
-
-        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<ClearDepth>, stencil : Option<ClearStencil>) =
             if texture.Format.HasDepth || texture.Format.HasStencil then
                 let binding =
-                    match (depth, stencil) with
+                    match values.Depth, values.Stencil with
                     | Some x, Some y -> Some FramebufferAttachment.DepthStencilAttachment
                     | Some x, None -> Some FramebufferAttachment.DepthAttachment
                     | None, Some y -> Some FramebufferAttachment.StencilAttachment
@@ -348,20 +330,10 @@ type Runtime(debug : DebugLevel) =
 
                 match binding with
                 | Some b ->
-                    use __ = ctx.ResourceLock
-
-                    let old = GL.GetInteger(GetPName.DrawFramebufferBinding)
-
-                    let fbo = GL.GenFramebuffer()
-                    GL.Check "could not create framebuffer"
-
-                    GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, fbo)
-                    GL.Check "could not bind framebuffer"
-
                     GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, b, texture.Handle |> unbox<int>, 0)
                     GL.Check "could not attach framebuffer texture"
 
-                    match (depth, stencil) with
+                    match values.Depth, values.Stencil with
                     | Some d, Some s ->
                         GL.ClearDepth(float d)
                         GL.ClearStencil(int s)
@@ -375,13 +347,29 @@ type Runtime(debug : DebugLevel) =
                     | _ -> ()
                     GL.Check "could not clear"
 
-                    GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, old)
-                    GL.Check "could not unbind framebuffer"
-
-                    GL.DeleteFramebuffer(fbo)
-                    GL.Check "could not delete framebuffer"
-
                 | _ -> () // done
+
+            else
+                match values.Colors.[DefaultSemantic.Colors] with
+                | Some color ->
+                    GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, FramebufferAttachment.ColorAttachment0, texture.Handle |> unbox<int>, 0)
+                    GL.Check "could not attach framebuffer texture"
+
+                    GL.DrawBuffer(DrawBufferMode.ColorAttachment0)
+                    if texture.Format.IsIntegerFormat then
+                        GL.ClearBuffer(ClearBuffer.Color, 0, color.Integer.ToArray())
+                    else
+                        GL.ClearBuffer(ClearBuffer.Color, 0, color.Float.ToArray())
+                    GL.Check "could not clear buffer"
+
+                | _ ->
+                    ()
+
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, old)
+            GL.Check "could not unbind framebuffer"
+
+            GL.DeleteFramebuffer(fbo)
+            GL.Check "could not delete framebuffer"
 
         member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture =
             ctx.CreateTextureView(unbox<Texture> texture, levels, slices, isArray) :> IBackendTexture

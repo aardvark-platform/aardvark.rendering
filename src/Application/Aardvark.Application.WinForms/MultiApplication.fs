@@ -388,10 +388,9 @@ and MultiRuntime(runtimes : IRuntime[]) =
         member x.Run (commands : list<ComputeCommand>, queries : IQuery) = failwith ""
         member x.Compile (commands : list<ComputeCommand>) = failwith ""
 
-        member x.Clear(fbo : IFramebuffer, values : ClearValues) = failwith "not implemented"
+        member x.Clear(fbo : IFramebuffer, values : ClearValues) : unit = failwith "not implemented"
 
-        member x.ClearColor(texture : IBackendTexture, color : ClearColor) = failwith "not implemented"
-        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<ClearDepth>, stencil : Option<ClearStencil>) = failwith "not implemented"
+        member x.Clear(texture : IBackendTexture, values : ClearValues) : unit = failwith "not implemented"
 
         member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture = failwith "not implemented"
 

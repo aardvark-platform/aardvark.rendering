@@ -528,13 +528,10 @@ type Runtime(device : Device, debug : DebugLevel) as this =
             x.CopyAsync(src, srcOffset, dst, size)
 
 
-        member x.Clear(fbo : IFramebuffer, values : ClearValues) =
+        member x.Clear(fbo : IFramebuffer, values : ClearValues) : unit =
             failwith "not implemented"
 
-        member x.ClearColor(texture : IBackendTexture, color : ClearColor) =
-            failwith "not implemented"
-
-        member x.ClearDepthStencil(texture : IBackendTexture, depth : Option<ClearDepth>, stencil : Option<ClearStencil>) =
+        member x.Clear(texture : IBackendTexture, values : ClearValues) : unit =
             failwith "not implemented"
 
         member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture =

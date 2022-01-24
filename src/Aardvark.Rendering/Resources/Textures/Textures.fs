@@ -185,10 +185,7 @@ and ITextureRuntime =
                                     [<Optional; DefaultParameterValue(0)>] slice : int *
                                     [<Optional; DefaultParameterValue(V2i())>] offset : V2i -> unit
 
-    /// Clears the given texture with the given color.
-    abstract member ClearColor : texture: IBackendTexture * color: ClearColor -> unit
-
-    /// Clears the given texture with the given depth and stencil values.
-    abstract member ClearDepthStencil : texture: IBackendTexture * depth: Option<ClearDepth> * stencil : Option<ClearStencil> -> unit
+    /// Clears the texture with the given values.
+    abstract member Clear : texture: IBackendTexture * values: ClearValues -> unit
 
     abstract member CreateTextureView : texture : IBackendTexture * levels : Range1i * slices : Range1i * isArray : bool -> IBackendTexture

@@ -98,23 +98,33 @@ module TensorExtensions =
 
 [<AutoOpen>]
 module ITextureRuntimeFSharpExtensions =
-
+    
     // These extensions use SRTPs so MUST NOT be exposed to C#
     type ITextureRuntime with
-
+    
         // ================================================================================================================
         // Clear
         // ================================================================================================================
-
-        /// Clears the given texture with the given color.
-        member inline x.ClearColor(texture : IBackendTexture, color : ^Color) =
-            x.ClearColor(texture, ClearColor.create color)
-
-        /// Clears the given texture with the given depth and stencil values.
-        member inline x.ClearDepthStencil(texture : IBackendTexture, depth: Option< ^Depth>, stencil : Option< ^Stencil>) =
-            let depth = depth |> Option.map ClearDepth.create
-            let stencil = stencil |> Option.map ClearStencil.create
-            x.ClearDepthStencil(texture, depth, stencil)
+    
+        /// Clears the texture with the given color.
+        member inline x.Clear(texture : IBackendTexture, color : ^Color) =
+            let values = color |> (fun c -> clear { color c })
+            x.Clear(texture, values)
+    
+        /// Clears the texture with the given depth value.
+        member inline x.ClearDepth(texture : IBackendTexture, depth : ^Depth) =
+            let values = depth |> (fun d -> clear { depth d })
+            x.Clear(texture, values)
+    
+        /// Clears the texture with the given stencil value.
+        member inline x.ClearStencil(texture : IBackendTexture, stencil : ^Stencil) =
+            let values = stencil |> (fun s -> clear { stencil s })
+            x.Clear(texture, values)
+    
+        /// Clears the texture with the given depth and stencil values.
+        member inline x.ClearDepthStencil(texture : IBackendTexture, depth : ^Depth, stencil : ^Stencil) =
+            let values = (depth, stencil) ||> (fun d s -> clear { depth d; stencil s })
+            x.Clear(texture, values)
 
 
 [<AbstractClass; Sealed; Extension>]
@@ -490,21 +500,6 @@ type ITextureRuntimeExtensions private() =
     [<Extension>]
     static member CopyTo(src : IFramebufferOutput, dst : IFramebufferOutput) =
         src.Runtime.Copy(src, dst)
-
-
-    // ================================================================================================================
-    // Clear
-    // ================================================================================================================
-
-    /// Clears the texture with the given clear values.
-    [<Extension>]
-    static member Clear(this : ITextureRuntime, texture : IBackendTexture, values : ClearValues) =
-        if texture.Format.HasDepth || texture.Format.HasStencil then
-            this.ClearDepthStencil(texture, values.Depth, values.Stencil)
-        else
-            match values.Colors.Default with
-            | Some color -> this.ClearColor(texture, color)
-            | _ -> ()
 
 
 [<AbstractClass; Sealed; Extension>]
