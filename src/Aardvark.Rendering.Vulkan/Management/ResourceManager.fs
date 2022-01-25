@@ -278,6 +278,7 @@ type MutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, in
 
         match handle with
             | None ->
+                inc &version
                 recreate n
 
             | Some (oa, oh) when Unchecked.equals oa n ->
@@ -287,7 +288,6 @@ type MutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, in
                 if desc.mtryUpdate oh n then
                     owner.ReplaceLocked(Some oa, Some n)
                     handle <- Some(n, oh)
-                    inc &version
                     oh
                 else
                     recreate n
@@ -475,16 +475,6 @@ module Resources =
                 mtryUpdate       = fun (b : Buffer) (v : IBuffer) -> Buffer.tryUpdate v b
             }
         )
-
-//        inherit ImmutableResourceLocation<IBuffer, Buffer>(
-//            owner, key,
-//            input,
-//            {
-//                icreate = fun (b : IBuffer) -> device.CreateBuffer(usage, b)
-//                idestroy = fun b -> device.Delete b
-//                ieagerDestroy = true
-//            }
-//        )
 
     type AdaptiveBufferResource(owner : IResourceCache, key : list<obj>, device : Device, usage : VkBufferUsageFlags, input : IAdaptiveBuffer) =
         inherit AbstractResourceLocation<Buffer>(owner, key)
