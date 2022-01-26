@@ -4,6 +4,8 @@ open System.IO
 open Aardvark.Base
 
 type FileTexture(fileName : string, textureParams : TextureParams) =
+    inherit StreamTexture((fun () -> File.OpenRead(fileName) :> Stream), textureParams)
+
     do if File.Exists fileName |> not then failwithf "File does not exist: %s" fileName
 
     member x.FileName = fileName
@@ -21,6 +23,3 @@ type FileTexture(fileName : string, textureParams : TextureParams) =
             fileName = o.FileName && textureParams = o.TextureParams
         | _ ->
             false
-
-    interface ITexture with
-        member x.WantMipMaps = textureParams.wantMipMaps

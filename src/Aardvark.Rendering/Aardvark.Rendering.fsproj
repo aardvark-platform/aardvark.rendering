@@ -49,6 +49,7 @@
     <Compile Include="Resources\Textures\Layouts.fs" />
     <Compile Include="Resources\Textures\Textures.fs" />
     <Compile Include="Resources\Textures\TextureSlicing.fs" />
+    <Compile Include="Resources\Textures\StreamTexture.fs" />
     <Compile Include="Resources\Textures\FileTexture.fs" />
     <Compile Include="Resources\Textures\PixTexture2d.fs" />
     <Compile Include="Resources\Textures\PixTexture3d.fs" />

@@ -271,13 +271,13 @@ module internal TextureCompressedFileLoadExtensions =
 
         // TODO: Provide an API in Aardvark.Base for loading compressed images
         // Also this only handles unarrayed 2D textures
-        let tryLoadCompressedFromFile (ctx : Context) (config : TextureParams) (path : string) =
+        let tryLoadCompressedFromFile (ctx : Context) (config : TextureParams) (stream : IO.Stream) =
             Devil.perform (fun () ->
                 let img = IL.GenImage()
 
                 try
-                    IL.BindImage(img)
-                    IL.LoadImage(path) |> IL.check "could not load image"
+                    IL.BindImage(img)         
+                    IL.LoadStream(stream) |> IL.check "could not load image"
 
                     let channelType = IL.GetDataType()
                     let channelFormat = IL.GetInteger(IntName.ImageFormat) |> unbox<ChannelFormat>
@@ -291,7 +291,7 @@ module internal TextureCompressedFileLoadExtensions =
                         let sizeInBytes = IL.GetDXTCData(0n, 0, format)
 
                         if sizeInBytes = 0 then
-                            Log.warn "Cannot load compressed data from '%s'" path
+                            Log.warn "Cannot load compressed data"
                             None
 
                         else
@@ -359,9 +359,9 @@ module ContextTextureUploadExtensions =
     [<AutoOpen>]
     module private Patterns =
 
-        let (|FileTexture|_|) (t : ITexture) =
+        let (|StreamTexture|_|) (t : ITexture) =
             match t with
-            | :? FileTexture as t -> Some(FileTexture(t.TextureParams, t.FileName))
+            | :? StreamTexture as t -> Some(StreamTexture(t.TextureParams, t.Open))
             | _ -> None
 
         let (|PixTextureCube|_|) (t : ITexture) =
@@ -396,22 +396,21 @@ module ContextTextureUploadExtensions =
         static member CreateTexture(this : Context, data : ITexture) =
             using this.ResourceLock (fun _ ->
                 match data with
-                | FileTexture(info, file) ->
-                    if isNull file then
-                        this.CreateTexture <| NullTexture()
-                    else
-                        let compressed =
-                            if info.wantCompressed then
-                                file |> Texture.tryLoadCompressedFromFile this info
-                            else
-                                None
+                | StreamTexture(info, openStream) ->
+                    use stream = openStream()
 
-                        match compressed with
-                        | Some t -> t
-                        | _ ->
-                            let pi = PixImage.Create(file)
-                            let mm = PixImageMipMap [|pi|]
-                            this.CreateTexture <| PixTexture2d(mm, info)
+                    let compressed =
+                        if info.wantCompressed then
+                            stream |> Texture.tryLoadCompressedFromFile this info
+                        else
+                            None
+
+                    match compressed with
+                    | Some t -> t
+                    | _ ->
+                        let pi = PixImage.Create(stream)
+                        let mm = PixImageMipMap [|pi|]
+                        this.CreateTexture <| PixTexture2d(mm, info)
 
                 | PixTexture2D(info, data) ->
                     let texture = this |> Texture.createOfFormat2D data.PixFormat data.[0].Size info

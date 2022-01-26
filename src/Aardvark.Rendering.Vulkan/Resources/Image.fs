@@ -1360,7 +1360,7 @@ module ``Devil Loader`` =
             PixFormat(types t, colFormat fmt)
 
     module TensorImage =
-        let ofFile (file : string) (srgb : bool) (device : Device) =
+        let ofStream (stream : IO.Stream) (srgb : bool) (device : Device) =
             // let img = PixImage.Create file
             // TensorImage.ofPixImage img srgb device
             lock devilLock (fun () ->
@@ -1369,8 +1369,8 @@ module ``Devil Loader`` =
                 let img = IL.GenImage()
                 try
                     IL.BindImage(img)
-                    IL.LoadImage file
-                        |> checkf "could not load image %A" file
+                    IL.LoadStream stream
+                        |> checkf "could not load image"
 
                     let width       = IL.GetInteger(IntName.ImageWidth)
                     let height      = IL.GetInteger(IntName.ImageHeight)
@@ -2898,10 +2898,8 @@ module Image =
                     
                     failf "synchronous upload of NativeTexture not implemented"
 
-    let ofFile (file : string) (info : TextureParams) (device : Device) =
-        if not (System.IO.File.Exists file) then failf "file does not exists: %A" file
-
-        let temp = device |> TensorImage.ofFile file info.wantSrgb
+    let ofStream (stream : IO.Stream) (info : TextureParams) (device : Device) =
+        let temp = device |> TensorImage.ofStream stream info.wantSrgb
         let size = temp.Size
 
         let mipMapLevels =
@@ -2964,7 +2962,9 @@ module Image =
                 }
         image
 
-
+    let ofFile (path : string) (info : TextureParams) (device : Device) =
+        use stream = IO.File.OpenRead(path)
+        ofStream stream info device
 
     let ofTexture (t : ITexture) (device : Device) =
         match t with
@@ -2980,8 +2980,9 @@ module Image =
         | :? PixTexture3d as t ->
             device |> ofPixVolume t.PixVolume t.TextureParams
 
-        | :? FileTexture as t ->
-            device |> ofFile t.FileName t.TextureParams
+        | :? StreamTexture as t ->
+            use stream = t.Open()
+            device |> ofStream stream t.TextureParams
 
         | :? INativeTexture as nt ->
             device |> ofNativeImage nt
