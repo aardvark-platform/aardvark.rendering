@@ -103,6 +103,7 @@ type TextureFormat =
     | CompressedRgRgtc2 = 36285
     | CompressedSignedRgRgtc2 = 36286
     | CompressedRgbaBptcUnorm = 36492
+    | CompressedSrgbAlphaBptcUnorm = 36493
     | CompressedRgbBptcSignedFloat = 36494
     | CompressedRgbBptcUnsignedFloat = 36495
 
@@ -140,6 +141,7 @@ module TextureFormat =
             TextureFormat.CompressedSrgbAlphaS3tcDxt1
             TextureFormat.CompressedSrgbAlphaS3tcDxt3
             TextureFormat.CompressedSrgbAlphaS3tcDxt5
+            TextureFormat.CompressedSrgbAlphaBptcUnorm
         ]
 
     let isSrgb (fmt : TextureFormat) =
@@ -299,6 +301,7 @@ module TextureFormat =
             TextureFormat.CompressedRgRgtc2
             TextureFormat.CompressedSignedRgRgtc2
             TextureFormat.CompressedRgbaBptcUnorm
+            TextureFormat.CompressedSrgbAlphaBptcUnorm
             TextureFormat.CompressedRgbBptcSignedFloat
             TextureFormat.CompressedRgbBptcUnsignedFloat
         ]
@@ -394,6 +397,7 @@ module TextureFormat =
             TextureFormat.CompressedRgRgtc2, PixFormat(typeof<uint8>, Col.Format.NormalUV)
             TextureFormat.CompressedSignedRgRgtc2, PixFormat(typeof<uint8>, Col.Format.NormalUV)
             TextureFormat.CompressedRgbaBptcUnorm, PixFormat.ByteRGBA
+            TextureFormat.CompressedSrgbAlphaBptcUnorm, PixFormat.ByteRGBA
             TextureFormat.CompressedRgbBptcSignedFloat, PixFormat.FloatRGB
             TextureFormat.CompressedRgbBptcUnsignedFloat, PixFormat.FloatRGB
         ]
@@ -485,6 +489,7 @@ module TextureFormat =
             TextureFormat.CompressedRgRgtc2,              Col.Format.NormalUV
             TextureFormat.CompressedSignedRgRgtc2,        Col.Format.NormalUV
             TextureFormat.CompressedRgbaBptcUnorm,        Col.Format.RGBA
+            TextureFormat.CompressedSrgbAlphaBptcUnorm,   Col.Format.RGBA
             TextureFormat.CompressedRgbBptcSignedFloat,   Col.Format.RGB
             TextureFormat.CompressedRgbBptcUnsignedFloat, Col.Format.RGB
         ]
@@ -576,6 +581,7 @@ module TextureFormat =
             TextureFormat.CompressedRgRgtc2, -1
             TextureFormat.CompressedSignedRgRgtc2, -1
             TextureFormat.CompressedRgbaBptcUnorm, -1
+            TextureFormat.CompressedSrgbAlphaBptcUnorm, -1
             TextureFormat.CompressedRgbBptcSignedFloat, -1
             TextureFormat.CompressedRgbBptcUnsignedFloat, -1
         ]
