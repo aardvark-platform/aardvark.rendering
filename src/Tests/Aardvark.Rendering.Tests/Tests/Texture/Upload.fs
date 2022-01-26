@@ -185,7 +185,7 @@ module TextureUpload =
                 Array.init levels (fun level ->
                     let size = Fun.MipmapLevelSize(size, level)
                     if compressed then
-                        PixImage.checkerboard C4b.BurlyWood |> PixImage.resized size
+                        PixImage.checkerboard (V2i(256)) |> PixImage.resized size
                     else
                         PixImage.random <| V2i size
                 )

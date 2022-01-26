@@ -4,6 +4,7 @@ open System
 open System.IO
 open Aardvark.Base
 open Aardvark.Rendering
+open FSharp.Data.Adaptive
 open Expecto
 
 [<AutoOpen>]
@@ -72,14 +73,21 @@ module PixData =
 
         let random = random8ui
 
-        let checkerboard (color : C4b) =
-            let pi = PixImage<byte>(Col.Format.RGBA, V2i.II * 256)
+        let checkerboard (size : V2i) =
+            let mutable colors = HashMap.empty
+
+            let pi = PixImage<byte>(Col.Format.RGBA, size)
             pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
                 let c = c / 16L
                 if (c.X + c.Y) % 2L = 0L then
                     C4b.White
                 else
-                    color
+                    match colors |> HashMap.tryFind c with
+                    | Some c -> c
+                    | _ ->
+                        let color = C4b(rng.UniformInt(256), rng.UniformInt(256), rng.UniformInt(256), 255)
+                        colors <- colors |> HashMap.add c color
+                        color
             ) |> ignore
             pi
 
