@@ -237,90 +237,12 @@ module internal TextureUploadImplementation =
 
 [<AutoOpen>]
 module internal TextureCompressedFileLoadExtensions =
-    open DevILSharp
-
-    module private Devil =
-
-        let compressedFormat =
-            LookupTable.lookupTable' [
-                (ChannelFormat.RGB, ChannelType.UnsignedByte, false), (CompressedDataFormat.Dxt1, PixelInternalFormat.CompressedRgbS3tcDxt1Ext)
-                (ChannelFormat.RGBA, ChannelType.UnsignedByte, false), (CompressedDataFormat.Dxt5, PixelInternalFormat.CompressedRgbaS3tcDxt5Ext)
-                (ChannelFormat.RGB, ChannelType.UnsignedByte, true), (CompressedDataFormat.Dxt1, PixelInternalFormat.CompressedSrgbS3tcDxt1Ext)
-                (ChannelFormat.RGBA, ChannelType.UnsignedByte, true), (CompressedDataFormat.Dxt5, PixelInternalFormat.CompressedSrgbAlphaS3tcDxt5Ext)
-
-                (ChannelFormat.BGR, ChannelType.UnsignedByte, false), (CompressedDataFormat.Dxt1, PixelInternalFormat.CompressedRgbS3tcDxt1Ext)
-                (ChannelFormat.BGRA, ChannelType.UnsignedByte, false), (CompressedDataFormat.Dxt5, PixelInternalFormat.CompressedRgbaS3tcDxt5Ext)
-                (ChannelFormat.BGR, ChannelType.UnsignedByte, true), (CompressedDataFormat.Dxt1, PixelInternalFormat.CompressedSrgbS3tcDxt1Ext)
-                (ChannelFormat.BGRA, ChannelType.UnsignedByte, true), (CompressedDataFormat.Dxt5, PixelInternalFormat.CompressedSrgbAlphaS3tcDxt5Ext)
-
-                (ChannelFormat.Luminance, ChannelType.UnsignedByte, false), (CompressedDataFormat.Dxt1, PixelInternalFormat.CompressedRedRgtc1)
-            ]
-
-        let private devilLock =
-            let fi = typeof<PixImageDevil>.GetField("s_devilLock", Reflection.BindingFlags.Static ||| Reflection.BindingFlags.NonPublic)
-            fi.GetValue(null)
-
-        let perform (f : unit -> 'T) =
-            lock devilLock (fun _ ->
-                PixImageDevil.InitDevil()
-                f()
-            )
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Texture =
 
-        // TODO: Provide an API in Aardvark.Base for loading compressed images
-        // Also this only handles unarrayed 2D textures
-        let tryLoadCompressedFromFile (ctx : Context) (config : TextureParams) (stream : IO.Stream) =
-            Devil.perform (fun () ->
-                let img = IL.GenImage()
-
-                try
-                    IL.BindImage(img)         
-                    IL.LoadStream(stream) |> IL.check "could not load image"
-
-                    let channelType = IL.GetDataType()
-                    let channelFormat = IL.GetInteger(IntName.ImageFormat) |> unbox<ChannelFormat>
-
-                    match Devil.compressedFormat (channelFormat, channelType, config.wantSrgb) with
-                    | Some (format, internalFormat) ->
-                        ILU.FlipImage() |> IL.check "could not flip image"
-
-                        let size = V2i(IL.GetInteger(IntName.ImageWidth), IL.GetInteger(IntName.ImageHeight))
-                        let channels = IL.GetInteger(IntName.ImageChannels)
-                        let sizeInBytes = IL.GetDXTCData(0n, 0, format)
-
-                        if sizeInBytes = 0 then
-                            Log.warn "Cannot load compressed data"
-                            None
-
-                        else
-                            Log.line "compression: %.2f%%" (100.0 * float sizeInBytes / float (size.X * size.Y * channels))
-
-                            let copy (dst : nativeint) =
-                                IL.GetDXTCData(dst, sizeInBytes, format) |> ignore
-
-                            let data =
-                                PixelData.Compressed {
-                                    Size        = V3i(size, 1)
-                                    SizeInBytes = nativeint sizeInBytes
-                                    Copy        = copy
-                                }
-
-                            let levels = if config.wantMipMaps then Fun.MipmapLevels(size) else 1
-                            let texture = ctx.CreateTexture2D(size, levels, unbox internalFormat, 1)
-                            data |> Texture.uploadPixelData texture config.wantMipMaps 0 V3i.Zero
-
-                            IL.BindImage(0)
-
-                            Some texture
-
-                    | _ ->
-                        None
-
-                finally
-                    IL.DeleteImage(img)
-            )
+        let tryLoadCompressedFromStream (ctx : Context) (config : TextureParams) (stream : IO.Stream) =
+            None
 
 
 [<AutoOpen>]
@@ -401,7 +323,7 @@ module ContextTextureUploadExtensions =
 
                     let compressed =
                         if info.wantCompressed then
-                            stream |> Texture.tryLoadCompressedFromFile this info
+                            stream |> Texture.tryLoadCompressedFromStream this info
                         else
                             None
 

@@ -1318,78 +1318,9 @@ module TensorImage =
         dst.Write(img, true)
         dst
 
-[<AutoOpen>]
-module ``Devil Loader`` =
-
-    open DevILSharp
-    
-    let private devilLock = typeof<PixImageDevil>.GetField("s_devilLock", System.Reflection.BindingFlags.NonPublic ||| System.Reflection.BindingFlags.Static).GetValue(null)
-    
-    let private checkf (fmt : Printf.StringFormat<'a, bool -> unit>) =
-        Printf.kprintf (fun str ->
-            fun (success : bool) ->
-                if not success then failwith ("[Devil] " + str)
-        ) fmt
- 
-    module private PixFormat =
-        let private types =
-            LookupTable.lookupTable [
-                ChannelType.Byte, typeof<int8>
-                //ChannelType.Double, PixelType.Double
-                ChannelType.Float, typeof<float32>
-                ChannelType.Half, typeof<float16>
-                ChannelType.Int, typeof<int>
-                ChannelType.Short, typeof<int16>
-                ChannelType.UnsignedByte, typeof<uint8>
-                ChannelType.UnsignedInt, typeof<uint32>
-                ChannelType.UnsignedShort, typeof<uint16>
-            ]
-
-        let private colFormat =
-            LookupTable.lookupTable [
-                ChannelFormat.RGB, Col.Format.RGB
-                ChannelFormat.BGR, Col.Format.BGR
-                ChannelFormat.RGBA, Col.Format.RGBA
-                ChannelFormat.BGRA, Col.Format.BGRA
-                ChannelFormat.Luminance, Col.Format.Gray
-                ChannelFormat.Alpha, Col.Format.Alpha
-                ChannelFormat.LuminanceAlpha, Col.Format.GrayAlpha
-            ]
-
-        let ofDevil (fmt : ChannelFormat) (t : ChannelType) =
-            PixFormat(types t, colFormat fmt)
-
-    module TensorImage =
-        let ofStream (stream : IO.Stream) (srgb : bool) (device : Device) =
-            // let img = PixImage.Create file
-            // TensorImage.ofPixImage img srgb device
-            lock devilLock (fun () ->
-                PixImageDevil.InitDevil()
-
-                let img = IL.GenImage()
-                try
-                    IL.BindImage(img)
-                    IL.LoadStream stream
-                        |> checkf "could not load image"
-
-                    let width       = IL.GetInteger(IntName.ImageWidth)
-                    let height      = IL.GetInteger(IntName.ImageHeight)
-                    let channelType = IL.GetDataType()
-                    let format      = IL.GetFormat()
-                    let data        = IL.GetData()
-                    let pixFormat   = PixFormat.ofDevil format channelType
-                    
-                    let bytesPerPixel = IL.GetInteger(IntName.ImageBytesPerPixel)
-                    let rowSize = nativeint bytesPerPixel * nativeint width
-                    
-                    let target = device |> TensorImage.createUntyped (V3i(width, height, 1)) pixFormat srgb
-                    target.Write(data, rowSize, pixFormat.Format, ImageTrafo.MirrorY)
-
-                    target
-                finally
-                    IL.BindImage(0)
-                    IL.DeleteImage(img)
-            )
+    let ofStream (stream : IO.Stream) (srgb : bool) (device : Device) =
+        let img = PixImage.Create stream
+        ofPixImage img srgb device
 
 
 [<AbstractClass; Sealed; Extension>]

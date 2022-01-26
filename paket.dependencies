@@ -19,7 +19,6 @@ nuget Aardvark.Base.Runtime              ~> 5.1.22
 nuget Aardvark.Base.Essentials           ~> 5.1.22
 nuget Aardvark.Geometry                  ~> 5.1.22
 nuget Aardvark.Base.Tensors              ~> 5.1.22
-nuget Aardvark.PixImage.DevIL            ~> 5.1.22
 
 nuget FShade.Core                        ~> 5.2.2
 nuget FShade                             ~> 5.2.2
