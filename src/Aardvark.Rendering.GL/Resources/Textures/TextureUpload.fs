@@ -286,7 +286,7 @@ module internal TextureCompressedFileLoadExtensions =
                     | Some (format, internalFormat) ->
                         ILU.FlipImage() |> IL.check "could not flip image"
 
-                        let size = V2i(IL.GetInteger(IntName.ImageWidth), IL.GetInteger(IntName.ImageWidth))
+                        let size = V2i(IL.GetInteger(IntName.ImageWidth), IL.GetInteger(IntName.ImageHeight))
                         let channels = IL.GetInteger(IntName.ImageChannels)
                         let sizeInBytes = IL.GetDXTCData(0n, 0, format)
 
