@@ -234,17 +234,6 @@ module internal TextureUploadImplementation =
 
             uploadPixelData texture generateMipMap level offset data
 
-
-[<AutoOpen>]
-module internal TextureCompressedFileLoadExtensions =
-
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module Texture =
-
-        let tryLoadCompressedFromStream (ctx : Context) (config : TextureParams) (stream : IO.Stream) =
-            None
-
-
 [<AutoOpen>]
 module ContextTextureUploadExtensions =
 
@@ -323,12 +312,12 @@ module ContextTextureUploadExtensions =
 
                     let compressed =
                         if info.wantCompressed then
-                            stream |> Texture.tryLoadCompressedFromStream this info
+                            stream |> DdsTexture.tryLoadCompressedFromStream
                         else
                             None
 
                     match compressed with
-                    | Some t -> t
+                    | Some t -> this.CreateTexture(t)
                     | _ ->
                         let pi = PixImage.Create(stream)
                         let mm = PixImageMipMap [|pi|]
