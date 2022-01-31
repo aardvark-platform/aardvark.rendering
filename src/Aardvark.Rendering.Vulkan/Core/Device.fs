@@ -551,7 +551,7 @@ and [<RequireQualifiedAccess>] CopyCommand =
             VkBufferCopy(uint64 srcOffset, uint64 dstOffset, uint64 size)
         )
 
-    static member Copy(src : VkBuffer, srcOffset : int64, dst : VkImage, dstLayout : VkImageLayout, format : VkFormat, info : VkBufferImageCopy) =
+    static member Copy(src : VkBuffer, dst : VkImage, dstLayout : VkImageLayout, format : VkFormat, info : VkBufferImageCopy) =
         let sizeInBytes = 
             int64 info.imageExtent.width *
             int64 info.imageExtent.height * 

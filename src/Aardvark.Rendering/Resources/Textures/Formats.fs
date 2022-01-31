@@ -11,11 +11,13 @@ type TextureDimension =
 
 type CompressionMode =
     | None = 0
-    | BC1 = 1
-    | BC2 = 2
-    | BC3 = 3
+    | BC1 = 1       // DXT1
+    | BC2 = 2       // DXT3
+    | BC3 = 3       // DXT5
     | BC4 = 4
     | BC5 = 5
+    | BC6h = 6
+    | BC7 = 7
 
 type TextureFormat =
     | Bgr8 = 1234
@@ -90,22 +92,22 @@ type TextureFormat =
     | Depth24Stencil8 = 35056
     | Depth32fStencil8 = 36013
     | StencilIndex8 = 36168
-    | CompressedRgbS3tcDxt1 = 33776
-    | CompressedRgbaS3tcDxt1 = 33777
-    | CompressedRgbaS3tcDxt3 = 33778
-    | CompressedRgbaS3tcDxt5 = 33779
+    | CompressedRgbS3tcDxt1 = 33776             // BC1
     | CompressedSrgbS3tcDxt1 = 35916
+    | CompressedRgbaS3tcDxt1 = 33777
     | CompressedSrgbAlphaS3tcDxt1 = 35917
+    | CompressedRgbaS3tcDxt3 = 33778            // BC2
     | CompressedSrgbAlphaS3tcDxt3 = 35918
+    | CompressedRgbaS3tcDxt5 = 33779            // BC3
     | CompressedSrgbAlphaS3tcDxt5 = 35919
-    | CompressedRedRgtc1 = 36283
+    | CompressedRedRgtc1 = 36283                // BC4
     | CompressedSignedRedRgtc1 = 36284
-    | CompressedRgRgtc2 = 36285
+    | CompressedRgRgtc2 = 36285                 // BC5
     | CompressedSignedRgRgtc2 = 36286
-    | CompressedRgbaBptcUnorm = 36492
-    | CompressedSrgbAlphaBptcUnorm = 36493
-    | CompressedRgbBptcSignedFloat = 36494
+    | CompressedRgbBptcSignedFloat = 36494      // BC6h
     | CompressedRgbBptcUnsignedFloat = 36495
+    | CompressedRgbaBptcUnorm = 36492           // BC7
+    | CompressedSrgbAlphaBptcUnorm = 36493
 
 type TextureAspect =
     | Color
@@ -594,22 +596,28 @@ module TextureFormat =
 
     let private compressionModes =
         Dictionary.ofList [
-            TextureFormat.CompressedRgbS3tcDxt1, CompressionMode.BC1
-            TextureFormat.CompressedRgbaS3tcDxt1, CompressionMode.BC1
-            TextureFormat.CompressedSrgbS3tcDxt1, CompressionMode.BC1
-            TextureFormat.CompressedSrgbAlphaS3tcDxt1, CompressionMode.BC1
+            TextureFormat.CompressedRgbS3tcDxt1,          CompressionMode.BC1
+            TextureFormat.CompressedSrgbS3tcDxt1,         CompressionMode.BC1
+            TextureFormat.CompressedRgbaS3tcDxt1,         CompressionMode.BC1
+            TextureFormat.CompressedSrgbAlphaS3tcDxt1,    CompressionMode.BC1
 
-            TextureFormat.CompressedRgbaS3tcDxt3, CompressionMode.BC2
-            TextureFormat.CompressedSrgbAlphaS3tcDxt3, CompressionMode.BC2
+            TextureFormat.CompressedRgbaS3tcDxt3,         CompressionMode.BC2
+            TextureFormat.CompressedSrgbAlphaS3tcDxt3,    CompressionMode.BC2
 
-            TextureFormat.CompressedRgbaS3tcDxt5, CompressionMode.BC3
-            TextureFormat.CompressedSrgbAlphaS3tcDxt5, CompressionMode.BC3
+            TextureFormat.CompressedRgbaS3tcDxt5,         CompressionMode.BC3
+            TextureFormat.CompressedSrgbAlphaS3tcDxt5,    CompressionMode.BC3
 
-            TextureFormat.CompressedRedRgtc1, CompressionMode.BC4
-            TextureFormat.CompressedSignedRedRgtc1, CompressionMode.BC4
+            TextureFormat.CompressedRedRgtc1,             CompressionMode.BC4
+            TextureFormat.CompressedSignedRedRgtc1,       CompressionMode.BC4
 
-            TextureFormat.CompressedRgRgtc2, CompressionMode.BC5
-            TextureFormat.CompressedSignedRgRgtc2, CompressionMode.BC5
+            TextureFormat.CompressedRgRgtc2,              CompressionMode.BC5
+            TextureFormat.CompressedSignedRgRgtc2,        CompressionMode.BC5
+
+            TextureFormat.CompressedRgbBptcSignedFloat,   CompressionMode.BC6h
+            TextureFormat.CompressedRgbBptcUnsignedFloat, CompressionMode.BC6h
+
+            TextureFormat.CompressedRgbaBptcUnorm,        CompressionMode.BC7
+            TextureFormat.CompressedSrgbAlphaBptcUnorm,   CompressionMode.BC7
         ]
 
     let compressionMode (fmt : TextureFormat) =
@@ -631,30 +639,23 @@ module TextureFormatExtensions =
         member x.Aspects = TextureFormat.toAspects x
         member x.PixelSizeInBits = TextureFormat.pixelSizeInBits x
         member x.PixelSizeInBytes = TextureFormat.pixelSizeInBytes x
+        member x.CompressionMode = TextureFormat.compressionMode x
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module CompressionMode =
-    let blockSize =
-        LookupTable.lookupTable [
-            CompressionMode.None, V2i.II
-            CompressionMode.BC1, V2i(4,4)
-            CompressionMode.BC2, V2i(4,4)
-            CompressionMode.BC3, V2i(4,4)
-            CompressionMode.BC4, V2i(4,4)
-            CompressionMode.BC5, V2i(4,4)
-        ]
+    let blockSize = function
+        | CompressionMode.None -> 1
+        | _ -> 4
 
-    let blockSizeInBytes =
-        LookupTable.lookupTable [
-            CompressionMode.None, 0
-            CompressionMode.BC1, 8
-            CompressionMode.BC2, 16
-            CompressionMode.BC3, 16
-            CompressionMode.BC4, 8
-            CompressionMode.BC5, 16
+    let bytesPerBlock = function
+        | CompressionMode.None -> 0
+        | CompressionMode.BC1 | CompressionMode.BC4 -> 8
+        | _ -> 16
 
-        ]
+    let numberOfBlocks (size : V3i) (mode : CompressionMode) =
+        let blockSize = blockSize mode
+        max 1 ((size + (blockSize - 1)) / blockSize)
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

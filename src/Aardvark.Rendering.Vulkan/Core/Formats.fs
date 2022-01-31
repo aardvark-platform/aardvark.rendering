@@ -79,23 +79,23 @@ module VkFormat =
             TextureFormat.Depth24Stencil8,                VkFormat.D24UnormS8Uint
             TextureFormat.Depth32fStencil8,               VkFormat.D32SfloatS8Uint
             TextureFormat.StencilIndex8,                  VkFormat.S8Uint
-   
-            // TODO: check
+
             TextureFormat.CompressedRgbS3tcDxt1,          VkFormat.Bc1RgbUnormBlock
+            TextureFormat.CompressedSrgbS3tcDxt1,         VkFormat.Bc1RgbSrgbBlock
             TextureFormat.CompressedRgbaS3tcDxt1,         VkFormat.Bc1RgbaUnormBlock
+            TextureFormat.CompressedSrgbAlphaS3tcDxt1,    VkFormat.Bc1RgbaSrgbBlock
             TextureFormat.CompressedRgbaS3tcDxt3,         VkFormat.Bc2UnormBlock
+            TextureFormat.CompressedSrgbAlphaS3tcDxt3,    VkFormat.Bc2SrgbBlock
             TextureFormat.CompressedRgbaS3tcDxt5,         VkFormat.Bc3UnormBlock
-            TextureFormat.CompressedSrgbS3tcDxt1,         VkFormat.Undefined
-            TextureFormat.CompressedSrgbAlphaS3tcDxt1,    VkFormat.Undefined
-            TextureFormat.CompressedSrgbAlphaS3tcDxt3,    VkFormat.Undefined
-            TextureFormat.CompressedSrgbAlphaS3tcDxt5,    VkFormat.Undefined
-            TextureFormat.CompressedRedRgtc1,             VkFormat.Undefined
-            TextureFormat.CompressedSignedRedRgtc1,       VkFormat.Undefined
-            TextureFormat.CompressedRgRgtc2,              VkFormat.Undefined
-            TextureFormat.CompressedSignedRgRgtc2,        VkFormat.Undefined
-            TextureFormat.CompressedRgbaBptcUnorm,        VkFormat.Undefined
-            TextureFormat.CompressedRgbBptcSignedFloat,   VkFormat.Undefined
-            TextureFormat.CompressedRgbBptcUnsignedFloat, VkFormat.Undefined
+            TextureFormat.CompressedSrgbAlphaS3tcDxt5,    VkFormat.Bc3SrgbBlock
+            TextureFormat.CompressedRedRgtc1,             VkFormat.Bc4UnormBlock
+            TextureFormat.CompressedSignedRedRgtc1,       VkFormat.Bc4SnormBlock
+            TextureFormat.CompressedRgRgtc2,              VkFormat.Bc5UnormBlock
+            TextureFormat.CompressedSignedRgRgtc2,        VkFormat.Bc5SnormBlock
+            TextureFormat.CompressedRgbBptcSignedFloat,   VkFormat.Bc6hSfloatBlock
+            TextureFormat.CompressedRgbBptcUnsignedFloat, VkFormat.Bc6hUfloatBlock
+            TextureFormat.CompressedRgbaBptcUnorm,        VkFormat.Bc7UnormBlock
+            TextureFormat.CompressedSrgbAlphaBptcUnorm,   VkFormat.Bc7SrgbBlock
         ]
 
     let toTextureFormat =
@@ -1060,60 +1060,6 @@ module VkFormat =
             VkFormat.D16UnormS8Uint, 3
             VkFormat.D24UnormS8Uint, 4
             VkFormat.D32SfloatS8Uint, 5
-            VkFormat.Bc1RgbUnormBlock, -1
-            VkFormat.Bc1RgbSrgbBlock, -1
-            VkFormat.Bc1RgbaUnormBlock, -1
-            VkFormat.Bc1RgbaSrgbBlock, -1
-            VkFormat.Bc2UnormBlock, -1
-            VkFormat.Bc2SrgbBlock, -1
-            VkFormat.Bc3UnormBlock, -1
-            VkFormat.Bc3SrgbBlock, -1
-            VkFormat.Bc4UnormBlock, -1
-            VkFormat.Bc4SnormBlock, -1
-            VkFormat.Bc5UnormBlock, -1
-            VkFormat.Bc5SnormBlock, -1
-            VkFormat.Bc6hUfloatBlock, -1
-            VkFormat.Bc6hSfloatBlock, -1
-            VkFormat.Bc7UnormBlock, -1
-            VkFormat.Bc7SrgbBlock, -1
-            VkFormat.Etc2R8g8b8UnormBlock, -1
-            VkFormat.Etc2R8g8b8SrgbBlock, -1
-            VkFormat.Etc2R8g8b8a1UnormBlock, -1
-            VkFormat.Etc2R8g8b8a1SrgbBlock, -1
-            VkFormat.Etc2R8g8b8a8UnormBlock, -1
-            VkFormat.Etc2R8g8b8a8SrgbBlock, -1
-            VkFormat.EacR11UnormBlock, -1
-            VkFormat.EacR11SnormBlock, -1
-            VkFormat.EacR11g11UnormBlock, -1
-            VkFormat.EacR11g11SnormBlock, -1
-            VkFormat.Astc44UnormBlock, -1
-            VkFormat.Astc44SrgbBlock, -1
-            VkFormat.Astc54UnormBlock, -1
-            VkFormat.Astc54SrgbBlock, -1
-            VkFormat.Astc55UnormBlock, -1
-            VkFormat.Astc55SrgbBlock, -1
-            VkFormat.Astc65UnormBlock, -1
-            VkFormat.Astc65SrgbBlock, -1
-            VkFormat.Astc66UnormBlock, -1
-            VkFormat.Astc66SrgbBlock, -1
-            VkFormat.Astc85UnormBlock, -1
-            VkFormat.Astc85SrgbBlock, -1
-            VkFormat.Astc86UnormBlock, -1
-            VkFormat.Astc86SrgbBlock, -1
-            VkFormat.Astc88UnormBlock, -1
-            VkFormat.Astc88SrgbBlock, -1
-            VkFormat.Astc105UnormBlock, -1
-            VkFormat.Astc105SrgbBlock, -1
-            VkFormat.Astc106UnormBlock, -1
-            VkFormat.Astc106SrgbBlock, -1
-            VkFormat.Astc108UnormBlock, -1
-            VkFormat.Astc108SrgbBlock, -1
-            VkFormat.Astc1010UnormBlock, -1
-            VkFormat.Astc1010SrgbBlock, -1
-            VkFormat.Astc1210UnormBlock, -1
-            VkFormat.Astc1210SrgbBlock, -1
-            VkFormat.Astc1212UnormBlock, -1
-            VkFormat.Astc1212SrgbBlock, -1
         ]
 
     let expectedType =

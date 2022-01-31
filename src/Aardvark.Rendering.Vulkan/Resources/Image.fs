@@ -1413,6 +1413,28 @@ module DeviceTensorCommandExtensions =
             if src.Size <> dst.Size then failf "[TensorImage] mismatching sizes in copy %A vs %A" src.Size dst.Size
             Command.Copy(src, dst, V3i.Zero, src.Size)
 
+        static member Copy(src : Buffer, dst : ImageSubresource, dstOffset : V3i, pitch : V2i, size : V3i) =
+            { new Command() with
+                member x.Compatible = QueueFlags.All
+                member x.Enqueue cmd =
+                    let copy =
+                        VkBufferImageCopy(
+                            0UL,
+                            uint32 pitch.X,
+                            uint32 pitch.Y,
+                            dst.VkImageSubresourceLayers,
+                            VkOffset3D(dstOffset.X, dstOffset.Y, dstOffset.Z),
+                            VkExtent3D(size.X, size.Y, size.Z)
+                        )
+
+                    cmd.AppendCommand()
+                    copy |> pin (fun pCopy ->
+                        VkRaw.vkCmdCopyBufferToImage(cmd.Handle, src.Handle, dst.Image.Handle, dst.Image.Layout, 1u, pCopy)
+                    )
+
+                    [src; dst.Image]
+            }
+
         // download
         static member Copy(src : ImageSubresource, srcOffset : V3i, dst : TensorImage, size : V3i) =
             if src.Aspect <> ImageAspect.Color then
@@ -1520,7 +1542,7 @@ module DeviceTensorCommandExtensions =
         // upload
         static member Copy(src : TensorImage, dst : ImageSubresource, dstOffset : V3i, size : V3i) =
             CopyCommand.Copy(
-                src.Buffer.Handle, 0L,
+                src.Buffer.Handle,
                 dst.Image.Handle,
                 dst.Image.Layout,
                 dst.Image.Format,
@@ -1534,6 +1556,20 @@ module DeviceTensorCommandExtensions =
             
         static member Copy(src : TensorImage, dst : ImageSubresource) =
             CopyCommand.Copy(src, dst, V3i.Zero, src.Size)
+
+        static member Copy(src : Buffer, dst : ImageSubresource, dstOffset : V3i, sizeInBytes : int64, pitch : V2i, size : V3i) =
+            CopyCommand.BufferToImageCmd(
+                src.Handle,
+                dst.Image.Handle,
+                dst.Image.Layout,
+                VkBufferImageCopy(
+                    0UL, uint32 pitch.X, uint32 pitch.Y,
+                    dst.VkImageSubresourceLayers,
+                    VkOffset3D(dstOffset.X, dstOffset.Y, dstOffset.Z),
+                    VkExtent3D(size.X, size.Y, size.Z)
+                ),
+                sizeInBytes
+            )
 
         // download
         static member Copy(src : ImageSubresource, srcOffset : V3i, dst : TensorImage, size : V3i) =
@@ -2598,236 +2634,101 @@ module Image =
                 }
 
         image
-  
-  
-    [<AutoOpen>]
-    module private Helpers = 
 
-        type nativeptr<'a when 'a : unmanaged> with
-            member x.Item
-                with inline get(i : int) = NativePtr.get x i
-                and inline set(i : int) (v : 'a) = NativePtr.set x i v
+    let ofNativeTexture (texture : INativeTexture) (device : Device) =
+        let size = texture.[0, 0].Size
+        let format = VkFormat.ofTextureFormat texture.Format
 
-        let inline (++) (ptr : nativeptr<'a>) (i : int) =
-            NativePtr.add ptr i
+        let uploadLevels =
+            if texture.WantMipMaps then texture.MipMapLevels
+            else 1
 
-        module NativePtr =
-            let inline swap (l : nativeptr<'a>) (r : nativeptr<'a>) =
-                let t = NativePtr.read l
-                NativePtr.write l (NativePtr.read r)
-                NativePtr.write r t
+        let mipMapLevels =
+            if texture.WantMipMaps then
+                Fun.MipmapLevels(size)
+            else
+                1
 
-        let mirrorCopyDXT1 (src : nativeptr<byte>) (dst : nativeptr<byte>) =
-            dst.[0] <- src.[0]
-            dst.[1] <- src.[1]
-            dst.[2] <- src.[2]
-            dst.[3] <- src.[3]
-            dst.[7] <- src.[4]
-            dst.[6] <- src.[5]
-            dst.[5] <- src.[6]
-            dst.[4] <- src.[7]
+        let generateMipMaps =
+            uploadLevels < mipMapLevels
 
-        let mirrorCopyDXT3 (src : nativeptr<byte>) (dst : nativeptr<byte>) =
-            dst.[6] <- src.[0]
-            dst.[7] <- src.[1]
-            dst.[4] <- src.[2]
-            dst.[5] <- src.[3]
-            dst.[2] <- src.[4]
-            dst.[3] <- src.[5]
-            dst.[0] <- src.[6]
-            dst.[1] <- src.[7]
-            mirrorCopyDXT1 (src ++ 8) (dst ++ 8)
+        let image =
+            create size mipMapLevels texture.Count 1
+                   texture.Dimension format
+                   (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.StorageBit)
+                   device
 
-        let mirrorCopyDXT5 (src : nativeptr<byte>) (dst : nativeptr<byte>) =
-            let line_0_1 = uint32 src.[2] + 256u * (uint32 src.[3] + 256u * uint32 src.[4]);
-            let line_2_3 = uint32 src.[5] + 256u * (uint32 src.[6] + 256u * uint32 src.[7]);
-            let line_1_0 = ((line_0_1 &&& 0x000fffu) <<< 12) ||| ((line_0_1 &&& 0xfff000u) >>> 12);
-            let line_3_2 = ((line_2_3 &&& 0x000fffu) <<< 12) |||  ((line_2_3 &&& 0xfff000u) >>> 12);
-            dst.[0] <- src.[0]
-            dst.[1] <- src.[1]
-            dst.[2] <- byte (line_3_2 &&& 0xffu)
-            dst.[3] <- byte ((line_3_2 &&& 0xff00u) >>> 8)
-            dst.[4] <- byte ((line_3_2 &&& 0xff0000u) >>> 16)
-            dst.[5] <- byte (line_1_0 &&& 0xffu)
-            dst.[6] <- byte ((line_1_0 &&& 0xff00u) >>> 8)
-            dst.[7] <- byte ((line_1_0 &&& 0xff0000u) >>> 16)
+        let tempImages =
+            Array.init texture.Count (fun slice ->
+                Array.init uploadLevels (fun level ->
+                    let data = texture.[slice, level]
+                    let buffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit data.SizeInBytes
 
-            mirrorCopyDXT1 (src ++ 8) (dst ++ 8)
-
-        let inline ceilDiv (v : ^a) (d : ^a) : ^a =
-            if v % d = LanguagePrimitives.GenericZero then v / d
-            else LanguagePrimitives.GenericOne + v / d
-    
-    let ofNativeImage (image : INativeTexture) (device : Device) =
-        if image.Count <> 1 then failf "NativeTexture layering not implemented"
-        
-
-        let levels = image.MipMapLevels
-        let size = image.[0,0].Size
-
-        let format = VkFormat.ofTextureFormat image.Format
-        let compressionMode = TextureFormat.compressionMode image.Format
-
-
-        let result =
-            alloc size levels image.Count 1 image.Dimension format (VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.StorageBit) device
-
-
-        if compressionMode <> CompressionMode.None then
-            if image.Dimension <> TextureDimension.Texture2D then failf "NativeTexture: only 2D textures implemented atm."
-
-            let levels =
-                Array.init levels (fun level ->
-                    let srcLevel = image.[0, level]
-                    let temp = allocLinear srcLevel.Size.XY format VkImageUsageFlags.TransferSrcBit device
-
-                    let resource = VkImageSubresource(VkImageAspectFlags.ColorBit, 0u, 0u)
-                    let layout = 
-                        resource |> pin (fun pResource ->
-                            temporary (fun pLayout ->
-                                VkRaw.vkGetImageSubresourceLayout(device.Handle, temp.Handle, pResource, pLayout)
-                                NativePtr.read pLayout
-                            )
-                        )
-                    let vkRowPitch = int64 layout.rowPitch
-
-                    let blockSize = CompressionMode.blockSize compressionMode
-                    let blockBytes = CompressionMode.blockSizeInBytes compressionMode |> int64
-
-                    let blocksX = ceilDiv srcLevel.Size.X blockSize.X
-                    let blocksY = ceilDiv srcLevel.Size.Y blockSize.Y
-                    let rowPitch = blockBytes * int64 blocksX
-
-                    if temp.Memory.Size < srcLevel.SizeInBytes then
-                        failf "NativeTexture invalid memory-size"
-
-                    temp.Memory.Mapped(fun dst ->
-                        srcLevel.Use(fun src ->
-//                            
-//                            if rowPitch = vkRowPitch then
-//                                Marshal.Copy(src, dst, srcLevel.SizeInBytes)
-//                            else
-                            let mutable src = src
-                            let mutable dst = dst + nativeint vkRowPitch * nativeint (blocksY - 1)
-                            let blockJmp = nativeint blockBytes
-                            let dstJmp = nativeint -vkRowPitch - nativeint rowPitch
-
-                            match compressionMode with
-                                | CompressionMode.BC1 ->
-                                    for r in 0 .. blocksY - 1 do
-                                        for x in 0 .. blocksX - 1 do
-                                            Helpers.mirrorCopyDXT1 (NativePtr.ofNativeInt src) (NativePtr.ofNativeInt dst)
-                                            src <- src + blockJmp
-                                            dst <- dst + blockJmp
-                                        dst <- dst + dstJmp
-
-                                | CompressionMode.BC2 ->
-                                    for r in 0 .. blocksY - 1 do
-                                        for x in 0 .. blocksX - 1 do
-                                            Helpers.mirrorCopyDXT3 (NativePtr.ofNativeInt src) (NativePtr.ofNativeInt dst)
-                                            src <- src + blockJmp
-                                            dst <- dst + blockJmp
-                                        dst <- dst + dstJmp
-
-                                | CompressionMode.BC3 ->
-                                    for r in 0 .. blocksY - 1 do
-                                        for x in 0 .. blocksX - 1 do
-                                            Helpers.mirrorCopyDXT5 (NativePtr.ofNativeInt src) (NativePtr.ofNativeInt dst)
-                                            src <- src + blockJmp
-                                            dst <- dst + blockJmp
-                                        dst <- dst + dstJmp
-
-                                | _ ->
-                                    failf "compression %A not implemented" compressionMode
-
+                    buffer.Memory.Mapped (fun dst ->
+                        data.Use (fun src ->
+                            Marshal.Copy(src, dst, data.SizeInBytes)
                         )
                     )
 
-                    temp
+                    let alignedSize =
+                        let compression = texture.Format.CompressionMode
+                        let blockSize = compression |> CompressionMode.blockSize
+                        let blocks = compression |> CompressionMode.numberOfBlocks data.Size
+                        blocks * blockSize
+
+                    buffer, data.Size, alignedSize
                 )
+            )
 
-            match device.UploadMode with
-                | UploadMode.Async ->
-                    device.CopyEngine.EnqueueSafe [
-                        yield CopyCommand.TransformLayout(result.[ImageAspect.Color], VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
+        match device.UploadMode with
+            | UploadMode.Async ->
+                let imageRange = image.[ImageAspect.Color]
+                image.Layout <- VkImageLayout.TransferDstOptimal
 
-                        for level in 0 .. levels.Length - 1 do
-                            let src = levels.[level]
+                device.CopyEngine.EnqueueSafe [
+                    yield CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
 
-                            yield CopyCommand.TransformLayout(src.[ImageAspect.Color], VkImageLayout.Preinitialized, VkImageLayout.TransferSrcOptimal)
-                            yield CopyCommand.Copy(src.[ImageAspect.Color, 0, 0], result.[ImageAspect.Color, level, 0])
-                               
-                        yield CopyCommand.SyncImage(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
+                    for slice = 0 to texture.Count - 1 do
+                        for level = 0 to uploadLevels - 1 do
+                            let src, size, alignedSize = tempImages.[slice].[level]
+                            let dst = image.[ImageAspect.Color, level, slice]
+                            yield CopyCommand.Copy(src, dst, V3i.Zero, src.Size, alignedSize.XY, size)
 
-                        yield CopyCommand.Release(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
-                        yield CopyCommand.Callback (fun () -> levels |> Array.iter Disposable.dispose)
-                    ]
+                    yield CopyCommand.SyncImage(imageRange, VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
 
-                    result.Layout <- VkImageLayout.TransferDstOptimal
-                    device.eventually {
-                        do! Command.Acquire(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, device.TransferFamily)
-                        do! Command.TransformLayout(result, VkImageLayout.ShaderReadOnlyOptimal)
-                    }
+                    yield CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
+                    yield CopyCommand.Callback (fun () -> tempImages |> Array.iter (Array.iter ((fun (d, _, _) -> d.Dispose()))))
+                ]
 
-                    result
+                device.eventually {
+                    do! Command.Acquire(imageRange, VkImageLayout.TransferDstOptimal, device.TransferFamily)
+                    if generateMipMaps then
+                        do! Command.GenerateMipMaps image.[ImageAspect.Color]
+                    do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
+                }
 
-                | _ ->
-                    failf "NativeTexture sync upload not implemented"
+            | _ ->
+                device.eventually {
+                    try
+                        do! Command.TransformLayout(image, VkImageLayout.TransferDstOptimal)
 
+                        for slice = 0 to texture.Count - 1 do
+                            for level = 0 to uploadLevels - 1 do
+                                let src, size, alignedSize = tempImages.[slice].[level]
+                                let dst = image.[ImageAspect.Color, level, slice]
+                                do! Command.Copy(src, dst, V3i.Zero, alignedSize.XY, size)
 
-        else
-            match device.UploadMode with
-                | UploadMode.Async ->
-                    let tempImages =
-                        Array.init image.MipMapLevels (fun level ->
-                            let data = image.[0, level]
-                            let buffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit data.SizeInBytes
+                        // generate the mipMaps
+                        if generateMipMaps then
+                            do! Command.GenerateMipMaps image.[ImageAspect.Color]
 
-                            buffer.Memory.Mapped (fun dst ->
-                                data.Use (fun src ->
-                                    Marshal.Copy(src, dst, data.SizeInBytes)
-                                )  
-                            )
-                            buffer, data.Size
-                        ) 
+                        do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
 
-                    device.CopyEngine.EnqueueSafe [
+                    finally
+                        tempImages |> Array.iter (Array.iter (fun (d, _, _) -> d.Dispose()))
+                }
 
-                        yield CopyCommand.TransformLayout(result.[ImageAspect.Color], VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
-
-                        for level in 0 .. tempImages.Length - 1 do
-                            let src, size = tempImages.[level]
-                            let dst = result.[ImageAspect.Color, level, 0]
-                            yield CopyCommand.Copy(
-                                src.Handle, 0L, 
-                                result.Handle, VkImageLayout.TransferDstOptimal, result.Format,
-                                VkBufferImageCopy(
-                                    0UL,
-                                    0u, 0u, 
-                                    dst.VkImageSubresourceLayers,
-                                    VkOffset3D(0,0,0),
-                                    VkExtent3D(size.X, size.Y, size.Z)
-                                )
-                            )
-
-                        yield CopyCommand.SyncImage(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
-
-                        yield CopyCommand.Release(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
-                        yield CopyCommand.Callback(fun () -> tempImages |> Array.iter (fst >> Disposable.dispose))
-                    ]
-
-                    result.Layout <- VkImageLayout.TransferDstOptimal
-
-                    device.eventually {
-                        do! Command.Acquire(result.[ImageAspect.Color], VkImageLayout.TransferDstOptimal, device.TransferFamily)
-                        do! Command.TransformLayout(result, VkImageLayout.ShaderReadOnlyOptimal)
-                    }
-
-                    result
-
-                | _ ->
-                    
-                    failf "synchronous upload of NativeTexture not implemented"
+        image
 
     let ofStream (stream : IO.Stream) (info : TextureParams) (device : Device) =
         let temp = device |> TensorImage.ofStream stream info.wantSrgb
@@ -2897,7 +2798,7 @@ module Image =
         use stream = IO.File.OpenRead(path)
         ofStream stream info device
 
-    let ofTexture (t : ITexture) (device : Device) =
+    let rec ofTexture (t : ITexture) (device : Device) : Image =
         match t with
         | :? PixTexture2d as t ->
             device |> ofPixImageMipMap t.PixImageMipMap t.TextureParams
@@ -2913,10 +2814,22 @@ module Image =
 
         | :? StreamTexture as t ->
             use stream = t.Open()
-            device |> ofStream stream t.TextureParams
+
+            let compressed =
+                if t.TextureParams.wantCompressed then
+                    stream |> DdsTexture.tryLoadCompressedFromStream
+                else
+                    None
+
+            match compressed with
+            | Some t ->
+                device |> ofTexture t
+
+            | _ ->
+                device |> ofStream stream t.TextureParams
 
         | :? INativeTexture as nt ->
-            device |> ofNativeImage nt
+            device |> ofNativeTexture nt
 
         | :? Image as t ->
             t.AddReference()

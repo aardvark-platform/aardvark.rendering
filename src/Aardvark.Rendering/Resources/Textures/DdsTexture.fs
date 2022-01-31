@@ -218,15 +218,6 @@ module DdsTexture =
 
         module TextureFormat =
 
-            let bytesPerBlock = function
-                | TextureFormat.CompressedRgbS3tcDxt1
-                | TextureFormat.CompressedRgbaS3tcDxt1
-                | TextureFormat.CompressedSrgbS3tcDxt1
-                | TextureFormat.CompressedSrgbAlphaS3tcDxt1
-                | TextureFormat.CompressedRedRgtc1
-                | TextureFormat.CompressedSignedRedRgtc1 -> 8
-                | _ -> 16
-
             let ofDxgiFormat (withAlpha : bool) = function
                 | DxgiFormat.BC1 | DxgiFormat.BC1Unorm ->
                     if withAlpha then TextureFormat.CompressedRgbaS3tcDxt1
@@ -339,7 +330,7 @@ module DdsTexture =
 
         let metaData =
             let bytesPerBlock =
-                format |> TextureFormat.bytesPerBlock
+                format.CompressionMode |> CompressionMode.bytesPerBlock
 
             Array.init slices (fun layer ->
                 Array.init levels (fun level ->
