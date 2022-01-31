@@ -73,8 +73,14 @@ module internal TextureUploadImplementation =
             )
 
             if generateMipmap then
+                GL.TexParameter(target, TextureParameterName.TextureBaseLevel, level)
+                GL.Check "could not set base mip map level"
+
                 GL.GenerateMipmap(unbox target)
                 GL.Check "failed to generate mipmaps"
+
+                GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
+                GL.Check "could not reset base mip map level"
 
             GL.BindTexture(target, 0)
             GL.Check "could not unbind texture"
@@ -152,7 +158,7 @@ module internal TextureUploadImplementation =
                                 Copy   = fun _ _ _ _ -> copy
                             }
 
-                    let generateMipmap = generateMipmap && level = levelCount - 1
+                    let generateMipmap = generateMipmap && slice = data.Count - 1 && level = levelCount - 1
                     uploadPixelData texture generateMipmap (baseLevel + level) offset pixelData
 
 

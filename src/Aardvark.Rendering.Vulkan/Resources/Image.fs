@@ -1973,20 +1973,20 @@ module ``Image Command Extensions`` =
                     [img.Image]
             }
 
-        static member GenerateMipMaps (img : ImageSubresourceRange) =
+        static member GenerateMipMaps (img : ImageSubresourceRange, [<Optional; DefaultParameterValue(0)>] baseLevel : int) =
             if img.Image.IsNull then
                 Command.Nop
             else
                 command {
                     let oldLayout = img.Image.Layout
-                    do! Command.TransformLayout(img.[0,*], oldLayout, VkImageLayout.TransferSrcOptimal)
+                    do! Command.TransformLayout(img.[baseLevel,*], oldLayout, VkImageLayout.TransferSrcOptimal)
 
-                    for l in 1 .. img.LevelCount - 1 do
+                    for l = baseLevel + 1 to img.LevelCount - 1 do
                         do! Command.TransformLayout(img.[l,*], oldLayout, VkImageLayout.TransferDstOptimal)
                         do! Command.Blit(img.[l - 1, *], VkImageLayout.TransferSrcOptimal, img.[l, *], VkImageLayout.TransferDstOptimal, VkFilter.Linear)
                         do! Command.TransformLayout(img.[l,*], VkImageLayout.TransferDstOptimal, VkImageLayout.TransferSrcOptimal)
 
-                    do! Command.TransformLayout(img, VkImageLayout.TransferSrcOptimal, oldLayout)
+                    do! Command.TransformLayout(img.[baseLevel .. img.LevelCount - 1,*], VkImageLayout.TransferSrcOptimal, oldLayout)
                 }
 
         static member TransformLayout(img : ImageSubresourceRange, source : VkImageLayout, target : VkImageLayout) =
@@ -2400,8 +2400,7 @@ module Image =
 
         let mipMapLevels =
             if info.wantMipMaps then
-                if pi.LevelCount > 1 then pi.LevelCount
-                else Fun.MipmapLevels(size)
+                Fun.MipmapLevels(size)
             else
                 1
 
@@ -2443,7 +2442,7 @@ module Image =
                 device.eventually {
                     do! Command.Acquire(imageRange, VkImageLayout.TransferDstOptimal, device.TransferFamily)
                     if generateMipMaps then
-                        do! Command.GenerateMipMaps image.[ImageAspect.Color]
+                        do! Command.GenerateMipMaps(image.[ImageAspect.Color], uploadLevels - 1)
                     do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
                 }
 
@@ -2460,7 +2459,7 @@ module Image =
 
                         // generate the mipMaps
                         if generateMipMaps then
-                            do! Command.GenerateMipMaps image.[ImageAspect.Color]
+                            do! Command.GenerateMipMaps(image.[ImageAspect.Color], uploadLevels - 1)
 
                         do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
 
@@ -2560,8 +2559,7 @@ module Image =
 
         let mipMapLevels =
             if info.wantMipMaps then
-                if face0.LevelCount > 1 then face0.LevelCount
-                else Fun.MipmapLevels(size)
+                Fun.MipmapLevels(size)
             else
                 1
 
@@ -2608,7 +2606,7 @@ module Image =
                     do! Command.Acquire(imageRange, VkImageLayout.TransferDstOptimal, device.TransferFamily)
                     // generate the mipMaps
                     if generateMipMaps then
-                        do! Command.GenerateMipMaps image.[ImageAspect.Color]
+                        do! Command.GenerateMipMaps(image.[ImageAspect.Color], uploadLevels - 1)
 
                     do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
                 }
@@ -2625,7 +2623,7 @@ module Image =
                        
                         // generate the mipMaps
                         if generateMipMaps then
-                            do! Command.GenerateMipMaps image.[ImageAspect.Color]
+                            do! Command.GenerateMipMaps(image.[ImageAspect.Color], uploadLevels - 1)
 
                         do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
 
@@ -2703,7 +2701,7 @@ module Image =
                 device.eventually {
                     do! Command.Acquire(imageRange, VkImageLayout.TransferDstOptimal, device.TransferFamily)
                     if generateMipMaps then
-                        do! Command.GenerateMipMaps image.[ImageAspect.Color]
+                        do! Command.GenerateMipMaps(image.[ImageAspect.Color], uploadLevels - 1)
                     do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
                 }
 
@@ -2720,7 +2718,7 @@ module Image =
 
                         // generate the mipMaps
                         if generateMipMaps then
-                            do! Command.GenerateMipMaps image.[ImageAspect.Color]
+                            do! Command.GenerateMipMaps(image.[ImageAspect.Color], uploadLevels - 1)
 
                         do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
 

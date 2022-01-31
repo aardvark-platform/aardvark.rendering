@@ -9,6 +9,24 @@ open Expecto
 
 module TextureUpload =
 
+    [<RequireQualifiedAccess>]
+    type MipmapInput =
+        | None
+        | Partial
+        | Full
+
+        member x.GetLevels(size : V3i) =
+            match x with
+            | None -> 1
+            | Partial -> Fun.MipmapLevels(size) / 2
+            | Full -> Fun.MipmapLevels(size)
+
+        member x.GetLevels(size : V2i) =
+            x.GetLevels(size.XYI)
+
+        member x.GetLevels(size : int) =
+            x.GetLevels(V2i size)
+
     module Cases =
 
         module private NativeTexture =
@@ -222,10 +240,9 @@ module TextureUpload =
             let size = V2i(256)
             uploadAndDownloadPixTexture2D runtime size 1 TextureParams.srgb
 
-        let pixTexture2DMipmapped (provideMipmap : bool) (runtime : IRuntime) =
-            let size = V2i(128)
-            //let size = V2i(435, 231)
-            let levels = if provideMipmap then Fun.MipmapLevels(size) else 1
+        let pixTexture2DMipmapped (mipmapInput : MipmapInput) (runtime : IRuntime) =
+            let size = V2i(435, 231)
+            let levels = mipmapInput.GetLevels(size)
             uploadAndDownloadPixTexture2D runtime size levels TextureParams.mipmapped
 
         let pixTexture2DCompressed (runtime : IRuntime) =
@@ -489,9 +506,9 @@ module TextureUpload =
             let size = 128
             uploadAndDownloadPixTextureCube runtime size 1 TextureParams.srgb
 
-        let pixTextureCubeMipmapped (provideMipmap : bool) (runtime : IRuntime) =
+        let pixTextureCubeMipmapped (mipmapInput : MipmapInput) (runtime : IRuntime) =
             let size = 128
-            let levels = if provideMipmap then Fun.MipmapLevels(size) else 1
+            let levels = mipmapInput.GetLevels(size)
             uploadAndDownloadPixTextureCube runtime size levels TextureParams.mipmapped
 
     let tests (backend : Backend) =
@@ -518,12 +535,15 @@ module TextureUpload =
             "2D array level",            Cases.texture2DArrayLevel
             "2D array level subwindow",  Cases.texture2DArrayLevelSubwindow
 
-            "2D PixTexture",                    Cases.pixTexture2D
-            "2D PixTexture sRGB",               Cases.pixTexture2DSrgb
-            "2D PixTexture compressed",         Cases.pixTexture2DCompressed
-            "2D PixTexture mipmapped",          Cases.pixTexture2DMipmapped true
-            "2D PixTexture mipmap generation",  Cases.pixTexture2DMipmapped false
-            "2D PixTexture as PixVolume",       Cases.pixTexture2DPixVolume
+            "2D PixTexture",                           Cases.pixTexture2D
+            "2D PixTexture sRGB",                      Cases.pixTexture2DSrgb
+            "2D PixTexture mipmapped",                 Cases.pixTexture2DMipmapped MipmapInput.Full
+            "2D PixTexture mipmap generation",         Cases.pixTexture2DMipmapped MipmapInput.None
+            "2D PixTexture mipmap partial generation", Cases.pixTexture2DMipmapped MipmapInput.Partial
+            "2D PixTexture as PixVolume",              Cases.pixTexture2DPixVolume
+
+            if backend <> Backend.Vulkan then // requires host-side compression
+                "2D PixTexture compressed",                Cases.pixTexture2DCompressed
 
             if backend <> Backend.Vulkan then // not supported
                 "2D multisampled",                        Cases.texture2DMultisampled
@@ -550,9 +570,10 @@ module TextureUpload =
             "Cube array level",             Cases.textureCubeArrayLevel
             "Cube array level subwindow",   Cases.textureCubeArrayLevelSubwindow
 
-            "Cube PixTexture",                      Cases.pixTextureCube
-            "Cube PixTexture sRGB",                 Cases.pixTextureCubeSrgb
-            "Cube PixTexture mipmapped",            Cases.pixTextureCubeMipmapped true
-            "Cube PixTexture mipmap generation",    Cases.pixTextureCubeMipmapped false
+            "Cube PixTexture",                           Cases.pixTextureCube
+            "Cube PixTexture sRGB",                      Cases.pixTextureCubeSrgb
+            "Cube PixTexture mipmapped",                 Cases.pixTextureCubeMipmapped MipmapInput.Full
+            "Cube PixTexture mipmap generation",         Cases.pixTextureCubeMipmapped MipmapInput.None
+            "Cube PixTexture mipmap partial generation", Cases.pixTextureCubeMipmapped MipmapInput.Partial
         ]
         |> prepareCases backend "Upload"
