@@ -136,7 +136,7 @@ type IFramebufferRuntimeExtensions private() =
                                              [<Optional; DefaultParameterValue(null : seq<string>)>] perLayerUniforms : seq<string>) =
         this.CreateFramebufferSignature(Map.ofSeq attachments, samples, layers, perLayerUniforms)
 
-    [<Extension; Obsolete("Use IFramebufferSignature.Dispose()")>]
+    [<Extension>]
     static member DeleteFramebufferSignature(this : IFramebufferRuntime, signature : IFramebufferSignature) =
         signature.Dispose()
 
@@ -152,7 +152,7 @@ type IFramebufferRuntimeExtensions private() =
     static member CreateFramebuffer(this : IFramebufferRuntime, signature : IFramebufferSignature, attachments : seq<Symbol * IFramebufferOutput>) =
         this.CreateFramebuffer(signature, Map.ofSeq attachments)
 
-    [<Extension; Obsolete("Use IFramebuffer.Dispose()")>]
+    [<Extension>]
     static member DeleteFramebuffer(this : IFramebufferRuntime, framebuffer : IFramebuffer) =
         framebuffer.Dispose()
 
