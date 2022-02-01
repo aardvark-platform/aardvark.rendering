@@ -44,3 +44,11 @@ type RuntimeCommandExtensions private() =
     static member ClearDepth(depth : ClearDepth)                                        = RenderCommand.ClearDepth<_>(depth)
     static member ClearStencil(stencil : ClearStencil)                                  = RenderCommand.ClearStencil<_>(stencil)
     static member ClearDepthStencil(depth : ClearDepth, stencil : ClearStencil)         = RenderCommand.ClearDepthStencil<_,_>(depth, stencil)
+
+    // Non adaptive multi color
+    static member Clear(colors : Map<Symbol, C4f>)  = RenderCommand.Clear<_>(colors)
+    static member Clear(colors : seq<Symbol * C4f>) = RenderCommand.Clear<_>(colors)
+    static member Clear(colors : Map<Symbol, C4f>, depth : ClearDepth)  = RenderCommand.Clear<_,_>(colors, depth)
+    static member Clear(colors : seq<Symbol * C4f>, depth : ClearDepth) = RenderCommand.Clear<_,_>(colors, depth)
+    static member Clear(colors : Map<Symbol, C4f>, depth : ClearDepth, stencil : ClearStencil)  = RenderCommand.Clear<_,_,_>(colors, depth, stencil)
+    static member Clear(colors : seq<Symbol * C4f>, depth : ClearDepth, stencil : ClearStencil) = RenderCommand.Clear<_,_,_>(colors, depth, stencil)

@@ -137,3 +137,38 @@ type IRuntimeExtensions private() =
     [<Extension>]
     static member CompileClearDepthStencil(this : IRuntime, signature : IFramebufferSignature, depth : ClearDepth, stencil : ClearStencil) =
         this.CompileClearDepthStencil<_, _>(signature, depth, stencil)
+
+
+    // ================================================================================================================
+    // CompileClear (multiple nonadaptive colors)
+    // ================================================================================================================
+
+    /// Compiles a render task for clearing a framebuffer with the given colors.
+    [<Extension>]
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, colors : Map<Symbol, C4f>) =
+        this.CompileClear<_>(signature, colors)
+
+    /// Compiles a render task for clearing a framebuffer with the given colors.
+    [<Extension>]
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, colors : seq<Symbol * C4f>) =
+        this.CompileClear<_>(signature, colors)
+
+    /// Compiles a render task for clearing a framebuffer with the given colors and depth.
+    [<Extension>]
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, colors : Map<Symbol, C4f>, depth : ClearDepth) =
+        this.CompileClear<_, _>(signature, colors, depth)
+
+    /// Compiles a render task for clearing a framebuffer with the given colors and depth.
+    [<Extension>]
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, colors : seq<Symbol * C4f>, depth : ClearDepth) =
+        this.CompileClear<_, _>(signature, colors, depth)
+
+    /// Compiles a render task for clearing a framebuffer with the given colors, depth, and stencil.
+    [<Extension>]
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, colors : Map<Symbol, C4f>, depth : ClearDepth, stencil : ClearStencil) =
+        this.CompileClear<_, _, _>(signature, colors, depth, stencil)
+
+    /// Compiles a render task for clearing a framebuffer with the given colors, depth, and stencil.
+    [<Extension>]
+    static member CompileClear(this : IRuntime, signature : IFramebufferSignature, colors : seq<Symbol * C4f>, depth : ClearDepth, stencil : ClearStencil) =
+        this.CompileClear<_, _, _>(signature, colors, depth, stencil)

@@ -102,6 +102,30 @@ module RenderCommandFSharpExtensions =
         static member inline ClearStencil(stencil : ^Stencil)                          = RenderCommand.ClearStencil(~~stencil)
         static member inline ClearDepthStencil(depth : ^Depth, stencil : ^Stencil)     = RenderCommand.ClearDepthStencil(~~depth, ~~stencil)
 
+        static member inline Clear(colors : Map<Symbol, ^Color>) =
+            let values = colors |> (fun c -> clear { colors c })
+            RenderCommand.Clear(values)
+
+        static member inline Clear(colors : seq<Symbol * ^Color>) =
+            let values = colors |> (fun c -> clear { colors c })
+            RenderCommand.Clear(values)
+
+        static member inline Clear(colors : Map<Symbol, ^Color>, depth : ^Depth) =
+            let values = (colors, depth) ||> (fun c d -> clear { colors c; depth d })
+            RenderCommand.Clear(values)
+
+        static member inline Clear(colors : seq<Symbol * ^Color>, depth : ^Depth) =
+            let values = (colors, depth) ||> (fun c d -> clear { colors c; depth d })
+            RenderCommand.Clear(values)
+
+        static member inline Clear(colors : Map<Symbol, ^Color>, depth : ^Depth, stencil : ^Stencil) =
+            let values = (colors, depth, stencil) |||> (fun c d s -> clear { colors c; depth d; stencil s })
+            RenderCommand.Clear(values)
+
+        static member inline Clear(colors : seq<Symbol * ^Color>, depth : ^Depth, stencil : ^Stencil) =
+            let values = (colors, depth, stencil) |||> (fun c d s -> clear { colors c; depth d; stencil s })
+            RenderCommand.Clear(values)
+
 [<AutoOpen>]
 module ``Sg RuntimeCommand Extensions`` =
 

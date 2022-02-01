@@ -20,14 +20,44 @@ module IFramebufferRuntimeFSharpExtensions =
             let values = color |> (fun c -> clear { color c })
             x.Clear(fbo, values)
 
+        /// Clears the framebuffer with the given colors.
+        member inline x.Clear(fbo : IFramebuffer, colors : Map<Symbol, ^Color>) =
+            let values = colors |> (fun c -> clear { colors c })
+            x.Clear(fbo, values)
+
+        /// Clears the framebuffer with the given colors.
+        member inline x.Clear(fbo : IFramebuffer, colors : seq<Symbol * ^Color>) =
+            let values = colors |> (fun c -> clear { colors c })
+            x.Clear(fbo, values)
+
         /// Clears the framebuffer with the given color and depth.
         member inline x.Clear(fbo : IFramebuffer, color : ^Color, depth : ^Depth) =
             let values = (color, depth) ||> (fun c d -> clear { color c; depth d })
             x.Clear(fbo, values)
 
+        /// Clears the framebuffer with the given colors and depth.
+        member inline x.Clear(fbo : IFramebuffer, colors : Map<Symbol, ^Color>, depth : ^Depth) =
+            let values = (colors, depth) ||> (fun c d -> clear { colors c; depth d })
+            x.Clear(fbo, values)
+
+        /// Clears the framebuffer with the given colors and depth.
+        member inline x.Clear(fbo : IFramebuffer, colors : seq<Symbol * ^Color>, depth : ^Depth) =
+            let values = (colors, depth) ||> (fun c d -> clear { colors c; depth d })
+            x.Clear(fbo, values)
+
         /// Clears the framebuffer with the given color, depth and stencil values.
         member inline x.Clear(fbo : IFramebuffer, color : ^Color, depth : ^Depth, stencil : ^Stencil) =
             let values = (color, depth, stencil) |||> (fun c d s -> clear { color c; depth d; stencil s })
+            x.Clear(fbo, values)
+
+        /// Clears the framebuffer with the given colors, depth and stencil values.
+        member inline x.Clear(fbo : IFramebuffer, colors : Map<Symbol, ^Color>, depth : ^Depth, stencil : ^Stencil) =
+            let values = (colors, depth, stencil) |||> (fun c d s -> clear { colors c; depth d; stencil s })
+            x.Clear(fbo, values)
+
+        /// Clears the framebuffer with the given colors, depth and stencil values.
+        member inline x.Clear(fbo : IFramebuffer, colors : seq<Symbol * ^Color>, depth : ^Depth, stencil : ^Stencil) =
+            let values = (colors, depth, stencil) |||> (fun c d s -> clear { colors c; depth d; stencil s })
             x.Clear(fbo, values)
 
         /// Clears the framebuffer with the given depth value.
@@ -106,7 +136,7 @@ type IFramebufferRuntimeExtensions private() =
                                              [<Optional; DefaultParameterValue(null : seq<string>)>] perLayerUniforms : seq<string>) =
         this.CreateFramebufferSignature(Map.ofSeq attachments, samples, layers, perLayerUniforms)
 
-    [<Extension; Obsolete("Use IFramebufferSignature.Dispose()")>]
+    [<Extension>]
     static member DeleteFramebufferSignature(this : IFramebufferRuntime, signature : IFramebufferSignature) =
         signature.Dispose()
 
@@ -122,7 +152,7 @@ type IFramebufferRuntimeExtensions private() =
     static member CreateFramebuffer(this : IFramebufferRuntime, signature : IFramebufferSignature, attachments : seq<Symbol * IFramebufferOutput>) =
         this.CreateFramebuffer(signature, Map.ofSeq attachments)
 
-    [<Extension; Obsolete("Use IFramebuffer.Dispose()")>]
+    [<Extension>]
     static member DeleteFramebuffer(this : IFramebufferRuntime, framebuffer : IFramebuffer) =
         framebuffer.Dispose()
 

@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering
 
+open Aardvark.Base
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 open System.Runtime.CompilerServices
@@ -50,13 +51,41 @@ module IRuntimeFSharpExtensions =
         member inline x.CompileClear(signature : IFramebufferSignature, color : ^Color) =
             x.CompileClear(signature, ~~color)
 
+        /// Compiles a render task for clearing a framebuffer with the given colors.
+        member inline x.CompileClear(signature : IFramebufferSignature, colors : Map<Symbol, ^Color>) =
+            x.CompileClear(signature, ClearValues.empty |> ClearValues.colors colors |> AVal.constant)
+
+        ///// Compiles a render task for clearing a framebuffer with the given colors.
+        member inline x.CompileClear(signature : IFramebufferSignature, colors : seq<Symbol * ^Color>) =
+            x.CompileClear(signature, ClearValues.empty |> ClearValues.colors (Map.ofSeq colors) |> AVal.constant)
+
         /// Compiles a render task for clearing a framebuffer with the given color and depth.
         member inline x.CompileClear(signature : IFramebufferSignature, color : ^Color, depth : ^Depth) =
             x.CompileClear(signature, ~~color, ~~depth)
 
+        /// Compiles a render task for clearing a framebuffer with the given colors and depth.
+        member inline x.CompileClear(signature : IFramebufferSignature, colors : Map<Symbol, ^Color>, depth : ^Depth) =
+            let values = ClearValues.empty |> ClearValues.colors colors |> ClearValues.depth depth
+            x.CompileClear(signature, AVal.constant values)
+
+        /// Compiles a render task for clearing a framebuffer with the given colors and depth.
+        member inline x.CompileClear(signature : IFramebufferSignature, colors : seq<Symbol * ^Color>, depth : ^Depth) =
+            let values = ClearValues.empty |> ClearValues.colors (Map.ofSeq colors) |> ClearValues.depth depth
+            x.CompileClear(signature, AVal.constant values)
+
         /// Compiles a render task for clearing a framebuffer with the given color, depth and stencil.
         member inline x.CompileClear(signature : IFramebufferSignature, color : ^Color, depth : ^Depth, stencil : ^Stencil) =
             x.CompileClear(signature, ~~color, ~~depth, ~~stencil)
+
+        /// Compiles a render task for clearing a framebuffer with the given colors, depth and stencil.
+        member inline x.CompileClear(signature : IFramebufferSignature, colors : Map<Symbol, ^Color>, depth : ^Depth, stencil : ^Stencil) =
+            let values = ClearValues.empty |> ClearValues.colors colors |> ClearValues.depth depth |> ClearValues.stencil stencil
+            x.CompileClear(signature, AVal.constant values)
+
+        /// Compiles a render task for clearing a framebuffer with the given colors, depth and stencil.
+        member inline x.CompileClear(signature : IFramebufferSignature, colors : seq<Symbol * ^Color>, depth : ^Depth, stencil : ^Stencil) =
+            let values = ClearValues.empty |> ClearValues.colors (Map.ofSeq colors) |> ClearValues.depth depth |> ClearValues.stencil stencil
+            x.CompileClear(signature, AVal.constant values)
 
         /// Compiles a render task for clearing a framebuffer with the given depth value.
         member inline x.CompileClearDepth(signature : IFramebufferSignature, depth : ^Depth) =
