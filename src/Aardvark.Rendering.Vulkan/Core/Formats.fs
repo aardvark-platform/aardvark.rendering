@@ -232,22 +232,22 @@ module VkFormat =
             VkFormat.D16UnormS8Uint, unknown
             VkFormat.D24UnormS8Uint, TextureFormat.Depth24Stencil8
             VkFormat.D32SfloatS8Uint, TextureFormat.Depth32fStencil8
-            VkFormat.Bc1RgbUnormBlock, unknown
-            VkFormat.Bc1RgbSrgbBlock, unknown
-            VkFormat.Bc1RgbaUnormBlock, unknown
-            VkFormat.Bc1RgbaSrgbBlock, unknown
-            VkFormat.Bc2UnormBlock, unknown
-            VkFormat.Bc2SrgbBlock, unknown
-            VkFormat.Bc3UnormBlock, unknown
-            VkFormat.Bc3SrgbBlock, unknown
-            VkFormat.Bc4UnormBlock, unknown
-            VkFormat.Bc4SnormBlock, unknown
-            VkFormat.Bc5UnormBlock, unknown
-            VkFormat.Bc5SnormBlock, unknown
-            VkFormat.Bc6hUfloatBlock, unknown
-            VkFormat.Bc6hSfloatBlock, unknown
-            VkFormat.Bc7UnormBlock, unknown
-            VkFormat.Bc7SrgbBlock, unknown
+            VkFormat.Bc1RgbUnormBlock, TextureFormat.CompressedRgbS3tcDxt1
+            VkFormat.Bc1RgbSrgbBlock, TextureFormat.CompressedSrgbS3tcDxt1
+            VkFormat.Bc1RgbaUnormBlock, TextureFormat.CompressedRgbaS3tcDxt1
+            VkFormat.Bc1RgbaSrgbBlock, TextureFormat.CompressedSrgbAlphaS3tcDxt1
+            VkFormat.Bc2UnormBlock, TextureFormat.CompressedRgbaS3tcDxt3
+            VkFormat.Bc2SrgbBlock, TextureFormat.CompressedSrgbAlphaS3tcDxt3
+            VkFormat.Bc3UnormBlock, TextureFormat.CompressedRgbaS3tcDxt5
+            VkFormat.Bc3SrgbBlock, TextureFormat.CompressedSrgbAlphaS3tcDxt5
+            VkFormat.Bc4UnormBlock, TextureFormat.CompressedRedRgtc1
+            VkFormat.Bc4SnormBlock, TextureFormat.CompressedSignedRedRgtc1
+            VkFormat.Bc5UnormBlock, TextureFormat.CompressedRgRgtc2
+            VkFormat.Bc5SnormBlock, TextureFormat.CompressedSignedRgRgtc2
+            VkFormat.Bc6hSfloatBlock, TextureFormat.CompressedRgbBptcSignedFloat
+            VkFormat.Bc6hUfloatBlock, TextureFormat.CompressedRgbBptcUnsignedFloat
+            VkFormat.Bc7UnormBlock, TextureFormat.CompressedRgbaBptcUnorm
+            VkFormat.Bc7SrgbBlock, TextureFormat.CompressedSrgbAlphaBptcUnorm
             VkFormat.Etc2R8g8b8UnormBlock, unknown
             VkFormat.Etc2R8g8b8SrgbBlock, unknown
             VkFormat.Etc2R8g8b8a1UnormBlock, unknown
@@ -685,18 +685,18 @@ module VkFormat =
             VkFormat.Bc1RgbSrgbBlock, rgb
             VkFormat.Bc1RgbaUnormBlock, rgba
             VkFormat.Bc1RgbaSrgbBlock, rgba
-            VkFormat.Bc2UnormBlock, unknown
-            VkFormat.Bc2SrgbBlock, rgb
-            VkFormat.Bc3UnormBlock, unknown
-            VkFormat.Bc3SrgbBlock, rgb
-            VkFormat.Bc4UnormBlock, unknown
-            VkFormat.Bc4SnormBlock, unknown
-            VkFormat.Bc5UnormBlock, unknown
-            VkFormat.Bc5SnormBlock, unknown
-            VkFormat.Bc6hUfloatBlock, unknown
-            VkFormat.Bc6hSfloatBlock, unknown
-            VkFormat.Bc7UnormBlock, unknown
-            VkFormat.Bc7SrgbBlock, rgb
+            VkFormat.Bc2UnormBlock, rgba
+            VkFormat.Bc2SrgbBlock, rgba
+            VkFormat.Bc3UnormBlock, rgba
+            VkFormat.Bc3SrgbBlock, rgba
+            VkFormat.Bc4UnormBlock, r
+            VkFormat.Bc4SnormBlock, r
+            VkFormat.Bc5UnormBlock, rg
+            VkFormat.Bc5SnormBlock, rg
+            VkFormat.Bc6hUfloatBlock, rgb
+            VkFormat.Bc6hSfloatBlock, rgb
+            VkFormat.Bc7UnormBlock, rgba
+            VkFormat.Bc7SrgbBlock, rgba
             VkFormat.Etc2R8g8b8UnormBlock, rgb
             VkFormat.Etc2R8g8b8SrgbBlock, rgb
             VkFormat.Etc2R8g8b8a1UnormBlock, rgba

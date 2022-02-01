@@ -1,11 +1,29 @@
 ﻿namespace Aardvark.Rendering.Tests
 
 open System
+open System.Reflection
+open System.Text.RegularExpressions
 open System.IO
 open Aardvark.Base
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Expecto
+
+module EmbeddedResource =
+
+    let get (path : string) =
+        let asm = Assembly.GetExecutingAssembly()
+        let name = Regex.Replace(asm.ManifestModule.Name, @"\.(exe|dll)$", "", RegexOptions.IgnoreCase)
+        let path = Regex.Replace(path, @"(\\|\/)", ".")
+        asm.GetManifestResourceStream(name + "." + path)
+
+    let loadPixImage<'T> (path : string) =
+        use stream = get path
+        PixImage.Create(stream).AsPixImage<'T>()
+
+    let getTexture (textureParams : TextureParams) (path : string) =
+        let openStream = fun () -> get path
+        StreamTexture(openStream, textureParams) :> ITexture
 
 [<AutoOpen>]
 module PixData =
@@ -78,7 +96,7 @@ module PixData =
 
             let pi = PixImage<byte>(Col.Format.RGBA, size)
             pi.GetMatrix<C4b>().SetByCoord(fun (c : V2l) ->
-                let c = c / 16L
+                let c = c / 11L
                 if (c.X + c.Y) % 2L = 0L then
                     C4b.White
                 else

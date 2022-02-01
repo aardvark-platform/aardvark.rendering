@@ -1,10 +1,12 @@
 ﻿namespace Aardvark.Rendering.Tests.Texture
 
 open Aardvark.Base
-open Aardvark.Base.NativeTensors
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.Application
+open Aardvark.SceneGraph
+open FSharp.Data.Adaptive
+open FSharp.Data.Adaptive.Operators
 open Expecto
 
 module TextureUpload =
@@ -270,6 +272,81 @@ module TextureUpload =
             finally
                 runtime.DeleteTexture(texture)
 
+        let private texture2DCompressed (expectedFormat : TextureFormat) (pathReference : string) (path : string) (runtime : IRuntime) =
+            let reference = EmbeddedResource.loadPixImage<uint8> pathReference
+            let compressed = EmbeddedResource.getTexture TextureParams.mipmappedCompressed path
+
+            use signature =
+                runtime.CreateFramebufferSignature([
+                    DefaultSemantic.Colors, TextureFormat.Rgba8
+                ])
+
+            let texture =
+                runtime.PrepareTexture(compressed)
+
+            try
+                Expect.equal texture.Dimension TextureDimension.Texture2D "unexpected dimension"
+                Expect.equal texture.Count 1 "unexpected count"
+                Expect.equal texture.Format expectedFormat "unexpected format"
+                Expect.equal texture.MipMapLevels (Fun.MipmapLevels(reference.Size)) "unexpected mipmap count"
+
+                match expectedFormat with
+                | TextureFormat.CompressedRedRgtc1
+                | TextureFormat.CompressedSignedRedRgtc1 ->
+                    reference.GetChannel(Col.Channel.Green).Set(0uy) |> ignore
+                    reference.GetChannel(Col.Channel.Blue).Set(0uy) |> ignore
+
+                | TextureFormat.CompressedRgRgtc2
+                | TextureFormat.CompressedSignedRgRgtc2 ->
+                    reference.GetChannel(Col.Channel.Blue).Set(0uy) |> ignore
+
+                | _ ->
+                    ()
+
+                use task =
+                    Sg.fullScreenQuad
+                    |> Sg.diffuseTexture' texture
+                    |> Sg.shader {
+                        do! DefaultSurfaces.diffuseTexture
+                    }
+                    |> Sg.compile runtime signature
+
+                let buffer = task |> RenderTask.renderToColor (~~reference.Size)
+                buffer.Acquire()
+
+                try
+                    let result = buffer.GetValue().Download()
+                    let result = result.Transformed(ImageTrafo.MirrorY).AsPixImage<byte>()
+
+                    Expect.equal result.Size reference.Size "image size mismatch"
+                    PixImage.compareWithEpsilon 30uy V2i.Zero reference result
+
+                finally
+                    buffer.Release()
+
+            finally
+                runtime.DeleteTexture(texture)
+
+        let texture2DCompressedDDSBC1 (runtime : IRuntime) =
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbS3tcDxt1 "data/rgb.png" "data/bc1.dds"
+
+        let texture2DCompressedDDSBC2 (runtime : IRuntime) =
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt3 "data/rgb.png" "data/bc2.dds"
+
+        let texture2DCompressedDDSBC3 (runtime : IRuntime) =
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt5 "data/rgb.png" "data/bc3.dds"
+
+        let texture2DCompressedDDSBC4 (runtime : IRuntime) =
+            runtime |> texture2DCompressed TextureFormat.CompressedRedRgtc1 "data/rgb.png" "data/bc4.dds"
+
+        let texture2DCompressedDDSBC5 (runtime : IRuntime) =
+            runtime |> texture2DCompressed TextureFormat.CompressedRgRgtc2 "data/rgb.png" "data/bc5.dds"
+
+        let texture2DCompressedDDSBC6h (runtime : IRuntime) =
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbBptcUnsignedFloat "data/rgb.png" "data/bc6h.dds"
+
+        let texture2DCompressedDDSBC7 (runtime : IRuntime) =
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaBptcUnorm "data/rgb.png" "data/bc7.dds"
 
         let private uploadAndDownloadTextureNative (runtime : IRuntime) (size : V2i)
                                                    (levels : int) (count : int) (wantMipmap : bool) =
@@ -542,14 +619,23 @@ module TextureUpload =
             "2D PixTexture mipmap partial generation", Cases.pixTexture2DMipmapped MipmapInput.Partial
             "2D PixTexture as PixVolume",              Cases.pixTexture2DPixVolume
 
-            if backend <> Backend.Vulkan then // requires host-side compression
-                "2D PixTexture compressed",                Cases.pixTexture2DCompressed
+            // Vulkan: not implemented as it requires host-side compression
+            // GL: Really bad results, don't bother
+                //"2D PixTexture compressed",                Cases.pixTexture2DCompressed
 
             if backend <> Backend.Vulkan then // not supported
                 "2D multisampled",                        Cases.texture2DMultisampled
                 "2D multisampled subwindow",              Cases.texture2DMultisampledSubwindow
                 "2D multisampled array",                  Cases.texture2DMultisampledArray
                 "2D multisampled array subwindow",        Cases.texture2DMultisampledArraySubwindow
+
+            "2D compressed DDS (BC1)",      Cases.texture2DCompressedDDSBC1
+            "2D compressed DDS (BC2)",      Cases.texture2DCompressedDDSBC2
+            "2D compressed DDS (BC3)",      Cases.texture2DCompressedDDSBC3
+            "2D compressed DDS (BC4)",      Cases.texture2DCompressedDDSBC4
+            "2D compressed DDS (BC5)",      Cases.texture2DCompressedDDSBC5
+            "2D compressed DDS (BC6h)",     Cases.texture2DCompressedDDSBC6h
+            "2D compressed DDS (BC7)",      Cases.texture2DCompressedDDSBC7
 
             "3D",                           Cases.texture3D
             "3D subwindow",                 Cases.texture3DSubwindow
