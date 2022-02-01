@@ -98,29 +98,29 @@ module TensorExtensions =
 
 [<AutoOpen>]
 module ITextureRuntimeFSharpExtensions =
-    
+
     // These extensions use SRTPs so MUST NOT be exposed to C#
     type ITextureRuntime with
-    
+
         // ================================================================================================================
         // Clear
         // ================================================================================================================
-    
+
         /// Clears the texture with the given color.
         member inline x.Clear(texture : IBackendTexture, color : ^Color) =
             let values = color |> (fun c -> clear { color c })
             x.Clear(texture, values)
-    
+
         /// Clears the texture with the given depth value.
         member inline x.ClearDepth(texture : IBackendTexture, depth : ^Depth) =
             let values = depth |> (fun d -> clear { depth d })
             x.Clear(texture, values)
-    
+
         /// Clears the texture with the given stencil value.
         member inline x.ClearStencil(texture : IBackendTexture, stencil : ^Stencil) =
             let values = stencil |> (fun s -> clear { stencil s })
             x.Clear(texture, values)
-    
+
         /// Clears the texture with the given depth and stencil values.
         member inline x.ClearDepthStencil(texture : IBackendTexture, depth : ^Depth, stencil : ^Stencil) =
             let values = (depth, stencil) ||> (fun d s -> clear { depth d; stencil s })
@@ -130,7 +130,7 @@ module ITextureRuntimeFSharpExtensions =
 [<AbstractClass; Sealed; Extension>]
 type ITextureRuntimeExtensions private() =
 
-    static let levelRegion (texture : IBackendTexture) (level : int) (region : Box2i) =    
+    static let levelRegion (texture : IBackendTexture) (level : int) (region : Box2i) =
         if region.IsEmpty || region.IsInfinite then
             Box2i.FromMinAndSize(V2i.Zero, texture.GetSize(level).XY)
         else
@@ -238,9 +238,9 @@ type ITextureRuntimeExtensions private() =
         let size =
             if size = V2i.Zero then
                 source.Size
-            else 
+            else
                 size
-        
+
         source.Visit
             { new PixVisitors.PixImageVisitor() with
                 member x.VisitUnit(img : PixImage<'T>) =
@@ -283,7 +283,7 @@ type ITextureRuntimeExtensions private() =
         let size =
             if size = V3i.Zero then
                 source.Size
-            else 
+            else
                 size
 
         source.Visit
@@ -328,7 +328,7 @@ type ITextureRuntimeExtensions private() =
         let size =
             if size = V2i.Zero then
                 target.Size
-            else 
+            else
                 size
 
         target.Visit
@@ -440,9 +440,9 @@ type ITextureRuntimeExtensions private() =
         let size =
             if size = V3i.Zero then
                 target.Size
-            else 
+            else
                 size
-        
+
         target.Visit
             { new PixVisitors.PixVolumeVisitor() with
                 member x.VisitUnit(dst : PixVolume<'T>) =
@@ -795,7 +795,7 @@ type IBackendTextureExtensions private() =
     [<Extension>]
     static member GetOutputView(texture : IBackendTexture,
                                 [<Optional; DefaultParameterValue(0)>] level : int,
-                                [<Optional; DefaultParameterValue(-1)>] slice : int) =      
+                                [<Optional; DefaultParameterValue(-1)>] slice : int) =
         let aspect =
             let aspects = texture.Format.Aspects
             if Set.count aspects = 1 then Set.minElement aspects
