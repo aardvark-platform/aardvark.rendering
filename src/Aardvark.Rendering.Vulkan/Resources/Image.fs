@@ -2650,6 +2650,11 @@ module Image =
         let generateMipMaps =
             uploadLevels < mipMapLevels
 
+        let isCubeOr2D =
+            match texture.Dimension with
+            | TextureDimension.Texture2D | TextureDimension.TextureCube -> true
+            | _ -> false
+
         let image =
             create size mipMapLevels texture.Count 1
                    texture.Dimension format
@@ -2657,6 +2662,9 @@ module Image =
                    device
 
         let tempImages =
+            let compression = texture.Format.CompressionMode
+            let blockSize = compression |> CompressionMode.blockSize
+
             Array.init texture.Count (fun slice ->
                 Array.init uploadLevels (fun level ->
                     let data = texture.[slice, level]
@@ -2664,13 +2672,14 @@ module Image =
 
                     buffer.Memory.Mapped (fun dst ->
                         data.Use (fun src ->
-                            Marshal.Copy(src, dst, data.SizeInBytes)
+                            if compression <> CompressionMode.None && isCubeOr2D then
+                                BlockCompression.mirrorCopy compression data.Size.XY src dst
+                            else
+                                Marshal.Copy(src, dst, data.SizeInBytes)
                         )
                     )
 
                     let alignedSize =
-                        let compression = texture.Format.CompressionMode
-                        let blockSize = compression |> CompressionMode.blockSize
                         let blocks = compression |> CompressionMode.numberOfBlocks data.Size
                         blocks * blockSize
 

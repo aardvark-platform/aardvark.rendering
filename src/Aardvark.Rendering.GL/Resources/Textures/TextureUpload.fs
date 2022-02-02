@@ -120,7 +120,7 @@ module internal TextureUploadImplementation =
 
         let uploadNativeTexture (texture : Texture) (baseLevel : int) (baseSlice : int) (data : INativeTexture) =
             let pixelFormat, pixelType = TextureFormat.toFormatAndType data.Format
-            let isCompressed = TextureFormat.isCompressed data.Format
+            let compression = TextureFormat.compressionMode data.Format
 
             let levelCount =
                 if data.WantMipMaps then data.MipMapLevels else 1
@@ -139,11 +139,14 @@ module internal TextureUploadImplementation =
 
                     let copy (dst : nativeint) =
                         subdata.Use (fun src ->
-                            Marshal.Copy(src, dst, subdata.SizeInBytes)
+                            if compression <> CompressionMode.None && texture.IsCubeOr2D then
+                                BlockCompression.mirrorCopy compression subdata.Size.XY src dst
+                            else
+                                Marshal.Copy(src, dst, subdata.SizeInBytes)
                         )
 
                     let pixelData =
-                        if isCompressed then
+                        if compression <> CompressionMode.None then
                             PixelData.Compressed {
                                 Size        = subdata.Size
                                 SizeInBytes = nativeint subdata.SizeInBytes

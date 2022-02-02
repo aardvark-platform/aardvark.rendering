@@ -9,16 +9,6 @@ type TextureDimension =
     | TextureCube = 3
     | Texture3D = 4
 
-type CompressionMode =
-    | None = 0
-    | BC1 = 1       // DXT1
-    | BC2 = 2       // DXT3
-    | BC3 = 3       // DXT5
-    | BC4 = 4
-    | BC5 = 5
-    | BC6h = 6
-    | BC7 = 7
-
 type TextureFormat =
     | Bgr8 = 1234
     | Bgra8 = 1235
@@ -594,37 +584,6 @@ module TextureFormat =
         elif s % 8 = 0 then s / 8
         else failwithf "[TextureFormat] ill-aligned size %A" s
 
-    let private compressionModes =
-        Dictionary.ofList [
-            TextureFormat.CompressedRgbS3tcDxt1,          CompressionMode.BC1
-            TextureFormat.CompressedSrgbS3tcDxt1,         CompressionMode.BC1
-            TextureFormat.CompressedRgbaS3tcDxt1,         CompressionMode.BC1
-            TextureFormat.CompressedSrgbAlphaS3tcDxt1,    CompressionMode.BC1
-
-            TextureFormat.CompressedRgbaS3tcDxt3,         CompressionMode.BC2
-            TextureFormat.CompressedSrgbAlphaS3tcDxt3,    CompressionMode.BC2
-
-            TextureFormat.CompressedRgbaS3tcDxt5,         CompressionMode.BC3
-            TextureFormat.CompressedSrgbAlphaS3tcDxt5,    CompressionMode.BC3
-
-            TextureFormat.CompressedRedRgtc1,             CompressionMode.BC4
-            TextureFormat.CompressedSignedRedRgtc1,       CompressionMode.BC4
-
-            TextureFormat.CompressedRgRgtc2,              CompressionMode.BC5
-            TextureFormat.CompressedSignedRgRgtc2,        CompressionMode.BC5
-
-            TextureFormat.CompressedRgbBptcSignedFloat,   CompressionMode.BC6h
-            TextureFormat.CompressedRgbBptcUnsignedFloat, CompressionMode.BC6h
-
-            TextureFormat.CompressedRgbaBptcUnorm,        CompressionMode.BC7
-            TextureFormat.CompressedSrgbAlphaBptcUnorm,   CompressionMode.BC7
-        ]
-
-    let compressionMode (fmt : TextureFormat) =
-        match compressionModes.TryGetValue fmt with
-            | (true, mode) -> mode
-            | _ -> CompressionMode.None
-
 [<AutoOpen>]
 module TextureFormatExtensions =
     type TextureFormat with
@@ -639,23 +598,6 @@ module TextureFormatExtensions =
         member x.Aspects = TextureFormat.toAspects x
         member x.PixelSizeInBits = TextureFormat.pixelSizeInBits x
         member x.PixelSizeInBytes = TextureFormat.pixelSizeInBytes x
-        member x.CompressionMode = TextureFormat.compressionMode x
-
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module CompressionMode =
-    let blockSize = function
-        | CompressionMode.None -> 1
-        | _ -> 4
-
-    let bytesPerBlock = function
-        | CompressionMode.None -> 0
-        | CompressionMode.BC1 | CompressionMode.BC4 -> 8
-        | _ -> 16
-
-    let numberOfBlocks (size : V3i) (mode : CompressionMode) =
-        let blockSize = blockSize mode
-        max 1 ((size + (blockSize - 1)) / blockSize)
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

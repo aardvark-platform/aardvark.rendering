@@ -315,8 +315,7 @@ module TextureUpload =
                 buffer.Acquire()
 
                 try
-                    let result = buffer.GetValue().Download()
-                    let result = result.Transformed(ImageTrafo.MirrorY).AsPixImage<byte>()
+                    let result = buffer.GetValue().Download().AsPixImage<byte>()
 
                     Expect.equal result.Size reference.Size "image size mismatch"
                     PixImage.compareWithEpsilon 30uy V2i.Zero reference result
@@ -634,8 +633,11 @@ module TextureUpload =
             "2D compressed DDS (BC3)",      Cases.texture2DCompressedDDSBC3
             "2D compressed DDS (BC4)",      Cases.texture2DCompressedDDSBC4
             "2D compressed DDS (BC5)",      Cases.texture2DCompressedDDSBC5
-            "2D compressed DDS (BC6h)",     Cases.texture2DCompressedDDSBC6h
-            "2D compressed DDS (BC7)",      Cases.texture2DCompressedDDSBC7
+
+            // Uploading BC6/7 is possible on both backends, but there is no
+            // easy way to flip these, and unfortunately we want to flip all our textures on upload -_-
+                //"2D compressed DDS (BC6h)",     Cases.texture2DCompressedDDSBC6h
+                //"2D compressed DDS (BC7)",      Cases.texture2DCompressedDDSBC7
 
             "3D",                           Cases.texture3D
             "3D subwindow",                 Cases.texture3DSubwindow

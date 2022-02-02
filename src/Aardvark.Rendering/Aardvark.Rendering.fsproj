@@ -46,6 +46,7 @@
     <Compile Include="Resources\Buffers\ChangeableBuffer.fs" />
     <Compile Include="Resources\Buffers\BufferView.fs" />
     <Compile Include="Resources\Textures\Formats.fs" />
+    <Compile Include="Resources\Textures\Compression.fs" />
     <Compile Include="Resources\Textures\Layouts.fs" />
     <Compile Include="Resources\Textures\Textures.fs" />
     <Compile Include="Resources\Textures\TextureSlicing.fs" />
