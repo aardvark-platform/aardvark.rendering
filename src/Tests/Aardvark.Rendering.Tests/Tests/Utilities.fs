@@ -32,12 +32,27 @@ module PixData =
 
     module PixVolume =
 
-        let random (size : V3i) =
-            let pv = PixVolume<byte>(Col.Format.RGBA, size)
-            pv.GetVolume<C4b>().SetByIndex(fun _ ->
-                rng.UniformC4f() |> C4b
-            ) |> ignore
-            pv
+        let private randomGeneric<'T> (getValue : unit -> 'T) (format : Col.Format) (size : V3i) =
+            let pi = PixVolume<'T>(format, size)
+            for c in pi.ChannelArray do
+                c.SetByIndex(ignore >> getValue) |> ignore
+            pi
+
+        let random8ui' = randomGeneric (rng.UniformUInt >> uint8)
+        let random8i' = randomGeneric (rng.UniformInt >> int8)
+        let random16ui' = randomGeneric (rng.UniformUInt >> uint16)
+        let random16i' = randomGeneric (rng.UniformInt >> int16)
+        let random32ui' = randomGeneric rng.UniformUInt
+        let random32i' = randomGeneric rng.UniformInt
+        let random32f' = randomGeneric rng.UniformFloatClosed
+
+        let random8ui   = random8ui' Col.Format.RGBA
+        let random8i    = random8i' Col.Format.RGBA
+        let random16ui  = random16ui' Col.Format.RGBA
+        let random16i   = random16i' Col.Format.RGBA
+        let random32ui  = random32ui' Col.Format.RGBA
+        let random32i   = random32i' Col.Format.RGBA
+        let random32f   = random32f' Col.Format.RGBA
 
         let compare (offset : V3i) (input : PixVolume<'T>) (output : PixVolume<'T>) =
             for x in 0 .. output.Size.X - 1 do
@@ -89,8 +104,6 @@ module PixData =
         let random32i   = random32i' Col.Format.RGBA
         let random32f   = random32f' Col.Format.RGBA
 
-        let random = random8ui
-
         let checkerboard (size : V2i) =
             let mutable colors = HashMap.empty
 
@@ -109,8 +122,8 @@ module PixData =
             ) |> ignore
             pi
 
-        let resized (size : V2i) (img : PixImage<byte>) =
-            let result = PixImage<byte>(img.Format, size)
+        let resized (size : V2i) (img : PixImage<uint16>) =
+            let result = PixImage<uint16>(img.Format, size)
 
             for c in 0L .. img.Volume.Size.Z - 1L do
                 let src = img.Volume.SubXYMatrixWindow(c)

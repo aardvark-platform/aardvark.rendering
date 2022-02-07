@@ -64,7 +64,7 @@ module TextureDownload =
             data |> texture2DWithFormat32f runtime Accuracy.veryHigh TextureFormat.Rgba32f
 
         let texture2DMultisampled (runtime : IRuntime) =
-            let data = PixImage.random <| V2i(256)
+            let data = PixImage.random32f <| V2i(256)
             let size = data.Size
             let samples = 8
 
@@ -86,7 +86,7 @@ module TextureDownload =
 
             try
                 task.Run(RenderToken.Empty, framebuffer)
-                let result = runtime.Download(colorTexture).ToPixImage<byte>()
+                let result = runtime.Download(colorTexture).AsPixImage<float32>()
 
                 Expect.equal result.Size size "Unexpected texture size"
                 PixImage.compare V2i.Zero data result
@@ -103,7 +103,7 @@ module TextureDownload =
 
             let data =
                 Array.init count (fun index ->
-                    let data = PixImage.random <| V2i(256)
+                    let data = PixImage.random16ui <| V2i(256)
 
                     Array.init levels (fun level ->
                         let size = size / (1 <<< level)
@@ -124,7 +124,7 @@ module TextureDownload =
                 let result =
                     data |> Array.mapi (fun index mipmaps ->
                         mipmaps |> Array.mapi (fun level _ ->
-                            runtime.Download(t, level, index).ToPixImage<byte>()
+                            runtime.Download(t, level, index).AsPixImage<uint16>()
                         )
                     )
 
@@ -144,7 +144,7 @@ module TextureDownload =
 
             let data =
                 CubeMap.init levels (fun side level ->
-                    let data = PixImage.random <| V2i(256)
+                    let data = PixImage.random16ui <| V2i(256)
                     let size = size / (1 <<< level)
                     data |> PixImage.resized size
                 )
@@ -159,7 +159,7 @@ module TextureDownload =
 
                 let result =
                     data |> CubeMap.mapi (fun side level _ ->
-                        runtime.Download(t, level, int side).ToPixImage<byte>()
+                        runtime.Download(t, level, int side).AsPixImage<uint16>()
                     )
 
                 (data, result) ||> CubeMap.iteri2 (fun side level src dst ->
@@ -178,7 +178,7 @@ module TextureDownload =
             let data =
                 Array.init count (fun index ->
                     CubeMap.init levels (fun side level ->
-                        let data = PixImage.random <| V2i(256)
+                        let data = PixImage.random16ui <| V2i(256)
                         let size = size / (1 <<< level)
                         data |> PixImage.resized size
                     )
@@ -198,7 +198,7 @@ module TextureDownload =
                     data |> Array.mapi (fun index mipmaps ->
                         mipmaps |> CubeMap.mapi (fun side level _ ->
                             let slice = index * 6 + int side
-                            runtime.Download(t, level, slice).ToPixImage<byte>()
+                            runtime.Download(t, level, slice).AsPixImage<uint16>()
                         )
                     )
 
@@ -217,7 +217,7 @@ module TextureDownload =
 
             let data =
                 Array.init levels (fun level ->
-                    let data = PixImage.random <| V2i(256)
+                    let data = PixImage.random16ui <| V2i(256)
                     let size = size >>> level
                     data |> PixImage.resized size
                 )
@@ -232,7 +232,7 @@ module TextureDownload =
 
                 let level = 2
                 let region = Box2i.FromMinAndSize(V2i(14, 18), V2i(10, 3))
-                let result = runtime.Download(t, level = level, slice = 0, region = region).ToPixImage<byte>()
+                let result = runtime.Download(t, level = level, slice = 0, region = region).AsPixImage<uint16>()
 
                 let reference = data.[level].SubImage(region)
                 Expect.equal result.Size reference.Size "Unexpected texture size"
@@ -247,7 +247,7 @@ module TextureDownload =
 
             let data =
                 CubeMap.init levels (fun side level ->
-                    let data = PixImage.random <| V2i(256)
+                    let data = PixImage.random16ui <| V2i(256)
                     let size = size / (1 <<< level)
                     data |> PixImage.resized size
                 )
@@ -263,7 +263,7 @@ module TextureDownload =
                 let side = CubeSide.PositiveY
                 let level = 1
                 let region = Box2i.FromMinAndSize(V2i(14, 18), V2i(10, 3))
-                let result = t.Download(level, int side, region).ToPixImage<byte>()
+                let result = t.Download(level, int side, region).AsPixImage<uint16>()
 
                 let reference = data.[side, level].SubImage(region)
                 Expect.equal result.Size reference.Size "Unexpected texture size"
@@ -280,7 +280,7 @@ module TextureDownload =
             let data =
                 Array.init count (fun index ->
                     CubeMap.init levels (fun side level ->
-                        let data = PixImage.random <| V2i(256)
+                        let data = PixImage.random16ui <| V2i(256)
                         let size = size / (1 <<< level)
                         data |> PixImage.resized size
                     )
@@ -300,7 +300,7 @@ module TextureDownload =
                 let index = 1
                 let level = 2
                 let region = Box2i.FromMinAndSize(V2i(14, 18), V2i(10, 3))
-                let result = t.Download(level, index * 6 + int side, region).ToPixImage<byte>()
+                let result = t.Download(level, index * 6 + int side, region).AsPixImage<uint16>()
 
                 let reference = data.[index].[side, level].SubImage(region)
                 Expect.equal result.Size reference.Size "Unexpected texture size"

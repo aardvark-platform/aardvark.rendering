@@ -50,15 +50,15 @@ module TextureCopy =
                 Array.init count (fun _ ->
                     Array.init levels (fun level ->
                         let size = Fun.MipmapLevelSize(size, level)
-                        PixVolume.random <| V3i(size, 1, 1)
+                        PixVolume.random32ui <| V3i(size, 1, 1)
                     )
                 )
 
             let texture =
                 if count > 1 then
-                    runtime.CreateTexture1DArray(size, TextureFormat.Rgba8, levels, count)
+                    runtime.CreateTexture1DArray(size, TextureFormat.Rgba32ui, levels, count)
                 else
-                    runtime.CreateTexture1D(size, TextureFormat.Rgba8, levels)
+                    runtime.CreateTexture1D(size, TextureFormat.Rgba32ui, levels)
 
             data |> Array.iteri (fun slice ->
                 Array.iteri (fun level _ ->
@@ -81,9 +81,9 @@ module TextureCopy =
             let src, data = createTexture1D runtime srcSize srcLevels srcCount
             let dst =
                 if dstCount > 1 then
-                    runtime.CreateTexture1DArray(dstSize, TextureFormat.Rgba8, dstLevels, dstCount)
+                    runtime.CreateTexture1DArray(dstSize, src.Format, dstLevels, dstCount)
                 else
-                    runtime.CreateTexture1D(dstSize, TextureFormat.Rgba8, dstLevels)
+                    runtime.CreateTexture1D(dstSize, src.Format, dstLevels)
 
             try
                 let dstBaseLevel = srcBaseLevel + levelDelta
@@ -97,7 +97,7 @@ module TextureCopy =
 
                         let levelSize = Fun.MipmapLevelSize(srcSize, srcLevel)
                         let target = dst.[TextureAspect.Color, dstLevel, dstSlice]
-                        let result = PixVolume<byte>(Col.Format.RGBA, V3i(levelSize, 1, 1))
+                        let result = PixVolume<uint32>(Col.Format.RGBA, V3i(levelSize, 1, 1))
                         runtime.Download(target, result)
 
                         Expect.equal (dst.GetSize(dstLevel)) data.[srcSlice].[srcLevel].Size "image size mismatch"
@@ -154,9 +154,9 @@ module TextureCopy =
             let src, data = createTexture1D runtime srcSize srcLevels srcCount
             let dst =
                 if dstCount > 1 then
-                    runtime.CreateTexture1DArray(dstSize, TextureFormat.Rgba8, dstLevels, dstCount)
+                    runtime.CreateTexture1DArray(dstSize, src.Format, dstLevels, dstCount)
                 else
-                    runtime.CreateTexture1D(dstSize, TextureFormat.Rgba8, dstLevels)
+                    runtime.CreateTexture1D(dstSize, src.Format, dstLevels)
 
             try
                 let dstLevel = srcLevel + levelDelta
@@ -173,7 +173,7 @@ module TextureCopy =
                     let dstSlice = dstBaseSlice + srcSlice - srcBaseSlice
 
                     let target = dst.[TextureAspect.Color, dstLevel, dstSlice]
-                    let result = PixVolume<byte>(Col.Format.RGBA, V3i(windowSize, 1, 1))
+                    let result = PixVolume<uint32>(Col.Format.RGBA, V3i(windowSize, 1, 1))
                     target.Download(result, V3i(dstOffset, 0, 0), result.Size)
 
                     PixVolume.compare (V3i(-srcOffset, 0, 0)) data.[srcSlice].[srcLevel] result
@@ -229,7 +229,7 @@ module TextureCopy =
             let dstSlices = 6
 
             let src, data = createTexture1D runtime srcSize srcLevels srcSlices
-            let dst = runtime.CreateTexture2DArray(dstSize, TextureFormat.Rgba8, levels = dstLevels, count = dstSlices)
+            let dst = runtime.CreateTexture2DArray(dstSize, src.Format, levels = dstLevels, count = dstSlices)
 
             try
                 let srcLevel = 0
@@ -254,7 +254,7 @@ module TextureCopy =
                     let dstSlice = dstBaseSlice + srcSlice - srcBaseSlice
 
                     let target = dst.[TextureAspect.Color, dstLevel, dstSlice]
-                    let result = PixVolume<byte>(Col.Format.RGBA, V3i(copySize, 1, 1))
+                    let result = PixVolume<uint32>(Col.Format.RGBA, V3i(copySize, 1, 1))
                     target.Download(result, V3i(dstOffset, 0, 0), result.Size)
 
                     PixVolume.compare (V3i(-srcOffset, 0, 0)) data.[srcSlice].[srcLevel] result
@@ -272,7 +272,7 @@ module TextureCopy =
             let dstSlices = 2
 
             let src, data = createTexture1D runtime srcSize srcLevels srcSlices
-            let dst = runtime.CreateTextureCubeArray(dstSize, TextureFormat.Rgba8, levels = dstLevels, count = dstSlices)
+            let dst = runtime.CreateTextureCubeArray(dstSize, src.Format, levels = dstLevels, count = dstSlices)
 
             try
                 let srcLevel = 0
@@ -297,7 +297,7 @@ module TextureCopy =
                     let dstSlice = dstBaseSlice + srcSlice - srcBaseSlice
 
                     let target = dst.[TextureAspect.Color, dstLevel, dstSlice]
-                    let result = PixVolume<byte>(Col.Format.RGBA, V3i(copySize, 1, 1))
+                    let result = PixVolume<uint32>(Col.Format.RGBA, V3i(copySize, 1, 1))
                     target.Download(result, V3i(dstOffset, 0, 0), result.Size)
 
                     PixVolume.compare (V3i(-srcOffset, 0, 0)) data.[srcSlice].[srcLevel] result
@@ -314,7 +314,7 @@ module TextureCopy =
             let dstLevels = srcLevels + 1
 
             let src, data = createTexture1D runtime srcSize srcLevels srcSlices
-            let dst = runtime.CreateTexture3D(dstSize, TextureFormat.Rgba8, levels = dstLevels)
+            let dst = runtime.CreateTexture3D(dstSize, src.Format, levels = dstLevels)
 
             try
                 let srcLevel = 0
@@ -333,7 +333,7 @@ module TextureCopy =
                 )
 
                 let target = dst.[TextureAspect.Color, dstLevel, 0]
-                let result = PixVolume<byte>(Col.Format.RGBA, V3i(copySize, 1, 1))
+                let result = PixVolume<uint32>(Col.Format.RGBA, V3i(copySize, 1, 1))
                 target.Download(result, V3i(dstOffset, 0, 0), result.Size)
 
                 PixVolume.compare (V3i(-srcOffset, 0, 0)) data.[0].[srcLevel] result
@@ -349,7 +349,7 @@ module TextureCopy =
 
             let data =
                 Array.init count (fun index ->
-                    let data = PixImage.random <| V2i(256)
+                    let data = PixImage.random16ui <| V2i(256)
 
                     Array.init levels (fun level ->
                         let size = size / (1 <<< level)
@@ -372,7 +372,7 @@ module TextureCopy =
 
                 for i in 2 .. 4 do
                     for l in 1 .. 3 do
-                        let result = runtime.Download(dst, level = l, slice = i).ToPixImage<byte>()
+                        let result = runtime.Download(dst, level = l, slice = i).AsPixImage<uint16>()
                         let levelSize = size / (1 <<< l)
 
                         Expect.equal result.Size levelSize "Texture size inconsistent"
@@ -383,13 +383,13 @@ module TextureCopy =
                 runtime.DeleteTexture(dst)
 
         let texture2DMultisampled (resolve : bool) (runtime : IRuntime) =
-            let data = PixImage.random <| V2i(256)
+            let data = PixImage.random32f <| V2i(256)
             let size = data.Size
             let samples = 8
 
-            let signature = runtime.CreateFramebufferSignature([DefaultSemantic.Colors, TextureFormat.Rgba8], samples)
-            let src = runtime.CreateTexture2D(size, TextureFormat.Rgba8, levels = 1, samples = samples)
-            let dst = runtime.CreateTexture2D(size, TextureFormat.Rgba8, levels = 1, samples = if resolve then 1 else samples)
+            let signature = runtime.CreateFramebufferSignature([DefaultSemantic.Colors, TextureFormat.Rgba32f], samples)
+            let src = runtime.CreateTexture2D(size, TextureFormat.Rgba32f, levels = 1, samples = samples)
+            let dst = runtime.CreateTexture2D(size, TextureFormat.Rgba32f, levels = 1, samples = if resolve then 1 else samples)
             let framebuffer = runtime.CreateFramebuffer(signature, [DefaultSemantic.Colors, src.GetOutputView()])
 
             let sampler =
@@ -408,7 +408,7 @@ module TextureCopy =
                 task.Run(RenderToken.Empty, framebuffer)
 
                 runtime.Copy(src, 0, 0, dst, 0, 0, 1, 1)
-                let result = runtime.Download(dst).ToPixImage<byte>()
+                let result = runtime.Download(dst).AsPixImage<float32>()
 
                 Expect.equal result.Size size "Texture size inconsistent"
                 PixImage.compare V2i.Zero data result
@@ -426,7 +426,7 @@ module TextureCopy =
 
             let data =
                 CubeMap.init levels (fun side level ->
-                    let data = PixImage.random <| V2i(256)
+                    let data = PixImage.random16ui <| V2i(256)
                     let size = size / (1 <<< level)
                     data |> PixImage.resized size
                 )
@@ -444,7 +444,7 @@ module TextureCopy =
 
                 for slice in 3 .. 5 do
                     for level in 1 .. 2 do
-                        let result = runtime.Download(dst, level = level, slice = slice).ToPixImage<byte>()
+                        let result = runtime.Download(dst, level = level, slice = slice).AsPixImage<uint16>()
                         let levelSize = size / (1 <<< level)
                         let side = unbox<CubeSide> (slice % 6)
 
@@ -464,7 +464,7 @@ module TextureCopy =
             let data =
                 Array.init count (fun index ->
                     CubeMap.init levels (fun side level ->
-                        let data = PixImage.random <| V2i(256)
+                        let data = PixImage.random16ui <| V2i(256)
                         let size = size / (1 <<< level)
                         data |> PixImage.resized size
                     )
@@ -485,7 +485,7 @@ module TextureCopy =
 
                 for slice in 2 .. 8 do
                     for level in 1 .. 2 do
-                        let result = runtime.Download(dst, level = level, slice = slice).ToPixImage<byte>()
+                        let result = runtime.Download(dst, level = level, slice = slice).AsPixImage<uint16>()
                         let levelSize = size / (1 <<< level)
                         let index = slice / 6
                         let side = unbox<CubeSide> (slice % 6)
