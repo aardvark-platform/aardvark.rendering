@@ -134,7 +134,9 @@ module RenderPass =
 
             let colorReferences =
                 let count =
-                    (colors |> Array.last |> fst) + 1
+                    match colors with
+                    | [||] -> 0
+                    | _ -> (colors |> Array.last |> fst) + 1
 
                 Array.init count (fun i ->
                     let reference =
