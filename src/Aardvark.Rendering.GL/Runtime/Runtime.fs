@@ -628,6 +628,8 @@ type Runtime(debug : DebugLevel) =
         x.ResolveMultisamples(ms, V2i.Zero, ss, V2i.Zero, 0, ms.Size.XY, trafo)
 
     member x.GenerateMipMaps(t : IBackendTexture) =
+        ResourceValidation.Textures.validateFormatForMipmapGeneration t
+
         match t with
             | :? Texture as t ->
                 if t.MipMapLevels > 1 then

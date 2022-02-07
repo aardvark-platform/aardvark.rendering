@@ -309,6 +309,9 @@ module TextureFormat =
             TextureFormat.Srgb8Alpha8, TextureFormat.CompressedSrgbAlphaS3tcDxt5
         ]
 
+    let isFilterable (fmt : TextureFormat) =
+        not (isIntegerFormat fmt || isCompressed fmt)
+
     let toDownloadFormat =
         LookupTable.lookupTable [
             TextureFormat.R8, PixFormat.ByteGray
@@ -589,6 +592,7 @@ module TextureFormatExtensions =
     type TextureFormat with
         member x.IsIntegerFormat = TextureFormat.isIntegerFormat x
         member x.IsCompressed = TextureFormat.isCompressed x
+        member x.IsFilterable = TextureFormat.isFilterable x
         member x.IsSrgb = TextureFormat.isSrgb x
         member x.IsDepth = TextureFormat.isDepth x
         member x.IsStencil = TextureFormat.isStencil x

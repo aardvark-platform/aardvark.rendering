@@ -210,8 +210,15 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         img :> IRenderbuffer
 
     member x.GenerateMipMaps(t : IBackendTexture) =
+        ResourceValidation.Textures.validateFormatForMipmapGeneration t
+        let img = unbox<Image> t
+
+        let range =
+            if VkFormat.hasDepth img.Format then img.[ImageAspect.Depth]
+             else img.[ImageAspect.Color]
+
         device.GraphicsFamily.run {
-            do! Command.GenerateMipMaps (unbox t)
+            do! Command.GenerateMipMaps(range)
         }
 
     member x.ResolveMultisamples(source : IFramebufferOutput, target : IBackendTexture, trafo : ImageTrafo) =

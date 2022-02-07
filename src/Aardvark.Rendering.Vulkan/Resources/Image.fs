@@ -1981,9 +1981,13 @@ module ``Image Command Extensions`` =
                     let oldLayout = img.Image.Layout
                     do! Command.TransformLayout(img.[baseLevel,*], oldLayout, VkImageLayout.TransferSrcOptimal)
 
+                    let filter =
+                        if img.Aspect = ImageAspect.Color then VkFilter.Linear
+                        else VkFilter.Nearest
+
                     for l = baseLevel + 1 to img.LevelCount - 1 do
                         do! Command.TransformLayout(img.[l,*], oldLayout, VkImageLayout.TransferDstOptimal)
-                        do! Command.Blit(img.[l - 1, *], VkImageLayout.TransferSrcOptimal, img.[l, *], VkImageLayout.TransferDstOptimal, VkFilter.Linear)
+                        do! Command.Blit(img.[l - 1, *], VkImageLayout.TransferSrcOptimal, img.[l, *], VkImageLayout.TransferDstOptimal, filter)
                         do! Command.TransformLayout(img.[l,*], VkImageLayout.TransferDstOptimal, VkImageLayout.TransferSrcOptimal)
 
                     do! Command.TransformLayout(img.[baseLevel .. img.LevelCount - 1,*], VkImageLayout.TransferSrcOptimal, oldLayout)
@@ -2400,7 +2404,10 @@ module Image =
 
         let mipMapLevels =
             if info.wantMipMaps then
-                Fun.MipmapLevels(size)
+                if TextureFormat.isFilterable (VkFormat.toTextureFormat format) then
+                    Fun.MipmapLevels(size)
+                else
+                    uploadLevels
             else
                 1
 
@@ -2479,11 +2486,10 @@ module Image =
 
         
         let mipMapLevels =
-            if info.wantMipMaps then
+            if info.wantMipMaps && TextureFormat.isFilterable (VkFormat.toTextureFormat format) then
                 Fun.MipmapLevels(size) 
             else
                 1
-
 
         let image = 
             create 
@@ -2516,7 +2522,7 @@ module Image =
                     do! Command.Acquire(imageRange, VkImageLayout.TransferDstOptimal, device.TransferFamily)
                     
                     // generate the mipMaps
-                    if info.wantMipMaps then
+                    if mipMapLevels > 1 then
                         do! Command.GenerateMipMaps image.[ImageAspect.Color]
 
                     do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
@@ -2531,7 +2537,7 @@ module Image =
                         do! Command.Copy(temp, image.[ImageAspect.Color, 0, 0])
 
                         // generate the mipMaps
-                        if info.wantMipMaps then
+                        if mipMapLevels > 1 then
                             do! Command.GenerateMipMaps image.[ImageAspect.Color]
 
                         do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
@@ -2559,7 +2565,10 @@ module Image =
 
         let mipMapLevels =
             if info.wantMipMaps then
-                Fun.MipmapLevels(size)
+                if TextureFormat.isFilterable (VkFormat.toTextureFormat format) then
+                    Fun.MipmapLevels(size)
+                else
+                    uploadLevels
             else
                 1
 
@@ -2605,7 +2614,7 @@ module Image =
                 device.eventually {
                     do! Command.Acquire(imageRange, VkImageLayout.TransferDstOptimal, device.TransferFamily)
                     // generate the mipMaps
-                    if generateMipMaps then
+                    if mipMapLevels > 1 then
                         do! Command.GenerateMipMaps(image.[ImageAspect.Color], uploadLevels - 1)
 
                     do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
@@ -2622,7 +2631,7 @@ module Image =
                                 do! Command.Copy(temp, image.[ImageAspect.Color, level, face])
                        
                         // generate the mipMaps
-                        if generateMipMaps then
+                        if mipMapLevels > 1 then
                             do! Command.GenerateMipMaps(image.[ImageAspect.Color], uploadLevels - 1)
 
                         do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
@@ -2643,7 +2652,10 @@ module Image =
 
         let mipMapLevels =
             if texture.WantMipMaps then
-                Fun.MipmapLevels(size)
+                if texture.Format.IsFilterable then
+                    Fun.MipmapLevels(size)
+                else
+                    uploadLevels
             else
                 1
 
@@ -2742,7 +2754,7 @@ module Image =
         let size = temp.Size
 
         let mipMapLevels =
-            if info.wantMipMaps then
+            if info.wantMipMaps && TextureFormat.isFilterable (VkFormat.toTextureFormat temp.ImageFormat) then
                 Fun.MipmapLevels(size)
             else
                 1
