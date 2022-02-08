@@ -77,15 +77,19 @@ module PixExtensions =
 [<AutoOpen>]
 module TensorExtensions =
 
+    type VolumeInfo with
+        member x.ToXYWTensor4'() =
+            Tensor4Info(
+                x.Origin,
+                V4l(x.SX, x.SY, 1L, x.SZ),
+                V4l(x.DX, x.DY, x.DY * x.SY, x.DZ)
+            )
+
     type NativeVolume<'T when 'T : unmanaged> with
         member x.ToXYWTensor4'() =
             NativeTensor4<'T>(
                 x.Pointer,
-                Tensor4Info(
-                    x.Info.Origin,
-                    V4l(x.Info.SX, x.Info.SY, 1L, x.Info.SZ),
-                    V4l(x.Info.DX, x.Info.DY, x.Info.DY * x.Info.SY, x.Info.DZ)
-                )
+                x.Info.ToXYWTensor4'()
             )
 
     type NativeTensor4<'T when 'T : unmanaged> with

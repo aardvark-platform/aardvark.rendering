@@ -91,45 +91,20 @@ module internal TextureUtilitiesAndExtensions =
         let ofTexture (texture : Texture) =
             TextureTarget.ofParameters texture.Dimension texture.IsArray texture.IsMultisampled
 
-
-    module PixFormat =
-
-        let toFormatAndType (internalFormat : TextureFormat) (pixFormat : PixFormat) =
-            let isInteger = TextureFormat.isIntegerFormat internalFormat
-
-            match PixelFormat.ofColFormat isInteger pixFormat.Format, PixelType.ofType pixFormat.Type with
-            | Some f, Some t -> f, t
-            | _ ->
-                failwithf "[GL] Pixel format %A and type %A not supported" pixFormat.Format pixFormat.Type
-
     [<AutoOpen>]
     module TensorExtensions =
 
-        type NativeTensor4<'T when 'T : unmanaged> with
-            member x.PixFormat =
-                PixFormat(typeof<'T>, x.Format)
-
-        module VolumeInfo =
-
-            let deviceLayoutWithOffset (flipY : bool) (elementOffset : int) (elementSize : int) (stride : nativeint) (channels : int) (size : V2l) =
-                let size = V3l(size, int64 channels)
-                let channelSize = int64 elementSize
-
-                let origin, deltaY =
-                    if flipY then
-                        int64 stride * (size.Y - 1L), int64 -stride
-                    else
-                        0L, int64 stride
-
-                let delta = V3l(int64 channels * channelSize, deltaY, channelSize)
-                VolumeInfo(origin + int64 elementOffset, size, delta)
-
-            let deviceLayout (flipY : bool) (elementSize : int) (stride : nativeint) (channels : int) (size : V2l) =
-                deviceLayoutWithOffset flipY 0 elementSize stride channels size
-
         module Tensor4Info =
 
-            let deviceLayout (flipY : bool) (elementSize : int) (stride : nativeint) (channels : int) (size : V3l) =
+            let asBytes (elementSize : int) (info : Tensor4Info) =
+                Tensor4Info(
+                    info.Origin * int64 elementSize,
+                    info.Size,
+                    info.Delta * int64 elementSize
+                )
+
+            let deviceLayoutWithOffset (flipY : bool) (offset : int) (elementSize : int)
+                                       (stride : nativeint) (channels : int) (size : V3l) =
                 let size = V4l(size, int64 channels)
                 let channelSize = int64 elementSize
 
@@ -140,7 +115,14 @@ module internal TextureUtilitiesAndExtensions =
                         0L, int64 stride
 
                 let delta = V4l(int64 channels * channelSize, deltaY, int64 stride * size.Y, channelSize)
-                Tensor4Info(origin, size, delta)
+                Tensor4Info(origin + int64 offset, size, delta)
+
+            let deviceLayout (flipY : bool) (elementSize : int) (stride : nativeint) (channels : int) (size : V3l) =
+                deviceLayoutWithOffset flipY 0 elementSize stride channels size
+
+        type Tensor4Info with
+            member x.AsBytes(elementSize) = x |> Tensor4Info.asBytes elementSize
+            member x.AsBytes<'T>() = x.AsBytes(sizeof<'T>)
 
     module private WindowOffset =
 

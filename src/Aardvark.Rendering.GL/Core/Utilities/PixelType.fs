@@ -1,7 +1,6 @@
 ﻿namespace Aardvark.Rendering.GL
 
 open Aardvark.Base
-open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
 
 module internal PixelType =
@@ -18,31 +17,6 @@ module internal PixelType =
             PixelType.Float,                    4
             PixelType.UnsignedInt248,           4
             PixelType.Float32UnsignedInt248Rev, 8
-        ]
-
-    let ofType =
-        LookupTable.lookupTable' [
-            typeof<uint8>,   PixelType.UnsignedByte
-            typeof<int8>,    PixelType.Byte
-            typeof<uint16>,  PixelType.UnsignedShort
-            typeof<int16>,   PixelType.Short
-            typeof<uint32>,  PixelType.UnsignedInt
-            typeof<int32>,   PixelType.Int
-            typeof<float16>, PixelType.HalfFloat
-            typeof<float32>, PixelType.Float
-        ]
-
-    let compressedFormat =
-        LookupTable.lookupTable' [
-            (PixelFormat.Rgb, PixelType.UnsignedByte, false), (TextureFormat.CompressedRgbS3tcDxt1, PixelInternalFormat.CompressedRgbS3tcDxt1Ext)
-            (PixelFormat.Rgba, PixelType.UnsignedByte, false), (TextureFormat.CompressedRgbaS3tcDxt5, PixelInternalFormat.CompressedRgbaS3tcDxt5Ext)
-            (PixelFormat.Rgb, PixelType.UnsignedByte, true), (TextureFormat.CompressedSrgbS3tcDxt1, PixelInternalFormat.CompressedSrgbS3tcDxt1Ext)
-            (PixelFormat.Rgba, PixelType.UnsignedByte, true), (TextureFormat.CompressedSrgbAlphaS3tcDxt5, PixelInternalFormat.CompressedSrgbAlphaS3tcDxt5Ext)
-            (PixelFormat.Bgr, PixelType.UnsignedByte, false), (TextureFormat.CompressedRgbS3tcDxt1, PixelInternalFormat.CompressedRgbS3tcDxt1Ext)
-            (PixelFormat.Bgra, PixelType.UnsignedByte, false), (TextureFormat.CompressedRgbaS3tcDxt5, PixelInternalFormat.CompressedRgbaS3tcDxt5Ext)
-            (PixelFormat.Bgr, PixelType.UnsignedByte, true), (TextureFormat.CompressedSrgbS3tcDxt1, PixelInternalFormat.CompressedSrgbS3tcDxt1Ext)
-            (PixelFormat.Bgra, PixelType.UnsignedByte, true), (TextureFormat.CompressedSrgbAlphaS3tcDxt5, PixelInternalFormat.CompressedSrgbAlphaS3tcDxt5Ext)
-            (PixelFormat.Luminance, PixelType.UnsignedByte, false), (TextureFormat.CompressedRedRgtc1, PixelInternalFormat.CompressedRedRgtc1)
         ]
 
 [<AutoOpen>]

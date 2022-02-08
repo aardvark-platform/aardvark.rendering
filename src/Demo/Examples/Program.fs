@@ -979,7 +979,6 @@ module private NativeSupport =
 
 let lerp : float -> byte -> byte -> byte =
     fun t a b -> Fun.Lerp(t,a,b)
-open DevILSharp
 
 
 type NativeVolume<'a when 'a : unmanaged> with

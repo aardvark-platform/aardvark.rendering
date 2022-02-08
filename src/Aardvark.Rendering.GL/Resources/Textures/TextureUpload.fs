@@ -3,10 +3,8 @@
 open Aardvark.Base
 open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
-open Microsoft.FSharp.NativeInterop
 open System.Runtime.InteropServices
 open Aardvark.Rendering.GL
-open System
 open System.Runtime.CompilerServices
 
 #nowarn "9"
@@ -90,7 +88,7 @@ module internal TextureUploadImplementation =
                                                         (src : NativeTensor4<'T>) =
 
             let pixelFormat, pixelType =
-                PixFormat.toFormatAndType texture.Format src.PixFormat
+                TextureFormat.toFormatAndType texture.Format
 
             let offset =
                 let flipped = texture.WindowOffset(level, offset, size)
@@ -98,14 +96,9 @@ module internal TextureUploadImplementation =
                 else V3i(flipped.XY, slice)
 
             let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (dst : nativeint) =
-                let dstTensor =
-                    let info =
-                        let rowPixels = alignedLineSize / nativeint elementSize
-                        Tensor4Info.deviceLayout texture.IsCubeOr2D 1 rowPixels channels (V3l size)
-
-                    NativeTensor4<'T>(NativePtr.ofNativeInt dst, info)
-
-                NativeTensor4.copy src dstTensor
+                let srcInfo = src.Info.AsBytes<'T>()
+                let dstInfo = Tensor4Info.deviceLayout texture.IsCubeOr2D elementSize alignedLineSize channels (V3l size)
+                NativeTensor4.copyBytes<'T> src.Address srcInfo dst dstInfo
 
             let pixelData =
                 PixelData.General {
@@ -167,27 +160,14 @@ module internal TextureUploadImplementation =
 
         let uploadPixImage (texture : Texture) (generateMipmap : bool)
                            (level : int) (slice : int) (offset : V2i) (image : PixImage) =
-
-            let pixelFormat, pixelType =
-                PixFormat.toFormatAndType texture.Format image.PixFormat
-
-            let offset =
-                texture.WindowOffset(level, offset, image.Size)
-
-            let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (dst : nativeint) =
-                let dstInfo = VolumeInfo.deviceLayout true elementSize alignedLineSize channels image.SizeL
-                TextureCopyUtils.Copy(image, dst, dstInfo)
-
-            let offset = V3i(offset, slice)
-            let data =
-                PixelData.General {
-                    Size   = V3i(image.Size, 1)
-                    Type   = pixelType
-                    Format = pixelFormat
-                    Copy   = copy
-                }
-
-            uploadPixelData texture generateMipmap level offset data
+            image.Visit
+                { new PixVisitors.PixImageVisitor() with
+                    member x.VisitUnit(img : PixImage<'T>) =
+                        NativeVolume.using img.Volume (fun src ->
+                            let src = src.ToXYWTensor4'()
+                            uploadNativeTensor4 texture generateMipmap level slice offset.XYO image.Size.XYI src
+                        )
+                } |> ignore
 
 
         let private uploadPixImageMipMapInternal (texture : Texture) (wantMipmap : bool) (generateMipmap : bool)
@@ -220,28 +200,15 @@ module internal TextureUploadImplementation =
                 uploadPixImageMipMapInternal texture wantMipmap generateMipMap baseLevel (slice + i) offset data
 
 
-        let uploadPixVolume (texture : Texture) (generateMipMap : bool)
+        let uploadPixVolume (texture : Texture) (generateMipmap : bool)
                             (level : int) (offset : V3i) (volume : PixVolume) =
-
-            let pixelFormat, pixelType =
-                PixFormat.toFormatAndType texture.Format volume.PixFormat
-
-            let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (dst : nativeint) =
-                let dstInfo =
-                    let rowPixels = alignedLineSize / nativeint elementSize
-                    Tensor4Info.deviceLayout false 1 rowPixels channels volume.SizeL
-
-                TextureCopyUtils.Copy(volume, dst, dstInfo)
-
-            let data =
-                PixelData.General {
-                    Size   = volume.Size
-                    Type   = pixelType
-                    Format = pixelFormat
-                    Copy   = copy
-                }
-
-            uploadPixelData texture generateMipMap level offset data
+            volume.Visit
+                { new PixVisitors.PixVolumeVisitor() with
+                    member x.VisitUnit(img : PixVolume<'T>) =
+                        NativeTensor4.using img.Tensor4 (fun src ->
+                            uploadNativeTensor4 texture generateMipmap level 0 offset volume.Size src
+                        )
+                } |> ignore
 
 [<AutoOpen>]
 module ContextTextureUploadExtensions =

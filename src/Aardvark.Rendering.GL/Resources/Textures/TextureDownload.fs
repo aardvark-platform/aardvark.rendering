@@ -1,6 +1,5 @@
 ﻿namespace Aardvark.Rendering.GL
 
-open System
 open Aardvark.Base
 open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
@@ -105,139 +104,113 @@ module internal TextureDownloadImplementation =
 
             downloadPixelData texture level offset pixelData
 
+        let private downloadNative (texture : Texture) (level : int) (slice : int) (offset : V3i) (size : V3i)
+                                   (startOffset : int) (maxElementSize : int) (dst : nativeint) (dstInfo : Tensor4Info) =
+            if texture.Format.IsCompressed then
+                failwith "Not implemented"
+
+            else
+                let pixelFormat, pixelType =
+                    TextureFormat.toFormatAndType texture.Format
+
+                let bufferElementSize =
+                    min maxElementSize pixelType.Size
+
+                let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (src : nativeint) =
+                    let srcInfo = Tensor4Info.deviceLayoutWithOffset texture.IsCubeOr2D startOffset elementSize alignedLineSize channels (V3l size)
+                    NativeTensor4.copyBytesWithSize bufferElementSize src srcInfo dst dstInfo
+
+                downloadGeneralPixelData texture level slice offset size pixelFormat pixelType copy
+
+
         let downloadNativeTensor4<'T when 'T : unmanaged> (texture : Texture) (level : int) (slice : int)
                                                           (offset : V3i) (size : V3i) (dst : NativeTensor4<'T>) =
+            let dstInfo = dst.Info.AsBytes<'T>()
+            downloadNative texture level slice offset size 0 sizeof<'T> dst.Address dstInfo
 
-            let pixelFormat, pixelType =
-                PixFormat.toFormatAndType texture.Format dst.PixFormat
-
-            let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (src : nativeint) =
-                let srcTensor =
-                    let info =
-                        let rowPixels = alignedLineSize / nativeint elementSize
-                        Tensor4Info.deviceLayout texture.IsCubeOr2D 1 rowPixels channels (V3l size)
-
-                    NativeTensor4<'T>(NativePtr.ofNativeInt src, info)
-
-                NativeTensor4.copy srcTensor dst
-
-            downloadGeneralPixelData texture level slice offset size pixelFormat pixelType copy
-
-        let private downloadPixImageInternal (texture : Texture) (pixelFormat : PixelFormat) (pixelType : PixelType)
-                                             (elementType : Option<Type>) (elementOffset : int) (level : int) (slice : int) (offset : V2i)
-                                             (image : PixImage) =
-
-            let elementType =
-                elementType |> Option.defaultValue image.PixFormat.Type
-
-            let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (src : nativeint) =
-                let srcInfo = VolumeInfo.deviceLayoutWithOffset true elementOffset elementSize alignedLineSize channels image.SizeL
-                TextureCopyUtils.Copy(elementType, src, srcInfo, image)
-
-            let size = V3i(image.Size, 1)
-            let offset = V3i(offset, slice)
-            downloadGeneralPixelData texture level slice offset size pixelFormat pixelType copy
 
         let downloadPixImage (texture : Texture) (level : int) (slice : int) (offset : V2i) (image : PixImage) =
-            let pixelFormat, pixelType =
-                PixFormat.toFormatAndType texture.Format image.PixFormat
+            let size = V3i(image.Size, 1)
+            let offset = V3i(offset, slice)
+            let elementSize = image.ChannelSize
 
-            downloadPixImageInternal texture pixelFormat pixelType None 0 level slice offset image
+            pinned image.Array (fun dst ->
+                let dstInfo = image.VolumeInfo.ToXYWTensor4'().AsBytes(elementSize)
+                downloadNative texture level slice offset size 0 elementSize dst dstInfo
+            )
+
 
         let downloadPixVolume (texture : Texture) (level : int) (offset : V3i) (volume : PixVolume) =
-            let pixelFormat, pixelType =
-                PixFormat.toFormatAndType texture.Format volume.PixFormat
+            let elementSize = volume.ChannelSize
 
-            let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (src : nativeint) =
-                let srcInfo =
-                    let rowPixels = alignedLineSize / nativeint elementSize
-                    Tensor4Info.deviceLayout texture.IsCubeOr2D 1 rowPixels channels volume.SizeL
+            pinned volume.Array (fun dst ->
+                let dstInfo = volume.Tensor4Info.AsBytes(elementSize)
+                downloadNative texture level 0 offset volume.Size 0 elementSize dst dstInfo
+            )
 
-                TextureCopyUtils.Copy(src, srcInfo, volume)
 
-            downloadGeneralPixelData texture level 0 offset volume.Size pixelFormat pixelType copy
+        let inline private copyUnsignedNormalizedDepth (matrix : Matrix<float32>) (shift : int) (maxValue : ^T)
+                                                       (channels : int) (elementSize : int) (alignedLineSize : nativeint) (_ : nativeint) (src : nativeint) =
+            pinned matrix.Array (fun dst ->
+                let src =
+                    let info = Tensor4Info.deviceLayout true elementSize alignedLineSize channels matrix.Size.XYI
+                    src |> NativeTensor4.ofNativeInt<uint8> info
+
+                let dst =
+                    let info = matrix.AsVolume().Info.ToXYWTensor4'().AsBytes<float32>()
+                    dst |> NativeTensor4.ofNativeInt<uint8> info
+
+                (src, dst) ||> NativeTensor4.iterPtr2 (fun _ src dst ->
+                    let src : nativeptr<'T> = NativePtr.cast src
+                    let dst : nativeptr<float32> = NativePtr.cast dst
+                    NativePtr.write dst (float32 ((NativePtr.read src) >>> shift) / float32 maxValue)
+                )
+            )
+
+        let private (|UnsignedNormalizedDepth|_|) = function
+            | TextureFormat.DepthComponent16 -> Some (0, 65535u, true)       // Divide by 2^16 - 1
+            | TextureFormat.DepthComponent24 -> Some (0, 4294967295u, false)
+            | TextureFormat.DepthComponent32 -> Some (0, 4294967295u, false) // Divide by 2^32 - 1
+            | TextureFormat.Depth24Stencil8  -> Some (8, 16777215u, false)   // Shift right by 8 and divide by 2^24 - 1
+            | _ -> None
 
         let downloadDepth (texture : Texture) (level : int) (slice : int) (offset : V2i) (matrix : Matrix<float32>) =
+            let size = V3i matrix.Size.XYI
+
             match texture.Format with
-            | TextureFormat.DepthComponent16
-            | TextureFormat.DepthComponent24
-            | TextureFormat.DepthComponent32
-            | TextureFormat.DepthComponent32f ->
-                let image =
-                    let img : PixImage<float32> = PixImage<float32>()
-                    img.Volume <- matrix.AsVolume()
-                    img.Format <- Col.Format.Depth
-                    img
-
-                downloadPixImage texture level slice offset image
-
-            | TextureFormat.Depth24Stencil8 ->
-                let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (src : nativeint) =
-                    let srcInfo =
-                        let rowPixels = alignedLineSize / nativeint elementSize
-                        VolumeInfo.deviceLayout true 1 rowPixels channels matrix.Size
-
-                    let vSrc = NativeVolume<uint32>(NativePtr.ofNativeInt src, srcInfo)
-
-                    NativeVolume.using (matrix.AsVolume()) (fun vDst ->
-                        (vSrc, vDst) ||> NativeVolume.copyWith (fun value ->
-                            float32 (value >>> 8) / 16777215.0f // Upper 24bit divided by 2^24 - 1
-                        )
-                    )
-
-                let pixelFormat = PixelFormat.DepthStencil
-                let pixelType = PixelType.UnsignedInt248
+            | UnsignedNormalizedDepth (shift, maxValue, is16bit) ->
+                let copy =
+                    if is16bit then
+                        copyUnsignedNormalizedDepth matrix shift (uint16 maxValue)
+                    else
+                        copyUnsignedNormalizedDepth matrix shift (uint32 maxValue)
 
                 let size = V3i(V2i matrix.Size, 1)
                 let offset = V3i(offset, slice)
-                downloadGeneralPixelData texture level slice offset size pixelFormat pixelType copy
+                downloadGeneralPixelData texture level slice offset size PixelFormat.DepthComponent PixelType.UnsignedInt copy
 
+            | TextureFormat.DepthComponent32f
             | TextureFormat.Depth32fStencil8 ->
-                let image =
-                    let img : PixImage<float32> = PixImage<float32>()
-                    img.Volume <- matrix.AsVolume()
-                    img.Format <- Col.Format.Depth
-                    img
-
-                let pf = PixelFormat.DepthStencil
-                let pt = PixelType.Float32UnsignedInt248Rev
-                downloadPixImageInternal texture pf pt None 0 level slice offset image
+                pinned matrix.Array (fun dst ->
+                    let dstInfo = matrix.AsVolume().Info.ToXYWTensor4'().AsBytes<float32>()
+                    downloadNative texture level slice offset.XYO size 0 sizeof<float32> dst dstInfo
+                )
 
             | fmt -> failwithf "[GL] %A is not a supported depth format" fmt
 
+
         let downloadStencil (texture : Texture) (level : int) (slice : int) (offset : V2i) (matrix : Matrix<int>) =
-            match texture.Format with
-            | TextureFormat.StencilIndex8 ->
-                let info = VolumeInfo(0L, V3l (matrix.Size, 1L), V3l (4L, 4L * matrix.SX, 1L))
-                let volume = Volume<uint8>(matrix.Array.UnsafeCoerce<uint8>(), info)
+            let size = V3i matrix.Size.XYI
 
-                let image =
-                    let img : PixImage<uint8> = PixImage<uint8>()
-                    img.Volume <- volume
-                    img.Format <- Col.Format.Stencil
-                    img
+            let startOffset =
+                match texture.Format with
+                | TextureFormat.Depth32fStencil8 -> 4
+                | _ -> 0
 
-                downloadPixImage texture level slice offset image
-                matrix.Array.UnsafeCoerce<int>() |> ignore
-
-            | TextureFormat.Depth24Stencil8
-            | TextureFormat.Depth32fStencil8 ->
-                let image =
-                    let img : PixImage<int> = PixImage<int>()
-                    img.Volume <- matrix.AsVolume()
-                    img.Format <- Col.Format.Stencil
-                    img
-
-                let pt, elementOffset =
-                    if texture.Format = TextureFormat.Depth24Stencil8 then PixelType.UnsignedInt248, 0
-                    else PixelType.Float32UnsignedInt248Rev, 4
-
-                let pf = PixelFormat.DepthStencil
-                let elementType = Some typeof<uint8>
-                downloadPixImageInternal texture pf pt elementType elementOffset level slice offset image
-
-            | fmt -> failwithf "[GL] %A is not a supported stencil format" fmt
-
+            pinned matrix.Array (fun dst ->
+                let dstInfo = matrix.AsVolume().Info.ToXYWTensor4'().AsBytes<int>()
+                downloadNative texture level slice offset.XYO size startOffset sizeof<uint8> dst dstInfo
+            )
 
 [<AutoOpen>]
 module ContextTextureDownloadExtensions =

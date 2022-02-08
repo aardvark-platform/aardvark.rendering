@@ -243,8 +243,6 @@ module TextureFormat =
             PixFormat(typeof<uint32>, Col.Format.NormalUV)  , (fun _ -> TextureFormat.Rg32ui)
             PixFormat(typeof<uint32>, Col.Format.RGB)       , (fun _ -> TextureFormat.Rgb32ui)
             PixFormat(typeof<uint32>, Col.Format.RGBA)      , (fun _ -> TextureFormat.Rgba32ui)
-
-            PixFormat(typeof<float32>, Col.Format.None), (fun _ -> TextureFormat.DepthComponent32)
         ]
 
     let private integerFormats =
@@ -606,22 +604,7 @@ module TextureFormatExtensions =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PixFormat =
-    let channels =
-        LookupTable.lookupTable [
-            Col.Format.Alpha, 1
-            Col.Format.BGR, 3
-            Col.Format.BGRA, 4
-            Col.Format.BGRP, 4
-            Col.Format.BW, 1
-            Col.Format.Gray, 1
-            Col.Format.GrayAlpha, 2
-            Col.Format.NormalUV, 2
-            Col.Format.RGB, 3
-            Col.Format.RGBA, 4
-            Col.Format.RGBP, 4
-        ]
-
-    let typeSize =
+    let private typeSize =
         LookupTable.lookupTable [
             typeof<int8>, 1
             typeof<uint8>, 1
@@ -637,5 +620,34 @@ module PixFormat =
 
         ]
 
+    /// Returns the size of each channel in bytes.
+    let channelSize (fmt : PixFormat) =
+        typeSize fmt.Type
+
+    /// Returns the total pixel size in bytes (i.e. channel size x channel count)
     let pixelSizeInBytes (fmt : PixFormat) =
-        typeSize fmt.Type * channels fmt.Format
+        typeSize fmt.Type * fmt.Format.ChannelCount()
+
+[<AutoOpen>]
+module PixFormatExtensions =
+
+    type PixFormat with
+        /// The size of each channel in bytes.
+        member x.ChannelSize = PixFormat.channelSize x
+
+        /// The total pixel size in bytes (i.e. channel size x channel count)
+        member x.PixelSize = PixFormat.pixelSizeInBytes x
+
+    type PixImage with
+        /// The size of each channel in bytes.
+        member x.ChannelSize = PixFormat.channelSize x.PixFormat
+
+        /// The total pixel size in bytes (i.e. channel size x channel count)
+        member x.PixelSize = PixFormat.pixelSizeInBytes x.PixFormat
+
+    type PixVolume with
+        /// The size of each channel in bytes.
+        member x.ChannelSize = PixFormat.channelSize x.PixFormat
+
+        /// The total pixel size in bytes (i.e. channel size x channel count)
+        member x.PixelSize = PixFormat.pixelSizeInBytes x.PixFormat

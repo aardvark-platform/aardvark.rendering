@@ -3,7 +3,6 @@
 open System
 open System.Runtime.InteropServices
 open Aardvark.Base
-open Aardvark.Base.NativeTensors
 open Aardvark.Rendering
 open Microsoft.FSharp.NativeInterop
 open System.Runtime.CompilerServices
@@ -54,95 +53,36 @@ module internal TextureCopyUtilities =
                 16, typeof<byte16>
             ]
 
-    [<AutoOpen>]
-    module private CopyDispatch =
+    module NativeTensor4 =
 
-        type private Dispatcher() =
+        let copyBytes<'T when 'T : unmanaged> (src : nativeint) (srcInfo : Tensor4Info) (dst : nativeint) (dstInfo : Tensor4Info) =
+            let src = src |> NativeTensor4.ofNativeInt<uint8> srcInfo
+            let dst = dst |> NativeTensor4.ofNativeInt<uint8> dstInfo
 
-            static member NativeToNative<'T when 'T : unmanaged>(src : nativeint, srcInfo : VolumeInfo, dst : nativeint, dstInfo : VolumeInfo) =
-                let vSrc = NativeVolume<byte>(NativePtr.ofNativeInt src, srcInfo)
-                let vDst = NativeVolume<byte>(NativePtr.ofNativeInt dst, dstInfo)
+            (src, dst) ||> NativeTensor4.iterPtr2 (fun _ s d ->
+                let s : nativeptr<'T> = NativePtr.cast s
+                let d : nativeptr<'T> = NativePtr.cast d
+                NativePtr.write d (NativePtr.read s)
+            )
 
-                let copy (s : nativeptr<byte>) (d : nativeptr<byte>) =
-                    let s : nativeptr<'T> = NativePtr.cast s
-                    let d : nativeptr<'T> = NativePtr.cast d
-                    NativePtr.write d (NativePtr.read s)
+        [<AutoOpen>]
+        module private CopyDispatch =
 
-                NativeVolume.iter2 vSrc vDst copy
+            type private Dispatcher() =
 
-            static member PixVolumeToNative<'T when 'T : unmanaged>(src : PixVolume, dst : nativeint, dstInfo : Tensor4Info) =
-                let x = unbox<PixVolume<'T>> src
-                let dst = NativeTensor4<'T>(NativePtr.ofNativeInt dst, dstInfo)
-                NativeTensor4.using x.Tensor4 (fun src ->
-                    src.CopyTo(dst)
-                )
+                static member CopyNativeToNative<'T when 'T : unmanaged>(src : nativeint, srcInfo : Tensor4Info, dst : nativeint, dstInfo : Tensor4Info) =
+                    copyBytes<'T> src srcInfo dst dstInfo
 
-            static member NativeToPixVolume<'T when 'T : unmanaged>(src : nativeint, srcInfo : Tensor4Info, dst : PixVolume) =
-                let x = unbox<PixVolume<'T>> dst
-                let src = NativeTensor4<'T>(NativePtr.ofNativeInt src, srcInfo)
-                NativeTensor4.using x.Tensor4 (fun dst ->
-                    src.CopyTo(dst)
-                )
+            module Method =
+                let private flags = BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public
+                let copyNativeToNative = typeof<Dispatcher>.GetMethod("CopyNativeToNative", flags)
 
-        module Method =
-            let private flags = BindingFlags.Static ||| BindingFlags.NonPublic ||| BindingFlags.Public
-            let copyNativeToNative = typeof<Dispatcher>.GetMethod("NativeToNative", flags)
-            let copyPixVolumeToNative = typeof<Dispatcher>.GetMethod("PixVolumeToNative", flags)
-            let copyNativeToPixVolume = typeof<Dispatcher>.GetMethod("NativeToPixVolume", flags)
-
-    [<Sealed; AbstractClass>]
-    type TextureCopyUtils() =
-
-        static member Copy(elementType : Type, src : nativeint, srcInfo : VolumeInfo, dst : nativeint, dstInfo : VolumeInfo) =
+        let copyBytesTyped (elementType : Type) (src : nativeint) (srcInfo : Tensor4Info) (dst : nativeint) (dstInfo : Tensor4Info) =
             let mi = Method.copyNativeToNative.MakeGenericMethod [| elementType |]
             mi.Invoke(null, [| src; srcInfo; dst; dstInfo |]) |> ignore
 
-        static member Copy(elementSize : int, src : nativeint, srcInfo : VolumeInfo, dst : nativeint, dstInfo : VolumeInfo) =
-            TextureCopyUtils.Copy(StructTypes.types.[elementSize], src, srcInfo, dst, dstInfo)
-
-        static member Copy(src : PixImage, dst : nativeint, dstInfo : VolumeInfo) =
-            let gc = GCHandle.Alloc(src.Array, GCHandleType.Pinned)
-            try
-                let pSrc = gc.AddrOfPinnedObject()
-                let imgInfo = src.VolumeInfo
-                let elementType = src.PixFormat.Type
-                let elementSize = elementType.GLSize |> int64
-                let srcInfo =
-                    VolumeInfo(
-                        imgInfo.Origin * elementSize,
-                        imgInfo.Size,
-                        imgInfo.Delta * elementSize
-                    )
-                TextureCopyUtils.Copy(elementType, pSrc, srcInfo, dst, dstInfo)
-            finally
-                gc.Free()
-
-        static member Copy(elementType : Type, src : nativeint, srcInfo : VolumeInfo, dst : PixImage) =
-            let gc = GCHandle.Alloc(dst.Array, GCHandleType.Pinned)
-            try
-                let pDst = gc.AddrOfPinnedObject()
-                let imgInfo = dst.VolumeInfo
-                let elementSize = dst.PixFormat.Type.GLSize |> int64
-                let dstInfo =
-                    VolumeInfo(
-                        imgInfo.Origin * elementSize,
-                        imgInfo.Size,
-                        imgInfo.Delta * elementSize
-                    )
-                TextureCopyUtils.Copy(elementType, src, srcInfo, pDst, dstInfo)
-            finally
-                gc.Free()
-
-        static member Copy(src : nativeint, srcInfo : VolumeInfo, dst : PixImage) =
-            TextureCopyUtils.Copy(dst.PixFormat.Type, src, srcInfo, dst)
-
-        static member Copy(src : PixVolume, dst : nativeint, dstInfo : Tensor4Info) =
-            let mi = Method.copyPixVolumeToNative.MakeGenericMethod [| src.PixFormat.Type |]
-            mi.Invoke(null, [| src; dst; dstInfo |]) |> ignore
-
-        static member Copy(src : nativeint, srcInfo : Tensor4Info, dst : PixVolume) =
-            let mi = Method.copyNativeToPixVolume.MakeGenericMethod [| dst.PixFormat.Type |]
-            mi.Invoke(null, [| src; srcInfo; dst |]) |> ignore
+        let copyBytesWithSize (elementSize : int) (src : nativeint) (srcInfo : Tensor4Info) (dst : nativeint) (dstInfo : Tensor4Info) =
+            copyBytesTyped StructTypes.types.[elementSize] src srcInfo dst dstInfo
 
 [<AutoOpen>]
 module internal ImageCopyImplementation =
