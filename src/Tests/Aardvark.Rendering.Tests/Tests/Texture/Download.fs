@@ -7,6 +7,7 @@ open Aardvark.Rendering.Tests
 open Aardvark.Application
 open Aardvark.SceneGraph
 open FSharp.Data.Adaptive
+open FSharp.Data.Adaptive.Operators
 open Expecto
 
 module TextureDownload =
@@ -136,6 +137,91 @@ module TextureDownload =
 
             finally
                 runtime.DeleteTexture(t)
+
+
+        let private texture2DCompressed (expectedFormat : TextureFormat) (path : string) (window : Box2i option) (runtime : IRuntime) =
+            let compressed = EmbeddedResource.getTexture TextureParams.mipmappedCompressed path
+
+            use signature =
+                runtime.CreateFramebufferSignature([
+                    DefaultSemantic.Colors, TextureFormat.Rgba8
+                ])
+
+            let texture =
+                runtime.PrepareTexture(compressed)
+
+            let region =
+                match window with
+                | Some r -> r
+                | None -> Box2i(V2i.Zero, texture.Size.XY)
+
+            try
+                Expect.equal texture.Dimension TextureDimension.Texture2D "unexpected dimension"
+                Expect.equal texture.Count 1 "unexpected count"
+                Expect.equal texture.Format expectedFormat "unexpected format"
+
+                use task =
+                    Sg.fullScreenQuad
+                    |> Sg.diffuseTexture' texture
+                    |> Sg.shader {
+                        do! DefaultSurfaces.diffuseTexture
+                    }
+                    |> Sg.compile runtime signature
+
+                let buffer = task |> RenderTask.renderToColor (~~texture.Size.XY)
+                buffer.Acquire()
+
+                try
+                    let reference = buffer.GetValue().Download(region = region).AsPixImage<byte>()
+                    let result = texture.Download(region = region).ToPixImage<byte>()
+
+                    Expect.equal result.Size result.Size "image size mismatch"
+                    PixImage.compareWithEpsilon 5uy V2i.Zero reference result
+
+                finally
+                    buffer.Release()
+
+            finally
+                runtime.DeleteTexture(texture)
+
+        let texture2DCompressedBC1 (runtime : IRuntime) =
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt1 "data/bc1.dds" None
+
+        let texture2DCompressedBC1Subwindow (runtime : IRuntime) =
+            let window = Box2i.FromMinAndSize(V2i(3, 7), V2i(67, 31))
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt1 "data/bc1.dds" (Some window)
+
+
+        let texture2DCompressedBC2 (runtime : IRuntime) =
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt3 "data/bc2.dds" None
+
+        let texture2DCompressedBC2Subwindow (runtime : IRuntime) =
+            let window = Box2i.FromMinAndSize(V2i(4, 16), V2i(64, 32))
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt3 "data/bc2.dds" (Some window)
+
+
+        let texture2DCompressedBC3 (runtime : IRuntime) =
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt5 "data/bc3.dds" None
+
+        let texture2DCompressedBC3Subwindow (runtime : IRuntime) =
+            let window = Box2i.FromMinAndSize(V2i(0, 0), V2i(3, 2))
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt5 "data/bc3.dds" (Some window)
+
+
+        let texture2DCompressedBC4u (runtime : IRuntime) =
+            runtime |> texture2DCompressed TextureFormat.CompressedRedRgtc1 "data/bc4.dds" None
+
+        let texture2DCompressedBC4uSubwindow (runtime : IRuntime) =
+            let window = Box2i(V2i(40, 87), V2i(253, 128))
+            runtime |> texture2DCompressed TextureFormat.CompressedRedRgtc1 "data/bc4.dds" (Some window)
+
+
+        let texture2DCompressedBC5u (runtime : IRuntime) =
+            runtime |> texture2DCompressed TextureFormat.CompressedRgRgtc2 "data/bc5.dds" None
+
+        let texture2DCompressedBC5uSubwindow (runtime : IRuntime) =
+            let window = Box2i(V2i(40, 87), V2i(251, 126))
+            runtime |> texture2DCompressed TextureFormat.CompressedRgRgtc2 "data/bc5.dds" (Some window)
 
 
         let textureCubeMipmapped (runtime : IRuntime) =
@@ -487,6 +573,18 @@ module TextureDownload =
             "2D mulitsampled",        Cases.texture2DMultisampled
             "2D level subwindow",     Cases.texture2DSubwindow
             "2D array mipmapped",     Cases.texture2DArrayMipmapped
+
+            "2D compressed BC1",            Cases.texture2DCompressedBC1
+            "2D compressed BC1 subwindow",  Cases.texture2DCompressedBC1Subwindow
+            "2D compressed BC2",            Cases.texture2DCompressedBC2
+            "2D compressed BC2 subwindow",  Cases.texture2DCompressedBC2Subwindow
+            "2D compressed BC3",            Cases.texture2DCompressedBC3
+            "2D compressed BC3 subwindow",  Cases.texture2DCompressedBC3Subwindow
+            "2D compressed BC4u",           Cases.texture2DCompressedBC4u
+            "2D compressed BC4u subwindow", Cases.texture2DCompressedBC4uSubwindow
+            "2D compressed BC5u",           Cases.texture2DCompressedBC5u
+            "2D compressed BC5u subwindow", Cases.texture2DCompressedBC5uSubwindow
+
             "Cube mipmapped",         Cases.textureCubeMipmapped
             "Cube array mipmapped",   Cases.textureCubeArrayMipmapped
             "Cube subwindow",         Cases.textureCubeSubwindow

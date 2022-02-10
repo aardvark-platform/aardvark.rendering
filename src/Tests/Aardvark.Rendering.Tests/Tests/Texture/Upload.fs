@@ -279,6 +279,15 @@ module TextureUpload =
                 Expect.equal texture.MipMapLevels (Fun.MipmapLevels(reference.Size)) "unexpected mipmap count"
 
                 match expectedFormat with
+                | TextureFormat.CompressedRgbaS3tcDxt1
+                | TextureFormat.CompressedSrgbAlphaS3tcDxt1 ->
+                    reference.GetMatrix<C4b>().Apply(fun color ->
+                        if color.A < 127uy then
+                            C4b.Zero
+                        else
+                            C4b(color.RGB, 255uy)
+                    ) |> ignore
+
                 | TextureFormat.CompressedRedRgtc1
                 | TextureFormat.CompressedSignedRedRgtc1 ->
                     reference.GetChannel(Col.Channel.Green).Set(0uy) |> ignore
@@ -304,9 +313,10 @@ module TextureUpload =
 
                 try
                     let result = buffer.GetValue().Download().AsPixImage<byte>()
-
                     Expect.equal result.Size reference.Size "image size mismatch"
-                    PixImage.compareWithEpsilon 30uy V2i.Zero reference result
+
+                    let psnr = PixImage.peakSignalToNoiseRatio V2i.Zero reference result
+                    Expect.isGreaterThan psnr 30.0 "bad peak signal-to-noise ratio"
 
                 finally
                     buffer.Release()
@@ -315,25 +325,25 @@ module TextureUpload =
                 runtime.DeleteTexture(texture)
 
         let texture2DCompressedDDSBC1 (runtime : IRuntime) =
-            runtime |> texture2DCompressed TextureFormat.CompressedRgbS3tcDxt1 "data/rgb.png" "data/bc1.dds"
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt1 "data/rgba.png" "data/bc1.dds"
 
         let texture2DCompressedDDSBC2 (runtime : IRuntime) =
-            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt3 "data/rgb.png" "data/bc2.dds"
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt3 "data/rgba.png" "data/bc2.dds"
 
         let texture2DCompressedDDSBC3 (runtime : IRuntime) =
-            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt5 "data/rgb.png" "data/bc3.dds"
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt5 "data/rgba.png" "data/bc3.dds"
 
-        let texture2DCompressedDDSBC4 (runtime : IRuntime) =
+        let texture2DCompressedDDSBC4u (runtime : IRuntime) =
             runtime |> texture2DCompressed TextureFormat.CompressedRedRgtc1 "data/rgb.png" "data/bc4.dds"
 
-        let texture2DCompressedDDSBC5 (runtime : IRuntime) =
+        let texture2DCompressedDDSBC5u (runtime : IRuntime) =
             runtime |> texture2DCompressed TextureFormat.CompressedRgRgtc2 "data/rgb.png" "data/bc5.dds"
 
         let texture2DCompressedDDSBC6h (runtime : IRuntime) =
             runtime |> texture2DCompressed TextureFormat.CompressedRgbBptcUnsignedFloat "data/rgb.png" "data/bc6h.dds"
 
         let texture2DCompressedDDSBC7 (runtime : IRuntime) =
-            runtime |> texture2DCompressed TextureFormat.CompressedRgbaBptcUnorm "data/rgb.png" "data/bc7.dds"
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaBptcUnorm "data/rgba.png" "data/bc7.dds"
 
         let private uploadAndDownloadTextureNative (runtime : IRuntime) (size : V2i)
                                                    (levels : int) (count : int) (wantMipmap : bool) =
@@ -615,8 +625,8 @@ module TextureUpload =
             "2D compressed DDS (BC1)",      Cases.texture2DCompressedDDSBC1
             "2D compressed DDS (BC2)",      Cases.texture2DCompressedDDSBC2
             "2D compressed DDS (BC3)",      Cases.texture2DCompressedDDSBC3
-            "2D compressed DDS (BC4)",      Cases.texture2DCompressedDDSBC4
-            "2D compressed DDS (BC5)",      Cases.texture2DCompressedDDSBC5
+            "2D compressed DDS (BC4u)",     Cases.texture2DCompressedDDSBC4u
+            "2D compressed DDS (BC5u)",     Cases.texture2DCompressedDDSBC5u
 
             // Uploading BC6/7 is possible on both backends, but there is no
             // easy way to flip these, and unfortunately we want to flip all our textures on upload -_-

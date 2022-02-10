@@ -96,6 +96,13 @@ module internal TextureUtilitiesAndExtensions =
 
         module Tensor4Info =
 
+            let mirrorY (info : Tensor4Info) =
+                Tensor4Info(
+                    info.Index(0L, info.SY - 1L, 0L, 0L),
+                    info.Size,
+                    V4l(info.DX, -info.DY, info.DZ, info.DW)
+                )
+
             let asBytes (elementSize : int) (info : Tensor4Info) =
                 Tensor4Info(
                     info.Origin * int64 elementSize,
@@ -121,6 +128,7 @@ module internal TextureUtilitiesAndExtensions =
                 deviceLayoutWithOffset flipY 0 elementSize stride channels size
 
         type Tensor4Info with
+            member x.MirrorY() = x |> Tensor4Info.mirrorY
             member x.AsBytes(elementSize) = x |> Tensor4Info.asBytes elementSize
             member x.AsBytes<'T>() = x.AsBytes(sizeof<'T>)
 

@@ -278,14 +278,14 @@ module TextureFormat =
 
     let private compressedFormats =
         HashSet.ofList [
-            TextureFormat.CompressedSrgbS3tcDxt1
-            TextureFormat.CompressedSrgbAlphaS3tcDxt1
-            TextureFormat.CompressedSrgbAlphaS3tcDxt3
-            TextureFormat.CompressedSrgbAlphaS3tcDxt5
             TextureFormat.CompressedRgbS3tcDxt1
+            TextureFormat.CompressedSrgbS3tcDxt1
             TextureFormat.CompressedRgbaS3tcDxt1
+            TextureFormat.CompressedSrgbAlphaS3tcDxt1
             TextureFormat.CompressedRgbaS3tcDxt3
+            TextureFormat.CompressedSrgbAlphaS3tcDxt3
             TextureFormat.CompressedRgbaS3tcDxt5
+            TextureFormat.CompressedSrgbAlphaS3tcDxt5
             TextureFormat.CompressedRedRgtc1
             TextureFormat.CompressedSignedRedRgtc1
             TextureFormat.CompressedRgRgtc2
@@ -376,19 +376,20 @@ module TextureFormat =
             TextureFormat.Rgba32ui, PixFormat(typeof<uint32>, Col.Format.RGBA)
 
             TextureFormat.CompressedRgbS3tcDxt1, PixFormat.ByteRGB
-            TextureFormat.CompressedRgbaS3tcDxt1, PixFormat.ByteRGBA
-            TextureFormat.CompressedRgbaS3tcDxt3, PixFormat.ByteRGBA
-            TextureFormat.CompressedRgbaS3tcDxt5, PixFormat.ByteRGBA
-
             TextureFormat.CompressedSrgbS3tcDxt1, PixFormat.ByteRGB
+            TextureFormat.CompressedRgbaS3tcDxt1, PixFormat.ByteRGBA
             TextureFormat.CompressedSrgbAlphaS3tcDxt1, PixFormat.ByteRGBA
+
+            TextureFormat.CompressedRgbaS3tcDxt3, PixFormat.ByteRGBA
             TextureFormat.CompressedSrgbAlphaS3tcDxt3, PixFormat.ByteRGBA
+
+            TextureFormat.CompressedRgbaS3tcDxt5, PixFormat.ByteRGBA
             TextureFormat.CompressedSrgbAlphaS3tcDxt5, PixFormat.ByteRGBA
 
             TextureFormat.CompressedRedRgtc1, PixFormat.ByteGray
-            TextureFormat.CompressedSignedRedRgtc1, PixFormat.ByteGray
-            TextureFormat.CompressedRgRgtc2, PixFormat(typeof<uint8>, Col.Format.NormalUV)
-            TextureFormat.CompressedSignedRgRgtc2, PixFormat(typeof<uint8>, Col.Format.NormalUV)
+            TextureFormat.CompressedSignedRedRgtc1, PixFormat.SByteGray
+            TextureFormat.CompressedRgRgtc2, PixFormat.ByteRGB
+            TextureFormat.CompressedSignedRgRgtc2, PixFormat.SByteRGB
             TextureFormat.CompressedRgbaBptcUnorm, PixFormat.ByteRGBA
             TextureFormat.CompressedSrgbAlphaBptcUnorm, PixFormat.ByteRGBA
             TextureFormat.CompressedRgbBptcSignedFloat, PixFormat.FloatRGB
@@ -470,12 +471,12 @@ module TextureFormat =
             TextureFormat.Depth32fStencil8,               Col.Format.Gray
             TextureFormat.StencilIndex8,                  Col.Format.Gray
             TextureFormat.CompressedRgbS3tcDxt1,          Col.Format.RGB
-            TextureFormat.CompressedRgbaS3tcDxt1,         Col.Format.RGBA
-            TextureFormat.CompressedRgbaS3tcDxt3,         Col.Format.RGBA
-            TextureFormat.CompressedRgbaS3tcDxt5,         Col.Format.RGBA
             TextureFormat.CompressedSrgbS3tcDxt1,         Col.Format.RGB
+            TextureFormat.CompressedRgbaS3tcDxt1,         Col.Format.RGBA
             TextureFormat.CompressedSrgbAlphaS3tcDxt1,    Col.Format.RGBA
+            TextureFormat.CompressedRgbaS3tcDxt3,         Col.Format.RGBA
             TextureFormat.CompressedSrgbAlphaS3tcDxt3,    Col.Format.RGBA
+            TextureFormat.CompressedRgbaS3tcDxt5,         Col.Format.RGBA
             TextureFormat.CompressedSrgbAlphaS3tcDxt5,    Col.Format.RGBA
             TextureFormat.CompressedRedRgtc1,             Col.Format.Gray
             TextureFormat.CompressedSignedRedRgtc1,       Col.Format.Gray
@@ -562,12 +563,12 @@ module TextureFormat =
             TextureFormat.Depth32fStencil8, 40
             TextureFormat.StencilIndex8, 8
             TextureFormat.CompressedRgbS3tcDxt1, -1
-            TextureFormat.CompressedRgbaS3tcDxt1, -1
-            TextureFormat.CompressedRgbaS3tcDxt3, -1
-            TextureFormat.CompressedRgbaS3tcDxt5, -1
             TextureFormat.CompressedSrgbS3tcDxt1, -1
+            TextureFormat.CompressedRgbaS3tcDxt1, -1
             TextureFormat.CompressedSrgbAlphaS3tcDxt1, -1
+            TextureFormat.CompressedRgbaS3tcDxt3, -1
             TextureFormat.CompressedSrgbAlphaS3tcDxt3, -1
+            TextureFormat.CompressedRgbaS3tcDxt5, -1
             TextureFormat.CompressedSrgbAlphaS3tcDxt5, -1
             TextureFormat.CompressedRedRgtc1, -1
             TextureFormat.CompressedSignedRedRgtc1, -1

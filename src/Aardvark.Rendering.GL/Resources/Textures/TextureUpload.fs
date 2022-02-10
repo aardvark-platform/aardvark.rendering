@@ -95,7 +95,7 @@ module internal TextureUploadImplementation =
                 if texture.Dimension = TextureDimension.Texture3D then flipped
                 else V3i(flipped.XY, slice)
 
-            let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (dst : nativeint) =
+            let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (dst : nativeint) =
                 let srcInfo = src.Info.AsBytes<'T>()
                 let dstInfo = Tensor4Info.deviceLayout texture.IsCubeOr2D elementSize alignedLineSize channels (V3l size)
                 NativeTensor4.copyBytes<'T> src.Address srcInfo dst dstInfo
@@ -151,7 +151,7 @@ module internal TextureUploadImplementation =
                                 Size   = subdata.Size
                                 Type   = pixelType
                                 Format = pixelFormat
-                                Copy   = fun _ _ _ _ -> copy
+                                Copy   = fun _ _ _ -> copy
                             }
 
                     let generateMipmap = generateMipmap && slice = data.Count - 1 && level = levelCount - 1

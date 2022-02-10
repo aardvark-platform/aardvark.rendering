@@ -71,7 +71,7 @@ module internal PixelTransfer =
             Size   : V3i
             Type   : PixelType
             Format : PixelFormat
-            Copy   : int -> int -> nativeint -> nativeint -> nativeint -> unit
+            Copy   : int -> int -> nativeint -> nativeint -> unit
         }
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -80,7 +80,7 @@ module internal PixelTransfer =
             GeneralPixelDataInfo.create alignment data.Size data.Format data.Type
 
         let copy (ptr : nativeint) (info : GeneralPixelDataInfo) (data : GeneralPixelData) =
-            data.Copy info.Channels info.ElementSize info.AlignedLineSize info.SizeInBytes ptr
+            data.Copy info.Channels info.ElementSize info.AlignedLineSize ptr
 
     [<RequireQualifiedAccess>]
     type PixelData =

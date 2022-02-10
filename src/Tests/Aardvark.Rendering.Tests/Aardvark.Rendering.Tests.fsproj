@@ -26,6 +26,7 @@
     <EmbeddedResource Include="data\bc6h.dds" />
     <EmbeddedResource Include="data\bc7.dds" />
     <EmbeddedResource Include="data\rgb.png" />
+    <EmbeddedResource Include="data\rgba.png" />
     <Compile Include="Scratch\RenderingTests.fs" />
     <Compile Include="Scratch\PerformanceTest.fs" />
     <Compile Include="Scratch\RadixSort.fs" />

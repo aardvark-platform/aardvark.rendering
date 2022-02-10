@@ -3,9 +3,11 @@
 open System
 open System.IO
 open System.Runtime.InteropServices
+open FSharp.NativeInterop
 open Aardvark.Base
 
 #nowarn "9"
+#nowarn "51"
 
 module DdsTexture =
 
@@ -32,11 +34,22 @@ module DdsTexture =
             /// Used in some older DDS files for single channel color uncompressed data
             | Luminance   = 0x20000u
 
+        [<Struct; StructLayout(LayoutKind.Sequential, Size = 4)>]
         type FourCC =
-                | DXT1 = 827611204u
-                | DXT3 = 861165636u
-                | DXT5 = 894720068u
-                | DX10 = 808540228u
+            { C0 : uint8
+              C1 : uint8
+              C2 : uint8
+              C3 : uint8 }
+
+            member x.Item(index : int) =
+                let ptr = &&x.C0
+                char (NativePtr.get ptr index)
+
+            override x.ToString() =
+                string x.[0] +
+                string x.[1] +
+                string x.[2] +
+                string x.[3]
 
         [<Struct; StructLayout(LayoutKind.Sequential, Size = 32)>]
         type PixelFormat =
@@ -51,15 +64,11 @@ module DdsTexture =
                 ABitMask    : uint32
             }
 
-            member x.HasAlpha =
-                x.Flags.HasFlag(PixelFormatFlags.Alpha) ||
-                x.Flags.HasFlag(PixelFormatFlags.AlphaPixels)
-
             member x.IsCompressed =
                 x.Flags.HasFlag(PixelFormatFlags.FourCC)
 
             member x.HasExtendedHeader =
-                x.FourCC.HasFlag(FourCC.DX10)
+                string x.FourCC = "DX10"
 
         /// Flags to indicate which members contain valid data
         [<Flags>]
@@ -218,15 +227,9 @@ module DdsTexture =
 
         module TextureFormat =
 
-            let ofDxgiFormat (withAlpha : bool) = function
-                | DxgiFormat.BC1 | DxgiFormat.BC1Unorm ->
-                    if withAlpha then TextureFormat.CompressedRgbaS3tcDxt1
-                    else TextureFormat.CompressedRgbS3tcDxt1
-
-                | DxgiFormat.BC1UnormSrgb ->
-                    if withAlpha then TextureFormat.CompressedSrgbAlphaS3tcDxt1
-                    else TextureFormat.CompressedSrgbS3tcDxt1
-
+            let ofDxgiFormat = function
+                | DxgiFormat.BC1 | DxgiFormat.BC1Unorm  -> TextureFormat.CompressedRgbaS3tcDxt1
+                | DxgiFormat.BC1UnormSrgb               -> TextureFormat.CompressedSrgbAlphaS3tcDxt1
                 | DxgiFormat.BC2 | DxgiFormat.BC2Unorm  -> TextureFormat.CompressedRgbaS3tcDxt3
                 | DxgiFormat.BC2UnormSrgb               -> TextureFormat.CompressedSrgbAlphaS3tcDxt3
                 | DxgiFormat.BC3 | DxgiFormat.BC3Unorm  -> TextureFormat.CompressedRgbaS3tcDxt5
@@ -242,15 +245,20 @@ module DdsTexture =
                 | fmt ->
                     failwithf "Unknown compressed DXGI format: %A" fmt
 
-            let ofFourCC (withAlpha : bool) = function
-                | FourCC.DXT1 -> if withAlpha then TextureFormat.CompressedRgbaS3tcDxt1 else TextureFormat.CompressedRgbS3tcDxt1
-                | FourCC.DXT3 -> TextureFormat.CompressedRgbaS3tcDxt3
-                | FourCC.DXT5 -> TextureFormat.CompressedRgbaS3tcDxt5
-                | fcc ->
-                    if Enum.IsDefined(typeof<DxgiFormat>, uint32 fcc) then
-                        fcc |> unbox<DxgiFormat> |> ofDxgiFormat withAlpha
+            let ofFourCC (cc : FourCC) =
+                match string cc with
+                | "DXT1" -> TextureFormat.CompressedRgbaS3tcDxt1 // Always use the RGBA format, should not make any difference
+                | "DXT3" -> TextureFormat.CompressedRgbaS3tcDxt3
+                | "DXT5" -> TextureFormat.CompressedRgbaS3tcDxt5
+                | "BC4U" -> TextureFormat.CompressedRedRgtc1
+                | "BC4S" -> TextureFormat.CompressedSignedRedRgtc1
+                | "BC5U" -> TextureFormat.CompressedRgRgtc2
+                | "BC5S" -> TextureFormat.CompressedSignedRgRgtc2
+                | scc ->
+                    if Enum.IsDefined(typeof<DxgiFormat>, cc) then
+                        cc |> unbox<DxgiFormat> |> ofDxgiFormat
                     else
-                        failwithf "Unexpected four character code %A" fcc
+                        failwithf "Unexpected four character code \"%A\"" scc
 
     [<AutoOpen>]
     module BinaryStreamReading =
@@ -311,8 +319,8 @@ module DdsTexture =
 
         let format =
             match header10 with
-            | Some h -> h.Format |> TextureFormat.ofDxgiFormat header.PixelFormat.HasAlpha
-            | _ -> header.PixelFormat.FourCC |> TextureFormat.ofFourCC header.PixelFormat.HasAlpha
+            | Some h -> h.Format |> TextureFormat.ofDxgiFormat
+            | _ -> header.PixelFormat.FourCC |> TextureFormat.ofFourCC
 
         let levels =
             if header.Flags.HasFlag(Flags.MipMapCount) || header.Caps.HasFlag(Caps.MipMap) then int header.MipMapCount
@@ -326,7 +334,7 @@ module DdsTexture =
             | TextureDimension.TextureCube -> count * 6
             | _ -> count
 
-        let mutable totalSize = 0
+        let mutable totalSize = 0n
 
         let metaData =
             let bytesPerBlock =
@@ -336,7 +344,7 @@ module DdsTexture =
                 Array.init levels (fun level ->
                     let size = Fun.MipmapLevelSize(size, level)
                     let blocks = max 1 ((size + 3) / 4)
-                    let sizeInBytes = blocks.X * blocks.Y * blocks.Z * bytesPerBlock
+                    let sizeInBytes = nativeint blocks.X * nativeint blocks.Y * nativeint blocks.Z * bytesPerBlock
                     let offset = totalSize
                     totalSize <- totalSize + sizeInBytes
 
@@ -344,7 +352,7 @@ module DdsTexture =
                 )
             )
 
-        let data = stream |> readRaw totalSize "texture data"
+        let data = stream |> readRaw (int totalSize) "texture data"
 
         let layers =
             Array.init slices (fun layer ->
@@ -371,5 +379,6 @@ module DdsTexture =
         try
             Some <| loadCompressedFromStream stream
         with
-        | _ ->
+        | exn ->
+            Report.Line(3, "Failed to load stream as DDS file: {0}", exn.Message)
             None

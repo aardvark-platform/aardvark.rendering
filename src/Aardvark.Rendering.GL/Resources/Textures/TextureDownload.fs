@@ -88,7 +88,7 @@ module internal TextureDownloadImplementation =
 
         let private downloadGeneralPixelData (texture : Texture) (level : int) (slice : int) (offset : V3i) (size : V3i)
                                              (pixelFormat : PixelFormat) (pixelType : PixelType)
-                                             (copy : int -> int -> nativeint -> nativeint -> nativeint -> unit) =
+                                             (copy : int -> int -> nativeint -> nativeint -> unit) =
             let offset =
                 let flipped = texture.WindowOffset(level, offset, size)
                 if texture.Dimension = TextureDimension.Texture3D then flipped
@@ -104,23 +104,57 @@ module internal TextureDownloadImplementation =
 
             downloadPixelData texture level offset pixelData
 
+
+        let private downloadCompressedPixelData (texture : Texture) (level : int) (slice : int) (offset : V3i) (size : V3i)
+                                                (mode : CompressionMode) (dst : nativeint) (dstInfo : Tensor4Info) =
+            let offset =
+                let flipped = texture.WindowOffset(level, offset, size)
+                flipped.XY
+
+            let blockSize = CompressionMode.blockSize mode
+
+            let alignedOffset = (offset / blockSize) * blockSize
+
+            let alignedSize =
+                let size = offset - alignedOffset + size.XY
+                let blocks = mode |> CompressionMode.numberOfBlocks size.XYI
+                min (texture.Size - alignedOffset.XYO) (blocks * blockSize)
+
+            let sizeInBytes = mode |> CompressionMode.sizeInBytes alignedSize
+
+            let copy (src : nativeint) =
+                let dstInfo = dstInfo.MirrorY().SubXYWVolume(0)
+                let offset = offset.XY - alignedOffset
+                BlockCompression.decode mode offset size.XY src dst dstInfo
+
+            let pixelData =
+                PixelData.Compressed {
+                    Size = alignedSize
+                    SizeInBytes = sizeInBytes
+                    Copy = copy
+                }
+
+            downloadPixelData texture level (V3i(alignedOffset, slice)) pixelData
+
+
         let private downloadNative (texture : Texture) (level : int) (slice : int) (offset : V3i) (size : V3i)
                                    (startOffset : int) (maxElementSize : int) (dst : nativeint) (dstInfo : Tensor4Info) =
-            if texture.Format.IsCompressed then
-                failwith "Not implemented"
-
-            else
+            match texture.Format.CompressionMode with
+            | CompressionMode.None ->
                 let pixelFormat, pixelType =
                     TextureFormat.toFormatAndType texture.Format
 
                 let bufferElementSize =
                     min maxElementSize pixelType.Size
 
-                let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (sizeInBytes : nativeint) (src : nativeint) =
+                let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (src : nativeint) =
                     let srcInfo = Tensor4Info.deviceLayoutWithOffset texture.IsCubeOr2D startOffset elementSize alignedLineSize channels (V3l size)
                     NativeTensor4.copyBytesWithSize bufferElementSize src srcInfo dst dstInfo
 
                 downloadGeneralPixelData texture level slice offset size pixelFormat pixelType copy
+
+            | mode ->
+                downloadCompressedPixelData texture level slice offset size mode dst dstInfo
 
 
         let downloadNativeTensor4<'T when 'T : unmanaged> (texture : Texture) (level : int) (slice : int)
@@ -150,7 +184,7 @@ module internal TextureDownloadImplementation =
 
 
         let inline private copyUnsignedNormalizedDepth (matrix : Matrix<float32>) (shift : int) (maxValue : ^T)
-                                                       (channels : int) (elementSize : int) (alignedLineSize : nativeint) (_ : nativeint) (src : nativeint) =
+                                                       (channels : int) (elementSize : int) (alignedLineSize : nativeint) (src : nativeint) =
             pinned matrix.Array (fun dst ->
                 let src =
                     let info = Tensor4Info.deviceLayout true elementSize alignedLineSize channels matrix.Size.XYI
