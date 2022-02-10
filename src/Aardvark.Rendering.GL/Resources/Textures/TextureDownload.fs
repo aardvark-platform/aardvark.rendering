@@ -123,7 +123,7 @@ module internal TextureDownloadImplementation =
             let sizeInBytes = mode |> CompressionMode.sizeInBytes alignedSize
 
             let copy (src : nativeint) =
-                let dstInfo = dstInfo.MirrorY().SubXYWVolume(0)
+                let dstInfo = dstInfo.MirrorY().SubXYWVolume(0L)
                 let offset = offset.XY - alignedOffset
                 BlockCompression.decode mode offset size.XY src dst dstInfo
 
