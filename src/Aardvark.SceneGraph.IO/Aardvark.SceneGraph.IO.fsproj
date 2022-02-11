@@ -15,6 +15,9 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|AnyCPU'">
     <OutputPath>..\..\bin\Release</OutputPath>
   </PropertyGroup>
+  <PropertyGroup Condition="($(DesignTimeBuild) == true)">
+    <DisableImplicitFrameworkReferences>true</DisableImplicitFrameworkReferences>
+  </PropertyGroup>
   <ItemGroup>
     <Compile Include="IO.fs" />
     <Compile Include="AssimpExporter.fs" />
