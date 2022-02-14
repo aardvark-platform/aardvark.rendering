@@ -1190,9 +1190,9 @@ module VkFormat =
             VkFormat.E5b9g9r9UfloatPack32, typeof<uint32>
             VkFormat.D16Unorm, typeof<uint16>
             VkFormat.X8D24UnormPack32, typeof<uint32>
-            VkFormat.D32Sfloat, null
+            VkFormat.D32Sfloat, typeof<float32>
             VkFormat.S8Uint, typeof<uint8>
-            VkFormat.D16UnormS8Uint, null
+            VkFormat.D16UnormS8Uint, typeof<uint32>
             VkFormat.D24UnormS8Uint, typeof<uint32>
             VkFormat.D32SfloatS8Uint, null
             VkFormat.Bc1RgbUnormBlock, null

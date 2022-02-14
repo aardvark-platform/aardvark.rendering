@@ -512,8 +512,8 @@ module ``Compute Commands`` =
                     let dstStage = VkImageLayout.toDstStageFlags QueueFlags.Compute target
 
                     let range =
-                        if VkFormat.hasDepth img.Format then img.[ImageAspect.Depth]
-                        else img.[ImageAspect.Color]
+                        if VkFormat.hasDepth img.Format then img.[TextureAspect.Depth]
+                        else img.[TextureAspect.Color]
 
                     let barrier =
                         VkImageMemoryBarrier(
@@ -807,7 +807,7 @@ module ``Compute Commands`` =
                     let tex = unbox<Image> range.Texture
                     let srcLayout = VkImageLayout.ofTextureLayout srcLayout
                     let dstLayout = VkImageLayout.ofTextureLayout dstLayout
-                    let res = tex.[ImageAspect.ofTextureAspect range.Aspect, range.Levels.Min .. range.Levels.Max, range.Slices.Min .. range.Slices.Max]
+                    let res = tex.[range.Aspect, range.Levels.Min .. range.Levels.Max, range.Slices.Min .. range.Slices.Max]
                     Command.TransformLayout(res, srcLayout, dstLayout)
 
 
@@ -816,7 +816,7 @@ module ``Compute Commands`` =
 
                 | ComputeCommand.SyncImageCmd(i, src, dst) ->
                     let i = unbox<Image> i
-                    Command.ImageBarrier(i.[ImageAspect.Color], VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst)
+                    Command.ImageBarrier(i.[TextureAspect.Color], VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst)
 
                 | ComputeCommand.SetBufferCmd(b, pattern) ->
                     Command.SetBuffer(unbox b.Buffer, int64 b.Offset, int64 b.Size, pattern)
@@ -903,7 +903,7 @@ module ``Compute Commands`` =
                         let tex = unbox<Image> range.Texture
                         let srcLayout = VkImageLayout.ofTextureLayout srcLayout
                         let dstLayout = VkImageLayout.ofTextureLayout dstLayout
-                        let res = tex.[ImageAspect.ofTextureAspect range.Aspect, range.Levels.Min .. range.Levels.Max, range.Slices.Min .. range.Slices.Max]
+                        let res = tex.[range.Aspect, range.Levels.Min .. range.Levels.Max, range.Slices.Min .. range.Slices.Max]
                         stream.TransformLayout(res, srcLayout, dstLayout) |> ignore
 
                     | ComputeCommand.SyncBufferCmd(b, src, dst) ->
@@ -911,7 +911,7 @@ module ``Compute Commands`` =
                         
                     | ComputeCommand.SyncImageCmd(i, src, dst) ->
                         let i = unbox<Image> i
-                        stream.ImageBarrier(i.[ImageAspect.Color], VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst) |> ignore
+                        stream.ImageBarrier(i.[TextureAspect.Color], VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst) |> ignore
 
                     | ComputeCommand.SetBufferCmd(b, value) ->
                         stream.SetBuffer(unbox b.Buffer, int64 b.Offset, int64 b.Size, value) |> ignore

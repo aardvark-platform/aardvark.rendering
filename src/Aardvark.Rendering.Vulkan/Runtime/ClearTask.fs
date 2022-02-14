@@ -14,8 +14,8 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
 
     let renderPassDepthAspect =
         match renderPass.DepthStencilAttachment with
-        | Some format -> ImageAspect.ofTextureAspects format.Aspects
-        | _ -> ImageAspect.None
+        | Some format -> format.Aspect
+        | _ -> TextureAspect.None
 
     member x.Run(caller : AdaptiveToken, renderToken : RenderToken, outputs : OutputDescription) =
         x.EvaluateAlways caller (fun caller ->
@@ -37,15 +37,15 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
 
                 for KeyValue(_, att) in renderPass.ColorAttachments do
                     match values.Colors.[att.Name] with
-                    | Some color -> do! Command.ClearColor(fbo.Attachments.[att.Name], ImageAspect.Color, color)
+                    | Some color -> do! Command.ClearColor(fbo.Attachments.[att.Name], TextureAspect.Color, color)
                     | _ -> ()
 
-                if renderPassDepthAspect <> ImageAspect.None then
+                if renderPassDepthAspect <> TextureAspect.None then
                     let view = fbo.Attachments.[DefaultSemantic.DepthStencil]
                     match depth, stencil with
                     | Some d, Some s -> do! Command.ClearDepthStencil(view, renderPassDepthAspect, d, s)
-                    | Some d, None   -> do! Command.ClearDepthStencil(view, ImageAspect.Depth, d, 0)
-                    | None, Some s   -> do! Command.ClearDepthStencil(view, ImageAspect.Stencil, 0.0, s)
+                    | Some d, None   -> do! Command.ClearDepthStencil(view, TextureAspect.Depth, d, 0)
+                    | None, Some s   -> do! Command.ClearDepthStencil(view, TextureAspect.Stencil, 0.0, s)
                     | None, None     -> ()
 
                 for q in vulkanQueries do

@@ -212,13 +212,10 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     member x.GenerateMipMaps(t : IBackendTexture) =
         ResourceValidation.Textures.validateFormatForMipmapGeneration t
         let img = unbox<Image> t
-
-        let range =
-            if VkFormat.hasDepth img.Format then img.[ImageAspect.Depth]
-             else img.[ImageAspect.Color]
+        let aspect = (img :> IBackendTexture).Format.Aspect
 
         device.GraphicsFamily.run {
-            do! Command.GenerateMipMaps(range)
+            do! Command.GenerateMipMaps(img.[aspect])
         }
 
     member x.ResolveMultisamples(source : IFramebufferOutput, target : IBackendTexture, trafo : ImageTrafo) =
@@ -322,16 +319,16 @@ type Runtime(device : Device, debug : DebugLevel) as this =
             if dstLayout <> VkImageLayout.TransferDstOptimal then do! Command.TransformLayout(dst, VkImageLayout.TransferDstOptimal)
             if src.Samples = dst.Samples then
                 do! Command.Copy(
-                        src.[ImageAspect.Color, srcBaseLevel .. srcBaseLevel + levels - 1, srcBaseSlice .. srcBaseSlice + slices - 1],
-                        dst.[ImageAspect.Color, dstBaseLevel .. dstBaseLevel + levels - 1, dstBaseSlice .. dstBaseSlice + slices - 1]
+                        src.[TextureAspect.Color, srcBaseLevel .. srcBaseLevel + levels - 1, srcBaseSlice .. srcBaseSlice + slices - 1],
+                        dst.[TextureAspect.Color, dstBaseLevel .. dstBaseLevel + levels - 1, dstBaseSlice .. dstBaseSlice + slices - 1]
                     )
             else
                 for l in 0 .. levels - 1 do
                     let srcLevel = srcBaseLevel + l
                     let dstLevel = dstBaseLevel + l
                     do! Command.ResolveMultisamples(
-                            src.[ImageAspect.Color, srcLevel, srcBaseSlice .. srcBaseSlice + slices - 1],
-                            dst.[ImageAspect.Color, dstLevel, dstBaseSlice .. dstBaseSlice + slices - 1]
+                            src.[TextureAspect.Color, srcLevel, srcBaseSlice .. srcBaseSlice + slices - 1],
+                            dst.[TextureAspect.Color, dstLevel, dstBaseSlice .. dstBaseSlice + slices - 1]
                         )
 
             if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, srcLayout)

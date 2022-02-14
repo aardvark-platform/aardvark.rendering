@@ -276,12 +276,12 @@ type Swapchain(device : Device, description : SwapchainDescription) =
 
                 //do! Command.PerDevice(fun di ->
                 //        let color = if di = 0 then C4f.Green else C4f.Blue
-                //        Command.ClearColor(colorView.Image.[ImageAspect.Color], color)
+                //        Command.ClearColor(colorView.Image.[TextureAspect.Color], color)
                 //    )
 
-                do! Command.ClearColor(colorView.Image.[ImageAspect.Color], C4f.Black)
+                do! Command.ClearColor(colorView.Image.[TextureAspect.Color], C4f.Black)
                 match depthView with
-                    | Some v -> do! Command.ClearDepthStencil(v.Image.[ImageAspect.DepthStencil], 1.0, 0u)
+                    | Some v -> do! Command.ClearDepthStencil(v.Image.[TextureAspect.DepthStencil], 1.0, 0u)
                     | _ -> ()
 
                 // ensure that colorImage is ColorAttachmentOptimal
@@ -316,15 +316,15 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                                 let myRange = ranges.[di]
                                 
                                 Command.ResolveMultisamples(
-                                    colorView.Image.[ImageAspect.Color, 0, *], 
+                                    colorView.Image.[TextureAspect.Color, 0, *], 
                                     V3i(myRange.frMin, 0),
-                                    resolvedImage.[ImageAspect.Color, 0, *],
+                                    resolvedImage.[TextureAspect.Color, 0, *],
                                     V3i(myRange.frMin, 0),
                                     V3i(V2i.II + myRange.frMax - myRange.frMin, 1)
                                 )
                             )
                         else
-                            do! Command.ResolveMultisamples(colorView.Image.[ImageAspect.Color, 0, *], resolvedImage.[ImageAspect.Color, 0, *])
+                            do! Command.ResolveMultisamples(colorView.Image.[TextureAspect.Color, 0, *], resolvedImage.[TextureAspect.Color, 0, *])
 
                         // the color-data is now stored in the resolved image
                         currentImage <- resolvedImage
@@ -356,10 +356,10 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 //do! Command.TransformLayout(currentImage, VkImageLayout.TransferSrcOptimal)
                 do! Command.TransformLayout(backbuffer, VkImageLayout.TransferDstOptimal)
                 do! Command.Blit(
-                        currentImage.[ImageAspect.Color, 0, *],
+                        currentImage.[TextureAspect.Color, 0, *],
                         VkImageLayout.TransferSrcOptimal,
                         srcRange,
-                        backbuffer.[ImageAspect.Color, 0, *],
+                        backbuffer.[TextureAspect.Color, 0, *],
                         VkImageLayout.TransferDstOptimal, 
                         dstRange,
                         VkFilter.Nearest

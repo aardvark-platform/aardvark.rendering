@@ -2,6 +2,7 @@
 
 open Aardvark.Base
 open FSharp.Data.Adaptive
+open System
 
 type TextureDimension =
     | Texture1D = 1
@@ -99,10 +100,13 @@ type TextureFormat =
     | CompressedRgbaBptcUnorm = 36492           // BC7
     | CompressedSrgbAlphaBptcUnorm = 36493
 
+[<Flags>]
 type TextureAspect =
-    | Color
-    | Depth
-    | Stencil
+    | None         = 0x00000000
+    | Color        = 0x00000001
+    | Depth        = 0x00000002
+    | Stencil      = 0x00000004
+    | DepthStencil = 0x00000006
 
 type TextureParams =
     {
@@ -180,13 +184,12 @@ module TextureFormat =
     let hasStencil (fmt : TextureFormat) =
         isStencil fmt || isDepthStencil fmt
 
-    /// Returns the aspects of the given texture format.
-    let toAspects (fmt : TextureFormat) : Set<TextureAspect> =
-        if isDepthStencil fmt then [ Depth; Stencil ]
-        elif isDepth fmt then [ Depth ]
-        elif isStencil fmt then [ Stencil ]
-        else [ Color ]
-        |> Set.ofList
+    /// Returns the aspect of the given texture format.
+    let toAspect (fmt : TextureFormat) =
+        if isDepthStencil fmt then TextureAspect.DepthStencil
+        elif isDepth fmt then TextureAspect.Depth
+        elif isStencil fmt then TextureAspect.Stencil
+        else TextureAspect.Color
 
     let ofPixFormat =
 
@@ -598,7 +601,7 @@ module TextureFormatExtensions =
         member x.IsDepthStencil = TextureFormat.isDepthStencil x
         member x.HasDepth = TextureFormat.hasDepth x
         member x.HasStencil = TextureFormat.hasStencil x
-        member x.Aspects = TextureFormat.toAspects x
+        member x.Aspect = TextureFormat.toAspect x
         member x.PixelSizeInBits = TextureFormat.pixelSizeInBits x
         member x.PixelSizeInBytes = TextureFormat.pixelSizeInBytes x
 

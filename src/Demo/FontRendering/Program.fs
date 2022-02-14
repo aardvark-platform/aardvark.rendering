@@ -158,7 +158,7 @@ module VulkanTests =
                             let size = V3i b.Data.Size.XYZ
                             
                             device.perform {
-                                do! Command.Copy(img.[ImageAspect.Color, b.Level, 0], b.Index * brickSize, tempBuffer, 0L, V2i.OO, size)
+                                do! Command.Copy(img.[TextureAspect.Color, b.Level, 0], b.Index * brickSize, tempBuffer, 0L, V2i.OO, size)
                             }
                                 
                             tempBuffer.Memory.MappedTensor4<uint16>(

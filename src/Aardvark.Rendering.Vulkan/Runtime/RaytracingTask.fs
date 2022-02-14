@@ -67,7 +67,7 @@ module private ``Trace Command Extensions`` =
 
             | RaytracingCommand.SyncTextureCmd(texture, src, dst) ->
                 let image = unbox<Image> texture
-                Command.ImageBarrier(image.[ImageAspect.Color], VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst)
+                Command.ImageBarrier(image.[TextureAspect.Color], VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst)
 
             | RaytracingCommand.TransformLayoutCmd(texture, src, dst) ->
                 let image = unbox<Image> texture

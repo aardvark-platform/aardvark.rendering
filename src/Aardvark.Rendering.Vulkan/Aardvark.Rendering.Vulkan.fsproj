@@ -24,7 +24,6 @@
     <Copy Condition="'$(OS)' == 'Unix'" SourceFiles="$(ProjectDir)..\..\lib\Native\Aardvark.Rendering.Vulkan\linux\AMD64\libvkvm.so" DestinationFolder="$(OutputPath)..\net471" ContinueOnError="true" />
   </Target>
   <ItemGroup>
-    <None Include="paket.references" />
     <None Include="Wrapper\vk.xml" />
     <None Include="Wrapper\Generator.fsx" />
     <Compile Include="Wrapper\Types.fs" />
@@ -43,8 +42,14 @@
     <Compile Include="Core\Commands.fs" />
     <Compile Include="Core\ShaderInterface.fs" />
     <Compile Include="Resources\Buffer.fs" />
-    <Compile Include="Resources\Image.fs" />
-    <Compile Include="Resources\ImageView.fs" />
+    <Compile Include="Resources\Image\ComponentMapping.fs" />
+    <Compile Include="Resources\Image\Image.fs" />
+    <Compile Include="Resources\Image\DeviceTensor.fs" />
+    <Compile Include="Resources\Image\TensorImage.fs" />
+    <Compile Include="Resources\Image\ImageDownload.fs" />
+    <Compile Include="Resources\Image\ImageUpload.fs" />
+    <Compile Include="Resources\Image\ImageView.fs" />
+    <Compile Include="Resources\Image\SparseImage.fs" />
     <Compile Include="Resources\Sampler.fs" />
     <Compile Include="Resources\RenderPass.fs" />
     <Compile Include="Resources\BackendSurface.fs" />
@@ -68,7 +73,6 @@
     <Compile Include="Resources\IndirectBuffer.fs" />
     <Compile Include="Resources\CommandResources.fs" />
     <Compile Include="Resources\GeometryPool.fs" />
-    <Compile Include="Resources\SparseImage.fs" />
     <Compile Include="Resources\Query\QueryPool.fs" />
     <Compile Include="Resources\Query\Query.fs" />
     <Compile Include="Resources\Query\TimeQuery.fs" />
@@ -89,6 +93,7 @@
     <Compile Include="Runtime\RaytracingTask.fs" />
     <Compile Include="Runtime\Runtime.fs" />
     <Compile Include="Runtime\Headless.fs" />
+    <None Include="paket.references" />
     <Content Include="Aardvark.Rendering.Vulkan.dll.config">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

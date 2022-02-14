@@ -268,7 +268,7 @@ type ITextureRuntimeExtensions private() =
                          [<Optional; DefaultParameterValue(0)>] slice : int,
                          [<Optional; DefaultParameterValue(V2i())>] offset : V2i,
                          [<Optional; DefaultParameterValue(V2i())>] size : V2i) =
-        this.Upload(texture.[Color, level, slice], source, offset, size)
+        this.Upload(texture.[TextureAspect.Color, level, slice], source, offset, size)
 
     // ================================================================================================================
     // Upload 3D
@@ -312,7 +312,7 @@ type ITextureRuntimeExtensions private() =
                          [<Optional; DefaultParameterValue(0)>] slice : int,
                          [<Optional; DefaultParameterValue(V3i())>] offset : V3i,
                          [<Optional; DefaultParameterValue(V3i())>] size : V3i) =
-        this.Upload(texture.[Color, level, slice], source, offset, size)
+        this.Upload(texture.[TextureAspect.Color, level, slice], source, offset, size)
 
 
     // ================================================================================================================
@@ -357,7 +357,7 @@ type ITextureRuntimeExtensions private() =
                            [<Optional; DefaultParameterValue(0)>] slice : int,
                            [<Optional; DefaultParameterValue(V2i())>] offset : V2i,
                            [<Optional; DefaultParameterValue(V2i())>] size : V2i) =
-        this.Download(texture.[Color, level, slice], target, offset, size)
+        this.Download(texture.[TextureAspect.Color, level, slice], target, offset, size)
 
     ///<summary>Downloads color data from the given texture to a PixImage.</summary>
     ///<param name="this">The runtime.</param>
@@ -469,7 +469,7 @@ type ITextureRuntimeExtensions private() =
                            [<Optional; DefaultParameterValue(0)>] slice : int,
                            [<Optional; DefaultParameterValue(V3i())>] offset : V3i,
                            [<Optional; DefaultParameterValue(V3i())>] size : V3i) =
-        this.Download(texture.[Color, level, slice], target, offset, size)
+        this.Download(texture.[TextureAspect.Color, level, slice], target, offset, size)
 
 
     // ================================================================================================================
@@ -801,8 +801,8 @@ type IBackendTextureExtensions private() =
                                 [<Optional; DefaultParameterValue(0)>] level : int,
                                 [<Optional; DefaultParameterValue(-1)>] slice : int) =
         let aspect =
-            let aspects = texture.Format.Aspects
-            if Set.count aspects = 1 then Set.minElement aspects
-            else TextureAspect.Depth
+            match texture.Format.Aspect with
+            | TextureAspect.DepthStencil -> TextureAspect.Depth
+            | asp -> asp
 
         texture.GetOutputView(aspect, level, slice)

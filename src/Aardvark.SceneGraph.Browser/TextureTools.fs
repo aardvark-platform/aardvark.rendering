@@ -135,7 +135,7 @@ module internal BrowserTexture =
                                         let temp = device.CreateTensorImage<byte>(size, Col.Format.RGBA, false)
                                         temp.Write(img.data, nativeint (size.X * 4), Col.Format.BGRA, ImageTrafo.Identity)
                                         device.CopyEngine.Enqueue [
-                                            CopyCommand.Copy(temp, newImg.[ImageAspect.Color, 0, 0])
+                                            CopyCommand.Copy(temp, newImg.[TextureAspect.Color, 0, 0])
                                             CopyCommand.Callback temp.Dispose
                                         ]
                                         let o = tex
@@ -148,7 +148,7 @@ module internal BrowserTexture =
                                         let temp = device.CreateTensorImage<byte>(size, Col.Format.RGBA, false)
                                         temp.Write(img.data, nativeint (size.X * 4), Col.Format.BGRA, ImageTrafo.Identity)
                                         device.CopyEngine.Enqueue [
-                                            CopyCommand.Copy(temp, tex.[ImageAspect.Color, 0, 0])
+                                            CopyCommand.Copy(temp, tex.[TextureAspect.Color, 0, 0])
                                             CopyCommand.Callback temp.Dispose
                                         ]
                                     else
@@ -168,7 +168,7 @@ module internal BrowserTexture =
                                         )
 
                                         device.CopyEngine.Enqueue [
-                                            CopyCommand.Copy(temp, tex.[ImageAspect.Color, 0, 0], V3i(copyOffset, 0), V3i(copySize, 1))
+                                            CopyCommand.Copy(temp, tex.[TextureAspect.Color, 0, 0], V3i(copyOffset, 0), V3i(copySize, 1))
                                             CopyCommand.Callback temp.Dispose
                                         ]
                                 with e ->
@@ -200,7 +200,7 @@ module internal BrowserTexture =
                         toDispose.Clear()
                         if mipMaps then
                             device.perform {
-                                do! Command.GenerateMipMaps tex.[ImageAspect.Color]
+                                do! Command.GenerateMipMaps tex.[TextureAspect.Color]
                             }
 
                         tex :> ITexture

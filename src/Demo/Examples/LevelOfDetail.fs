@@ -506,7 +506,7 @@ module LevelOfDetail =
         let img = createOptimalImage size 1 format
 
         device.perform {
-            do! Command.Copy(hostVisible.[ImageAspect.Color, 0, 0], V3i.Zero, img.[ImageAspect.Color, 0, 0], V3i.Zero, V3i(size, 1))
+            do! Command.Copy(hostVisible.[TextureAspect.Color, 0, 0], V3i.Zero, img.[TextureAspect.Color, 0, 0], V3i.Zero, V3i(size, 1))
         }
 
         hostVisible.Dispose()

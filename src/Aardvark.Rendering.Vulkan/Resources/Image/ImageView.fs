@@ -13,6 +13,7 @@ type ImageView =
         inherit Resource<VkImageView>
         val public Image            : Image
         val public ImageViewType    : VkImageViewType
+        val public Aspect           : TextureAspect
         val public MipLevelRange    : Range1i
         val public ArrayRange       : Range1i
         val public IsResolved       : bool
@@ -28,7 +29,7 @@ type ImageView =
 
         interface IFramebufferOutput with
             member x.Runtime = x.Device.Runtime :> ITextureRuntime
-            member x.Format = VkFormat.toTextureFormat x.Image.Format
+            member x.Format = (x.Image :> IBackendTexture).Format
             member x.Samples = x.Image.Samples
             member x.Size = 
                 let s = x.Image.Size
@@ -39,9 +40,7 @@ type ImageView =
             member x.Texture = x.Image :> IBackendTexture
             member x.Levels = x.MipLevelRange
             member x.Slices = x.ArrayRange
-            member x.Aspect = 
-                if VkFormat.hasDepth x.Image.Format then TextureAspect.Depth
-                else TextureAspect.Color
+            member x.Aspect = x.Aspect
 
         interface ITextureLevel with
             member x.Level = x.MipLevelRange.Min
@@ -50,10 +49,11 @@ type ImageView =
                 let d = 1 <<< x.MipLevelRange.Min
                 V3i(max 1 (s.X / d), max 1 (s.Y / d), max 1 (s.Z / d))
 
-        new(device : Device, handle : VkImageView, img, viewType, levelRange, arrayRange, resolved) =
+        new(device : Device, handle : VkImageView, img, viewType, aspect, levelRange, arrayRange, resolved) =
             { inherit Resource<_>(device, handle);
                 Image = img;
                 ImageViewType = viewType;
+                Aspect = aspect;
                 MipLevelRange = levelRange;
                 ArrayRange = arrayRange;
                 IsResolved = resolved
@@ -69,12 +69,12 @@ module ImageViewCommandExtensions =
         static member TransformLayout(view : ImageView, target : VkImageLayout) =
             Command.TransformLayout(view.Image, view.MipLevelRange, view.ArrayRange, target)
 
-        static member inline ClearColor(view : ImageView, aspect : ImageAspect, color : ^Color) =
+        static member inline ClearColor(view : ImageView, aspect : TextureAspect, color : ^Color) =
             let levels = view.MipLevelRange
             let slices = view.ArrayRange
             Command.ClearColor(view.Image.[aspect, levels.Min .. levels.Max, slices.Min .. slices.Max], color)
 
-        static member inline ClearDepthStencil(view : ImageView, aspect : ImageAspect, depth : ^Depth, stencil : ^Stencil) =
+        static member inline ClearDepthStencil(view : ImageView, aspect : TextureAspect, depth : ^Depth, stencil : ^Stencil) =
             let levels = view.MipLevelRange
             let slices = view.ArrayRange
             Command.ClearDepthStencil(view.Image.[aspect, levels.Min .. levels.Max, slices.Min .. slices.Max], depth, stencil)
@@ -155,7 +155,7 @@ module ImageView =
                     device.eventually {
                         do! Command.TransformLayout(img, VkImageLayout.TransferSrcOptimal)
                         do! Command.TransformLayout(resolved, VkImageLayout.TransferDstOptimal)
-                        do! Command.ResolveMultisamples(img.[ImageAspect.Color, 0], resolved.[ImageAspect.Color, 0])
+                        do! Command.ResolveMultisamples(img.[TextureAspect.Color, 0], resolved.[TextureAspect.Color, 0])
                         do! Command.TransformLayout(resolved, VkImageLayout.ShaderReadOnlyOptimal)
                         do! Command.TransformLayout(img, srcLayout)
                     }
@@ -190,7 +190,7 @@ module ImageView =
             VkRaw.vkCreateImageView(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create image view"
 
-            return new ImageView(device, !!pHandle, img, viewType, levelRange, arrayRange, isResolved)
+            return new ImageView(device, !!pHandle, img, viewType, VkImageAspectFlags.toTextureAspect aspect, levelRange, arrayRange, isResolved)
         }
 
     let createStorageView (componentMapping : VkComponentMapping) (img : Image) (imageType : FShade.GLSL.GLSLImageType) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
@@ -215,7 +215,7 @@ module ImageView =
 
                     device.eventually {
                         do! Command.TransformLayout(temp, VkImageLayout.TransferDstOptimal)
-                        do! Command.ResolveMultisamples(img.[ImageAspect.Color, 0], temp.[ImageAspect.Color, 0])
+                        do! Command.ResolveMultisamples(img.[TextureAspect.Color, 0], temp.[TextureAspect.Color, 0])
                         do! Command.TransformLayout(temp, VkImageLayout.ShaderReadOnlyOptimal)
                     }
 
@@ -249,7 +249,7 @@ module ImageView =
             VkRaw.vkCreateImageView(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create image view"
 
-            return new ImageView(device, !!pHandle, img, viewType, levelRange, arrayRange, isResolved)
+            return new ImageView(device, !!pHandle, img, viewType, VkImageAspectFlags.toTextureAspect aspect, levelRange, arrayRange, isResolved)
         }
 
     let createOutputView (img : Image) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
@@ -281,7 +281,7 @@ module ImageView =
             VkRaw.vkCreateImageView(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create image view"
 
-            return new ImageView(device, !!pHandle, img, viewType, levelRange, arrayRange, false)
+            return new ImageView(device, !!pHandle, img, viewType, VkImageAspectFlags.toTextureAspect aspect, levelRange, arrayRange, false)
         }
 
 [<AbstractClass; Sealed; Extension>]

@@ -637,7 +637,7 @@ module SparseTextureImplemetation =
                             VkBufferImageCopy(
                                 uint64 offset,
                                 0u, 0u,
-                                back.[ImageAspect.Color, b.level, b.slice].VkImageSubresourceLayers,
+                                back.[TextureAspect.Color, b.level, b.slice].VkImageSubresourceLayers,
                                 VkOffset3D(b.offset.X, b.offset.Y, b.offset.Z),
                                 VkExtent3D(uint32 minSize.X, uint32 minSize.Y, uint32 minSize.Z)
                             )
@@ -726,7 +726,7 @@ module SparseTextureImplemetation =
 
                 ReaderWriterLock.read updateLock (fun () ->
                     device.perform {
-                        do! Command.Copy(tempBuffer, 0L, V2i.OO, back.[ImageAspect.Color, level, slice], V3i.Zero, levelSize)
+                        do! Command.Copy(tempBuffer, 0L, V2i.OO, back.[TextureAspect.Color, level, slice], V3i.Zero, levelSize)
                     }
                 )
 
@@ -759,7 +759,7 @@ module SparseTextureImplemetation =
                     back.Update [| bind |]
 
                     device.perform {
-                        do! Command.Copy(tempBuffer, 0L, V2i.OO, back.[ImageAspect.Color, level, slice], offset, brickSize)
+                        do! Command.Copy(tempBuffer, 0L, V2i.OO, back.[TextureAspect.Color, level, slice], offset, brickSize)
                     }
                 )
 
@@ -888,7 +888,7 @@ module SparseTextureImplemetation =
                             let size = V3i b.Data.Size.XYZ
                             
                             device.perform {
-                                do! Command.Copy(img.[ImageAspect.Color, b.Level, 0], b.Index * brickSize, tempBuffer, 0L, V2i.OO, size)
+                                do! Command.Copy(img.[TextureAspect.Color, b.Level, 0], b.Index * brickSize, tempBuffer, 0L, V2i.OO, size)
                             }
                                 
                             tempBuffer.Memory.MappedTensor4<uint16>(
