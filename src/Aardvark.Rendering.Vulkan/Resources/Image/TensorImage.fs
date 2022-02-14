@@ -343,7 +343,7 @@ module TensorImage =
 
     let ofPixVolume (img : PixVolume) (srgb : bool) (device : Device) =
         let dst = createUntyped (V3i(img.Size.X, img.Size.Y, 1)) img.PixFormat srgb device
-        dst.Write(img, true)
+        dst.Write(img, false)
         dst
 
     let ofStream (stream : IO.Stream) (srgb : bool) (device : Device) =
@@ -443,28 +443,6 @@ module TensorImageCommandExtensions =
         static member Copy(src : TensorImage, dst : ImageSubresource) =
             if src.Size <> dst.Size then failf "[TensorImage] mismatching sizes in copy %A vs %A" src.Size dst.Size
             Command.Copy(src, dst, V3i.Zero, src.Size)
-
-        static member Copy(src : Buffer, dst : ImageSubresource, dstOffset : V3i, pitch : V2i, size : V3i) =
-            { new Command() with
-                member x.Compatible = QueueFlags.All
-                member x.Enqueue cmd =
-                    let copy =
-                        VkBufferImageCopy(
-                            0UL,
-                            uint32 pitch.X,
-                            uint32 pitch.Y,
-                            dst.VkImageSubresourceLayers,
-                            VkOffset3D(dstOffset.X, dstOffset.Y, dstOffset.Z),
-                            VkExtent3D(size.X, size.Y, size.Z)
-                        )
-
-                    cmd.AppendCommand()
-                    copy |> pin (fun pCopy ->
-                        VkRaw.vkCmdCopyBufferToImage(cmd.Handle, src.Handle, dst.Image.Handle, dst.Image.Layout, 1u, pCopy)
-                    )
-
-                    [src; dst.Image]
-            }
 
         // download
         static member Copy(src : ImageSubresource, srcOffset : V3i, dst : TensorImage, size : V3i) =

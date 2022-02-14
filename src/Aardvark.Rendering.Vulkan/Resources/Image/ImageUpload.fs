@@ -354,7 +354,7 @@ module ImageUploadExtensions =
                             for level = 0 to uploadLevels - 1 do
                                 let src, size, alignedSize = tempImages.[slice].[level]
                                 let dst = image.[TextureAspect.Color, level, slice]
-                                do! Command.Copy(src, dst, V3i.Zero, alignedSize.XY, size)
+                                do! Command.Copy(src, 0L, alignedSize.XY, dst, V3i.Zero, size)
 
                         // generate the mipMaps
                         if generateMipMaps then
