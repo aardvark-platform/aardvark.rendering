@@ -286,11 +286,9 @@ module ContextTextureUploadExtensions =
                 | StreamTexture(info, openStream) ->
                     use stream = openStream()
 
+                    // Always try to load compressed data first
                     let compressed =
-                        if info.wantCompressed then
-                            stream |> DdsTexture.tryLoadCompressedFromStream
-                        else
-                            None
+                        stream |> DdsTexture.tryLoadCompressedFromStream
 
                     match compressed with
                     | Some t -> this.CreateTexture(t)

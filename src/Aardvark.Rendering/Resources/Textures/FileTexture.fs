@@ -12,7 +12,7 @@ type FileTexture(fileName : string, textureParams : TextureParams) =
     member x.TextureParams = textureParams
 
     new(fileName : string, wantMipMaps : bool) =
-        FileTexture(fileName, { TextureParams.compressed with wantMipMaps = wantMipMaps })
+        FileTexture(fileName, { TextureParams.empty with wantMipMaps = wantMipMaps })
 
     override x.GetHashCode() =
         HashCode.Combine(fileName.GetHashCode(), textureParams.GetHashCode())

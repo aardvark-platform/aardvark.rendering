@@ -453,11 +453,9 @@ module ImageUploadExtensions =
             | :? StreamTexture as t ->
                 use stream = t.Open()
 
+                // Always try to load compressed data first
                 let compressed =
-                    if t.TextureParams.wantCompressed then
-                        stream |> DdsTexture.tryLoadCompressedFromStream
-                    else
-                        None
+                    stream |> DdsTexture.tryLoadCompressedFromStream
 
                 match compressed with
                 | Some t ->

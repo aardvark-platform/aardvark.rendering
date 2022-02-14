@@ -7,7 +7,7 @@ type StreamTexture(openStream : unit -> Stream, textureParams : TextureParams) =
     member x.TextureParams = textureParams
 
     new(openStream : unit -> Stream, wantMipMaps : bool) =
-        StreamTexture(openStream, { TextureParams.compressed with wantMipMaps = wantMipMaps })
+        StreamTexture(openStream, { TextureParams.empty with wantMipMaps = wantMipMaps })
 
     interface ITexture with
         member x.WantMipMaps = textureParams.wantMipMaps
