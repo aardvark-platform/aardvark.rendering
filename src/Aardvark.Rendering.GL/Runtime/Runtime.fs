@@ -102,6 +102,12 @@ type Runtime(debug : DebugLevel) =
         member x.DeviceCount = 1
 
         member x.Upload<'a when 'a : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'a>, offset : V3i, size : V3i) : unit =
+            let size =
+                if size = V3i.Zero then
+                    V3i source.Size
+                else
+                    size
+
             let level = texture.Level
             let slice = texture.Slice
             let dst = texture.Texture |> unbox<Texture>
@@ -112,6 +118,12 @@ type Runtime(debug : DebugLevel) =
             ctx.Upload(dst, level, slice, offset, size, source)
   
         member x.Download<'a when 'a : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'a>, offset : V3i, size : V3i) : unit =
+            let size =
+                if size = V3i.Zero then
+                    V3i target.Size
+                else
+                    size
+
             let level = texture.Level
             let slice = texture.Slice
             let src = texture.Texture |> unbox<Texture>

@@ -338,6 +338,12 @@ type Runtime(device : Device, debug : DebugLevel) as this =
 
     // upload
     member x.Upload<'a when 'a : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'a>, offset : V3i, size : V3i) =
+        let size =
+            if size = V3i.Zero then
+                V3i source.Size
+            else
+                size
+
         texture.Texture |> ResourceValidation.Textures.validateLevel texture.Level
         texture.Texture |> ResourceValidation.Textures.validateSlice texture.Slice
         texture.Texture |> ResourceValidation.Textures.validateWindow texture.Level offset size
@@ -347,6 +353,12 @@ type Runtime(device : Device, debug : DebugLevel) as this =
 
     // download
     member x.Download<'a when 'a : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'a>, offset : V3i, size : V3i) =
+        let size =
+            if size = V3i.Zero then
+                V3i target.Size
+            else
+                size
+
         texture.Texture |> ResourceValidation.Textures.validateLevel texture.Level
         texture.Texture |> ResourceValidation.Textures.validateSlice texture.Slice
         texture.Texture |> ResourceValidation.Textures.validateWindow texture.Level offset size
