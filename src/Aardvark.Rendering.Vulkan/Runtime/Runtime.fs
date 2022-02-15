@@ -302,21 +302,26 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         let srcLayout = src.Layout
         let dstLayout = dst.Layout
 
+        let aspect =
+            let src = (src :> IBackendTexture).Format.Aspect
+            let dst = (dst :> IBackendTexture).Format.Aspect
+            src &&& dst
+
         device.perform {
             if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, VkImageLayout.TransferSrcOptimal)
             if dstLayout <> VkImageLayout.TransferDstOptimal then do! Command.TransformLayout(dst, VkImageLayout.TransferDstOptimal)
             if src.Samples = dst.Samples then
                 do! Command.Copy(
-                        src.[TextureAspect.Color, srcBaseLevel .. srcBaseLevel + levels - 1, srcBaseSlice .. srcBaseSlice + slices - 1],
-                        dst.[TextureAspect.Color, dstBaseLevel .. dstBaseLevel + levels - 1, dstBaseSlice .. dstBaseSlice + slices - 1]
+                        src.[aspect, srcBaseLevel .. srcBaseLevel + levels - 1, srcBaseSlice .. srcBaseSlice + slices - 1],
+                        dst.[aspect, dstBaseLevel .. dstBaseLevel + levels - 1, dstBaseSlice .. dstBaseSlice + slices - 1]
                     )
             else
                 for l in 0 .. levels - 1 do
                     let srcLevel = srcBaseLevel + l
                     let dstLevel = dstBaseLevel + l
                     do! Command.ResolveMultisamples(
-                            src.[TextureAspect.Color, srcLevel, srcBaseSlice .. srcBaseSlice + slices - 1],
-                            dst.[TextureAspect.Color, dstLevel, dstBaseSlice .. dstBaseSlice + slices - 1]
+                            src.[aspect, srcLevel, srcBaseSlice .. srcBaseSlice + slices - 1],
+                            dst.[aspect, dstLevel, dstBaseSlice .. dstBaseSlice + slices - 1]
                         )
 
             if srcLayout <> VkImageLayout.TransferSrcOptimal then do! Command.TransformLayout(src, srcLayout)
