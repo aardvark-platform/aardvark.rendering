@@ -420,6 +420,64 @@ module TextureCopy =
                 signature.Dispose()
 
 
+        let texture2DMultisampledDepth (runtime : IRuntime) =
+            let clear =
+                clear {
+                    depth 0.67
+                }
+
+            let size = V2i(256)
+            let format = TextureFormat.DepthComponent16
+            let samples = 8
+
+            renderQuadToDepthStencil runtime format samples clear size (fun src ->
+                let dst = runtime.CreateTexture2D(size, format, samples = samples)
+
+                try
+                    let srcResult = resolveAndDownloadDepth src
+                    Expect.validDepthResult srcResult Accuracy.low size 0.5 0.67
+
+                    runtime.Copy(src, 0, 0, dst, 0, 0, 1, 1)
+
+                    let dstResult = resolveAndDownloadDepth dst
+                    Expect.validDepthResult dstResult Accuracy.low size 0.5 0.67
+
+                finally
+                    runtime.DeleteTexture dst
+            )
+
+        let texture2DMultisampledDepthSubwindow (runtime : IRuntime) =
+            let clear =
+                clear {
+                    depth 0.67
+                }
+
+            let size = V2i(256)
+            let format = TextureFormat.DepthComponent16
+            let samples = 8
+
+            let srcOffset = V2i(54, 23)
+            let dstOffset = V2i(3, 5)
+            let copySize = V2i(45, 123)
+
+            renderQuadToDepthStencil runtime format samples clear size (fun src ->
+                let dst = runtime.CreateTexture2D(size, format, samples = samples)
+
+                try
+                    let srcResult = resolveAndDownloadDepth src
+                    Expect.validDepthResult srcResult Accuracy.low size 0.5 0.67
+
+                    runtime.Copy(src.GetOutputView(), srcOffset, dst.GetOutputView(), dstOffset, copySize)
+
+                    let dstResult = resolveAndDownloadDepth dst
+                    let dstResult = dstResult.SubMatrix(dstOffset, copySize)
+
+                    Expect.validDepthResult dstResult Accuracy.low copySize 0.5 0.67
+
+                finally
+                    runtime.DeleteTexture dst
+            )
+
         let textureCubeMipmapped (runtime : IRuntime) =
             let levels = 3
             let size = V2i(128)
@@ -512,6 +570,8 @@ module TextureCopy =
             "2D array mipmapped",               Cases.texture2DArrayMipmapped
             "2D multisampled",                  Cases.texture2DMultisampled false
             "2D multisampled (with resolve)",   Cases.texture2DMultisampled true
+            "2D multisampled depth",            Cases.texture2DMultisampledDepth
+            "2D multisampled depth subwindow",  Cases.texture2DMultisampledDepthSubwindow
             "Cube mipmapped",                   Cases.textureCubeMipmapped
             "Cube array mipmapped",             Cases.textureCubeArrayMipmapped
         ]

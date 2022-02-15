@@ -226,6 +226,153 @@ module PixData =
 
 
 [<AutoOpen>]
+module ``RenderTo Utilities`` =
+    open Aardvark.SceneGraph
+    open FSharp.Data.Adaptive.Operators
+
+    module private Shader =
+        open FShade
+
+        let diffuseSamplerMS =
+            sampler2dMS {
+                texture uniform?DiffuseColorTexture
+                filter Filter.MinMagMipLinear
+                addressU WrapMode.Wrap
+                addressV WrapMode.Wrap
+            }
+
+        type Fragment = {
+            [<FragCoord>] coord : V4d
+        }
+
+        let resolveSingle (f : Fragment) =
+            fragment {
+                return diffuseSamplerMS.Read(V2i f.coord.XY, 0)
+            }
+
+    type RenderTo =
+        {
+            Task : IRenderTask
+            Disposable : IDisposable
+        }
+
+        member x.Dispose() =
+            x.Task.Dispose()
+            x.Disposable.Dispose()
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
+    let renderQuadTo (runtime : IRuntime) (attachments : seq<Symbol * TextureFormat>) (samples : int)=
+        let signature =
+             runtime.CreateFramebufferSignature(attachments, samples)
+
+        let task =
+            let drawCall =
+                DrawCallInfo(
+                    FaceVertexCount = 4,
+                    InstanceCount = 1
+                )
+
+            let positions = [| V3f(-0.5,-0.5,0.0); V3f(0.5,-0.5,0.0); V3f(-0.5,0.5,0.0); V3f(0.5,0.5,0.0) |]
+
+            let stencilMode =
+                { StencilMode.None with
+                    Pass = StencilOperation.Replace;
+                    Reference = 3 }
+
+            drawCall
+            |> Sg.render IndexedGeometryMode.TriangleStrip
+            |> Sg.vertexAttribute DefaultSemantic.Positions (AVal.constant positions)
+            |> Sg.stencilMode' stencilMode
+            |> Sg.shader {
+                do! DefaultSurfaces.trafo
+            }
+            |> Sg.compile runtime signature
+
+        { Task = task
+          Disposable = signature }
+
+    let renderQuadToDepthStencil (runtime : IRuntime) (format : TextureFormat) (samples : int)
+                                 (clear : ClearValues) (size : V2i) (f : IBackendTexture -> 'T) =
+        use task =
+            let atts = [ DefaultSemantic.DepthStencil, format ]
+            renderQuadTo runtime atts samples
+
+        let buffer =
+            task.Task |> RenderTask.renderToDepthWithClear (AVal.constant size) clear
+
+        buffer.Acquire()
+
+        try
+            f <| buffer.GetValue()
+        finally
+            buffer.Release()
+
+    let resolveAndDownloadDepth (texture : IBackendTexture) =
+
+        if texture.Samples > 1 then
+            let runtime = texture.Runtime :?> IRuntime
+            use signature = runtime.CreateFramebufferSignature([ DefaultSemantic.Colors, TextureFormat.R32f])
+
+            use task =
+                Sg.fullScreenQuad
+                |> Sg.diffuseTexture' texture
+                |> Sg.shader {
+                    do! Shader.resolveSingle
+                }
+                |> Sg.compile runtime signature
+
+            let size = texture.Size.XY
+            let buffer = task |> RenderTask.renderToColor ~~size
+            buffer.Acquire()
+
+            try
+                let depth = buffer.GetValue().Download().AsPixImage<float32>()
+                depth.GetChannel(0L)
+
+            finally
+                buffer.Release()
+
+        else
+            texture.DownloadDepth()
+
+    module Expect =
+
+        module private Matrix =
+
+            let private comp (f : 'T -> 'T -> bool) (matrix : Matrix<'T>) =
+                let mutable res = matrix.[0, 0]
+
+                for y = 0 to int matrix.Size.Y - 1 do
+                    for x = 0 to int matrix.Size.X - 1 do
+                        if f matrix.[x, y] res then
+                            res <- matrix.[x, y]
+
+                res
+
+            let min (matrix : Matrix<'T>) = comp (<) matrix
+            let max (matrix : Matrix<'T>) = comp (>) matrix
+
+        let validDepthResult (depthResult : Matrix<float32>) (accuracy : Accuracy) (expectedSize : V2i) (expectedMin : float) (expectedMax : float) =
+            let min = float <| Matrix.min depthResult
+            let max = float <| Matrix.max depthResult
+
+            Expect.equal (V2i depthResult.Size) expectedSize "Unexpected depth texture size"
+            Expect.isLessThan min 1.0 "All depth one"
+            Expect.floatClose accuracy min expectedMin "Unexpected min depth value"
+            Expect.floatClose accuracy max expectedMax "Unexpected max depth value"
+
+        let validStencilResult (stencilResult : Matrix<int>) (expectedSize : V2i) (expectedMin : int) (expectedMax : int) =
+            let min = Matrix.min stencilResult
+            let max = Matrix.max stencilResult
+
+            Expect.equal (V2i stencilResult.Size) expectedSize "Unexpected stencil texture size"
+            Expect.equal min expectedMin "Unexpected min stencil value"
+            Expect.equal max expectedMax "Unexpected max stencil value"
+
+
+[<AutoOpen>]
 module ``Test Utilities`` =
 
     type IBackendTexture with
