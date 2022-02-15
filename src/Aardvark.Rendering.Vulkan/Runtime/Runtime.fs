@@ -63,13 +63,7 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         t |> ResourceValidation.Textures.validateStencilFormat
 
         let image = unbox<Image> t
-        let pix =
-            let img = PixImage<int>()
-            img.Volume <- target.AsVolume()
-            img
-
-        failwith "Not implemented in Vulkan backend"
-        //device.DownloadLevel(image.[ImageAspect.Stencil, level, slice], pix, offset)
+        device.DownloadStencil(image.[TextureAspect.Stencil, level, slice], target, offset)
 
     member x.DownloadDepth(t : IBackendTexture, target : Matrix<float32>, level : int, slice : int, offset : V2i) =
         t |> ResourceValidation.Textures.validateLevel level
@@ -78,13 +72,7 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         t |> ResourceValidation.Textures.validateDepthFormat
 
         let image = unbox<Image> t
-        let pix =
-            let img = PixImage<float32>()
-            img.Volume <- target.AsVolume()
-            img
-
-        failwith "Not implemented in Vulkan backend"
-        //device.DownloadLevel(image.[ImageAspect.Depth, level, slice], pix, offset)
+        device.DownloadDepth(image.[TextureAspect.Depth, level, slice], target, offset)
 
     member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) =
         manager.PrepareRenderObject(unbox fboSignature, rj) :> IPreparedRenderObject

@@ -465,6 +465,7 @@ module TextureDownload =
             let accuracy =
                 match format with
                 | TextureFormat.DepthComponent16 -> Accuracy.low
+                | TextureFormat.DepthComponent24 -> Accuracy.medium
                 | _ -> Accuracy.veryHigh
 
             renderToDepthStencil runtime format size (fun buffer ->
@@ -590,14 +591,13 @@ module TextureDownload =
             "Cube subwindow",         Cases.textureCubeSubwindow
             "Cube array subwindow",   Cases.textureCubeArraySubwindow
 
-            if backend <> Backend.Vulkan then // not implemented
-                "DepthComponent16",         Cases.textureDepthComponent16
-                "DepthComponent24",         Cases.textureDepthComponent24
-                "DepthComponent32",         Cases.textureDepthComponent32
-                "DepthComponent32f",        Cases.textureDepthComponent32f
-                "Depth24Stencil8",          Cases.textureDepth24Stencil8
-                "Depth32fStencil8",         Cases.textureDepth32fStencil8
-                "StencilIndex8",            Cases.textureStencilIndex8
+            "DepthComponent16",         Cases.textureDepthComponent16
+            "DepthComponent24",         Cases.textureDepthComponent24
+            "DepthComponent32",         Cases.textureDepthComponent32
+            "DepthComponent32f",        Cases.textureDepthComponent32f
+            "Depth24Stencil8",          Cases.textureDepth24Stencil8
+            "Depth32fStencil8",         Cases.textureDepth32fStencil8
+            "StencilIndex8",            Cases.textureStencilIndex8
 
             "Arguments out of range", Cases.argumentsOutOfRange
         ]

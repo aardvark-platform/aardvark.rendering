@@ -16,7 +16,7 @@ type RenderPass =
         val public Samples : int
         val internal Attachments : Symbol[]
         val public ColorAttachments : Map<int, AttachmentSignature>
-        val public DepthStencilAttachment : Option<TextureFormat>
+        val public DepthStencilAttachment : Option<VkFormat>
         val public LayerCount : int
         val public PerLayerUniforms : Set<string>
 
@@ -32,13 +32,13 @@ type RenderPass =
             member x.Runtime = x.Runtime :> IFramebufferRuntime
             member x.Samples = x.Samples
             member x.ColorAttachments = x.ColorAttachments
-            member x.DepthStencilAttachment = x.DepthStencilAttachment
+            member x.DepthStencilAttachment = x.DepthStencilAttachment |> Option.map VkFormat.toTextureFormat
 
             member x.LayerCount = x.LayerCount
             member x.PerLayerUniforms = x.PerLayerUniforms
 
         new(device : Device, handle : VkRenderPass,
-            colors : Map<int, AttachmentSignature>, depthStencil : Option<TextureFormat>,
+            colors : Map<int, AttachmentSignature>, depthStencil : Option<VkFormat>,
             samples : int, layers : int, perLayer : Set<string>) =
 
             let attachments =
@@ -111,7 +111,7 @@ module RenderPass =
                         match tryFindFormat device <| VkFormat.ofTextureFormat fmt with
                         | Some fmt -> fmt
                         | None -> failf "could not get supported format for %A" fmt
-                        
+
                     let depthLoadOp, depthStoreOp = getLoadStoreOp <| VkFormat.hasDepth format
                     let stencilLoadOp, stencilStoreOp = getLoadStoreOp <| VkFormat.hasStencil format
 
@@ -131,6 +131,9 @@ module RenderPass =
 
                     description, reference
                 )
+
+            let depthStencilFormat =
+                depth |> Option.map (fun (desc, _) -> desc.format)
 
             let colorReferences =
                 let count =
@@ -193,7 +196,7 @@ module RenderPass =
             let! pHandle = VkRenderPass.Null
             VkRaw.vkCreateRenderPass(device.Handle, pInfo, NativePtr.zero, pHandle) |> check "vkCreateRenderPass"
 
-            return new RenderPass(device, !!pHandle, colorAttachments, depthStencilAttachment, samples, layers, perLayer)
+            return new RenderPass(device, !!pHandle, colorAttachments, depthStencilFormat, samples, layers, perLayer)
         }
 
     let internal validateCompability (fbo : IFramebuffer) (pass : RenderPass) =

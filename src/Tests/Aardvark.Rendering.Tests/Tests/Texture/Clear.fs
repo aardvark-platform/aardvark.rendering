@@ -123,13 +123,13 @@ module TextureClear =
 
                 do
                     let stencil = textures.[DefaultSemantic.DepthStencil].DownloadStencil()
-                    stencil.Data |> Array.iter (fun x -> Expect.equal x 4 "Stencil data mismatch")       
+                    stencil.Data |> Array.iter (fun x -> Expect.equal x 4 "Stencil data mismatch")
 
             finally
                 fbo.Dispose()
                 signature.Dispose()
                 textures |> Map.iter (fun _ t -> runtime.DeleteTexture t)
-            
+
 
         let framebuffer (runtime : IRuntime) =
             createAndClearFramebuffer runtime (fun fbo clear ->
@@ -151,7 +151,7 @@ module TextureClear =
                 task.Run(RenderToken.Empty, fbo)
             )
 
-    let tests (backend : Backend) =        
+    let tests (backend : Backend) =
         [
             if backend <> Backend.Vulkan then
                 "Color rgba8",                  Cases.rgba8
@@ -161,7 +161,8 @@ module TextureClear =
                 "Color rgba32f",                Cases.rgba32f
                 "Depth-stencil",                Cases.depthStencil
                 "Framebuffer",                  Cases.framebuffer
-                "Framebuffer (compiled)",       Cases.framebufferCompileClear
-                "Framebuffer (render command)", Cases.framebufferRenderCommand
+
+            "Framebuffer (compiled)",       Cases.framebufferCompileClear
+            "Framebuffer (render command)", Cases.framebufferRenderCommand
         ]
         |> prepareCases backend "Clear"

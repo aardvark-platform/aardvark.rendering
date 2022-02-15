@@ -14,7 +14,7 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
 
     let renderPassDepthAspect =
         match renderPass.DepthStencilAttachment with
-        | Some format -> format.Aspect
+        | Some format -> format |> VkFormat.toTextureFormat |> TextureFormat.toAspect
         | _ -> TextureAspect.None
 
     member x.Run(caller : AdaptiveToken, renderToken : RenderToken, outputs : OutputDescription) =
