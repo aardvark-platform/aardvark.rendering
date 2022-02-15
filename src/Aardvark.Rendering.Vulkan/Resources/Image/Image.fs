@@ -467,6 +467,9 @@ module ``Image Command Extensions`` =
             if src.SliceCount <> dst.SliceCount then
                 failf "cannot resolve image: { srcSlices = %A; dstSlices = %A }" src.SliceCount dst.SliceCount
 
+            if dst.Aspect <> TextureAspect.Color then
+                failf "cannot automatically resolve non-color textures"
+
             { new Command() with
                 member x.Compatible = QueueFlags.Graphics
                 member x.Enqueue (cmd : CommandBuffer) =
