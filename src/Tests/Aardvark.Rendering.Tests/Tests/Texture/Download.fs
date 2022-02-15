@@ -445,7 +445,7 @@ module TextureDownload =
 
             let clear =
                 clear {
-                    depth 0.75
+                    depth 0.95
                     stencil 1
                 }
 
@@ -466,7 +466,7 @@ module TextureDownload =
                 match format with
                 | TextureFormat.DepthComponent16 -> Accuracy.low
                 | TextureFormat.DepthComponent24 -> Accuracy.medium
-                | _ -> Accuracy.veryHigh
+                | _ -> Accuracy.high
 
             renderToDepthStencil runtime format size (fun buffer ->
                 let depthResult = runtime.DownloadDepth(buffer)
@@ -477,7 +477,7 @@ module TextureDownload =
                 Expect.isGreaterThan min 0.0 "Contains zero depth value"
                 Expect.isLessThan min 1.0 "All depth one"
                 Expect.floatClose accuracy min 0.5 "Unexpected min depth value"
-                Expect.floatClose accuracy max 0.75 "Unexpected max depth value"
+                Expect.floatClose accuracy max 0.95 "Unexpected max depth value"
             )
 
         let textureDepthComponent16 = textureDepthComponent TextureFormat.DepthComponent16
@@ -491,7 +491,7 @@ module TextureDownload =
             let accuracy =
                 match format with
                 | TextureFormat.Depth24Stencil8 -> Accuracy.medium
-                | _ -> Accuracy.veryHigh
+                | _ -> Accuracy.high
 
             renderToDepthStencil runtime format size (fun buffer ->
                 let depthResult = runtime.DownloadDepth(buffer)
@@ -502,7 +502,7 @@ module TextureDownload =
                 Expect.isGreaterThan min 0.0 "Contains zero depth value"
                 Expect.isLessThan min 1.0 "All depth one"
                 Expect.floatClose accuracy min 0.5 "Unexpected min depth value"
-                Expect.floatClose accuracy max 0.75 "Unexpected max depth value"
+                Expect.floatClose accuracy max 0.98 "Unexpected max depth value"
 
                 let stencilResult = runtime.DownloadStencil(buffer)
                 let min = Array.min stencilResult.Data

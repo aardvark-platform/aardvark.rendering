@@ -197,7 +197,7 @@ module internal TextureDownloadImplementation =
                 (src, dst) ||> NativeTensor4.iterPtr2 (fun _ src dst ->
                     let src : nativeptr<'T> = NativePtr.cast src
                     let dst : nativeptr<float32> = NativePtr.cast dst
-                    NativePtr.write dst (float32 ((NativePtr.read src) >>> shift) / float32 maxValue)
+                    NativePtr.write dst (float32 (((NativePtr.read src) >>> shift) &&& maxValue) / float32 maxValue)
                 )
             )
 
