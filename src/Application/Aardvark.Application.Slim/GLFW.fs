@@ -529,7 +529,7 @@ type GlfwGamepad() =
 type ISwapchain =
     inherit System.IDisposable
     abstract Size : V2i
-    abstract Run : IRenderTask * IQuery -> unit
+    abstract Run : IRenderTask * IQuery -> bool
 
 type IWindowSurface =
     inherit System.IDisposable
@@ -707,7 +707,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
     let glfw = app.Glfw
 
     let mutable windowScale = V2d.II
-    let mutable damaged = true
+    let mutable requiresRedraw = true
     let mutable title = title
     let mutable icon : option<PixImageMipMap> = None
     let mutable lastMousePosition = V2d.Zero
@@ -832,11 +832,11 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
         cval s 
 
     let resizeCb =
-        glfw.SetWindowSizeCallback(win, GlfwCallbacks.WindowSizeCallback(fun _ w h ->
+        glfw.SetFramebufferSizeCallback(win, GlfwCallbacks.FramebufferSizeCallback(fun _ w h ->
             let evt = getResizeEvent()
             transact (fun () -> currentSize.Value <- evt.FramebufferSize)
             resize.Trigger evt     
-            damaged <- true
+            requiresRedraw <- true
             this.Redraw() |> ignore
         ))
 
@@ -942,7 +942,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
 
     let damagedCallback =
         glfw.SetWindowRefreshCallback(win, GlfwCallbacks.WindowRefreshCallback(fun w ->
-            damaged <- true
+            requiresRedraw <- true
         ))
 
     let dropCallback =
@@ -1053,7 +1053,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
     let mutable renderTask : IRenderTask = RenderTask.empty
     let mutable renderTaskSub = 
         renderTask.AddMarkingCallback (fun () ->
-            damaged <- true
+            requiresRedraw <- true
             glfw.PostEmptyEvent()
         )
 
@@ -1168,10 +1168,10 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                 renderTask <- v
                 renderTaskSub <- 
                     v.AddMarkingCallback (fun () ->
-                        damaged <- true
+                        requiresRedraw <- true
                         glfw.PostEmptyEvent()
                     )
-                damaged <- true
+                requiresRedraw <- true
             )
             glfw.PostEmptyEvent()
 
@@ -1312,7 +1312,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                     let o = beforeFullScreen.Min
                     let s = beforeFullScreen.Size
                     glfw.SetWindowMonitor(win, NativePtr.zero, o.X, o.Y, s.X, s.Y, 0)
-                damaged <- true                    
+                requiresRedraw <- true
                 glfw.PostEmptyEvent()                            
             )        
 
@@ -1522,10 +1522,10 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                 else ()
 
     member x.Redraw() : bool =
-        if renderContinuous || damaged then
+        if renderContinuous || requiresRedraw then
             sw.Restart()
             try
-                damaged <- false
+                requiresRedraw <- false
                 if vsync <> enableVSync then
                     vsync <- enableVSync
                     if enableVSync then glfw.SwapInterval(1)
@@ -1542,20 +1542,26 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                         Queries.none
 
                 beforeRender.Trigger()
-                let s = x.FramebufferSize
-                match swapchain with
-                | Some ch when ch.Size = s -> 
-                    ch.Run(renderTask, queries)
-                | _ ->
+
+                let success =
+                    let s = x.FramebufferSize
                     match swapchain with
-                    | Some o -> o.Dispose()
-                    | None -> ()
+                    | Some ch when ch.Size = s ->
+                        ch.Run(renderTask, queries)
 
-                    let swap = surface.CreateSwapchain(s)
-                    swapchain <- Some swap
-                    swap.Run(renderTask, queries)
+                    | _ ->
+                        match swapchain with
+                        | Some o -> o.Dispose()
+                        | None -> ()
 
-                renderContinuous || renderTask.OutOfDate
+                        let swap = surface.CreateSwapchain(s)
+                        swapchain <- Some swap
+                        swap.Run(renderTask, queries)
+
+                if not success then
+                    requiresRedraw <- true
+
+                renderContinuous || renderTask.OutOfDate || requiresRedraw
             finally 
                 afterRender.Trigger()  
                 transact time.MarkOutdated  
