@@ -360,7 +360,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
             x.Flush()
 
 [<AutoOpen>]
-module ``Compute Commands`` =
+module private ``Compute Commands`` =
     
     type Command with
 
@@ -409,46 +409,6 @@ module ``Compute Commands`` =
 
         static member Dispatch (sizeX : int, sizeY : int, sizeZ : int) = Command.Dispatch(V3i(sizeX, sizeY, sizeZ))
         static member Dispatch (sizeX : int, sizeY : int) = Command.Dispatch(V3i(sizeX, sizeY, 1))
-         
-        static member ImageBarrier(img : ImageSubresourceRange, src : VkAccessFlags, dst : VkAccessFlags) =
-            { new Command() with
-                member x.Compatible = QueueFlags.All
-                member x.Enqueue cmd =
-                    native {
-                        let! pImageMemoryBarrier =
-                            VkImageMemoryBarrier(
-                                src, dst,
-                                VkImageLayout.General, VkImageLayout.General,
-                                VkQueueFamilyIgnored,
-                                VkQueueFamilyIgnored,
-                                img.Image.Handle,
-                                img.VkImageSubresourceRange
-                            )
-
-                        let srcStage =
-                            match src with
-                                | VkAccessFlags.TransferReadBit | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
-                                | _ -> VkPipelineStageFlags.ComputeShaderBit
-                            
-                        let dstStage =
-                            match dst with
-                                | VkAccessFlags.TransferReadBit | VkAccessFlags.TransferWriteBit -> VkPipelineStageFlags.TransferBit
-                                | _ -> VkPipelineStageFlags.ComputeShaderBit
-
-                        cmd.AppendCommand()
-                        VkRaw.vkCmdPipelineBarrier(
-                            cmd.Handle, 
-                            srcStage,
-                            dstStage,
-                            VkDependencyFlags.None,
-                            0u, NativePtr.zero,
-                            0u, NativePtr.zero,
-                            1u, pImageMemoryBarrier
-                        )
-
-                        return [img.Image :> ICommandResource]
-                    }
-            }
 
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module ComputeCommand =
@@ -504,76 +464,62 @@ module ``Compute Commands`` =
                     )
 
             type VKVM.CommandStream with
+                member x.TransformLayout(img : ImageSubresourceRange, source : VkImageLayout, target : VkImageLayout) =
+                    let srcStage, srcAccess =
+                        let stage = VkImageLayout.toSrcStageFlags source
+                        let access = VkImageLayout.toSrcAccessFlags source
+                        QueueFlags.Compute |> QueueFlags.filterSrcStageAndAccess stage access
+
+                    let dstStage, dstAccess =
+                        let stage = VkImageLayout.toDstStageFlags source
+                        let access = VkImageLayout.toDstAccessFlags source
+                        QueueFlags.Compute |> QueueFlags.filterDstStageAndAccess stage access
+
+                    let barrier =
+                        VkImageMemoryBarrier(
+                            srcAccess,
+                            dstAccess,
+                            source,
+                            target,
+                            VkQueueFamilyIgnored,
+                            VkQueueFamilyIgnored,
+                            img.Image.Handle,
+                            img.VkImageSubresourceRange
+                        )
+                    x.PipelineBarrier(
+                        srcStage,
+                        dstStage,
+                        [||],
+                        [||],
+                        [| barrier |]
+                    )
+
                 member x.TransformLayout(img : Image, source : VkImageLayout, target : VkImageLayout) =
-                    let src = VkImageLayout.toAccessFlags source
-                    let dst = VkImageLayout.toAccessFlags target
-
-                    let srcStage = VkImageLayout.toSrcStageFlags QueueFlags.Compute source
-                    let dstStage = VkImageLayout.toDstStageFlags QueueFlags.Compute target
-
                     let range =
                         if VkFormat.hasDepth img.Format then img.[TextureAspect.Depth]
                         else img.[TextureAspect.Color]
 
-                    let barrier =
-                        VkImageMemoryBarrier(
-                            src,
-                            dst,
-                            source,
-                            target,
-                            VkQueueFamilyIgnored,
-                            VkQueueFamilyIgnored,
-                            img.Handle,
-                            range.VkImageSubresourceRange
-                        )
-                    x.PipelineBarrier(
-                        srcStage,
-                        dstStage,
-                        [||],
-                        [||],
-                        [| barrier |]    
-                    )
-                    
-                member x.TransformLayout(range : ImageSubresourceRange, source : VkImageLayout, target : VkImageLayout) =
-                    let src = VkImageLayout.toAccessFlags source
-                    let dst = VkImageLayout.toAccessFlags target
+                    x.TransformLayout(range, source, target)
 
-                    let srcStage = VkImageLayout.toSrcStageFlags QueueFlags.Compute source
-                    let dstStage = VkImageLayout.toDstStageFlags QueueFlags.Compute target
-                        
-                    let barrier =
-                        VkImageMemoryBarrier(
-                            src,
-                            dst,
-                            source,
-                            target,
-                            VkQueueFamilyIgnored,
-                            VkQueueFamilyIgnored,
-                            range.Image.Handle,
-                            range.VkImageSubresourceRange
-                        )
-                    x.PipelineBarrier(
-                        srcStage,
-                        dstStage,
-                        [||],
-                        [||],
-                        [| barrier |]    
-                    )
+                member x.Sync(buffer : Buffer, srcAccess : VkAccessFlags, dstAccess : VkAccessFlags) =
 
-                member x.Sync(b : Buffer, src : VkAccessFlags, dst : VkAccessFlags) =
+                    let srcStage, srcAccess =
+                        let stage = VkBufferUsageFlags.toSrcStageFlags buffer.Usage
+                        QueueFlags.Compute |> QueueFlags.filterSrcStageAndAccess stage srcAccess
+
+                    let dstStage, dstAccess =
+                        let stage = VkBufferUsageFlags.toDstStageFlags buffer.Usage
+                        QueueFlags.Compute |> QueueFlags.filterDstStageAndAccess stage dstAccess
 
                     let barrier =
                         VkBufferMemoryBarrier(
-                            src,
-                            dst,
+                            srcAccess,
+                            dstAccess,
                             VkQueueFamilyIgnored, VkQueueFamilyIgnored,
-                            b.Handle,
+                            buffer.Handle,
                             0UL,
-                            uint64 b.Size
+                            uint64 buffer.Size
                         )
-
-                    let srcStage = VkAccessFlags.toSrcStageFlags QueueFlags.Compute src
-                    let dstStage = VkAccessFlags.toDstStageFlags QueueFlags.Compute dst
 
                     x.PipelineBarrier(
                         srcStage,
@@ -587,10 +533,15 @@ module ``Compute Commands`` =
                     let value = BitConverter.ToUInt32(pattern, 0)
                     x.FillBuffer(b.Handle, uint64 offset, uint64 size, value)
 
-                member x.ImageBarrier(img : ImageSubresourceRange, src : VkAccessFlags, dst : VkAccessFlags) =
+                member x.ImageBarrier(img : ImageSubresourceRange, srcAccess : VkAccessFlags, dstAccess : VkAccessFlags) =
 
-                    let srcStage = VkAccessFlags.toSrcStageFlags QueueFlags.Compute src
-                    let dstStage = VkAccessFlags.toDstStageFlags QueueFlags.Compute dst
+                    let srcStage, srcAccess =
+                        let stage = VkImageLayout.toSrcStageFlags img.Image.Layout
+                        QueueFlags.Compute |> QueueFlags.filterSrcStageAndAccess stage srcAccess
+
+                    let dstStage, dstAccess =
+                        let stage = VkImageLayout.toDstStageFlags img.Image.Layout
+                        QueueFlags.Compute |> QueueFlags.filterDstStageAndAccess stage dstAccess
 
                     x.PipelineBarrier(
                         srcStage, dstStage,
@@ -598,7 +549,7 @@ module ``Compute Commands`` =
                         [||],
                         [|
                             VkImageMemoryBarrier(
-                                src, dst,
+                                srcAccess, dstAccess,
                                 VkImageLayout.General, VkImageLayout.General,
                                 VkQueueFamilyIgnored,
                                 VkQueueFamilyIgnored,
@@ -816,7 +767,7 @@ module ``Compute Commands`` =
 
                 | ComputeCommand.SyncImageCmd(i, src, dst) ->
                     let i = unbox<Image> i
-                    Command.ImageBarrier(i.[TextureAspect.Color], VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst)
+                    Command.Sync(i.[TextureAspect.Color], VkImageLayout.General, VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst)
 
                 | ComputeCommand.SetBufferCmd(b, pattern) ->
                     Command.SetBuffer(unbox b.Buffer, int64 b.Offset, int64 b.Size, pattern)

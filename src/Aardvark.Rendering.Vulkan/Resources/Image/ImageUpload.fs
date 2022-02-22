@@ -59,8 +59,6 @@ module ImageUploadExtensions =
                     yield CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
                     yield! tempImage.ImageArray |> Array.mapi (fun level src -> CopyCommand.Copy(src, imageRange.[level, 0]))
 
-                    yield CopyCommand.SyncImage(imageRange, VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
-
                     yield CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
                     yield CopyCommand.Callback (fun () -> tempImage.Dispose())
                 ]
@@ -130,8 +128,6 @@ module ImageUploadExtensions =
                 device.CopyEngine.EnqueueSafe [
                     CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
                     CopyCommand.Copy(temp, imageRange.[0,0])
-
-                    CopyCommand.SyncImage(imageRange, VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
 
                     CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
                     CopyCommand.Callback(fun () -> temp.Dispose())
@@ -223,8 +219,6 @@ module ImageUploadExtensions =
                     for (level, faces) in Seq.indexed tempImages do
                         for (face, temp) in Seq.indexed faces do
                             yield CopyCommand.Copy(temp, image.[TextureAspect.Color, level, face])
-
-                    yield CopyCommand.SyncImage(imageRange, VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
 
                     yield CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
                     yield CopyCommand.Callback (fun () -> tempImages |> List.iter (List.iter Disposable.dispose))
@@ -332,8 +326,6 @@ module ImageUploadExtensions =
                             let dst = image.[TextureAspect.Color, level, slice]
                             yield CopyCommand.Copy(src, dst, V3i.Zero, src.Size, alignedSize.XY, size)
 
-                    yield CopyCommand.SyncImage(imageRange, VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
-
                     yield CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
                     yield CopyCommand.Callback (fun () -> tempImages |> Array.iter (Array.iter ((fun (d, _, _) -> d.Dispose()))))
                 ]
@@ -395,7 +387,6 @@ module ImageUploadExtensions =
                 device.CopyEngine.EnqueueSafe [
                     CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
                     CopyCommand.Copy(temp, imageRange.[0,0])
-                    CopyCommand.SyncImage(imageRange, VkImageLayout.TransferDstOptimal, VkAccessFlags.TransferWriteBit)
 
                     CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
                     CopyCommand.Callback(fun () -> temp.Dispose())

@@ -537,13 +537,12 @@ and [<RequireQualifiedAccess>] CopyCommand =
         | ReleaseBufferCmd   of buffer : VkBuffer * offset : int64 * size : int64 * dstQueueFamily : uint32
         | ReleaseImageCmd    of image : VkImage * range : VkImageSubresourceRange * srcLayout : VkImageLayout * dstLayout : VkImageLayout * dstQueueFamily : uint32
         | TransformLayoutCmd of image : VkImage * range : VkImageSubresourceRange * srcLayout : VkImageLayout * dstLayout : VkImageLayout
-        | SyncImageCmd       of image : VkImage * range : VkImageSubresourceRange * layout : VkImageLayout * srcAccess : VkAccessFlags
 
     static member TransformLayout(image : VkImage, range : VkImageSubresourceRange, srcLayout : VkImageLayout, dstLayout : VkImageLayout) =
         CopyCommand.TransformLayoutCmd(image, range, srcLayout, dstLayout)
 
-    static member SyncImage(image : VkImage, range : VkImageSubresourceRange, layout : VkImageLayout, srcAccess : VkAccessFlags) =
-        CopyCommand.SyncImageCmd(image, range, layout, srcAccess)
+    static member SyncImage(image : VkImage, range : VkImageSubresourceRange, layout : VkImageLayout) =
+        CopyCommand.TransformLayoutCmd(image, range, layout, layout)
 
     static member Copy(src : VkBuffer, srcOffset : int64, dst : VkBuffer, dstOffset : int64, size : int64) =
         CopyCommand.BufferToBufferCmd(
@@ -666,95 +665,77 @@ and CopyEngine(family : DeviceQueueFamily) =
 
                 for copy in copies do
                     match copy with
-                        | CopyCommand.CallbackCmd cont ->
-                            conts.Add cont
+                    | CopyCommand.CallbackCmd cont ->
+                        conts.Add cont
 
-                        | CopyCommand.BufferToBufferCmd(src, dst, info) ->
-                            stream.CopyBuffer(src, dst, [| info |]) |> ignore
+                    | CopyCommand.BufferToBufferCmd(src, dst, info) ->
+                        stream.CopyBuffer(src, dst, [| info |]) |> ignore
 
-                        | CopyCommand.BufferToImageCmd(src, dst, dstLayout, info, size) ->
-                            stream.CopyBufferToImage(src, dst, dstLayout, [| info |]) |> ignore
+                    | CopyCommand.BufferToImageCmd(src, dst, dstLayout, info, size) ->
+                        stream.CopyBufferToImage(src, dst, dstLayout, [| info |]) |> ignore
 
-                        | CopyCommand.ImageToBufferCmd(src, srcLayout, dst, info, size) ->
-                            stream.CopyImageToBuffer(src, srcLayout, dst, [| info |]) |> ignore
+                    | CopyCommand.ImageToBufferCmd(src, srcLayout, dst, info, size) ->
+                        stream.CopyImageToBuffer(src, srcLayout, dst, [| info |]) |> ignore
 
-                        | CopyCommand.ImageToImageCmd(src, srcLayout, dst, dstLayout, info, size) ->
-                            stream.CopyImage(src, srcLayout, dst, dstLayout, [| info |]) |> ignore
+                    | CopyCommand.ImageToImageCmd(src, srcLayout, dst, dstLayout, info, size) ->
+                        stream.CopyImage(src, srcLayout, dst, dstLayout, [| info |]) |> ignore
 
-                        | CopyCommand.ReleaseBufferCmd(buffer, offset, size, dstQueue) ->
-                            stream.PipelineBarrier(
-                                VkPipelineStageFlags.TransferBit,
-                                VkPipelineStageFlags.BottomOfPipeBit,
-                                [||],
-                                [|
-                                    VkBufferMemoryBarrier(
-                                        VkAccessFlags.TransferWriteBit,
-                                        VkAccessFlags.None,
-                                        uint32 familyIndex,
-                                        dstQueue,
-                                        buffer,
-                                        uint64 offset, uint64 size
-                                    )
-                                |],
-                                [||]
-                            ) |> ignore
+                    | CopyCommand.ReleaseBufferCmd(buffer, offset, size, dstQueue) ->
+                        stream.PipelineBarrier(
+                            VkPipelineStageFlags.TransferBit,
+                            VkPipelineStageFlags.BottomOfPipeBit,
+                            [||],
+                            [|
+                                VkBufferMemoryBarrier(
+                                    VkAccessFlags.TransferWriteBit,
+                                    VkAccessFlags.None,
+                                    uint32 familyIndex,
+                                    dstQueue,
+                                    buffer,
+                                    uint64 offset, uint64 size
+                                )
+                            |],
+                            [||]
+                        ) |> ignore
 
-                        | CopyCommand.ReleaseImageCmd(image, range, srcLayout, dstLayout, dstQueue) ->
-                            stream.PipelineBarrier(
-                                VkPipelineStageFlags.TransferBit,
-                                VkPipelineStageFlags.BottomOfPipeBit,
-                                [||],
-                                [||],
-                                [|
-                                    VkImageMemoryBarrier(
-                                        VkAccessFlags.TransferWriteBit,
-                                        VkAccessFlags.None,
-                                        srcLayout, dstLayout,
-                                        uint32 familyIndex,
-                                        uint32 dstQueue,
-                                        image,
-                                        range
-                                    )
-                                |]
-                            ) |> ignore
+                    | CopyCommand.ReleaseImageCmd(image, range, srcLayout, dstLayout, dstQueue) ->
+                        stream.PipelineBarrier(
+                            VkPipelineStageFlags.TransferBit,
+                            VkPipelineStageFlags.BottomOfPipeBit,
+                            [||],
+                            [||],
+                            [|
+                                VkImageMemoryBarrier(
+                                    VkAccessFlags.TransferWriteBit,
+                                    VkAccessFlags.None,
+                                    srcLayout, dstLayout,
+                                    uint32 familyIndex,
+                                    uint32 dstQueue,
+                                    image,
+                                    range
+                                )
+                            |]
+                        ) |> ignore
 
-                        | CopyCommand.TransformLayoutCmd(image, range, srcLayout, dstLayout) ->
-                            stream.PipelineBarrier(
-                                VkImageLayout.toSrcStageFlags queue.Flags srcLayout,
-                                VkImageLayout.toDstStageFlags queue.Flags dstLayout,
-                                [||],
-                                [||],
-                                [|
-                                    VkImageMemoryBarrier(
-                                        VkImageLayout.toAccessFlags srcLayout,
-                                        VkImageLayout.toAccessFlags dstLayout,
-                                        srcLayout, dstLayout,
-                                        uint32 familyIndex,
-                                        uint32 familyIndex,
-                                        image,
-                                        range
-                                    )
-                                |]
-                            ) |> ignore
+                    | CopyCommand.TransformLayoutCmd(image, range, srcLayout, dstLayout) ->
+                        stream.PipelineBarrier(
+                            VkPipelineStageFlags.TransferBit, // copy engine only performs transfer operations
+                            VkPipelineStageFlags.TransferBit,
+                            [||],
+                            [||],
+                            [|
+                                VkImageMemoryBarrier(
+                                    VkAccessFlags.TransferWriteBit,                                   // make transfer writes available
+                                    VkAccessFlags.TransferReadBit ||| VkAccessFlags.TransferWriteBit, // make them visible to subsequent reads and writes
+                                    srcLayout, dstLayout,
+                                    uint32 familyIndex,
+                                    uint32 familyIndex,
+                                    image,
+                                    range
+                                )
+                            |]
+                        ) |> ignore
 
-                        | CopyCommand.SyncImageCmd(image, range, layout, srcAccess) ->
-                            stream.PipelineBarrier(
-                                VkAccessFlags.toSrcStageFlags queue.Flags srcAccess,
-                                VkPipelineStageFlags.TopOfPipeBit,
-                                [||],
-                                [||],
-                                [|
-                                    VkImageMemoryBarrier(
-                                        srcAccess,
-                                        VkAccessFlags.None,
-                                        layout, layout,
-                                        uint32 familyIndex,
-                                        uint32 familyIndex,
-                                        image,
-                                        range
-                                    )
-                                |]
-                            ) |> ignore
                 stream.Run cmd.Handle
                 cmd.End()
 
@@ -2294,14 +2275,14 @@ and [<RequireQualifiedAccess>] QueueCommandResult =
     | Success
     | SwapchainSuboptimal
     | PresentationFailure
-    | Failure of VkResult
+    | Failure
 
     member private x.Rank =
         match x with
         | Success -> 0
         | SwapchainSuboptimal -> 1
         | PresentationFailure -> 2
-        | Failure _ -> 3
+        | Failure -> 3
 
     static member union (l : QueueCommandResult) (r : QueueCommandResult) =
         if l.Rank > r.Rank then l else r
@@ -2311,11 +2292,11 @@ and [<RequireQualifiedAccess>] QueueCommandResult =
         elif result = VkResult.SuboptimalKhr then SwapchainSuboptimal
         elif result = VkResult.ErrorOutOfDateKhr then PresentationFailure
         elif result = VkResult.ErrorSurfaceLostKhr then PresentationFailure
-        else Failure result
+        else Failure
 
     static member check (result : VkResult) (message : string) =
         match QueueCommandResult.ofVkResult result with
-        | QueueCommandResult.Failure code -> failf $"{message} ({code})"
+        | QueueCommandResult.Failure -> failf $"{message} ({result})"
         | res -> res
 
 and DeviceTask(parent : DeviceQueueThread, priority : int) =
@@ -3010,4 +2991,3 @@ type DeviceExtensions private() =
     [<Extension>]
     static member Alloc(this : Device, reqs : VkMemoryRequirements) =
         DeviceExtensions.Alloc(this, reqs, false)
-
