@@ -364,7 +364,7 @@ module GeometryPoolUtilities =
                             command {
                                 if not isEmpty then
                                     do! Command.Copy(hostBuffer, x, ranges)
-                                    do! Command.SyncWrite x
+                                    do! Command.Sync(x, VkPipelineStageFlags.TransferBit, VkAccessFlags.TransferWriteBit)
                             }
 
                         Some copy
@@ -393,10 +393,8 @@ module GeometryPoolUtilities =
                                     | None -> ()
                                     
                                 if not isEmpty then
-                                    //do! Command.Copy(hostBuffer, newBuffer.HostBuffer, copySize)
                                     do! Command.Copy(x, newBuffer, copySize)
-                                    //do! Command.SyncWrite(newBuffer.HostBuffer)
-                                    do! Command.SyncWrite(newBuffer)
+                                    do! Command.Sync(newBuffer, VkPipelineStageFlags.TransferBit, VkAccessFlags.TransferWriteBit)
                             }
 
                         run update

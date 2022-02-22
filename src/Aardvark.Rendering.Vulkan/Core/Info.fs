@@ -128,56 +128,6 @@ type QueueFlags =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module QueueFlags =
-    open KHRRayTracingPipeline
-    open KHRAccelerationStructure
-
-    // See Vulkan specification 1.2.164 (Chapter 7. Synchronization and Cache Control)
-    let private supportedStages =
-        let general =
-            VkPipelineStageFlags.TopOfPipeBit |||
-            VkPipelineStageFlags.BottomOfPipeBit |||
-            VkPipelineStageFlags.HostBit |||
-            VkPipelineStageFlags.AllCommandsBit
-
-        let transfer =
-            general ||| VkPipelineStageFlags.TransferBit
-
-        let graphics =
-            transfer |||
-            VkPipelineStageFlags.DrawIndirectBit |||
-            VkPipelineStageFlags.VertexInputBit |||
-            VkPipelineStageFlags.VertexShaderBit |||
-            VkPipelineStageFlags.TessellationControlShaderBit |||
-            VkPipelineStageFlags.TessellationEvaluationShaderBit |||
-            VkPipelineStageFlags.GeometryShaderBit |||
-            VkPipelineStageFlags.FragmentShaderBit |||
-            VkPipelineStageFlags.EarlyFragmentTestsBit |||
-            VkPipelineStageFlags.LateFragmentTestsBit |||
-            VkPipelineStageFlags.ColorAttachmentOutputBit |||
-            VkPipelineStageFlags.AllGraphicsBit
-
-        let compute =
-            transfer |||
-            VkPipelineStageFlags.DrawIndirectBit |||
-            VkPipelineStageFlags.ComputeShaderBit |||
-            VkPipelineStageFlags.AccelerationStructureBuildBitKhr |||
-            VkPipelineStageFlags.RayTracingShaderBitKhr
-
-        Map.ofList [
-           QueueFlags.Graphics, graphics
-           QueueFlags.Compute, compute
-           QueueFlags.Transfer, transfer
-           QueueFlags.SparseBinding, general
-        ]
-
-    /// Removes all stages that are not supported by a queue with the given flags.
-    let filterStages (flags : QueueFlags) (stages : VkPipelineStageFlags) =
-        (VkPipelineStageFlags.None, supportedStages) ||> Map.fold (fun result queue supported ->
-            if flags.HasFlag queue then
-                result ||| (stages &&& supported)
-            else
-                result
-        )
 
     let inline graphics (f : QueueFlags) = (f &&& QueueFlags.Graphics) <> QueueFlags.None
     let inline compute (f : QueueFlags) = (f &&& QueueFlags.Compute) <> QueueFlags.None
