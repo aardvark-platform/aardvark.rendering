@@ -221,9 +221,6 @@ module Terrain =
 
 
     let run() =
-        FShade.EffectDebugger.attach()
-
-
         let bounds = AVal.init (Box3d(V3d(-10.0, -10.0, 0.0), V3d(10.0, 10.0, 3.0)))
 
         let gridCount = V2i(40, 40)
