@@ -11,31 +11,7 @@ open System.Runtime.InteropServices
 #nowarn "51"
 
 module Loader =
-    open System
     open System.IO
-
-    [<OnAardvarkInit>]
-    let init() =
-        // load native libs explicitly using aardvark mechanism so that dlopen in assimp is nop
-        let l = 
-            if RuntimeInformation.IsOSPlatform(OSPlatform.OSX) then
-                Aardvark.Base.Aardvark.LoadLibrary(typeof<Assimp.CompileFlags>.Assembly, "libassimp")
-            elif RuntimeInformation.IsOSPlatform(OSPlatform.Linux) then
-                Aardvark.Base.Aardvark.LoadLibrary(typeof<Assimp.CompileFlags>.Assembly, "libassimp")
-            elif RuntimeInformation.IsOSPlatform(OSPlatform.Windows) then
-                if Environment.Is64BitOperatingSystem then
-                    Aardvark.Base.Aardvark.LoadLibrary(typeof<Assimp.CompileFlags>.Assembly, "Assimp64")
-                else 
-                    Aardvark.Base.Aardvark.LoadLibrary(typeof<Assimp.CompileFlags>.Assembly, "Assimp32")
-            else 
-                0n
-        Log.line "assimp ptr: %A" l
-
-        // this no longer works with aardvark.base >= 5.1. 
-        //Assimp.Unmanaged.AssimpLibraryImplementation.NativeLibraryPath <- Aardvark.NativeLibraryPath
-        //Assimp.Unmanaged.AssimpLibraryImplementation.SeparateLibraryDirectories <- Aardvark.SeparateLibraryDirectories
-
-
 
     type Texture =
         {
