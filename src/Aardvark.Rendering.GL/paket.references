@@ -7,3 +7,4 @@ FSharp.Core
 Unofficial.OpenTK
 Aardvark.Base.Tensors
 Aardvark.PixImage.DevIL
+Aardvark.Build

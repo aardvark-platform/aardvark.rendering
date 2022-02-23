@@ -14,3 +14,4 @@ FShade.Debug
 SixLabors.ImageSharp
 
 Aardvark.Base.Tensors
+Aardvark.Build
