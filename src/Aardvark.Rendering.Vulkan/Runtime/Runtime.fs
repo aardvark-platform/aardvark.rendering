@@ -207,8 +207,6 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         }
 
     member x.ResolveMultisamples(source : IFramebufferOutput, target : IBackendTexture, trafo : ImageTrafo) =
-        use token = device.Token
-
         let src =
             match source with
             | :? Image as img ->
@@ -227,7 +225,21 @@ type Runtime(device : Device, debug : DebugLevel) as this =
             let img = unbox<Image> target
             img.[src.Aspect, 0, 0 .. src.SliceCount - 1]
 
-        token.Enqueue (Command.ResolveMultisamples(src, dst))
+        device.eventually {
+            let srcLayout = src.Image.Layout
+            let dstLayout = dst.Image.Layout
+
+            do! Command.TransformLayout(src, srcLayout, VkImageLayout.TransferSrcOptimal)
+            do! Command.TransformLayout(dst, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
+
+            do! Command.ResolveMultisamples(
+                src, VkImageLayout.TransferSrcOptimal,
+                dst, VkImageLayout.TransferDstOptimal
+            )
+
+            do! Command.TransformLayout(src, VkImageLayout.TransferSrcOptimal, srcLayout)
+            do! Command.TransformLayout(dst, VkImageLayout.TransferDstOptimal, dstLayout)
+        }
 
     member x.Dispose() =
         if not device.IsDisposed then

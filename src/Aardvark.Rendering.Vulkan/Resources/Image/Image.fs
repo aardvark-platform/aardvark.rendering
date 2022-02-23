@@ -501,7 +501,10 @@ module ``Image Command Extensions`` =
                     [src.Image; dst]
             }
 
-        static member ResolveMultisamples(src : ImageSubresourceLayers, srcOffset : V3i, dst : ImageSubresourceLayers, dstOffset : V3i, size : V3i) =
+        static member ResolveMultisamples(src : ImageSubresourceLayers, srcLayout : VkImageLayout, srcOffset : V3i,
+                                          dst : ImageSubresourceLayers, dstLayout : VkImageLayout, dstOffset : V3i,
+                                          size : V3i) =
+
             if src.SliceCount <> dst.SliceCount then
                 failf "cannot resolve image: { srcSlices = %A; dstSlices = %A }" src.SliceCount dst.SliceCount
 
@@ -522,18 +525,24 @@ module ``Image Command Extensions`` =
 
                     cmd.AppendCommand()
                     resolve |> pin (fun pResolve ->
-                        VkRaw.vkCmdResolveImage(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Image.Handle, dst.Image.Layout, 1u, pResolve)
+                        VkRaw.vkCmdResolveImage(cmd.Handle, src.Image.Handle, srcLayout, dst.Image.Handle, dstLayout, 1u, pResolve)
                     )
 
                     [src.Image; dst.Image]
             }
 
-        static member ResolveMultisamples(src : ImageSubresourceLayers, dst : ImageSubresourceLayers) =
+        static member ResolveMultisamples(src : ImageSubresourceLayers, srcOffset : V3i, dst : ImageSubresourceLayers, dstOffset : V3i, size : V3i) =
+            Command.ResolveMultisamples(src, src.Image.Layout, srcOffset, dst, dst.Image.Layout, dstOffset, size)
+
+        static member ResolveMultisamples(src : ImageSubresourceLayers, srcLayout : VkImageLayout,
+                                          dst : ImageSubresourceLayers, dstLayout : VkImageLayout) =
             if src.Size <> dst.Size then
                 failf "cannot copy image: { srcSize = %A; dstSize = %A }" src.LevelCount dst.LevelCount
 
-            Command.ResolveMultisamples(src, V3i.Zero, dst, V3i.Zero, src.Size)
+            Command.ResolveMultisamples(src, srcLayout, V3i.Zero, dst, dstLayout, V3i.Zero, src.Size)
 
+        static member ResolveMultisamples(src : ImageSubresourceLayers, dst : ImageSubresourceLayers) =
+            Command.ResolveMultisamples(src, src.Image.Layout, dst, dst.Image.Layout)
 
         static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout, srcRange : Box3i, dst : ImageSubresourceLayers, dstLayout : VkImageLayout, dstRange : Box3i, filter : VkFilter) =
             { new Command() with
