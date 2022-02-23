@@ -94,6 +94,7 @@ module private ManagedBufferImplementation =
     type ManagedBuffer<'a when 'a : unmanaged>(runtime : IRuntime, usage : BufferUsage) =
         inherit AdaptiveObject()
         static let asize = sizeof<'a> |> nativeint
+        static let empty = { new IDisposable with member x.Dispose() = () }
 
         let mutable store = runtime.CreateBuffer(0n, usage)
 
@@ -103,7 +104,7 @@ module private ManagedBufferImplementation =
         let dirtyLock = obj()
         let mutable dirty = System.Collections.Generic.HashSet<ManagedBufferWriter>()
 
-        override x.InputChangedObject(transaction, object) =
+        override x.InputChangedObject(_transaction, object) =
             match object with
             | :? ManagedBufferWriter as writer -> 
                 lock dirtyLock (fun () -> dirty.Add writer |> ignore)
@@ -125,43 +126,47 @@ module private ManagedBufferImplementation =
             with get() = store
 
         member x.Add(range : Range1l, view : BufferView) =
-            let mutable isNew = false
-            let res = lock x (fun () ->
-                let count = range.Size + 1L
+            let count = range.Size + 1L
 
-                let writer = 
-                    bufferWriters.GetOrCreate(view, fun view ->
-                        isNew <- true
-                        let data = BufferView.download 0 (int count) view
-                        let real : aval<'a[]> = data |> PrimitiveValueConverter.convertArray view.ElementType
-                        let remove w =
-                            lock dirtyLock (fun () -> dirty.Remove w |> ignore)
-                            bufferWriters.Remove view |> ignore
-                            view.Buffer.Outputs.Remove(real) |> ignore // remove converter from Output of data Mod (in case there is no converter remove will do nothing, but Release of ManagedBufferSingleWriter will)
+            if count <= 0L then
+                empty
+            else
+                let mutable isNew = false
+                let res = lock x (fun () ->
 
-                        let w = new ManagedBufferWriter<'a>(remove, real, x)
-                        lock dirtyLock (fun () -> dirty.Add w |> ignore)
-                        w
-                    )
+                    let writer =
+                        bufferWriters.GetOrCreate(view, fun view ->
+                            isNew <- true
+                            let data = BufferView.download 0 (int count) view
+                            let real : aval<'a[]> = data |> PrimitiveValueConverter.convertArray view.ElementType
+                            let remove w =
+                                lock dirtyLock (fun () -> dirty.Remove w |> ignore)
+                                bufferWriters.Remove view |> ignore
+                                view.Buffer.Outputs.Remove(real) |> ignore // remove converter from Output of data Mod (in case there is no converter remove will do nothing, but Release of ManagedBufferSingleWriter will)
+
+                            let w = new ManagedBufferWriter<'a>(remove, real, x)
+                            lock dirtyLock (fun () -> dirty.Add w |> ignore)
+                            w
+                        )
 
 
-                if writer.AddRef range then
-                    let min = nativeint(range.Min + count) * asize
-                    if x.Store.SizeInBytes < min then
-                        x.Resize(Fun.NextPowerOfTwo(int64 min) |> nativeint)
-       
-                    lock writer (fun () -> 
-                        if not writer.OutOfDate then
-                            writer.Write(AdaptiveToken.Top, range)
-                    )
+                    if writer.AddRef range then
+                        let min = nativeint(range.Min + count) * asize
+                        if x.Store.SizeInBytes < min then
+                            x.Resize(Fun.NextPowerOfTwo(int64 min) |> nativeint)
 
-                { new IDisposable with
-                    member x.Dispose() =
-                        writer.RemoveRef range |> ignore
-                }
-            )
-            if isNew then transact (fun () -> x.MarkOutdated ())
-            res
+                        lock writer (fun () ->
+                            if not writer.OutOfDate then
+                                writer.Write(AdaptiveToken.Top, range)
+                        )
+
+                    { new IDisposable with
+                        member x.Dispose() =
+                            writer.RemoveRef range |> ignore
+                    }
+                )
+                if isNew then transact (fun () -> x.MarkOutdated ())
+                res
 
         member x.Add(index : int, data : IAdaptiveValue) =
             let mutable isNew = false
@@ -201,35 +206,38 @@ module private ManagedBufferImplementation =
             res
 
         member x.Set(byteOffset : nativeint, src : IntPtr, byteCount : nativeint) =
-            let e = byteOffset + byteCount
-            if x.Store.SizeInBytes < e then
-                x.Resize(Fun.NextPowerOfTwo(int64 e) |> nativeint)
+            if byteCount > 0n then
+                let e = byteOffset + byteCount
+                if x.Store.SizeInBytes < e then
+                    x.Resize(Fun.NextPowerOfTwo(int64 e) |> nativeint)
 
-            x.Store.Upload(byteOffset, src, byteCount)
+                x.Store.Upload(byteOffset, src, byteCount)
 
         /// allows to set the provided value-array repeated if the range is larger than the value-array
         member x.Set(range : Range1l, value : byte[]) =
             let count = range.Size + 1L
-            let e = nativeint(range.Min + count) * asize
-            if x.Store.SizeInBytes < e then
-                x.Resize(Fun.NextPowerOfTwo(int64 e) |> nativeint)
 
-            let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
-            try
-                let ptr = gc.AddrOfPinnedObject()
-                let lv = value.Length |> nativeint
-                let mutable remaining = nativeint count * asize
-                let mutable offset = nativeint range.Min * asize
-                while remaining >= lv do
-                    x.Store.Upload(offset, ptr, lv)
-                    offset <- offset + lv
-                    remaining <- remaining - lv
+            if count > 0L then
+                let e = nativeint(range.Min + count) * asize
+                if x.Store.SizeInBytes < e then
+                    x.Resize(Fun.NextPowerOfTwo(int64 e) |> nativeint)
 
-                if remaining > 0n then
-                    x.Store.Upload(offset, ptr, remaining)
+                let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
+                try
+                    let ptr = gc.AddrOfPinnedObject()
+                    let lv = value.Length |> nativeint
+                    let mutable remaining = nativeint count * asize
+                    let mutable offset = nativeint range.Min * asize
+                    while remaining >= lv do
+                        x.Store.Upload(offset, ptr, lv)
+                        offset <- offset + lv
+                        remaining <- remaining - lv
 
-            finally
-                gc.Free()
+                    if remaining > 0n then
+                        x.Store.Upload(offset, ptr, remaining)
+
+                finally
+                    gc.Free()
 
         member x.Set(index : int, value : 'a) =
             let e = nativeint (index + 1) * asize
@@ -248,15 +256,18 @@ module private ManagedBufferImplementation =
             res
 
         member x.Set(range : Range1l, value : 'a[]) =
-            let e = nativeint(range.Max + 1L) * asize
-            if x.Store.SizeInBytes < e then
-                x.Resize(Fun.NextPowerOfTwo(int64 e) |> nativeint)
+            let count = range.Size + 1L
 
-            let offset = nativeint range.Min * asize
-            let size = nativeint(range.Size + 1L) * asize
-            let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
-            try x.Store.Upload(offset, gc.AddrOfPinnedObject(), size)
-            finally gc.Free()
+            if count > 0L then
+                let e = nativeint(range.Max + 1L) * asize
+                if x.Store.SizeInBytes < e then
+                    x.Resize(Fun.NextPowerOfTwo(int64 e) |> nativeint)
+
+                let offset = nativeint range.Min * asize
+                let size = nativeint count * asize
+                let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
+                try x.Store.Upload(offset, gc.AddrOfPinnedObject(), size)
+                finally gc.Free()
 
         member x.GetValue(token : AdaptiveToken) =
             x.EvaluateAlways token (fun token ->
@@ -309,7 +320,6 @@ module private ManagedBufferImplementation =
 
     and [<AbstractClass>] ManagedBufferWriter(remove : ManagedBufferWriter -> unit) =
         inherit AdaptiveObject()
-        let mutable refCount = 0
         let targetRegions = ReferenceCountingSet<Range1l>()
 
         abstract member Write : AdaptiveToken * Range1l -> unit
@@ -449,6 +459,9 @@ type internal PoolResources =
     }
 
 and ManagedDrawCall internal(call : DrawCallInfo, poolResources : voption<PoolResources>) =
+    static let empty = new ManagedDrawCall(DrawCallInfo())
+
+    static member Empty = empty
 
     member x.Call = call
 
@@ -541,58 +554,62 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
     ///<param name="indexOffset">An offset added to the FirstIndex field of the resulting draw call.</param>
     ///<param name="faceVertexCount">The face vertex count of the resulting draw call.</param>
     member x.Add(geometry : AdaptiveGeometry, indexOffset : int, faceVertexCount : int) =
-        lock x (fun () ->
-            let ds = List()
-            let fvc = geometry.FaceVertexCount
-            let vertexCount = geometry.VertexCount
-            
-            
-            let vertexPtr = vertexManager.Alloc(geometry.VertexAttributes, vertexCount)
-            let vertexRange = Range1l(int64 vertexPtr.Offset, int64 vertexPtr.Offset + int64 vertexCount - 1L)
-            for (k,t) in vertexBufferTypes do
-                let target = vertexBuffers.[k]
-                match Map.tryFind k geometry.VertexAttributes with
-                    | Some v -> target.Add(vertexRange, v) |> ds.Add
-                    | None -> target.Set(vertexRange, zero)
-            
-            let instancePtr = instanceManager.Alloc(geometry.InstanceAttributes, 1)
-            let instanceIndex = int instancePtr.Offset
-            for (k,t) in uniformTypes do
-                let target = instanceBuffers.[k]
-                match Map.tryFind k geometry.InstanceAttributes with
-                    | Some v -> target.Add(instanceIndex, v) |> ds.Add
-                    | None -> target.Set(Range1l(int64 instanceIndex, int64 instanceIndex), zero)
+        let faceVertexCount = min faceVertexCount geometry.FaceVertexCount
 
-            let isNew, indexPtr = indexManager.TryAlloc((geometry.Indices, fvc), fvc)
-            let indexRange = Range1l(int64 indexPtr.Offset, int64 indexPtr.Offset + int64 fvc - 1L)
-            match geometry.Indices with
-                | Some v -> indexBuffer.Add(indexRange, v) |> ds.Add
-                | None ->
-                    if isNew then
-                        let conv = PrimitiveValueConverter.getArrayConverter typeof<int> signature.IndexType
-                        let data = Array.init fvc id |> conv
-                        indexBuffer.Set(indexRange, data.UnsafeCoerce<byte>())
+        if faceVertexCount <= 0 then
+            ManagedDrawCall.Empty
+        else
+            lock x (fun () ->
+                let ds = List()
+                let fvc = geometry.FaceVertexCount
+                let vertexCount = geometry.VertexCount
 
-            let resources =
-                {
-                    Pool        = x
-                    IndexPtr    = indexPtr
-                    VertexPtr   = vertexPtr
-                    InstancePtr = instancePtr
-                    Disposables = ds
-                }
+                let vertexPtr = vertexManager.Alloc(geometry.VertexAttributes, vertexCount)
+                let vertexRange = Range1l(int64 vertexPtr.Offset, int64 vertexPtr.Offset + int64 vertexCount - 1L)
+                for (k,_) in vertexBufferTypes do
+                    let target = vertexBuffers.[k]
+                    match Map.tryFind k geometry.VertexAttributes with
+                        | Some v -> target.Add(vertexRange, v) |> ds.Add
+                        | None -> target.Set(vertexRange, zero)
 
-            let call =
-                DrawCallInfo(
-                    FaceVertexCount = faceVertexCount,
-                    FirstIndex = int indexPtr.Offset + indexOffset,
-                    FirstInstance = int instancePtr.Offset,
-                    InstanceCount = 1,
-                    BaseVertex = int vertexPtr.Offset
-                )
+                let instancePtr = instanceManager.Alloc(geometry.InstanceAttributes, 1)
+                let instanceIndex = int instancePtr.Offset
+                for (k,_) in uniformTypes do
+                    let target = instanceBuffers.[k]
+                    match Map.tryFind k geometry.InstanceAttributes with
+                        | Some v -> target.Add(instanceIndex, v) |> ds.Add
+                        | None -> target.Set(Range1l(int64 instanceIndex, int64 instanceIndex), zero)
 
-            new ManagedDrawCall(call, resources)
-        )
+                let isNew, indexPtr = indexManager.TryAlloc((geometry.Indices, fvc), fvc)
+                let indexRange = Range1l(int64 indexPtr.Offset, int64 indexPtr.Offset + int64 fvc - 1L)
+                match geometry.Indices with
+                    | Some v -> indexBuffer.Add(indexRange, v) |> ds.Add
+                    | None ->
+                        if isNew then
+                            let conv = PrimitiveValueConverter.getArrayConverter typeof<int> signature.IndexType
+                            let data = Array.init fvc id |> conv
+                            indexBuffer.Set(indexRange, data.UnsafeCoerce<byte>())
+
+                let resources =
+                    {
+                        Pool        = x
+                        IndexPtr    = indexPtr
+                        VertexPtr   = vertexPtr
+                        InstancePtr = instancePtr
+                        Disposables = ds
+                    }
+
+                let call =
+                    DrawCallInfo(
+                        FaceVertexCount = faceVertexCount,
+                        FirstIndex = int indexPtr.Offset + indexOffset,
+                        FirstInstance = int instancePtr.Offset,
+                        InstanceCount = 1,
+                        BaseVertex = int vertexPtr.Offset
+                    )
+
+                new ManagedDrawCall(call, resources)
+            )
 
     member x.VertexAttributes =
         { new IAttributeProvider with
@@ -835,13 +852,8 @@ type IRuntimePoolExtensions private() =
 
     [<Extension>]
     static member CreateDrawCallBuffer(this : IRuntime, indexed : bool) =
-        new DrawCallBuffer(this, indexed)
+        DrawCallBuffer(this, indexed)
 
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module ManagedDrawCall =
-
-    let empty = new ManagedDrawCall(DrawCallInfo())
 
 [<AutoOpen>]
 module ManagedPoolSg =
@@ -864,8 +876,8 @@ module ``Pool Semantics`` =
             
             let pool = p.Pool
             
-            let additions = new List<DrawCallInfo>()
-            let removals = new List<DrawCallInfo>()
+            let additions = List<DrawCallInfo>()
+            let removals = List<DrawCallInfo>()
 
             let r = (p.Calls |> ASet.map (fun mdc -> mdc.Call)).GetReader()
             let calls =
