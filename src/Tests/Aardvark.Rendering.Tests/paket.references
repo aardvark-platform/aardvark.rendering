@@ -5,3 +5,4 @@ Expecto.FsCheck
 Expecto.Hopac
 YoloDev.Expecto.TestSdk
 Microsoft.NET.Test.Sdk
+Aardvark.Build
