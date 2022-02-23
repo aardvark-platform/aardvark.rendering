@@ -251,12 +251,14 @@ module BufferCommands =
 // =======================================================================
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Buffer =
-    let private emptyBuffers = ConcurrentDictionary<Device * VkBufferUsageFlags, Buffer>()
+    let private emptyBuffers = ConcurrentDictionary<DeviceHeap * VkBufferUsageFlags, Buffer>()
 
-    let empty (usage : VkBufferUsageFlags) (device : Device) =
-        let key = (device, usage)
+    let empty (usage : VkBufferUsageFlags) (memory : DeviceHeap) =
+        let key = (memory, usage)
         let buffer =
-            emptyBuffers.GetOrAdd(key, fun (device, usage) ->
+            emptyBuffers.GetOrAdd(key, fun (memory, usage) ->
+                let device = memory.Device
+
                 let info =
                     VkBufferCreateInfo(
                         VkBufferCreateFlags.None,
@@ -282,10 +284,13 @@ module Buffer =
                         NativePtr.read ptr
                     )
 
-                let mem = device.Alloc(reqs, true)
+                if reqs.memoryTypeBits &&& (1u <<< memory.Index) = 0u then
+                    failf "cannot create buffer using memory %A" memory
+
+                let mem = memory.Alloc(int64 reqs.alignment, int64 reqs.size)
+
                 VkRaw.vkBindBufferMemory(device.Handle, handle, mem.Memory.Handle, uint64 mem.Offset)
                     |> check "could not bind empty buffer memory"
-
 
                 device.OnDispose.Add (fun () ->
                     VkRaw.vkDestroyBuffer(device.Handle, handle, NativePtr.zero)
@@ -338,7 +343,7 @@ module Buffer =
             new Buffer(device, handle, ptr, size, flags)
 
         else
-            device |> empty flags
+            memory |> empty flags
 
     let inline create  (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
         createConcurrent false flags size memory
@@ -386,7 +391,7 @@ module Buffer =
 
             buffer
         else
-            empty flags device
+            empty flags memory
 
     let internal updateRangeWriter (offset : int64) (size : int64) (writer : nativeint -> unit) (buffer : Buffer) =
         let device = buffer.Device
@@ -446,8 +451,6 @@ module Buffer =
             false
 
     let rec ofBufferWithMemory (flags : VkBufferUsageFlags) (buffer : IBuffer) (memory : DeviceHeap) =
-        let device = memory.Device
-
         match buffer with
         | :? ArrayBuffer as ab ->
             if ab.Data.Length <> 0 then
@@ -456,7 +459,7 @@ module Buffer =
                 try memory |> ofWriter flags size (fun dst -> Marshal.Copy(gc.AddrOfPinnedObject(), dst, size))
                 finally gc.Free()
             else
-                device |> empty flags
+                memory |> empty flags
 
         | :? INativeBuffer as nb ->
             if nb.SizeInBytes <> 0 then
@@ -465,7 +468,7 @@ module Buffer =
                     memory |> ofWriter flags size (fun dst -> Marshal.Copy(src, dst, size))
                 )
             else
-                device |> empty flags
+                memory |> empty flags
 
         | :? Buffer as b ->
             b.AddReference()

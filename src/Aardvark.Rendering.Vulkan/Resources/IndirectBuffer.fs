@@ -59,7 +59,7 @@ module IndirectBuffer =
                     try device.DeviceMemory |> Buffer.ofWriter flags size (fun dst -> copy indexed (gc.AddrOfPinnedObject()) dst ab.Data.Length)
                     finally gc.Free()
                 else
-                    Buffer.empty flags device
+                    Buffer.empty flags device.DeviceMemory
 
             | :? INativeBuffer as nb ->
                 if nb.SizeInBytes <> 0 then
@@ -69,7 +69,7 @@ module IndirectBuffer =
                         device.DeviceMemory |> Buffer.ofWriter flags size (fun dst -> copy indexed src dst count)
                     )
                 else
-                    Buffer.empty flags device
+                    Buffer.empty flags device.DeviceMemory
             | :? Buffer as bb ->
                 bb
             | _ ->
