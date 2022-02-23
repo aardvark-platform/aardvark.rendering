@@ -720,7 +720,7 @@ module ConsoleDeviceChooser =
                 let altDown = 
                     match System.Environment.OSVersion with
                         | Windows -> Win32.isDown KeyCode.LeftAlt || Win32.isDown KeyCode.RightAlt
-                        | _ -> true
+                        | _ -> false
 
                 if altDown then
                     choose()
