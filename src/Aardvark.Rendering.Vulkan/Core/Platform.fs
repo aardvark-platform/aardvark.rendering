@@ -158,7 +158,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                     |> check "could not get physical device groups"
 
                 let groupCount = NativePtr.read pGroupCount
-                let groups = Array.zeroCreate (int groupCount)
+                let groups = Array.replicate (int groupCount) VkPhysicalDeviceGroupProperties.Empty
                 let! ptr = groups
                 VkRaw.vkEnumeratePhysicalDeviceGroups(instance, pGroupCount, ptr)
                     |> check "could not get physical device groups"
@@ -720,7 +720,7 @@ module ConsoleDeviceChooser =
                 let altDown = 
                     match System.Environment.OSVersion with
                         | Windows -> Win32.isDown KeyCode.LeftAlt || Win32.isDown KeyCode.RightAlt
-                        | _ -> true
+                        | _ -> false
 
                 if altDown then
                     choose()

@@ -119,11 +119,9 @@ module UniformBuffer =
                     [b]
             }
 
-        //Command.Sync(b, VkAccessFlags.TransferWriteBit, VkAccessFlags.UniformReadBit)
-
         t.enqueue {
             do! upload
-            do! Command.Sync(b, VkAccessFlags.TransferWriteBit, VkAccessFlags.UniformReadBit)
+            do! Command.Sync(b, VkPipelineStageFlags.TransferBit, VkAccessFlags.TransferWriteBit)
         }
 
 [<AbstractClass; Sealed; Extension>]

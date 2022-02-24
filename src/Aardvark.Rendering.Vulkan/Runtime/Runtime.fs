@@ -207,8 +207,6 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         }
 
     member x.ResolveMultisamples(source : IFramebufferOutput, target : IBackendTexture, trafo : ImageTrafo) =
-        use token = device.Token
-
         let src =
             match source with
             | :? Image as img ->
@@ -227,7 +225,21 @@ type Runtime(device : Device, debug : DebugLevel) as this =
             let img = unbox<Image> target
             img.[src.Aspect, 0, 0 .. src.SliceCount - 1]
 
-        token.Enqueue (Command.ResolveMultisamples(src, dst))
+        device.eventually {
+            let srcLayout = src.Image.Layout
+            let dstLayout = dst.Image.Layout
+
+            do! Command.TransformLayout(src, srcLayout, VkImageLayout.TransferSrcOptimal)
+            do! Command.TransformLayout(dst, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
+
+            do! Command.ResolveMultisamples(
+                src, VkImageLayout.TransferSrcOptimal,
+                dst, VkImageLayout.TransferDstOptimal
+            )
+
+            do! Command.TransformLayout(src, VkImageLayout.TransferSrcOptimal, srcLayout)
+            do! Command.TransformLayout(dst, VkImageLayout.TransferDstOptimal, dstLayout)
+        }
 
     member x.Dispose() =
         if not device.IsDisposed then
@@ -244,49 +256,55 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         device.CreateBuffer(flags, int64 size)
 
     member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
-        use temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (int64 size)
-        let dst = unbox<Buffer> dst
+        if size > 0n then
+            use temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (int64 size)
+            let dst = unbox<Buffer> dst
 
-        temp.Memory.Mapped(fun ptr -> Marshal.Copy(src, ptr, size))
-        device.perform {
-            do! Command.Copy(temp, 0L, dst, int64 dstOffset, int64 size)
-        }
+            temp.Memory.Mapped(fun ptr -> Marshal.Copy(src, ptr, size))
+            device.perform {
+                do! Command.Copy(temp, 0L, dst, int64 dstOffset, int64 size)
+            }
 
     member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
-        use temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
-        let src = unbox<Buffer> src
+        if size > 0n then
+            use temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
+            let src = unbox<Buffer> src
 
-        device.perform {
-            do! Command.Copy(src, int64 srcOffset, temp, 0L, int64 size)
-        }
+            device.perform {
+                do! Command.Copy(src, int64 srcOffset, temp, 0L, int64 size)
+            }
 
-        temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
+            temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
 
     member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
-        let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
-        let src = unbox<Buffer> src
+        if size > 0n then
+            let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
+            let src = unbox<Buffer> src
 
-        let task = device.GraphicsFamily.Start(QueueCommand.ExecuteCommand([], [], Command.Copy(src, int64 srcOffset, temp, 0L, int64 size)))
+            let task = device.GraphicsFamily.Start(QueueCommand.ExecuteCommand([], [], Command.Copy(src, int64 srcOffset, temp, 0L, int64 size)))
 
-        (fun () ->
-            task.Wait()
-            if task.IsFaulted then
-                temp.Dispose()
-                raise task.Exception
-            else
-                temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
-                temp.Dispose()
-        )
+            (fun () ->
+                task.Wait()
+                if task.IsFaulted then
+                    temp.Dispose()
+                    raise task.Exception
+                else
+                    temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
+                    temp.Dispose()
+            )
+        else
+            ignore
 
 
 
     member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
-        let src = unbox<Buffer> src
-        let dst = unbox<Buffer> dst
+        if size > 0n then
+            let src = unbox<Buffer> src
+            let dst = unbox<Buffer> dst
 
-        device.perform {
-            do! Command.Copy(src, int64 srcOffset, dst, int64 dstOffset, int64 size)
-        }
+            device.perform {
+                do! Command.Copy(src, int64 srcOffset, dst, int64 dstOffset, int64 size)
+            }
 
     member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
         src |> ResourceValidation.Textures.validateSlices srcBaseSlice slices

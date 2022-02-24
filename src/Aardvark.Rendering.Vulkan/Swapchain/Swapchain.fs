@@ -13,47 +13,6 @@ open KHRSurface
 #nowarn "9"
 // #nowarn "51"
 
-[<AutoOpen>]
-module private EnumExtensions =
-    type Command with
-        static member PresentBarrier(img : Image) =
-            if img.Layout = VkImageLayout.PresentSrcKhr then
-                Command.Nop
-            else
-                { new Command() with
-                    member x.Compatible = QueueFlags.All
-                    member x.Enqueue cmd =
-                        native {
-                            let familyIndex = cmd.QueueFamily.Index
-                            let! pPrePresentBarrier =
-                                VkImageMemoryBarrier( 
-                                    VkAccessFlags.ColorAttachmentWriteBit,
-                                    VkAccessFlags.MemoryReadBit,
-                                    VkImageLayout.ColorAttachmentOptimal,
-                                    VkImageLayout.PresentSrcKhr,
-                                    uint32 familyIndex,
-                                    uint32 familyIndex,
-                                    img.Handle,
-                                    VkImageSubresourceRange(VkImageAspectFlags.ColorBit, 0u, 1u, 0u, 1u)
-                                )
-
-                            cmd.AppendCommand()
-                            VkRaw.vkCmdPipelineBarrier(
-                                cmd.Handle,
-                                VkPipelineStageFlags.AllCommandsBit, 
-                                VkPipelineStageFlags.BottomOfPipeBit, 
-                                VkDependencyFlags.None, 
-                                0u, NativePtr.zero, 
-                                0u, NativePtr.zero, 
-                                1u, pPrePresentBarrier
-                            )
-
-                            img.Layout <- VkImageLayout.PresentSrcKhr
-                            return [img :> ICommandResource]
-                        }
-                }
-
-
 [<AutoOpen>]          
 module ImageTrafoExtensions =
     type Box3i with
@@ -82,7 +41,6 @@ type Swapchain(device : Device, description : SwapchainDescription) =
             native {
                 let extent = VkExtent2D(size.X, size.Y)
                 let surface = description.surface
-                let renderPass = description.renderPass
 
                 let colorUsage =
                     if description.samples = 1 then VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.TransferDstBit
@@ -252,7 +210,7 @@ type Swapchain(device : Device, description : SwapchainDescription) =
     member x.Description = description
     member x.Samples = description.samples
 
-    member x.RenderFrame (render : Framebuffer -> 'a) =
+    member x.RenderFrame (render : Framebuffer -> unit) : bool =
         lock x (fun () ->
             if disposed <> 0 then 
                 failf "cannot use disposed Swapchain"
@@ -260,8 +218,6 @@ type Swapchain(device : Device, description : SwapchainDescription) =
             // the color-data is currently stored in colorView
             let mutable currentImage : Image = Unchecked.defaultof<_>
             let mutable backbuffer  : Image = Unchecked.defaultof<_>
-            let mutable res :  'a = Unchecked.defaultof<_>
-
 
             device.perform {
                 update() 
@@ -281,15 +237,14 @@ type Swapchain(device : Device, description : SwapchainDescription) =
 
                 do! Command.ClearColor(colorView.Image.[TextureAspect.Color], C4f.Black)
                 match depthView with
-                    | Some v -> do! Command.ClearDepthStencil(v.Image.[TextureAspect.DepthStencil], 1.0, 0u)
-                    | _ -> ()
+                | Some v -> do! Command.ClearDepthStencil(v.Image.[TextureAspect.DepthStencil], 1.0, 0u)
+                | _ -> ()
 
                 // ensure that colorImage is ColorAttachmentOptimal
                 do! Command.TransformLayout(colorView.Image, VkImageLayout.ColorAttachmentOptimal)
 
                 // render the scene
-                res <- render framebuffer
-
+                render framebuffer
 
                 // the color-data is currently stored in colorView
                 currentImage <- colorView.Image
@@ -297,40 +252,38 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 // if the colorView is multisampled we need to resolve it to a temporary 
                 // single-sampled image (resolvedImage)
                 match resolvedImage with
-                    | Some resolvedImage ->
-                        // resolve multisamples
-                        do! Command.TransformLayout(colorView.Image, VkImageLayout.TransferSrcOptimal)
-                        do! Command.TransformLayout(resolvedImage, VkImageLayout.TransferDstOptimal)
+                | Some resolvedImage ->
+                    // resolve multisamples
+                    do! Command.TransformLayout(colorView.Image, VkImageLayout.TransferSrcOptimal)
+                    do! Command.TransformLayout(resolvedImage, VkImageLayout.TransferDstOptimal)
 
+                    if device.AllCount > 1u then
+                        let size = framebuffer.Size
+                        let range =
+                            {
+                                frMin = V2i.Zero
+                                frMax = size - V2i.II
+                                frLayers = Range1i(0,renderPass.LayerCount-1)
+                            }
+                        let ranges = range.Split(int device.AllCount)
+                        do! Command.PerDevice (fun di ->
+                            let myRange = ranges.[di]
 
-                        if device.AllCount > 1u then
-                            let size = framebuffer.Size
-                            let range = 
-                                { 
-                                    frMin = V2i.Zero
-                                    frMax = size - V2i.II
-                                    frLayers = Range1i(0,renderPass.LayerCount-1)
-                                }
-                            let ranges = range.Split(int device.AllCount)
-                            do! Command.PerDevice (fun di ->
-                                let myRange = ranges.[di]
-                                
-                                Command.ResolveMultisamples(
-                                    colorView.Image.[TextureAspect.Color, 0, *], 
-                                    V3i(myRange.frMin, 0),
-                                    resolvedImage.[TextureAspect.Color, 0, *],
-                                    V3i(myRange.frMin, 0),
-                                    V3i(V2i.II + myRange.frMax - myRange.frMin, 1)
-                                )
+                            Command.ResolveMultisamples(
+                                colorView.Image.[TextureAspect.Color, 0, *],
+                                V3i(myRange.frMin, 0),
+                                resolvedImage.[TextureAspect.Color, 0, *],
+                                V3i(myRange.frMin, 0),
+                                V3i(V2i.II + myRange.frMax - myRange.frMin, 1)
                             )
-                        else
-                            do! Command.ResolveMultisamples(colorView.Image.[TextureAspect.Color, 0, *], resolvedImage.[TextureAspect.Color, 0, *])
+                        )
+                    else
+                        do! Command.ResolveMultisamples(colorView.Image.[TextureAspect.Color, 0, *], resolvedImage.[TextureAspect.Color, 0, *])
 
-                        // the color-data is now stored in the resolved image
-                        currentImage <- resolvedImage
-                    | None ->
-                        ()
-
+                    // the color-data is now stored in the resolved image
+                    currentImage <- resolvedImage
+                | None ->
+                    ()
 
                 if device.AllCount > 1u then
                     //do! Command.TransformLayout(currentImage, VkImageLayout.TransferSrcOptimal)
@@ -344,34 +297,36 @@ type Swapchain(device : Device, description : SwapchainDescription) =
                 let srcRange = Box3i(V3i(0,0,0), V3i(size.X - 1, size.Y - 1, 0))
                 let dstRange = srcRange.Transformed description.blitTrafo
 
-
                 // acquire a swapchain image for rendering
-                do! x.AcquireNextImage
+                let! acquire = x.AcquireNextImage
+                if acquire = QueueCommandResult.Success then
 
-                // determine color and output images (may differ when using MSAA)
-                let outputIndex = int !currentBuffer
-                backbuffer <- buffers.[outputIndex].Image
+                    // determine color and output images (may differ when using MSAA)
+                    let outputIndex = int !currentBuffer
+                    backbuffer <- buffers.[outputIndex].Image
 
-                // blit the current image to the final backbuffer using the ranges from above
-                //do! Command.TransformLayout(currentImage, VkImageLayout.TransferSrcOptimal)
-                do! Command.TransformLayout(backbuffer, VkImageLayout.TransferDstOptimal)
-                do! Command.Blit(
-                        currentImage.[TextureAspect.Color, 0, *],
-                        VkImageLayout.TransferSrcOptimal,
-                        srcRange,
-                        backbuffer.[TextureAspect.Color, 0, *],
-                        VkImageLayout.TransferDstOptimal, 
-                        dstRange,
-                        VkFilter.Nearest
-                    )
+                    // blit the current image to the final backbuffer using the ranges from above
+                    //do! Command.TransformLayout(currentImage, VkImageLayout.TransferSrcOptimal)
+                    do! Command.TransformLayout(backbuffer, VkImageLayout.TransferDstOptimal)
+                    do! Command.Blit(
+                            currentImage.[TextureAspect.Color, 0, *],
+                            VkImageLayout.TransferSrcOptimal,
+                            srcRange,
+                            backbuffer.[TextureAspect.Color, 0, *],
+                            VkImageLayout.TransferDstOptimal,
+                            dstRange,
+                            VkFilter.Nearest
+                        )
 
-                // finally the backbuffer needs to be in layout PresentSrcKhr
-                do! Command.TransformLayout(backbuffer, VkImageLayout.PresentSrcKhr)
+                    // finally the backbuffer needs to be in layout PresentSrcKhr
+                    do! Command.TransformLayout(backbuffer, VkImageLayout.PresentSrcKhr)
 
-                // present the backbuffer
-                do! x.Present
+                    // present the backbuffer
+                    let! present = x.Present
+                    return present = QueueCommandResult.Success
 
-                return res
+                else
+                    return false
             }
         )
 

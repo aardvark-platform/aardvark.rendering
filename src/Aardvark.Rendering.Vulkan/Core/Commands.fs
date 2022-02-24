@@ -249,9 +249,9 @@ module CommandAPI =
             buffer.Enqueue m
             f()
 
-        member x.Bind(m : QueueCommand, f : unit -> 'a) =
-            buffer.Enqueue m
-            f()
+        member x.Bind(m : QueueCommand, f : QueueCommandResult -> 'a) =
+            let res = buffer.EnqueueWithResult m
+            f res
 
         member x.Return(v : 'a) = v
 

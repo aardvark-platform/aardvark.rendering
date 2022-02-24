@@ -213,7 +213,7 @@ module private NativeAccelerationStructureData =
             device |> Buffer.alloc flags (int64 sizes.accelerationStructureSize)
 
         let scratchBuffer =
-            let flags = VkBufferUsageFlags.AccelerationStructureStorageBitKhr ||| VkBufferUsageFlags.ShaderDeviceAddressBitKhr
+            let flags = VkBufferUsageFlags.StorageBufferBit ||| VkBufferUsageFlags.ShaderDeviceAddressBitKhr
             let size = max sizes.buildScratchSize sizes.updateScratchSize
             device |> Buffer.alloc flags (int64 size)
 

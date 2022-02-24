@@ -195,6 +195,7 @@ module private OpenGL =
                     task.Run(AdaptiveToken.Top, rt, output)
 
                     glfw.SwapBuffers(win)
+                    true
                 )
             override this.Size = 
                 size

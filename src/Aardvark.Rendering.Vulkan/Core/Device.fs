@@ -10,6 +10,7 @@ open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
 open Aardvark.Rendering
 open KHRSwapchain
+open KHRSurface
 open KHRBufferDeviceAddress
 open Vulkan11
 
@@ -536,13 +537,12 @@ and [<RequireQualifiedAccess>] CopyCommand =
         | ReleaseBufferCmd   of buffer : VkBuffer * offset : int64 * size : int64 * dstQueueFamily : uint32
         | ReleaseImageCmd    of image : VkImage * range : VkImageSubresourceRange * srcLayout : VkImageLayout * dstLayout : VkImageLayout * dstQueueFamily : uint32
         | TransformLayoutCmd of image : VkImage * range : VkImageSubresourceRange * srcLayout : VkImageLayout * dstLayout : VkImageLayout
-        | SyncImageCmd       of image : VkImage * range : VkImageSubresourceRange * layout : VkImageLayout * srcAccess : VkAccessFlags
 
     static member TransformLayout(image : VkImage, range : VkImageSubresourceRange, srcLayout : VkImageLayout, dstLayout : VkImageLayout) =
         CopyCommand.TransformLayoutCmd(image, range, srcLayout, dstLayout)
 
-    static member SyncImage(image : VkImage, range : VkImageSubresourceRange, layout : VkImageLayout, srcAccess : VkAccessFlags) =
-        CopyCommand.SyncImageCmd(image, range, layout, srcAccess)
+    static member SyncImage(image : VkImage, range : VkImageSubresourceRange, layout : VkImageLayout) =
+        CopyCommand.TransformLayoutCmd(image, range, layout, layout)
 
     static member Copy(src : VkBuffer, srcOffset : int64, dst : VkBuffer, dstOffset : int64, size : int64) =
         CopyCommand.BufferToBufferCmd(
@@ -665,95 +665,77 @@ and CopyEngine(family : DeviceQueueFamily) =
 
                 for copy in copies do
                     match copy with
-                        | CopyCommand.CallbackCmd cont ->
-                            conts.Add cont
+                    | CopyCommand.CallbackCmd cont ->
+                        conts.Add cont
 
-                        | CopyCommand.BufferToBufferCmd(src, dst, info) ->
-                            stream.CopyBuffer(src, dst, [| info |]) |> ignore
+                    | CopyCommand.BufferToBufferCmd(src, dst, info) ->
+                        stream.CopyBuffer(src, dst, [| info |]) |> ignore
 
-                        | CopyCommand.BufferToImageCmd(src, dst, dstLayout, info, size) ->
-                            stream.CopyBufferToImage(src, dst, dstLayout, [| info |]) |> ignore
+                    | CopyCommand.BufferToImageCmd(src, dst, dstLayout, info, size) ->
+                        stream.CopyBufferToImage(src, dst, dstLayout, [| info |]) |> ignore
 
-                        | CopyCommand.ImageToBufferCmd(src, srcLayout, dst, info, size) ->
-                            stream.CopyImageToBuffer(src, srcLayout, dst, [| info |]) |> ignore
+                    | CopyCommand.ImageToBufferCmd(src, srcLayout, dst, info, size) ->
+                        stream.CopyImageToBuffer(src, srcLayout, dst, [| info |]) |> ignore
 
-                        | CopyCommand.ImageToImageCmd(src, srcLayout, dst, dstLayout, info, size) ->
-                            stream.CopyImage(src, srcLayout, dst, dstLayout, [| info |]) |> ignore
+                    | CopyCommand.ImageToImageCmd(src, srcLayout, dst, dstLayout, info, size) ->
+                        stream.CopyImage(src, srcLayout, dst, dstLayout, [| info |]) |> ignore
 
-                        | CopyCommand.ReleaseBufferCmd(buffer, offset, size, dstQueue) ->
-                            stream.PipelineBarrier(
-                                VkPipelineStageFlags.TransferBit,
-                                VkPipelineStageFlags.BottomOfPipeBit,
-                                [||],
-                                [|
-                                    VkBufferMemoryBarrier(
-                                        VkAccessFlags.TransferWriteBit,
-                                        VkAccessFlags.None,
-                                        uint32 familyIndex,
-                                        dstQueue,
-                                        buffer,
-                                        uint64 offset, uint64 size
-                                    )
-                                |],
-                                [||]
-                            ) |> ignore
+                    | CopyCommand.ReleaseBufferCmd(buffer, offset, size, dstQueue) ->
+                        stream.PipelineBarrier(
+                            VkPipelineStageFlags.TransferBit,
+                            VkPipelineStageFlags.BottomOfPipeBit,
+                            [||],
+                            [|
+                                VkBufferMemoryBarrier(
+                                    VkAccessFlags.TransferWriteBit,
+                                    VkAccessFlags.None,
+                                    uint32 familyIndex,
+                                    dstQueue,
+                                    buffer,
+                                    uint64 offset, uint64 size
+                                )
+                            |],
+                            [||]
+                        ) |> ignore
 
-                        | CopyCommand.ReleaseImageCmd(image, range, srcLayout, dstLayout, dstQueue) ->
-                            stream.PipelineBarrier(
-                                VkPipelineStageFlags.TransferBit,
-                                VkPipelineStageFlags.BottomOfPipeBit,
-                                [||],
-                                [||],
-                                [|
-                                    VkImageMemoryBarrier(
-                                        VkAccessFlags.TransferWriteBit,
-                                        VkAccessFlags.None,
-                                        srcLayout, dstLayout,
-                                        uint32 familyIndex,
-                                        uint32 dstQueue,
-                                        image,
-                                        range
-                                    )
-                                |]
-                            ) |> ignore
+                    | CopyCommand.ReleaseImageCmd(image, range, srcLayout, dstLayout, dstQueue) ->
+                        stream.PipelineBarrier(
+                            VkPipelineStageFlags.TransferBit,
+                            VkPipelineStageFlags.BottomOfPipeBit,
+                            [||],
+                            [||],
+                            [|
+                                VkImageMemoryBarrier(
+                                    VkAccessFlags.TransferWriteBit,
+                                    VkAccessFlags.None,
+                                    srcLayout, dstLayout,
+                                    uint32 familyIndex,
+                                    uint32 dstQueue,
+                                    image,
+                                    range
+                                )
+                            |]
+                        ) |> ignore
 
-                        | CopyCommand.TransformLayoutCmd(image, range, srcLayout, dstLayout) ->
-                            stream.PipelineBarrier(
-                                VkImageLayout.toSrcStageFlags queue.Flags srcLayout,
-                                VkImageLayout.toDstStageFlags queue.Flags dstLayout,
-                                [||],
-                                [||],
-                                [|
-                                    VkImageMemoryBarrier(
-                                        VkImageLayout.toAccessFlags srcLayout,
-                                        VkImageLayout.toAccessFlags dstLayout,
-                                        srcLayout, dstLayout,
-                                        uint32 familyIndex,
-                                        uint32 familyIndex,
-                                        image,
-                                        range
-                                    )
-                                |]
-                            ) |> ignore
+                    | CopyCommand.TransformLayoutCmd(image, range, srcLayout, dstLayout) ->
+                        stream.PipelineBarrier(
+                            VkPipelineStageFlags.TransferBit, // copy engine only performs transfer operations
+                            VkPipelineStageFlags.TransferBit,
+                            [||],
+                            [||],
+                            [|
+                                VkImageMemoryBarrier(
+                                    VkAccessFlags.TransferWriteBit,                                   // make transfer writes available
+                                    VkAccessFlags.TransferReadBit ||| VkAccessFlags.TransferWriteBit, // make them visible to subsequent reads and writes
+                                    srcLayout, dstLayout,
+                                    uint32 familyIndex,
+                                    uint32 familyIndex,
+                                    image,
+                                    range
+                                )
+                            |]
+                        ) |> ignore
 
-                        | CopyCommand.SyncImageCmd(image, range, layout, srcAccess) ->
-                            stream.PipelineBarrier(
-                                VkAccessFlags.toSrcStageFlags queue.Flags srcAccess,
-                                VkPipelineStageFlags.TopOfPipeBit,
-                                [||],
-                                [||],
-                                [|
-                                    VkImageMemoryBarrier(
-                                        srcAccess,
-                                        VkAccessFlags.None,
-                                        layout, layout,
-                                        uint32 familyIndex,
-                                        uint32 familyIndex,
-                                        image,
-                                        range
-                                    )
-                                |]
-                            ) |> ignore
                 stream.Run cmd.Handle
                 cmd.End()
 
@@ -1297,34 +1279,29 @@ and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues :
 
     member x.CreateCommandPool (flags : CommandPoolFlags) =
         new CommandPool(device, info.index, x, flags)
-
-    member x.Start (cmd : QueueCommand) : DeviceTask =
-        thread.Value.Enqueue cmd
         
-    member x.Start (priority : int, cmd : QueueCommand) : DeviceTask =
-        thread.Value.Enqueue(priority, cmd)
+    member x.Start (cmd : QueueCommand,
+                    [<Optional; DefaultParameterValue(3)>] priority : int) : DeviceTask =
+        thread.Value.Enqueue(cmd, priority)
 
-    member x.RunSynchronously(cmd : QueueCommand) : unit =
-        let t = thread.Value.Enqueue cmd
+    member x.RunSynchronouslyWithResult(cmd : QueueCommand,
+                                        [<Optional; DefaultParameterValue(3)>] priority : int) =
+        let t = thread.Value.Enqueue(cmd, priority)
         t.Wait()
         if t.IsFaulted then raise t.Exception
-        
-    member x.RunSynchronously(priority : int, cmd : QueueCommand) : unit =
-        let t = thread.Value.Enqueue(priority, cmd)
-        t.Wait()
-        if t.IsFaulted then raise t.Exception
+        else t.Result
 
-    member x.Start (cmd : CommandBuffer) =
-        x.Start(QueueCommand.Submit([], [], [cmd]))
+    member x.RunSynchronously(cmd : QueueCommand,
+                              [<Optional; DefaultParameterValue(3)>] priority : int) =
+        x.RunSynchronouslyWithResult(cmd, priority) |> ignore
         
-    member x.Start (priority : int, cmd : CommandBuffer) =
-        x.Start(priority, QueueCommand.Submit([], [], [cmd]))
+    member x.Start (cmd : CommandBuffer,
+                    [<Optional; DefaultParameterValue(3)>] priority : int) =
+        x.Start(QueueCommand.Submit([], [], [cmd]), priority)
         
-    member x.RunSynchronously (cmd : CommandBuffer) =
-        x.RunSynchronously (QueueCommand.Submit([], [], [cmd]))
-        
-    member x.RunSynchronously (priority : int, cmd : CommandBuffer) =
-        x.RunSynchronously (priority, QueueCommand.Submit([], [], [cmd]))
+    member x.RunSynchronously (cmd : CommandBuffer,
+                               [<Optional; DefaultParameterValue(3)>] priority : int) =
+        x.RunSynchronously (QueueCommand.Submit([], [], [cmd]), priority)
 
     [<Obsolete>]
     member x.GetQueue () : DeviceQueue =
@@ -1718,6 +1695,9 @@ and Fence internal(device : Device, signaled : bool) =
 
 
     new(device : Device) = new Fence(device, false)
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 and Semaphore internal(device : Device) =
 
@@ -2291,11 +2271,40 @@ and QueueCommand =
     | Atomically        of children : list<QueueCommand>
     | Custom            of (DeviceQueue -> Fence -> unit)
 
+and [<RequireQualifiedAccess>] QueueCommandResult =
+    | Success
+    | SwapchainSuboptimal
+    | PresentationFailure
+    | Failure
+
+    member private x.Rank =
+        match x with
+        | Success -> 0
+        | SwapchainSuboptimal -> 1
+        | PresentationFailure -> 2
+        | Failure -> 3
+
+    static member union (l : QueueCommandResult) (r : QueueCommandResult) =
+        if l.Rank > r.Rank then l else r
+
+    static member ofVkResult result =
+        if result = VkResult.Success then Success
+        elif result = VkResult.SuboptimalKhr then SwapchainSuboptimal
+        elif result = VkResult.ErrorOutOfDateKhr then PresentationFailure
+        elif result = VkResult.ErrorSurfaceLostKhr then PresentationFailure
+        else Failure
+
+    static member check (result : VkResult) (message : string) =
+        match QueueCommandResult.ofVkResult result with
+        | QueueCommandResult.Failure -> failf $"{message} ({result})"
+        | res -> res
+
 and DeviceTask(parent : DeviceQueueThread, priority : int) =
     let lockObj = obj()
     [<VolatileField>]
     let mutable status = 0
     let mutable ex : exn = null
+    let mutable res = QueueCommandResult.Success
     let mutable conts = []
     let mutable kill = []
     let mutable tcs : System.Threading.Tasks.TaskCompletionSource<unit> = null
@@ -2303,7 +2312,7 @@ and DeviceTask(parent : DeviceQueueThread, priority : int) =
     static let finished : DeviceTask =
         let t = DeviceTask(Unchecked.defaultof<_>, 0)
         t.SetStarted()
-        t.SetFinished()
+        t.SetFinished(QueueCommandResult.Success)
         t
 
     static member Finished : DeviceTask = finished
@@ -2321,11 +2330,12 @@ and DeviceTask(parent : DeviceQueueThread, priority : int) =
             Monitor.PulseAll lockObj
         )
             
-    member internal x.SetFinished() =
+    member internal x.SetFinished(result) =
         let conts = 
             lock lockObj (fun () ->
                 if status <> 1 then Log.error "finished task that is not in running state"
                 status <- 2
+                res <- result
                 Monitor.PulseAll lockObj
                 let r = conts
                 conts <- []
@@ -2337,7 +2347,7 @@ and DeviceTask(parent : DeviceQueueThread, priority : int) =
 
                 r
             )
-        for (p,c,t) in conts do parent.Enqueue(p, c, t)
+        for (p,c,t) in conts do parent.Enqueue(c, t, p)
 
     member internal x.SetFaulted(e : exn) =
         let conts = 
@@ -2378,6 +2388,8 @@ and DeviceTask(parent : DeviceQueueThread, priority : int) =
         )
 
     member x.Exception = ex
+    
+    member x.Result = res
 
     member x.AsTask =
         lock lockObj (fun () ->
@@ -2396,7 +2408,7 @@ and DeviceTask(parent : DeviceQueueThread, priority : int) =
         )
         
 
-    member x.ContinueWith (priority : int, cmd : QueueCommand) =
+    member x.ContinueWith (cmd : QueueCommand, priority : int) =
         lock lockObj (fun () ->
             if status < 2 then
                 let task = DeviceTask(parent, priority)
@@ -2404,14 +2416,14 @@ and DeviceTask(parent : DeviceQueueThread, priority : int) =
                 task
 
             elif status = 2 then
-                parent.Enqueue(priority,cmd)
+                parent.Enqueue(cmd, priority)
 
             else (* status = 3 *) 
                 DeviceTask.CreateFaulted(ex)
         )
 
     member x.ContinueWith (cmd : QueueCommand) =
-        x.ContinueWith(priority, cmd)
+        x.ContinueWith(cmd, priority)
 
 and DeviceQueueThread(family : DeviceQueueFamily) =
     
@@ -2590,7 +2602,7 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                 )
         }
 
-    let rec acquireNextImage (queue : DeviceQueue) (swapchain : VkSwapchainKHR) (buffer : ref<uint32>) (fence : Fence) =
+    let acquireNextImage (queue : DeviceQueue) (swapchain : VkSwapchainKHR) (buffer : ref<uint32>) (fence : Fence) =
         let res =
             native {
                 let arr = [| !buffer |]
@@ -2599,17 +2611,14 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                 buffer := arr.[0]
                 return res
             }
-        if res <> VkResult.Success then
-            System.Diagnostics.Debugger.Launch() |> ignore
-            acquireNextImage queue swapchain buffer fence
-            //|> check "could not acquire Swapchain Image"
+
+        QueueCommandResult.check res "could not acquire swapchain image"
 
     let present (queue : DeviceQueue) (swapchain : VkSwapchainKHR) (buffer : ref<uint32>) =
         native {
             let arr = [| !buffer |]
             let! pHandle = [| swapchain |]
             let! pArr = arr
-            let! pResult = [| VkResult.Success |]
 
             let! pInfo =
                 [|
@@ -2617,59 +2626,70 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
                         0u, NativePtr.zero,
                         1u, pHandle,
                         pArr,
-                        pResult
+                        NativePtr.zero
                     )
                 |]
                 
-            VkRaw.vkQueuePresentKHR(queue.Handle, pInfo) 
-                |> check "could not acquire image"
+            let res =
+                let r = VkRaw.vkQueuePresentKHR(queue.Handle, pInfo)
+                QueueCommandResult.check r "could not present swapchain image"
 
             VkRaw.vkQueueWaitIdle(queue.Handle)
                 |> check "could not wait for queue"
             buffer := arr.[0]
+
+            return res
         }
 
 
 
     let rec perform (queue : DeviceQueue) (pool : CommandPool) (cmd : QueueCommand) (fence : Fence) =
         match cmd with
-            | QueueCommand.Custom action ->
-                fence.Reset()
-                action queue fence
+        | QueueCommand.Custom action ->
+            fence.Reset()
+            action queue fence
 
-            | QueueCommand.Submit(waitFor, signal, cmds) ->
-                fence.Reset()
-                submit queue waitFor signal cmds fence
-                fence.Wait()
+            QueueCommandResult.Success
 
-            | QueueCommand.BindSparse (imageBinds, bufferBinds) ->
-                fence.Reset()
-                bindSparse queue imageBinds bufferBinds fence
-                fence.Wait()
+        | QueueCommand.Submit(waitFor, signal, cmds) ->
+            fence.Reset()
+            submit queue waitFor signal cmds fence
+            fence.Wait()
 
-            | QueueCommand.AcquireNextImage(chain, buffer) ->
-                fence.Reset()
-                acquireNextImage queue chain buffer fence
-                fence.Wait()
+            QueueCommandResult.Success
 
-            | QueueCommand.Present(chain, buffer) ->
-                present queue chain buffer
+        | QueueCommand.BindSparse (imageBinds, bufferBinds) ->
+            fence.Reset()
+            bindSparse queue imageBinds bufferBinds fence
+            fence.Wait()
 
-            | QueueCommand.ExecuteCommand(waitFor, signal, cmd) ->
-                use buffer = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
-                buffer.Begin(CommandBufferUsage.OneTimeSubmit)
-                cmd.Enqueue(buffer)
-                buffer.End()
+            QueueCommandResult.Success
 
-                fence.Reset()
-                submit queue waitFor signal [buffer] fence
-                fence.Wait()
+        | QueueCommand.AcquireNextImage(chain, buffer) ->
+            fence.Reset()
+            let res = acquireNextImage queue chain buffer fence
+            fence.Wait()
+            res
 
-            | QueueCommand.Atomically many ->
-                Log.warn "atomic"
-                for m in many do perform queue pool m fence
+        | QueueCommand.Present(chain, buffer) ->
+            present queue chain buffer
 
-        ()
+        | QueueCommand.ExecuteCommand(waitFor, signal, cmd) ->
+            use buffer = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
+            buffer.Begin(CommandBufferUsage.OneTimeSubmit)
+            cmd.Enqueue(buffer)
+            buffer.End()
+
+            fence.Reset()
+            submit queue waitFor signal [buffer] fence
+            fence.Wait()
+
+            QueueCommandResult.Success
+
+        | QueueCommand.Atomically many ->
+            Log.warn "atomic"
+            let results = many |> List.map (fun cmd -> perform queue pool cmd fence)
+            (QueueCommandResult.Success, results) ||> List.fold QueueCommandResult.union
 
     let rec toString (cmd : QueueCommand) =
         match cmd with
@@ -2698,8 +2718,8 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
 
                 tcs.SetStarted()
                 try
-                    perform queue pool item fence
-                    tcs.SetFinished ()
+                    let res = perform queue pool item fence
+                    tcs.SetFinished res
                 with
                     e -> tcs.SetFaulted e
                     
@@ -2726,20 +2746,19 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
             )
             for t in threads do t.Join()
 
-    member internal x.Enqueue(priority : int, item : QueueCommand, task : DeviceTask) =
+    member internal x.Enqueue(item : QueueCommand, task : DeviceTask,
+                              [<Optional; DefaultParameterValue(3)>] priority : int) =
         lock pending (fun () ->
             if task.IsCompleted || task.IsFaulted || task.IsRunning then Log.error "bad task"
             enqueue priority item task
             Monitor.PulseAll pending
         )
 
-    member x.Enqueue(priority : int, item : QueueCommand) : DeviceTask =
+    member x.Enqueue(item : QueueCommand,
+                     [<Optional; DefaultParameterValue(3)>] priority : int) : DeviceTask =
         let task = DeviceTask(x, priority)
-        x.Enqueue(priority, item, task)
+        x.Enqueue(item, task, priority)
         task
-
-    member x.Enqueue(item : QueueCommand) : DeviceTask =
-        x.Enqueue(3, item)
 
 
 
@@ -2803,16 +2822,16 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
 
     let flush(priority : int) =
         match current with
-            | Some buffer ->
-                buffer.End()
-                if not buffer.IsEmpty then
-                    family.RunSynchronously(priority, QueueCommand.Submit([], [], [buffer]))
+        | Some buffer ->
+            buffer.End()
+            if not buffer.IsEmpty then
+                family.RunSynchronously(QueueCommand.Submit([], [], [buffer]), priority) |> ignore
 
-                buffer.Dispose()
-                current <- None
+            buffer.Dispose()
+            current <- None
 
-            | None ->
-                ()
+        | None ->
+            ()
 
     let syncTask (priority : int) : DeviceTask =
         match current with
@@ -2820,7 +2839,7 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
                 current <- None
                 buffer.End()
                 if not buffer.IsEmpty then
-                    let task = family.Start(priority, buffer)
+                    let task = family.Start(buffer, priority)
                     task.AddCleanup buffer.Dispose
                     task
                 else 
@@ -2832,13 +2851,11 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
         check()
         flush(3)
 
-    member x.Sync(priority : int) =
+    member x.Sync([<Optional; DefaultParameterValue(3)>] priority : int) =
         check()
         flush(priority)
 
-    member x.Sync() = x.Sync(3)
-
-    member x.SyncTask(priority : int) =
+    member x.SyncTask([<Optional; DefaultParameterValue(3)>] priority : int) =
         check()
         syncTask priority
 
@@ -2852,11 +2869,11 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
         let buffer = getCurrent()
         enqueue buffer cmd
 
-    member x.Enqueue (cmd : QueueCommand) =
+    member x.EnqueueWithResult (cmd : QueueCommand) =
         check()
         flush(3)
 
-        family.RunSynchronously cmd
+        family.RunSynchronouslyWithResult cmd
 //        let task =
 //            match lastTask with
 //                | Some t -> t.ContinueWith cmd
@@ -2864,12 +2881,14 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
 //
 //        lastTask <- Some task
 
+    member x.Enqueue (cmd : QueueCommand) =
+        x.EnqueueWithResult(cmd) |> ignore
 
     member internal x.AddRef() = 
         check()
         refCount <- refCount + 1
 
-    member internal x.RemoveRef(priority : int) = 
+    member internal x.RemoveRef([<Optional; DefaultParameterValue(3)>] priority : int) = 
         check()
         refCount <- refCount - 1
         if refCount = 0 then
@@ -2882,8 +2901,7 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
         x.RemoveRef(priority)
 
     member x.Dispose() =
-        check()
-        x.RemoveRef(3)
+        x.Dispose(3)
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
@@ -2973,4 +2991,3 @@ type DeviceExtensions private() =
     [<Extension>]
     static member Alloc(this : Device, reqs : VkMemoryRequirements) =
         DeviceExtensions.Alloc(this, reqs, false)
-

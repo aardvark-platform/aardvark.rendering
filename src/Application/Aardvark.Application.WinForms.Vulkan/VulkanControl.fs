@@ -31,7 +31,8 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
 
     abstract member OnLoad : SwapchainDescription -> unit
     abstract member OnUnload : unit -> unit
-    abstract member OnRenderFrame : RenderPass * Framebuffer -> bool
+    abstract member OnRenderFrame : RenderPass * Framebuffer -> unit
+    abstract member RenderContinuously : bool
 
     member x.IsInvalid = isInvalid
 
@@ -70,7 +71,7 @@ type VulkanControl(device : Device, graphicsMode : AbstractGraphicsMode) =
                     //)
                 )
             isInvalid <- invalidate
-            if invalidate then
+            if invalidate || x.RenderContinuously then
                 x.Invalidate()
 
     override x.Dispose(d) =
@@ -92,7 +93,6 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
     let mutable renderTask : IRenderTask = RenderTask.empty
     let mutable taskSubscription : IDisposable = null
     let mutable sizes = AVal.init (V2i.II)
-    let mutable needsRedraw = false
     let mutable renderContiuously = false
 
     let frameTime = AverageWindow(10)
@@ -137,7 +137,6 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
         )
 
     override x.OnRenderFrame(pass, fbo) =
-        needsRedraw <- false
         let s = V2i(x.ClientSize.Width, x.ClientSize.Height)
         if s <> sizes.Value then
             transact (fun () -> sizes.Value <- s)
@@ -157,7 +156,6 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
         transact (fun () -> time.MarkOutdated())
 
         first <- false
-        renderContiuously
 
     override x.OnUnload() =
         if not (isNull taskSubscription) then
@@ -167,6 +165,9 @@ type VulkanRenderControl(runtime : Runtime, graphicsMode : AbstractGraphicsMode)
         renderTask.Dispose()
         renderTask <- RenderTask.empty
         ()
+
+    override x.RenderContinuously =
+        renderContiuously
 
     member x.Time = time
     member x.Sizes = sizes :> aval<_>

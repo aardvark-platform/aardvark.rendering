@@ -76,6 +76,42 @@ type BufferView =
 // =======================================================================
 [<AutoOpen>]
 module BufferCommands =
+
+    type CommandBuffer with
+
+        member internal cmd.BufferBarrier(buffer : Buffer,
+                                          srcStage : VkPipelineStageFlags, srcAccess : VkAccessFlags,
+                                          dstStage : VkPipelineStageFlags, dstAccess : VkAccessFlags,
+                                          srcQueue : uint32, dstQueue : uint32,
+                                          offset : uint64, size : uint64)  =
+
+            let srcStage, srcAccess = cmd.QueueFamily.Flags |> QueueFlags.filterSrcStageAndAccess srcStage srcAccess
+            let dstStage, dstAccess = cmd.QueueFamily.Flags |> QueueFlags.filterDstStageAndAccess dstStage dstAccess
+
+            let barrier =
+                VkBufferMemoryBarrier(
+                    srcAccess, dstAccess,
+                    srcQueue, dstQueue,
+                    buffer.Handle, offset, size
+                )
+
+            barrier |> pin (fun pBarrier ->
+                VkRaw.vkCmdPipelineBarrier(
+                    cmd.Handle,
+                    srcStage, dstStage,
+                    VkDependencyFlags.None,
+                    0u, NativePtr.zero,
+                    1u, pBarrier,
+                    0u, NativePtr.zero
+                )
+            )
+
+        member internal cmd.BufferBarrier(buffer : Buffer,
+                                          srcStage : VkPipelineStageFlags, srcAccess : VkAccessFlags,
+                                          dstStage : VkPipelineStageFlags, dstAccess : VkAccessFlags,
+                                          srcQueue : uint32, dstQueue : uint32)  =
+            cmd.BufferBarrier(buffer, srcStage, srcAccess, dstStage, dstAccess, srcQueue, dstQueue, 0UL, uint64 buffer.Size)
+
     type Command with
 
         // buffer to buffer
@@ -120,105 +156,60 @@ module BufferCommands =
         static member inline Copy(src : Buffer, dst : Buffer) = 
             Command.Copy(src, 0L, dst, 0L, min src.Size dst.Size)
 
-        static member Acquire(buffer : Buffer, offset : int64, size : int64) =
+        static member Acquire(buffer : Buffer, srcQueue : DeviceQueueFamily, offset : int64, size : int64) =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
 
-                    let access = VkAccessFlags.ofBufferUsage buffer.Usage
-                    let stage = VkAccessFlags.toDstStageFlags cmd.QueueFamily.Flags access
-
-                    let barrier =
-                        VkBufferMemoryBarrier(
-                            VkAccessFlags.TransferWriteBit ||| VkAccessFlags.HostWriteBit ||| VkAccessFlags.MemoryWriteBit ||| VkAccessFlags.ShaderWriteBit,
-                            access,
-                            uint32 buffer.Device.TransferFamily.Index,
-                            uint32 buffer.Device.GraphicsFamily.Index,
-                            buffer.Handle,
-                            uint64 offset,
-                            uint64 size
-                        )
-
-                    barrier |> pin (fun pBarrier ->
-                        VkRaw.vkCmdPipelineBarrier(
-                            cmd.Handle,
-                            VkPipelineStageFlags.TopOfPipeBit,
-                            stage,
-                            VkDependencyFlags.None,
-                            0u, NativePtr.zero,
-                            1u, pBarrier,
-                            0u, NativePtr.zero
-                        )
+                    cmd.BufferBarrier(
+                        buffer,
+                        VkPipelineStageFlags.TopOfPipeBit, VkAccessFlags.None,
+                        VkBufferUsageFlags.toDstStageFlags buffer.Usage,
+                        VkBufferUsageFlags.toDstAccessFlags buffer.Usage,
+                        uint32 srcQueue.Index,
+                        uint32 cmd.QueueFamily.Index,
+                        uint64 offset, uint64 size
                     )
 
                     [buffer]
             }
 
-        static member Acquire(buffer : Buffer) =
-            Command.Acquire(buffer, 0L, buffer.Size)
+        static member Acquire(buffer : Buffer, srcQueue : DeviceQueueFamily) =
+            Command.Acquire(buffer, srcQueue, 0L, buffer.Size)
 
-        static member Sync(b : Buffer, src : VkAccessFlags, dst : VkAccessFlags) =
+
+        static member Sync(buffer : Buffer,
+                           srcStage : VkPipelineStageFlags, srcAccess : VkAccessFlags,
+                           dstStage : VkPipelineStageFlags, dstAccess : VkAccessFlags) =
             { new Command() with
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
-                    let barrier =
-                        VkBufferMemoryBarrier(
-                            src,
-                            dst,
-                            VkQueueFamilyIgnored, VkQueueFamilyIgnored,
-                            b.Handle,
-                            0UL,
-                            uint64 b.Size
-                        )
 
-                    let srcStage = src |> VkAccessFlags.toSrcStageFlags cmd.QueueFamily.Flags
-                    let dstStage = dst |> VkAccessFlags.toDstStageFlags cmd.QueueFamily.Flags
-
-                    barrier |> pin (fun pBarrier ->
-                        VkRaw.vkCmdPipelineBarrier(
-                            cmd.Handle, 
-                            srcStage, 
-                            dstStage,
-                            VkDependencyFlags.None,
-                            0u, NativePtr.zero,
-                            1u, pBarrier,
-                            0u, NativePtr.zero
-                        )
+                    cmd.BufferBarrier(
+                        buffer,
+                        srcStage, srcAccess,
+                        dstStage, dstAccess,
+                        VkQueueFamilyIgnored, VkQueueFamilyIgnored
                     )
 
-                    [b]
+                    [buffer]
             }
 
-        static member SyncWrite(b : Buffer) =
-            { new Command() with
-                member x.Compatible = QueueFlags.All
-                member x.Enqueue cmd =
-                    cmd.AppendCommand()
-                    let barrier =
-                        VkBufferMemoryBarrier(
-                            VkAccessFlags.TransferWriteBit ||| VkAccessFlags.HostWriteBit ||| VkAccessFlags.MemoryWriteBit ||| VkAccessFlags.ShaderWriteBit,
-                            VkAccessFlags.TransferReadBit ||| VkAccessFlags.ShaderReadBit ||| VkAccessFlags.IndexReadBit ||| VkAccessFlags.VertexAttributeReadBit ||| VkAccessFlags.UniformReadBit,
-                            VkQueueFamilyIgnored, VkQueueFamilyIgnored,
-                            b.Handle,
-                            0UL,
-                            uint64 b.Size
-                        )
-                    barrier |> pin (fun pBarrier ->
-                        VkRaw.vkCmdPipelineBarrier(
-                            cmd.Handle, 
-                            VkPipelineStageFlags.TopOfPipeBit, 
-                            VkPipelineStageFlags.BottomOfPipeBit,
-                            VkDependencyFlags.None,
-                            0u, NativePtr.zero,
-                            1u, pBarrier,
-                            0u, NativePtr.zero
-                        )
-                    )
+        static member Sync(buffer : Buffer, srcStage : VkPipelineStageFlags, srcAccess : VkAccessFlags) =
+            Command.Sync(
+                buffer, srcStage, srcAccess,
+                VkBufferUsageFlags.toDstStageFlags buffer.Usage,
+                VkBufferUsageFlags.toDstAccessFlags buffer.Usage
+            )
 
-                    [b]
-            }
+        static member Sync(buffer : Buffer, srcAccess : VkAccessFlags, dstAccess : VkAccessFlags) =
+            Command.Sync(
+                buffer,
+                VkBufferUsageFlags.toSrcStageFlags buffer.Usage, srcAccess,
+                VkBufferUsageFlags.toDstStageFlags buffer.Usage, dstAccess
+            )
 
         static member ZeroBuffer(b : Buffer) =
             { new Command() with
@@ -260,12 +251,14 @@ module BufferCommands =
 // =======================================================================
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Buffer =
-    let private emptyBuffers = ConcurrentDictionary<Device * VkBufferUsageFlags, Buffer>()
+    let private emptyBuffers = ConcurrentDictionary<DeviceHeap * VkBufferUsageFlags, Buffer>()
 
-    let empty (usage : VkBufferUsageFlags) (device : Device) =
-        let key = (device, usage)
+    let empty (usage : VkBufferUsageFlags) (memory : DeviceHeap) =
+        let key = (memory, usage)
         let buffer =
-            emptyBuffers.GetOrAdd(key, fun (device, usage) ->
+            emptyBuffers.GetOrAdd(key, fun (memory, usage) ->
+                let device = memory.Device
+
                 let info =
                     VkBufferCreateInfo(
                         VkBufferCreateFlags.None,
@@ -291,10 +284,13 @@ module Buffer =
                         NativePtr.read ptr
                     )
 
-                let mem = device.Alloc(reqs, true)
+                if reqs.memoryTypeBits &&& (1u <<< memory.Index) = 0u then
+                    failf "cannot create buffer using memory %A" memory
+
+                let mem = memory.Alloc(int64 reqs.alignment, int64 reqs.size)
+
                 VkRaw.vkBindBufferMemory(device.Handle, handle, mem.Memory.Handle, uint64 mem.Offset)
                     |> check "could not bind empty buffer memory"
-
 
                 device.OnDispose.Add (fun () ->
                     VkRaw.vkDestroyBuffer(device.Handle, handle, NativePtr.zero)
@@ -347,7 +343,7 @@ module Buffer =
             new Buffer(device, handle, ptr, size, flags)
 
         else
-            device |> empty flags
+            memory |> empty flags
 
     let inline create  (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
         createConcurrent false flags size memory
@@ -390,12 +386,12 @@ module Buffer =
                     ]
 
                     device.eventually {
-                        do! Command.Acquire buffer
+                        do! Command.Acquire(buffer, device.TransferFamily)
                     }
 
             buffer
         else
-            empty flags device
+            empty flags memory
 
     let internal updateRangeWriter (offset : int64) (size : int64) (writer : nativeint -> unit) (buffer : Buffer) =
         let device = buffer.Device
@@ -455,8 +451,6 @@ module Buffer =
             false
 
     let rec ofBufferWithMemory (flags : VkBufferUsageFlags) (buffer : IBuffer) (memory : DeviceHeap) =
-        let device = memory.Device
-
         match buffer with
         | :? ArrayBuffer as ab ->
             if ab.Data.Length <> 0 then
@@ -465,7 +459,7 @@ module Buffer =
                 try memory |> ofWriter flags size (fun dst -> Marshal.Copy(gc.AddrOfPinnedObject(), dst, size))
                 finally gc.Free()
             else
-                device |> empty flags
+                memory |> empty flags
 
         | :? INativeBuffer as nb ->
             if nb.SizeInBytes <> 0 then
@@ -474,7 +468,7 @@ module Buffer =
                     memory |> ofWriter flags size (fun dst -> Marshal.Copy(src, dst, size))
                 )
             else
-                device |> empty flags
+                memory |> empty flags
 
         | :? Buffer as b ->
             b.AddReference()

@@ -1,5 +1,7 @@
 ﻿namespace Aardvark.Rendering.Vulkan.Raytracing
 
+open System
+
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
@@ -12,7 +14,6 @@ open Aardvark.Rendering.Raytracing
 open FSharp.Data.Adaptive
 open Microsoft.FSharp.NativeInterop
 
-open System
 
 #nowarn "9"
 
@@ -63,11 +64,12 @@ module private ``Trace Command Extensions`` =
                 Command.TraceRays(shaderBindingTable, uint32 size.X, uint32 size.Y, uint32 size.Z)
 
             | RaytracingCommand.SyncBufferCmd(buffer, src, dst) ->
-                Command.Sync(unbox buffer, VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst)
+                let buffer = unbox<Buffer> buffer
+                Command.Sync(buffer, VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst)
 
             | RaytracingCommand.SyncTextureCmd(texture, src, dst) ->
                 let image = unbox<Image> texture
-                Command.ImageBarrier(image.[TextureAspect.Color], VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst)
+                Command.Sync(image.[TextureAspect.Color], image.Layout, VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst)
 
             | RaytracingCommand.TransformLayoutCmd(texture, src, dst) ->
                 let image = unbox<Image> texture

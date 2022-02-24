@@ -30,7 +30,6 @@ type ContextErrorEventHandler =
 module ContextHandleGLExtensions =
     type GL with
         static member SetDefaultStates() =
-            GL.Hint(HintTarget.PointSmoothHint, HintMode.Fastest)
             GL.Enable(EnableCap.TextureCubeMapSeamless)
             GL.Disable(EnableCap.PolygonSmooth)
             GL.Hint(HintTarget.FragmentShaderDerivativeHint, HintMode.Nicest)

@@ -319,8 +319,8 @@ module DeviceTensorCommandExtensions =
         static member Release(img : ImageSubresourceRange, layout : VkImageLayout, dstQueueFamily : DeviceQueueFamily) =
             CopyCommand.Release(img.Image.Handle, img.VkImageSubresourceRange, layout, layout, dstQueueFamily.Index)
 
-        static member SyncImage(img : ImageSubresourceRange, layout : VkImageLayout, srcAccess : VkAccessFlags) =
-            CopyCommand.SyncImage(img.Image.Handle, img.VkImageSubresourceRange, layout, srcAccess)
+        static member SyncImage(img : ImageSubresourceRange, layout : VkImageLayout) =
+            CopyCommand.SyncImage(img.Image.Handle, img.VkImageSubresourceRange, layout)
 
 
 // ===========================================================================================
@@ -332,7 +332,60 @@ module ``Image Command Extensions`` =
     open KHRSwapchain
     open Vulkan11
 
+    type CommandBuffer with
+
+        member internal cmd.ImageBarrier(img : ImageSubresourceRange,
+                                         srcLayout : VkImageLayout, dstLayout : VkImageLayout,
+                                         srcStage : VkPipelineStageFlags, srcAccess : VkAccessFlags,
+                                         dstStage : VkPipelineStageFlags, dstAccess : VkAccessFlags,
+                                         srcQueue : uint32, dstQueue : uint32)  =
+
+            let srcStage, srcAccess = cmd.QueueFamily.Flags |> QueueFlags.filterSrcStageAndAccess srcStage srcAccess
+            let dstStage, dstAccess = cmd.QueueFamily.Flags |> QueueFlags.filterDstStageAndAccess dstStage dstAccess
+
+            let imageMemoryBarrier =
+                VkImageMemoryBarrier(
+                    srcAccess, dstAccess,
+                    srcLayout, dstLayout,
+                    srcQueue, dstQueue,
+                    img.Image.Handle,
+                    img.VkImageSubresourceRange
+                )
+
+            imageMemoryBarrier |> pin (fun pBarrier ->
+                VkRaw.vkCmdPipelineBarrier(
+                    cmd.Handle,
+                    srcStage, dstStage,
+                    VkDependencyFlags.None,
+                    0u, NativePtr.zero,
+                    0u, NativePtr.zero,
+                    1u, pBarrier
+                )
+            )
+
     type Command with
+
+        static member ImageBarrier(img : ImageSubresourceRange,
+                                   srcLayout : VkImageLayout, dstLayout : VkImageLayout,
+                                   srcStage : VkPipelineStageFlags, srcAccess : VkAccessFlags,
+                                   dstStage : VkPipelineStageFlags, dstAccess : VkAccessFlags) =
+
+            if img.Image.IsNull || dstLayout = VkImageLayout.Undefined || dstLayout = VkImageLayout.Preinitialized then
+                Command.Nop
+            else
+                { new Command() with
+                    member x.Compatible = QueueFlags.All
+                    member x.Enqueue (cmd : CommandBuffer) =
+                        cmd.AppendCommand()
+
+                        cmd.ImageBarrier(
+                            img, srcLayout, dstLayout,
+                            srcStage, srcAccess, dstStage, dstAccess,
+                            VkQueueFamilyIgnored, VkQueueFamilyIgnored
+                        )
+
+                        [img.Image]
+                }
 
         static member Acquire(src : ImageSubresourceRange, srcLayout : VkImageLayout, dstLayout : VkImageLayout, srcQueue : DeviceQueueFamily) =
             { new Command() with
@@ -340,28 +393,13 @@ module ``Image Command Extensions`` =
                 member x.Enqueue(cmd) =
                     cmd.AppendCommand()
 
-                    let imageMemoryBarrier =
-                        VkImageMemoryBarrier(
-                            VkAccessFlags.None,
-                            VkImageLayout.toAccessFlags dstLayout,
-                            srcLayout,
-                            dstLayout,
-                            uint32 srcQueue.Index,
-                            uint32 cmd.QueueFamily.Index,
-                            src.Image.Handle,
-                            src.VkImageSubresourceRange
-                        )
-
-                    imageMemoryBarrier |> pin (fun pBarrier ->
-                        VkRaw.vkCmdPipelineBarrier(
-                            cmd.Handle,
-                            VkPipelineStageFlags.TopOfPipeBit,
-                            VkImageLayout.toDstStageFlags cmd.QueueFamily.Flags dstLayout,
-                            VkDependencyFlags.None,
-                            0u, NativePtr.zero,
-                            0u, NativePtr.zero,
-                            1u, pBarrier
-                        )
+                    cmd.ImageBarrier(
+                        src, srcLayout, dstLayout,
+                        VkPipelineStageFlags.TopOfPipeBit, VkAccessFlags.None,
+                        VkImageLayout.toDstStageFlags dstLayout,
+                        VkImageLayout.toDstAccessFlags dstLayout,
+                        uint32 srcQueue.Index,
+                        uint32 cmd.QueueFamily.Index
                     )
 
                     [src.Image]
@@ -463,7 +501,10 @@ module ``Image Command Extensions`` =
                     [src.Image; dst]
             }
 
-        static member ResolveMultisamples(src : ImageSubresourceLayers, srcOffset : V3i, dst : ImageSubresourceLayers, dstOffset : V3i, size : V3i) =
+        static member ResolveMultisamples(src : ImageSubresourceLayers, srcLayout : VkImageLayout, srcOffset : V3i,
+                                          dst : ImageSubresourceLayers, dstLayout : VkImageLayout, dstOffset : V3i,
+                                          size : V3i) =
+
             if src.SliceCount <> dst.SliceCount then
                 failf "cannot resolve image: { srcSlices = %A; dstSlices = %A }" src.SliceCount dst.SliceCount
 
@@ -484,18 +525,24 @@ module ``Image Command Extensions`` =
 
                     cmd.AppendCommand()
                     resolve |> pin (fun pResolve ->
-                        VkRaw.vkCmdResolveImage(cmd.Handle, src.Image.Handle, src.Image.Layout, dst.Image.Handle, dst.Image.Layout, 1u, pResolve)
+                        VkRaw.vkCmdResolveImage(cmd.Handle, src.Image.Handle, srcLayout, dst.Image.Handle, dstLayout, 1u, pResolve)
                     )
 
                     [src.Image; dst.Image]
             }
 
-        static member ResolveMultisamples(src : ImageSubresourceLayers, dst : ImageSubresourceLayers) =
+        static member ResolveMultisamples(src : ImageSubresourceLayers, srcOffset : V3i, dst : ImageSubresourceLayers, dstOffset : V3i, size : V3i) =
+            Command.ResolveMultisamples(src, src.Image.Layout, srcOffset, dst, dst.Image.Layout, dstOffset, size)
+
+        static member ResolveMultisamples(src : ImageSubresourceLayers, srcLayout : VkImageLayout,
+                                          dst : ImageSubresourceLayers, dstLayout : VkImageLayout) =
             if src.Size <> dst.Size then
                 failf "cannot copy image: { srcSize = %A; dstSize = %A }" src.LevelCount dst.LevelCount
 
-            Command.ResolveMultisamples(src, V3i.Zero, dst, V3i.Zero, src.Size)
+            Command.ResolveMultisamples(src, srcLayout, V3i.Zero, dst, dstLayout, V3i.Zero, src.Size)
 
+        static member ResolveMultisamples(src : ImageSubresourceLayers, dst : ImageSubresourceLayers) =
+            Command.ResolveMultisamples(src, src.Image.Layout, dst, dst.Image.Layout)
 
         static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout, srcRange : Box3i, dst : ImageSubresourceLayers, dstLayout : VkImageLayout, dstRange : Box3i, filter : VkFilter) =
             { new Command() with
@@ -619,37 +666,20 @@ module ``Image Command Extensions`` =
                         [img.Image]
                 }
 
+        static member Sync(img : ImageSubresourceRange, layout : VkImageLayout, srcAccess : VkAccessFlags, dstAccess : VkAccessFlags) =
+            Command.ImageBarrier(
+                img, layout, layout,
+                VkImageLayout.toSrcStageFlags layout, srcAccess,
+                VkImageLayout.toDstStageFlags layout, dstAccess
+            )
 
-        static member Sync(img : ImageSubresourceRange, layout : VkImageLayout, src : VkAccessFlags, dst : VkAccessFlags) =
-            { new Command() with
-                member x.Compatible = QueueFlags.Graphics ||| QueueFlags.Compute
-                member x.Enqueue cmd =
-                    cmd.AppendCommand()
-                    let srcStage = VkAccessFlags.toSrcStageFlags cmd.QueueFamily.Flags src
-                    let dstStage = VkAccessFlags.toDstStageFlags cmd.QueueFamily.Flags dst
-
-                    let image =
-                        VkImageMemoryBarrier(
-                            src, dst,
-                            layout, layout,
-                            VkQueueFamilyIgnored, VkQueueFamilyIgnored,
-                            img.Image.Handle,
-                            img.VkImageSubresourceRange
-                        )
-
-                    image |> pin (fun pImage ->
-                        VkRaw.vkCmdPipelineBarrier(
-                            cmd.Handle,
-                            srcStage, dstStage,
-                            VkDependencyFlags.None,
-                            0u, NativePtr.zero,
-                            0u, NativePtr.zero,
-                            1u, pImage
-                        )
-                    )
-
-                    [img.Image]
-            }
+        static member Sync(img : ImageSubresourceRange, layout : VkImageLayout, srcStage : VkPipelineStageFlags, srcAccess : VkAccessFlags) =
+            Command.ImageBarrier(
+                img, layout, layout,
+                srcStage, srcAccess,
+                VkImageLayout.toDstStageFlags layout,
+                VkImageLayout.toDstAccessFlags layout
+            )
 
         static member GenerateMipMaps (img : ImageSubresourceRange, [<Optional; DefaultParameterValue(0)>] baseLevel : int) =
             if img.Image.IsNull then
@@ -672,45 +702,13 @@ module ``Image Command Extensions`` =
                 }
 
         static member TransformLayout(img : ImageSubresourceRange, source : VkImageLayout, target : VkImageLayout) =
-            if img.Image.IsNull || target = VkImageLayout.Undefined || target = VkImageLayout.Preinitialized then
-                Command.Nop
-            else
-                { new Command() with
-                    member x.Compatible = QueueFlags.All
-                    member x.Enqueue (cmd : CommandBuffer) =
-                        let src = VkImageLayout.toAccessFlags source
-                        let dst = VkImageLayout.toAccessFlags target
-
-                        let srcMask = VkImageLayout.toSrcStageFlags cmd.QueueFamily.Flags source
-                        let dstMask = VkImageLayout.toDstStageFlags cmd.QueueFamily.Flags target
-
-                        let barrier =
-                            VkImageMemoryBarrier(
-                                src,
-                                dst,
-                                source,
-                                target,
-                                VkQueueFamilyIgnored,
-                                VkQueueFamilyIgnored,
-                                img.Image.Handle,
-                                img.VkImageSubresourceRange
-                            )
-
-                        cmd.AppendCommand()
-                        barrier |> pin (fun pBarrier ->
-                            VkRaw.vkCmdPipelineBarrier(
-                                cmd.Handle,
-                                srcMask,
-                                dstMask,
-                                VkDependencyFlags.None,
-                                0u, NativePtr.zero,
-                                0u, NativePtr.zero,
-                                1u, pBarrier
-                            )
-                        )
-
-                        [img.Image]
-                }
+            Command.ImageBarrier(
+                img, source, target,
+                VkImageLayout.toSrcStageFlags source,
+                VkImageLayout.toSrcAccessFlags source,
+                VkImageLayout.toDstStageFlags target,
+                VkImageLayout.toDstAccessFlags target
+            )
 
         static member TransformLayout(img : Image, levels : Range1i, slices : Range1i, target : VkImageLayout) =
             if img.IsNull || target = VkImageLayout.Undefined || target = VkImageLayout.Preinitialized then
@@ -739,15 +737,10 @@ module ``Image Command Extensions`` =
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue(cmd) =
 
-                    let device = img.Image.Device
-
                     let mutable totalSize = 0L
 
                     if img.Image.PeerHandles.Length > 0 then
                         cmd.AppendCommand()
-
-
-                        let device = img.Image.Device
 
                         let baseImage = img.Image
                         let deviceIndices = baseImage.Device.AllIndicesArr
@@ -787,13 +780,13 @@ module ``Image Command Extensions`` =
                         let mem =
                             VkMemoryBarrier(
                                 VkAccessFlags.TransferWriteBit,
-                                VkAccessFlags.TransferReadBit ||| VkAccessFlags.ShaderReadBit
+                                VkAccessFlags.TransferReadBit ||| VkAccessFlags.TransferWriteBit
                             )
                         mem |> pin (fun pMem ->
                             VkRaw.vkCmdPipelineBarrier(
                                 cmd.Handle,
                                 VkPipelineStageFlags.TransferBit,
-                                VkPipelineStageFlags.TransferBit ||| VkPipelineStageFlags.VertexShaderBit,
+                                VkPipelineStageFlags.TransferBit,
                                 VkDependencyFlags.DeviceGroupBit,
                                 1u, pMem,
                                 0u, NativePtr.zero,
