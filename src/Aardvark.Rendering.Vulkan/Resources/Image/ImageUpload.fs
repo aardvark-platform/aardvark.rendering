@@ -442,7 +442,8 @@ module ImageUploadExtensions =
                 device |> ofPixVolume t.PixVolume t.TextureParams
 
             | :? StreamTexture as t ->
-                use stream = t.Open()
+                use stream = t.Open(true)
+                let initialPos = stream.Position
 
                 // Always try to load compressed data first
                 let compressed =
@@ -453,6 +454,7 @@ module ImageUploadExtensions =
                     device |> ofTexture t
 
                 | _ ->
+                    stream.Position <- initialPos
                     device |> ofStream stream t.TextureParams
 
             | :? INativeTexture as nt ->

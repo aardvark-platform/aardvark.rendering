@@ -248,7 +248,7 @@ module ContextTextureUploadExtensions =
 
         let (|StreamTexture|_|) (t : ITexture) =
             match t with
-            | :? StreamTexture as t -> Some(StreamTexture(t.TextureParams, t.Open))
+            | :? StreamTexture as t -> Some(StreamTexture(t.TextureParams, fun seek -> t.Open seek))
             | _ -> None
 
         let (|PixTextureCube|_|) (t : ITexture) =
@@ -284,7 +284,8 @@ module ContextTextureUploadExtensions =
             using this.ResourceLock (fun _ ->
                 match data with
                 | StreamTexture(info, openStream) ->
-                    use stream = openStream()
+                    use stream = openStream true
+                    let initialPos = stream.Position
 
                     // Always try to load compressed data first
                     let compressed =
@@ -293,6 +294,7 @@ module ContextTextureUploadExtensions =
                     match compressed with
                     | Some t -> this.CreateTexture(t)
                     | _ ->
+                        stream.Position <- initialPos
                         let pi = PixImage.Create(stream)
                         let mm = PixImageMipMap [|pi|]
                         this.CreateTexture <| PixTexture2d(mm, info)
