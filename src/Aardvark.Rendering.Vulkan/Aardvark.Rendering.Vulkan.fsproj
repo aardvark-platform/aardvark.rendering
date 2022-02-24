@@ -94,9 +94,6 @@
     <Compile Include="Runtime\Runtime.fs" />
     <Compile Include="Runtime\Headless.fs" />
     <None Include="paket.references" />
-    <Content Include="Aardvark.Rendering.Vulkan.dll.config">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />
