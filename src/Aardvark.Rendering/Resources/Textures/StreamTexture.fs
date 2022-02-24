@@ -10,9 +10,12 @@ type StreamTexture(openStream : unit -> Stream, textureParams : TextureParams) =
         let stream = openStream()
         if stream.CanSeek || not seekable then stream
         else
-            let temp = new MemoryStream()
-            stream.CopyTo(temp)
-            temp :> Stream
+            try
+                let temp = new MemoryStream()
+                stream.CopyTo(temp)
+                temp :> Stream
+            finally
+                stream.Dispose()
 
     new(openStream : unit -> Stream, wantMipMaps : bool) =
         StreamTexture(openStream, { TextureParams.empty with wantMipMaps = wantMipMaps })
