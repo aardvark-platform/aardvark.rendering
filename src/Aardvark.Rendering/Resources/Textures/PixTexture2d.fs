@@ -10,6 +10,12 @@ type PixTexture2d(data : PixImageMipMap, textureParams : TextureParams) =
     new(data : PixImageMipMap, wantMipMaps : bool) =
         PixTexture2d(data, { TextureParams.empty with wantMipMaps = wantMipMaps })
 
+    new(data : PixImage, textureParams : TextureParams) =
+        PixTexture2d(PixImageMipMap(data), textureParams)
+
+    new(data : PixImage, wantMipMaps : bool) =
+        PixTexture2d(PixImageMipMap(data), wantMipMaps)
+
     override x.GetHashCode() =
         HashCode.Combine(data.GetHashCode(), textureParams.GetHashCode())
 
