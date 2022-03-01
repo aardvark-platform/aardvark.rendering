@@ -384,6 +384,8 @@ module ``Image Command Extensions`` =
                             VkQueueFamilyIgnored, VkQueueFamilyIgnored
                         )
 
+                        img.Image.Layout <- dstLayout
+
                         [img.Image]
                 }
 
@@ -532,7 +534,11 @@ module ``Image Command Extensions`` =
             }
 
         static member ResolveMultisamples(src : ImageSubresourceLayers, srcOffset : V3i, dst : ImageSubresourceLayers, dstOffset : V3i, size : V3i) =
-            Command.ResolveMultisamples(src, src.Image.Layout, srcOffset, dst, dst.Image.Layout, dstOffset, size)
+            { new Command() with
+                member x.Compatible = QueueFlags.Graphics
+                member x.Enqueue (cmd : CommandBuffer) =
+                    Command.ResolveMultisamples(src, src.Image.Layout, srcOffset, dst, dst.Image.Layout, dstOffset, size).Enqueue(cmd)
+            }
 
         static member ResolveMultisamples(src : ImageSubresourceLayers, srcLayout : VkImageLayout,
                                           dst : ImageSubresourceLayers, dstLayout : VkImageLayout) =
@@ -542,7 +548,11 @@ module ``Image Command Extensions`` =
             Command.ResolveMultisamples(src, srcLayout, V3i.Zero, dst, dstLayout, V3i.Zero, src.Size)
 
         static member ResolveMultisamples(src : ImageSubresourceLayers, dst : ImageSubresourceLayers) =
-            Command.ResolveMultisamples(src, src.Image.Layout, dst, dst.Image.Layout)
+            { new Command() with
+                member x.Compatible = QueueFlags.Graphics
+                member x.Enqueue (cmd : CommandBuffer) =
+                    Command.ResolveMultisamples(src, src.Image.Layout, dst, dst.Image.Layout).Enqueue(cmd)
+            }
 
         static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout, srcRange : Box3i, dst : ImageSubresourceLayers, dstLayout : VkImageLayout, dstRange : Box3i, filter : VkFilter) =
             { new Command() with
@@ -685,20 +695,24 @@ module ``Image Command Extensions`` =
             if img.Image.IsNull then
                 Command.Nop
             else
-                command {
-                    let oldLayout = img.Image.Layout
-                    do! Command.TransformLayout(img.[baseLevel,*], oldLayout, VkImageLayout.TransferSrcOptimal)
+                { new Command() with
+                    member x.Compatible = QueueFlags.Graphics
+                    member x.Enqueue cmd =
+                        let oldLayout = img.Image.Layout
+                        cmd.Enqueue <| Command.TransformLayout(img.[baseLevel,*], oldLayout, VkImageLayout.TransferSrcOptimal)
 
-                    let filter =
-                        if img.Aspect = TextureAspect.Color then VkFilter.Linear
-                        else VkFilter.Nearest
+                        let filter =
+                            if img.Aspect = TextureAspect.Color then VkFilter.Linear
+                            else VkFilter.Nearest
 
-                    for l = baseLevel + 1 to img.LevelCount - 1 do
-                        do! Command.TransformLayout(img.[l,*], oldLayout, VkImageLayout.TransferDstOptimal)
-                        do! Command.Blit(img.[l - 1, *], VkImageLayout.TransferSrcOptimal, img.[l, *], VkImageLayout.TransferDstOptimal, filter)
-                        do! Command.TransformLayout(img.[l,*], VkImageLayout.TransferDstOptimal, VkImageLayout.TransferSrcOptimal)
+                        for l = baseLevel + 1 to img.LevelCount - 1 do
+                            cmd.Enqueue <| Command.TransformLayout(img.[l,*], oldLayout, VkImageLayout.TransferDstOptimal)
+                            cmd.Enqueue <| Command.Blit(img.[l - 1, *], VkImageLayout.TransferSrcOptimal, img.[l, *], VkImageLayout.TransferDstOptimal, filter)
+                            cmd.Enqueue <| Command.TransformLayout(img.[l,*], VkImageLayout.TransferDstOptimal, VkImageLayout.TransferSrcOptimal)
 
-                    do! Command.TransformLayout(img.[baseLevel .. img.LevelCount - 1,*], VkImageLayout.TransferSrcOptimal, oldLayout)
+                        cmd.Enqueue <| Command.TransformLayout(img.[baseLevel .. img.LevelCount - 1,*], VkImageLayout.TransferSrcOptimal, oldLayout)
+
+                        [img.Image]
                 }
 
         static member TransformLayout(img : ImageSubresourceRange, source : VkImageLayout, target : VkImageLayout) =
@@ -721,7 +735,6 @@ module ``Image Command Extensions`` =
                             []
                         else
                             let source = img.Layout
-                            img.Layout <- target
                             let aspect = VkFormat.toAspect img.Format
                             Command.TransformLayout(img.[unbox (int aspect), levels.Min .. levels.Max, slices.Min .. slices.Max], source, target).Enqueue(cmd)
                 }

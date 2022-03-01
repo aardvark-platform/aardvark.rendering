@@ -80,13 +80,16 @@ module ImageDownloadExtensions =
 
                 try
                     let cmd =
-                        let layout = srcImg.Layout
+                        { new Command() with
+                            member x.Compatible = QueueFlags.All
+                            member x.Enqueue (cmd : CommandBuffer) =
+                                let layout = srcImg.Layout
+                                cmd.Enqueue <| Command.TransformLayout(srcImg, VkImageLayout.TransferSrcOptimal)
+                                cmd.Enqueue <| Command.TransformLayout(resolved, VkImageLayout.TransferDstOptimal)
+                                cmd.Enqueue <| Command.ResolveMultisamples(src, resolved.[src.Aspect, src.Level, src.Slice])
+                                cmd.Enqueue <| Command.TransformLayout(srcImg, layout)
 
-                        command {
-                            do! Command.TransformLayout(srcImg, VkImageLayout.TransferSrcOptimal)
-                            do! Command.TransformLayout(resolved, VkImageLayout.TransferDstOptimal)
-                            do! Command.ResolveMultisamples(src, resolved.[src.Aspect, src.Level, src.Slice])
-                            do! Command.TransformLayout(srcImg, layout)
+                                [srcImg; resolved]
                         }
 
                     resolved.[src.Aspect, src.Level, src.Slice], cmd
