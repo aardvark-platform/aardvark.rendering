@@ -1,3 +1,6 @@
+### 5.2.0
+https://github.com/aardvark-platform/aardvark.docs/wiki/Aardvark-5.2-changelog
+
 ### 5.2.0-prerelease0002
 - improved C# interop for ClearValues
 - added setter for Call of ManagedDrawCall
