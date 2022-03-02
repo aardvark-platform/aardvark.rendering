@@ -31,7 +31,7 @@ The aardvark rendering engine was the vital spark which finally led to the compl
 We are constantly looking for cool contributions ideas etc! Meet us on [gitter](https://gitter.im/aardvark-platform/Lobby)
 
 To list some, the most important [packages found on nuget](https://www.nuget.org/packages?q=aardvark.Rendering.*) are:
-- Aardvark.Base.Rendering	
+- Aardvark.Rendering	
 - Aardvark.Rendering.GL	
 - Aardvark.Rendering.Vulkan
 - Aardvark.SceneGraph	
