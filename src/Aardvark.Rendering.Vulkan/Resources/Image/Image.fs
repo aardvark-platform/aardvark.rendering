@@ -35,25 +35,6 @@ module ``Image Format Extensions`` =
                 typeof<uint32>, VkIndexType.Uint32
             ]
 
-    type VolumeInfo with
-        member x.Transformed(t : ImageTrafo) =
-            let sx = x.SX
-            let sy = x.SY
-            let sz = x.SZ
-            let dx = x.DX
-            let dy = x.DY
-            let dz = x.DZ
-            match t with
-                | ImageTrafo.Identity -> x
-                | ImageTrafo.Rot90 -> x.SubVolume(sx - 1L, 0L, 0L, sy, sx, sz, dy, -dx, dz)
-                | ImageTrafo.Rot180 -> x.SubVolume(sx - 1L, sy - 1L, 0L, sx, sy, sz, -dx, -dy, dz)
-                | ImageTrafo.Rot270 -> x.SubVolume(0L, sy - 1L, 0L, sy, sx, sz, -dy, dx, dz)
-                | ImageTrafo.MirrorX -> x.SubVolume(sx - 1L, 0L, 0L, sx, sy, sz, -dx, dy, dz)
-                | ImageTrafo.Transpose -> x.SubVolume(0L, 0L, 0L, sy, sx, sz, dy, dx, dz)
-                | ImageTrafo.MirrorY -> x.SubVolume(0L, sy - 1L, 0L, sx, sy, sz, dx, -dy, dz)
-                | ImageTrafo.Transverse -> x.SubVolume(sx - 1L, sy - 1L, 0L, sy, sx, sz, -dy, -dx, dz)
-                | _ -> failf "invalid ImageTrafo"
-
     type Device with
 
         member x.GetSupportedFormat(tiling : VkImageTiling, fmt : PixFormat, t : TextureParams) =

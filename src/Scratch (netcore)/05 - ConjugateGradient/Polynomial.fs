@@ -140,11 +140,11 @@ type Polynomial<'p, 'c> (coeff : HashMap<HashMap<string * 'p, int>, 'c>) =
     static member (*) (l : Polynomial<'p, 'c>, r : 'c) = l * Polynomial<'p, 'c>.Constant r
     static member (*) (l : 'c, r : Polynomial<'p, 'c>) = Polynomial<'p, 'c>.Constant l * r
 
-    static member Pow(l : Polynomial<'p, 'c>, r : int) =
+    static member Power(l : Polynomial<'p, 'c>, r : int) =
         if r < 0 then failwith "negative exponent"
         elif r = 0 then Polynomial<'p,'c>.Zero
         elif r = 1 then l
-        else l * Polynomial<'p,'c>.Pow(l, r - 1)
+        else l * Polynomial<'p,'c>.Power(l, r - 1)
 
     override x.ToString() =
         if HashMap.isEmpty x.coefficients then

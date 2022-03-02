@@ -54,9 +54,9 @@ type Term<'c when 'c : equality> =
     static member (/) (l : Term<'c>, r : int) = Product [l;Value(1.0/float r)]
     static member (/) (l : int, r : Term<'c>) = Product [Value (float l);Power_(r, Value -1.0)]
 
-    static member Pow (l : Term<'c>, r : Term<'c>) = Power_(l,r)
-    static member Pow (l : Term<'c>, r : float) = Power_(l,Value r)
-    static member Pow (l : Term<'c>, r : int) = Power_(l,Value (float r))
+    static member Power (l : Term<'c>, r : Term<'c>) = Power_(l,r)
+    static member Power (l : Term<'c>, r : float) = Power_(l,Value r)
+    static member Power (l : Term<'c>, r : int) = Power_(l,Value (float r))
 
     static member Sqrt(l : Term<'c>) = Power_(l, Value 0.5)
     static member Cbrt(l : Term<'c>) = Power_(l, Value (1.0 / 3.0))
