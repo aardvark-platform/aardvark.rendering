@@ -259,10 +259,10 @@ let main argv =
     Aardvark.Init()
 
     // uncomment/comment to switch between the backends
-    //use app = new VulkanApplication(debug = true)
+    //use app = new VulkanApplication(debug = false)
     use app = new OpenGlApplication(DebugLevel.Normal)
     let runtime = app.Runtime :> IRuntime
-    let samples = 8
+    let samples = 2
 
     use win = app.CreateGameWindow(samples = 1)
     let rnd = RandomSystem(0)
@@ -320,14 +320,22 @@ let main argv =
                 }
 
             let lines =
-                Sg.lines ~~C4b.Red (line |> AVal.map Array.singleton)
+                Sg.cylinder' 32 C4b.Red 0.01 1.0
+                |> Sg.trafo (
+                    line |> AVal.map (fun line ->
+                        let dir = line.P1 - line.P0
+                        let len = Vec.length dir
+                        Trafo3d.Scale(1.0, 1.0, len) *
+                        Trafo3d.RotateInto(V3d.OOI, dir / len) *
+                        Trafo3d.Translation(line.P0)
+                    )
+                )
+                //Sg.lines ~~C4b.Red (line |> AVal.map Array.singleton)
                 |> Sg.shader {
                     do! DefaultSurfaces.trafo
-                    do! DefaultSurfaces.thickLine
                     do! DefaultSurfaces.vertexColor
                     do! Shader.withoutPicking           // Do not write picking data
                 }
-                |> Sg.uniform' "LineWidth" 2.0
 
             Sg.ofList [sphere; lines]
             |> Sg.colorOutput' (Set.singleton DefaultSemantic.Colors)   // Only write to color buffer

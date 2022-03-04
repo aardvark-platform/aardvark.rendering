@@ -9,6 +9,7 @@ open Silk.NET.GLFW
 open System.Runtime.InteropServices
 open FSharp.Control
 open FSharp.Data.Adaptive
+open System.Runtime.InteropServices
 
 type private IGamepad = Aardvark.Application.IGamepad
 type private GamepadButton = Aardvark.Application.GamepadButton
@@ -653,7 +654,11 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
             glfw.DefaultWindowHints()
 
             interop.WindowHints(cfg, glfw)
-
+            
+            let retina =
+                if RuntimeInformation.IsOSPlatform OSPlatform.OSX then cfg.physicalSize
+                else false
+            glfw.WindowHint(unbox<WindowHintBool> 0x00023001, retina)
             glfw.WindowHint(WindowHintBool.TransparentFramebuffer, cfg.transparent)
             glfw.WindowHint(WindowHintBool.Visible, false)
             glfw.WindowHint(WindowHintBool.Resizable, cfg.resizable)
@@ -667,7 +672,7 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
             
             let surface = interop.CreateSurface(runtime, cfg, glfw, win)
         
-            let w = new Window(x, win, cfg.title, cfg.vsync, surface, cfg.samples)
+            let w = new Window(x, win, cfg.title, cfg.vsync, surface, cfg.samples, retina)
 
             match aardvarkIcon with
             | Some icon -> w.Icon <- Some icon
@@ -701,12 +706,19 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
 
     new(runtime, swap) = Application(runtime, swap, false)
 
-and Window(app : Application, win : nativeptr<WindowHandle>, title : string, enableVSync : bool, surface : IWindowSurface, samples : int) as this =
+and Window(app : Application, win : nativeptr<WindowHandle>, title : string, enableVSync : bool, surface : IWindowSurface, samples : int, retina : bool) as this =
     static let keyNameCache = System.Collections.Concurrent.ConcurrentDictionary<Keys * int, string>()
 
     let glfw = app.Glfw
 
-    let mutable windowScale = V2d.II
+    let contentScale() =
+        if retina then
+            let mutable scale = V2f.II
+            glfw.GetWindowContentScale(win, &scale.X, &scale.Y)
+            V2d scale
+        else
+            V2d.II
+        
     let mutable requiresRedraw = true
     let mutable title = title
     let mutable icon : option<PixImageMipMap> = None
@@ -777,21 +789,23 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
         else
             Border2i()              
 
-    let contentSize() =
+    let framebufferSize() =
         let mutable ps = V2i.Zero
-        glfw.GetWindowSize(win, &ps.X, &ps.Y)
-        V2i(round (float windowScale.X * float ps.X), round(float windowScale.Y * float ps.Y))
+        if retina then
+            glfw.GetFramebufferSize(win, &ps.X, &ps.Y)
+        else
+            glfw.GetWindowSize(win, &ps.X, &ps.Y)
+        ps 
 
     let getResizeEvent() =
         let mutable fbo = V2i.Zero
         let mutable ps = V2i.Zero
-        let mutable scale = V2f.Zero
+        
         let border = getFrameBorder()
-
-        glfw.GetFramebufferSize(win, &fbo.X, &fbo.Y)
+        let scale = contentScale()
+        
         glfw.GetWindowSize(win, &ps.X, &ps.Y)
-        glfw.GetWindowContentScale(win, &scale.X, &scale.Y)   
-        windowScale <- V2d scale
+        let fbo = framebufferSize()
         let ws = ps + border.Min + border.Max
         let ps = V2i(round (float scale.X * float ps.X), round(float scale.Y * float ps.Y))
         let ws = V2i(round (float scale.X * float ws.X), round(float scale.Y * float ws.Y))        
@@ -809,13 +823,14 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
         if v then
             let mutable pos = V2d.Zero
             glfw.GetCursorPos(win, &pos.X, &pos.Y)
-            lastMousePosition <- pos * windowScale
+            lastMousePosition <- pos * contentScale()
 
         lastMousePosition
 
     let getPixelPostion() =
         let pos = getMousePosition()
-        PixelPosition(V2i(pos.Round()), Box2i(V2i.Zero, contentSize()))
+        let sfbo = framebufferSize()
+        PixelPosition(V2i(pos.Round()), Box2i(V2i.Zero, sfbo))
 
     let keyboard = Aardvark.Application.EventKeyboard()
     let mouse = Aardvark.Application.EventMouse(true)
@@ -827,9 +842,8 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
     //     ])
 
     let currentSize =
-        let mutable s = V2i.Zero
-        glfw.GetFramebufferSize(win, &s.X, &s.Y)
-        cval s 
+        let s = getResizeEvent()
+        cval s.FramebufferSize
 
     let resizeCb =
         glfw.SetFramebufferSizeCallback(win, GlfwCallbacks.FramebufferSizeCallback(fun _ w h ->
@@ -905,9 +919,10 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                 glfw.GetWindowAttrib(w, WindowAttributeGetter.Visible) &&
                 not (glfw.GetWindowAttrib(w, WindowAttributeGetter.Iconified))
             if v then
-                let p = windowScale * V2d(a,b)
+                let sfbo = framebufferSize()
+                let p = V2d(a,b) * contentScale()
                 
-                let pp = PixelPosition(V2i(p.Round()), Box2i(V2i.Zero, contentSize()))
+                let pp = PixelPosition(V2i(p.Round()), Box2i(V2i.Zero, sfbo))
                 mouse.Move(pp)
                 lastMousePosition <- p
                 mouseMove.Trigger(p)
@@ -917,15 +932,16 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
         glfw.SetMouseButtonCallback(win, GlfwCallbacks.MouseButtonCallback(fun w button action modifiers ->
             let mutable pos = V2d.Zero
             glfw.GetCursorPos(win, &pos.X, &pos.Y)
-            let pos = windowScale * pos
+            let sfbo = framebufferSize()
+            let pos = pos * contentScale()
             let evt = MouseEvent(Translations.toMouseButton button, pos, action, modifiers)
             match action with
             | InputAction.Press -> 
-                let pp = PixelPosition(V2i(pos.Round()), Box2i(V2i.Zero, contentSize()))
+                let pp = PixelPosition(V2i(pos.Round()), Box2i(V2i.Zero, sfbo))
                 mouse.Down(pp, evt.Button)
                 mouseDown.Trigger evt    
             | InputAction.Release -> 
-                let pp = PixelPosition(V2i(pos.Round()), Box2i(V2i.Zero, contentSize()))
+                let pp = PixelPosition(V2i(pos.Round()), Box2i(V2i.Zero, sfbo))
                 mouse.Up(pp, evt.Button)
                 mouseUp.Trigger evt
             | _ -> ()       
@@ -1335,7 +1351,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
             if v then
                 let mutable pos = V2d.Zero
                 glfw.GetCursorPos(win, &pos.X, &pos.Y)
-                lastMousePosition <- pos * windowScale
+                lastMousePosition <- pos * contentScale()
             
             lastMousePosition         
         )
@@ -1392,20 +1408,17 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
         with get() =
             x.Invoke(fun () ->
                 let mutable ps = V2i.Zero
-                let mutable scale = V2f.Zero
                 let border = getFrameBorder()
+                let scale = contentScale()
 
-                glfw.GetWindowSize(win, &ps.X, &ps.Y)
-                glfw.GetWindowContentScale(win, &scale.X, &scale.Y)   
+                glfw.GetWindowSize(win, &ps.X, &ps.Y) 
                 let ws = ps + border.Min + border.Max
-                V2i(round (float scale.X * float ws.X), round(float scale.Y * float ws.Y))  
+                V2i(round (scale.X * float ws.X), round(scale.Y * float ws.Y))  
             )
         and set (v : V2i) = 
             x.Invoke(fun () ->
-                let mutable scale = V2f.Zero
+                let scale = contentScale()
                 let border = getFrameBorder()
-
-                glfw.GetWindowContentScale(win, &scale.X, &scale.Y)   
 
                 let ws = V2i(round (float v.X / float scale.X), round(float v.Y / float scale.Y))  
                 let ps = V2i.Max(V2i.II, ws - (border.Min + border.Max))
@@ -1416,15 +1429,12 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
     member x.FramebufferSize
         with get() = 
             x.Invoke(fun () ->
-                let (w,h) = glfw.GetFramebufferSize(win)
-                V2i(w,h)
+                framebufferSize()
             )
         and set (v : V2i) =
             x.Invoke(fun () ->
-                let mutable scale = V2f.Zero
-                glfw.GetWindowContentScale(win, &scale.X, &scale.Y)   
+                let scale = contentScale()
                 let ws = V2i(round (float v.X / float scale.X), round(float v.Y / float scale.Y)) 
-
                 glfw.SetWindowSize(win, ws.X, ws.Y)
             )        
 
@@ -1525,6 +1535,10 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
         if renderContinuous || requiresRedraw then
             sw.Restart()
             try
+                let sfbo = framebufferSize()
+                if currentSize.Value <>  sfbo then
+                    transact (fun () -> currentSize.Value <- sfbo)
+                    
                 requiresRedraw <- false
                 if vsync <> enableVSync then
                     vsync <- enableVSync
