@@ -91,5 +91,5 @@ type JitMem private() =
             dst.Use (fun pDst ->
                 use hSrc = src.Pin()
                 let pSrc = hSrc.Pointer |> NativePtr.ofVoidPtr<byte> |> NativePtr.toNativeInt
-                JitMem.Copy(pSrc, pDst + dstOffset, src.Length)
+                JitMem.Copy(pSrc, pDst + dstOffset, nativeint src.Length)
             )

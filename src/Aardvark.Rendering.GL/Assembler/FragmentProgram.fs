@@ -61,12 +61,12 @@ and FragmentProgram<'a> internal(differential : bool, compile : option<'a> -> 'a
         let epilog = toMemory (fun ass -> ass.EndFunction(); ass.Ret())
 
         let pProlog = 
-            let block = manager.Alloc(prolog.Length)
+            let block = manager.Alloc(nativeint prolog.Length)
             JitMem.Copy(prolog, block)
             block
             
         let pEpilog = 
-            let block = manager.Alloc(epilog.Length)
+            let block = manager.Alloc(nativeint epilog.Length)
             JitMem.Copy(epilog, block)
             block
 

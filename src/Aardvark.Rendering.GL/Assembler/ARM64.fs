@@ -7,7 +7,6 @@ open Aardvark.Base.Runtime
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
-open Aardvark.Base.Runtime
 open System.Collections.Generic
 
 #nowarn "9"
