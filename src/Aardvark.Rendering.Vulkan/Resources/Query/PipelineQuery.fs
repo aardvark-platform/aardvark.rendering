@@ -2,6 +2,7 @@
 
 open Aardvark.Base
 open Aardvark.Rendering
+open System
 
 [<AutoOpen>]
 module private PipelineQueryHelpers =
@@ -29,6 +30,24 @@ module private PipelineQueryHelpers =
     let getFlagIndex (f : PipelineStatistics) (flags : Set<PipelineStatistics>) =
         flags |> Set.toList |> List.sortBy base2VulkanFlags |> List.tryFindIndex ((=) f)
 
+type private EmptyPipelineQuery() =
+    interface IQuery with
+        member x.Begin() = ()
+        member x.End() = ()
+        member x.Reset() = ()
+
+    interface IVulkanQuery with
+        member x.Begin(_) = ()
+        member x.End(_) = ()
+
+    interface IPipelineQuery with
+        member x.HasResult() = true
+        member x.TryGetResult(_, _) = Some Map.empty
+        member x.GetResult(_, _) = Map.empty
+        member x.Statistics = Set.empty
+
+    interface IDisposable with
+        member x.Dispose() = ()
 
 type PipelineQuery(device : Device, enabledStatistics : Set<PipelineStatistics>) =
     inherit Query(device, QueryType.PipelineStatistics (getVulkanFlags enabledStatistics, Set.count enabledStatistics), 1)

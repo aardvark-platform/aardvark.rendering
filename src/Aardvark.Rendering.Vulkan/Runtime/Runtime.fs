@@ -410,14 +410,28 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         new TimeQuery(device) :> ITimeQuery
 
     member x.CreateOcclusionQuery(precise : bool) =
-        new OcclusionQuery(device, precise) :> IOcclusionQuery
+        let features = &device.PhysicalDevice.Features.Queries
+
+        if features.InheritedQueries then
+            new OcclusionQuery(device, precise && features.OcclusionQueryPrecise) :> IOcclusionQuery
+        else
+            new EmptyOcclusionQuery() :> IOcclusionQuery
 
     member x.CreatePipelineQuery(statistics : Set<PipelineStatistics>) =
-        new PipelineQuery(device, statistics) :> IPipelineQuery
+        let statistics = Set.union statistics x.SupportedPipelineStatistics
+        if Set.isEmpty statistics then
+            new EmptyPipelineQuery() :> IPipelineQuery
+        else
+            new PipelineQuery(device, statistics) :> IPipelineQuery
 
     member x.SupportedPipelineStatistics =
-        if x.Device.PhysicalDevice.Features.Queries.PipelineStatistics then
-            PipelineStatistics.All
+        let features = &device.PhysicalDevice.Features.Queries
+
+        if features.InheritedQueries then
+            if features.PipelineStatistics then
+                PipelineStatistics.All
+            else
+                PipelineStatistics.None
         else
             PipelineStatistics.None
 

@@ -1465,9 +1465,24 @@ and CommandBuffer internal(device : Device, pool : VkCommandPool, queueFamily : 
     let beginSecondary (pass : VkRenderPass) (framebuffer : VkFramebuffer) (inheritQueries : bool) (usage : CommandBufferUsage) =
         native {
             let occlusion, control, statistics =
-                match inheritQueries with
-                | true -> 1u, VkQueryControlFlags.All, VkQueryPipelineStatisticFlags.All
-                | _ -> 0u, VkQueryControlFlags.None, VkQueryPipelineStatisticFlags.None
+                let features = &device.PhysicalDevice.Features.Queries
+
+                if inheritQueries && features.InheritedQueries then
+                    let control =
+                        if features.OcclusionQueryPrecise then
+                            VkQueryControlFlags.All
+                        else
+                            VkQueryControlFlags.All ^^^ VkQueryControlFlags.PreciseBit
+
+                    let statistics =
+                        if features.PipelineStatistics then
+                            VkQueryPipelineStatisticFlags.All
+                        else
+                            VkQueryPipelineStatisticFlags.None
+
+                    1u, control, statistics
+                else
+                    0u, VkQueryControlFlags.None, VkQueryPipelineStatisticFlags.None
 
             let! pInheritanceInfo =
                 VkCommandBufferInheritanceInfo(
