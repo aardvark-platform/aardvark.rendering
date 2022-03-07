@@ -465,15 +465,18 @@ module private ``Compute Commands`` =
 
             type VKVM.CommandStream with
                 member x.TransformLayout(img : ImageSubresourceRange, source : VkImageLayout, target : VkImageLayout) =
+                    let supportedStages =
+                        VkPipelineStageFlags.ofQueueFlags QueueFlags.Compute
+
                     let srcStage, srcAccess =
                         let stage = VkImageLayout.toSrcStageFlags source
                         let access = VkImageLayout.toSrcAccessFlags source
-                        QueueFlags.Compute |> QueueFlags.filterSrcStageAndAccess stage access
+                        (stage, access) ||> filterSrcStageAndAccess supportedStages
 
                     let dstStage, dstAccess =
                         let stage = VkImageLayout.toDstStageFlags source
                         let access = VkImageLayout.toDstAccessFlags source
-                        QueueFlags.Compute |> QueueFlags.filterDstStageAndAccess stage access
+                        (stage, access) ||> filterDstStageAndAccess supportedStages
 
                     let barrier =
                         VkImageMemoryBarrier(
@@ -502,14 +505,16 @@ module private ``Compute Commands`` =
                     x.TransformLayout(range, source, target)
 
                 member x.Sync(buffer : Buffer, srcAccess : VkAccessFlags, dstAccess : VkAccessFlags) =
+                    let supportedStages =
+                        VkPipelineStageFlags.ofQueueFlags QueueFlags.Compute
 
                     let srcStage, srcAccess =
                         let stage = VkBufferUsageFlags.toSrcStageFlags buffer.Usage
-                        QueueFlags.Compute |> QueueFlags.filterSrcStageAndAccess stage srcAccess
+                        (stage, srcAccess) ||> filterSrcStageAndAccess supportedStages
 
                     let dstStage, dstAccess =
                         let stage = VkBufferUsageFlags.toDstStageFlags buffer.Usage
-                        QueueFlags.Compute |> QueueFlags.filterDstStageAndAccess stage dstAccess
+                        (stage, dstAccess) ||> filterDstStageAndAccess supportedStages
 
                     let barrier =
                         VkBufferMemoryBarrier(
@@ -534,14 +539,16 @@ module private ``Compute Commands`` =
                     x.FillBuffer(b.Handle, uint64 offset, uint64 size, value)
 
                 member x.ImageBarrier(img : ImageSubresourceRange, srcAccess : VkAccessFlags, dstAccess : VkAccessFlags) =
+                    let supportedStages =
+                        VkPipelineStageFlags.ofQueueFlags QueueFlags.Compute
 
                     let srcStage, srcAccess =
                         let stage = VkImageLayout.toSrcStageFlags img.Image.Layout
-                        QueueFlags.Compute |> QueueFlags.filterSrcStageAndAccess stage srcAccess
+                        (stage, srcAccess) ||> filterSrcStageAndAccess supportedStages
 
                     let dstStage, dstAccess =
                         let stage = VkImageLayout.toDstStageFlags img.Image.Layout
-                        QueueFlags.Compute |> QueueFlags.filterDstStageAndAccess stage dstAccess
+                        (stage, dstAccess) ||> filterDstStageAndAccess supportedStages
 
                     x.PipelineBarrier(
                         srcStage, dstStage,

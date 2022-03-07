@@ -58,33 +58,26 @@ module internal VkPipelineStageFlags =
                QueueFlags.SparseBinding, general
             ]
 
-    /// Removes all stages that are not supported by a queue with the given flags.
-    let filterByQueue (flags : QueueFlags) (stages : VkPipelineStageFlags) =
-        (VkPipelineStageFlags.None, Conversion.ofQueueFlags) ||> Map.fold (fun result queue supported ->
-            if flags.HasFlag queue then
-                result ||| (stages &&& supported)
-            else
-                result
-        )
+    let ofQueueFlags (flags : QueueFlags) =
+        flags |> Enum.convertFlags Conversion.ofQueueFlags VkPipelineStageFlags.None
 
 [<AutoOpen>]
-module internal ``QueueFlags Synchronization Extensions`` =
+module internal ``Synchronization Extensions`` =
 
-    module QueueFlags =
-        let private filterStageAndAccess (neutralStage : VkPipelineStageFlags)
-                                         (stage : VkPipelineStageFlags) (access : VkAccessFlags)
-                                         (flags : QueueFlags) =
-                let filtered = stage |> VkPipelineStageFlags.filterByQueue flags
-                if filtered = VkPipelineStageFlags.None then
-                    neutralStage, VkAccessFlags.None
-                else
-                    filtered, access
+    let private filterStageAndAccess (neutralStage : VkPipelineStageFlags)
+                                     (supported : VkPipelineStageFlags)
+                                     (stage : VkPipelineStageFlags) (access : VkAccessFlags) =
+            let filtered = stage &&& supported
+            if filtered = VkPipelineStageFlags.None then
+                neutralStage, VkAccessFlags.None
+            else
+                filtered, access
 
-        /// Filters stage and access flags to be compatible with the queue flags.
-        let filterSrcStageAndAccess = filterStageAndAccess VkPipelineStageFlags.TopOfPipeBit
+    /// Filters stage and access flags with the given supported stages.
+    let filterSrcStageAndAccess = filterStageAndAccess VkPipelineStageFlags.TopOfPipeBit
 
-        /// Filters stage and access flags to be compatible with the queue flags.
-        let filterDstStageAndAccess = filterStageAndAccess VkPipelineStageFlags.BottomOfPipeBit
+    /// Filters stage and access flags with the given supported stages.
+    let filterDstStageAndAccess = filterStageAndAccess VkPipelineStageFlags.BottomOfPipeBit
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VkAccessFlags =

@@ -251,7 +251,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
                     DeviceQueue(this, device, fam, offset + i)
                 )
 
-            let family = new DeviceQueueFamily(this, fam, queues)
+            let family = new DeviceQueueFamily(this, physical, fam, queues)
             family
 
         let graphicsFamily  = graphicsQueues |> Option.map toFamily
@@ -1252,7 +1252,7 @@ and DeviceTemporaryCommandPool(family : DeviceQueueFamily) =
 
 
 
-and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues : list<DeviceQueue>) as this =
+and DeviceQueueFamily internal(device : Device, physicalDevice : PhysicalDevice, info : QueueFamilyInfo, queues : list<DeviceQueue>) as this =
     let store = queues |> List.toArray
     do for q in store do q.Family <- this
     let mutable current = 0
@@ -1262,6 +1262,18 @@ and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues :
     
     let thread = lazy (new DeviceQueueThread(this))
 
+    let supportedStages =
+        let features = &physicalDevice.Features.Shaders
+        let mutable stages = info.flags |> VkPipelineStageFlags.ofQueueFlags
+
+        if not features.GeometryShader then
+            stages <- stages &&& (~~~VkPipelineStageFlags.GeometryShaderBit)
+
+        if not features.TessellationShader then
+            stages <- stages &&& (~~~VkPipelineStageFlags.TessellationControlShaderBit)
+            stages <- stages &&& (~~~VkPipelineStageFlags.TessellationEvaluationShaderBit)
+
+        stages
 
     member x.TakeCommandPool() = tempPool.Take()
 
@@ -1270,6 +1282,7 @@ and DeviceQueueFamily internal(device : Device, info : QueueFamilyInfo, queues :
     member x.Index : int = info.index
     member x.Flags = info.flags
     member x.Queues = queues
+    member x.Stages = supportedStages
 
     [<Obsolete>]
     member x.DefaultCommandPool = defaultPool

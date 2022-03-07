@@ -321,8 +321,8 @@ module ``Image Command Extensions`` =
                                          dstStage : VkPipelineStageFlags, dstAccess : VkAccessFlags,
                                          srcQueue : uint32, dstQueue : uint32)  =
 
-            let srcStage, srcAccess = cmd.QueueFamily.Flags |> QueueFlags.filterSrcStageAndAccess srcStage srcAccess
-            let dstStage, dstAccess = cmd.QueueFamily.Flags |> QueueFlags.filterDstStageAndAccess dstStage dstAccess
+            let srcStage, srcAccess = (srcStage, srcAccess) ||> filterSrcStageAndAccess cmd.QueueFamily.Stages
+            let dstStage, dstAccess = (dstStage, dstAccess) ||> filterDstStageAndAccess cmd.QueueFamily.Stages
 
             let imageMemoryBarrier =
                 VkImageMemoryBarrier(
