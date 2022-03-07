@@ -1185,17 +1185,18 @@ module rec ChangeableProgram =
     open System.IO
     open System.Runtime.InteropServices
     open Aardvark.Rendering.Management
-
+    open Aardvark.Assembler
     module Memory =
         let executable : Memory<nativeint> =
             {
-                malloc = ExecutableMemory.alloc
-                mfree = ExecutableMemory.free
-                mcopy = fun (src : nativeint) (srcOff : nativeint) (dst : nativeint) (dstOff : nativeint) (size : nativeint) -> Marshal.Copy(src + srcOff, dst + dstOff, size)
+                malloc = JitMem.Alloc
+                mfree = fun p s -> JitMem.Free(p, s)
+                mcopy = fun (src : nativeint) (srcOff : nativeint) (dst : nativeint) (dstOff : nativeint) (size : nativeint) ->
+                    JitMem.Copy(src + srcOff, dst + dstOff, size)
                 mrealloc = fun (old : nativeint) (oldSize : nativeint) (newSize : nativeint) ->
-                    let n = ExecutableMemory.alloc newSize
-                    Marshal.Copy(old, n, min oldSize newSize)
-                    ExecutableMemory.free old oldSize
+                    let n = JitMem.Alloc newSize
+                    JitMem.Copy(old, n, min oldSize newSize)
+                    JitMem.Free(old, oldSize)
                     n
             }
 
@@ -1284,15 +1285,17 @@ module rec ChangeableProgram =
         let mutable block = block
 
         static let assemble (action : IAssemblerStream -> unit) =
-            use ms = new MemoryStream()
-            use ass = AssemblerStream.ofStream ms
+            use ms = new SystemMemoryStream()
+            use ass = AssemblerStream.create ms
             action ass
-            ms.ToArray()
+            ms.ToMemory()
 
         static let jumpSize =
-            assemble (fun s ->
-                s.Jump 34325324
-            ) |> Array.length
+            let mem = 
+                assemble (fun s ->
+                    s.Jump 43210
+                )
+            mem.Length
 
         static let jumpDistance (lOffset : nativeint) (lSize : nativeint) (rOffset : nativeint) =
             let jumpEnd = lOffset + lSize
@@ -1304,14 +1307,22 @@ module rec ChangeableProgram =
         member private x.WriteJumpTo(jumpTarget : nativeint) =
             parent.Use(block, fun ptr offset size ->
                 let d = jumpDistance block.Offset block.Size jumpTarget
-                use m = new UnmanagedMemoryStream(NativePtr.ofNativeInt (ptr + offset + size - nativeint jumpSize), int64 jumpSize, int64 jumpSize, FileAccess.ReadWrite)
-                use ass = AssemblerStream.ofStream m
-                ass.Jump d
+                
+                let mem =
+                    use ms = new SystemMemoryStream()
+                    use ass = AssemblerStream.create ms
+                    ass.Jump d
+                    ms.ToMemory()
+                
+                JitMem.Copy(mem, ptr + offset + size - nativeint jumpSize)
+//                use m = new UnmanagedMemoryStream(NativePtr.ofNativeInt (ptr + offset + size - nativeint jumpSize), int64 jumpSize, int64 jumpSize, FileAccess.ReadWrite)
+//                use ass = AssemblerStream.create m
+//                ass.Jump d
             )
 
         member x.Mutate(action : IAssemblerStream -> IAdaptivePinning -> unit) =
-            use ms = new MemoryStream()
-            use ass = AssemblerStream.ofStream ms
+            use ms = new SystemMemoryStream()
+            use ass = AssemblerStream.create ms
 
             let o = pinned.ToArray()
             pinned.Clear()
@@ -1349,9 +1360,9 @@ module rec ChangeableProgram =
                 | None -> ()
 
             ass.Jump(jumpDistance block.Offset block.Size jumpTarget)
-            let arr = ms.ToArray()
+            let arr = ms.ToMemory()
             parent.Use(block, fun basePtr offset _size ->
-                Marshal.Copy(arr, 0, basePtr + offset, arr.Length)
+                JitMem.Copy(arr, basePtr + offset)
             )
 
         member x.IsDisposed =
@@ -1411,10 +1422,10 @@ module rec ChangeableProgram =
         let pinning = new AdaptivePinning()
 
         static let assemble (action : IAssemblerStream -> unit) =
-            use ms = new MemoryStream()
-            use ass = AssemblerStream.ofStream ms
+            use ms = new SystemMemoryStream()
+            use ass = AssemblerStream.create ms
             action ass
-            ms.ToArray()
+            ms.ToMemory()
 
         static let epilog =
             assemble (fun s ->
@@ -1423,15 +1434,16 @@ module rec ChangeableProgram =
             )
 
         static let jumpSize =
-            assemble (fun s ->
-                s.Jump 34325324
-            ) |> Array.length
+            let mem =  assemble (fun s -> s.Jump 43210)
+            mem.Length
 
         static let prologSize =
-            assemble (fun s ->
-                s.BeginFunction()
-                s.Jump 34325324
-            ) |> Array.length
+            let mem = 
+                assemble (fun s ->
+                    s.BeginFunction()
+                    s.Jump 34325324
+                )
+            mem.Length
 
         static let jumpDistance (lOffset : nativeint) (lSize : nativeint) (rOffset : nativeint) =
             let jumpEnd = lOffset + lSize
@@ -1441,7 +1453,7 @@ module rec ChangeableProgram =
             lazy (
                 let block = memory.Alloc(nativeint epilog.Length)
                 memory.Use(block, fun basePtr offset _size ->
-                    Marshal.Copy(epilog, 0, basePtr + offset, epilog.Length)
+                    JitMem.Copy(epilog, basePtr + offset)
                 )
                 block
             )
@@ -1450,17 +1462,17 @@ module rec ChangeableProgram =
 
         let mutable run : option<unit -> unit> = None
         let prologBlock =
-
+            let epilog = epilog.Value
             let block = memory.Alloc (nativeint prologSize)
             memory.Use(block, fun basePtr offset _size ->
-                use ms = new MemoryStream()
-                use ass = AssemblerStream.ofStream ms
+                use ms = new SystemMemoryStream()
+                use ass = AssemblerStream.create ms
 
                 ass.BeginFunction()
-                ass.Jump (jumpDistance block.Offset block.Size epilog.Value.Offset)
+                ass.Jump (jumpDistance block.Offset block.Size epilog.Offset)
 
-                let arr = ms.ToArray()
-                Marshal.Copy(arr, 0, basePtr + offset, arr.Length)
+                let arr = ms.ToMemory()
+                JitMem.Copy(arr, basePtr + offset)
 
             )
             block
@@ -1552,8 +1564,8 @@ module rec ChangeableProgram =
 
         member x.NewFragment(write : IAssemblerStream -> IAdaptivePinning -> unit) =
             if x.IsDisposed then raise <| System.ObjectDisposedException("FragmentProgram")
-            use ms = new MemoryStream()
-            use ass = AssemblerStream.ofStream ms
+            use ms = new SystemMemoryStream()
+            use ass = AssemblerStream.create ms
 
             let disposables = System.Collections.Generic.List<System.IDisposable>()
             let p =
@@ -1577,10 +1589,10 @@ module rec ChangeableProgram =
             let block = memory.Alloc blockSize
             fixEntry()
             ass.Jump (jumpDistance block.Offset block.Size epilog.Value.Offset)
-            let arr = ms.ToArray()
+            let arr = ms.ToMemory()
 
             memory.Use(block, fun basePtr offset _size ->
-                Marshal.Copy(arr, 0, basePtr + offset, arr.Length)
+                JitMem.Copy(arr, basePtr + offset)
             )
 
             new ProgramFragment(x, block, disposables)

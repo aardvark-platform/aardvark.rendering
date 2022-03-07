@@ -344,9 +344,9 @@ type OpenGlApplication(forceNvidia : bool, debug : DebugLevel, shaderCachePath :
         failwithf "unknown control type: %A" ctrl
         
 
-    member x.CreateGameWindow(?samples : int) =
+    member x.CreateGameWindow(?samples : int, ?physicalSize : bool) =
         let samples = defaultArg samples 1
-        let w = glfw.CreateWindow { windowConfig with samples = samples }
+        let w = glfw.CreateWindow { windowConfig with samples = samples; physicalSize = defaultArg physicalSize false }
 
         w.KeyDown.Add (fun e ->
             match e.Key with

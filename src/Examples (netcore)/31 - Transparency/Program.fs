@@ -73,7 +73,7 @@ module Program =
         use app = new VulkanApplication(debug = true)
         //use app = new OpenGlApplication()
         let runtime = app.Runtime :> IRuntime
-        let samples = 8
+        let samples = 1
 
         // create a game window (better for measuring fps)
         use win = app.CreateGameWindow(samples = samples)
@@ -174,7 +174,7 @@ module Program =
                     Trafo3d.Translation(-1.0 + 20.0 * px.X, -1.0 + 25.0 * px.Y, 0.0)
                 )
 
-            Sg.text (Font("Consolas")) C4b.White str
+            Sg.text FontSquirrel.Hack.Regular C4b.White str
                 |> Sg.trafo trafo
                 |> Sg.compile runtime win.FramebufferSignature
 

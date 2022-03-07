@@ -209,28 +209,73 @@ module RenderTasks =
             member x.Dispose() = x.Dispose()
 
     type NativeRenderProgram(cmp : IComparer<PreparedCommand>, scope : CompilerInfo, content : aset<PreparedCommand>, debug : bool) =
-        inherit NativeProgram<PreparedCommand, NativeStats>(
-                        ASet.sortWith (curry cmp.Compare) content, 
-                        (fun l r s -> 
-                                let asm =  AssemblerCommandStream(s) :> ICommandStream
-                                let stream = if debug then DebugCommandStream(asm) :> ICommandStream else asm
-                                r.Compile(scope, stream, l)
-                            ),
-                        NativeStats.Zero, (+), (-))
-        
+        inherit AdaptiveObject()
+        //inherit NativeProgram<PreparedCommand, NativeStats>(
+        //                ASet.sortWith (curry cmp.Compare) content, 
+        //                (fun l r s -> 
+        //                        let asm =  AssemblerCommandStream(s) :> ICommandStream
+        //                        let stream = if debug then DebugCommandStream(asm) :> ICommandStream else asm
+        //                        r.Compile(scope, stream, l)
+        //                    ),
+        //                NativeStats.Zero, (+), (-))
+        let mutable reader = content.GetReader()
+        let mutable state = 
+            SortedSetExt<PreparedCommand * Aardvark.Assembler.Fragment<PreparedCommand>> {
+                new IComparer<PreparedCommand * Aardvark.Assembler.Fragment<PreparedCommand>> with
+                    member x.Compare((a,_), (b,_)) =
+                        cmp.Compare(a, b)
+            }
+
+        let compile (l : option<PreparedCommand>) (self : PreparedCommand) (ass : IAssemblerStream) =
+            let asm =  AssemblerCommandStream(ass) :> ICommandStream
+            let stream = if debug then DebugCommandStream(asm) :> ICommandStream else asm
+            self.Compile(scope, stream, l) |> ignore // TODO: stats
+
+        let mutable program = new Aardvark.Assembler.FragmentProgram<PreparedCommand>(compile)
+
         let mutable stats = NativeProgramUpdateStatistics.Zero
         member x.Count = stats.Count
 
-        member private x.UpdateInt(t) =
-            let s = x.Update(t)
-            if s <> NativeProgramUpdateStatistics.Zero then
-                stats <- s
+        member x.Update(token : AdaptiveToken) =
+            x.EvaluateIfNeeded token () (fun token ->
+                let ops = reader.GetChanges token
+                for op in ops do
+                    match op with
+                    | Add(_, cmd) ->
+                        let (l, s, _r) = state.FindNeighbours((cmd, null))
+                        if s.HasValue then
+                            Log.warn "[NativeRenderProgram] duplicate add of: %A" cmd
+                        else
+                            let l = if l.HasValue then snd l.Value else null
+                            let self = program.InsertAfter(l, cmd)
+                            state.Add((cmd, self)) |> ignore
+                    | Rem(_, cmd) ->
+                        let (_, s, _) = state.FindNeighbours((cmd, null))
+                        if s.HasValue then
+                            let _, f = s.Value
+                            f.Dispose()
+                            state.Remove(cmd, null) |> ignore
+                        else
+                            Log.warn "[NativeRenderProgram] removal of unknown command: %A" cmd
 
+                program.Update()
+            )
 
+        member x.Run() =
+            program.Run()
+
+        member x.Dispose() =
+            if not (isNull state) then
+                program.Dispose()
+                stats <- NativeProgramUpdateStatistics.Zero
+                state <- null
+                reader <- Unchecked.defaultof<_>
+            
         interface IAdaptiveProgram<unit> with
+            member x.Dispose() = x.Dispose()
             member x.Disassemble() = null
             member x.Run(_) = x.Run()
-            member x.Update(t) = x.UpdateInt(t); AdaptiveProgramStatistics.Zero
+            member x.Update(t) = x.Update(t); AdaptiveProgramStatistics.Zero
             member x.StartDefragmentation() = Threading.Tasks.Task.FromResult(TimeSpan.Zero)
             member x.AutoDefragmentation
                 with get() = false
@@ -312,8 +357,8 @@ module RenderTasks =
         override x.Perform(token, renderToken) =
             x.Update(token, renderToken) |> ignore
             x.Execution (renderToken, fun () -> program.Run())
-            let ic = program.Stats.InstructionCount
-            renderToken.AddInstructions(ic, 0) // don't know active
+            //let ic = program.Stats.InstructionCount
+            //renderToken.AddInstructions(ic, 0) // don't know active
                
 
         override x.Dispose() =
