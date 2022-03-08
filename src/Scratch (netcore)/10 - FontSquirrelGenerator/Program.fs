@@ -10,8 +10,8 @@ module FontSquirrelGenerator =
     open System.Text.Json
     open System.IO.Compression
 
-    let private client = new WebClient()
-    do client.Headers.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36")
+    let private client = new HttpClient()
+    do client.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/79.0.3945.130 Safari/537.36")
 
     let private md5 = System.Security.Cryptography.MD5.Create()
 
@@ -27,7 +27,7 @@ module FontSquirrelGenerator =
         if File.Exists p then 
             File.readAllBytes p
         else
-            let c = client.DownloadData(url)
+            let c = client.GetByteArrayAsync(url).Result
             File.WriteAllBytes(p, c)
             c
 
@@ -37,7 +37,7 @@ module FontSquirrelGenerator =
         if File.Exists p then 
             File.ReadAllText p
         else
-            let c = client.DownloadString(url)
+            let c = client.GetStringAsync(url).Result
             File.WriteAllText(p, c)
             c
 

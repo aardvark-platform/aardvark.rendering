@@ -161,21 +161,21 @@ module StepwiseQueueExection =
 
         let markThings = MVar.empty()
 
+        let mutable running = true
+        
         let marker =
-            async {
-                while true do
-                    do! MVar.takeAsync markThings
-                    do! Async.Sleep 50
-                    transact (fun () -> set.MarkOutdated())
-            }
-
-        Async.Start marker
+            startThread <| fun () ->
+                while running do
+                    MVar.take markThings
+                    Thread.Sleep 50
+                    if running then
+                        transact (fun () -> set.MarkOutdated())
 
         let a =
             async {
                 do! Async.SwitchToNewThread()
 
-                while true do
+                while running do
                     let d = 
                         
                         let res = c.Dequeue()
