@@ -201,7 +201,7 @@ module RenderPass =
 
     let internal validateCompability (fbo : IFramebuffer) (pass : RenderPass) =
         if not <| pass.IsCompatibleWith fbo.Signature then
-            failwithf "vulkan requires render task signatures to be strictly compatible (i.e. equivalent) with the framebuffer signature\ntask signature:\n%A\n\nframebuffer signature:\n%A" pass.Layout fbo.Signature.Layout
+            failf "render task signatures need to be strictly compatible (i.e. equivalent) with the framebuffer signature\ntask signature:\n%A\n\nframebuffer signature:\n%A" pass.Layout fbo.Signature.Layout
 
 [<AbstractClass; Sealed; Extension>]
 type ContextRenderPassExtensions private() =

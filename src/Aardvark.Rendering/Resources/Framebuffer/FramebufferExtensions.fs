@@ -222,14 +222,13 @@ module IFramebufferSignatureExtensions =
                 this.DepthStencilAttachment = other.DepthStencilAttachment
 
         /// Check if the output with the signature is assignable to the given framebuffer.
-        /// Each color and depth output must have a counter part in the framebuffer, layer count and uniforms,
-        /// and sample count must match.
+        /// Each color and depth output must have a counter part in the framebuffer, layer count and uniforms must match.
+        /// Sample count may differ.
         [<Extension>]
         static member IsAssignableTo (this : IFramebufferSignature, fbo : IFramebuffer) =
             if LanguagePrimitives.PhysicalEquality this fbo.Signature then
                 true
             else
-                this.Samples = fbo.Signature.Samples &&
                 this.LayerCount = fbo.Signature.LayerCount &&
                 this.PerLayerUniforms = fbo.Signature.PerLayerUniforms &&
                 colorsAssignableTo this.ColorAttachments fbo.Signature.ColorAttachments &&

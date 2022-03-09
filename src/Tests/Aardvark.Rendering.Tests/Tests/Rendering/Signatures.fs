@@ -1,6 +1,5 @@
 ﻿namespace Aardvark.Rendering.Tests.Rendering
 
-open System
 open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
@@ -222,13 +221,49 @@ module FramebufferSignature =
             finally
                 r0.Release(); r1.Release(); r2.Release(); r3.Release(); r4.Release();
 
+        // Render to a multisampled framebuffer with a single sample task signature
+        // Note: We want this to be possible with the GL backend
+        let renderToMultisampled (runtime : IRuntime) =
+            use signature =
+                runtime.CreateFramebufferSignature(Map.ofList [
+                    1, { Name = Semantic.Output1; Format = TextureFormat.Rgba8 }
+                ], None, samples = 4)
 
-    let tests (backend : Backend) =        
+            use taskSignature =
+                runtime.CreateFramebufferSignature(Map.ofList [
+                    1, { Name = Semantic.Output1; Format = TextureFormat.Rgba8 }
+                ], None)
+
+            use task =
+                Sg.fullScreenQuad
+                |> Sg.shader {
+                    do! Shader.output1White
+                }
+                |> Sg.colorMask' ColorMask.Red
+                |> Sg.compile runtime taskSignature
+       
+            let result =
+                let fbo = runtime.CreateFramebuffer(signature, ~~V2i(256))
+                let output = task |> RenderTask.renderTo fbo
+                output.GetOutputTexture(Semantic.Output1)
+
+            result.Acquire()
+
+            try
+                let pi = result.GetValue().Download().AsPixImage<byte>()
+                pi |> PixImage.isColor [| 255uy; 0uy; 0uy; 0uy |]
+
+            finally
+                result.Release()
+
+
+    let tests (backend : Backend) =
         [
             "Framebuffer with holes",  Cases.framebufferWithHoles
 
             if backend <> Backend.Vulkan then
-                "Render subset",           Cases.renderToSubset
-                "Render combined",         Cases.renderCombined
+                "Render subset",       Cases.renderToSubset
+                "Render combined",     Cases.renderCombined
+                "Render multisampled", Cases.renderToMultisampled
         ]
         |> prepareCases backend "Framebuffer signatures"
