@@ -1,3 +1,7 @@
+### 5.2.2
+- [GL] relaxed framebuffer signature compability requirements
+- [Vulkan] using any compatible QueueFamily for CopyEngine
+
 ### 5.2.1
 - implemented ARM64 assembler
 - fixed issue with Retina displays
