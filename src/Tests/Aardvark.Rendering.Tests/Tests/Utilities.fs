@@ -15,7 +15,9 @@ module EmbeddedResource =
         let asm = Assembly.GetExecutingAssembly()
         let name = Regex.Replace(asm.ManifestModule.Name, @"\.(exe|dll)$", "", RegexOptions.IgnoreCase)
         let path = Regex.Replace(path, @"(\\|\/)", ".")
-        asm.GetManifestResourceStream(name + "." + path)
+        let stream = asm.GetManifestResourceStream(name + "." + path)
+        if stream <> null then stream
+        else failwithf "Cannot open resource stream with name '%s'" path
 
     let loadPixImage<'T> (path : string) =
         use stream = get path
@@ -183,6 +185,9 @@ module PixData =
                 typeof<float32>, 1.0
                 typeof<float>,   1.0
             ]
+
+        let inline rootMeanSquaredError (offset : V2i) (input : PixImage<'T>) (output : PixImage<'T>) =
+            sqrt (meanSquaredError offset input output)
 
         let inline peakSignalToNoiseRatio (offset : V2i) (input : PixImage<'T>) (output : PixImage<'T>) =
             let maxValue = maxValues typeof<'T>

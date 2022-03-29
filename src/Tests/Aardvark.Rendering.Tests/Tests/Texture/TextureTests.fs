@@ -15,6 +15,10 @@ module ``Texture Tests`` =
     ]
 
     [<Tests>]
+    let textureCompressionTests =
+        [ TextureCompression.tests ] |> testList "PixImage"
+
+    [<Tests>]
     let textureTestsGL =
         tests |> testBackend Backend.GL "Textures"
 

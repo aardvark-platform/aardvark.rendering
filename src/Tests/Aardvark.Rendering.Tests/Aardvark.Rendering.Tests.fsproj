@@ -28,6 +28,8 @@
     <EmbeddedResource Include="data\bc7.dds" />
     <EmbeddedResource Include="data\rgb.png" />
     <EmbeddedResource Include="data\rgba.png" />
+    <EmbeddedResource Include="data\spiral.png" />
+    <EmbeddedResource Include="data\spiral_alpha.png" />
     <Compile Include="Scratch\RenderingTests.fs" />
     <Compile Include="Scratch\PerformanceTest.fs" />
     <Compile Include="Scratch\RadixSort.fs" />
@@ -40,6 +42,7 @@
     <Compile Include="Tests\Texture\Create.fs" />
     <Compile Include="Tests\Texture\Upload.fs" />
     <Compile Include="Tests\Texture\Download.fs" />
+    <Compile Include="Tests\Texture\Compression.fs" />
     <Compile Include="Tests\Texture\TextureTests.fs" />
     <Compile Include="Tests\Rendering\Signatures.fs" />
     <Compile Include="Tests\Rendering\RenderingTests.fs" />

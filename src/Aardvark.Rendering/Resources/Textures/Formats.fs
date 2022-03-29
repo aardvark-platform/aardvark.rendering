@@ -305,8 +305,21 @@ module TextureFormat =
     let toCompressed =
         LookupTable.lookupTable' [
             TextureFormat.Rgb8, TextureFormat.CompressedRgbS3tcDxt1
+            TextureFormat.Rgb8ui, TextureFormat.CompressedRgbS3tcDxt1
             TextureFormat.Srgb8, TextureFormat.CompressedSrgbS3tcDxt1
+
+            TextureFormat.R8, TextureFormat.CompressedRedRgtc1
+            TextureFormat.R8ui, TextureFormat.CompressedRedRgtc1
+            TextureFormat.R8i, TextureFormat.CompressedSignedRedRgtc1
+            TextureFormat.R8Snorm, TextureFormat.CompressedSignedRedRgtc1
+
+            TextureFormat.Rg8, TextureFormat.CompressedRgRgtc2
+            TextureFormat.Rg8ui, TextureFormat.CompressedRgRgtc2
+            TextureFormat.Rg8i, TextureFormat.CompressedSignedRgRgtc2
+            TextureFormat.Rg8Snorm, TextureFormat.CompressedSignedRgRgtc2
+
             TextureFormat.Rgba8, TextureFormat.CompressedRgbaS3tcDxt5
+            TextureFormat.Rgba8ui, TextureFormat.CompressedRgbaS3tcDxt5
             TextureFormat.Srgb8Alpha8, TextureFormat.CompressedSrgbAlphaS3tcDxt5
         ]
 
