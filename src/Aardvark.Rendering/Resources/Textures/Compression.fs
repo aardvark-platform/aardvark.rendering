@@ -1,6 +1,6 @@
 ﻿namespace Aardvark.Rendering
 
-open System
+open System.Threading.Tasks
 open Aardvark.Base
 open FSharp.NativeInterop
 open System.Runtime.InteropServices
@@ -86,7 +86,7 @@ module BlockCompression =
 
     module private Array =
 
-        let minIndexBy (f : 'T -> 'U) (array : 'T[]) =
+        let inline minIndexBy (f : ^T -> ^U) (array : ^T[]) =
             let mutable dist = f array.[0]
             let mutable index = 0
 
@@ -200,7 +200,7 @@ module BlockCompression =
             let inline expand6 x =
                 Tables.expand6.[int x]
 
-        [<Struct;  CustomComparison; CustomEquality>]
+        [<Struct>]
         type R5G6B5 =
             val private R : uint8
             val private G : uint8
@@ -251,47 +251,16 @@ module BlockCompression =
                     lerp x.B y.B t
                 )
 
-            member inline private x.Equals(y : R5G6B5) =
-                x.R = y.R && x.G = y.G && x.B = y.B
-
             override x.ToString() =
                 x |> R5G6B5.ToC3b |> string
 
-            override x.Equals(y : obj) =
-                match y with
-                | :? R5G6B5 as y -> x.Equals(y)
-                | _ -> false
-
-            override x.GetHashCode() =
-                hash (x.R, x.G, x.B)
-
-            member inline private x.CompareTo(y : R5G6B5) =
-                compare (R5G6B5.ToUint16 x) (R5G6B5.ToUint16 y)
-
-            interface IEquatable<R5G6B5> with
-                member x.Equals(y) = x.Equals(y)
-
-            interface IComparable with
-                member x.CompareTo(y) =
-                    match y with
-                    | :? R5G6B5 as y -> x.CompareTo(y)
-                    | _ -> failwith "Cannot compare"
-
-            interface IComparable<R5G6B5> with
-                member x.CompareTo(y) = x.CompareTo(y)
-
         module C3b =
 
-            let distanceSquared (x : C3b) (y : C3b) =
-                let dR = float <| if x.R > y.R then x.R - y.R else y.R - x.R
-                let dG = float <| if x.G > y.G then x.G - y.G else y.G - x.G
-                let dB = float <| if x.B > y.B then x.B - y.B else y.B - x.B
+            let inline distanceSquared (x : C3b) (y : C3b) =
+                let dR = float x.R - float y.R
+                let dG = float x.G - float y.G
+                let dB = float x.B - float y.B
                 (dR * dR + dG * dG + dB * dB)
-
-        module C4b =
-
-            let two = C4b(2, 2, 2, 2)
-            let three = C4b(3, 3, 3, 3)
 
     // See: https://docs.microsoft.com/en-us/windows/win32/direct3d10/d3d10-graphics-programming-guide-resources-block-compression
     module private BC1 =
@@ -364,7 +333,7 @@ module BlockCompression =
                         R5G6B5(input.GetC3b(w - 1, h - 1))
 
             let computePalette (c0 : R5G6B5) (c1 : R5G6B5) =
-                if c0 > c1 then
+                if c0.ToUint16() > c1.ToUint16() then
                     [| c0; c1
                        R5G6B5.Lerp(c0, c1, 1.0 / 3.0)
                        R5G6B5.Lerp(c0, c1, 2.0 / 3.0) |]
@@ -408,7 +377,7 @@ module BlockCompression =
                     else
                         false
 
-                if c0 > c1 then
+                if c0.ToUint16() > c1.ToUint16() then
                     if hasAlpha then c1, c0 else c0, c1
                 else
                     if hasAlpha then c0, c1 else c1, c0
@@ -419,8 +388,8 @@ module BlockCompression =
             let pColors = dst |> NativePtr.ofNativeInt<uint16>
             let pIndices = (dst + 4n) |> NativePtr.ofNativeInt<uint8>
 
-            pColors.[0] <- R5G6B5.ToUint16 c0
-            pColors.[1] <- R5G6B5.ToUint16 c1
+            pColors.[0] <- c0.ToUint16()
+            pColors.[1] <- c1.ToUint16()
 
             for y = offset.Y to size.Y - 1 do
                 let mutable row = 0uy
@@ -459,10 +428,10 @@ module BlockCompression =
             colors.[1] <- R5G6B5(pColors.[1]).ToC4b()
 
             if pColors.[0] > pColors.[1] then
-                colors.[2] <- ((colors.[0] / C4b.three) * C4b.two) + (colors.[1] / C4b.three)
-                colors.[3] <- (colors.[0] / C4b.three) + ((colors.[1] / C4b.three) * C4b.two)
+                colors.[2] <- lerp colors.[0] colors.[1] (1.0 / 3.0)
+                colors.[3] <- lerp colors.[0] colors.[1] (2.0 / 3.0)
             else
-                colors.[2] <- (colors.[0] / C4b.two) + (colors.[1] / C4b.two)
+                colors.[2] <- lerp colors.[0] colors.[1] 0.5
                 colors.[3] <- C4b.Zero
 
             for y = offset.Y to size.Y - 1 do
@@ -735,7 +704,7 @@ module BlockCompression =
         let blockSize = CompressionMode.blockSize mode
         let bytesPerBlock = CompressionMode.bytesPerBlock mode
 
-        let decode =
+        let encode =
             match mode with
             | CompressionMode.BC1        -> BC1.encode
             | CompressionMode.BC2        -> BC2.encode
@@ -745,20 +714,18 @@ module BlockCompression =
             | _ ->
                 failwithf "Cannot encode using %A compression" mode
 
-        let mutable dst = dst
+        Parallel.For(0, blocks.X * blocks.Y, fun i ->
+            let block = V2i(i % blocks.X, i / blocks.X)
+            let blockOffset = blockSize * block
 
-        for y in 0 .. blocks.Y - 1 do
-            for x in 0 .. blocks.X - 1 do
-                let blockOffset = blockSize * V2i(x, y)
+            let srcInfo =
+                let size = min blockSize (srcSize - blockOffset)
+                srcInfo.SubVolume(
+                    blockOffset.XYO, V3i(size, srcChannels)
+                )
 
-                let srcInfo =
-                    let size = min blockSize (srcSize - blockOffset)
-                    srcInfo.SubVolume(
-                        blockOffset.XYO, V3i(size, srcChannels)
-                    )
-
-                decode V2i.Zero src srcInfo dst
-                dst <- dst + bytesPerBlock
+            encode V2i.Zero src srcInfo (dst + nativeint i * bytesPerBlock)
+        ) |> ignore
 
     let mirrorCopy (mode : CompressionMode) (size : V2i) (src : nativeint) (dst : nativeint) =
         let blocks = CompressionMode.numberOfBlocks size.XYI mode
@@ -780,17 +747,18 @@ module BlockCompression =
             if size.Y % (CompressionMode.blockSize mode) <> 0 then
                 Log.warn "Mirroring block compressed texture layers with an unaligned height will result in artifacts"
 
-            let mutable src = src
-            let mutable dst = dst + nativeint rowPitch * nativeint (blocks.Y - 1)
+            let src = src
+            let dst = dst + nativeint rowPitch * nativeint (blocks.Y - 1)
             let blockJmp = nativeint blockBytes
-            let dstJmp = nativeint -rowPitch - nativeint rowPitch
+            let rowJmp = nativeint rowPitch
 
-            for _ in 0 .. blocks.Y - 1 do
-                 for _ in 0 .. blocks.X - 1 do
-                     mirrorCopy (NativePtr.ofNativeInt src) (NativePtr.ofNativeInt dst)
-                     src <- src + blockJmp
-                     dst <- dst + blockJmp
-                 dst <- dst + dstJmp
+            Parallel.For(0, blocks.X * blocks.Y, fun i ->
+                let row = i / blocks.X
+                let src = src + nativeint i * blockJmp
+                let dst = dst + nativeint i * blockJmp - nativeint row * (2n * rowJmp)
+
+                mirrorCopy (NativePtr.ofNativeInt src) (NativePtr.ofNativeInt dst)
+            )|> ignore
 
         | _ ->
             Log.warn "Flipping %A compressed data not supported" mode
@@ -816,20 +784,18 @@ module BlockCompression =
             | _ ->
                 failwithf "Cannot decode %A compressed data" mode
 
-        let mutable src = src
+        Parallel.For(0, blocks.X * blocks.Y, fun i ->
+            let block = V2i(i % blocks.X, i / blocks.X)
+            let blockOffset = blockSize * block
+            let offsetInBlock = max 0 (offset - blockOffset)
 
-        for y in 0 .. blocks.Y - 1 do
-            for x in 0 .. blocks.X - 1 do
-                let blockOffset = blockSize * V2i(x, y)
-                let offsetInBlock = max 0 (offset - blockOffset)
+            let dstInfo =
+                let size = min blockSize (offset + size - blockOffset)
 
-                let dstInfo =
-                    let size = min blockSize (offset + size - blockOffset)
+                dstInfo.SubVolume(
+                    V3i(blockOffset - offset, 0),
+                    V3i(size, channels)
+                )
 
-                    dstInfo.SubVolume(
-                        V3i(blockOffset - offset, 0),
-                        V3i(size, channels)
-                    )
-
-                decode offsetInBlock src dst dstInfo
-                src <- src + bytesPerBlock
+            decode offsetInBlock (src + nativeint i * bytesPerBlock) dst dstInfo
+        ) |> ignore
