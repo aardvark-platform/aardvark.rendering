@@ -84,6 +84,22 @@ module CompressionMode =
 
 module BlockCompression =
 
+    [<Struct>]
+    type private SymM33f =
+        val mutable M00 : float32
+        val mutable M01 : float32
+        val mutable M02 : float32
+        val mutable M11 : float32
+        val mutable M12 : float32
+        val mutable M22 : float32
+
+        static member inline Multiply(m : inref<SymM33f>, v : V3f) =
+            V3f(
+                 m.M00 * v.X + m.M01 * v.Y + m.M02 * v.Z,
+                 m.M01 * v.X + m.M11 * v.Y + m.M12 * v.Z,
+                 m.M02 * v.X + m.M12 * v.Y + m.M22 * v.Z
+             )
+
     module private Array =
 
         let inline minIndexBy (f : ^T -> ^U) (array : ^T[]) =
@@ -222,9 +238,9 @@ module BlockCompression =
                   G = uint8 ((color &&& 0x07E0us) >>>  5);
                   B = uint8 (color &&& 0x001Fus) }
 
-            new (color : V3d) =
-                assert (Vec.allSmaller (round color) 256.0)
-                assert (Vec.allGreaterOrEqual (round color) 0.0)
+            new (color : V3f) =
+                assert (Vec.allSmaller (round color) 256.0f)
+                assert (Vec.allGreaterOrEqual (round color) 0.0f)
                 R5G6B5(C3b(uint8 (round color.X), uint8 (round color.Y), uint8 (round color.Z)))
 
             member x.ToC3b() =
@@ -244,7 +260,7 @@ module BlockCompression =
             static member ToUint16(color : R5G6B5) =
                 color.ToUint16()
 
-            static member Lerp(x : R5G6B5, y : R5G6B5, t : float) =
+            static member Lerp(x : R5G6B5, y : R5G6B5, t : float32) =
                 R5G6B5(
                     lerp x.R y.R t,
                     lerp x.G y.G t,
@@ -257,16 +273,38 @@ module BlockCompression =
         module C3b =
 
             let inline distanceSquared (x : C3b) (y : C3b) =
-                let dR = float x.R - float y.R
-                let dG = float x.G - float y.G
-                let dB = float x.B - float y.B
-                (dR * dR + dG * dG + dB * dB)
+                let dR = float32 x.R - float32 y.R
+                let dG = float32 x.G - float32 y.G
+                let dB = float32 x.B - float32 y.B
+                dR * dR + dG * dG + dB * dB
 
     // See: https://docs.microsoft.com/en-us/windows/win32/direct3d10/d3d10-graphics-programming-guide-resources-block-compression
     module private BC1 =
 
         [<AutoOpen>]
         module private Encoding =
+
+            let powerIteration (cov : inref<SymM33f>) =
+                let mutable bk = V3f.One
+                for _ = 0 to 7 do
+                    bk <- SymM33f.Multiply(&cov, bk)
+                    bk.Normalize()
+                bk
+
+            let computePrincipleAxis (center : V3f) (values : V3f[]) =
+                let mutable cov = SymM33f()
+                for i = 0 to values.Length - 1 do
+                    let v = values.[i] - center
+                    cov.M00 <- cov.M00 + v.X * v.X
+                    cov.M01 <- cov.M01 + v.X * v.Y
+                    cov.M02 <- cov.M02 + v.X * v.Z
+
+                    cov.M11 <- cov.M11 + v.Y * v.Y
+                    cov.M12 <- cov.M12 + v.Y * v.Z
+
+                    cov.M22 <- cov.M22 + v.Z * v.Z
+
+                powerIteration &cov
 
             let computeEndpoints (input : NativeVolume<uint8>) =
                 let w = int input.SX
@@ -279,68 +317,41 @@ module BlockCompression =
 
                 else
                     let values =
-                        Matrix<float>(
-                            Array.init (n * 3) (fun i -> float input.[(i / 3) % w, i / (3 * w), i % 3]),
-                            V2i(3, n)
+                        Array.init n (fun i ->
+                            let x = i % w
+                            let y = i / w
+                            V3f(float32 input.[x, y, 0], float32 input.[x, y, 1], float32 input.[x, y, 2])
                         )
 
                     let center =
-                        let sx = KahanSum()
-                        let sy = KahanSum()
-                        let sz = KahanSum()
+                        Array.sum values / float32 values.Length
 
-                        for i = 0 to n - 1 do
-                            sx.Add(values.[0, i] / float n)
-                            sy.Add(values.[1, i] / float n)
-                            sz.Add(values.[2, i] / float n)
+                    let u = values |> computePrincipleAxis center
 
-                        V3d(sx.Value, sy.Value, sz.Value)
+                    let mutable ta = infinityf
+                    let mutable tb = -infinityf
 
-                    let centered =
-                        let mutable m = Matrix<float>(values.Info)
+                    for i = 0 to n - 1 do
+                        let d = Vec.dot u values.[i]
+                        if d < ta then ta <- d
+                        if d > tb then tb <- d
 
-                        for i = 0 to n - 1 do
-                            m.[0, i] <- values.[0, i] - center.X
-                            m.[1, i] <- values.[1, i] - center.Y
-                            m.[2, i] <- values.[2, i] - center.Z
+                    let tc = Vec.dot center u
+                    let a = center + (ta - tc) * u
+                    let b = center + (tb - tc) * u
 
-                        m
-
-                    match SVD.Decompose(centered) with
-                    | Some (_, _, t) ->
-                        let u1 = V3d(t.[0, 0], t.[1, 0], t.[2, 0])
-                        let u2 = V3d(t.[0, 1], t.[1, 1], t.[2, 1])
-                        let u3 = V3d(t.[0, 2], t.[1, 2], t.[2, 2])
-
-                        let mutable low = infinity
-                        let mutable high = -infinity
-
-                        for i = 0 to n - 1 do
-                            let p = V3d(values.[0, i], values.[1, i], values.[2, i])
-                            let d = Vec.dot u1 p
-                            if d < low then low <- d
-                            if d > high then high <- d
-
-                        let offset =
-                            (u2 * (Vec.dot u2 center)) +
-                            (u3 * (Vec.dot u3 center))
-
-                        R5G6B5((u1 * low + offset) |> clamp 0.0 255.0),
-                        R5G6B5((u1 * high + offset) |> clamp 0.0 255.0)
-
-                    | _ ->
-                        R5G6B5(input.GetC3b(0, 0)),
-                        R5G6B5(input.GetC3b(w - 1, h - 1))
+                    R5G6B5(a |> clamp 0.0f 255.0f),
+                    R5G6B5(b |> clamp 0.0f 255.0f)
 
             let computePalette (c0 : R5G6B5) (c1 : R5G6B5) =
                 if c0.ToUint16() > c1.ToUint16() then
                     [| c0; c1
-                       R5G6B5.Lerp(c0, c1, 1.0 / 3.0)
-                       R5G6B5.Lerp(c0, c1, 2.0 / 3.0) |]
+                       R5G6B5.Lerp(c0, c1, 1.0f / 3.0f)
+                       R5G6B5.Lerp(c0, c1, 2.0f / 3.0f) |]
 
                 else
                     [| c0; c1
-                       R5G6B5.Lerp(c0, c1, 0.5) |]
+                       R5G6B5.Lerp(c0, c1, 0.5f) |]
 
             let computeIndices (palette : R5G6B5[]) (values : NativeVolume<uint8>) =
                 let mutable indices = Matrix<int>(values.Size.XY)
@@ -428,10 +439,10 @@ module BlockCompression =
             colors.[1] <- R5G6B5(pColors.[1]).ToC4b()
 
             if pColors.[0] > pColors.[1] then
-                colors.[2] <- lerp colors.[0] colors.[1] (1.0 / 3.0)
-                colors.[3] <- lerp colors.[0] colors.[1] (2.0 / 3.0)
+                colors.[2] <- lerp colors.[0] colors.[1] (1.0f / 3.0f)
+                colors.[3] <- lerp colors.[0] colors.[1] (2.0f / 3.0f)
             else
-                colors.[2] <- lerp colors.[0] colors.[1] 0.5
+                colors.[2] <- lerp colors.[0] colors.[1] 0.5f
                 colors.[3] <- C4b.Zero
 
             for y = offset.Y to size.Y - 1 do
