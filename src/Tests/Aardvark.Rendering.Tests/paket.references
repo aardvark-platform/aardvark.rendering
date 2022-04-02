@@ -3,6 +3,7 @@ group Test
 Expecto
 Expecto.FsCheck
 Expecto.Hopac
+BenchmarkDotNet
 YoloDev.Expecto.TestSdk
 Microsoft.NET.Test.Sdk
 Aardvark.Build

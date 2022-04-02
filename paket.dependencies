@@ -58,9 +58,9 @@ storage: none
 
 nuget FSharp.Core                        >= 5.0.0 lowest_matching: true
 nuget Expecto                            ~> 9.0.4
-nuget Expecto.BenchmarkDotNet            ~> 9.0.4
 nuget Expecto.FsCheck                    ~> 9.0.4
 nuget Expecto.Hopac                      ~> 9.0.4
+nuget BenchmarkDotNet                    ~> 0.13.1
 nuget YoloDev.Expecto.TestSdk            ~> 0.12.8
 nuget Microsoft.NET.Test.Sdk             ~> 16.11.0
 nuget Aardvark.Build                     ~> 1.0.11
