@@ -128,6 +128,12 @@ module PixData =
             ) |> ignore
             pi
 
+        let cropped (region : Box2i) (img : PixImage<'T>) =
+            PixImage<'T>(
+                img.Format,
+                img.Volume.SubVolume(V3i(region.Min, 0), V3i(region.Size, img.ChannelCount))
+            )
+
         let resized (size : V2i) (img : PixImage<uint16>) =
             let result = PixImage<uint16>(img.Format, size)
 

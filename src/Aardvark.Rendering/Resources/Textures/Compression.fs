@@ -122,9 +122,6 @@ module BlockCompression =
                 with inline get(i : int) = NativePtr.get x i
                 and inline set(i : int) (v : 'a) = NativePtr.set x i v
 
-        let inline (++) (ptr : nativeptr<'a>) (i : int) =
-            NativePtr.add ptr i
-
     [<Extension; Sealed>]
     type private VolumeExtensions() =
 
@@ -411,15 +408,19 @@ module BlockCompression =
 
                 pIndices.[y] <- row
 
-        let mirrorCopy (src : nativeptr<byte>) (dst : nativeptr<byte>) =
-            dst.[0] <- src.[0]
-            dst.[1] <- src.[1]
-            dst.[2] <- src.[2]
-            dst.[3] <- src.[3]
-            dst.[7] <- src.[4]
-            dst.[6] <- src.[5]
-            dst.[5] <- src.[6]
-            dst.[4] <- src.[7]
+        let mirrorCopy (offset : int) (height : int) (src : nativeint) (dst : nativeint) =
+            let srcColor = NativePtr.ofNativeInt<uint32> src
+            let dstColor = NativePtr.ofNativeInt<uint32> dst
+            dstColor.[0] <- srcColor.[0]
+
+            let srcIndex = NativePtr.ofNativeInt<uint8> (src + 4n)
+            let dstIndex = NativePtr.ofNativeInt<uint8> (dst + 4n)
+
+            for i = 0 to height - 1 do
+                dstIndex.[offset + height - 1 - i] <- srcIndex.[i]
+
+            for i = 0 to offset - 1 do
+                dstIndex.[i] <- srcIndex.[height - 1]
 
         let decode (offset : V2i) (src : nativeint) (dst : nativeint) (dstInfo : VolumeInfo) =
             assert (Vec.allSmaller offset 4)
@@ -476,16 +477,17 @@ module BlockCompression =
 
                 pAlpha.[y] <- row
 
-        let mirrorCopy (src : nativeptr<byte>) (dst : nativeptr<byte>) =
-            dst.[6] <- src.[0]
-            dst.[7] <- src.[1]
-            dst.[4] <- src.[2]
-            dst.[5] <- src.[3]
-            dst.[2] <- src.[4]
-            dst.[3] <- src.[5]
-            dst.[0] <- src.[6]
-            dst.[1] <- src.[7]
-            BC1.mirrorCopy (src ++ 8) (dst ++ 8)
+        let mirrorCopy (offset : int) (height : int) (src : nativeint) (dst : nativeint) =
+            let srcAlpha = NativePtr.ofNativeInt<uint16> src
+            let dstAlpha = NativePtr.ofNativeInt<uint16> dst
+
+            for i = 0 to height - 1 do
+                dstAlpha.[offset + height - 1 - i] <- srcAlpha.[i]
+
+            for i = 0 to offset - 1 do
+                dstAlpha.[i] <- srcAlpha.[height - 1]
+
+            BC1.mirrorCopy offset height (src + 8n) (dst + 8n)
 
         let decode (offset : V2i) (src : nativeint) (dst : nativeint) (dstInfo : VolumeInfo) =
             assert (Vec.allSmaller offset 4)
@@ -510,32 +512,26 @@ module BlockCompression =
     module private BC4 =
 
         [<Struct; StructLayout(LayoutKind.Explicit, Size = 6)>]
-        type private Indices =
-            {
-                [<FieldOffset(0)>] mutable L0 : int
-                [<FieldOffset(3)>] mutable L1 : int
-            }
+        type Indices =
+            [<FieldOffset(0)>] val mutable private D0 : uint32
+            [<FieldOffset(4)>] val mutable private D1 : uint16
+
+            member private x.Value
+                with inline get() = ((uint64 x.D1) <<< 32) ||| uint64 x.D0
+                and inline set(value : uint64) =
+                    x.D0 <- uint32 (value &&& 0xFFFFFFFFUL)
+                    x.D1 <- uint16 ((value >>> 32) &&& 0xFFFFUL)
 
             member idx.Item
                 with get (x : int, y : int) =
-                    let d, row =
-                        if y < 2 then
-                            idx.L0, y
-                        else
-                            idx.L1, y - 2
-
-                    let offset = x * 3 + row * 3 * 4
-                    (d >>> offset) &&& 0x07
+                    let offset = x * 3 + y * 3 * 4
+                    (int (idx.Value >>> offset)) &&& 0x07
 
                 and set (x : int, y : int) (value : uint8) =
-                    if y < 2 then
-                        let offset = x * 3 + y * 3 * 4
-                        let mask = 0x07 <<< offset
-                        idx.L0 <- (idx.L0 &&& ~~~mask) ||| (int value <<< offset)
-                    else
-                        let offset = x * 3 + (y - 2) * 3 * 4
-                        let mask = 0x07 <<< offset
-                        idx.L1 <- (idx.L1 &&& ~~~mask) ||| (int value <<< offset)
+                    let offset = x * 3 + y * 3 * 4
+                    let mask = 0x07UL <<< offset
+                    let value = (uint64 value &&& 0x07UL) <<< offset
+                    idx.Value <- (idx.Value &&& ~~~mask) ||| value
 
         [<AutoOpen>]
         module private Encoding =
@@ -615,19 +611,20 @@ module BlockCompression =
         let encodeU = encode computePaletteU
         let encodeS = encode computePaletteS
 
-        let mirrorCopy (src : nativeptr<byte>) (dst : nativeptr<byte>) =
-            let line_0_1 = uint32 src.[2] + 256u * (uint32 src.[3] + 256u * uint32 src.[4]);
-            let line_2_3 = uint32 src.[5] + 256u * (uint32 src.[6] + 256u * uint32 src.[7]);
-            let line_1_0 = ((line_0_1 &&& 0x000fffu) <<< 12) ||| ((line_0_1 &&& 0xfff000u) >>> 12);
-            let line_3_2 = ((line_2_3 &&& 0x000fffu) <<< 12) |||  ((line_2_3 &&& 0xfff000u) >>> 12);
-            dst.[0] <- src.[0]
-            dst.[1] <- src.[1]
-            dst.[2] <- byte (line_3_2 &&& 0xffu)
-            dst.[3] <- byte ((line_3_2 &&& 0xff00u) >>> 8)
-            dst.[4] <- byte ((line_3_2 &&& 0xff0000u) >>> 16)
-            dst.[5] <- byte (line_1_0 &&& 0xffu)
-            dst.[6] <- byte ((line_1_0 &&& 0xff00u) >>> 8)
-            dst.[7] <- byte ((line_1_0 &&& 0xff0000u) >>> 16)
+        let mirrorCopy (offset : int) (height : int) (src : nativeint) (dst : nativeint) =
+            let srcRed = NativePtr.ofNativeInt<uint16> src
+            let dstRed = NativePtr.ofNativeInt<uint16> dst
+            dstRed.[0] <- srcRed.[0]
+
+            let srcIndex = NativePtr.toByRef (NativePtr.ofNativeInt<Indices> (src + 2n))
+            let dstIndex = NativePtr.toByRef (NativePtr.ofNativeInt<Indices> (dst + 2n))
+
+            for x = 0 to 3 do
+                for y = 0 to height - 1 do
+                    dstIndex.[x, offset + height - 1 - y] <- uint8 srcIndex.[x, y]
+
+                for y = 0 to offset - 1 do
+                    dstIndex.[x, y] <- uint8 srcIndex.[x, height - 1]
 
         let inline private decode (cast : int16 -> ^T) (computePalette : ^T -> ^T -> int16[])
                                   (offset : V2i) (src : nativeint) (dst : nativeint) (dstInfo : VolumeInfo) =
@@ -661,9 +658,9 @@ module BlockCompression =
             BC4.encodeU offset src (srcInfo.SubVolumeAlpha()) dst
             BC1.encode offset src (srcInfo.SubVolumeRGB()) (dst + 8n)
 
-        let mirrorCopy (src : nativeptr<byte>) (dst : nativeptr<byte>) =
-            BC4.mirrorCopy src dst
-            BC1.mirrorCopy (src ++ 8) (dst ++ 8)
+        let mirrorCopy (offset : int) (height : int) (src : nativeint) (dst : nativeint) =
+            BC4.mirrorCopy offset height src dst
+            BC1.mirrorCopy offset height (src + 8n) (dst + 8n)
 
         let decode (offset : V2i) (src : nativeint) (dst : nativeint) (dstInfo : VolumeInfo) =
             assert (Vec.allSmaller offset 4)
@@ -689,9 +686,9 @@ module BlockCompression =
         let encodeS = encode BC4.encodeS
         let encodeU = encode BC4.encodeU
 
-        let mirrorCopy (src : nativeptr<byte>) (dst : nativeptr<byte>) =
-            BC4.mirrorCopy src dst
-            BC4.mirrorCopy (src ++ 8) (dst ++ 8)
+        let mirrorCopy (offset : int) (height : int) (src : nativeint) (dst : nativeint) =
+            BC4.mirrorCopy offset height src dst
+            BC4.mirrorCopy offset height (src + 8n) (dst + 8n)
 
         let private decode (decodeBC4 : V2i -> nativeint -> nativeint-> VolumeInfo -> unit)
                            (offset : V2i) (src : nativeint) (dst : nativeint) (dstInfo : VolumeInfo) =
@@ -740,6 +737,7 @@ module BlockCompression =
 
     let mirrorCopy (mode : CompressionMode) (size : V2i) (src : nativeint) (dst : nativeint) =
         let blocks = CompressionMode.numberOfBlocks size.XYI mode
+        let blockSize = CompressionMode.blockSize mode
         let blockBytes = CompressionMode.bytesPerBlock mode |> int64
         let rowPitch = blockBytes * int64 blocks.X
 
@@ -755,21 +753,23 @@ module BlockCompression =
 
         match mirrorCopyImpl with
         | Some mirrorCopy ->
-            if size.Y % (CompressionMode.blockSize mode) <> 0 then
+            if size.Y > blockSize && size.Y % blockSize <> 0 then
                 Log.warn "Mirroring block compressed texture layers with an unaligned height will result in artifacts"
 
-            let src = src
-            let dst = dst + nativeint rowPitch * nativeint (blocks.Y - 1)
+            let dstLastRow = dst + nativeint rowPitch * nativeint (blocks.Y - 1)
             let blockJmp = nativeint blockBytes
-            let rowJmp = nativeint rowPitch
+            let rowJmp = nativeint rowPitch * 2n
 
             Parallel.For(0, blocks.X * blocks.Y, fun i ->
                 let row = i / blocks.X
+                let rowOffset = blockSize * row
                 let src = src + nativeint i * blockJmp
-                let dst = dst + nativeint i * blockJmp - nativeint row * (2n * rowJmp)
+                let dst = dstLastRow + nativeint i * blockJmp - nativeint row * rowJmp
 
-                mirrorCopy (NativePtr.ofNativeInt src) (NativePtr.ofNativeInt dst)
-            )|> ignore
+                let height = min blockSize (size.Y - rowOffset)
+                let offset = if size.Y > blockSize then blockSize - height else 0
+                mirrorCopy offset height src dst
+            ) |> ignore
 
         | _ ->
             Log.warn "Flipping %A compressed data not supported" mode

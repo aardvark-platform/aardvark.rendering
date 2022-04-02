@@ -41,10 +41,9 @@ module TextureCompression =
                 | _ -> input.PixFormat
 
             let size = input.Size
-
             let sizeInBytes = mode |> CompressionMode.sizeInBytes size.XYI
-            let compressed = NativePtr.alloc<uint8> (int sizeInBytes)
 
+            let compressed = NativePtr.alloc<uint8> (int sizeInBytes)
             let output = PixImage.Create(format, int64 size.X, int64 size.Y).AsPixImage<uint8>()
 
             try
@@ -96,10 +95,9 @@ module TextureCompression =
                 )
 
             let size = input.Size
-
             let sizeInBytes = mode |> CompressionMode.sizeInBytes size.XYI
-            let compressed = NativePtr.alloc<uint8> (int sizeInBytes)
 
+            let compressed = NativePtr.alloc<uint8> (int sizeInBytes)
             let soutput = PixImage.Create(PixFormat.SByteRGB, int64 size.X, int64 size.Y).AsPixImage<int8>()
 
             try
@@ -138,43 +136,179 @@ module TextureCompression =
             finally
                 NativePtr.free compressed
 
-        let BC1() =
-            testCompressionUnsigned CompressionMode.BC1 "data/spiral.png" 6.0 5.0
+        let private testMirrorCopy (mode : CompressionMode) (path : string) (region : Box2i) =
+            let input = path |> EmbeddedResource.loadPixImage<uint8> |> PixImage.cropped region
 
-        let BC1a() =
-            testCompressionUnsigned CompressionMode.BC1 "data/spiral_alpha.png" 6.0 5.0
+            let format =
+                match mode with
+                | CompressionMode.BC4 _ | CompressionMode.BC5 _ -> Col.Format.RGB
+                | _ -> input.Format
 
-        let BC2() =
-            testCompressionUnsigned CompressionMode.BC2 "data/spiral_alpha.png" 6.0 5.0
+            let input = PixImage<uint8>(format, input.Volume)
 
-        let BC3() =
-            testCompressionUnsigned CompressionMode.BC3 "data/spiral_alpha.png" 6.0 5.0
+            let size = input.Size
+            let blockSize = mode |> CompressionMode.blockSize
+            let sizeInBytes = mode |> CompressionMode.sizeInBytes size.XYI
 
-        let BC4u() =
-            testCompressionUnsigned (CompressionMode.BC4 false) "data/spiral.png" 60.0 1.0
+            let pBuffer1 = NativePtr.alloc<uint8> (int sizeInBytes)
+            let output1 = PixImage.Create(input.PixFormat, int64 size.X, int64 size.Y).AsPixImage<uint8>()
 
-        let BC4s() =
-            testCompressionSigned (CompressionMode.BC4 true) "data/spiral.png" 57.0 1.0
+            let pBuffer2 = NativePtr.alloc<uint8> (int sizeInBytes)
+            let output2 = PixImage.Create(input.PixFormat, int64 size.X, int64 size.Y).AsPixImage<uint8>()
 
-        let BC5u() =
-            testCompressionUnsigned (CompressionMode.BC5 false) "data/spiral.png" 48.0 1.0
+            try
+                let compressed = NativePtr.toNativeInt pBuffer1
+                let mirrored = NativePtr.toNativeInt pBuffer2
 
-        let BC5s() =
-            testCompressionSigned (CompressionMode.BC5 true) "data/spiral.png" 46.0 1.1
+                PixImage.pin input (fun input ->
+                    BlockCompression.encode mode input.Address input.Info compressed
+                )
+
+                BlockCompression.mirrorCopy mode size compressed mirrored
+
+                PixImage.pin output1 (fun output ->
+                    BlockCompression.decode mode V2i.Zero size compressed output.Address output.Info
+                )
+
+                PixImage.pin output2 (fun output ->
+                    BlockCompression.decode mode V2i.Zero size mirrored output.Address output.Info
+                )
+
+                let output2 = output2.Transformed(ImageTrafo.MirrorY).AsPixImage<uint8>()
+
+                if size.Y < blockSize || size.Y % blockSize = 0 then
+                    // aligned or single block row -> no artifacts
+                    PixImage.compare V2i.Zero output1 output2
+
+                else
+                    // if unaligned we lose some (at most 3) pixel rows, rest is equal (shifted though)
+                    let rem = blockSize - (size.Y % blockSize)
+
+                    let o1 =
+                        let region = Box2i.FromMinAndSize(0, rem, size.X, size.Y - rem)
+                        output1 |> PixImage.cropped region
+
+                    let o2 =
+                        let region = Box2i.FromMinAndSize(0, 0, size.X, size.Y - rem)
+                        output2 |> PixImage.cropped region
+
+                    PixImage.compare V2i.Zero o1 o2
+
+                    // the new pixel rows are copied from the last row (similar to texture clamp wrap mode)
+                    let lastRow =
+                        let region = Box2i.FromMinAndSize(0, size.Y - 1, size.X, 1)
+                        output1 |> PixImage.cropped region
+
+                    for i = 0 to rem - 1 do
+                        let region = Box2i.FromMinAndSize(0, size.Y - 1 - i, size.X, 1)
+                        let row = output2 |> PixImage.cropped region
+                        PixImage.compare V2i.Zero lastRow row
+
+            finally
+                NativePtr.free pBuffer1
+                NativePtr.free pBuffer2
+
+        let encodeBC1() =
+            testCompressionUnsigned CompressionMode.BC1 "data/spiral.png" 6.8 4.2
+
+        let encodeBC1a() =
+            testCompressionUnsigned CompressionMode.BC1 "data/spiral_alpha.png" 13.5 3.32
+
+        let mirrorCopyBC1 (height : int) () =
+            let region = Box2i.FromMinAndSize(0, 0, 134, height)
+            testMirrorCopy CompressionMode.BC1 "data/spiral.png" region
+
+
+        let encodeBC2() =
+            testCompressionUnsigned CompressionMode.BC2 "data/spiral_alpha.png" 6.4 4.28
+
+        let mirrorCopyBC2 (height : int) () =
+            let region = Box2i.FromMinAndSize(75, 59, 192, height)
+            testMirrorCopy CompressionMode.BC2 "data/spiral_alpha.png" region
+
+
+        let encodeBC3() =
+            testCompressionUnsigned CompressionMode.BC3 "data/spiral_alpha.png" 6.8 4.18
+
+        let mirrorCopyBC3 (height : int) () =
+            let region = Box2i.FromMinAndSize(75, 59, 192, height)
+            testMirrorCopy CompressionMode.BC3 "data/spiral_alpha.png" region
+
+
+        let encodeBC4u() =
+            testCompressionUnsigned (CompressionMode.BC4 false) "data/spiral.png" 60.8 0.65
+
+        let encodeBC4s() =
+            testCompressionSigned (CompressionMode.BC4 true) "data/spiral.png" 57.7 0.72
+
+        let mirrorCopyBC4 (height : int) () =
+            let region = Box2i.FromMinAndSize(0, 0, 134, height)
+            testMirrorCopy (CompressionMode.BC4 false) "data/spiral.png" region
+
+
+        let encodeBC5u() =
+            testCompressionUnsigned (CompressionMode.BC5 false) "data/spiral.png" 48.7 0.98
+
+        let encodeBC5s() =
+            testCompressionSigned (CompressionMode.BC5 true) "data/spiral.png" 46.5 1.06
+
+        let mirrorCopyBC5 (height : int) () =
+            let region = Box2i.FromMinAndSize(0, 0, 134, height)
+            testMirrorCopy (CompressionMode.BC5 false) "data/spiral.png" region
 
     let tests =
         [
-            "BC1 encode",   Cases.BC1
-            "BC1a encode",  Cases.BC1a
+            "BC1 encode",           Cases.encodeBC1
+            "BC1a encode",          Cases.encodeBC1a
+            "BC1 mirror copy 1px",  Cases.mirrorCopyBC1 1
+            "BC1 mirror copy 2px",  Cases.mirrorCopyBC1 2
+            "BC1 mirror copy 3px",  Cases.mirrorCopyBC1 3
+            "BC1 mirror copy 4px",  Cases.mirrorCopyBC1 4
+            "BC1 mirror copy 20px", Cases.mirrorCopyBC1 20
+            "BC1 mirror copy 21px", Cases.mirrorCopyBC1 21
+            "BC1 mirror copy 22px", Cases.mirrorCopyBC1 22
+            "BC1 mirror copy 23px", Cases.mirrorCopyBC1 23
 
-            "BC2 encode",   Cases.BC2
+            "BC2 encode",           Cases.encodeBC2
+            "BC2 mirror copy 1px",  Cases.mirrorCopyBC2 1
+            "BC2 mirror copy 2px",  Cases.mirrorCopyBC2 2
+            "BC2 mirror copy 3px",  Cases.mirrorCopyBC2 3
+            "BC2 mirror copy 4px",  Cases.mirrorCopyBC2 4
+            "BC2 mirror copy 20px", Cases.mirrorCopyBC2 20
+            "BC2 mirror copy 21px", Cases.mirrorCopyBC2 21
+            "BC2 mirror copy 22px", Cases.mirrorCopyBC2 22
+            "BC2 mirror copy 23px", Cases.mirrorCopyBC2 23
 
-            "BC3 encode",   Cases.BC3
+            "BC3 encode",           Cases.encodeBC3
+            "BC3 mirror copy 1px",  Cases.mirrorCopyBC3 1
+            "BC3 mirror copy 2px",  Cases.mirrorCopyBC3 2
+            "BC3 mirror copy 3px",  Cases.mirrorCopyBC3 3
+            "BC3 mirror copy 4px",  Cases.mirrorCopyBC3 4
+            "BC3 mirror copy 20px", Cases.mirrorCopyBC3 20
+            "BC3 mirror copy 21px", Cases.mirrorCopyBC3 21
+            "BC3 mirror copy 22px", Cases.mirrorCopyBC3 22
+            "BC3 mirror copy 23px", Cases.mirrorCopyBC3 23
 
-            "BC4u encode",  Cases.BC4u
-            "BC4s encode",  Cases.BC4s
+            "BC4u encode",          Cases.encodeBC4u
+            "BC4s encode",          Cases.encodeBC4s
+            "BC4 mirror copy 1px",  Cases.mirrorCopyBC4 1
+            "BC4 mirror copy 2px",  Cases.mirrorCopyBC4 2
+            "BC4 mirror copy 3px",  Cases.mirrorCopyBC4 3
+            "BC4 mirror copy 4px",  Cases.mirrorCopyBC4 4
+            "BC4 mirror copy 20px", Cases.mirrorCopyBC4 20
+            "BC4 mirror copy 21px", Cases.mirrorCopyBC4 21
+            "BC4 mirror copy 22px", Cases.mirrorCopyBC4 22
+            "BC4 mirror copy 23px", Cases.mirrorCopyBC4 23
 
-            "BC5u encode",  Cases.BC5u
-            "BC5s encode",  Cases.BC5s
+            "BC5u encode",          Cases.encodeBC5u
+            "BC5s encode",          Cases.encodeBC5s
+            "BC5 mirror copy 1px",  Cases.mirrorCopyBC5 1
+            "BC5 mirror copy 2px",  Cases.mirrorCopyBC5 2
+            "BC5 mirror copy 3px",  Cases.mirrorCopyBC5 3
+            "BC5 mirror copy 4px",  Cases.mirrorCopyBC5 4
+            "BC5 mirror copy 20px", Cases.mirrorCopyBC5 20
+            "BC5 mirror copy 21px", Cases.mirrorCopyBC5 21
+            "BC5 mirror copy 22px", Cases.mirrorCopyBC5 22
+            "BC5 mirror copy 23px", Cases.mirrorCopyBC5 23
         ]
         |> prepareCasesBackendAgnostic "Compression"
