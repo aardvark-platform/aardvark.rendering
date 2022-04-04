@@ -260,6 +260,27 @@ module TextureUpload =
             finally
                 runtime.DeleteTexture(texture)
 
+        let pixTexture2DCompressed (runtime : IRuntime) =
+            let data = EmbeddedResource.loadPixImage<uint8> "data/spiral.png"
+
+            let texture =
+                let pix = PixTexture2d(data, TextureParams.compressed)
+                runtime.PrepareTexture pix
+
+            try
+                Expect.equal texture.Format TextureFormat.CompressedRgbaS3tcDxt5 "unexpected texture format"
+
+                let output = runtime.Download(texture).AsPixImage<uint8>()
+                Expect.equal output.Size data.Size "image size mismatch"
+
+                let psnr = PixImage.peakSignalToNoiseRatio V2i.Zero data output
+                let rmse = PixImage.rootMeanSquaredError V2i.Zero data output
+                Expect.isGreaterThan psnr 6.8 "Bad peak-signal-to-noise ratio"
+                Expect.isLessThan rmse 4.2 "Bad root-mean-square error"
+
+            finally
+                runtime.DeleteTexture(texture)
+
         let private texture2DCompressed (expectedFormat : TextureFormat) (pathReference : string) (path : string) (runtime : IRuntime) =
             let reference = EmbeddedResource.loadPixImage<uint8> pathReference
             let compressed = EmbeddedResource.getTexture TextureParams.mipmappedCompressed path
@@ -344,6 +365,31 @@ module TextureUpload =
 
         let texture2DCompressedDDSBC7 (runtime : IRuntime) =
             runtime |> texture2DCompressed TextureFormat.CompressedRgbaBptcUnorm "data/rgba.png" "data/bc7.dds"
+
+        let texture2DCompressedSubwindow (runtime : IRuntime) =
+            let data = EmbeddedResource.loadPixImage<uint8> "data/spiral.png"
+
+            let texture =
+                runtime.CreateTexture2D(V2i(100, 80), TextureFormat.CompressedRgbaS3tcDxt3)
+
+            let region = Box2i(12, 24, 80, 76)
+
+            let reference =
+                PixImage.cropped (Box2i.FromMinAndSize(V2i.Zero, region.Size)) data
+
+            try
+                texture.Upload(data, offset = region.Min, size = region.Size)
+
+                let output = texture.Download(region = region).AsPixImage<uint8>()
+                Expect.equal output.Size region.Size "image size mismatch"
+
+                let psnr = PixImage.peakSignalToNoiseRatio V2i.Zero reference output
+                let rmse = PixImage.rootMeanSquaredError V2i.Zero reference output
+                Expect.isGreaterThan psnr 6.8 "Bad peak-signal-to-noise ratio"
+                Expect.isLessThan rmse 4.2 "Bad root-mean-square error"
+
+            finally
+                runtime.DeleteTexture(texture)
 
         let private uploadAndDownloadTextureNative (runtime : IRuntime) (size : V2i)
                                                    (levels : int) (count : int) (wantMipmap : bool) =
@@ -615,6 +661,7 @@ module TextureUpload =
             "2D PixTexture mipmap generation",         Cases.pixTexture2DMipmapped MipmapInput.None
             "2D PixTexture mipmap partial generation", Cases.pixTexture2DMipmapped MipmapInput.Partial
             "2D PixTexture as PixVolume",              Cases.pixTexture2DPixVolume
+            "2D PixTexture compressed",                Cases.pixTexture2DCompressed
 
             if backend <> Backend.Vulkan then // not supported
                 "2D multisampled",                        Cases.texture2DMultisampled
@@ -627,6 +674,7 @@ module TextureUpload =
             "2D compressed DDS (BC3)",      Cases.texture2DCompressedDDSBC3
             "2D compressed DDS (BC4u)",     Cases.texture2DCompressedDDSBC4u
             "2D compressed DDS (BC5u)",     Cases.texture2DCompressedDDSBC5u
+            "2D compressed subwindow",      Cases.texture2DCompressedSubwindow
 
             // Uploading BC6/7 is possible on both backends, but there is no
             // easy way to flip these, and unfortunately we want to flip all our textures on upload -_-

@@ -10,6 +10,56 @@ open Expecto
 
 module TextureCompression =
 
+    open BenchmarkDotNet.Attributes
+    open OpenTK.Graphics.OpenGL4
+    open Aardvark.Application
+
+    type OnTheFlyCompression() =
+        let mutable app = Unchecked.defaultof<TestApplication>
+        let mutable image = Unchecked.defaultof<PixImage<uint8>>
+
+        let finish() =
+            let runtime = app.Runtime :?> GL.Runtime
+            use __ = runtime.Context.ResourceLock
+            GL.Finish()
+
+        [<DefaultValue; Params(128, 512, 1024, 2048, 4096)>]
+        val mutable Size : int
+
+        [<GlobalSetup>]
+        member x.Setup() =
+            app <- TestApplication.create' DebugLevel.None Backend.GL
+
+            let rng = RandomSystem(1)
+
+            let size = V2i x.Size
+            image <- PixImage<uint8>(Col.Format.RGBA, size)
+
+            for c in image.ChannelArray do
+                c.SetByIndex(ignore >> rng.UniformUInt >> uint8) |> ignore
+
+        [<GlobalCleanup>]
+        member x.Cleanup() =
+            app.Dispose()
+
+        [<Benchmark>]
+        member x.Upload() =
+            app.Runtime.PrepareTexture(PixTexture2d(image, TextureParams.empty)) |> ignore
+            finish()
+
+        [<Benchmark>]
+        member x.UploadCompressed() =
+            GL.RuntimeConfig.PreferHostSideTextureCompression <- false
+            app.Runtime.PrepareTexture(PixTexture2d(image, TextureParams.compressed)) |> ignore
+            finish()
+
+        [<Benchmark>]
+        member x.UploadHostCompressed() =
+            GL.RuntimeConfig.PreferHostSideTextureCompression <- true
+            app.Runtime.PrepareTexture(PixTexture2d(image, TextureParams.compressed)) |> ignore
+            finish()
+
+
     module Cases =
 
         let private testCompressionUnsigned (mode : CompressionMode) (path : string) (targetPsnr : float) (targetRsme : float) =

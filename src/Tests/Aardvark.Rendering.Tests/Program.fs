@@ -10,6 +10,11 @@ open Aardvark.Rendering.GL
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Application.Slim
 
+open BenchmarkDotNet.Running;
+open BenchmarkDotNet.Configs
+open BenchmarkDotNet.Jobs
+open BenchmarkDotNet.Toolchains
+
 let testCompile() =
     use runtime = new Runtime(DebugLevel.None)
     let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create runtime.DebugLevel)
@@ -255,9 +260,15 @@ module CSTest =
 
 
 [<EntryPoint>]
-let main args =
-    Aardvark.Init()
-    CSTest.run()
+let main argv =
+    //Aardvark.Init()
+    //CSTest.run()
+
+    let cfg =
+        let job = Job.Default.WithToolchain(InProcess.Emit.InProcessEmitToolchain.Instance)
+        ManualConfig.Create(DefaultConfig.Instance).AddJob(job)
+
+    BenchmarkSwitcher.FromAssembly(typeof<Texture.TextureCompression.OnTheFlyCompression>.Assembly).Run(argv, cfg) |> ignore;
 
     exit 0
     //``Texture Tests``.runAllTests()

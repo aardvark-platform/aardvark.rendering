@@ -169,6 +169,36 @@ module ResourceValidation =
                 Utils.failf dimension "texture window (offset = %A, size = %A) exceeds size of texture level (%A)" offset windowSize size
 
         /// Raises an ArgumentException if the window for the given texture is invalid.
+        let inline validateUploadWindow (level : int) (offset : V3i) (windowSize : V3i) (texture : ^Texture) =
+            let dimension = getDimension texture
+            let size = getSize level texture
+            let format = getFormat texture
+
+            validateWindow level offset windowSize texture
+
+            if format.IsCompressed && windowSize <> size then
+                let mode = format.CompressionMode
+                let blockSize = CompressionMode.blockSize mode
+
+                let windowSize =
+                    match dimension with
+                    | TextureDimension.Texture1D -> windowSize.XOO
+                    | TextureDimension.Texture2D | TextureDimension.TextureCube -> windowSize.XYO
+                    | _ -> windowSize
+
+                if windowSize.X % blockSize <> 0 ||  windowSize.Y % blockSize <> 0 || windowSize.Z % blockSize <> 0 then
+                    Utils.failf dimension "window size must be aligned with compressed texture block size (size = %A, block size = %A)" windowSize blockSize
+
+                let offset =
+                    if dimension <> TextureDimension.Texture2D && dimension <> TextureDimension.TextureCube then
+                        offset
+                    else
+                        V3i(offset.X, size.Y - (offset.Y + windowSize.Y), offset.Z)
+
+                if offset.X % blockSize <> 0 || offset.Y % blockSize <> 0 || offset.Z % blockSize <> 0 then
+                    Utils.failf dimension "window offset must be aligned with compressed texture block size (offset = %A, block size = %A)" offset blockSize
+
+        /// Raises an ArgumentException if the window for the given texture is invalid.
         let inline validateWindow2D (level : int) (offset : V2i) (windowSize : V2i) (texture : ^Texture) =
             texture |> validateWindow level (V3i offset) (V3i (windowSize, 1))
 

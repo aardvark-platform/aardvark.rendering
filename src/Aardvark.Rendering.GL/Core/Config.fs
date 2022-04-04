@@ -117,3 +117,9 @@ module RuntimeConfig =
     /// Determines if and how API errors are checked and reported.
     /// </summary>
     let mutable internal ErrorReporting = ErrorReporting.Disabled
+
+    /// <summary>
+    /// Determines whether the CPU implementation of block compression should be
+    /// used over the implicit encoding provided by OpenGL.
+    /// </summary>
+    let mutable PreferHostSideTextureCompression = true

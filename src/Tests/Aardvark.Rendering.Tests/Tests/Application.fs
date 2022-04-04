@@ -21,14 +21,15 @@ module TestApplication =
         open OpenTK
         open Aardvark.Rendering.GL
 
-        let create() =
+        let create (debug : DebugLevel) =
             Config.MajorVersion <- 4
             Config.MinorVersion <- 6
             RuntimeConfig.UseNewRenderTask <- true
+            RuntimeConfig.PreferHostSideTextureCompression <- true
 
             Toolkit.Init(ToolkitOptions(Backend = PlatformBackend.PreferNative)) |> ignore
 
-            let runtime = new Runtime(DebugLevel.Normal)
+            let runtime = new Runtime(debug)
             let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create runtime.DebugLevel)
 
             runtime.Initialize(ctx)
@@ -45,20 +46,23 @@ module TestApplication =
     module private Vulkan =
         open Aardvark.Rendering.Vulkan
 
-        let create() =
-            let app = new HeadlessVulkanApplication(debug = true)
+        let create (debug : DebugLevel) =
+            let app = new HeadlessVulkanApplication(debug)
 
             new TestApplication(
                 app.Runtime, app :> IDisposable
             )
 
-    let create (backend : Backend) =
+    let create' (debug : DebugLevel) (backend : Backend) =
         IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
         Aardvark.Init()
 
         match backend with
-        | Backend.GL -> GL.create()
-        | Backend.Vulkan -> Vulkan.create()
+        | Backend.GL -> GL.create debug
+        | Backend.Vulkan -> Vulkan.create debug
+
+    let create (backend : Backend) =
+        backend |> create' DebugLevel.Normal
 
     let createUse f backend =
         use app = create backend

@@ -87,26 +87,39 @@ module internal TextureUploadImplementation =
                                                         (level : int) (slice : int) (offset : V3i) (size : V3i)
                                                         (src : NativeTensor4<'T>) =
 
-            let pixelFormat, pixelType =
-                TextureFormat.toFormatAndType texture.Format
+            let pixelFormat, pixelType = TextureFormat.toFormatAndType texture.Format
+            let compression = TextureFormat.compressionMode texture.Format
 
             let offset =
                 let flipped = texture.WindowOffset(level, offset, size)
                 if texture.Dimension = TextureDimension.Texture3D then flipped
                 else V3i(flipped.XY, slice)
 
-            let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (dst : nativeint) =
-                let srcInfo = src.Info.AsBytes<'T>()
-                let dstInfo = Tensor4Info.deviceLayout texture.IsCubeOr2D elementSize alignedLineSize channels (V3l size)
-                NativeTensor4.copyBytes<'T> src.Address srcInfo dst dstInfo
-
             let pixelData =
-                PixelData.General {
-                    Size   = size
-                    Type   = pixelType
-                    Format = pixelFormat
-                    Copy   = copy
-                }
+                if compression <> CompressionMode.None && texture.IsCubeOr2D && RuntimeConfig.PreferHostSideTextureCompression then
+                    let copy (dst : nativeint) =
+                        let channels = int src.Info.SW
+                        let srcInfo = src.Info.SubTensor4(V4i.Zero, V4i(size, channels)).SubXYWVolume(0L).Transformed(ImageTrafo.MirrorY)
+                        BlockCompression.encode compression src.Address srcInfo dst
+
+                    PixelData.Compressed {
+                        Size        = size
+                        SizeInBytes = compression |> CompressionMode.sizeInBytes size
+                        Copy        = copy
+                    }
+
+                else
+                    let copy (channels : int) (elementSize : int) (alignedLineSize : nativeint) (dst : nativeint) =
+                        let srcInfo = src.Info.SubTensor4(V4i.Zero, V4i(size, channels)).AsBytes<'T>()
+                        let dstInfo = Tensor4Info.deviceLayout texture.IsCubeOr2D elementSize alignedLineSize channels (V3l size)
+                        NativeTensor4.copyBytes<'T> src.Address srcInfo dst dstInfo
+
+                    PixelData.General {
+                        Size   = size
+                        Type   = pixelType
+                        Format = pixelFormat
+                        Copy   = copy
+                    }
 
             uploadPixelData texture generateMipmap level offset pixelData
 

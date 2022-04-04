@@ -114,7 +114,7 @@ type Runtime(debug : DebugLevel) =
 
             dst |> ResourceValidation.Textures.validateLevel level
             dst |> ResourceValidation.Textures.validateSlice slice
-            dst |> ResourceValidation.Textures.validateWindow level offset size
+            dst |> ResourceValidation.Textures.validateUploadWindow level offset size
             ctx.Upload(dst, level, slice, offset, size, source)
   
         member x.Download<'a when 'a : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'a>, offset : V3i, size : V3i) : unit =
