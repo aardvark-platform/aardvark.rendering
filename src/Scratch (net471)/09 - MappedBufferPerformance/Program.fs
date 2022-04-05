@@ -53,7 +53,7 @@ let main argv =
     let rnd = Random(1123)
 
 
-    use pool =
+    let pool =
         app.Runtime.CreateManagedPool {
             IndexType = typeof<int>
             VertexAttributeTypes = 
@@ -91,13 +91,11 @@ let main argv =
         Report.End() |> ignore
         mdc
 
-    let pooledGeometries = 
+    let disp, pooledGeometries = 
         geometries |> ASet.map (fun (g, t) -> 
                                         let ntr = t|> AVal.map(fun t -> t.Backward.Transposed |> M33d.op_Explicit)
                                         g |> AdaptiveGeometry.ofIndexedGeometry [ (Sem.InstanceTrafo, (t :> IAdaptiveValue)); (Sem.InstanceNormalTrafo, (ntr :> IAdaptiveValue)) ])
-                    
-                    // TODO: what about use??????
-                    |> ASet.map (fun ag -> addToPool ag)
+                    |> ASet.mapUse (fun ag -> addToPool ag)
                     
     let sg = 
         Sg.PoolNode(pool, pooledGeometries, IndexedGeometryMode.TriangleList)
@@ -139,5 +137,8 @@ let main argv =
         
     win.RenderTask <- renderTask
     win.Run()
+
+    // either dispose the pool directly, or dispose all the draw calls
+    disp.Dispose()
     
     0

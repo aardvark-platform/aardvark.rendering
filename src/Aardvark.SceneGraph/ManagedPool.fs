@@ -542,6 +542,8 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
 
                 if drawCalls.Count = 0 then
                     clear()
+            else
+                raise <| ObjectDisposedException("ManagedDrawCall")
         )
 
     ///<summary>Adds the given geometry to the pool and returns a managed draw call.</summary>
@@ -608,7 +610,9 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
                         BaseVertex = int vertexPtr.Offset
                     )
 
-                new ManagedDrawCall(call, resources)
+                let mdc = new ManagedDrawCall(call, resources)
+                drawCalls.Add(mdc) |> ignore
+                mdc
             )
 
     member x.VertexAttributes =
