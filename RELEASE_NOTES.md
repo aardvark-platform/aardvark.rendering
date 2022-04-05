@@ -1,3 +1,8 @@
+### 5.2.3
+- [ManagedPool] Fixed memory leak
+- Improved block compression decoding and copying
+- [GL] Implemented host-side texture compression
+
 ### 5.2.2
 - [GL] relaxed framebuffer signature compability requirements
 - [Vulkan] using any compatible QueueFamily for CopyEngine
