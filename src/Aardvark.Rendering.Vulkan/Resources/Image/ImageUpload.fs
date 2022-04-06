@@ -1,299 +1,121 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
-open Aardvark.Base
-open Aardvark.Rendering
-open Aardvark.Rendering.Vulkan
 open System
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 
+open Aardvark.Base
+open Aardvark.Rendering
+open Aardvark.Rendering.Vulkan
+
 [<AutoOpen>]
 module ImageUploadExtensions =
 
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module Image =
+    [<AutoOpen>]
+    module private UploadImplementation =
 
-        let ofPixImageMipMap (pi : PixImageMipMap) (info : TextureParams) (device : Device) =
-            if pi.LevelCount <= 0 then failf "empty PixImageMipMap"
+        module PixFormat =
 
-            let format = pi.ImageArray.[0].PixFormat
-            let size = pi.ImageArray.[0].Size
-
-            let format = device.GetSupportedFormat(VkImageTiling.Optimal, format, info)
-            let expectedFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
-
-            let uploadLevels =
-                if info.wantMipMaps then pi.LevelCount
-                else 1
-
-            let mipMapLevels =
-                if info.wantMipMaps then
-                    if TextureFormat.isFilterable (VkFormat.toTextureFormat format) then
-                        Fun.MipmapLevels(size)
-                    else
-                        uploadLevels
+            let toTextureFormat (info : TextureParams) (format : PixFormat) =
+                let baseFormat = TextureFormat.ofPixFormat format info
+                if info.wantCompressed then
+                    match TextureFormat.toCompressed baseFormat with
+                    | Some fmt -> fmt
+                    | _ ->
+                        Log.warn "[Vulkan] Texture format %A does not support compression" baseFormat
+                        baseFormat
                 else
-                    1
+                    baseFormat
 
-            let generateMipMaps =
-                uploadLevels < mipMapLevels
+        module ImageBuffer =
 
-            let image =
-                Image.create
-                    size.XYI
-                    mipMapLevels 1 1
-                    TextureDimension.Texture2D
-                    format
-                    (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.StorageBit)
-                    device
+            let ofNativeTensor4 (mirrorY : bool) (dstFormat : TextureFormat) (srcFormat : Col.Format) (src : NativeTensor4<'T>) (device : Device) =
+                let compression = dstFormat.CompressionMode
+                let size = V3i src.Size.XYZ
 
-            let tempImage =
-                device.CreateTensorImage2D(pi, uploadLevels, info.wantSrgb)
+                if compression = CompressionMode.None then
+                    let img = device.CreateTensorImage<'T>(size, TextureFormat.toColFormat dstFormat, dstFormat.IsSrgb)
+                    img.Write(srcFormat, if mirrorY then src.MirrorY() else src)
+                    img :> ImageBuffer
 
-            match device.UploadMode with
-            | UploadMode.Async ->
-                let imageRange = image.[TextureAspect.Color]
-                image.Layout <- VkImageLayout.TransferDstOptimal
-
-                device.CopyEngine.EnqueueSafe [
-                    yield CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
-                    yield! tempImage.ImageArray |> Array.mapi (fun level src -> CopyCommand.Copy(src, imageRange.[level, 0]))
-
-                    yield CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
-                    yield CopyCommand.Callback (fun () -> tempImage.Dispose())
-                ]
-
-                device.eventually {
-                    do! Command.Acquire(imageRange, VkImageLayout.TransferDstOptimal, device.TransferFamily)
-                    if generateMipMaps then
-                        do! Command.GenerateMipMaps(image.[TextureAspect.Color], uploadLevels - 1)
-                    do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
-                }
-
-            | _ ->
-                device.eventually {
-                    try
-                        do! Command.TransformLayout(image, VkImageLayout.TransferDstOptimal)
-
-                        // upload the levels
-                        let mutable level = 0
-                        for temp in tempImage.ImageArray do
-                            do! Command.Copy(temp, image.[TextureAspect.Color, level, 0])
-                            level <- level + 1
-
-                        // generate the mipMaps
-                        if generateMipMaps then
-                            do! Command.GenerateMipMaps(image.[TextureAspect.Color], uploadLevels - 1)
-
-                        do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
-
-                    finally
-                        tempImage.Dispose()
-                }
-
-            image
-
-        // TODO: check CopyEngine
-        let ofPixVolume (pi : PixVolume) (info : TextureParams) (device : Device) =
-            let format = pi.PixFormat
-            let size = pi.Size
-
-            let format = device.GetSupportedFormat(VkImageTiling.Optimal, format, info)
-            let expectedFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
-
-
-            let mipMapLevels =
-                if info.wantMipMaps && TextureFormat.isFilterable (VkFormat.toTextureFormat format) then
-                    Fun.MipmapLevels(size)
                 else
-                    1
+                    raise <| NotImplementedException("On-the-fly compression not implemented")
 
-            let image =
-                Image.create
-                    size
-                    mipMapLevels 1 1
-                    TextureDimension.Texture3D
-                    format
-                    (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.StorageBit)
-                    device
+            let ofPixImage (dstFormat : TextureFormat) (pix : PixImage) (device : Device) =
+                    pix.Visit
+                        { new PixVisitors.PixImageVisitor<ImageBuffer>() with
+                            member x.Visit(img : PixImage<'T>) =
+                                NativeVolume.using img.Volume (fun src ->
+                                    let src = src.ToXYWTensor4'()
+                                    device |> ofNativeTensor4 true dstFormat pix.Format src
+                                )
+                        }
 
-            let temp = device.CreateTensorImage(pi.Size, expectedFormat, info.wantSrgb)
-            temp.Write(pi, false)
+            let ofPixVolume (info : TextureParams) (pix : PixVolume) (device : Device) =
+                let textureFormat = PixFormat.toTextureFormat info pix.PixFormat
 
-            match device.UploadMode with
-            | UploadMode.Async ->
-                let imageRange = image.[TextureAspect.Color]
-                image.Layout <- VkImageLayout.TransferDstOptimal
+                pix.Visit
+                    { new PixVisitors.PixVolumeVisitor<ImageBuffer>() with
+                        member x.Visit(img : PixVolume<'T>) =
+                            NativeTensor4.using img.Tensor4 (fun src ->
+                                device |> ofNativeTensor4 false textureFormat pix.Format src
+                            )
+                    }
 
-                device.CopyEngine.EnqueueSafe [
-                    CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
-                    CopyCommand.Copy(temp, imageRange.[0,0])
+        type ImageBufferArray =
+            { Buffers : ImageBuffer[]
+              Levels  : int }
 
-                    CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
-                    CopyCommand.Callback(fun () -> temp.Dispose())
-                ]
+            member x.TextureFormat =
+                x.Buffers.[0].TextureFormat
 
-                device.eventually {
-                    do! Command.Acquire(imageRange, VkImageLayout.TransferDstOptimal, device.TransferFamily)
+            member x.BaseSize =
+                x.Buffers.[0].ImageSize
 
-                    // generate the mipMaps
-                    if mipMapLevels > 1 then
-                        do! Command.GenerateMipMaps image.[TextureAspect.Color]
+            member x.Slices =
+                x.Buffers.Length / x.Levels
 
-                    do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
-                }
+            member x.Item(level : int, slice : int) =
+                x.Buffers.[slice * x.Levels + level]
 
-            | _ ->
-                device.eventually {
-                    try
-                        do! Command.TransformLayout(image, VkImageLayout.TransferDstOptimal)
+            member x.Dispose() =
+                x.Buffers |> Array.iter Disposable.dispose
 
-                        // upload the level 0
-                        do! Command.Copy(temp, image.[TextureAspect.Color, 0, 0])
+            interface IDisposable with
+                member x.Dispose() = x.Dispose()
 
-                        // generate the mipMaps
-                        if mipMapLevels > 1 then
-                            do! Command.GenerateMipMaps image.[TextureAspect.Color]
+        module ImageBufferArray =
 
-                        do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
+            let create (levels : int) (buffers : #ImageBuffer[]) =
+                assert (buffers.Length % levels = 0)
 
-                    finally
-                        temp.Dispose()
-                }
+                { Buffers = buffers |> Array.map unbox
+                  Levels  = levels }
 
-            image
-
-        // TODO: check CopyEngine
-        let ofPixImageCube (pi : PixImageCube) (info : TextureParams) (device : Device) =
-            let face0 = pi.MipMapArray.[0]
-            if face0.LevelCount <= 0 then failf "empty PixImageMipMap"
-
-            let format = face0.ImageArray.[0].PixFormat
-            let size = face0.ImageArray.[0].Size
-
-            let format = device.GetSupportedFormat(VkImageTiling.Optimal, format, info)
-            let expectedFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
-
-            let uploadLevels =
-                if info.wantMipMaps then face0.LevelCount
-                else 1
-
-            let mipMapLevels =
-                if info.wantMipMaps then
-                    if TextureFormat.isFilterable (VkFormat.toTextureFormat format) then
-                        Fun.MipmapLevels(size)
-                    else
-                        uploadLevels
-                else
-                    1
-
-            let generateMipMaps =
-                uploadLevels < mipMapLevels
-
-            let image =
-                Image.create
-                    size.XYI
-                    mipMapLevels 6 1
-                    TextureDimension.TextureCube
-                    format
-                    (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.StorageBit)
-                    device
-
-            let tempImages =
-                List.init uploadLevels (fun level ->
-                    List.init 6 (fun face ->
-                        let data = pi.MipMapArray.[face].ImageArray.[level]
-                        let temp = device.CreateTensorImage(V3i(data.Size.X, data.Size.Y, 1), expectedFormat, info.wantSrgb)
-                        temp.Write(data, true)
-                        temp
-                    )
-                )
-
-            match device.UploadMode with
-            | UploadMode.Async ->
-                let imageRange = image.[TextureAspect.Color]
-                image.Layout <- VkImageLayout.TransferDstOptimal
-                device.CopyEngine.EnqueueSafe [
-                    yield CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
-
-                    for (level, faces) in Seq.indexed tempImages do
-                        for (face, temp) in Seq.indexed faces do
-                            yield CopyCommand.Copy(temp, image.[TextureAspect.Color, level, face])
-
-                    yield CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
-                    yield CopyCommand.Callback (fun () -> tempImages |> List.iter (List.iter Disposable.dispose))
-                ]
-
-                device.eventually {
-                    do! Command.Acquire(imageRange, VkImageLayout.TransferDstOptimal, device.TransferFamily)
-                    // generate the mipMaps
-                    if generateMipMaps then
-                        do! Command.GenerateMipMaps(image.[TextureAspect.Color], uploadLevels - 1)
-
-                    do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
-                }
-
-            | _ ->
-                device.eventually {
-                    try
-                        do! Command.TransformLayout(image, VkImageLayout.TransferDstOptimal)
-
-                        // upload the levels
-                        for (level, faces) in Seq.indexed tempImages do
-                            for (face, temp) in Seq.indexed faces do
-                                do! Command.Copy(temp, image.[TextureAspect.Color, level, face])
-
-                        // generate the mipMaps
-                        if mipMapLevels > 1 then
-                            do! Command.GenerateMipMaps(image.[TextureAspect.Color], uploadLevels - 1)
-
-                        do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
-
-                    finally
-                        tempImages |> List.iter (List.iter Disposable.dispose)
-                }
-
-            image
-
-        let ofNativeTexture (texture : INativeTexture) (device : Device) =
-            let size = texture.[0, 0].Size
-            let format = VkFormat.ofTextureFormat texture.Format
-
-            let uploadLevels =
-                if texture.WantMipMaps then texture.MipMapLevels
-                else 1
-
-            let mipMapLevels =
-                if texture.WantMipMaps then
-                    if texture.Format.IsFilterable then
-                        Fun.MipmapLevels(size)
-                    else
-                        uploadLevels
-                else
-                    1
-
-            let generateMipMaps =
-                uploadLevels < mipMapLevels
-
-            let isCubeOr2D =
-                match texture.Dimension with
-                | TextureDimension.Texture2D | TextureDimension.TextureCube -> true
-                | _ -> false
-
-            let image =
-                Image.create size mipMapLevels texture.Count 1
-                       texture.Dimension format
-                       (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.StorageBit)
-                       device
-
-            let tempImages =
-                let compression = texture.Format.CompressionMode
+            let ofNativeTexture (texture : INativeTexture) (device : Device) =
+                let compression = TextureFormat.compressionMode texture.Format
                 let blockSize = compression |> CompressionMode.blockSize
 
-                Array.init texture.Count (fun slice ->
-                    Array.init uploadLevels (fun level ->
+                let levelCount =
+                    if texture.WantMipMaps then texture.MipMapLevels else 1
+
+                let isCubeOr2D =
+                    match texture.Dimension with
+                    | TextureDimension.Texture2D | TextureDimension.TextureCube -> true
+                    | _ -> false
+
+                let buffers =
+                    Array.init (texture.Count * levelCount) (fun i ->
+                        let slice = i / levelCount
+                        let level = i % levelCount
+
                         let data = texture.[slice, level]
-                        let buffer = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit data.SizeInBytes
+
+                        let alignedSize =
+                            let blocks = compression |> CompressionMode.numberOfBlocks data.Size
+                            blocks * blockSize
+
+                        let buffer = device.CreateImageBuffer(texture.Format, data.Size, alignedSize.XY, data.SizeInBytes)
 
                         buffer.Memory.Mapped (fun dst ->
                             data.Use (fun src ->
@@ -304,36 +126,75 @@ module ImageUploadExtensions =
                             )
                         )
 
-                        let alignedSize =
-                            let blocks = compression |> CompressionMode.numberOfBlocks data.Size
-                            blocks * blockSize
-
-                        buffer, data.Size, alignedSize
+                        buffer
                     )
-                )
+
+                buffers |> create levelCount
+
+            let ofPixImageMipMaps (info : TextureParams) (pix : PixImageMipMap[]) (device : Device) =
+                let format = PixFormat.toTextureFormat info pix.[0].PixFormat
+
+                let levels =
+                    pix |> Array.map (fun i -> i.LevelCount) |> Array.min
+
+                let buffers =
+                    Array.init (pix.Length * levels) (fun i ->
+                        let slice = i / levels
+                        let level = i % levels
+
+                        device |> ImageBuffer.ofPixImage format pix.[slice].[level]
+                    )
+
+                buffers |> create levels
+
+
+        let ofImageBufferArray (dimension : TextureDimension) (wantMipmap : bool)
+                               (buffers : ImageBufferArray) (device : Device) =
+            let slices = buffers.Slices
+
+            let uploadLevels =
+                if wantMipmap then buffers.Levels
+                else 1
+
+            let mipMapLevels =
+                if wantMipmap then
+                    if TextureFormat.isFilterable buffers.TextureFormat then
+                        Fun.MipmapLevels(buffers.BaseSize)
+                    else
+                        uploadLevels
+                else
+                    1
+
+            let generateMipmap =
+                uploadLevels < mipMapLevels
+
+            let image = device.CreateImage(buffers.BaseSize, mipMapLevels, slices, 1, dimension, buffers.TextureFormat, Image.defaultUsage)
+            let imageRange = image.[TextureAspect.Color]
 
             match device.UploadMode with
             | UploadMode.Async ->
-                let imageRange = image.[TextureAspect.Color]
                 image.Layout <- VkImageLayout.TransferDstOptimal
 
                 device.CopyEngine.EnqueueSafe [
                     yield CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
 
-                    for slice = 0 to texture.Count - 1 do
+                    for slice = 0 to slices - 1 do
                         for level = 0 to uploadLevels - 1 do
-                            let src, size, alignedSize = tempImages.[slice].[level]
-                            let dst = image.[TextureAspect.Color, level, slice]
-                            yield CopyCommand.Copy(src, dst, V3i.Zero, src.Size, alignedSize.XY, size)
+                            let src = buffers.[level, slice]
+                            let dst = imageRange.[level, slice]
+
+                            yield CopyCommand.Copy(src, dst, V3i.Zero)
 
                     yield CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
-                    yield CopyCommand.Callback (fun () -> tempImages |> Array.iter (Array.iter ((fun (d, _, _) -> d.Dispose()))))
+                    yield CopyCommand.Callback buffers.Dispose
                 ]
 
                 device.eventually {
                     do! Command.Acquire(imageRange, VkImageLayout.TransferDstOptimal, device.TransferFamily)
-                    if generateMipMaps then
-                        do! Command.GenerateMipMaps(image.[TextureAspect.Color], uploadLevels - 1)
+
+                    if generateMipmap then
+                        do! Command.GenerateMipMaps(imageRange, uploadLevels - 1)
+
                     do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
                 }
 
@@ -342,86 +203,79 @@ module ImageUploadExtensions =
                     try
                         do! Command.TransformLayout(image, VkImageLayout.TransferDstOptimal)
 
-                        for slice = 0 to texture.Count - 1 do
+                        for slice = 0 to slices - 1 do
                             for level = 0 to uploadLevels - 1 do
-                                let src, size, alignedSize = tempImages.[slice].[level]
+                                let src = buffers.[level, slice]
                                 let dst = image.[TextureAspect.Color, level, slice]
-                                do! Command.Copy(src, 0L, alignedSize.XY, dst, V3i.Zero, size)
 
-                        // generate the mipMaps
-                        if generateMipMaps then
+                                do! Command.Copy(src, dst, V3i.Zero)
+
+                        if generateMipmap then
                             do! Command.GenerateMipMaps(image.[TextureAspect.Color], uploadLevels - 1)
 
                         do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
 
                     finally
-                        tempImages |> Array.iter (Array.iter (fun (d, _, _) -> d.Dispose()))
+                        buffers.Dispose()
                 }
 
             image
+
+        let ofImageBuffer (dimension : TextureDimension) (wantMipmap : bool) (buffer : ImageBuffer) (device : Device) =
+            let buffers = [| buffer |] |> ImageBufferArray.create 1
+            device |> ofImageBufferArray dimension wantMipmap buffers
+
+        let uploadNativeTensor4<'T when 'T : unmanaged> (dst : ImageSubresource) (offset : V3i) (size : V3i) (src : NativeTensor4<'T>) =
+            let device = dst.Image.Device
+            let textureFormat = VkFormat.toTextureFormat dst.Image.Format
+            let format = TextureFormat.toColFormat textureFormat
+
+            let src =
+                src.SubTensor4(V4i.Zero, V4i(size, int src.SW))
+
+            let offset =
+                if dst.Image.IsCubeOr2D then
+                    V3i(offset.X, dst.Size.Y - offset.Y - int src.SY, offset.Z) // flip y-offset
+                else
+                    offset
+
+            let buffer =
+                device |> ImageBuffer.ofNativeTensor4 dst.Image.IsCubeOr2D textureFormat format src
+
+            let layout = dst.Image.Layout
+
+            device.eventually {
+                try
+                    do! Command.TransformLayout(dst.Image, VkImageLayout.TransferDstOptimal)
+                    do! Command.Copy(buffer, dst, offset)
+                    do! Command.TransformLayout(dst.Image, layout)
+                finally
+                    buffer.Dispose()
+            }
+
+
+    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+    module Image =
+
+        let ofNativeTexture (data : INativeTexture) (device : Device) =
+            let buffers = device |> ImageBufferArray.ofNativeTexture data
+            device |> ofImageBufferArray data.Dimension data.WantMipMaps buffers
+
+        let ofPixImageMipMap (data : PixImageMipMap) (info : TextureParams) (device : Device) =
+            let buffers = device |> ImageBufferArray.ofPixImageMipMaps info [| data |]
+            device |> ofImageBufferArray TextureDimension.Texture2D info.wantMipMaps buffers
+
+        let ofPixVolume (data : PixVolume) (info : TextureParams) (device : Device) =
+            let buffer = device |> ImageBuffer.ofPixVolume info data
+            device |> ofImageBuffer TextureDimension.Texture3D info.wantMipMaps buffer
+
+        let ofPixImageCube (data : PixImageCube) (info : TextureParams) (device : Device) =
+            let buffers = device |> ImageBufferArray.ofPixImageMipMaps info data.MipMapArray
+            device |> ofImageBufferArray TextureDimension.TextureCube info.wantMipMaps buffers
 
         let ofStream (stream : IO.Stream) (info : TextureParams) (device : Device) =
             let temp = device |> TensorImage.ofStream stream info.wantSrgb
-            let size = temp.Size
-
-            let mipMapLevels =
-                if info.wantMipMaps && TextureFormat.isFilterable (VkFormat.toTextureFormat temp.ImageFormat) then
-                    Fun.MipmapLevels(size)
-                else
-                    1
-
-            let image =
-                Image.create
-                    size
-                    mipMapLevels 1 1
-                    TextureDimension.Texture2D
-                    temp.ImageFormat
-                    (VkImageUsageFlags.TransferSrcBit ||| VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.SampledBit ||| VkImageUsageFlags.StorageBit)
-                    device
-
-            match device.UploadMode with
-            | UploadMode.Async ->
-                let imageRange = image.[TextureAspect.Color]
-
-                image.Layout <- VkImageLayout.TransferDstOptimal
-                device.CopyEngine.EnqueueSafe [
-                    CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
-                    CopyCommand.Copy(temp, imageRange.[0,0])
-
-                    CopyCommand.Release(imageRange, VkImageLayout.TransferDstOptimal, device.GraphicsFamily)
-                    CopyCommand.Callback(fun () -> temp.Dispose())
-                ]
-
-                device.eventually {
-                    do! Command.Acquire(imageRange, VkImageLayout.TransferDstOptimal, device.TransferFamily)
-
-                    // generate the mipMaps
-                    if info.wantMipMaps then
-                        do! Command.GenerateMipMaps image.[TextureAspect.Color]
-
-                    do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
-
-                }
-
-
-            | _ ->
-                device.eventually {
-                    try
-                        do! Command.TransformLayout(image, VkImageLayout.TransferDstOptimal)
-
-                        // upload the levels
-                        do! Command.Copy(temp, image.[TextureAspect.Color, 0, 0])
-
-                        // generate the mipMaps
-                        if info.wantMipMaps then
-                            do! Command.GenerateMipMaps image.[TextureAspect.Color]
-
-                        do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
-
-                    finally
-                        temp.Dispose()
-                }
-            image
+            device |> ofImageBuffer TextureDimension.Texture2D info.wantMipMaps temp
 
         let ofFile (path : string) (info : TextureParams) (device : Device) =
             use stream = IO.File.OpenRead(path)
@@ -468,32 +322,7 @@ module ImageUploadExtensions =
                 failf "unsupported texture-type: %A" t
 
         let uploadLevel (offset : V3i) (size : V3i) (src : NativeTensor4<'T>) (dst : ImageSubresource) (device : Device) =
-            if dst.Image.Samples > 1 then
-                raise <| InvalidOperationException("Cannot upload to multisampled image")
-
-            let format = dst.Image.Format
-            let dstPixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
-
-            let src, offset =
-                if dst.Image.IsCubeOr2D then
-                    src.SubTensor4(V4l.Zero, V4l(V3l size, src.SW)).MirrorY(),
-                    V3i(offset.X, dst.Size.Y - offset.Y - int src.SY, offset.Z) // flip y-offset
-                else
-                    src, offset
-
-            let temp = device.CreateTensorImage(V3i src.Size, dstPixFormat, VkFormat.isSrgb dst.Image.Format)
-            temp.Write(src.Format, src)
-
-            let layout = dst.Image.Layout
-            device.eventually {
-                try
-                    do! Command.TransformLayout(dst.Image, VkImageLayout.TransferDstOptimal)
-                    do! Command.Copy(temp, dst, offset, temp.Size)
-                    do! Command.TransformLayout(dst.Image, layout)
-                finally
-                    temp.Dispose()
-            }
-
+            src |> uploadNativeTensor4 dst offset size
 
     [<AbstractClass; Sealed; Extension>]
     type DeviceImageUploadExtensions private() =

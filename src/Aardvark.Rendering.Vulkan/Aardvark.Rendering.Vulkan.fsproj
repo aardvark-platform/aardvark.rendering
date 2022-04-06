@@ -37,6 +37,7 @@
     <Compile Include="Resources\Image\ComponentMapping.fs" />
     <Compile Include="Resources\Image\Image.fs" />
     <Compile Include="Resources\Image\DeviceTensor.fs" />
+    <Compile Include="Resources\Image\ImageBuffer.fs" />
     <Compile Include="Resources\Image\TensorImage.fs" />
     <Compile Include="Resources\Image\ImageDownload.fs" />
     <Compile Include="Resources\Image\ImageUpload.fs" />

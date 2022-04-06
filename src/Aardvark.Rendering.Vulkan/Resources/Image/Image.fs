@@ -839,6 +839,13 @@ module Image =
     open KHRBindMemory2
     open Vulkan11
 
+    [<Literal>]
+    let internal defaultUsage =
+        VkImageUsageFlags.TransferSrcBit |||
+        VkImageUsageFlags.TransferDstBit |||
+        VkImageUsageFlags.SampledBit |||
+        VkImageUsageFlags.StorageBit
+
     let allocLinear (size : V2i) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
         let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Linear, fmt)
         let usage = usage |> VkImageUsageFlags.filterSupported features

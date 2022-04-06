@@ -370,7 +370,7 @@ module TextureUpload =
             let data = EmbeddedResource.loadPixImage<uint8> "data/spiral.png"
 
             let texture =
-                runtime.CreateTexture2D(V2i(100, 80), TextureFormat.CompressedRgbaS3tcDxt3)
+                runtime.CreateTexture2D(V2i(100, 80), TextureFormat.CompressedRgbaS3tcDxt5)
 
             let region = Box2i(12, 24, 80, 76)
 
@@ -404,7 +404,7 @@ module TextureUpload =
                  )
 
             let texture =
-                NativeTexture.ofPixImages TextureFormat.Rgba16ui wantMipmap data
+                NativeTexture.ofPixImages TextureFormat.Rgba16 wantMipmap data
                 |> runtime.PrepareTexture
 
             try
@@ -433,7 +433,7 @@ module TextureUpload =
 
         let texture2DNativeMipmapGeneration (runtime : IRuntime) =
             let size = V2i(258, 125)
-            let levels = Fun.MipmapLevels(size)
+            let levels = Fun.MipmapLevels(size) / 2
             let count = 3
             uploadAndDownloadTextureNative runtime size levels count true
 

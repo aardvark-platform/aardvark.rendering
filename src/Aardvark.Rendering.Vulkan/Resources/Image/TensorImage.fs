@@ -14,6 +14,8 @@ open System.Runtime.InteropServices
 
 [<AbstractClass>]
 type TensorImage(buffer : Buffer, info : Tensor4Info, format : PixFormat, imageFormat : VkFormat) =
+    inherit ImageBuffer(buffer, V3i info.Size.XYZ, V2i info.Size.XY, VkFormat.toTextureFormat imageFormat)
+
     member x.Buffer = buffer
     member x.Channels = int info.Size.W
     member x.Size = V3i info.Size.XYZ
@@ -67,12 +69,6 @@ type TensorImage(buffer : Buffer, info : Tensor4Info, format : PixFormat, imageF
                         x.Read(img.Format, if mirrorY then dst.MirrorY() else dst)
                     )
         } |> ignore
-
-    member x.Dispose() =
-        buffer.Dispose()
-
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
 
 type TensorImage<'a when 'a : unmanaged> private(buffer : Buffer, info : Tensor4Info, format : Col.Format, imageFormat : VkFormat) =
     inherit TensorImage(buffer, info, PixFormat(typeof<'a>, format), imageFormat)
@@ -511,19 +507,6 @@ module TensorImageCommandExtensions =
         static member Copy(src : TensorImage, dst : ImageSubresource) =
             CopyCommand.Copy(src, dst, V3i.Zero, src.Size)
 
-        static member Copy(src : Buffer, dst : ImageSubresource, dstOffset : V3i, sizeInBytes : int64, pitch : V2i, size : V3i) =
-            CopyCommand.BufferToImageCmd(
-                src.Handle,
-                dst.Image.Handle,
-                dst.Image.Layout,
-                VkBufferImageCopy(
-                    0UL, uint32 pitch.X, uint32 pitch.Y,
-                    dst.VkImageSubresourceLayers,
-                    VkOffset3D(dstOffset.X, dstOffset.Y, dstOffset.Z),
-                    VkExtent3D(size.X, size.Y, size.Z)
-                ),
-                sizeInBytes
-            )
 
         // download
         static member Copy(src : ImageSubresource, srcOffset : V3i, dst : TensorImage, size : V3i) =

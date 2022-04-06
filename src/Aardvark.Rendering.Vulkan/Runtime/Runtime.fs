@@ -357,7 +357,7 @@ type Runtime(device : Device, debug : DebugLevel) as this =
 
         texture.Texture |> ResourceValidation.Textures.validateLevel texture.Level
         texture.Texture |> ResourceValidation.Textures.validateSlice texture.Slice
-        texture.Texture |> ResourceValidation.Textures.validateWindow texture.Level offset size
+        texture.Texture |> ResourceValidation.Textures.validateUploadWindow texture.Level offset size
 
         let image = ImageSubresource.ofTextureSubResource texture
         device.UploadLevel(image, source, offset, size)
