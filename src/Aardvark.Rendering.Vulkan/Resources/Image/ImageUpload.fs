@@ -30,8 +30,8 @@ module ImageUploadExtensions =
         module ImageBuffer =
 
             let ofNativeTensor4 (mirrorY : bool) (dstFormat : TextureFormat) (srcFormat : Col.Format) (src : NativeTensor4<'T>) (device : Device) =
-                let compression = dstFormat.CompressionMode
                 let size = V3i src.Size.XYZ
+                let compression = dstFormat.CompressionMode
 
                 if compression = CompressionMode.None then
                     let img = device.CreateTensorImage<'T>(size, TextureFormat.toColFormat dstFormat, dstFormat.IsSrgb)
@@ -39,7 +39,24 @@ module ImageUploadExtensions =
                     img :> ImageBuffer
 
                 else
-                    raise <| NotImplementedException("On-the-fly compression not implemented")
+                    let blockSize =
+                        CompressionMode.blockSize compression
+
+                    let alignedSize =
+                        let blocks = compression |> CompressionMode.numberOfBlocks size
+                        blocks * blockSize
+
+                    let sizeInBytes =
+                        int64 <| CompressionMode.sizeInBytes size compression
+
+                    let buffer = device.CreateImageBuffer(dstFormat, size, alignedSize.XY, sizeInBytes)
+
+                    buffer.Memory.Mapped (fun dst ->
+                        let srcInfo = src.Info.SubXYWVolume(0L).Transformed(ImageTrafo.MirrorY)
+                        BlockCompression.encode compression src.Address srcInfo dst
+                    )
+
+                    buffer
 
             let ofPixImage (dstFormat : TextureFormat) (pix : PixImage) (device : Device) =
                     pix.Visit
