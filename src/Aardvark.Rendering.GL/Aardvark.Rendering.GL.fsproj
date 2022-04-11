@@ -71,6 +71,7 @@
     <Compile Include="Resources\SamplerState.fs" />
     <Compile Include="Resources\ShaderReflector.fs" />
     <Compile Include="Resources\Program.fs" />
+    <Compile Include="Resources\FramebufferSignature.fs" />
     <Compile Include="Resources\Framebuffer.fs" />
     <Compile Include="Resources\Pointers.fs" />
     <Compile Include="Resources\SparseBuffer.fs" />

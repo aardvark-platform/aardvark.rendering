@@ -54,11 +54,15 @@ module FramebufferSignature =
                     ], samples = 64)
 
             Expect.isGreaterThan signature.Samples 1 "not multisampled"
-            Expect.notEqual signature.Samples 65 "weird sample count"
+            Expect.isLessThan signature.Samples 64 "weird sample count"
+
+            let samplerState =
+                SamplerState.Default |> SamplerState.withFilter TextureFilter.MinMagPoint
 
             use task =
                 Sg.fullScreenQuad
                 |> Sg.diffuseTexture' (PixTexture2d(input, false))
+                |> Sg.samplerState' DefaultSemantic.DiffuseColorTexture (Some samplerState)
                 |> Sg.shader {
                     do! DefaultSurfaces.diffuseTexture
                 }

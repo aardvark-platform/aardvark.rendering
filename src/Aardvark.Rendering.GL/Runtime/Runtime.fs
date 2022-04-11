@@ -24,52 +24,52 @@ type Runtime(debug : DebugLevel) =
     member x.DebugLevel = debug
 
     member x.Initialize(context : Context) =
-           if ctx <> null then
-               Log.warn "Runtime already initialized"
+        if ctx <> null then
+            Log.warn "Runtime already initialized"
 
-           ctx <- context
-           manager <- ResourceManager(context, None, true, true)
+        ctx <- context
+        manager <- ResourceManager(context, None, true, true)
 
-           RuntimeConfig.ErrorReporting <-
-               match debug with
-               | DebugLevel.Full | DebugLevel.Normal -> ErrorReporting.Exception
-               | DebugLevel.Minimal -> ErrorReporting.Log
-               | _ -> ErrorReporting.Disabled
+        RuntimeConfig.ErrorReporting <-
+            match debug with
+            | DebugLevel.Full | DebugLevel.Normal -> ErrorReporting.Exception
+            | DebugLevel.Minimal -> ErrorReporting.Log
+            | _ -> ErrorReporting.Disabled
 
-           Operators.using context.ResourceLock (fun _ ->
+        Operators.using context.ResourceLock (fun _ ->
 
-               try
-                   Log.startTimed "initializing OpenGL runtime"
+            try
+                Log.startTimed "initializing OpenGL runtime"
 
-                   Driver.printDriverInfo 4
+                Driver.printDriverInfo 4
 
-                   let driver = context.Driver
+                let driver = context.Driver
 
-                   // GL_CONTEXT_CORE_PROFILE_BIT 1
-                   // GL_CONTEXT_COMPATIBILITY_PROFILE_BIT 2
-                   let profileType = if driver.profileMask = 1 then " Core" elif driver.profileMask = 2 then " Compatibility" else ""
+                // GL_CONTEXT_CORE_PROFILE_BIT 1
+                // GL_CONTEXT_COMPATIBILITY_PROFILE_BIT 2
+                let profileType = if driver.profileMask = 1 then " Core" elif driver.profileMask = 2 then " Compatibility" else ""
 
-                   Log.line "vendor:   %A" driver.vendor
-                   Log.line "renderer: %A" driver.renderer
-                   Log.line "version:  OpenGL %A / GLSL %A %s" driver.version driver.glsl profileType
+                Log.line "vendor:   %A" driver.vendor
+                Log.line "renderer: %A" driver.renderer
+                Log.line "version:  OpenGL %A / GLSL %A %s" driver.version driver.glsl profileType
 
-                   let major = driver.version.Major
-                   let minor = driver.version.Minor
-                   if major < 3 || major = 3 && minor < 3 then
-                       failwith "OpenGL driver version less than 3.3"
+                let major = driver.version.Major
+                let minor = driver.version.Minor
+                if major < 3 || major = 3 && minor < 3 then
+                    failwith "OpenGL driver version less than 3.3"
 
-                   GLVM.vmInit()
+                GLVM.vmInit()
 
-                   // perform test OpenGL call
-                   if OpenGl.Pointers.ActiveTexture = 0n then
-                       failwith "Essentinal OpenGL procedure missing"
+                // perform test OpenGL call
+                if OpenGl.Pointers.ActiveTexture = 0n then
+                    failwith "Essentinal OpenGL procedure missing"
 
-                   OpenGl.Unsafe.ActiveTexture (int OpenTK.Graphics.OpenGL4.TextureUnit.Texture0)
-                   GL.Check "first GL call failed"
+                OpenGl.Unsafe.ActiveTexture (int OpenTK.Graphics.OpenGL4.TextureUnit.Texture0)
+                GL.Check "first GL call failed"
 
-               finally
-                   Log.stop()
-           )
+            finally
+                Log.stop()
+        )
 
     member x.Dispose() =
         if ctx <> null then
@@ -484,16 +484,16 @@ type Runtime(debug : DebugLevel) =
             if perLayerUniforms = null then Set.empty
             else Set.ofSeq perLayerUniforms
 
-        { new Object() with
-            member _.ToString() = sprintf "{ ColorAttachments = %A; DepthStencilAttachment = %A }" colorAttachments depthStencilAttachment
-          interface IFramebufferSignature with
-            member _.Runtime = x :> IFramebufferRuntime
-            member _.Samples = samples
-            member _.ColorAttachments = colorAttachments
-            member _.DepthStencilAttachment = depthStencilAttachment
-            member _.LayerCount = layers
-            member _.PerLayerUniforms = perLayerUniforms 
-            member _.Dispose() = () }
+        if isNull ctx then
+            new FramebufferSignature(
+                x, colorAttachments, depthStencilAttachment,
+                samples, layers, perLayerUniforms
+            ) :> IFramebufferSignature
+        else
+            ctx.CreateFramebufferSignature(
+                colorAttachments, depthStencilAttachment,
+                samples, layers, perLayerUniforms
+            ) :> IFramebufferSignature
 
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
     member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
