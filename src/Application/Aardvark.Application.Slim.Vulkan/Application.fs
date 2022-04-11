@@ -15,6 +15,15 @@ open Aardvark.Glfw
 
 
 module private Vulkan =
+    let getSupportedSamples (runtime : Runtime) =
+        let limits = runtime.Device.PhysicalDevice.Limits.Framebuffer
+
+        Set.intersectMany [
+            limits.ColorSampleCounts
+            limits.DepthSampleCounts
+            limits.StencilSampleCounts
+        ]
+
     let createSurface (runtime : Runtime) (cfg: WindowConfig) (glfw : Glfw) (win : nativeptr<WindowHandle>) =
         let device = runtime.Device
         use pSurf = fixed [| Unchecked.defaultof<_> |]
@@ -40,8 +49,16 @@ module private Vulkan =
         let surface = Aardvark.Rendering.Vulkan.KHRSurface.VkSurfaceKHR(surf.Handle)
         let surf = new Aardvark.Rendering.Vulkan.Surface(runtime.Device, surface)
 
+        let samples =
+            let supported = getSupportedSamples runtime
+
+            if supported |> Set.contains cfg.samples then
+                cfg.samples
+            else
+                Set.maxElement supported
+
         let description =
-            let graphicsMode = GraphicsMode(Col.Format.BGRA, 8, 24, 8, 2, cfg.samples, ImageTrafo.MirrorY, cfg.vsync)
+            let graphicsMode = GraphicsMode(Col.Format.BGRA, 8, 24, 8, 2, samples, ImageTrafo.MirrorY, cfg.vsync)
             device.CreateSwapchainDescription(surf, graphicsMode)
 
         { new IWindowSurface with
@@ -66,7 +83,6 @@ module private Vulkan =
 
             override this.Handle = 
                 surf :> obj
-            
         }
 
     let interop =

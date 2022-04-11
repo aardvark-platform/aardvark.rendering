@@ -203,6 +203,14 @@ module private OpenGL =
 
     let mutable private lastWindow = None
 
+    let getFramebufferSamples() =
+        GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+        GL.Check "could not bind default framebuffer"
+
+        let samples = GL.GetFramebufferParameter(FramebufferTarget.DrawFramebuffer, unbox GetFramebufferParameter.Samples)
+        GL.Check "could not retrieve framebuffer samples"
+        samples
+
     let createSurface (runtime : Runtime) (cfg: WindowConfig) (glfw : Glfw) (win : nativeptr<WindowHandle>) =
         let old = glfw.GetCurrentContext()
         
@@ -215,6 +223,8 @@ module private OpenGL =
         let info =
             new MyWindowInfo(win)
 
+        let mutable samples = cfg.samples
+
         if not (isNull ctx) then  
             glfw.MakeContextCurrent(win)
             let current = glfw.GetCurrentContext() 
@@ -226,7 +236,7 @@ module private OpenGL =
                 Log.error "[GLFW] could not make context current"
             ctx.LoadAll()          
             glfw.SwapInterval(if cfg.vsync then 1 else 0)
-
+            samples <- getFramebufferSamples()
             glfw.MakeContextCurrent(NativePtr.zero)
 
         if old <> NativePtr.zero then
@@ -236,7 +246,7 @@ module private OpenGL =
             runtime.CreateFramebufferSignature([
                 DefaultSemantic.Colors, TextureFormat.Rgba8
                 DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
-            ], cfg.samples)
+            ], samples)
         let handle = new Aardvark.Rendering.GL.ContextHandle(ctx, info)
 
         { new IWindowSurface with
@@ -246,7 +256,6 @@ module private OpenGL =
             override this.CreateSwapchain(size: V2i) = 
                 createSwapchain runtime signature handle glfw win size
             override this.Dispose() = 
-                
                 ()
         }
 

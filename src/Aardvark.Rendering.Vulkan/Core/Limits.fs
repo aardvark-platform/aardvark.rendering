@@ -473,13 +473,13 @@ type FramebufferLimits =
         /// the color sample counts that are supported for all framebuffer color attachments.
         ColorSampleCounts : Set<int>
 
-        /// the depth sample counts that are supported for all framebuffer color attachments.
+        /// the supported depth sample counts for all framebuffer depth/stencil attachments, when the format includes a depth component.
         DepthSampleCounts : Set<int>
 
-        /// the stecil sample counts that are supported for all framebuffer color attachments.
+        /// he supported stencil sample counts for all framebuffer depth/stencil attachments, when the format includes a stencil component.
         StencilSampleCounts : Set<int>
 
-        /// the supported sample counts for a framebuffer with no attachments.
+        /// the supported sample counts for a subpass which uses no attachments.
         NoAttachmentsSampleCounts : Set<int>
 
 

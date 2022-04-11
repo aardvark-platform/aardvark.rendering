@@ -672,7 +672,10 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
             
             let surface = interop.CreateSurface(runtime, cfg, glfw, win)
         
-            let w = new Window(x, win, cfg.title, cfg.vsync, surface, cfg.samples, retina)
+            let w = new Window(x, win, cfg.title, cfg.vsync, surface, surface.Signature.Samples, retina)
+
+            if cfg.samples <> w.Samples then
+                Report.Line(3, $"using {w.Samples} samples for window surface (requested {cfg.samples})")
 
             match aardvarkIcon with
             | Some icon -> w.Icon <- Some icon
