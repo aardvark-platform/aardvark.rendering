@@ -82,8 +82,36 @@ module RenderPass =
         let unused = VkAttachmentReference(VkAttachmentUnused, VkImageLayout.Undefined)
 
     let create (colorAttachments : Map<int, AttachmentSignature>) (depthStencilAttachment : Option<TextureFormat>)
-               (samples : int)  (layers : int) (perLayer : Set<string>) (device : Device) =
+               (samples : int) (layers : int) (perLayer : Set<string>) (device : Device) =
         native {
+            let limits =
+                let fbo = device.PhysicalDevice.Limits.Framebuffer
+
+                let counts = [
+                        if not colorAttachments.IsEmpty then
+                            fbo.ColorSampleCounts
+
+                        match depthStencilAttachment with
+                        | Some fmt ->
+                            if fmt.HasDepth then
+                                fbo.DepthSampleCounts
+
+                            if fmt.HasStencil then
+                                fbo.StencilSampleCounts
+
+                        | _ -> ()
+                    ]
+
+                if counts.IsEmpty then fbo.NoAttachmentsSampleCounts
+                else Set.intersectMany counts
+
+            let samples =
+                if limits.Contains samples then samples
+                else
+                    let max = Set.maxElement limits
+                    Log.warn "[Vulkan] cannot create render pass with %d samples (using %d instead)" samples max
+                    max
+
             let colors =
                 colorAttachments
                 |> Map.toArray

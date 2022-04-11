@@ -262,7 +262,7 @@ let main argv =
     //use app = new VulkanApplication(debug = false)
     use app = new OpenGlApplication(DebugLevel.Normal)
     let runtime = app.Runtime :> IRuntime
-    let samples = 2
+    let samples = 16
 
     use win = app.CreateGameWindow(samples = 1)
     let rnd = RandomSystem(0)
@@ -374,7 +374,7 @@ let main argv =
         Sg.fullScreenQuad
         |> Sg.diffuseTexture offscreenBuffer.[DefaultSemantic.PickData]
         |> Sg.shader {
-            do! Shader.resolveSingle samples
+            do! Shader.resolveSingle offscreenSignature.Samples
         }
         |> Sg.compile runtime resolvePickSignature
 
@@ -426,7 +426,7 @@ let main argv =
         Sg.fullScreenQuad
         |> Sg.diffuseTexture offscreenBuffer.[DefaultSemantic.Colors]
         |> Sg.shader {
-            do! Shader.resolve samples
+            do! Shader.resolve offscreenSignature.Samples
         }
         |> Sg.compile runtime win.FramebufferSignature
 

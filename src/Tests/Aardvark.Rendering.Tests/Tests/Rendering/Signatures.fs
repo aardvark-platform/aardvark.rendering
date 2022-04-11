@@ -43,6 +43,37 @@ module FramebufferSignature =
        
     module Cases =
 
+        let framebufferWithUnsupportedSampleCounts (runtime : IRuntime) =
+            let size = V2i(256)
+            let input = PixImage.random8ui size
+
+            use signature =
+                runtime.CreateFramebufferSignature([
+                        DefaultSemantic.Colors, TextureFormat.Rgba8
+                        DefaultSemantic.DepthStencil, TextureFormat.DepthComponent32
+                    ], samples = 64)
+
+            Expect.isGreaterThan signature.Samples 1 "not multisampled"
+            Expect.notEqual signature.Samples 65 "weird sample count"
+
+            use task =
+                Sg.fullScreenQuad
+                |> Sg.diffuseTexture' (PixTexture2d(input, false))
+                |> Sg.shader {
+                    do! DefaultSurfaces.diffuseTexture
+                }
+                |> Sg.compile runtime signature
+
+            let buffer = task |> RenderTask.renderToColor (AVal.constant size)
+            buffer.Acquire()
+
+            try
+                let output = buffer.GetValue().Download().AsPixImage<byte>()
+                PixImage.compare V2i.Zero input output
+
+            finally
+                buffer.Release()
+
         let framebufferWithHoles (runtime : IRuntime) =
             use signature =
                 runtime.CreateFramebufferSignature(Map.ofList [
@@ -259,7 +290,8 @@ module FramebufferSignature =
 
     let tests (backend : Backend) =
         [
-            "Framebuffer with holes",  Cases.framebufferWithHoles
+            "Framebuffer with unsupported sample count", Cases.framebufferWithUnsupportedSampleCounts
+            "Framebuffer with holes",                    Cases.framebufferWithHoles
 
             if backend <> Backend.Vulkan then
                 "Render subset",       Cases.renderToSubset
