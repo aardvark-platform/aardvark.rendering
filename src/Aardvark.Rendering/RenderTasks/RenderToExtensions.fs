@@ -110,9 +110,9 @@ type RenderToExtensions private() =
     static member RenderTo(this : IRenderTask, output : IAdaptiveResource<IFramebuffer>) =
         AdaptiveRenderingResult(this, output) :> IAdaptiveResource<_>
 
-    /// Renders the given task to the given framebuffer, after clearing it according to the given clear values.
+    /// Renders the given task to the given framebuffer, after clearing it according to the given adaptive clear values.
     [<Extension>]
-    static member RenderTo(this : IRenderTask, output : IAdaptiveResource<IFramebuffer>, clearValues : ClearValues) =
+    static member RenderTo(this : IRenderTask, output : IAdaptiveResource<IFramebuffer>, clearValues : aval<ClearValues>) =
         let runtime = this.Runtime.Value
         let signature = this.FramebufferSignature.Value
 
@@ -131,6 +131,11 @@ type RenderToExtensions private() =
 
         AdaptiveRenderingResult(task, output) :> IAdaptiveResource<_>
 
+    /// Renders the given task to the given framebuffer, after clearing it according to the given clear values.
+    [<Extension>]
+    static member RenderTo(this : IRenderTask, output : IAdaptiveResource<IFramebuffer>, clearValues : ClearValues) =
+        this.RenderTo(output, AVal.constant clearValues)
+
     /// Gets the attachment of the framebuffer with the given semantic.
     [<Extension>]
     static member GetOutputTexture(this : IAdaptiveResource<IFramebuffer>, semantic : Symbol) =
@@ -146,15 +151,15 @@ type RenderToExtensions private() =
     static member RenderTo(this : CubeMap<#IRenderTask>, output : IAdaptiveResource<CubeMap<IFramebuffer>>) =
         AdaptiveRenderingResultCube(this |> CubeMap.map (fun x -> x :> IRenderTask), output) :> IAdaptiveResource<_>
 
-    /// Renders the given tasks to the given framebuffers, after clearing them according to the given clear values.
+    /// Renders the given tasks to the given framebuffers, after clearing them according to the given adaptive clear values.
     [<Extension>]
-    static member RenderTo(this : CubeMap<#IRenderTask>, output : IAdaptiveResource<CubeMap<IFramebuffer>>, clearValues : CubeMap<ClearValues>) =
+    static member RenderTo(this : CubeMap<#IRenderTask>, output : IAdaptiveResource<CubeMap<IFramebuffer>>, clearValues : CubeMap<aval<ClearValues>>) =
         let task = this.Data.[0]
         let runtime = task.Runtime.Value
         let signature = task.FramebufferSignature.Value
 
         let compiled =
-            let cache = Dict<ClearValues, IRenderTask>()
+            let cache = Dict<aval<ClearValues>, IRenderTask>()
 
             let create() =
                 (clearValues, this) ||> CubeMap.map2(fun values task ->
@@ -173,9 +178,20 @@ type RenderToExtensions private() =
 
     /// Renders the given tasks to the given framebuffers, after clearing them according to the given clear values.
     [<Extension>]
-    static member RenderTo(this : CubeMap<#IRenderTask>, output : IAdaptiveResource<CubeMap<IFramebuffer>>, clearValues : ClearValues) =
+    static member RenderTo(this : CubeMap<#IRenderTask>, output : IAdaptiveResource<CubeMap<IFramebuffer>>, clearValues : CubeMap<ClearValues>) =
+        let clear = clearValues |> CubeMap.map AVal.constant
+        this.RenderTo(output, clear)
+
+    /// Renders the given tasks to the given framebuffers, after clearing them according to the given adaptive clear values.
+    [<Extension>]
+    static member RenderTo(this : CubeMap<#IRenderTask>, output : IAdaptiveResource<CubeMap<IFramebuffer>>, clearValues : aval<ClearValues>) =
         let clear = CubeMap.single this.Levels clearValues
         this.RenderTo(output, clear)
+
+    /// Renders the given tasks to the given framebuffers, after clearing them according to the given clear values.
+    [<Extension>]
+    static member RenderTo(this : CubeMap<#IRenderTask>, output : IAdaptiveResource<CubeMap<IFramebuffer>>, clearValues : ClearValues) =
+        this.RenderTo(output, AVal.constant clearValues)
 
     /// Gets the cube attachment of the framebuffer with the given semantic.
     [<Extension>]
