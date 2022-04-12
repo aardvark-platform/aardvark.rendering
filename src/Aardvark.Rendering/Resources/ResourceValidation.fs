@@ -80,6 +80,8 @@ module ResourceValidation =
             | TextureDimension.TextureCube -> size.X >= 0 && size.X = size.Y && size.Z = 1
             | _ -> true
 
+        let private validSampleCounts = Set.ofList [ 1; 2; 4; 8; 16; 32; 64 ]
+
         module Utils =
             let failf (dimension : TextureDimension) format =
                 let name =
@@ -219,6 +221,8 @@ module ResourceValidation =
             if samples > 1 then
                 if levels > 1 then fail "multisampled textures cannot have mip maps"
                 if dimension <> TextureDimension.Texture2D then fail "only 2D textures can be multisampled"
+                if not <| validSampleCounts.Contains samples then
+                    Utils.failf dimension "samples must be one of %A but got %d" validSampleCounts samples
 
         /// Raises an ArgumentException if the combination of parameters is invalid.
         let validateCreationParamsArray (dimension : TextureDimension) (size : V3i) (levels : int) (samples : int) (count : int) =

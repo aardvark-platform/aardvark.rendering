@@ -469,6 +469,17 @@ module TextureCreationExtensions =
                     if samples = 1 then TextureTarget.Texture2D
                     else TextureTarget.Texture2DMultisample
 
+                let samples =
+                    if samples > 1 then
+                        let counts = x.GetFormatSamples(unbox target, format)
+                        if counts.Contains samples then samples
+                        else
+                            let max = Set.maxElement counts
+                            Log.warn "[GL] cannot create %A texture with %d samples (using %d instead)" format samples max
+                            max
+                    else
+                        1
+
                 GL.BindTexture(target, tex.Handle)
                 GL.Check "could not bind texture"
 
@@ -576,6 +587,17 @@ module TextureCreationExtensions =
                 let target =
                     if samples = 1 then TextureTarget.Texture2DArray
                     else TextureTarget.Texture2DMultisampleArray
+
+                let samples =
+                    if samples > 1 then
+                        let counts = x.GetFormatSamples(unbox target, format)
+                        if counts.Contains samples then samples
+                        else
+                            let max = Set.maxElement counts
+                            Log.warn "[GL] cannot create %A texture with %d samples (using %d instead)" format samples max
+                            max
+                    else
+                        1
 
                 GL.BindTexture(target, tex.Handle)
                 GL.Check "could not bind texture"

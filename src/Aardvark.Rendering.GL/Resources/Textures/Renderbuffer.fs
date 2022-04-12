@@ -45,21 +45,31 @@ module RenderbufferExtensions =
             Interlocked.Add(&ctx.MemoryUsage.RenderBufferMemory,newSize - oldSize) |> ignore
 
 
-    let private updateRenderbuffer (handle : int) (size : V2i) (format : TextureFormat) (samples : int) =
-        let format = unbox<RenderbufferStorage> format
-
+    let private updateRenderbuffer (cxt : Context) (handle : int) (size : V2i) (format : TextureFormat) (samples : int) =
         GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, handle)
         GL.Check "could not bind renderbuffer"
 
-        match samples with
-            | 1 ->
-                GL.RenderbufferStorage(RenderbufferTarget.Renderbuffer, format, size.X, size.Y)
-            | sam ->
-                GL.RenderbufferStorageMultisample(RenderbufferTarget.Renderbuffer, sam, format, size.X, size.Y)
+        let samples =
+            if samples > 1 then
+                let counts = cxt.GetFormatSamples(ImageTarget.Renderbuffer, format)
+                if counts.Contains samples then samples
+                else
+                    let max = Set.maxElement counts
+                    Log.warn "[GL] cannot create %A render buffer with %d samples (using %d instead)" format samples max
+                    max
+            else
+                1
+
+        if samples > 1 then
+            GL.RenderbufferStorageMultisample(RenderbufferTarget.Renderbuffer, samples, unbox format, size.X, size.Y)
+        else
+            GL.RenderbufferStorage(RenderbufferTarget.Renderbuffer, unbox format, size.X, size.Y)
         GL.Check "could not set renderbuffer storage"
 
         GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0)
         GL.Check "could not unbind renderbuffer"
+
+        samples
 
     type Context with
         member x.CreateRenderbuffer (size : V2i, format : TextureFormat, ?samples : int) =
@@ -70,7 +80,7 @@ module RenderbufferExtensions =
                 let handle = GL.GenRenderbuffer()
                 GL.Check "could not create renderbuffer"
 
-                updateRenderbuffer handle size format samples
+                let samples = updateRenderbuffer x handle size format samples
 
                 let sizeInBytes = (int64 size.X * int64 size.Y * int64 format.PixelSizeInBits) / 8L
                 ResourceCounts.addRenderbuffer x sizeInBytes
@@ -82,19 +92,7 @@ module RenderbufferExtensions =
 
             if r.Size <> size || r.Format <> format || r.Samples <> samples then
                 using x.ResourceLock (fun _ ->
-                    GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, r.Handle)
-                    GL.Check "could not bind renderbuffer"
-                    let storageFormat = unbox<RenderbufferStorage> format
-                    match samples with
-                        | 1 ->
-                            GL.RenderbufferStorage(RenderbufferTarget.Renderbuffer, storageFormat, size.X, size.Y)
-                        | sam ->
-                            GL.RenderbufferStorageMultisample(RenderbufferTarget.Renderbuffer, sam, storageFormat, size.X, size.Y)
-                    GL.Check "could not set renderbuffer storage"
-
-                    GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0)
-                    GL.Check "could not unbind renderbuffer"
-
+                    let samples = updateRenderbuffer x r.Handle size format samples
                     let sizeInBytes = (int64 size.X * int64 size.Y * int64 format.PixelSizeInBits) / 8L
 
                     ResourceCounts.resizeRenderbuffer x r.SizeInBytes sizeInBytes

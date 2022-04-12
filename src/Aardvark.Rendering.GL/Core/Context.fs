@@ -215,6 +215,8 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
     let mutable unpackAlignment = None
 
     let mutable shaderCachePath : Option<string> = None
+
+    let formatSampleCounts = FastConcurrentDict()
     
     member x.CreateContext() = createContext()
 
@@ -356,6 +358,23 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
                 // no release: put resource context back in bag and reset current to None
                 new ResourceLockDisposable(ValueSome handle, bag, bagCount, currentHandle)
 
+
+    /// <summary>
+    /// Returns the number of samples supported by the given format for the given target.
+    /// </summary>
+    member internal x.GetFormatSamples(target : ImageTarget, format : TextureFormat) =
+        if GL.ARB_internalformat_query then
+            formatSampleCounts.GetOrCreate((target, format), fun _ ->
+                let count = GL.Dispatch.GetInternalformat(target, unbox format, InternalFormatParameter.NumSampleCounts)
+                GL.Check "could not query number of sample counts"
+
+                let buffer = GL.Dispatch.GetInternalformat(target, unbox format, InternalFormatParameter.Samples, count)
+                GL.Check "could not query sample counts"
+
+                Set.ofArray buffer
+            )
+        else
+            Set.ofList [1; 2; 4; 8; 16; 32; 64]
 
     /// <summary>
     /// releases all resources created by the context
