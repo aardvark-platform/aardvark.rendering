@@ -399,3 +399,33 @@ module PickingSemantics =
             let pickable = AVal.map2 Pickable.transform scope.ModelTrafo pickable.Pickable
             let o = PickObject(scope, pickable)
             ASet.single o
+
+        member x.PickObjects(node : Sg.RuntimeCommandNode, scope : Ag.Scope) : aset<PickObject> =
+            let rec processCommand (cmd : RenderCommand) =
+                aset {
+                    match cmd with
+                    | RenderCommand.REmpty | RenderCommand.RClear _ -> ()
+                    | RenderCommand.RUnorderedScenes set ->
+                        for sg in set do
+                            yield! sg.PickObjects(scope)
+
+                    | RenderCommand.ROrdered cmds ->
+                        for cmd in cmds do
+                            yield! processCommand cmd
+
+                    | RenderCommand.ROrderedConstant cmds ->
+                        for cmd in cmds do
+                            yield! processCommand cmd
+
+                    | RenderCommand.RIfThenElse (condition, ifTrue, ifFalse) ->
+                        let! c = condition
+                        yield! processCommand (if c then ifTrue else ifFalse)
+
+                    | RenderCommand.RGeometries (config, geometries) ->
+                        ()
+
+                    | RenderCommand.RLodTree (config, geometries) ->
+                        ()
+                }
+
+            processCommand node.Command

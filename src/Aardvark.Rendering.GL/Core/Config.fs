@@ -83,14 +83,19 @@ module RuntimeConfig =
     /// penalty as well as incompatibility on some drivers.
     let mutable SyncUploadsAndFrames = false
 
+    /// <summary>
+    /// Determines if GPU sparse buffers should be avoided. These are known to be
+    /// broken on non-Windows platforms with some NVIDIA hardware, even though the
+    /// required extension is present.
+    /// </summary>
     let mutable SupressSparseBuffers = false
 
     let mutable PrintShaderCode = true
 
     /// <summary>
-    /// Use the "new" RenderTask OpenGL RenderTask supporting RuntimeCommands (5.1.0)
+    /// Use the "new" RenderTask OpenGL RenderTask supporting RuntimeCommands.
     /// </summary>
-    let mutable UseNewRenderTask = false
+    let mutable UseNewRenderTask = true
 
     /// <summary>
     /// Use pixel buffer objects for texture uploads and downloads.
