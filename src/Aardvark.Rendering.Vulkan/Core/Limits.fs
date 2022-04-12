@@ -657,19 +657,6 @@ module DeviceLimits =
     open KHRRayTracingPipeline
     open KHRAccelerationStructure
 
-    [<AutoOpen>]
-    module private Helpers =
-        let ofVkSampleCountFlags (flags : VkSampleCountFlags) =
-            Set.ofList [
-                if flags.HasFlag VkSampleCountFlags.D1Bit then yield 1
-                if flags.HasFlag VkSampleCountFlags.D2Bit then yield 2
-                if flags.HasFlag VkSampleCountFlags.D4Bit then yield 4
-                if flags.HasFlag VkSampleCountFlags.D8Bit then yield 8
-                if flags.HasFlag VkSampleCountFlags.D16Bit then yield 16
-                if flags.HasFlag VkSampleCountFlags.D32Bit then yield 32
-                if flags.HasFlag VkSampleCountFlags.D64Bit then yield 64
-            ]
-
     let create (maxAllocationSize : Mem)
                (raytracingProperties : Option<VkPhysicalDeviceRayTracingPipelinePropertiesKHR * VkPhysicalDeviceAccelerationStructurePropertiesKHR>)
                (limits : VkPhysicalDeviceLimits) =
@@ -685,11 +672,11 @@ module DeviceLimits =
 
             SampledImage =
                 {
-                    ColorSampleCounts       = ofVkSampleCountFlags limits.sampledImageColorSampleCounts
-                    IntegerSampleCounts     = ofVkSampleCountFlags limits.sampledImageIntegerSampleCounts
-                    DepthSampleCounts       = ofVkSampleCountFlags limits.sampledImageDepthSampleCounts
-                    StencilSampleCounts     = ofVkSampleCountFlags limits.sampledImageStencilSampleCounts
-                    StorageSampleCounts     = ofVkSampleCountFlags limits.storageImageSampleCounts
+                    ColorSampleCounts       = VkSampleCountFlags.toSet limits.sampledImageColorSampleCounts
+                    IntegerSampleCounts     = VkSampleCountFlags.toSet limits.sampledImageIntegerSampleCounts
+                    DepthSampleCounts       = VkSampleCountFlags.toSet limits.sampledImageDepthSampleCounts
+                    StencilSampleCounts     = VkSampleCountFlags.toSet limits.sampledImageStencilSampleCounts
+                    StorageSampleCounts     = VkSampleCountFlags.toSet limits.storageImageSampleCounts
                 }
 
             Sampler =
@@ -837,10 +824,10 @@ module DeviceLimits =
                     MaxSize                     = V2i(int limits.maxFramebufferWidth, int limits.maxFramebufferHeight)
                     MaxLayers                   = int limits.maxFramebufferLayers
                     MaxColorAttachments         = int limits.maxColorAttachments
-                    ColorSampleCounts           = ofVkSampleCountFlags limits.framebufferColorSampleCounts
-                    DepthSampleCounts           = ofVkSampleCountFlags limits.framebufferDepthSampleCounts
-                    StencilSampleCounts         = ofVkSampleCountFlags limits.framebufferStencilSampleCounts
-                    NoAttachmentsSampleCounts   = ofVkSampleCountFlags limits.framebufferNoAttachmentsSampleCounts
+                    ColorSampleCounts           = VkSampleCountFlags.toSet limits.framebufferColorSampleCounts
+                    DepthSampleCounts           = VkSampleCountFlags.toSet limits.framebufferDepthSampleCounts
+                    StencilSampleCounts         = VkSampleCountFlags.toSet limits.framebufferStencilSampleCounts
+                    NoAttachmentsSampleCounts   = VkSampleCountFlags.toSet limits.framebufferNoAttachmentsSampleCounts
                 }
 
             Rasterizer =

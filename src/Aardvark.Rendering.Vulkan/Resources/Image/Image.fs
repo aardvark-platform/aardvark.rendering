@@ -902,8 +902,8 @@ module Image =
 
         if features = VkFormatFeatureFlags.None then
             match fmt.NextBetter with
-                | Some fmt -> alloc size mipMapLevels count samples dim fmt usage device
-                | None -> failf "bad image format %A" fmt
+            | Some fmt -> alloc size mipMapLevels count samples dim fmt usage device
+            | None -> failf "bad image format %A" fmt
         else
             let mayHavePeers =
                 device.IsDeviceGroup &&
@@ -933,13 +933,27 @@ module Image =
                 | TextureDimension.TextureCube -> V3i(size.X, size.X, 1)
                 | _ -> size
 
+            let typ =
+                VkImageType.ofTextureDimension dim
+
             let usage =
                 usage |> VkImageUsageFlags.filterSupported features
+
+            let properties =
+                device.PhysicalDevice.GetImageFormatProperties(fmt, typ, VkImageTiling.Optimal, usage, flags)
+
+            let samples =
+                let counts = VkSampleCountFlags.toSet properties.sampleCounts
+                if counts.Contains samples then samples
+                else
+                    let max = Set.maxElement counts
+                    Log.warn "[Vulkan] cannot create %A image with %d samples (using %d instead)" fmt samples max
+                    max
 
             let info =
                 VkImageCreateInfo(
                     flags,
-                    VkImageType.ofTextureDimension dim,
+                    typ,
                     fmt,
                     VkExtent3D(uint32 size.X, uint32 size.Y, uint32 size.Z),
                     uint32 mipMapLevels,

@@ -295,3 +295,18 @@ module VkImageUsageFlags =
     let filterSupported (features : VkFormatFeatureFlags) (usage : VkImageUsageFlags) =
         let unsupported = getUnsupported features
         usage &&& ~~~unsupported
+
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module internal VkSampleCountFlags =
+
+    let toSet (flags : VkSampleCountFlags) =
+        Set.ofList [
+            if flags.HasFlag VkSampleCountFlags.D1Bit then yield 1
+            if flags.HasFlag VkSampleCountFlags.D2Bit then yield 2
+            if flags.HasFlag VkSampleCountFlags.D4Bit then yield 4
+            if flags.HasFlag VkSampleCountFlags.D8Bit then yield 8
+            if flags.HasFlag VkSampleCountFlags.D16Bit then yield 16
+            if flags.HasFlag VkSampleCountFlags.D32Bit then yield 32
+            if flags.HasFlag VkSampleCountFlags.D64Bit then yield 64
+        ]

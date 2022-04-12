@@ -510,6 +510,9 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
                 yield fmt, props
         ]
 
+    let imageFormatProperties =
+        FastConcurrentDict()
+
     let hostMemory = memoryTypes |> Array.maxBy MemoryInfo.hostScore
     let deviceMemory = memoryTypes |> Array.maxBy MemoryInfo.deviceScore
     
@@ -518,8 +521,19 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
 
     member x.GetFormatFeatures(tiling : VkImageTiling, fmt : VkFormat) =
         match tiling with
-            | VkImageTiling.Linear -> formatProperties.[fmt].linearTilingFeatures
-            | _ -> formatProperties.[fmt].optimalTilingFeatures
+        | VkImageTiling.Linear -> formatProperties.[fmt].linearTilingFeatures
+        | _ -> formatProperties.[fmt].optimalTilingFeatures
+
+    member x.GetImageFormatProperties(format : VkFormat, typ : VkImageType, tiling : VkImageTiling, usage : VkImageUsageFlags, flags : VkImageCreateFlags) =
+        let key = (format, typ, tiling, usage, flags)
+        imageFormatProperties.GetOrCreate(key, fun _ ->
+            temporary<VkImageFormatProperties,_> (fun pProps ->
+                VkRaw.vkGetPhysicalDeviceImageFormatProperties(x.Handle, format, typ, tiling, usage, flags, pProps)
+                    |> check "could not query image format properties"
+
+                NativePtr.read pProps
+            )
+        )
 
     member x.GetBufferFormatFeatures(fmt : VkFormat) =
         formatProperties.[fmt].bufferFeatures
