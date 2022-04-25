@@ -310,57 +310,25 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         
     member x.CreateBuffer(data : aval<IBuffer>) =
         match data with
-            | :? IAdaptiveBuffer as data ->
-                bufferCache.GetOrCreate(
-                    [data :> obj],
-                    fun () ->
-                        let mutable r = Unchecked.defaultof<_>
-                        { new Resource<Buffer, int>(ResourceKind.Buffer) with
-                            
-                            member x.View b =
-                                b.Handle
+        | :? SingleValueBuffer as v ->
+            bufferCache.GetOrCreate(AVal.constant 0, fun () -> {
+                create = fun b      -> new Buffer(ctx, 0n, 0)
+                update = fun h b    -> h
+                delete = fun h      -> ()
+                info =   fun h      -> ResourceInfo.Zero
+                view =   fun h      -> h.Handle
+                kind = ResourceKind.Buffer
+            })
 
-                            member x.GetInfo b = 
-                                b.SizeInBytes |> Mem |> ResourceInfo
-
-                            member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<Buffer>) =
-                                match old with
-                                    | None ->
-                                        r <- data.GetReader()
-                                        let (nb, _) = r.GetDirtyRanges(token)
-                                        ctx.CreateBuffer(nb)
-                                    | Some old ->
-                                        let (nb, ranges) = r.GetDirtyRanges(token)
-                                        nb.Use (fun ptr ->
-                                            ctx.UploadRanges(old, ptr, ranges)
-                                        )
-                                        old
-
-                            member x.Destroy(b : Buffer) =
-                                ctx.Delete b
-                                r.Dispose()
-                        }
-                )
-
-            | :? SingleValueBuffer as v ->
-                bufferCache.GetOrCreate(AVal.constant 0, fun () -> {
-                    create = fun b      -> new Buffer(ctx, 0n, 0)
-                    update = fun h b    -> h
-                    delete = fun h      -> ()
-                    info =   fun h      -> ResourceInfo.Zero
-                    view =   fun h      -> h.Handle
-                    kind = ResourceKind.Buffer
-                })
-
-            | _ ->
-                bufferCache.GetOrCreate<IBuffer>(data, fun () -> {
-                    create = fun b      -> bufferManager.Create b
-                    update = fun h b    -> bufferManager.Update(h, b)
-                    delete = fun h      -> bufferManager.Delete h
-                    info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
-                    view =   fun h      -> h.Handle
-                    kind = ResourceKind.Buffer
-                })
+        | _ ->
+            bufferCache.GetOrCreate<IBuffer>(data, fun () -> {
+                create = fun b      -> bufferManager.Create b
+                update = fun h b    -> bufferManager.Update(h, b)
+                delete = fun h      -> bufferManager.Delete h
+                info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
+                view =   fun h      -> h.Handle
+                kind = ResourceKind.Buffer
+            })
 
     member x.CreateTexture(data : aval<ITexture>) : IResource<Texture, V2i> =
         textureCache.GetOrCreate<ITexture>(data, fun () -> {

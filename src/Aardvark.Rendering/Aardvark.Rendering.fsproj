@@ -43,7 +43,6 @@
     <Compile Include="Resources\Buffers\SingleValueBuffer.fs" />
     <Compile Include="Resources\Buffers\NativeMemoryBuffer.fs" />
     <Compile Include="Resources\Buffers\IndirectBuffer.fs" />
-    <Compile Include="Resources\Buffers\ChangeableBuffer.fs" />
     <Compile Include="Resources\Buffers\BufferView.fs" />
     <Compile Include="Resources\Textures\Formats.fs" />
     <Compile Include="Resources\Textures\Compression.fs" />
@@ -65,6 +64,7 @@
     <Compile Include="Resources\Framebuffer\OutputDescription.fs" />
     <Compile Include="Resources\Raytracing\AccelerationStructure.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveResource.fs" />
+    <Compile Include="Resources\Adaptive\AdaptiveBuffer.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveTextures.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveRenderbuffers.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveFramebuffers.fs" />

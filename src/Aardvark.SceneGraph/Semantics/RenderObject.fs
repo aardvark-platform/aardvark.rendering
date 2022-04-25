@@ -177,13 +177,13 @@ module RenderObjectSemantics =
         member x.RenderObjects(r : Sg.GeometrySet, scope : Ag.Scope) : aset<IRenderObject> =
             let rj = RenderObject.ofScope scope
 
-            let packer = new GeometrySetUtilities.GeometryPacker(r.AttributeTypes)
+            let packer = new GeometrySetUtilities.GeometryPacker(r.Runtime, r.AttributeTypes)
             let vertexAttributes =
                 { new IAttributeProvider with
                     member x.TryGetAttribute(sem) =
                         match Map.tryFind sem r.AttributeTypes with
                             | Some t ->
-                                let b = packer.GetBuffer sem
+                                let b = packer.GetBuffer sem |> AdaptiveResource.cast<IBuffer>
                                 BufferView(b, t) |> Some
                             | None -> None
 

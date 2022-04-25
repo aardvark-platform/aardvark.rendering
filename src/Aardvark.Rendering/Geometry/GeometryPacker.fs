@@ -9,12 +9,12 @@ open FSharp.Data.Adaptive
 
 module GeometrySetUtilities =
 
-    type GeometryPacker(attributeTypes : Map<Symbol, Type>) =
+    type GeometryPacker(runtime : IBufferRuntime, attributeTypes : Map<Symbol, Type>) =
         inherit AVal.AbstractVal<RangeSet>()
 
         let manager = MemoryManager.createNop()
         let locations = ConcurrentDictionary<IndexedGeometry, managedptr>()
-        let mutable buffers = ConcurrentDictionary<Symbol, ChangeableBuffer>()
+        let mutable buffers = ConcurrentDictionary<Symbol, IAdaptiveBuffer>()
         let elementSizes = attributeTypes |> Map.map (fun _ v -> nativeint(Marshal.SizeOf v)) |> Map.toSeq |> Dictionary.ofSeq
         let mutable ranges = RangeSet.empty
 
@@ -22,16 +22,15 @@ module GeometrySetUtilities =
         let getElementSize (sem : Symbol) =
             elementSizes.[sem]
 
-        let writeAttribute (sem : Symbol) (region : managedptr) (buffer : ChangeableBuffer) (source : IndexedGeometry) =
+        let writeAttribute (sem : Symbol) (region : managedptr) (buffer : IAdaptiveBuffer) (source : IndexedGeometry) =
             match source.IndexedAttributes.TryGetValue(sem) with
                 | (true, arr) ->
                     let elementSize = getElementSize sem
-                    let cap = elementSize * (nativeint manager.Capacity)
+                    let cap = elementSize * manager.Capacity
 
-                    if buffer.Capacity <> cap then
-                        buffer.Resize(cap)
+                    buffer.Resize(cap)
 
-                    buffer.Write(int (region.Offset * elementSize), arr, int region.Size * int elementSize)
+                    buffer.Write(arr, region.Offset * elementSize, region.Size * elementSize)
                 | _ ->
                     // TODO: write NullBuffer content or 0 here
                     ()
@@ -41,9 +40,10 @@ module GeometrySetUtilities =
             let result =
                 buffers.GetOrAdd(sem, fun sem ->
                     isNew <- true
-                    let elementSize = getElementSize sem |> int
-                    let b = ChangeableBuffer(elementSize * int manager.Capacity)
-                    b
+                    let elementSize = getElementSize sem
+                    let b = AdaptiveBufferImplementation.MappedAdaptiveBuffer(runtime, elementSize * manager.Capacity)
+                    b.Acquire()
+                    b :> IAdaptiveBuffer
                 )
 
             if isNew then
@@ -108,12 +108,12 @@ module GeometrySetUtilities =
                     false
 
         member x.GetBuffer (sem : Symbol) =
-            getBuffer sem  :> aval<IBuffer>
+            getBuffer sem  :> aval<IBackendBuffer>
 
         member x.Dispose() =
             let old = Interlocked.Exchange(&buffers, ConcurrentDictionary())
             if old.Count > 0 then
-                for q in old.Values do q.Dispose()
+                for q in old.Values do q.Release()
                 old.Clear()
 
         override x.Compute(token) =

@@ -7,21 +7,12 @@ open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Vulkan.KHRAccelerationStructure
 
 open FSharp.Data.Adaptive
-open OptimizedClosures
 
-[<AutoOpen>]
-module private AdaptiveInstanceBufferInternals =
+module internal InstanceBuffer =
 
-    module Offsets =
-        let Index = nativeint sizeof<VkTransformMatrixKHR>
-        let Mask = Index + nativeint sizeof<uint24>
-        let HitGroup = Mask + nativeint sizeof<uint8>
-        let Flags = HitGroup + nativeint sizeof<uint24>
-        let Geometry = Flags + nativeint sizeof<uint8>
+    [<AutoOpen>]
+    module private Helpers =
 
-        let Stride = sizeof<VkAccelerationStructureInstanceKHR>
-
-    module Writers =
         let private getFlags (cullMode : CullMode) (geometryMode : GeometryMode) =
             let c =
                 cullMode |> (function
@@ -42,21 +33,9 @@ module private AdaptiveInstanceBufferInternals =
                     | GeometryMode.Transparent -> VkGeometryInstanceFlagsKHR.ForceNoOpaqueBit
                 )
 
-            c ||| g
+            uint8 (c ||| g)
 
-        let writeTransform (token : AdaptiveToken) (dst : nativeint) (inst : ITraceInstance) =
-            let trafo = inst.Transform.GetValue(token)
-            M34f trafo.Forward |> NativeInt.write dst
-
-        let writeIndex (token : AdaptiveToken) (dst : nativeint) (inst : ITraceInstance) =
-            let index = inst.CustomIndex.GetValue(token)
-            uint24 index |> NativeInt.write (dst + Offsets.Index)
-
-        let writeMask (token : AdaptiveToken) (dst : nativeint) (inst : ITraceInstance) =
-            let mask = inst.Mask.GetValue(token)
-            uint8 mask |> NativeInt.write (dst + Offsets.Mask)
-
-        let writeHitGroup (sbt : aval<ShaderBindingTable>) (token : AdaptiveToken) (dst : nativeint) (inst : ITraceInstance) =
+        let private getHitGroup (sbt : aval<ShaderBindingTable>) (token : AdaptiveToken) (inst : ITraceInstance) =
             let sbt = sbt.GetValue(token)
             let cfg = inst.HitGroups.GetValue(token)
             let accel = inst.Geometry.GetValue(token)
@@ -64,49 +43,33 @@ module private AdaptiveInstanceBufferInternals =
             if accel.GeometryCount > cfg.Length then
                 failwithf "[Raytracing] Object has %d geometries but only %d hit groups" accel.GeometryCount cfg.Length
 
-            let hitg = sbt.HitGroupTable.Indices.[cfg]
-            uint24 hitg |> NativeInt.write (dst + Offsets.HitGroup)
+            uint24 sbt.HitGroupTable.Indices.[cfg]
 
-        let writeFlags (token : AdaptiveToken) (dst : nativeint) (inst : ITraceInstance) =
+        let evaluate (sbt : aval<ShaderBindingTable>) (token : AdaptiveToken) (inst : ITraceInstance) =
+            let trafo = inst.Transform.GetValue(token)
+            let index = inst.CustomIndex.GetValue(token)
+            let mask = inst.Mask.GetValue(token)
             let cull = inst.Culling.GetValue(token)
             let geom = inst.GeometryMode.GetValue(token)
-            let flags = getFlags cull geom
-            uint8 flags |> NativeInt.write (dst + Offsets.Flags)
-
-        let writeGeometry (token : AdaptiveToken) (dst : nativeint) (inst : ITraceInstance) =
             let accel = inst.Geometry.GetValue(token) |> unbox<AccelerationStructure>
-            accel.DeviceAddress |> NativeInt.write (dst + Offsets.Geometry)
 
+            VkAccelerationStructureInstanceKHR(
+                VkTransformMatrixKHR(M34f trafo.Forward),
+                uint24 index,
+                uint8 mask,
+                getHitGroup sbt token inst,
+                getFlags cull geom,
+                accel.DeviceAddress
+            )
 
-type AdaptiveInstanceBuffer(instances : aset<ITraceInstance>, sbt : aval<ShaderBindingTable>) =
-    inherit AdaptiveCompactBuffer<ITraceInstance>(instances, Offsets.Stride)
+        let acquire (inst : ITraceInstance) =
+            inst.Geometry.Acquire()
 
-    let writers =
-        [| Writers.writeTransform
-           Writers.writeIndex
-           Writers.writeMask
-           Writers.writeHitGroup sbt
-           Writers.writeFlags
-           Writers.writeGeometry |]
-        |> Array.map FSharpFunc<_,_,_,_>.Adapt
+        let release (inst : ITraceInstance) =
+            inst.Geometry.Release()
 
-    let count = ASet.count instances
-
-    member x.Count = count
-
-    override x.AcquireValue(inst : ITraceInstance) =
-        inst.Geometry.Acquire()
-
-    override x.ReleaseValue(inst : ITraceInstance) =
-        inst.Geometry.Release()
-
-    override x.WriteValue =
-        writers
-
-    override x.Create() =
-        sbt.Acquire()
-        base.Create()
-
-    override x.Destroy() =
-        base.Destroy()
-        sbt.Release()
+    let create (runtime : IRuntime) (sbt : aval<ShaderBindingTable>) (instances : aset<ITraceInstance>) =
+        runtime.CreateCompactBuffer(
+            evaluate sbt, acquire, release, instances,
+            BufferUsage.Write ||| BufferUsage.AccelerationStructure
+        )

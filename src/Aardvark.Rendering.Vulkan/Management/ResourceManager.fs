@@ -476,60 +476,6 @@ module Resources =
             }
         )
 
-    type AdaptiveBufferResource(owner : IResourceCache, key : list<obj>, device : Device, usage : VkBufferUsageFlags, input : IAdaptiveBuffer) =
-        inherit AbstractResourceLocation<Buffer>(owner, key)
-
-        let mutable handle : Option<Buffer> = None
-        let mutable reader : IAdaptiveBufferReader = Unchecked.defaultof<_>
-        let mutable version = 0
-
-        let recreate (nb : INativeBuffer) =
-            handle |> Option.iter Disposable.dispose
-            let buffer = device.HostMemory |> Buffer.ofBufferWithMemory usage nb
-            handle <- Some buffer
-            buffer
-
-        let update token =
-            match handle with
-            | None ->
-                reader <- input.GetReader()
-                let (nb, _) = reader.GetDirtyRanges(token)
-                recreate nb
-
-            | Some old ->
-                let (nb, ranges) = reader.GetDirtyRanges(token)
-
-                if old.Size < int64 nb.SizeInBytes then
-                    recreate nb
-                else
-                    inc &version
-                    nb.Use (fun src -> old.UploadRanges(src, ranges))
-                    old
-
-        override x.Create() =
-            input.Acquire()
-
-        override x.Destroy() =
-            input.Outputs.Remove x |> ignore
-            match handle with
-            | Some h ->
-                h.Dispose()
-                reader.Dispose()
-                reader <- Unchecked.defaultof<_>
-                handle <- None
-            | None ->
-                ()
-            input.Release()
-
-        override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
-            if x.OutOfDate then
-                let handle = update token
-                { handle = handle; version = version }
-            else
-                match handle with
-                | Some h -> { handle = h; version = version }
-                | None -> failwith "[Resource] inconsistent state"
-
     type IndirectBufferResource(owner : IResourceCache, key : list<obj>, device : Device, indexed : bool, input : aval<IndirectBuffer>) =
         inherit ImmutableResourceLocation<IndirectBuffer, VkIndirectBuffer>(
             owner, key,
@@ -1599,11 +1545,12 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
     member private x.CreateBuffer(input : aval<IBuffer>, usage : VkBufferUsageFlags) =
         bufferCache.GetOrCreate([input :> obj], fun cache key ->
-            match input with
-            | :? IAdaptiveBuffer as b ->
-                new AdaptiveBufferResource(cache, key, device, usage, b) :> IResourceLocation<Buffer>
-            | _ ->
-                new BufferResource(cache, key, device, usage, input) :> IResourceLocation<Buffer>
+            new BufferResource(cache, key, device, usage, input |> AdaptiveResource.cast) :> IResourceLocation<Buffer>
+        )
+
+    member private x.CreateBuffer(input : aval<IBackendBuffer>) =
+        bufferCache.GetOrCreate([input :> obj], fun cache key ->
+            new BufferResource(cache, key, device, VkBufferUsageFlags.None, input |> AdaptiveResource.cast) :> IResourceLocation<Buffer>
         )
 
     member x.CreateBuffer(input : aval<IBuffer>) =
@@ -1883,17 +1830,12 @@ type ResourceManager(user : IResourceUser, device : Device) =
                                          sbt : IResourceLocation<Raytracing.ShaderBindingTable>,
                                          usage : Raytracing.AccelerationStructureUsage) =
 
-        let bufferUsage =
-            VkBufferUsageFlags.TransferDstBit |||
-            VkBufferUsageFlags.ShaderDeviceAddressBitKhr |||
-            VkBufferUsageFlags.AccelerationStructureBuildInputReadOnlyBitKhr
-
         accelerationStructureCache.GetOrCreate(
             [ instances :> obj; sbt :> obj; usage :> obj ],
             fun cache key ->
-                let adaptiveBuffer = AdaptiveInstanceBuffer(instances, sbt)
-                let buffer = x.CreateBuffer(adaptiveBuffer, bufferUsage)
-                let count = adaptiveBuffer.Count
+                let instanceBuffer = InstanceBuffer.create x.Device.Runtime sbt instances
+                let buffer = x.CreateBuffer(instanceBuffer)
+                let count = ASet.count instances
 
                 new AccelerationStructureResource(cache, key, device, buffer, count, usage)
         )

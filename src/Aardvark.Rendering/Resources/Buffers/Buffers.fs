@@ -29,15 +29,6 @@ type INativeBuffer =
     abstract member Pin : unit -> nativeint
     abstract member Unpin : unit -> unit
 
-type IAdaptiveBuffer =
-    inherit IAdaptiveValue<IBuffer>
-    abstract member GetReader : unit -> IAdaptiveBufferReader
-
-and IAdaptiveBufferReader =
-    inherit IAdaptiveObject
-    inherit IDisposable
-    abstract member GetDirtyRanges : AdaptiveToken -> INativeBuffer * RangeSet
-
 type IBackendBuffer =
     inherit IBuffer // ISSUE: this allows a backend buffer to be used everywhere even if it is restricted to a specific type -> HOWEVER buffers can have multiple mixed usage flags -> interface restriction not possible
     inherit IDisposable
