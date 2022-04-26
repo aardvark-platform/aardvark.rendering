@@ -848,47 +848,51 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
         let s = getResizeEvent()
         cval s.FramebufferSize
 
-    let resizeCb =
+    let setCurrentSize s =
+        if Vec.allGreater s 0 && currentSize.Value <> s then
+            transact (fun () -> currentSize.Value <- s)
+
+    let _resizeCb =
         glfw.SetFramebufferSizeCallback(win, GlfwCallbacks.FramebufferSizeCallback(fun _ w h ->
             let evt = getResizeEvent()
-            transact (fun () -> currentSize.Value <- evt.FramebufferSize)
+            setCurrentSize evt.FramebufferSize
             resize.Trigger evt     
             requiresRedraw <- true
             this.Redraw() |> ignore
         ))
 
-    let maxCb =
+    let _maxCb =
         glfw.SetWindowMaximizeCallback(win, GlfwCallbacks.WindowMaximizeCallback(fun w b ->
             let windowState = getWindowState()
             stateChanged.Trigger windowState
         ))
 
-    let minCb =
+    let _minCb =
         glfw.SetWindowIconifyCallback(win, GlfwCallbacks.WindowIconifyCallback(fun w b ->
             let windowState = getWindowState()
             stateChanged.Trigger windowState
         ))
 
-    let closingCallback = 
+    let _closingCallback = 
         glfw.SetWindowCloseCallback(win, GlfwCallbacks.WindowCloseCallback(fun w ->
             closeEvt.Trigger()
             glfw.HideWindow(win)
             app.RemoveExistingWindow this
         ))
 
-    let focusCallback =
+    let _focusCallback =
         glfw.SetWindowFocusCallback(win, GlfwCallbacks.WindowFocusCallback(fun w f ->
             focus.Trigger(f)
         ))
 
-    let posCb =
+    let _posCb =
         glfw.SetWindowPosCallback(win, GlfwCallbacks.WindowPosCallback(fun w x y ->
             let border = getFrameBorder()
             wpChanged.Trigger(V2i(x,y) - border.Min)
             cpChanged.Trigger(V2i(x,y))
         ))
 
-    let keyCallback =
+    let _keyCallback =
         glfw.SetKeyCallback(win, GlfwCallbacks.KeyCallback(fun w k c a m ->
             let name = getKeyName k c
             match Translations.tryGetKey k c name with
@@ -908,7 +912,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                 ()       
         ))
 
-    let inputCallback =
+    let _inputCallback =
         glfw.SetCharCallback(win, GlfwCallbacks.CharCallback (fun w c ->
             let str = System.Text.Encoding.UTF32.GetString(System.BitConverter.GetBytes(c))
             for c in str do keyboard.KeyPress c
@@ -916,7 +920,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
         ))
 
 
-    let moveCallback =
+    let _moveCallback =
         glfw.SetCursorPosCallback(win, GlfwCallbacks.CursorPosCallback(fun w a b ->
             let v = 
                 glfw.GetWindowAttrib(w, WindowAttributeGetter.Visible) &&
@@ -931,7 +935,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                 mouseMove.Trigger(p)
         ))
 
-    let mouseCallback =
+    let _mouseCallback =
         glfw.SetMouseButtonCallback(win, GlfwCallbacks.MouseButtonCallback(fun w button action modifiers ->
             let mutable pos = V2d.Zero
             glfw.GetCursorPos(win, &pos.X, &pos.Y)
@@ -950,7 +954,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
             | _ -> ()       
         ))    
 
-    let wheelCallback =
+    let _wheelCallback =
         glfw.SetScrollCallback(win, GlfwCallbacks.ScrollCallback(fun w dx dy ->
             let mutable pos = V2d.Zero
             glfw.GetCursorPos(win, &pos.X, &pos.Y)
@@ -959,12 +963,12 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
             mouseWheel.Trigger(V2d(dx, dy) * 120.0)
         ))    
 
-    let damagedCallback =
+    let _damagedCallback =
         glfw.SetWindowRefreshCallback(win, GlfwCallbacks.WindowRefreshCallback(fun w ->
             requiresRedraw <- true
         ))
 
-    let dropCallback =
+    let _dropCallback =
         glfw.SetDropCallback(win, GlfwCallbacks.DropCallback(fun _ cnt paths ->
             let ptr = NativePtr.ofNativeInt paths
 
@@ -988,7 +992,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
             dropFiles.Trigger files                 
         ))
 
-    let enterLeave =
+    let _enterLeave =
         glfw.SetCursorEnterCallback(win, GlfwCallbacks.CursorEnterCallback(fun _ entered ->
             if entered then
                 mouse.Enter(getPixelPostion())
@@ -1535,13 +1539,13 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                 else ()
 
     member x.Redraw() : bool =
-        if renderContinuous || requiresRedraw then
-            sw.Restart()
+        let sfbo = framebufferSize()
+        setCurrentSize sfbo
+
+        if (renderContinuous || requiresRedraw) && Vec.allGreater sfbo 0 then
             try
-                let sfbo = framebufferSize()
-                if currentSize.Value <>  sfbo then
-                    transact (fun () -> currentSize.Value <- sfbo)
-                    
+                sw.Restart()
+
                 requiresRedraw <- false
                 if vsync <> enableVSync then
                     vsync <- enableVSync
@@ -1561,9 +1565,8 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                 beforeRender.Trigger()
 
                 let success =
-                    let s = x.FramebufferSize
                     match swapchain with
-                    | Some ch when ch.Size = s ->
+                    | Some ch when ch.Size = sfbo ->
                         ch.Run(renderTask, queries)
 
                     | _ ->
@@ -1571,7 +1574,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                         | Some o -> o.Dispose()
                         | None -> ()
 
-                        let swap = surface.CreateSwapchain(s)
+                        let swap = surface.CreateSwapchain(sfbo)
                         swapchain <- Some swap
                         swap.Run(renderTask, queries)
 
