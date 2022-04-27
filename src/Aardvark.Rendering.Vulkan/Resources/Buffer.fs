@@ -37,7 +37,7 @@ type Buffer =
             member x.Handle = x.Handle :> obj
             member x.SizeInBytes = nativeint x.Size // NOTE: return size as specified by user. memory might have larger size as it is an aligned block
 
-        new(device : Device, handle, memory, size, usage, refCount) =
+        new(device : Device, handle, memory, size, usage) =
             let address =
                 if usage &&& VkBufferUsageFlags.ShaderDeviceAddressBitKhr <> VkBufferUsageFlags.None then
                     native {
@@ -47,10 +47,7 @@ type Buffer =
                 else
                     0UL
 
-            { inherit Resource<_>(device, handle, refCount); Memory = memory; Size = size; Usage = usage; DeviceAddress = address }
-
-        new(device, handle, memory, size, usage) =
-            new Buffer(device, handle, memory, size, usage, 1)
+            { inherit Resource<_>(device, handle); Memory = memory; Size = size; Usage = usage; DeviceAddress = address }
     end
 
 type BufferView =
@@ -70,6 +67,19 @@ type BufferView =
             { inherit Resource<_>(device, handle); Buffer = buffer; Format = fmt; Offset = offset; Size = size }
     end
 
+[<AbstractClass>]
+type BufferDecorator =
+    class
+        inherit Buffer
+        val private Parent : Buffer
+
+        override x.Destroy() =
+            x.Parent.Dispose()
+
+        new (parent : Buffer) =
+            { inherit Buffer(parent.Device, parent.Handle, parent.Memory, parent.Size, parent.Usage);
+              Parent = parent }
+    end
 
 // =======================================================================
 // Command Extensions

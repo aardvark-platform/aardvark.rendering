@@ -80,16 +80,16 @@ module UnmanagedStruct =
 
 type UniformBuffer =
     class
-        inherit Buffer
+        inherit BufferDecorator
         val public Storage : UnmanagedStruct
         val public Layout : FShade.GLSL.GLSLUniformBuffer
 
         override x.Destroy() =
-            base.Destroy()
             UnmanagedStruct.free x.Storage
+            base.Destroy()
 
-        new(buffer : Buffer, storage : UnmanagedStruct, layout : FShade.GLSL.GLSLUniformBuffer) = 
-            { inherit Buffer(buffer.Device, buffer.Handle, buffer.Memory, buffer.Size, buffer.Usage, buffer.ReferenceCount); Storage = storage; Layout = layout }
+        new(buffer : Buffer, storage : UnmanagedStruct, layout : FShade.GLSL.GLSLUniformBuffer) =
+            { inherit BufferDecorator(buffer); Storage = storage; Layout = layout }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

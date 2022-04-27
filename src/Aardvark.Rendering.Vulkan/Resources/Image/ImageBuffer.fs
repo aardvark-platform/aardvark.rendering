@@ -8,12 +8,11 @@ open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 
 type ImageBuffer(buffer : Buffer, size : V3i, pitch : V2i, format : TextureFormat) =
-    inherit Buffer(buffer.Device, buffer.Handle, buffer.Memory, buffer.Size, buffer.Usage, buffer.ReferenceCount)
+    inherit BufferDecorator(buffer)
 
     member x.ImageSize = size
     member x.ImagePitch = pitch
     member x.TextureFormat = format
-
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module internal ImageBuffer =

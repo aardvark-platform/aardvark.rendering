@@ -10,16 +10,11 @@ open Aardvark.Rendering.Vulkan
 
 type IndirectBuffer =
     class
-        inherit Buffer
-        val public Parent : Buffer
+        inherit BufferDecorator
         val public Count  : int
 
-        override x.Destroy() =
-            x.Parent.Dispose()
-
         new(parent : Buffer, count : int) =
-            { inherit Buffer(parent.Device, parent.Handle, parent.Memory, parent.Size, parent.Usage);
-              Parent = parent
+            { inherit BufferDecorator(parent);
               Count  = count }
     end
 
