@@ -909,7 +909,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
     let adjust (call : DrawCallInfo) =
         if indexed then
             let mutable c = call
-            Fun.Swap(&c.BaseVertex, &c.FirstInstance)
+            DrawCallInfo.ToggleIndexed(&c)
             c
         else
             let mutable c = call
@@ -1146,7 +1146,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
 
 
     member x.Buffer =
-        Aardvark.Rendering.IndirectBuffer(buffer :> IBuffer, count, sizeof<DrawCallInfo>, false)
+        IndirectBuffer.ofBuffer false sizeof<DrawCallInfo> count buffer
 
     member x.BoundsBuffer =
         bbuffer

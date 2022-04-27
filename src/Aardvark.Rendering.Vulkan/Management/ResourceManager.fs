@@ -476,12 +476,12 @@ module Resources =
             }
         )
 
-    type IndirectBufferResource(owner : IResourceCache, key : list<obj>, device : Device, indexed : bool, input : aval<IndirectBuffer>) =
-        inherit ImmutableResourceLocation<IndirectBuffer, VkIndirectBuffer>(
+    type IndirectBufferResource(owner : IResourceCache, key : list<obj>, device : Device, indexed : bool, input : aval<Aardvark.Rendering.IndirectBuffer>) =
+        inherit ImmutableResourceLocation<Aardvark.Rendering.IndirectBuffer, IndirectBuffer>(
             owner, key,
             input,
             {
-                icreate = fun (b : IndirectBuffer) -> device.CreateIndirectBuffer(indexed, b)
+                icreate = fun (b : Aardvark.Rendering.IndirectBuffer) -> device.CreateIndirectBuffer(indexed, b)
                 idestroy = fun b -> b.Dispose()
                 ieagerDestroy = true
             }
@@ -1122,7 +1122,7 @@ module Resources =
         override x.Free(p : VkPipeline) =
             VkRaw.vkDestroyPipeline(renderPass.Device.Handle, p, NativePtr.zero)
 
-    type IndirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : IResourceLocation<VkIndirectBuffer>) =
+    type IndirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : IResourceLocation<IndirectBuffer>) =
         inherit AbstractPointerResourceWithEquality<DrawCall>(owner, key)
 
         override x.Create() =
@@ -1472,7 +1472,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
     //let descriptorPool = device.CreateDescriptorPool(1 <<< 22, 1 <<< 22)
 
     let bufferCache             = ResourceLocationCache<Buffer>(user)
-    let indirectBufferCache     = ResourceLocationCache<VkIndirectBuffer>(user)
+    let indirectBufferCache     = ResourceLocationCache<IndirectBuffer>(user)
     let indexBufferCache        = ResourceLocationCache<Buffer>(user)
     let descriptorSetCache      = ResourceLocationCache<DescriptorSet>(user)
     let uniformBufferCache      = ResourceLocationCache<UniformBuffer>(user)
@@ -1559,7 +1559,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateIndexBuffer(input : aval<IBuffer>) =
         x.CreateBuffer(input, VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.IndexBufferBit)
 
-    member x.CreateIndirectBuffer(indexed : bool, input : aval<IndirectBuffer>) =
+    member x.CreateIndirectBuffer(indexed : bool, input : aval<Aardvark.Rendering.IndirectBuffer>) =
         indirectBufferCache.GetOrCreate([indexed :> obj; input :> obj], fun cache key -> new IndirectBufferResource(cache, key, device, indexed, input))
 
     member x.CreateImage(input : aval<ITexture>) =
@@ -1867,7 +1867,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateDrawCall(indexed : bool, calls : aval<list<DrawCallInfo>>) =
         drawCallCache.GetOrCreate([indexed :> obj; calls :> obj], fun cache key -> new DirectDrawCallResource(cache, key, indexed, calls))
 
-    member x.CreateDrawCall(indexed : bool, calls : IResourceLocation<VkIndirectBuffer>) =
+    member x.CreateDrawCall(indexed : bool, calls : IResourceLocation<IndirectBuffer>) =
         drawCallCache.GetOrCreate([indexed :> obj; calls :> obj], fun cache key -> new IndirectDrawCallResource(cache, key, indexed, calls))
 
     member x.CreateVertexBufferBinding(buffers : list<IResourceLocation<Buffer> * int64>) =

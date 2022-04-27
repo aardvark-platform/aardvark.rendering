@@ -174,7 +174,7 @@ module Sg =
                         )
                     )
                     |> Seq.toArray
-                    |> IndirectBuffer.ofArray false
+                    |> IndirectBuffer.ofArray
                 )
 
             let trafos = BufferView(trafoBuffer, typeof<M34f>)
@@ -295,7 +295,7 @@ module Sg =
                                     BaseVertex = 0
                                 )
                                 )
-                            |> IndirectBuffer.ofArray false
+                            |> IndirectBuffer.ofArray
 
                     let trafoR0, trafoR1 =
                         let r0, r1 = 

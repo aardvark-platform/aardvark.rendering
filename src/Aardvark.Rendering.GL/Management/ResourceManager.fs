@@ -374,35 +374,43 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 buffer
 
         indirectBufferCache.GetOrCreate<IndirectBuffer>(data, [indexed :> obj], fun () -> {
-            create = fun b   -> let (buffer, own) =
-                                    match b.Buffer with
-                                    | :? Buffer -> 
-                                        (b.Buffer :?> Buffer, false)
-                                    | _ -> 
-                                        let layoutedData = if indexed then transformIndirectData b.Buffer else b.Buffer
-                                        (bufferManager.Create(layoutedData), true)
+            create = fun b ->
+                let (buffer, own) =
+                    match b.Buffer with
+                    | :? Buffer ->
+                        if b.Indexed <> indexed then
+                            if b.Indexed then failwithf "[GL] Expected non-indexed data but indirect buffer contains indexed data."
+                            else failwithf "[GL] Expected indexed data but indirect buffer contains non-indexed data."
 
-                                GLIndirectBuffer(buffer, b.Count, b.Stride, b.Indexed, own)
+                        b.Buffer :?> Buffer, false
 
-            update = fun h b -> if h.Indexed <> b.Indexed then
-                                    failwith "[GL] cannot change Indexed option of IndirectBuffer"
+                    | _ ->
+                        let layoutedData = if indexed then transformIndirectData b.Buffer else b.Buffer
+                        bufferManager.Create(layoutedData), true
 
-                                let buffer =
-                                    match b.Buffer with
-                                    | :? Buffer -> 
-                                        if h.OwnResource then 
-                                            failwith "[GL] cannot change IndirectBuffer type"
-                                        b.Buffer :?> Buffer
-                                    | _ -> 
-                                        if not h.OwnResource then 
-                                            failwith "[GL] cannot change IndirectBuffer type"
-                                        let layoutedData = if indexed then transformIndirectData b.Buffer else b.Buffer
-                                        bufferManager.Update(h.Buffer, layoutedData)
+                GLIndirectBuffer(buffer, b.Count, b.Stride, indexed, own)
 
-                                if h.Buffer = buffer && h.Count = b.Count && h.Stride = b.Stride then // OwnResource and Indexed cannot change
-                                    h // return old to remain reference equal -> will be counted as InPlaceUpdate (no real performance difference)
-                                else
-                                    GLIndirectBuffer(buffer, b.Count, b.Stride, b.Indexed, h.OwnResource)
+            update = fun h b ->
+                if h.Indexed <> b.Indexed then
+                    failwith "[GL] cannot change Indexed option of IndirectBuffer"
+
+                let buffer =
+                    match b.Buffer with
+                    | :? Buffer ->
+                        if h.OwnResource then
+                            failwith "[GL] cannot change IndirectBuffer type"
+                        b.Buffer :?> Buffer
+
+                    | _ ->
+                        if not h.OwnResource then
+                            failwith "[GL] cannot change IndirectBuffer type"
+                        let layoutedData = if indexed then transformIndirectData b.Buffer else b.Buffer
+                        bufferManager.Update(h.Buffer, layoutedData)
+
+                if h.Buffer = buffer && h.Count = b.Count && h.Stride = b.Stride then // OwnResource and Indexed cannot change
+                    h // return old to remain reference equal -> will be counted as InPlaceUpdate (no real performance difference)
+                else
+                    GLIndirectBuffer(buffer, b.Count, b.Stride, b.Indexed, h.OwnResource)
 
             delete = fun h   -> if h.OwnResource then bufferManager.Delete(h.Buffer)
             info =   fun h   -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo

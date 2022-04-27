@@ -240,7 +240,7 @@ module RenderObjectSemantics =
                 }
 
             rj.VertexAttributes <- vertexAttributes
-            rj.DrawCalls <- Indirect (indirect |> AVal.map (IndirectBuffer.ofArray false))
+            rj.DrawCalls <- Indirect (indirect |> AVal.map IndirectBuffer.ofArray)
             rj.Mode <- r.Mode
             rj.Activate <- activate
 

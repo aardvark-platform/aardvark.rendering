@@ -6,21 +6,21 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 
-
 #nowarn "9"
-// #nowarn "51"
 
-type VkIndirectBuffer =
+type IndirectBuffer =
     class
         inherit Buffer
-        val public Count : int
+        val public Parent : Buffer
+        val public Count  : int
 
-        //interface IIndirectBuffer with
-        //    member x.Buffer = x :> IBuffer
-        //    member x.Count = x.Count
+        override x.Destroy() =
+            x.Parent.Dispose()
 
-        new(device : Device, handle : VkBuffer, ptr : DevicePtr, count : int) = 
-            { inherit Buffer(device, handle, ptr, int64 count * 20L, VkBufferUsageFlags.IndirectBufferBit); Count = count }
+        new(parent : Buffer, count : int) =
+            { inherit Buffer(parent.Device, parent.Handle, parent.Memory, parent.Size, parent.Usage);
+              Parent = parent
+              Count  = count }
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -29,35 +29,51 @@ module IndirectBuffer =
 
     let private flags = VkBufferUsageFlags.IndirectBufferBit ||| VkBufferUsageFlags.TransferDstBit
 
-    let inline private copyIndexed (src : nativeptr<DrawCallInfo>) (dst : nativeptr<DrawCallInfo>) (cnt : int) =
+    let inline private copySwap (src : nativeptr<DrawCallInfo>) (dst : nativeptr<DrawCallInfo>) (cnt : int) =
         let mutable src = src
         let mutable dst = dst
         for i in 1 .. cnt do
             let mutable c = NativePtr.read src
-            Fun.Swap(&c.BaseVertex, &c.FirstInstance)
+            DrawCallInfo.ToggleIndexed(&c)
             NativePtr.write dst c
             src <- NativePtr.add src 1
             dst <- NativePtr.add dst 1
 
-    let inline private copyNonIndexed (src : nativeptr<DrawCallInfo>) (dst : nativeptr<DrawCallInfo>) (cnt : int) =
-        Marshal.Copy(NativePtr.toNativeInt src, NativePtr.toNativeInt dst, sizeof<DrawCallInfo> * cnt)
+    let inline private copyDirect (src : nativeptr<DrawCallInfo>) (dst : nativeptr<DrawCallInfo>) (cnt : int) =
+        let src = NativePtr.toNativeInt src
+        let dst = NativePtr.toNativeInt dst
+        Marshal.Copy(src, dst, sizeof<DrawCallInfo> * cnt)
 
 
-    let private copy (indexed : bool)  (src : nativeint) (dst : nativeint) (cnt : int) =
+    let private copy (swap : bool) (src : nativeint) (dst : nativeint) (cnt : int) =
         let src = NativePtr.ofNativeInt src
         let dst = NativePtr.ofNativeInt dst
-        if indexed then copyIndexed src dst cnt
-        else copyNonIndexed src dst cnt
 
-    let rec create (indexed : bool) (b : IndirectBuffer) (device : Device) =
-        let buffer = 
+        if swap then
+            copySwap src dst cnt
+        else
+            copyDirect src dst cnt
+
+    let create (indexed : bool) (b : Aardvark.Rendering.IndirectBuffer) (device : Device) =
+        if b.Stride <> sizeof<DrawCallInfo> then
+            failf "Stride of indirect buffer must be %d (is %d)" sizeof<DrawCallInfo> b.Stride
+
+        let swap = (indexed <> b.Indexed)
+
+        let buffer =
             match b.Buffer with
             | :? ArrayBuffer as ab ->
                 if ab.Data.Length <> 0 then
-                    let size = nativeint ab.Data.LongLength * nativeint (Marshal.SizeOf ab.ElementType)
-                    let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
-                    try device.DeviceMemory |> Buffer.ofWriter flags size (fun dst -> copy indexed (gc.AddrOfPinnedObject()) dst ab.Data.Length)
-                    finally gc.Free()
+                    if ab.ElementType <> typeof<DrawCallInfo> then
+                        failf "Element type of array for indirect buffer must be DrawCallInfo (is %A)" ab.ElementType
+
+                    let size = nativeint ab.Data.LongLength * nativeint sizeof<DrawCallInfo>
+
+                    pinned ab.Data (fun src ->
+                        device.DeviceMemory |> Buffer.ofWriter flags size (fun dst ->
+                            copy swap src dst ab.Data.Length
+                        )
+                    )
                 else
                     Buffer.empty flags device.DeviceMemory
 
@@ -66,20 +82,29 @@ module IndirectBuffer =
                     let size = nativeint nb.SizeInBytes
                     let count = nb.SizeInBytes / sizeof<DrawCallInfo>
                     nb.Use(fun src ->
-                        device.DeviceMemory |> Buffer.ofWriter flags size (fun dst -> copy indexed src dst count)
+                        device.DeviceMemory |> Buffer.ofWriter flags size (fun dst -> copy swap src dst count)
                     )
                 else
                     Buffer.empty flags device.DeviceMemory
-            | :? Buffer as bb ->
-                bb
-            | _ ->
-                failf "unsupported indirect buffer type %A" b.Buffer
 
-        new VkIndirectBuffer(device, buffer.Handle, buffer.Memory, b.Count)
+            | :? Buffer as bb ->
+                if swap then
+                    if b.Indexed then
+                        failf "Indirect buffer contains indexed data but expected non-indexed data"
+                    else
+                        failf "Indirect buffer contains non-indexed data but expected indexed data"
+
+                bb.AddReference()
+                bb
+
+            | _ ->
+                failf "Unsupported indirect buffer type %A" b.Buffer
+
+        new IndirectBuffer(buffer, b.Count)
 
 [<AbstractClass; Sealed; Extension>]
 type ContextIndirectBufferExtensions private() =
 
     [<Extension>]
-    static member inline CreateIndirectBuffer(device : Device, indexed : bool, data : IndirectBuffer) =
+    static member inline CreateIndirectBuffer(device : Device, indexed : bool, data : Aardvark.Rendering.IndirectBuffer) =
         device |> IndirectBuffer.create indexed data
