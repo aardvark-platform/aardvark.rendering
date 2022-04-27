@@ -55,7 +55,7 @@ type AdaptiveBufferExtensions private() =
     /// <param name="start">The first index of the data array to write.</param>
     /// <param name="length">The number of elements to write.</param>
     [<Extension>]
-    static member Write(this : IAdaptiveBuffer, data : 'T[], offset : nativeint, start : int, length : int) =
+    static member Write<'T when 'T : unmanaged>(this : IAdaptiveBuffer, data : 'T[], offset : nativeint, start : int, length : int) =
         assert (start >= 0 && start < data.Length)
         assert (start + length <= data.Length)
 
@@ -72,7 +72,7 @@ type AdaptiveBufferExtensions private() =
     /// <param name="data">The array to write.</param>
     /// <param name="offset">The offset (in bytes) into the buffer.</param>
     [<Extension>]
-    static member Write(this : IAdaptiveBuffer, data : 'T[], offset : nativeint) =
+    static member Write<'T when 'T : unmanaged>(this : IAdaptiveBuffer, data : 'T[], offset : nativeint) =
         this.Write(data, offset, 0, data.Length)
 
     /// <summary>
@@ -82,7 +82,7 @@ type AdaptiveBufferExtensions private() =
     /// <param name="data">The value to write.</param>
     /// <param name="offset">The offset (in bytes) into the buffer.</param>
     [<Extension>]
-    static member Write(this : IAdaptiveBuffer, data : 'T, offset : nativeint) =
+    static member Write<'T when 'T : unmanaged>(this : IAdaptiveBuffer, data : 'T, offset : nativeint) =
         pinned data (fun src ->
             this.Write(src, offset, nativeint sizeof<'T>)
         )
@@ -102,7 +102,7 @@ module internal AdaptiveBufferImplementation =
             with get() = size
             and set(s) = size <- s
 
-        member inline internal x.ComputeHandle(discard : bool) =
+        member internal x.ComputeHandle(discard : bool) =
             match handle with
             | ValueNone ->
                 let h = runtime.CreateBuffer(size, usage)
