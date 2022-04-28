@@ -102,7 +102,7 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
             GL.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, size.X, size.Y, pixelFormat, pixelType, 0n)
             GL.Check "could not update texture"
         else
-            GL.TexImage2D(TextureTarget.Texture2D, 0, unbox (int textureFormat), size.X, size.Y, 0, pixelFormat, pixelType, 0n)
+            GL.TexImage2D(TextureTarget.Texture2D, 0, TextureFormat.toPixelInternalFormat textureFormat, size.X, size.Y, 0, pixelFormat, pixelType, 0n)
             GL.Check "could not update texture"
             texA.Size <- V3i(size.X, size.Y, 1)
             texA.Format <- textureFormat
@@ -279,7 +279,7 @@ module private PixelBufferExtensions =
             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
             GL.Check "could not unbind buffer"
 
-            PixelBuffer(x, handle, size, imageSize, pixelType, pixelFormat, unbox (int ifmt))
+            PixelBuffer(x, handle, size, imageSize, pixelType, pixelFormat, TextureFormat.toPixelInternalFormat ifmt)
         
         member x.Update(pbo : PixelBuffer, imageSize : V2i, size : nativeint, pixelType : PixelType, pixelFormat : PixelFormat, ifmt : TextureFormat) =
             if pbo.Handle > 0 then
@@ -296,7 +296,7 @@ module private PixelBufferExtensions =
                 pbo.ImageSize <- imageSize
                 pbo.PixelFormat <- pixelFormat
                 pbo.PixelType <- pixelType
-                pbo.InternalFormat <- unbox (int ifmt)
+                pbo.InternalFormat <- TextureFormat.toPixelInternalFormat ifmt
             else
                 let res = x.CreatePixelBuffer(imageSize, size, pixelType, pixelFormat, ifmt)
                 pbo.Handle <- res.Handle

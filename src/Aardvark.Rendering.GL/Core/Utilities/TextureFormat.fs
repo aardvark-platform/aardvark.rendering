@@ -9,6 +9,27 @@ module internal TextureFormatExtensions =
 
     module TextureFormat =
 
+        let inline unbox< ^T> (format : TextureFormat) : ^T =
+            match format with
+            | TextureFormat.Bgr8 -> unbox< ^T> TextureFormat.Rgb8
+            | TextureFormat.Bgra8 -> unbox< ^T> TextureFormat.Rgba8
+            | fmt -> unbox< ^T> fmt
+
+        let inline toInternalFormat (format : TextureFormat) =
+            unbox<InternalFormat> format
+
+        let inline toSizedInternalFormat (format : TextureFormat) =
+            unbox<SizedInternalFormat> format
+
+        let inline toPixelInternalFormat (format : TextureFormat) =
+            unbox<PixelInternalFormat> format
+
+        let inline toPixelFormat (format : TextureFormat) =
+            unbox<PixelFormat> format
+
+        let inline toRenderbufferStorage (format : TextureFormat) =
+            unbox<RenderbufferStorage> format
+
         let toFormatAndType =
             let table =
                 LookupTable.lookupTable' [

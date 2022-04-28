@@ -80,7 +80,7 @@ module ``Sparse Texture Extensions`` =
         member x.CreateSparseTexture(virtualSize : V3i, format : TextureFormat, levels : int) =
             use __ = x.ResourceLock
 
-            let ifmt = unbox<SizedInternalFormat> (int format)
+            let ifmt = TextureFormat.toSizedInternalFormat format
 
             // determine the page size
             let mutable pageSize = V3i.Zero
