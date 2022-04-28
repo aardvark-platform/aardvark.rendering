@@ -437,6 +437,27 @@ module TextureUpload =
             let count = 3
             uploadAndDownloadTextureNative runtime size levels count true
 
+        let texture2DStreaming (runtime : IRuntime) =
+            let texture = runtime.CreateStreamingTexture(false)
+
+            let size = V2i(256)
+            let input = PixImage<uint8>(Col.Format.BGRA, PixImage.random8ui size)
+
+            try
+                PixImage.pin input (fun src ->
+                    texture.Update(input.PixFormat, size, src.Address)
+                )
+
+                let output = (texture.GetValue() :?> IBackendTexture).Download().Transformed(ImageTrafo.MirrorY).AsPixImage<uint8>()
+                PixImage.compare V2i.Zero input output
+
+                let pos = V2i(123, 231)
+                let pixel = texture.ReadPixel(pos).ToC4b()
+                Expect.equal pixel (output.GetMatrix<C4b>().[pos]) "Pixel read failed"
+
+            finally
+                runtime.DeleteStreamingTexture(texture)
+
         let private uploadAndDownloadTexture3D (runtime : IRuntime)
                                                (size : V3i) (levels : int) (level : int)
                                                (window : Box3i option) =
@@ -680,6 +701,9 @@ module TextureUpload =
             // easy way to flip these, and unfortunately we want to flip all our textures on upload -_-
                 //"2D compressed DDS (BC6h)",     Cases.texture2DCompressedDDSBC6h
                 //"2D compressed DDS (BC7)",      Cases.texture2DCompressedDDSBC7
+
+            if backend <> Backend.Vulkan then // not supported (only really used for CEF?)
+                "2D StreamingTexture",      Cases.texture2DStreaming
 
             "3D",                           Cases.texture3D
             "3D subwindow",                 Cases.texture3DSubwindow

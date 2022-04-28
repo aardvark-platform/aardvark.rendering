@@ -5,6 +5,20 @@ open OpenTK.Graphics.OpenGL4
 
 module internal PixelFormat =
 
+    let ofColFormat =
+        LookupTable.lookupTable [
+            Col.Format.Alpha,     PixelFormat.Alpha
+            Col.Format.BW,        PixelFormat.Red
+            Col.Format.Gray,      PixelFormat.Red
+            Col.Format.GrayAlpha, PixelFormat.Rg
+            Col.Format.RGB,       PixelFormat.Rgb
+            Col.Format.BGR,       PixelFormat.Bgr
+            Col.Format.RGBA,      PixelFormat.Rgba
+            Col.Format.BGRA,      PixelFormat.Bgra
+            Col.Format.RGBP,      PixelFormat.Rgba
+            Col.Format.NormalUV,  PixelFormat.Rg
+        ]
+
     let channels =
         LookupTable.lookupTable [
             PixelFormat.Bgr, 3
