@@ -97,7 +97,7 @@ module private Vulkan =
                 glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.NoApi)
         }
 
-type VulkanApplication(userExt : list<string>, debug : DebugLevel) =    
+type VulkanApplication(userExt : list<string>, debug : DebugLevel, hideCocoaMenuBar : bool) =    
     static let surfaceExtensions = 
         let all = Instance.GlobalExtensions
         all
@@ -122,7 +122,7 @@ type VulkanApplication(userExt : list<string>, debug : DebugLevel) =
 
 
     let app = new HeadlessVulkanApplication(debug, getExtensions userExt, (fun _ -> []))
-    let glfw = Application(app.Runtime, Vulkan.interop, false)
+    let glfw = Application(app.Runtime, Vulkan.interop, hideCocoaMenuBar)
 
     let windowConfig =
         {
@@ -137,6 +137,9 @@ type VulkanApplication(userExt : list<string>, debug : DebugLevel) =
             WindowConfig.transparent = false
             WindowConfig.samples = 1
         }
+
+    new(userExt : list<string>, debug : DebugLevel) =
+        new VulkanApplication(userExt, debug, false)
     
     new(userExt : list<string>, debug : bool) =
         new VulkanApplication(userExt, DebugLevel.ofBool debug)
