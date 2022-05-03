@@ -6,19 +6,50 @@ open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Aardvark.Base
 
+/// Flags to specify how a buffer may be used.
 [<Flags>]
-type BufferUsage = // Buffer usage
-    | None = 0
-    | Index = 1
-    | Indirect = 2
-    | Vertex = 4
-    | Uniform = 8
-    | Storage = 16
-    | Read = 256
-    | Write = 512
-    | AccelerationStructure = 1024
-    | ReadWrite = 0x300
-    | Default = 0x071f
+type BufferUsage =
+    | None                  = 0x00
+
+    /// Buffer may be used as index buffer.
+    | Index                 = 0x01
+
+    /// Buffer may be used for indirect rendering.
+    | Indirect              = 0x02
+
+    /// Buffer may be used as vertex buffer.
+    | Vertex                = 0x04
+
+    /// Buffer may be used as uniform buffer.
+    | Uniform               = 0x08
+
+    /// Buffer may be used as storage buffer.
+    | Storage               = 0x10
+
+    /// Buffer may be used as source for copy operations.
+    | Read                  = 0x20
+
+    /// Buffer may be used as destination for copy operations.
+    | Write                 = 0x40
+
+    /// Buffer may be used as storage for acceleration structures.
+    | AccelerationStructure = 0x80
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module BufferUsage =
+
+    /// Buffer may be used as source and destination for copy operations.
+    [<Literal>]
+    let ReadWrite = BufferUsage.Read ||| BufferUsage.Write
+
+    /// Default usage (equivalent to combination of all other flags).
+    [<Literal>]
+    let Default =
+        BufferUsage.Index |||
+        BufferUsage.Indirect ||| BufferUsage.Vertex |||
+        BufferUsage.Uniform ||| BufferUsage.Storage |||
+        BufferUsage.Read ||| BufferUsage.Write |||
+        BufferUsage.AccelerationStructure
 
 type IBuffer = interface end
 
