@@ -38,7 +38,7 @@ module internal TextureUploadImplementation =
                         GL.TexSubImage1D(target, level, offset.X, d.Size.X, d.Format, d.Type, pixels)
                     | PixelData.Compressed d ->
                         GL.CompressedTexSubImage1D(target, level, offset.X, d.Size.X,
-                                                   unbox texture.Format, int d.SizeInBytes, pixels)
+                                                   TextureFormat.toPixelFormat texture.Format, int d.SizeInBytes, pixels)
 
                 | TextureDimension.Texture1D, true
                 | TextureDimension.Texture2D, false
@@ -52,7 +52,7 @@ module internal TextureUploadImplementation =
                         GL.TexSubImage2D(targetSlice, level, offset.X, offset.Y, d.Size.X, d.Size.Y, d.Format, d.Type, pixels)
                     | PixelData.Compressed d ->
                         GL.CompressedTexSubImage2D(targetSlice, level, offset.X, offset.Y, d.Size.X, d.Size.Y,
-                                                   unbox texture.Format, int d.SizeInBytes, pixels)
+                                                   TextureFormat.toPixelFormat texture.Format, int d.SizeInBytes, pixels)
 
                 | TextureDimension.Texture2D, true
                 | TextureDimension.Texture3D, false
@@ -62,7 +62,7 @@ module internal TextureUploadImplementation =
                         GL.TexSubImage3D(target, level, offset.X, offset.Y, offset.Z, d.Size.X, d.Size.Y, d.Size.Z, d.Format, d.Type, pixels)
                     | PixelData.Compressed d ->
                         GL.CompressedTexSubImage3D(target, level, offset.X, offset.Y, offset.Z,
-                                                   d.Size.X, d.Size.Y, d.Size.Z, unbox texture.Format, int d.SizeInBytes, pixels)
+                                                   d.Size.X, d.Size.Y, d.Size.Z, TextureFormat.toPixelFormat texture.Format, int d.SizeInBytes, pixels)
 
                 | d, a ->
                     failwithf "[GL] unsupported texture data %A%s" d (if a then "[]" else "")

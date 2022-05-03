@@ -1,3 +1,13 @@
+### 5.2.4
+- [Vulkan] Implemented host-side texture compression
+- Added RenderTo overloads with adaptive clear values
+- Added checks for maximum multisamples when creating framebuffer signatures and textures
+- Implemented PickObjects for RenderCommand
+- [GLFW] Fixed issue with non-positive window size
+- [GL] Fixed streaming texture issues
+- [GL] Use RGB internal format for BGR texture formats
+- [GLFW] Add hideCocoaMenuBar parameter
+
 ### 5.2.3
 - [ManagedPool] Fixed memory leak
 - Improved block compression decoding and copying

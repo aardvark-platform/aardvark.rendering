@@ -58,11 +58,10 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
         if f <> currentFormat then
             currentFormat <- f
             textureFormat <- TextureFormat.ofPixFormat f TextureParams.empty
-            let pf, pt = TextureFormat.toFormatAndType textureFormat
-            pixelType <- pt
-            pixelFormat <- pf
-            channels <- PixelFormat.channels pf
-            channelSize <- PixelType.size pt
+            pixelType <- PixelType.ofType f.Type
+            pixelFormat <- PixelFormat.ofColFormat f.Format
+            channels <- PixelFormat.channels pixelFormat
+            channelSize <- PixelType.size pixelType
 
         // update size depenent things
         if currentSize <> size then
@@ -103,7 +102,7 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
             GL.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, size.X, size.Y, pixelFormat, pixelType, 0n)
             GL.Check "could not update texture"
         else
-            GL.TexImage2D(TextureTarget.Texture2D, 0, unbox (int textureFormat), size.X, size.Y, 0, pixelFormat, pixelType, 0n)
+            GL.TexImage2D(TextureTarget.Texture2D, 0, TextureFormat.toPixelInternalFormat textureFormat, size.X, size.Y, 0, pixelFormat, pixelType, 0n)
             GL.Check "could not update texture"
             texA.Size <- V3i(size.X, size.Y, 1)
             texA.Format <- textureFormat
@@ -273,25 +272,31 @@ module private PixelBufferExtensions =
         member x.CreatePixelBuffer(imageSize : V2i, size : nativeint, pixelType : PixelType, pixelFormat : PixelFormat, ifmt : TextureFormat) =
             use t = x.ResourceLock
             let handle = GL.GenBuffer()
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, handle)
-            GL.BufferData(BufferTarget.CopyWriteBuffer, size, 0n, BufferUsageHint.StreamDraw)
-            GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, handle)
+            GL.Check "could not bind buffer"
+            GL.BufferData(BufferTarget.PixelUnpackBuffer, size, 0n, BufferUsageHint.StreamDraw)
+            GL.Check "could not set buffer data"
+            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+            GL.Check "could not unbind buffer"
 
-            PixelBuffer(x, handle, size, imageSize, pixelType, pixelFormat, unbox (int ifmt))
+            PixelBuffer(x, handle, size, imageSize, pixelType, pixelFormat, TextureFormat.toPixelInternalFormat ifmt)
         
         member x.Update(pbo : PixelBuffer, imageSize : V2i, size : nativeint, pixelType : PixelType, pixelFormat : PixelFormat, ifmt : TextureFormat) =
             if pbo.Handle > 0 then
                 if size <> pbo.Size then
                     use t = x.ResourceLock
-                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, pbo.Handle)
-                    GL.BufferData(BufferTarget.CopyWriteBuffer, size, 0n, BufferUsageHint.StreamDraw)
-                    GL.BindBuffer(BufferTarget.CopyWriteBuffer, 0)
+                    GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo.Handle)
+                    GL.Check "could not bind buffer"
+                    GL.BufferData(BufferTarget.PixelUnpackBuffer, size, 0n, BufferUsageHint.StreamDraw)
+                    GL.Check "could not set buffer data"
+                    GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+                    GL.Check "could not unbind buffer"
                     pbo.Size <- size
 
                 pbo.ImageSize <- imageSize
                 pbo.PixelFormat <- pixelFormat
                 pbo.PixelType <- pixelType
-                pbo.InternalFormat <- unbox (int ifmt)
+                pbo.InternalFormat <- TextureFormat.toPixelInternalFormat ifmt
             else
                 let res = x.CreatePixelBuffer(imageSize, size, pixelType, pixelFormat, ifmt)
                 pbo.Handle <- res.Handle
@@ -321,12 +326,13 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
 
 
     let texture =
-        let res = ctx.CreateTexture2D(V2i.II, 1, TextureFormat.Bgra8, 1)
-        res
+        use t = ctx.ResourceLock
+        let handle = GL.GenTexture()
+        Texture(ctx, handle, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L)
 
     let swapLock = obj()
-    let mutable ping = ctx.CreatePixelBuffer(V2i.Zero, 0n, PixelType.UnsignedByte, PixelFormat.Bgra, TextureFormat.Bgra8)
-    let mutable pong = ctx.CreatePixelBuffer(V2i.Zero, 0n, PixelType.UnsignedByte, PixelFormat.Bgra, TextureFormat.Bgra8)
+    let mutable ping = ctx.CreatePixelBuffer(V2i.Zero, 0n, PixelType.UnsignedByte, PixelFormat.Bgra, TextureFormat.Rgba8)
+    let mutable pong = ctx.CreatePixelBuffer(V2i.Zero, 0n, PixelType.UnsignedByte, PixelFormat.Bgra, TextureFormat.Rgba8)
 
     let mutable currentFormat = PixFormat(typeof<obj>, Col.Format.RGBA)
     let mutable currentSize = -V2i.II
@@ -347,11 +353,10 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
             currentFormat <- f
             textureFormat <- TextureFormat.ofPixFormat f TextureParams.empty
 
-            let pf, pt = TextureFormat.toFormatAndType textureFormat
-            pixelType <- pt
-            pixelFormat <- pf
-            channels <- PixelFormat.channels pf
-            channelSize <- PixelType.size pt
+            pixelType <- PixelType.ofType f.Type
+            pixelFormat <- PixelFormat.ofColFormat f.Format
+            channels <- PixelFormat.channels pixelFormat
+            channelSize <- PixelType.size pixelType
 
         // update size depenent things
         if currentSize <> size then
@@ -367,14 +372,17 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
         ctx.Update(ping, size, bufferSize, pixelType, pixelFormat, textureFormat)
 
         GL.BindBuffer(BufferTarget.PixelUnpackBuffer, ping.Handle)
+        GL.Check "could not bind buffer"
         let target = GL.MapBufferRange(BufferTarget.PixelUnpackBuffer, 0n, bufferSize, BufferAccessMask.MapInvalidateBufferBit ||| BufferAccessMask.MapWriteBit)
+        if target = 0n then failwithf "[GL] could not map PBO"
 
         Marshal.Copy(data, target, bufferSize)
 
-        GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) |> ignore
+        if not <| GL.UnmapBuffer(BufferTarget.PixelUnpackBuffer) then
+            failwithf "[GL] could not unmap PBO"
+
         GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
-
-
+        GL.Check "could not unbind buffer"
 
         ping.Sync <- GL.FenceSync(SyncCondition.SyncGpuCommandsComplete, WaitSyncFlags.None)
 
@@ -489,11 +497,15 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
 
             if pbo.Sync <> 0n then
                 GL.ClientWaitSync(pbo.Sync, ClientWaitSyncFlags.SyncFlushCommandsBit, ~~~0L) |> ignore
+                GL.Check "could not wait on sync object"
                 GL.DeleteSync(pbo.Sync)
                 pbo.Sync <- 0n
 
             GL.BindTexture(TextureTarget.Texture2D, texture.Handle)
+            GL.Check "could not bind texture"
+
             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, pbo.Handle)
+            GL.Check "could not bind buffer"
 
             if pbo.ImageSize <> texture.Size2D then
                 GL.TexImage2D(TextureTarget.Texture2D, 0, pbo.InternalFormat, pbo.ImageSize.X, pbo.ImageSize.Y, 0, pbo.PixelFormat, pbo.PixelType, 0n)
@@ -501,13 +513,18 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
 
             else
                 GL.TexSubImage2D(TextureTarget.Texture2D, 0, 0, 0, pbo.ImageSize.X, pbo.ImageSize.Y, pbo.PixelFormat, pbo.PixelType, 0n)
+            GL.Check "could not set texture data"
             
             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+            GL.Check "could not unbind buffer"
 
             if mipMap then
                 GL.GenerateMipmap(GenerateMipmapTarget.Texture2D)
+                GL.Check "could not generate mip map"
 
             GL.BindTexture(TextureTarget.Texture2D, 0)
+            GL.Check "could not unbind texture"
+
             GL.Sync()
         )
 

@@ -296,13 +296,13 @@ module private OpenGL =
                 glfw.WindowHint(WindowHintInt.Samples, cfg.samples)
         }
 
-type OpenGlApplication(forceNvidia : bool, debug : DebugLevel, shaderCachePath : Option<string>) =
+type OpenGlApplication(forceNvidia : bool, debug : DebugLevel, shaderCachePath : Option<string>, hideCocoaMenuBar : bool) =
     do if forceNvidia then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
        // hs, 01-02.2021, this should NOT be necessary in slim. 
        //OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
        
     let runtime = new Runtime(debug)
-    let glfw = Application(runtime, OpenGL.interop, false)
+    let glfw = Application(runtime, OpenGL.interop, hideCocoaMenuBar)
     
     let windowConfig =
         {
@@ -329,6 +329,9 @@ type OpenGlApplication(forceNvidia : bool, debug : DebugLevel, shaderCachePath :
 
     do ctx.ShaderCachePath <- shaderCachePath
        runtime.Initialize(ctx)
+
+    new(forceNvidia, debug, shaderCachePath) =
+        new OpenGlApplication(forceNvidia, debug, shaderCachePath, false)
  
     new(forceNvidia, debug, shaderCachePath) =
         new OpenGlApplication(forceNvidia, DebugLevel.ofBool debug, shaderCachePath)

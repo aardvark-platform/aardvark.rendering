@@ -61,9 +61,9 @@ module RenderbufferExtensions =
                 1
 
         if samples > 1 then
-            GL.RenderbufferStorageMultisample(RenderbufferTarget.Renderbuffer, samples, unbox format, size.X, size.Y)
+            GL.RenderbufferStorageMultisample(RenderbufferTarget.Renderbuffer, samples, TextureFormat.toRenderbufferStorage format, size.X, size.Y)
         else
-            GL.RenderbufferStorage(RenderbufferTarget.Renderbuffer, unbox format, size.X, size.Y)
+            GL.RenderbufferStorage(RenderbufferTarget.Renderbuffer, TextureFormat.toRenderbufferStorage format, size.X, size.Y)
         GL.Check "could not set renderbuffer storage"
 
         GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, 0)

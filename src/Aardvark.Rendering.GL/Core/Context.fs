@@ -365,10 +365,10 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
     member internal x.GetFormatSamples(target : ImageTarget, format : TextureFormat) =
         if GL.ARB_internalformat_query then
             formatSampleCounts.GetOrCreate((target, format), fun _ ->
-                let count = GL.Dispatch.GetInternalformat(target, unbox format, InternalFormatParameter.NumSampleCounts)
+                let count = GL.Dispatch.GetInternalformat(target, TextureFormat.toSizedInternalFormat format, InternalFormatParameter.NumSampleCounts)
                 GL.Check "could not query number of sample counts"
 
-                let buffer = GL.Dispatch.GetInternalformat(target, unbox format, InternalFormatParameter.Samples, count)
+                let buffer = GL.Dispatch.GetInternalformat(target, TextureFormat.toSizedInternalFormat format, InternalFormatParameter.Samples, count)
                 GL.Check "could not query sample counts"
 
                 Set.ofArray buffer
