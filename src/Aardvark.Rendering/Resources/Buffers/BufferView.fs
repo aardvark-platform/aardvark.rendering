@@ -18,6 +18,9 @@ type BufferView(b : aval<IBuffer>, elementType : Type, [<Optional; DefaultParame
     member x.SingleValue = singleValue
     member x.IsSingleValue = Option.isSome singleValue
 
+    new(b : aval<IBackendBuffer>, elementType : Type, [<Optional; DefaultParameterValue(0)>] offset : int, [<Optional; DefaultParameterValue(0)>] stride : int) =
+        BufferView(AVal.cast<IBuffer> b, elementType, offset, stride)
+
     new(b : IBuffer, elementType : Type, [<Optional; DefaultParameterValue(0)>] offset : int, [<Optional; DefaultParameterValue(0)>] stride : int) =
         BufferView(AVal.constant b, elementType, offset, stride)
 
