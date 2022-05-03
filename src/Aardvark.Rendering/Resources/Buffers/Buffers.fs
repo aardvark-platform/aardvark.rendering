@@ -32,24 +32,14 @@ type BufferUsage =
     /// Buffer may be used as destination for copy operations.
     | Write                 = 0x40
 
+    /// Buffer may be used as source and destination for copy operations (combination of Read and Write flags).
+    | ReadWrite             = 0x60
+
     /// Buffer may be used as storage for acceleration structures.
     | AccelerationStructure = 0x80
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module BufferUsage =
-
-    /// Buffer may be used as source and destination for copy operations.
-    [<Literal>]
-    let ReadWrite = BufferUsage.Read ||| BufferUsage.Write
-
     /// Default usage (equivalent to combination of all other flags).
-    [<Literal>]
-    let Default =
-        BufferUsage.Index |||
-        BufferUsage.Indirect ||| BufferUsage.Vertex |||
-        BufferUsage.Uniform ||| BufferUsage.Storage |||
-        BufferUsage.Read ||| BufferUsage.Write |||
-        BufferUsage.AccelerationStructure
+    | Default               = 0xFF
 
 type IBuffer = interface end
 
