@@ -181,7 +181,7 @@ module Scene =
                     BaseVertex = 0
                 )
             )
-            |> IndirectBuffer.ofArray geometry.IsIndexed
+            |> IndirectBuffer.ofArray' geometry.IsIndexed
 
         let instanceTrafo =
             trafos |> AVal.map (Array.map (Trafo.forward >> M44f))

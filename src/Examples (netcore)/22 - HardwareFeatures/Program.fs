@@ -136,7 +136,7 @@ let createIndirect (runtime : IRuntime) (signature : IFramebufferSignature)
            )
                   
     // simply wrap the drawcall infos array into buffers
-    let indirect = IndirectBuffer.ofArray false drawCallInfos
+    let indirect = IndirectBuffer.ofArray drawCallInfos
   
     let sg = 
         Sg.indirectDraw IndexedGeometryMode.TriangleList (AVal.constant indirect)

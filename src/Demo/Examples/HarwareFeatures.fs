@@ -98,7 +98,7 @@ module HarwareFeatures =
                             inc &i
             |]
 
-        let indirect = IndirectBuffer.ofArray false indirect
+        let indirect = IndirectBuffer.ofArray indirect
 
 
         let sg =    

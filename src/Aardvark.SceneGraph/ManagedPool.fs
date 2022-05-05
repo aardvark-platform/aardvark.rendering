@@ -819,7 +819,7 @@ type DrawCallBuffer(runtime : IRuntime, indexed : bool) =
             
     override x.Compute(token) =
         let inner = store.GetValue(token)
-        IndirectBuffer(inner, calls.Count, stride, indexed)
+        inner |> IndirectBuffer.ofBuffer indexed stride calls.Count
 
     override x.Finalize() =
         try store.Dispose()
