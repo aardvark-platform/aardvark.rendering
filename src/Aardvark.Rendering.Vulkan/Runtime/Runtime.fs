@@ -258,55 +258,21 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         memory.CreateBuffer(flags, int64 size)
 
     member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
-        if size > 0n then
-            use temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit (int64 size)
-            let dst = unbox<Buffer> dst
-
-            temp.Memory.Mapped(fun ptr -> Marshal.Copy(src, ptr, size))
-            device.perform {
-                do! Command.Copy(temp, 0L, dst, int64 dstOffset, int64 size)
-            }
+        let dst = unbox<Buffer> dst
+        Buffer.upload src dst dstOffset size
 
     member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
-        if size > 0n then
-            use temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
-            let src = unbox<Buffer> src
-
-            device.perform {
-                do! Command.Copy(src, int64 srcOffset, temp, 0L, int64 size)
-            }
-
-            temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
+        let src = unbox<Buffer> src
+        Buffer.download src srcOffset dst size
 
     member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
-        if size > 0n then
-            let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 size)
-            let src = unbox<Buffer> src
-
-            let task = device.GraphicsFamily.Start(QueueCommand.ExecuteCommand([], [], Command.Copy(src, int64 srcOffset, temp, 0L, int64 size)))
-
-            (fun () ->
-                task.Wait()
-                if task.IsFaulted then
-                    temp.Dispose()
-                    raise task.Exception
-                else
-                    temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, size))
-                    temp.Dispose()
-            )
-        else
-            ignore
-
-
+        let src = unbox<Buffer> src
+        Buffer.downloadAsync src srcOffset dst size
 
     member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
-        if size > 0n then
-            let src = unbox<Buffer> src
-            let dst = unbox<Buffer> dst
-
-            device.perform {
-                do! Command.Copy(src, int64 srcOffset, dst, int64 dstOffset, int64 size)
-            }
+        let src = unbox<Buffer> src
+        let dst = unbox<Buffer> dst
+        Buffer.copy src srcOffset dst dstOffset size
 
     member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
         src |> ResourceValidation.Textures.validateSlices srcBaseSlice slices

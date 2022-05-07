@@ -494,6 +494,66 @@ module Buffer =
     let rec ofBuffer (flags : VkBufferUsageFlags) (buffer : IBuffer) (device : Device) =
         device.DeviceMemory |> ofBufferWithMemory flags buffer
 
+    let inline upload (src : nativeint) (dst : Buffer) (dstOffset : nativeint) (sizeInBytes : nativeint)  =
+        if sizeInBytes > 0n then
+            let device = dst.Device
+
+            if dst.Memory.Memory.Heap.IsHostVisible then
+                dst.Memory.Mapped (fun ptr -> Marshal.Copy(src, ptr + dstOffset, sizeInBytes))
+            else
+                use temp = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit (int64 sizeInBytes)
+
+                temp.Memory.Mapped(fun ptr -> Marshal.Copy(src, ptr, sizeInBytes))
+                device.perform {
+                    do! Command.Copy(temp, 0L, dst, int64 dstOffset, int64 sizeInBytes)
+                }
+
+    let inline download (src : Buffer) (srcOffset : nativeint) (dst : nativeint) (sizeInBytes : nativeint) =
+        if sizeInBytes > 0n then
+            let device = src.Device
+
+            if src.Memory.Memory.Heap.IsHostVisible then
+                src.Memory.Mapped (fun ptr -> Marshal.Copy(ptr + srcOffset, dst, sizeInBytes))
+            else
+                use temp = device.HostMemory |> create VkBufferUsageFlags.TransferDstBit (int64 sizeInBytes)
+
+                device.perform {
+                    do! Command.Copy(src, int64 srcOffset, temp, 0L, int64 sizeInBytes)
+                }
+
+                temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, sizeInBytes))
+
+    let inline downloadAsync (src : Buffer) (srcOffset : nativeint) (dst : nativeint) (sizeInBytes : nativeint)  =
+        if sizeInBytes > 0n then
+            let device = src.Device
+
+            if src.Memory.Memory.Heap.IsHostVisible then
+                (fun () ->
+                    src.Memory.Mapped (fun ptr -> Marshal.Copy(ptr + srcOffset, dst, sizeInBytes))
+                )
+            else
+                let temp = device.HostMemory |> create VkBufferUsageFlags.TransferDstBit (int64 sizeInBytes)
+                let task = device.GraphicsFamily.Start(QueueCommand.ExecuteCommand([], [], Command.Copy(src, int64 srcOffset, temp, 0L, int64 sizeInBytes)))
+
+                (fun () ->
+                    task.Wait()
+                    if task.IsFaulted then
+                        temp.Dispose()
+                        raise task.Exception
+                    else
+                        temp.Memory.Mapped (fun ptr -> Marshal.Copy(ptr, dst, sizeInBytes))
+                        temp.Dispose()
+                )
+        else
+            ignore
+
+    let inline copy (src : Buffer) (srcOffset : nativeint) (dst : Buffer) (dstOffset : nativeint) (sizeInBytes : nativeint) =
+        if sizeInBytes > 0n then
+            let device = src.Device
+
+            device.perform {
+                do! Command.Copy(src, int64 srcOffset, dst, int64 dstOffset, int64 sizeInBytes)
+            }
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
