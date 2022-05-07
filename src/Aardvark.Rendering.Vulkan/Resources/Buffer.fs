@@ -532,8 +532,16 @@ type ContextBufferExtensions private() =
         device |> Buffer.alloc flags size
 
     [<Extension>]
+    static member inline CreateBuffer(memory : DeviceHeap, flags : VkBufferUsageFlags, size : int64) =
+        memory |> Buffer.create flags size
+
+    [<Extension>]
     static member inline CreateBuffer(device : Device, flags : VkBufferUsageFlags, b : IBuffer) =
         device |> Buffer.ofBuffer flags b
+
+    [<Extension>]
+    static member inline CreateBuffer(memory : DeviceHeap, flags : VkBufferUsageFlags, b : IBuffer) =
+        memory |> Buffer.ofBufferWithMemory flags b
 
     [<Extension>]
     static member inline UploadRanges(buffer : Buffer, ptr : nativeint, ranges : RangeSet) =

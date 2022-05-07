@@ -317,7 +317,7 @@ type InstanceBuffer(ctx : Context, semantics : MapExt<string, GLSLType * Type>, 
 
                 let buffer =
                     if count = 0 then new Aardvark.Rendering.GL.Buffer(ctx, 0n, 0)
-                    else ctx.CreateBuffer(elemSize * count)
+                    else ctx.CreateBuffer(nativeint elemSize * nativeint count)
 
                 buffer, elemSize, write
             )
@@ -378,7 +378,7 @@ type VertexBuffer(ctx : Context, semantics : MapExt<string, Type>, count : int) 
                 totalSize <- totalSize + int64 elemSize * int64 count
                 let buffer =
                     if count = 0 then new Aardvark.Rendering.GL.Buffer(ctx, 0n, 0)
-                    else ctx.CreateBuffer(elemSize * count)
+                    else ctx.CreateBuffer(nativeint elemSize * nativeint count)
                 buffer, elemSize, typ
             )
         totalSize, buffers
@@ -528,7 +528,7 @@ type IndexManager(ctx : Context, chunkSize : int, usedMemory : ref<int64>, total
 
     let mem : Memory<Buffer> =
         let malloc (size : nativeint) =
-            let res = ctx.CreateBuffer(int size)
+            let res = ctx.CreateBuffer(size)
             Interlocked.Add(&totalMemory.contents, int64 res.SizeInBytes) |> ignore
             res
 
@@ -607,7 +607,7 @@ module AtlasTextureUpload =
 
             let fmt, typ = TextureFormat.toFormatAndType image.Format
 
-            let sizeInBytes = size.X * size.Y * TextureFormat.pixelSizeInBytes image.Format
+            let sizeInBytes = nativeint size.X * nativeint size.Y * (nativeint (TextureFormat.pixelSizeInBytes image.Format))
             let buffer = ctx.CreateBuffer sizeInBytes
 
             
@@ -895,8 +895,8 @@ and TextureSlot(parent : TextureManager, texture : Texture, id : Guid, sampler :
 
 
 type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : nativeptr<int>, signature : IFramebufferSignature, bounds : bool, active : nativeptr<int>, modelViewProjs : nativeptr<int>, indexed : bool, initialCapacity : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
-    static let es = sizeof<DrawCallInfo>
-    static let bs = sizeof<CullingShader.CullingInfo>
+    static let es = nativeint sizeof<DrawCallInfo>
+    static let bs = nativeint sizeof<CullingShader.CullingInfo>
 
     static let ceilDiv (a : int) (b : int) =
         if a % b = 0 then a / b
@@ -921,10 +921,10 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
     let mutable bmem : nativeptr<CullingShader.CullingInfo> = if bounds then NativePtr.alloc capacity else NativePtr.zero
 
 
-    let mutable buffer = ctx.CreateBuffer (es * capacity)
-    let mutable bbuffer = if bounds then ctx.CreateBuffer(bs * capacity) else new Buffer(ctx, 0n, 0)
+    let mutable buffer = ctx.CreateBuffer (es * nativeint capacity)
+    let mutable bbuffer = if bounds then ctx.CreateBuffer(bs * nativeint capacity) else new Buffer(ctx, 0n, 0)
 
-    let ub = ctx.CreateBuffer(128)
+    let ub = ctx.CreateBuffer(128n)
 
     let dirty = System.Collections.Generic.HashSet<int>()
     let mutable count = 0
@@ -945,7 +945,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
     let oldUBSize = NativePtr.allocArray [| 0n |]
 
     do let es = if bounds then es + bs else es
-       Interlocked.Add(&totalMemory.contents, int64 (es * capacity)) |> ignore
+       Interlocked.Add(&totalMemory.contents, int64 (es * nativeint capacity)) |> ignore
 
     let culling =
         if bounds then 
@@ -1010,13 +1010,13 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
         let newCapacity = max initialCapacity (Fun.NextPowerOfTwo (max 1 newCount))
         if newCapacity <> capacity then
             let ess = if bounds then es + bs else es
-            Interlocked.Add(&totalMemory.contents, int64 (ess * (newCapacity - capacity))) |> ignore
+            Interlocked.Add(&totalMemory.contents, int64 (ess * (nativeint newCapacity - nativeint capacity))) |> ignore
             let ob = buffer
             let obb = bbuffer
             let om = mem
             let obm = bmem
-            let nb = ctx.CreateBuffer (es * newCapacity)
-            let nbb = if bounds then ctx.CreateBuffer (bs * newCapacity) else new Buffer(ctx, 0n, 0)
+            let nb = ctx.CreateBuffer (es * nativeint newCapacity)
+            let nbb = if bounds then ctx.CreateBuffer (bs * nativeint newCapacity) else new Buffer(ctx, 0n, 0)
             let nm = NativePtr.alloc newCapacity
             let nbm = if bounds then NativePtr.alloc newCapacity else NativePtr.zero
 
@@ -1127,18 +1127,18 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
 
         if toUpload.Length > 0 then
             use __ = ctx.ResourceLock
-            let ptr = ctx.MapBufferRange(buffer, 0n, nativeint (count * es), BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
+            let ptr = ctx.MapBufferRange(buffer, 0n, nativeint count * es, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
             for r in toUpload do
-                let o = r * es |> nativeint
+                let o = nativeint r * es
                 let s = es |> nativeint
                 Marshal.Copy(NativePtr.toNativeInt mem + o, ptr + o, s)
                 GL.Dispatch.FlushMappedNamedBufferRange(buffer.Handle, o, s)
             ctx.UnmapBuffer(buffer)
 
             if bounds then
-                let bptr = ctx.MapBufferRange(bbuffer, 0n, nativeint (count * bs), BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
+                let bptr = ctx.MapBufferRange(bbuffer, 0n, nativeint count * bs, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
                 for r in toUpload do
-                    let o = r * bs |> nativeint
+                    let o = nativeint r * bs
                     let s = bs |> nativeint
                     Marshal.Copy(NativePtr.toNativeInt bmem + o, bptr + o, s)
                     GL.Dispatch.FlushMappedNamedBufferRange(bbuffer.Handle, o, s)
@@ -1213,8 +1213,8 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
 
     member x.Dispose() =
         let ess = if bounds then es + bs else es
-        Interlocked.Add(&usedMemory.contents, int64 (-ess * count)) |> ignore
-        Interlocked.Add(&totalMemory.contents, int64 (-ess * capacity)) |> ignore
+        Interlocked.Add(&usedMemory.contents, int64 (-ess * nativeint count)) |> ignore
+        Interlocked.Add(&totalMemory.contents, int64 (-ess * nativeint capacity)) |> ignore
         NativePtr.free mem
         ctx.Delete buffer
         if bounds then

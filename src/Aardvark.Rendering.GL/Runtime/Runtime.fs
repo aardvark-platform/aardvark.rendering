@@ -7,6 +7,7 @@ open OpenTK.Graphics.OpenGL4
 open FSharp.Data.Adaptive
 open FShade
 open Aardvark.Rendering.GL
+open System.Runtime.InteropServices
 
 #nowarn "9"
 
@@ -187,8 +188,7 @@ type Runtime(debug : DebugLevel) =
         member x.CompileRender (signature, set : aset<IRenderObject>, debug : bool) = x.CompileRender(signature, set, debug)
         member x.CompileClear(signature, values) = x.CompileClear(signature, values)
 
-        ///NOTE: OpenGL does not care about
-        member x.CreateBuffer(size : nativeint, usage : BufferUsage) = x.CreateBuffer(size) :> IBackendBuffer
+        member x.CreateBuffer(size : nativeint, _ : BufferUsage, storage : BufferStorage) = x.CreateBuffer(size, storage) :> IBackendBuffer
         member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = x.Upload(src, dst, dstOffset, size)
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) = x.Download(src, srcOffset, dst, size)
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
@@ -212,7 +212,7 @@ type Runtime(debug : DebugLevel) =
                 | :? Texture as t -> x.DeleteTexture t
                 | _ -> failwithf "unsupported texture-type: %A" t
 
-        member x.PrepareBuffer (b : IBuffer, usage : BufferUsage) = x.PrepareBuffer b :> IBackendBuffer
+        member x.PrepareBuffer (b : IBuffer, _ : BufferUsage, storage : BufferStorage) = x.PrepareBuffer(b, storage) :> IBackendBuffer
         member x.DeleteBuffer (b : IBackendBuffer) =
             match b with
                 | :? Aardvark.Rendering.GL.Buffer as b -> x.DeleteBuffer b
@@ -451,8 +451,8 @@ type Runtime(debug : DebugLevel) =
 
             ctx.Copy(src, srcLevel, srcSlices, V3i.Zero, dst, dstLevel, dstSlices, V3i.Zero, size)
 
-    member x.CreateBuffer(size : nativeint) =
-        ctx.CreateBuffer(int size)
+    member x.CreateBuffer(size : nativeint, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
+        ctx.CreateBuffer(size, storage)
 
     member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         use __ = ctx.ResourceLock
@@ -496,7 +496,7 @@ type Runtime(debug : DebugLevel) =
             ) :> IFramebufferSignature
 
     member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
-    member x.PrepareBuffer (b : IBuffer) = ctx.CreateBuffer(b)
+    member x.PrepareBuffer (b : IBuffer, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) = ctx.CreateBuffer(b, storage)
     member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) : IBackendSurface =
         Operators.using ctx.ResourceLock (fun d ->
             let surface =

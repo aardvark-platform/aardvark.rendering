@@ -6,6 +6,17 @@ open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 open Aardvark.Base
 
+/// Represents the type of storage used by a buffer.
+type BufferStorage =
+
+    /// Device local storage, which is most efficient for device access but cannot be accessed by the host directly.
+    /// Suitable if the data is accessed only occasionally by the host.
+    | Device = 0
+
+    /// Host-visible storage, which can be accessed directly by the host.
+    /// Suitable if the data is accessed regularly by the host.
+    | Host = 1
+
 /// Flags to specify how a buffer may be used.
 [<Flags>]
 type BufferUsage =
@@ -38,7 +49,7 @@ type BufferUsage =
     /// Buffer may be used as storage for acceleration structures.
     | AccelerationStructure = 0x80
 
-    /// Default usage (equivalent to combination of all other flags).
+    /// Equivalent to combination of all other usage flags.
     | Default               = 0xFF
 
 type IBuffer = interface end
@@ -51,7 +62,7 @@ type INativeBuffer =
     abstract member Unpin : unit -> unit
 
 type IBackendBuffer =
-    inherit IBuffer // ISSUE: this allows a backend buffer to be used everywhere even if it is restricted to a specific type -> HOWEVER buffers can have multiple mixed usage flags -> interface restriction not possible
+    inherit IBuffer
     inherit IDisposable
     abstract member Runtime : IBufferRuntime
     abstract member Handle : obj
@@ -61,12 +72,24 @@ and IBufferRuntime =
     /// Deletes a buffer and releases all GPU resources and API handles
     abstract member DeleteBuffer : IBackendBuffer -> unit
 
-    /// Prepares a buffer, allocating and uploading the data to GPU memory
-    /// If the buffer is an IBackendBuffer the operation performs NOP
-    abstract member PrepareBuffer : data : IBuffer * usage : BufferUsage -> IBackendBuffer
+    ///<summary>
+    /// Prepares a buffer, allocating and uploading the data to GPU memory.
+    /// If the given data is an IBackendBuffer the operation performs NOP.
+    ///</summary>
+    ///<param name="data">The data to upload to the buffer.</param>
+    ///<param name="usage">The usage flags of the buffer. Default is BufferUsage.Default.</param>
+    ///<param name="storage">The type of storage that is preferred. Default is BufferStorage.Device.</param>
+    abstract member PrepareBuffer : data : IBuffer *
+                                    [<Optional; DefaultParameterValue(BufferUsage.Default)>] usage : BufferUsage *
+                                    [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage -> IBackendBuffer
 
-    /// Creates a GPU buffer with the specified size in bytes and usage
-    abstract member CreateBuffer : size : nativeint * usage : BufferUsage -> IBackendBuffer
+    ///<summary>Creates a GPU buffer.</summary>
+    ///<param name="sizeInBytes">The size (in bytes) of the buffer.</param>
+    ///<param name="usage">The usage flags of the buffer. Default is BufferUsage.Default.</param>
+    ///<param name="storage">The type of storage that is preferred. Default is BufferStorage.Device.</param>
+    abstract member CreateBuffer : sizeInBytes : nativeint *
+                                   [<Optional; DefaultParameterValue(BufferUsage.Default)>] usage : BufferUsage *
+                                   [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage -> IBackendBuffer
 
     abstract member Copy : srcData : nativeint * dst : IBackendBuffer * dstOffset : nativeint * size : nativeint -> unit
     abstract member Copy : srcBuffer : IBackendBuffer * srcOffset : nativeint * dstData : nativeint * size : nativeint -> unit
@@ -284,12 +307,12 @@ type IBufferRuntimeExtensions private() =
 
     [<Extension>]
     static member CreateBuffer<'a when 'a : unmanaged>(this : IBufferRuntime, count : int) =
-        let buffer = this.CreateBuffer(nsa<'a> * nativeint count, BufferUsage.Default)
+        let buffer = this.CreateBuffer(nsa<'a> * nativeint count)
         new RuntimeBuffer<'a>(buffer, count) :> IBuffer<'a>
 
     [<Extension>]
     static member CreateBuffer<'a when 'a : unmanaged>(this : IBufferRuntime, data : 'a[]) =
-        let buffer = this.CreateBuffer(nsa<'a> * nativeint data.Length, BufferUsage.Default)
+        let buffer = this.CreateBuffer(nsa<'a> * nativeint data.Length)
         let res = new RuntimeBuffer<'a>(buffer, data.Length) :> IBuffer<'a>
         IBufferRuntimeExtensions.Upload(res, data)
         res
@@ -297,21 +320,6 @@ type IBufferRuntimeExtensions private() =
     [<Extension>]
     static member Coerce<'a when 'a : unmanaged>(this : IBackendBuffer) =
         new RuntimeBuffer<'a>(this, int (this.SizeInBytes / nativeint sizeof<'a>)) :> IBuffer<'a>
-
-    /// <summary>
-    /// Creates a buffer in GPU memory with default BufferUsage flags, enabling all usages as well as read and write.
-    /// </summary>
-    [<Extension>]
-    static member CreateBuffer(this : IBufferRuntime, size : nativeint) =
-        this.CreateBuffer(size, BufferUsage.Default)
-
-    /// <summary>
-    /// Prepares a buffer for GPU usage with all BufferUsage flags, but only write permissions.
-    /// If the buffer is an IBackendBuffer the operation performs NOP
-    /// </summary>
-    [<Extension>]
-    static member PrepareBuffer(this : IBufferRuntime, buffer : IBuffer) =
-        this.PrepareBuffer(buffer, BufferUsage.Default &&& ~~~BufferUsage.Read)
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module BufferRange =

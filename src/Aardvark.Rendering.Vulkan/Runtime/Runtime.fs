@@ -141,9 +141,10 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     member x.DeletRenderbuffer(t : IRenderbuffer) =
         Disposable.dispose (unbox<Image> t)
 
-    member x.PrepareBuffer (t : IBuffer, usage : BufferUsage) =
+    member x.PrepareBuffer (t : IBuffer, usage : BufferUsage, storage : BufferStorage) =
         let flags = VkBufferUsageFlags.ofBufferUsage usage
-        device.CreateBuffer(flags, t) :> IBackendBuffer
+        let memory = if storage = BufferStorage.Device then device.DeviceMemory else device.HostMemory
+        memory.CreateBuffer(flags, t) :> IBackendBuffer
 
     member x.DeleteBuffer(t : IBackendBuffer) =
         Disposable.dispose(unbox<Buffer> t)
@@ -251,9 +252,10 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-    member x.CreateBuffer(size : nativeint, usage : BufferUsage) =
+    member x.CreateBuffer(size : nativeint, usage : BufferUsage, storage : BufferStorage) =
         let flags = VkBufferUsageFlags.ofBufferUsage usage
-        device.CreateBuffer(flags, int64 size)
+        let memory = if storage = BufferStorage.Device then device.DeviceMemory else device.HostMemory
+        memory.CreateBuffer(flags, int64 size)
 
     member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         if size > 0n then
@@ -526,7 +528,7 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         member x.PrepareRenderObject(fboSignature, rj) = x.PrepareRenderObject(fboSignature, rj)
         member x.PrepareTexture(t) = x.PrepareTexture(t)
         member x.DeleteTexture(t) = x.DeleteTexture(t)
-        member x.PrepareBuffer(b, u) = x.PrepareBuffer(b, u)
+        member x.PrepareBuffer(b, u, s) = x.PrepareBuffer(b, u, s)
         member x.DeleteBuffer(b) = x.DeleteBuffer(b)
 
         member x.DeleteRenderbuffer(b) = x.DeletRenderbuffer(b)
@@ -554,7 +556,7 @@ type Runtime(device : Device, debug : DebugLevel) as this =
 
 
 
-        member x.CreateBuffer(size : nativeint, usage : BufferUsage) = x.CreateBuffer(size, usage) :> IBackendBuffer
+        member x.CreateBuffer(size : nativeint, usage : BufferUsage, storage : BufferStorage) = x.CreateBuffer(size, usage, storage) :> IBackendBuffer
 
         member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
             x.Copy(src, dst, dstOffset, size)
