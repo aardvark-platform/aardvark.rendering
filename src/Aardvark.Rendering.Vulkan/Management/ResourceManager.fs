@@ -1835,9 +1835,8 @@ type ResourceManager(user : IResourceUser, device : Device) =
             fun cache key ->
                 let instanceBuffer = InstanceBuffer.create x.Device.Runtime sbt instances
                 let buffer = x.CreateBuffer(instanceBuffer)
-                let count = ASet.count instances
 
-                new AccelerationStructureResource(cache, key, device, buffer, count, usage)
+                new AccelerationStructureResource(cache, key, device, buffer, instanceBuffer.Count, usage)
         )
 
     member x.CreateRaytracingPipeline(program           : Raytracing.RaytracingProgram,

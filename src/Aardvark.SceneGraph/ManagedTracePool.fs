@@ -388,9 +388,9 @@ module private ManagedTracePoolUtils =
             | IndexType.UInt32 -> typeof<uint32>
 
     type IManagedBuffer with
-        member x.Add(range : Range1l, data : IndexData<aval<IBuffer>>) =
+        member x.Add(data : IndexData<aval<IBuffer>>, range : Range1l) =
             let view = BufferView(data.Buffer, data.Type.Type, int data.Offset)
-            x.Add(range, view)
+            x.Add(view, range)
 
 type internal TracePoolResources =
     {
@@ -445,25 +445,25 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature) =
     let geometryAttributeManager = LayoutManager<Map<Symbol, IAdaptiveValue>[]>()
 
     let indexBuffer =
-        ManagedBuffer.create indexType runtime (BufferUsage.ReadWrite ||| BufferUsage.Storage ||| BufferUsage.AccelerationStructure)
+        runtime.CreateManagedBuffer(indexType, BufferUsage.ReadWrite ||| BufferUsage.Storage ||| BufferUsage.AccelerationStructure)
 
     let vertexBuffers =
         signature.VertexAttributeTypes |> Map.map (fun _ t ->
-            ManagedBuffer.create t runtime (BufferUsage.ReadWrite ||| BufferUsage.Storage ||| BufferUsage.AccelerationStructure)
+            runtime.CreateManagedBuffer(t, BufferUsage.ReadWrite ||| BufferUsage.Storage ||| BufferUsage.AccelerationStructure)
         )
 
     let instanceAttributeBuffers =
         instanceAttributeTypes |> Map.map (fun _ t ->
-            ManagedBuffer.create t runtime (BufferUsage.ReadWrite ||| BufferUsage.Storage)
+            runtime.CreateManagedBuffer(t, BufferUsage.ReadWrite ||| BufferUsage.Storage)
         )
 
     let geometryAttributeBuffers =
         geometryAttributeTypes |> Map.map (fun _ t ->
-            ManagedBuffer.create t runtime (BufferUsage.ReadWrite ||| BufferUsage.Storage)
+            runtime.CreateManagedBuffer(t, BufferUsage.ReadWrite ||| BufferUsage.Storage)
         )
 
     let geometryBuffer =
-        ManagedBuffer.create typeof<TraceGeometryInfo> runtime (BufferUsage.ReadWrite ||| BufferUsage.Storage)
+        runtime.CreateManagedBuffer(typeof<TraceGeometryInfo>, BufferUsage.ReadWrite ||| BufferUsage.Storage)
 
     let accelerationStructures =
         Dict<AdaptiveTraceGeometry * AccelerationStructureUsage, aval<IAccelerationStructure>>()
@@ -528,9 +528,9 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature) =
 
                 for KeyValue(k, _) in geometryAttributeTypes do
                     let target = geometryAttributeBuffers.[k]
-                    match attributes|> Map.tryFind k with
-                    | Some v -> target.Add(geometryAttributeIndex + i, v) |> ds.Add
-                    | None -> target.Set(Range1l.FromMinAndSize(int64 geometryAttributeIndex + int64 i, 0L), zero)
+                    match attributes |> Map.tryFind k with
+                    | Some v -> target.Add(v, geometryAttributeIndex + i) |> ds.Add
+                    | None -> target.Set(zero, Range1l.FromMinAndSize(int64 geometryAttributeIndex + int64 i, 0L))
 
             // Instance attributes
             let instanceAttributePtr   = instanceAttributeManager.Alloc(instanceAttributes, 1)
@@ -539,8 +539,8 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature) =
             for KeyValue(k, _) in instanceAttributeTypes do
                 let target = instanceAttributeBuffers.[k]
                 match instanceAttributes |> Map.tryFind k with
-                | Some v -> target.Add(instanceAttributeIndex, v) |> ds.Add
-                | None -> target.Set(Range1l.FromMinAndSize(int64 instanceAttributeIndex, 0L), zero)
+                | Some v -> target.Add(v, instanceAttributeIndex) |> ds.Add
+                | None -> target.Set(zero, Range1l.FromMinAndSize(int64 instanceAttributeIndex, 0L))
 
             // Geometry data
             let geometryIndex, geometryPtr =
@@ -557,8 +557,8 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature) =
                             for KeyValue(k, _) in signature.VertexAttributeTypes do
                                 let target = vertexBuffers.[k]
                                 match Map.tryFind k vertexAttributes with
-                                | Some v -> target.Add(vertexRange, v) |> ds.Add
-                                | None -> target.Set(vertexRange, zero)
+                                | Some v -> target.Add(v, vertexRange) |> ds.Add
+                                | None -> target.Set(zero, vertexRange)
 
                             vptrs.Add(vertexPtr)
                             int32 vertexPtr.Offset
@@ -572,12 +572,12 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature) =
                             let indexRange = Range1l.FromMinAndSize(int64 indexPtr.Offset, int64 fvc - 1L)
 
                             match m.Indices with
-                            | Some idx -> indexBuffer.Add(indexRange, idx) |> ds.Add
+                            | Some idx -> indexBuffer.Add(idx, indexRange) |> ds.Add
                             | None ->
                                 if isNew then
                                     let conv = PrimitiveValueConverter.getArrayConverter typeof<int> indexType
                                     let data = Array.init fvc id |> conv
-                                    indexBuffer.Set(indexRange, data.UnsafeCoerce<byte>())
+                                    indexBuffer.Set(data.UnsafeCoerce<byte>(), indexRange)
 
                             iptrs.Add(indexPtr)
                             int32 indexPtr.Offset
@@ -594,7 +594,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature) =
                               InstanceAttributeIndex = instanceAttributeIndex
                               GeometryAttributeIndex = geometryAttributeIndex + i }
 
-                        geometryBuffer.Add(geometryIndex + i, AVal.constant info) |> ds.Add
+                        geometryBuffer.Add(AVal.constant info, geometryIndex + i) |> ds.Add
 
                     geometryIndex, geometryPtr
 
@@ -610,7 +610,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature) =
                               InstanceAttributeIndex = instanceAttributeIndex
                               GeometryAttributeIndex = geometryAttributeIndex + i }
 
-                        geometryBuffer.Add(geometryIndex + i, AVal.constant info) |> ds.Add
+                        geometryBuffer.Add(AVal.constant info, geometryIndex + i) |> ds.Add
 
                     geometryIndex, geometryPtr
 
@@ -645,28 +645,28 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature) =
 
     /// Buffer of TraceGeometryInfo structs.
     member x.GeometryBuffer =
-        geometryBuffer :> aval<IBuffer>
+        geometryBuffer |> AdaptiveResource.cast<IBuffer>
 
     member x.IndexBuffer =
-        indexBuffer :> aval<IBuffer>
+        indexBuffer |> AdaptiveResource.cast<IBuffer>
 
     member x.TryGetVertexAttribute(semantic : Symbol) =
         vertexBuffers |> Map.tryFind semantic
-        |> Option.map (fun v -> v :> aval<IBuffer>)
+        |> Option.map AdaptiveResource.cast<IBuffer>
 
     member x.GetVertexAttribute(semantic : Symbol) =
         x.TryGetVertexAttribute semantic |> Option.get
 
     member x.TryGetInstanceAttribute(semantic : Symbol) =
         instanceAttributeBuffers |> Map.tryFind semantic
-        |> Option.map (fun v -> v :> aval<IBuffer>)
+        |> Option.map AdaptiveResource.cast<IBuffer>
 
     member x.GetInstanceAttribute(semantic : Symbol) =
         x.TryGetInstanceAttribute semantic |> Option.get
 
     member x.TryGetGeometryAttribute(semantic : Symbol) =
         geometryAttributeBuffers |> Map.tryFind semantic
-        |> Option.map (fun v -> v :> aval<IBuffer>)
+        |> Option.map AdaptiveResource.cast<IBuffer>
 
     member x.GetGeometryAttribute(semantic : Symbol) =
         x.TryGetGeometryAttribute semantic |> Option.get

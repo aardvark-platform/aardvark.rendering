@@ -41,7 +41,7 @@ module GeometrySetUtilities =
                 buffers.GetOrAdd(sem, fun sem ->
                     isNew <- true
                     let elementSize = getElementSize sem
-                    let b = AdaptiveBufferImplementation.MappedAdaptiveBuffer(runtime, elementSize * manager.Capacity)
+                    let b = AdaptiveBuffer(runtime, elementSize * manager.Capacity)
                     b.Acquire()
                     b :> IAdaptiveBuffer
                 )

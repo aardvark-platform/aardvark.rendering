@@ -3,28 +3,106 @@
 open Aardvark.Base
 open FSharp.Data.Adaptive
 open System
-open OptimizedClosures
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
+open OptimizedClosures
+
+type ICompactBuffer =
+    inherit IAdaptiveBuffer
+
+    /// The number of elements in the input set
+    abstract member Count : aval<int>
 
 module internal CompactBufferImplementation =
 
-    type private AdaptiveValueWriter<'Key, 'Value when 'Value : unmanaged>(
-                                     evaluate : FSharpFunc<AdaptiveToken, 'Key, 'Value>, stride : int, input : 'Key, index : int) =
+    [<AbstractClass>]
+    type AbstractCompactBuffer<'Key, 'Value>(runtime : IBufferRuntime, input : aset<'Key>, usage : BufferUsage, storage : BufferStorage) =
+        inherit AdaptiveBuffer(runtime, 0n, usage, storage)
+
+        static let elementSize = nativeint sizeof<'Value>
+
+        let count = ASet.count input
+        let compact = ASet.compact input
+        let reader = compact.GetReader()
+
+        member inline private x.Transact =
+            if x.ProcessDeltasInTransaction then transact
+            else (fun ([<InlineIfLambda>] g) -> g())
+
+        /// Indicates whether a transaction is used when processing deltas.
+        abstract member ProcessDeltasInTransaction : bool
+        default x.ProcessDeltasInTransaction = false
+
+        /// Called when a new element is added or an old one is moved
+        abstract member Set : input: 'Key * index: int -> unit
+
+        /// Called when an element is removed.
+        abstract member Remove : input: 'Key -> unit
+        default x.Remove(_) = ()
+
+        /// Called after deltas have been processed.
+        abstract member Update : token: AdaptiveToken -> unit
+        default x.Update(_) = ()
+
+        override x.Compute(t, rt) =
+            let ops = reader.GetChanges(t)
+
+            // Grow buffer if necessary
+            let count = count.GetValue(t)
+            x.Resize(nativeint count * elementSize)
+
+            // Process deltas
+            x.Transact (fun _ ->
+                for o in ops do
+                    match o with
+                    | value, Set index ->
+                        x.Set(value, index)
+
+                    | value, Remove ->
+                        x.Remove(value)
+            )
+
+            x.Update(t)
+            base.Compute(t, rt)
+
+        interface ICompactBuffer with
+            member x.Count = count
+
+    type ConstantCompactBuffer<'Key, 'Value when 'Value : unmanaged>(
+                                runtime : IBufferRuntime,
+                                evaluate : 'Key -> 'Value,
+                                input : aset<'Key>,
+                                usage : BufferUsage,
+                                storage : BufferStorage) =
+        inherit AbstractCompactBuffer<'Key, 'Value>(runtime, input, usage, storage)
+
+        let stride = sizeof<'Value>
+
+        override x.Set(input, index) =
+            let offset = index * stride
+            let value = evaluate input
+            x.Write(value, nativeint offset)
+
+    type private Writer<'Key, 'Value when 'Value : unmanaged>(
+                        buffer : AdaptiveCompactBuffer<'Key, 'Value>,
+                        evaluate : FSharpFunc<AdaptiveToken, 'Key, 'Value>,
+                        input : 'Key, index : int) =
         inherit AdaptiveObject()
+
+        static let elementSize = nativeint sizeof<'Value>
 
         let mutable currentIndex = index
 
-        member x.Write(token : AdaptiveToken, buffer : IAdaptiveBuffer) =
+        member x.Write(token : AdaptiveToken) =
             x.EvaluateIfNeeded token () (fun token ->
-                let offset = currentIndex * stride
+                let offset = nativeint currentIndex * elementSize
                 let value = evaluate.Invoke(token, input)
-                buffer.Write(value, nativeint offset)
+                buffer.Write(value, offset)
             )
 
         member x.SetIndex(index : int) =
             currentIndex <- index
-            transact x.MarkOutdated
+            x.MarkOutdated()
 
         member x.Dispose() =
             x.Outputs.Clear()
@@ -32,77 +110,62 @@ module internal CompactBufferImplementation =
         interface IDisposable with
             member x.Dispose() = x.Dispose()
 
-    /// Buffer that holds the elements of a set in a sequential block of memory.
-    type AdaptiveCompactBuffer<'Key, 'Value when ' Value : unmanaged>(
+    and AdaptiveCompactBuffer<'Key, 'Value when ' Value : unmanaged>(
                                runtime : IBufferRuntime,
                                evaluate : AdaptiveToken -> 'Key -> 'Value,
                                acquire : 'Key -> unit,
                                release : 'Key -> unit,
                                input : aset<'Key>,
-                               [<Optional; DefaultParameterValue(BufferUsage.Default)>] usage : BufferUsage,
-                               [<Optional; DefaultParameterValue(0)>] stride : int,
-                               [<Optional; DefaultParameterValue(1L)>] blockAlignment : int64,
-                               [<Optional; DefaultParameterValue(1L)>] blockSize : int64) =
-        inherit AdaptiveBufferImplementation.MappedAdaptiveBuffer(runtime, 0n, usage = usage, blockAlignment = blockAlignment, blockSize = blockSize)
+                               usage : BufferUsage,
+                               storage : BufferStorage) =
+        inherit AbstractCompactBuffer<'Key, 'Value>(runtime, input, usage, storage)
 
-        let stride = if stride = 0 then sizeof<'Value> else stride
+        let writers = Dict<'Key, Writer<'Key, 'Value>>()
+        let pending = LockedSet<Writer<'Key, 'Value>>()
 
-        let reader = (ASet.compact input).GetReader()
-        let writers = Dict<'Key, AdaptiveValueWriter<'Key, 'Value>>()
         let evaluate = FSharpFunc<_, _, _>.Adapt evaluate
 
         override x.Destroy() =
-            reader.Outputs.Remove(x) |> ignore
-
             for KeyValue(input, writer) in writers do
                 writer.Dispose()
                 release input
 
+            pending.Clear()
             writers.Clear()
             base.Destroy()
 
-        member x.MarkDirty(input : 'Key) =
-            match writers.TryGetValue input with
-            | (true, w) -> transact w.MarkOutdated
-            | _ -> ()
+        // SetIndex calls MarkOutdated which needs to happen in a transaction
+        override x.ProcessDeltasInTransaction = true
 
-        member private x.Set(input, index) =
+        override x.Set(input, index) =
             match writers.TryGetValue input with
             | (true, w) ->
                 w.SetIndex(index)
+                pending.Add(w) |> ignore
             | _ ->
                 acquire input
-                let w = new AdaptiveValueWriter<'Key, 'Value>(evaluate, stride, input, index)
+                let w = new Writer<'Key, 'Value>(x, evaluate, input, index)
                 writers.Add(input, w)
+                pending.Add(w) |> ignore
 
-        member private x.Remove(input) =
+        override x.Remove(input) =
             match writers.TryGetValue input with
             | (true, w) ->
                 w.Dispose()
+                pending.Remove(w) |> ignore
                 writers.Remove(input) |> ignore
                 release input
             | _ -> ()
 
-        override x.Compute(t, rt) =
-            let ops = reader.GetChanges(t)
+        override x.InputChangedObject(_, object) =
+            match object with
+            | :? Writer<'Key, 'Value> as w -> pending.Add w |> ignore
+            | _ ->
+                ()
 
-            // Process deltas
-            for o in ops do
-                match o with
-                | value, Set index ->
-                    x.Set(value, index)
-
-                | value, Remove ->
-                    x.Remove(value)
-
-            // Grow buffer if necessary
-            x.Resize <| nativeint (writers.Count * stride)
-
-            // Write values
-            for (KeyValue(_, writer)) in writers do
-                writer.Write(t, x)
-
-            base.Compute(t, rt)
+        override x.Update(token : AdaptiveToken) =
+            for w in pending.GetAndClear() do
+                w.Write(token)
 
 [<Extension; Sealed>]
 type RuntimeAdaptiveCompactBufferExtensions private() =
@@ -116,9 +179,7 @@ type RuntimeAdaptiveCompactBufferExtensions private() =
     /// <param name="release">The function called when an element is removed from the input set.</param>
     /// <param name="input">The input element set.</param>
     /// <param name="usage">The usage flags of the buffer.</param>
-    /// <param name="stride">The number of bytes between the beginning of two successive elements, or 0 for a tightly packed layout. Default is 0.</param>
-    /// <param name="blockAlignment">The block alignment of the buffer. Default is 1.</param>
-    /// <param name="blockSize">The block size of the buffer. Default is 1.</param>
+    /// <param name="storage">The type of storage that is preferred. Default is BufferStorage.Host.</param>
     [<Extension>]
     static member CreateCompactBuffer<'Key, 'Value when 'Value : unmanaged>(
                                       this : IBufferRuntime,
@@ -127,12 +188,29 @@ type RuntimeAdaptiveCompactBufferExtensions private() =
                                       release : 'Key -> unit,
                                       input : aset<'Key>,
                                       [<Optional; DefaultParameterValue(BufferUsage.Default)>] usage : BufferUsage,
-                                      [<Optional; DefaultParameterValue(0)>] stride : int,
-                                      [<Optional; DefaultParameterValue(1L)>] blockAlignment : int64,
-                                      [<Optional; DefaultParameterValue(1L)>] blockSize : int64) =
+                                      [<Optional; DefaultParameterValue(BufferStorage.Host)>] storage : BufferStorage) =
         CompactBufferImplementation.AdaptiveCompactBuffer<'Key, 'Value>(
-            this, evaluate, acquire, release, input, usage, stride, blockAlignment, blockSize
-        ) :> IAdaptiveBuffer
+            this, evaluate, acquire, release, input, usage, storage
+        ) :> ICompactBuffer
+
+    /// <summary>
+    /// Creates a buffer from a set of elements, maintaining a compact layout.
+    /// </summary>
+    /// <param name="this">The runtime.</param>
+    /// <param name="evaluate">The function that maps an element in the input set to a value.</param>
+    /// <param name="input">The input element set.</param>
+    /// <param name="usage">The usage flags of the buffer.</param>
+    /// <param name="storage">The type of storage that is preferred. Default is BufferStorage.Host.</param>
+    [<Extension>]
+    static member CreateCompactBuffer<'Key, 'Value when 'Value : unmanaged>(
+                                      this : IBufferRuntime,
+                                      evaluate : 'Key -> 'Value,
+                                      input : aset<'Key>,
+                                      [<Optional; DefaultParameterValue(BufferUsage.Default)>] usage : BufferUsage,
+                                      [<Optional; DefaultParameterValue(BufferStorage.Host)>] storage : BufferStorage) =
+        CompactBufferImplementation.ConstantCompactBuffer<'Key, 'Value>(
+            this, evaluate, input, usage, storage
+        ) :> ICompactBuffer
 
     /// <summary>
     /// Creates a buffer from a set of elements, maintaining a compact layout.
@@ -140,19 +218,14 @@ type RuntimeAdaptiveCompactBufferExtensions private() =
     /// <param name="this">The runtime.</param>
     /// <param name="input">The input element set.</param>
     /// <param name="usage">The usage flags of the buffer.</param>
-    /// <param name="stride">The number of bytes between the beginning of two successive elements, or 0 for a tightly packed layout. Default is 0.</param>
-    /// <param name="blockAlignment">The block alignment of the buffer. Default is 1.</param>
-    /// <param name="blockSize">The block size of the buffer. Default is 1.</param>
+    /// <param name="storage">The type of storage that is preferred. Default is BufferStorage.Host.</param>
     [<Extension>]
     static member CreateCompactBuffer<'T when 'T : unmanaged>(
                                       this : IBufferRuntime,
                                       input : aset<'T>,
                                       [<Optional; DefaultParameterValue(BufferUsage.Default)>] usage : BufferUsage,
-                                      [<Optional; DefaultParameterValue(0)>] stride : int,
-                                      [<Optional; DefaultParameterValue(1L)>] blockAlignment : int64,
-                                      [<Optional; DefaultParameterValue(1L)>] blockSize : int64) =
-        let evaluate _ = id
-        this.CreateCompactBuffer(evaluate, ignore, ignore, input, usage, stride, blockAlignment, blockSize)
+                                      [<Optional; DefaultParameterValue(BufferStorage.Host)>] storage : BufferStorage) =
+        this.CreateCompactBuffer(id, input, usage, storage)
 
     /// <summary>
     /// Creates a buffer from a set of adaptive elements, maintaining a compact layout.
@@ -160,18 +233,14 @@ type RuntimeAdaptiveCompactBufferExtensions private() =
     /// <param name="this">The runtime.</param>
     /// <param name="input">The input element set.</param>
     /// <param name="usage">The usage flags of the buffer.</param>
-    /// <param name="stride">The number of bytes between the beginning of two successive elements, or 0 for a tightly packed layout. Default is 0.</param>
-    /// <param name="blockAlignment">The block alignment of the buffer. Default is 1.</param>
-    /// <param name="blockSize">The block size of the buffer. Default is 1.</param>
+    /// <param name="storage">The type of storage that is preferred. Default is BufferStorage.Host.</param>
     [<Extension>]
     static member CreateCompactBuffer<'T, 'U when 'T : unmanaged and 'U :> aval<'T>>(
                                       this : IBufferRuntime,
                                       input : aset<'U>,
                                       [<Optional; DefaultParameterValue(BufferUsage.Default)>] usage : BufferUsage,
-                                      [<Optional; DefaultParameterValue(0)>] stride : int,
-                                      [<Optional; DefaultParameterValue(1L)>] blockAlignment : int64,
-                                      [<Optional; DefaultParameterValue(1L)>] blockSize : int64) =
+                                      [<Optional; DefaultParameterValue(BufferStorage.Host)>] storage : BufferStorage) =
         let evaluate t (x : 'U) = x.GetValue(t)
         let acquire (x : 'U) = x.Acquire()
         let release (x : 'U) = x.Release()
-        this.CreateCompactBuffer(evaluate, acquire, release, input, usage, stride, blockAlignment, blockSize)
+        this.CreateCompactBuffer(evaluate, acquire, release, input, usage, storage)

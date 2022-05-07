@@ -26,6 +26,7 @@
     <Compile Include="Utilities\Locks\ColoredLock.fs" />
     <Compile Include="Utilities\Locks\LockedResource.fs" />
     <Compile Include="Utilities\Locks\RenderTaskLock.fs" />
+    <Compile Include="Utilities\Locks\LockedSet.fs" />
     <Compile Include="Utilities\TaskUtilities.fs" />
     <Compile Include="Utilities\ConstantVal.fs" />
     <Compile Include="Utilities\IdGenerator.fs" />
@@ -65,6 +66,7 @@
     <Compile Include="Resources\Raytracing\AccelerationStructure.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveResource.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveBuffer.fs" />
+    <Compile Include="Resources\Adaptive\ManagedBuffer.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveTextures.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveRenderbuffers.fs" />
     <Compile Include="Resources\Adaptive\AdaptiveFramebuffers.fs" />
