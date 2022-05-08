@@ -138,7 +138,9 @@ and ManagedDrawCall internal(call : DrawCallInfo, poolResources : voption<PoolRe
         member x.Dispose() = x.Dispose()
 
 and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
-                 indexBufferUsage : BufferUsage, vertexBufferUsage : BufferUsage, instanceBufferUsage : BufferUsage) =
+                indexBufferUsage : BufferUsage, indexBufferStorage : BufferStorage,
+                vertexBufferUsage : BufferUsage, vertexBufferStorage : Symbol -> BufferStorage,
+                instanceBufferUsage : BufferUsage, instanceBufferStorage : Symbol -> BufferStorage) =
     static let zero : byte[] = Array.zeroCreate 4096
 
     let indexManager = LayoutManager<Option<BufferView> * int>()
@@ -148,16 +150,19 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
     let toDict f = Map.toSeq >> Seq.map f >> SymDict.ofSeq
 
     let indexBuffer =
-        runtime.CreateManagedBuffer(signature.IndexType, BufferUsage.ReadWrite ||| indexBufferUsage)
+        let usage = indexBufferUsage ||| BufferUsage.Index ||| BufferUsage.ReadWrite
+        runtime.CreateManagedBuffer(signature.IndexType, usage, indexBufferStorage)
 
     let vertexBuffers =
+        let usage = vertexBufferUsage ||| BufferUsage.Vertex ||| BufferUsage.ReadWrite
         signature.VertexAttributeTypes |> toDict (fun (k, t) ->
-            k, runtime.CreateManagedBuffer(t, BufferUsage.ReadWrite ||| vertexBufferUsage)
+            k, runtime.CreateManagedBuffer(t, usage, vertexBufferStorage k)
         )
 
     let instanceBuffers =
+        let usage = instanceBufferUsage ||| BufferUsage.Vertex ||| BufferUsage.ReadWrite
         signature.InstanceAttributeTypes |> toDict (fun (k, t) ->
-            k, runtime.CreateManagedBuffer(t, BufferUsage.ReadWrite ||| instanceBufferUsage)
+            k, runtime.CreateManagedBuffer(t, usage, instanceBufferStorage k)
         )
 
     let vertexBufferTypes = Map.toArray signature.VertexAttributeTypes
@@ -180,11 +185,29 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
         for KeyValue(_, b)in instanceBuffers do b.Clear()
         drawCalls.Clear()
 
-    new (runtime : IRuntime, signature : GeometrySignature) =
-        new ManagedPool(runtime, signature, BufferUsage.Index, BufferUsage.Vertex, BufferUsage.Vertex)
+    new (runtime : IRuntime, signature : GeometrySignature,
+         indexBufferStorage : BufferStorage, vertexBufferStorage : Symbol -> BufferStorage, instanceBufferStorage : Symbol -> BufferStorage) =
+        new ManagedPool(
+            runtime, signature,
+            BufferUsage.None, indexBufferStorage,
+            BufferUsage.None, vertexBufferStorage,
+            BufferUsage.None, instanceBufferStorage
+        )
+
+    new (runtime : IRuntime, signature : GeometrySignature,
+         indexBufferUsage : BufferUsage, vertexBufferUsage : BufferUsage, instanceBufferUsage : BufferUsage) =
+        new ManagedPool(
+            runtime, signature,
+            indexBufferUsage, BufferStorage.Device,
+            vertexBufferUsage, (fun _ -> BufferStorage.Device),
+            instanceBufferUsage, (fun _ -> BufferStorage.Host)
+        )
 
     new (runtime : IRuntime, signature : GeometrySignature, usage : BufferUsage) =
         new ManagedPool(runtime, signature, usage, usage, usage)
+
+    new (runtime : IRuntime, signature : GeometrySignature) =
+        new ManagedPool(runtime, signature, BufferUsage.None)
 
     static member internal Zero = zero
 
@@ -305,23 +328,44 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
 type IRuntimePoolExtensions private() =
 
     /// Creates a managed pool with the given geometry signature.
+    /// Index and vertex buffers use BufferStorage.Device, instance buffers use BufferStorage.Host.
     [<Extension>]
     static member CreateManagedPool(this : IRuntime, signature : GeometrySignature) =
         new ManagedPool(this, signature)
 
     /// Creates a managed pool with the given geometry signature using the given additional usage flags for all buffers.
-    /// By default, every buffer is created with BufferUsage.ReadWrite.
+    /// Index and vertex buffers use BufferStorage.Device, instance buffers use BufferStorage.Host.
     [<Extension>]
     static member CreateManagedPool(this : IRuntime, signature : GeometrySignature, usage : BufferUsage) =
         new ManagedPool(this, signature, usage)
 
     /// Creates a managed pool with the given geometry signature using the given additional usage flags for the corresponding buffers.
-    /// By default, every buffer is created with BufferUsage.ReadWrite.
+    /// Index and vertex buffers use BufferStorage.Device, instance buffers use BufferStorage.Host.
     [<Extension>]
     static member CreateManagedPool(this : IRuntime, signature : GeometrySignature,
                                     indexBufferUsage : BufferUsage, vertexBufferUsage : BufferUsage, instanceBufferUsage : BufferUsage) =
         new ManagedPool(this, signature, indexBufferUsage, vertexBufferUsage, instanceBufferUsage)
 
+    /// Creates a managed pool with the given geometry signature using the given storage type for the corresponding buffers.
+    [<Extension>]
+    static member CreateManagedPool(this : IRuntime, signature : GeometrySignature,
+                                    indexBufferStorage : BufferStorage,
+                                    vertexBufferStorage : Symbol -> BufferStorage,
+                                    instanceBufferStorage : Symbol -> BufferStorage) =
+        new ManagedPool(this, signature, indexBufferStorage, vertexBufferStorage, instanceBufferStorage)
+
+    /// Creates a managed pool with the given geometry signature using the given storage type and additional usage flags for the corresponding buffers.
+    [<Extension>]
+    static member CreateManagedPool(this : IRuntime, signature : GeometrySignature,
+                                    indexBufferUsage : BufferUsage, indexBufferStorage : BufferStorage,
+                                    vertexBufferUsage : BufferUsage, vertexBufferStorage : Symbol -> BufferStorage,
+                                    instanceBufferUsage : BufferUsage, instanceBufferStorage : Symbol -> BufferStorage) =
+        new ManagedPool(
+            this, signature,
+            indexBufferUsage, indexBufferStorage,
+            vertexBufferUsage, vertexBufferStorage,
+            instanceBufferUsage, instanceBufferStorage
+        )
 
 [<AutoOpen>]
 module ManagedPoolSg =

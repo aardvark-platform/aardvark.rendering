@@ -430,7 +430,12 @@ and ManagedTraceObject internal(index : int, geometry : aval<IAccelerationStruct
         member x.Mask         = obj.Mask
         member x.CustomIndex  = customIndex
 
-and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature) =
+and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
+                     indexBufferStorage : BufferStorage,
+                     vertexBufferStorage : Symbol -> BufferStorage,
+                     instanceAttributeBufferStorage : Symbol -> BufferStorage,
+                     geometryAttributeBufferStorage : Symbol -> BufferStorage,
+                     geometryBufferStorage : BufferStorage) =
 
     static let zero : byte[] = ManagedPool.Zero
 
@@ -445,25 +450,30 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature) =
     let geometryAttributeManager = LayoutManager<Map<Symbol, IAdaptiveValue>[]>()
 
     let indexBuffer =
-        runtime.CreateManagedBuffer(indexType, BufferUsage.ReadWrite ||| BufferUsage.Storage ||| BufferUsage.AccelerationStructure)
+        let usage = BufferUsage.ReadWrite ||| BufferUsage.Storage ||| BufferUsage.AccelerationStructure
+        runtime.CreateManagedBuffer(indexType, usage, indexBufferStorage)
 
     let vertexBuffers =
-        signature.VertexAttributeTypes |> Map.map (fun _ t ->
-            runtime.CreateManagedBuffer(t, BufferUsage.ReadWrite ||| BufferUsage.Storage ||| BufferUsage.AccelerationStructure)
+        let usage = BufferUsage.ReadWrite ||| BufferUsage.Storage ||| BufferUsage.AccelerationStructure
+        signature.VertexAttributeTypes |> Map.map (fun s t ->
+            runtime.CreateManagedBuffer(t, usage, vertexBufferStorage s)
         )
 
     let instanceAttributeBuffers =
-        instanceAttributeTypes |> Map.map (fun _ t ->
-            runtime.CreateManagedBuffer(t, BufferUsage.ReadWrite ||| BufferUsage.Storage)
+        let usage = BufferUsage.ReadWrite ||| BufferUsage.Storage
+        instanceAttributeTypes |> Map.map (fun s t ->
+            runtime.CreateManagedBuffer(t, usage, instanceAttributeBufferStorage s)
         )
 
     let geometryAttributeBuffers =
-        geometryAttributeTypes |> Map.map (fun _ t ->
-            runtime.CreateManagedBuffer(t, BufferUsage.ReadWrite ||| BufferUsage.Storage)
+        let usage = BufferUsage.ReadWrite ||| BufferUsage.Storage
+        geometryAttributeTypes |> Map.map (fun s t ->
+            runtime.CreateManagedBuffer(t, usage, geometryAttributeBufferStorage s)
         )
 
     let geometryBuffer =
-        runtime.CreateManagedBuffer(typeof<TraceGeometryInfo>, BufferUsage.ReadWrite ||| BufferUsage.Storage)
+        let usage = BufferUsage.ReadWrite ||| BufferUsage.Storage
+        runtime.CreateManagedBuffer(typeof<TraceGeometryInfo>, usage, geometryBufferStorage)
 
     let accelerationStructures =
         Dict<AdaptiveTraceGeometry * AccelerationStructureUsage, aval<IAccelerationStructure>>()
@@ -492,6 +502,20 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature) =
         for KeyValue(_, b) in vertexBuffers do b.Clear()
         for KeyValue(_, b) in instanceAttributeBuffers do b.Clear()
         for KeyValue(_, b) in geometryAttributeBuffers do b.Clear()
+
+    new (runtime : IRuntime, signature : TraceObjectSignature,
+         [<Optional; DefaultParameterValue(BufferStorage.Device)>] indexBufferStorage : BufferStorage,
+         [<Optional; DefaultParameterValue(BufferStorage.Device)>] vertexBufferStorage : BufferStorage,
+         [<Optional; DefaultParameterValue(BufferStorage.Host)>] instanceAttributeBufferStorage : BufferStorage,
+         [<Optional; DefaultParameterValue(BufferStorage.Device)>] geometryAttributeBufferStorage : BufferStorage,
+         [<Optional; DefaultParameterValue(BufferStorage.Device)>] geometryBufferStorage : BufferStorage) =
+        new ManagedTracePool(
+            runtime, signature, indexBufferStorage,
+            (fun _ -> vertexBufferStorage),
+            (fun _ -> instanceAttributeBufferStorage),
+            (fun _ -> geometryAttributeBufferStorage),
+            geometryBufferStorage
+        )
 
     member x.Runtime = runtime
     member x.Count = objects.Count
@@ -594,7 +618,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature) =
                               InstanceAttributeIndex = instanceAttributeIndex
                               GeometryAttributeIndex = geometryAttributeIndex + i }
 
-                        geometryBuffer.Add(AVal.constant info, geometryIndex + i) |> ds.Add
+                        geometryBuffer.Set(info, geometryIndex + i)
 
                     geometryIndex, geometryPtr
 
@@ -610,7 +634,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature) =
                               InstanceAttributeIndex = instanceAttributeIndex
                               GeometryAttributeIndex = geometryAttributeIndex + i }
 
-                        geometryBuffer.Add(AVal.constant info, geometryIndex + i) |> ds.Add
+                        geometryBuffer.Set(info, geometryIndex + i)
 
                     geometryIndex, geometryPtr
 
