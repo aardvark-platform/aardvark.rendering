@@ -79,11 +79,9 @@ type ManagedBufferExtensions private() =
     /// <param name="value">The value to write.</param>
     /// <param name="index">The index in the buffer to write to.</param>
     [<Extension>]
-    static member Set(this : IManagedBuffer<'T>, value : 'T, index : int64) =
+    static member Set<'T when 'T : unmanaged>(this : IManagedBuffer, value : 'T, index : int64) =
         pinned value (fun src ->
-            let size = int64 sizeof<'T>
-            let offset = index * size
-            this.Set(src, nativeint size, Range1l.FromMinAndSize(offset, size - 1L))
+            this.Set(src, nativeint sizeof<'T>, Range1l(index, index))
         )
 
     /// <summary>
@@ -93,7 +91,7 @@ type ManagedBufferExtensions private() =
     /// <param name="value">The value to write.</param>
     /// <param name="index">The index in the buffer to write to.</param>
     [<Extension>]
-    static member inline Set(this : IManagedBuffer<'T>, value : 'T, index : int) =
+    static member inline Set<'T when 'T : unmanaged>(this : IManagedBuffer, value : 'T, index : int) =
         this.Set(value, int64 index)
 
     /// <summary>
@@ -104,7 +102,7 @@ type ManagedBufferExtensions private() =
     /// <param name="values">The values to write.</param>
     /// <param name="range">The range (i.e. min and max offsets) in the buffer to write to.</param>
     [<Extension>]
-    static member Set(this : IManagedBuffer<'T>, values : 'T[], range : Range1l) =
+    static member Set<'T when 'T : unmanaged>(this : IManagedBuffer, values : 'T[], range : Range1l) =
         pinned values (fun src ->
             this.Set(src, nativeint values.Length * nativeint sizeof<'T>, range)
         )
@@ -185,24 +183,35 @@ module internal ManagedBufferImplementation =
             if count <= 0L then
                 empty
             else
-                let writer =
-                    getOrCreateWriter view (fun view ->
-                        let data = BufferView.download 0 (int count) view
-                        let converted : aval<'T[]> = data |> PrimitiveValueConverter.convertArray view.ElementType
-                        new ArrayWriter<'T>(x, converted)
-                    )
+                if view.Buffer.IsConstant then
+                    let data = BufferView.download 0 (int count) view
+                    let converted : 'T[] = data |> PrimitiveValueConverter.convertArray view.ElementType |> AVal.force
+                    x.Set(converted, range)
+                    empty
+                else
+                    let writer =
+                        getOrCreateWriter view (fun view ->
+                            let data = BufferView.download 0 (int count) view
+                            let converted : aval<'T[]> = data |> PrimitiveValueConverter.convertArray view.ElementType
+                            new ArrayWriter<'T>(x, converted)
+                        )
 
-                x.AddRange(writer, view, range)
+                    x.AddRange(writer, view, range)
 
         member x.Add(value : IAdaptiveValue, index : int64) =
-            let writer =
-                getOrCreateWriter value (fun value ->
-                    let converted : aval<'T> = value |> PrimitiveValueConverter.convertValue
-                    new SingleWriter<'T>(x, converted)
-                )
+            if value.IsConstant then
+                let converted : 'T = value |> PrimitiveValueConverter.convertValue |> AVal.force
+                x.Set(converted, index)
+                empty
+            else
+                let writer =
+                    getOrCreateWriter value (fun value ->
+                        let converted : aval<'T> = value |> PrimitiveValueConverter.convertValue
+                        new SingleWriter<'T>(x, converted)
+                    )
 
-            let range = Range1l(int64 index, int64 index)
-            x.AddRange(writer, value, range)
+                let range = Range1l(int64 index, int64 index)
+                x.AddRange(writer, value, range)
 
         override x.Destroy() =
             writers.Clear()

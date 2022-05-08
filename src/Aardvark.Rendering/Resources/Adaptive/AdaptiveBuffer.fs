@@ -102,6 +102,7 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
 
     let mutable size = sizeInBytes
     let mutable handle : ValueOption<IBackendBuffer> = ValueNone
+    let usage = usage ||| BufferUsage.Read
 
     member private x.ComputeHandle(discard : bool) =
         match handle with
