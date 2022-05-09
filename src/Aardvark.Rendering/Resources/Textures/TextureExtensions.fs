@@ -774,8 +774,6 @@ type IBackendTextureExtensions private() =
     ///<param name="aspect">The aspect of the texture.</param>
     ///<param name="level">The level for the output view. Default is 0.</param>
     ///<param name="slice">The slice for the output view or -1 for all slices. Default is -1.</param>
-    ///<param name="offset">The minimum coordinate to download. Default is V3i.Zero.</param>
-    ///<param name="size">The size of the texture region to download or V3i.Zero for the target size. Default is V3i.Zero.</param>
     [<Extension>]
     static member GetOutputView(texture : IBackendTexture, aspect : TextureAspect,
                                 [<Optional; DefaultParameterValue(0)>] level : int,
@@ -791,11 +789,8 @@ type IBackendTextureExtensions private() =
     /// If the texture format is a depth-stencil format, the depth aspect is selected.
     ///</summary>
     ///<param name="texture">The texture.</param>
-    ///<param name="aspect">The aspect of the texture.</param>
     ///<param name="level">The level for the output view. Default is 0.</param>
     ///<param name="slice">The slice for the output view or -1 for all slices. Default is -1.</param>
-    ///<param name="offset">The minimum coordinate to download. Default is V3i.Zero.</param>
-    ///<param name="size">The size of the texture region to download or V3i.Zero for the target size. Default is V3i.Zero.</param>
     [<Extension>]
     static member GetOutputView(texture : IBackendTexture,
                                 [<Optional; DefaultParameterValue(0)>] level : int,
