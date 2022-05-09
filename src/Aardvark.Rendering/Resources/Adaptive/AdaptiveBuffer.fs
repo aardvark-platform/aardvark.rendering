@@ -18,7 +18,9 @@ type IAdaptiveBuffer =
     /// Resizes the buffer.
     /// </summary>
     /// <param name="sizeInBytes">The new size in bytes.</param>
-    abstract member Resize : sizeInBytes: nativeint -> unit
+    /// <param name="forceImmediate">Indicates if the buffer is resized immediately or lazily.</param>
+    abstract member Resize : sizeInBytes: nativeint *
+                             [<Optional; DefaultParameterValue(false)>] forceImmediate: bool -> unit
 
     /// <summary>
     /// Writes data to the buffer.
@@ -91,7 +93,7 @@ type AdaptiveBufferExtensions private() =
     /// <param name="this">The buffer to clear.</param>
     [<Extension>]
     static member Clear(this : IAdaptiveBuffer) =
-        this.Resize(0n)
+        this.Resize(0n, true)
 
 
 /// Adaptive buffer that can be resized and written to in an imperative fashion.
@@ -132,11 +134,14 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
     /// Resizes the buffer.
     /// </summary>
     /// <param name="sizeInBytes">The new size in bytes.</param>
-    member x.Resize(sizeInBytes : nativeint) =
+    /// <param name="forceImmediate">Indicates if the buffer is resized immediately or lazily</param>
+    member x.Resize(sizeInBytes : nativeint, [<Optional; DefaultParameterValue(false)>] forceImmediate : bool) =
         lock x (fun _ ->
             if sizeInBytes <> x.Size then
                 size <- sizeInBytes
-                x.ComputeHandle(false) |> ignore
+
+                if forceImmediate then
+                    x.ComputeHandle(false) |> ignore
 
                 transact x.MarkOutdated
         )
@@ -160,11 +165,12 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
     override x.Destroy() =
         handle |> ValueOption.iter Disposable.dispose
         handle <- ValueNone
+        size <- 0n
 
     override x.Compute(t, rt) =
         x.ComputeHandle(false)
 
     interface IAdaptiveBuffer with
         member x.Size = x.Size
-        member x.Resize(sizeInBytes) = x.Resize(sizeInBytes)
+        member x.Resize(sizeInBytes, forceImmediate) = x.Resize(sizeInBytes, forceImmediate)
         member x.Write(data, offset, sizeInBytes) = x.Write(data, offset, sizeInBytes) 

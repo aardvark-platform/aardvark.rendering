@@ -49,7 +49,10 @@ module internal CompactBufferImplementation =
 
             // Grow buffer if necessary
             let count = count.GetValue(t)
-            x.Resize(nativeint count * elementSize)
+            let requiredSize = nativeint count * elementSize
+
+            if x.Size < requiredSize then
+                x.Resize(Fun.NextPowerOfTwo(int64 requiredSize) |> nativeint)
 
             // Process deltas
             x.Transact (fun _ ->
