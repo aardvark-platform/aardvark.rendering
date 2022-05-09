@@ -56,7 +56,7 @@ type IBuffer = interface end
 
 type INativeBuffer =
     inherit IBuffer
-    abstract member SizeInBytes : int
+    abstract member SizeInBytes : nativeint
     abstract member Use : (nativeint -> 'a) -> 'a
     abstract member Pin : unit -> nativeint
     abstract member Unpin : unit -> unit

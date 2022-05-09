@@ -275,7 +275,7 @@ module private ShaderBindingSubtable =
                     Marshal.Copy(data.Handles.Data, e * data.Handles.Size, src + offset, data.Handles.Size)
                     offset <- offset + nativeint data.Handles.SizeAligned
 
-                let nb = NativeMemoryBuffer(src, data.TotalSize)
+                let nb = NativeMemoryBuffer(src, nativeint data.TotalSize)
                 table.Buffer |> Buffer.tryUpdate nb
 
             finally

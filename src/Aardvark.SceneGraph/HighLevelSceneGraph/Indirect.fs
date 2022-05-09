@@ -178,7 +178,7 @@ module Indirect =
                 for d in dirty do d.Write(token)
 
                 stores |> Map.map (fun name (es, ptr) ->
-                    NativeMemoryBuffer(!ptr, int (es * capacity)) :> IBuffer
+                    NativeMemoryBuffer(!ptr, es * capacity) :> IBuffer
                 )
 
             )

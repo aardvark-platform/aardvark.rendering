@@ -101,7 +101,7 @@ module BufferExtensions =
         /// <summary>
         /// deletes the given buffer causing its memory to be freed
         /// </summary>
-        member x.Delete(buffer : Buffer) =            
+        member x.Delete(buffer : Buffer) =
             using x.ResourceLock (fun _ ->
                 let handle = Interlocked.Exchange(&buffer.Handle, -1)
                 if handle <> -1 then
@@ -124,7 +124,7 @@ module BufferExtensions =
                 x.CreateBuffer(ab.Data, storage)
 
             | :? INativeBuffer as nb ->
-                nb.Use (fun ptr -> x.CreateBuffer(ptr, nativeint nb.SizeInBytes, storage))
+                nb.Use (fun ptr -> x.CreateBuffer(ptr, nb.SizeInBytes, storage))
 
             | :? IBufferRange as bv ->
                 let handle = bv.Buffer
@@ -144,9 +144,8 @@ module BufferExtensions =
                     if bb.Handle <> b.Handle then failwith "cannot change backend-buffer handle"
 
                 | :? INativeBuffer as n ->
-                    n.Use (fun ptr -> x.Upload(b, ptr, nativeint n.SizeInBytes, useNamed))
+                    n.Use (fun ptr -> x.Upload(b, ptr, n.SizeInBytes, useNamed))
 
-                
                 | :? IBufferRange as bv ->
                     let handle = bv.Buffer
                     x.Upload(b, handle, useNamed)
@@ -162,7 +161,7 @@ module BufferExtensions =
         // =======================================================================================================================
         /// <summary>
         /// uploads data from the given pointer to the target-range specified
-        /// while leaving the rest of the buffer untouched. 
+        /// while leaving the rest of the buffer untouched.
         /// NOTE: Fails when the target-range exceeds the buffer's current size.
         /// </summary>
         member x.UploadRange(buffer : Buffer, src : nativeint, targetOffset : int, size : int) =
@@ -173,7 +172,7 @@ module BufferExtensions =
 
             let nativeSize = size |> nativeint
             let totalSize = targetOffset + size |> nativeint
-            
+
             if targetOffset < 0 || totalSize > buffer.SizeInBytes then
                 raise <| IndexOutOfRangeException("range uploads may not exceed the buffer's size")
             else
@@ -209,7 +208,7 @@ module BufferExtensions =
             GL.Check "failed to unmap buffer"
 
         /// <summary>
-        /// uploads a subrange of the given array to a (possibly different) range of the buffer. 
+        /// uploads a subrange of the given array to a (possibly different) range of the buffer.
         /// source: [sourceStartIndex, sourceStartIndex + count)
         /// target: [targetStartIndex, targetStartIndex + count)
         /// </summary>
@@ -233,7 +232,7 @@ module BufferExtensions =
             handle.Free()
 
         /// <summary>
-        /// uploads a subrange of the given array to a (possibly different) range of the buffer. 
+        /// uploads a subrange of the given array to a (possibly different) range of the buffer.
         /// </summary>
         member x.UploadRange(buffer : Buffer, source : 'a[], sourceStartIndex : int, targetStartIndex : int, count : int) =
             // TODO: maybe inline this (maybe faster since no reflection stuff needed)
@@ -254,10 +253,10 @@ module BufferExtensions =
             assert (sourceOffset >= 0)
             assert (size >= 0)
             assert (target <> 0n)
-   
+
             let nativeSize = size |> nativeint
             let totalSize = sourceOffset + size |> nativeint
-            
+
             if sourceOffset < 0 || totalSize > buffer.SizeInBytes then
                 raise <| IndexOutOfRangeException("downloads may not exceed the buffer's size")
             else
@@ -272,10 +271,10 @@ module BufferExtensions =
                 GL.Dispatch.UnmapNamedBuffer(buffer.Handle) |> ignore
                 GL.Check "failed to unmap buffer"
 
-                
+
 
         /// <summary>
-        /// downloads a subrange of the given buffer to a (possibly different) range of the array. 
+        /// downloads a subrange of the given buffer to a (possibly different) range of the array.
         /// source: [sourceStartIndex, sourceStartIndex + count)
         /// target: [targetStartIndex, targetStartIndex + count)
         /// </summary>
@@ -299,7 +298,7 @@ module BufferExtensions =
             handle.Free()
 
         /// <summary>
-        /// downloads a subrange of the given buffer to a (possibly different) range of the array. 
+        /// downloads a subrange of the given buffer to a (possibly different) range of the array.
         /// </summary>
         member x.DownloadRange(buffer : Buffer, target : 'a[], sourceStartIndex : int, targetStartIndex : int, count : int) =
             // TODO: maybe inline this (maybe faster since no reflection stuff needed)
@@ -318,7 +317,7 @@ module BufferExtensions =
             use __ = x.ResourceLock
             assert(size >= 0n)
             assert(src <> 0n)
-            
+
             if buffer.SizeInBytes <> size then
                 removeBuffer x (int64 buffer.SizeInBytes)
                 addBuffer x (int64 size)
@@ -343,10 +342,10 @@ module BufferExtensions =
                         GL.BufferSubData(t, 0n, size, src)
                         GL.Check "could not upload buffer"
                     )
-                    
+
         member x.Upload(buffer : Buffer, src : nativeint, size : nativeint) =
             x.Upload(buffer, src, size, true)
-  
+
 
 
         /// <summary>
@@ -411,7 +410,7 @@ module BufferExtensions =
         member x.Download(buffer : Buffer, target : 'a[]) =
             x.DownloadRange(buffer, target :> Array, 0, 0, target.Length)
 
-        
+
         // =======================================================================================================================
         //      Debug Download Overloads
         // =======================================================================================================================
@@ -438,7 +437,7 @@ module IndirectBufferExtensions =
             val mutable public Stride : int
             val mutable public Indexed : bool
             val mutable public OwnResource : bool
-            
+
             new(b, count, stride, indexed, ownResource) = { Buffer = b; Count = count; Stride = stride; Indexed = indexed; OwnResource = ownResource }
         end
 
@@ -453,13 +452,13 @@ module IndirectBufferExtensions =
 
         member x.Copy(source : Buffer, sourceOffset : nativeint, target : Buffer, targetOffset : nativeint, size : nativeint) =
             use __ = x.ResourceLock
-            
+
             if sourceOffset < 0n || targetOffset < 0n || size < 0n then
                 failwith "[GL] invalid arguments for buffer copy"
 
             if targetOffset + size > target.SizeInBytes || sourceOffset + size > source.SizeInBytes then
                 failwith "[GL] insufficient buffer size"
-                
+
             GL.Dispatch.CopyNamedBufferSubData(source.Handle, target.Handle, sourceOffset, targetOffset, size)
             GL.Check "could not copy buffer"
 

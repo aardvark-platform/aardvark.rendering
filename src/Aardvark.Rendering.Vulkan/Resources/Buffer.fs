@@ -472,8 +472,8 @@ module Buffer =
                 memory |> empty flags
 
         | :? INativeBuffer as nb ->
-            if nb.SizeInBytes <> 0 then
-                let size = nb.SizeInBytes |> nativeint
+            if nb.SizeInBytes <> 0n then
+                let size = nb.SizeInBytes
                 nb.Use(fun src ->
                     memory |> ofWriter flags size (fun dst -> Marshal.Copy(src, dst, size))
                 )

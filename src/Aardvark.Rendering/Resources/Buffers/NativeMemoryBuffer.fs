@@ -2,7 +2,7 @@
 
 open Aardvark.Base
 
-type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : int) =
+type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : nativeint) =
     interface INativeBuffer with
         member x.SizeInBytes = sizeInBytes
         member x.Use f = f ptr
@@ -12,7 +12,7 @@ type NativeMemoryBuffer(ptr : nativeint, sizeInBytes : int) =
     member x.Ptr = ptr
     member x.SizeInBytes = sizeInBytes
 
-    override x.GetHashCode() = HashCode.Combine(ptr.GetHashCode(),sizeInBytes)
+    override x.GetHashCode() = HashCode.Combine(ptr.GetHashCode(), int64 sizeInBytes)
     override x.Equals o =
         match o with
         | :? NativeMemoryBuffer as n ->

@@ -13,7 +13,7 @@ type ArrayBuffer(data : Array) =
     interface IBuffer
 
     interface INativeBuffer with
-        member x.SizeInBytes = data.Length * Marshal.SizeOf elementType
+        member x.SizeInBytes = nativeint data.Length * nativeint (Marshal.SizeOf elementType)
         member x.Use (f : nativeint -> 'a) =
             let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
             try f (gc.AddrOfPinnedObject())
