@@ -369,13 +369,16 @@ type IRuntimePoolExtensions private() =
 
 [<AutoOpen>]
 module ManagedPoolSg =
+    open System.Runtime.InteropServices
 
     module Sg =
-        type PoolNode(pool : ManagedPool, calls : aset<ManagedDrawCall>, mode : IndexedGeometryMode) =
+        type PoolNode(pool : ManagedPool, calls : aset<ManagedDrawCall>, mode : IndexedGeometryMode,
+                      [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
             interface ISg
             member x.Pool = pool
             member x.Calls = calls
             member x.Mode = mode
+            member x.Storage = storage
 
         let pool (pool : ManagedPool) (calls : aset<ManagedDrawCall>) (mode : IndexedGeometryMode)=
             PoolNode(pool, calls, mode) :> ISg
@@ -390,12 +393,12 @@ module ``Pool Semantics`` =
             DrawCallInfo.ToggleIndexed(&c)
             c
 
-        let create (runtime : IRuntime) (calls : aset<ManagedDrawCall>) =
+        let create (runtime : IRuntime) (storage : BufferStorage) (calls : aset<ManagedDrawCall>) =
             let buffer =
                 runtime.CreateCompactBuffer(
                     evaluate, calls,
                     BufferUsage.Indirect ||| BufferUsage.ReadWrite,
-                    BufferStorage.Device
+                    storage
                 )
 
             (buffer.Count, buffer) ||> AdaptiveResource.map2 (
@@ -406,7 +409,7 @@ module ``Pool Semantics`` =
     type PoolSem() =
         member x.RenderObjects(p : Sg.PoolNode, scope : Ag.Scope) : aset<IRenderObject> =
             let pool = p.Pool
-            let calls = p.Calls |> DrawCallBuffer.create pool.Runtime
+            let calls = p.Calls |> DrawCallBuffer.create pool.Runtime p.Storage
 
             let mutable ro = Unchecked.defaultof<RenderObject>
 
