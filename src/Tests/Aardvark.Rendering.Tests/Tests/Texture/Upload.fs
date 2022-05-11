@@ -113,11 +113,11 @@ module TextureUpload =
             uploadAndDownloadTexture1D runtime 100 4 5 1 3 region
 
 
-        let private uploadAndDownloadTexture2D (runtime : IRuntime)
-                                               (size : V2i) (levels : int) (count : int) (samples : int)
-                                               (level : int) (slice : int)
-                                               (window : Box2i option) =
-
+        let private uploadAndDownloadTexture2D' (randomPix : V2i -> PixImage<'T>)
+                                                (runtime : IRuntime)
+                                                (size : V2i) (levels : int) (count : int) (samples : int)
+                                                (level : int) (slice : int)
+                                                (window : Box2i option) =
             let region =
                 match window with
                 | Some r -> r
@@ -125,7 +125,7 @@ module TextureUpload =
                     let s = max 1 (size >>> level)
                     Box2i(V2i.Zero, s)
 
-            let data = PixImage.random32ui region.Size
+            let data = randomPix region.Size
             let fmt = TextureFormat.ofPixFormat data.PixFormat TextureParams.empty
 
             let texture =
@@ -136,16 +136,23 @@ module TextureUpload =
 
             try
                 texture.Upload(data, level, slice, region.Min)
-                let result = texture.Download(level, slice, region).AsPixImage<uint32>()
+                let result = texture.Download(level, slice, region).AsPixImage<'T>()
 
                 PixImage.compare V2i.Zero data result
 
             finally
                 runtime.DeleteTexture(texture)
 
+        let private uploadAndDownloadTexture2D =
+            uploadAndDownloadTexture2D' PixImage.random32ui
+
         let texture2D (runtime : IRuntime) =
             let size = V2i(100, 75)
             uploadAndDownloadTexture2D runtime size 1 1 1 0 0 None
+
+        let texture2DBgra (runtime : IRuntime) =
+            let size = V2i(100, 75)
+            uploadAndDownloadTexture2D' (PixImage.random8ui' Col.Format.BGRA) runtime size 1 1 1 0 0 None
 
         let texture2DSubwindow (runtime : IRuntime) =
             let size = V2i(100, 75)
@@ -197,13 +204,14 @@ module TextureUpload =
             let region = Some <| Box2i(11, 34, 87, 66)
             uploadAndDownloadTexture2D runtime size 1 5 4 0 2 region
 
-        let private uploadAndDownloadPixTexture2D (runtime : IRuntime) (size : V2i) (levels : int) (textureParams : TextureParams) =
+        let private uploadAndDownloadPixTexture2D (runtime : IRuntime) (bgra : bool) (size : V2i) (levels : int) (textureParams : TextureParams) =
             let expectedLevels = if textureParams.wantMipMaps then Fun.MipmapLevels(size) else 1
 
             let data =
                 Array.init levels (fun level ->
                     let size = Fun.MipmapLevelSize(size, level)
-                    PixImage.random16ui <| V2i size
+                    let format = if bgra then Col.Format.BGRA else Col.Format.RGBA
+                    PixImage<uint16>(format, PixImage.random16ui <| V2i size)
                 )
 
             let texture =
@@ -218,7 +226,7 @@ module TextureUpload =
                     let result = runtime.Download(texture, level = level).AsPixImage<uint16>()
                     Expect.equal result.Size (Fun.MipmapLevelSize(size, level)) "image size mismatch"
                     if level < levels then
-                            PixImage.compare V2i.Zero data.[level] result
+                        PixImage.compare V2i.Zero data.[level] result
                     else
                         let maxValue = result.Array |> unbox<uint16[]> |> Array.max
                         Expect.isGreaterThan maxValue 0us "image all black"
@@ -228,16 +236,20 @@ module TextureUpload =
 
         let pixTexture2D (runtime : IRuntime) =
             let size = V2i(256)
-            uploadAndDownloadPixTexture2D runtime size 1 TextureParams.empty
+            uploadAndDownloadPixTexture2D runtime false size 1 TextureParams.empty
+
+        let pixTexture2DBgra (runtime : IRuntime) =
+            let size = V2i(256)
+            uploadAndDownloadPixTexture2D runtime true size 1 TextureParams.empty
 
         let pixTexture2DSrgb (runtime : IRuntime) =
             let size = V2i(256)
-            uploadAndDownloadPixTexture2D runtime size 1 TextureParams.srgb
+            uploadAndDownloadPixTexture2D runtime false size 1 TextureParams.srgb
 
         let pixTexture2DMipmapped (mipmapInput : MipmapInput) (runtime : IRuntime) =
             let size = V2i(435, 231)
             let levels = mipmapInput.GetLevels(size)
-            uploadAndDownloadPixTexture2D runtime size levels TextureParams.mipmapped
+            uploadAndDownloadPixTexture2D runtime false size levels TextureParams.mipmapped
 
         let pixTexture2DPixVolume (runtime : IRuntime) =
             let size = V2i(256)
@@ -665,6 +677,7 @@ module TextureUpload =
             "1D array level subwindow",  Cases.texture1DArrayLevelSubwindow
 
             "2D",                           Cases.texture2D
+            "2D BGRA",                      Cases.texture2DBgra
             "2D subwindow",                 Cases.texture2DSubwindow
             "2D level",                     Cases.texture2DLevel
             "2D level subwindow",           Cases.texture2DLevelSubwindow
@@ -677,6 +690,7 @@ module TextureUpload =
             "2D array level subwindow",  Cases.texture2DArrayLevelSubwindow
 
             "2D PixTexture",                           Cases.pixTexture2D
+            "2D PixTexture BGRA",                      Cases.pixTexture2DBgra
             "2D PixTexture sRGB",                      Cases.pixTexture2DSrgb
             "2D PixTexture mipmapped",                 Cases.pixTexture2DMipmapped MipmapInput.Full
             "2D PixTexture mipmap generation",         Cases.pixTexture2DMipmapped MipmapInput.None

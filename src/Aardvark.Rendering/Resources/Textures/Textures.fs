@@ -149,18 +149,20 @@ and ITextureRuntime =
     ///<summary>Downloads data from the given texture sub resource to a NativeTensor4.</summary>
     ///<param name="texture">The texture to download.</param>
     ///<param name="target">The NativeTensor4 to copy the data to.</param>
+    ///<param name="format">The color format of the target tensor.</param>
     ///<param name="offset">The minimum coordinate to download. Default is V3i.Zero.</param>
     ///<param name="size">The size of the texture region to download or V3i.Zero for the target size. Default is V3i.Zero.</param>
-    abstract member Download : texture : ITextureSubResource * target : NativeTensor4<'T> *
+    abstract member Download : texture : ITextureSubResource * target : NativeTensor4<'T> * format : Col.Format *
                                [<Optional; DefaultParameterValue(V3i())>] offset : V3i *
                                [<Optional; DefaultParameterValue(V3i())>] size : V3i -> unit
 
     ///<summary>Uploads data from a NativeTensor4 to the given texture sub resource.</summary>
     ///<param name="texture">The texture to update.</param>
     ///<param name="source">The NativeTensor4 containing the data to upload.</param>
+    ///<param name="format">The color format of the source tensor.</param>
     ///<param name="offset">The minimum coordinate to update. Default is V3i.Zero.</param>
     ///<param name="size">The size of the texture region to update or V3i.Zero for the source size. Default is V3i.Zero.</param>
-    abstract member Upload : texture : ITextureSubResource * source : NativeTensor4<'T> *
+    abstract member Upload : texture : ITextureSubResource * source : NativeTensor4<'T> * format : Col.Format *
                              [<Optional; DefaultParameterValue(V3i())>] offset : V3i *
                              [<Optional; DefaultParameterValue(V3i())>] size : V3i -> unit
 

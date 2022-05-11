@@ -173,39 +173,6 @@ module LevelOfDetail =
     
     open System.Windows.Forms
 
-
-    let runView() =
-        let vk = new VulkanApplication(true)
-        let gl = new OpenGlApplication(true)
-        
-        let app = new MultiApplication([|vk; gl|]) :> IApplication 
-        let win = app.CreateSimpleRenderWindow(8)
-
-        let view =
-            CameraView.lookAt (V3d(60,60,60)) V3d.Zero V3d.OOI
-                |> DefaultCameraController.control win.Mouse win.Keyboard win.Time
-                |> AVal.map CameraView.viewTrafo
-
-        let proj =
-            win.Sizes 
-                |> AVal.map (fun s -> Frustum.perspective 60.0 0.1 1000.0 (float s.X / float s.Y))
-                |> AVal.map Frustum.projTrafo
-
-        let sg = 
-            Sg.box' C4b.Red Box3d.Unit
-                |> Sg.shader {
-                    do! DefaultSurfaces.trafo
-                    do! DefaultSurfaces.simpleLighting
-                }
-                |> Sg.viewTrafo view
-                |> Sg.projTrafo proj
-
-        win.RenderTask <- app.Runtime.CompileRender(win.FramebufferSignature, sg)
-
-        win.Run()
-
-        ()
-
     open Aardvark.Application
 
     let run() =

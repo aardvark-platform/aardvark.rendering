@@ -85,9 +85,10 @@ module internal TextureUploadImplementation =
 
         let uploadNativeTensor4<'T when 'T : unmanaged> (texture : Texture) (generateMipmap : bool)
                                                         (level : int) (slice : int) (offset : V3i) (size : V3i)
-                                                        (src : NativeTensor4<'T>) =
+                                                        (srcFormat : Col.Format) (src : NativeTensor4<'T>) =
 
-            let pixelFormat, pixelType = TextureFormat.toFormatAndType texture.Format
+            let pixelType = PixelType.ofType typeof<'T>
+            let pixelFormat = srcFormat |> PixelFormat.ofColFormat texture.Format.IsIntegerFormat
             let compression = TextureFormat.compressionMode texture.Format
 
             let offset =
@@ -178,7 +179,7 @@ module internal TextureUploadImplementation =
                     member x.VisitUnit(img : PixImage<'T>) =
                         NativeVolume.using img.Volume (fun src ->
                             let src = src.ToXYWTensor4'()
-                            uploadNativeTensor4 texture generateMipmap level slice offset.XYO image.Size.XYI src
+                            uploadNativeTensor4 texture generateMipmap level slice offset.XYO image.Size.XYI img.Format src
                         )
                 } |> ignore
 
@@ -219,7 +220,7 @@ module internal TextureUploadImplementation =
                 { new PixVisitors.PixVolumeVisitor() with
                     member x.VisitUnit(img : PixVolume<'T>) =
                         NativeTensor4.using img.Tensor4 (fun src ->
-                            uploadNativeTensor4 texture generateMipmap level 0 offset volume.Size src
+                            uploadNativeTensor4 texture generateMipmap level 0 offset volume.Size img.Format src
                         )
                 } |> ignore
 
@@ -347,22 +348,23 @@ module ContextTextureUploadExtensions =
 
         [<Extension>]
         static member Upload(this : Context, texture : Texture, level : int, slice : int,
-                             offset : V3i, size : V3i, source : NativeTensor4<'T>) =
+                             offset : V3i, size : V3i, source : NativeTensor4<'T>, format : Col.Format) =
             using this.ResourceLock (fun _ ->
                 // Multisampled texture requires blit
                 if texture.IsMultisampled then
                     useTemporaryAndBlit texture level slice offset.XY size.XY (fun temp ->
-                        Texture.uploadNativeTensor4 temp false 0 0 V3i.Zero size source
+                        Texture.uploadNativeTensor4 temp false 0 0 V3i.Zero size format source
                     )
 
                 // Upload directly
                 else
-                    Texture.uploadNativeTensor4 texture false level slice offset size source
+                    Texture.uploadNativeTensor4 texture false level slice offset size format source
             )
 
         [<Extension>]
-        static member Upload(this : Context, texture : Texture, level : int, slice : int, size : V3i, source : NativeTensor4<'T>) =
-            this.Upload(texture, level, slice, V3i.Zero, size, source)
+        static member Upload(this : Context, texture : Texture, level : int, slice : int, size : V3i,
+                             source : NativeTensor4<'T>, format : Col.Format) =
+            this.Upload(texture, level, slice, V3i.Zero, size, source, format)
 
         [<Extension>]
         static member Upload(this : Context, texture : Texture, level : int, slice : int, offset : V2i, source : PixImage) =

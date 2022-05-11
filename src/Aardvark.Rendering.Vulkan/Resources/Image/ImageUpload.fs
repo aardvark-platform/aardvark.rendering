@@ -29,13 +29,14 @@ module ImageUploadExtensions =
 
         module ImageBuffer =
 
-            let ofNativeTensor4 (mirrorY : bool) (dstFormat : TextureFormat) (srcFormat : Col.Format) (src : NativeTensor4<'T>) (device : Device) =
+            let ofNativeTensor4 (mirrorY : bool) (textureFormat : TextureFormat) (format : Col.Format)
+                                (src : NativeTensor4<'T>) (device : Device) =
                 let size = V3i src.Size.XYZ
-                let compression = dstFormat.CompressionMode
+                let compression = textureFormat.CompressionMode
 
                 if compression = CompressionMode.None then
-                    let img = device.CreateTensorImage<'T>(size, TextureFormat.toColFormat dstFormat, dstFormat.IsSrgb)
-                    img.Write(srcFormat, if mirrorY then src.MirrorY() else src)
+                    let img = device.CreateTensorImage<'T>(size, TextureFormat.toColFormat textureFormat, textureFormat.IsSrgb)
+                    img.Write(format, if mirrorY then src.MirrorY() else src)
                     img :> ImageBuffer
 
                 else
@@ -49,7 +50,7 @@ module ImageUploadExtensions =
                     let sizeInBytes =
                         int64 <| CompressionMode.sizeInBytes size compression
 
-                    let buffer = device.CreateImageBuffer(dstFormat, size, alignedSize.XY, sizeInBytes)
+                    let buffer = device.CreateImageBuffer(textureFormat, size, alignedSize.XY, sizeInBytes)
 
                     buffer.Memory.Mapped (fun dst ->
                         let srcInfo = src.Info.SubXYWVolume(0L).Transformed(ImageTrafo.MirrorY)
@@ -242,10 +243,10 @@ module ImageUploadExtensions =
             let buffers = [| buffer |] |> ImageBufferArray.create 1
             device |> ofImageBufferArray dimension wantMipmap buffers
 
-        let uploadNativeTensor4<'T when 'T : unmanaged> (dst : ImageSubresource) (offset : V3i) (size : V3i) (src : NativeTensor4<'T>) =
+        let uploadNativeTensor4<'T when 'T : unmanaged> (dst : ImageSubresource) (offset : V3i) (size : V3i)
+                                                        (format : Col.Format) (src : NativeTensor4<'T>) =
             let device = dst.Image.Device
             let textureFormat = VkFormat.toTextureFormat dst.Image.Format
-            let format = TextureFormat.toColFormat textureFormat
 
             let src =
                 src.SubTensor4(V4i.Zero, V4i(size, int src.SW))
@@ -338,8 +339,9 @@ module ImageUploadExtensions =
             | _ ->
                 failf "unsupported texture-type: %A" t
 
-        let uploadLevel (offset : V3i) (size : V3i) (src : NativeTensor4<'T>) (dst : ImageSubresource) (device : Device) =
-            src |> uploadNativeTensor4 dst offset size
+        let uploadLevel (offset : V3i) (size : V3i) (format : Col.Format)
+                        (src : NativeTensor4<'T>) (dst : ImageSubresource) (device : Device) =
+            src |> uploadNativeTensor4 dst offset size format
 
     [<AbstractClass; Sealed; Extension>]
     type DeviceImageUploadExtensions private() =
@@ -357,5 +359,6 @@ module ImageUploadExtensions =
             this |> Image.ofTexture t
 
         [<Extension>]
-        static member inline UploadLevel(this : Device, dst : ImageSubresource, src : NativeTensor4<'T>, offset : V3i, size : V3i) =
-            this |> Image.uploadLevel offset size src dst
+        static member inline UploadLevel(this : Device, dst : ImageSubresource, src : NativeTensor4<'T>,
+                                         format : Col.Format, offset : V3i, size : V3i) =
+            this |> Image.uploadLevel offset size format src dst

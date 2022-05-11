@@ -138,12 +138,10 @@ module internal TextureDownloadImplementation =
 
 
         let private downloadNative (texture : Texture) (level : int) (slice : int) (offset : V3i) (size : V3i)
-                                   (startOffset : int) (maxElementSize : int) (dst : nativeint) (dstInfo : Tensor4Info) =
+                                   (startOffset : int) (maxElementSize : int) (pixelFormat : PixelFormat) (pixelType : PixelType)
+                                   (dst : nativeint) (dstInfo : Tensor4Info) =
             match texture.Format.CompressionMode with
             | CompressionMode.None ->
-                let pixelFormat, pixelType =
-                    TextureFormat.toFormatAndType texture.Format
-
                 let bufferElementSize =
                     min maxElementSize pixelType.Size
 
@@ -158,28 +156,35 @@ module internal TextureDownloadImplementation =
 
 
         let downloadNativeTensor4<'T when 'T : unmanaged> (texture : Texture) (level : int) (slice : int)
-                                                          (offset : V3i) (size : V3i) (dst : NativeTensor4<'T>) =
+                                                          (offset : V3i) (size : V3i)
+                                                          (dstFormat : Col.Format) (dst : NativeTensor4<'T>) =
             let dstInfo = dst.Info.AsBytes<'T>()
-            downloadNative texture level slice offset size 0 sizeof<'T> dst.Address dstInfo
+            let pixelType = PixelType.ofType typeof<'T>
+            let pixelFormat = PixelFormat.ofColFormat texture.Format.IsIntegerFormat dstFormat
+            downloadNative texture level slice offset size 0 sizeof<'T> pixelFormat pixelType dst.Address dstInfo
 
 
         let downloadPixImage (texture : Texture) (level : int) (slice : int) (offset : V2i) (image : PixImage) =
             let size = V3i(image.Size, 1)
             let offset = V3i(offset, slice)
             let elementSize = image.ChannelSize
+            let pixelType = PixelType.ofType image.PixFormat.Type
+            let pixelFormat = PixelFormat.ofColFormat texture.Format.IsIntegerFormat image.Format
 
             pinned image.Array (fun dst ->
                 let dstInfo = image.VolumeInfo.ToXYWTensor4'().AsBytes(elementSize)
-                downloadNative texture level slice offset size 0 elementSize dst dstInfo
+                downloadNative texture level slice offset size 0 elementSize pixelFormat pixelType dst dstInfo
             )
 
 
         let downloadPixVolume (texture : Texture) (level : int) (offset : V3i) (volume : PixVolume) =
             let elementSize = volume.ChannelSize
+            let pixelType = PixelType.ofType volume.PixFormat.Type
+            let pixelFormat = PixelFormat.ofColFormat texture.Format.IsIntegerFormat volume.Format
 
             pinned volume.Array (fun dst ->
                 let dstInfo = volume.Tensor4Info.AsBytes(elementSize)
-                downloadNative texture level 0 offset volume.Size 0 elementSize dst dstInfo
+                downloadNative texture level 0 offset volume.Size 0 elementSize pixelFormat pixelType dst dstInfo
             )
 
 
@@ -202,17 +207,34 @@ module internal TextureDownloadImplementation =
             )
 
         let private (|UnsignedNormalizedDepth|_|) = function
-            | TextureFormat.DepthComponent16 -> Some (0, 65535u, true)       // Divide by 2^16 - 1
-            | TextureFormat.DepthComponent24 -> Some (0, 4294967295u, false)
-            | TextureFormat.DepthComponent32 -> Some (0, 4294967295u, false) // Divide by 2^32 - 1
-            | TextureFormat.Depth24Stencil8  -> Some (8, 16777215u, false)   // Shift right by 8 and divide by 2^24 - 1
+            | TextureFormat.DepthComponent16 ->
+                // Divide by 2^16 - 1
+                Some (PixelFormat.DepthComponent, PixelType.UnsignedShort, 0, 65535u, true) 
+
+            | TextureFormat.DepthComponent24 ->
+                // Divide by 2^32 - 1
+                Some (PixelFormat.DepthComponent, PixelType.UnsignedInt, 0, 4294967295u, false)
+
+            | TextureFormat.DepthComponent32 ->
+                // Divide by 2^32 - 1
+                Some (PixelFormat.DepthComponent, PixelType.UnsignedInt, 0, 4294967295u, false)
+
+            | TextureFormat.Depth24Stencil8  ->
+                // Shift right by 8 and divide by 2^24 - 1
+                Some (PixelFormat.DepthStencil, PixelType.UnsignedInt248, 8, 16777215u, false)
+
+            | _ -> None
+
+        let private (|FloatingPointDepth|_|) = function
+            | TextureFormat.DepthComponent32f -> Some (PixelFormat.DepthComponent, PixelType.Float)
+            | TextureFormat.Depth32fStencil8  -> Some (PixelFormat.DepthStencil, PixelType.Float32UnsignedInt248Rev)
             | _ -> None
 
         let downloadDepth (texture : Texture) (level : int) (slice : int) (offset : V2i) (matrix : Matrix<float32>) =
             let size = V3i matrix.Size.XYI
 
             match texture.Format with
-            | UnsignedNormalizedDepth (shift, maxValue, is16bit) ->
+            | UnsignedNormalizedDepth (format, typ, shift, maxValue, is16bit) ->
                 let copy =
                     if is16bit then
                         copyUnsignedNormalizedDepth matrix shift (uint16 maxValue)
@@ -221,30 +243,34 @@ module internal TextureDownloadImplementation =
 
                 let size = V3i(V2i matrix.Size, 1)
                 let offset = V3i(offset, slice)
-                downloadGeneralPixelData texture level slice offset size PixelFormat.DepthComponent PixelType.UnsignedInt copy
+                downloadGeneralPixelData texture level slice offset size format typ copy
 
-            | TextureFormat.DepthComponent32f
-            | TextureFormat.Depth32fStencil8 ->
+            | FloatingPointDepth (format, typ) ->
                 pinned matrix.Array (fun dst ->
                     let dstInfo = matrix.AsVolume().Info.ToXYWTensor4'().AsBytes<float32>()
-                    downloadNative texture level slice offset.XYO size 0 sizeof<float32> dst dstInfo
+                    downloadNative texture level slice offset.XYO size 0 sizeof<float32> format typ dst dstInfo
                 )
 
             | fmt -> failwithf "[GL] %A is not a supported depth format" fmt
 
 
+        let private (|Stencil|_|) = function
+            | TextureFormat.StencilIndex8    -> Some (PixelFormat.StencilIndex, PixelType.UnsignedByte, 0)
+            | TextureFormat.Depth24Stencil8  -> Some (PixelFormat.DepthStencil, PixelType.UnsignedInt248, 0)
+            | TextureFormat.Depth32fStencil8 -> Some (PixelFormat.DepthStencil, PixelType.Float32UnsignedInt248Rev, 4)
+            | _ -> None
+
         let downloadStencil (texture : Texture) (level : int) (slice : int) (offset : V2i) (matrix : Matrix<int>) =
             let size = V3i matrix.Size.XYI
 
-            let startOffset =
-                match texture.Format with
-                | TextureFormat.Depth32fStencil8 -> 4
-                | _ -> 0
+            match texture.Format with
+            | Stencil(format, typ, byteOffset) ->
+                pinned matrix.Array (fun dst ->
+                    let dstInfo = matrix.AsVolume().Info.ToXYWTensor4'().AsBytes<int>()
+                    downloadNative texture level slice offset.XYO size byteOffset sizeof<uint8> format typ dst dstInfo
+                )
 
-            pinned matrix.Array (fun dst ->
-                let dstInfo = matrix.AsVolume().Info.ToXYWTensor4'().AsBytes<int>()
-                downloadNative texture level slice offset.XYO size startOffset sizeof<uint8> dst dstInfo
-            )
+            | fmt -> failwithf "[GL] %A is not a supported stencil format" fmt
 
 [<AutoOpen>]
 module ContextTextureDownloadExtensions =
@@ -273,14 +299,15 @@ module ContextTextureDownloadExtensions =
 
         [<Extension>]
         static member Download(this : Context, texture : Texture, level : int, slice : int,
-                               offset : V3i, size : V3i, target : NativeTensor4<'T>) =
+                               offset : V3i, size : V3i, target : NativeTensor4<'T>, format : Col.Format) =
             download texture level slice offset size (fun level slice offset size texture ->
-                Texture.downloadNativeTensor4 texture level slice offset size target
+                Texture.downloadNativeTensor4 texture level slice offset size format target
             )
 
         [<Extension>]
-        static member Download(this : Context, texture : Texture, level : int, slice : int, size : V3i, target : NativeTensor4<'T>) =
-            this.Download(texture, level, slice, V3i.Zero, size, target)
+        static member Download(this : Context, texture : Texture, level : int, slice : int,
+                               size : V3i, target : NativeTensor4<'T>, format : Col.Format) =
+            this.Download(texture, level, slice, V3i.Zero, size, target, format)
 
         [<Extension>]
         static member Download(this : Context, texture : Texture, level : int, slice : int, offset : V2i, target : PixImage) =

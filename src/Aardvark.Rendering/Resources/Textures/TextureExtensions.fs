@@ -249,7 +249,7 @@ type ITextureRuntimeExtensions private() =
             { new PixVisitors.PixImageVisitor() with
                 member x.VisitUnit(img : PixImage<'T>) =
                     NativeVolume.using img.Volume (fun src ->
-                        this.Upload(texture, src.ToXYWTensor4'(), offset.XYO, size.XYI)
+                        this.Upload(texture, src.ToXYWTensor4'(), img.Format, offset.XYO, size.XYI)
                     )
             } |> ignore
 
@@ -294,7 +294,7 @@ type ITextureRuntimeExtensions private() =
             { new PixVisitors.PixVolumeVisitor() with
                 member x.VisitUnit(img : PixVolume<'T>) =
                     NativeTensor4.using img.Tensor4 (fun src ->
-                        this.Upload(texture, src, offset, size)
+                        this.Upload(texture, src, img.Format, offset, size)
                     )
             } |> ignore
 
@@ -337,9 +337,9 @@ type ITextureRuntimeExtensions private() =
 
         target.Visit
             { new PixVisitors.PixImageVisitor() with
-                member x.VisitUnit(dst : PixImage<'T>) =
-                    NativeVolume.using dst.Volume (fun dst ->
-                        this.Download(texture, dst.ToXYWTensor4'(), offset.XYO, size.XYI)
+                member x.VisitUnit(img : PixImage<'T>) =
+                    NativeVolume.using img.Volume (fun dst ->
+                        this.Download(texture, dst.ToXYWTensor4'(), img.Format, offset.XYO, size.XYI)
                     )
             } |> ignore
 
@@ -449,9 +449,9 @@ type ITextureRuntimeExtensions private() =
 
         target.Visit
             { new PixVisitors.PixVolumeVisitor() with
-                member x.VisitUnit(dst : PixVolume<'T>) =
-                    NativeTensor4.using dst.Tensor4 (fun pImg ->
-                        this.Download(texture, pImg, offset, size)
+                member x.VisitUnit(img : PixVolume<'T>) =
+                    NativeTensor4.using img.Tensor4 (fun dst ->
+                        this.Download(texture, dst, img.Format, offset, size)
                     )
             } |> ignore
 
