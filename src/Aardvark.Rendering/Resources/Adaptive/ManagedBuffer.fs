@@ -323,12 +323,12 @@ type ManagedBufferRuntimeExtensions private() =
     /// Creates a managed buffer with the given usage.
     /// </summary>
     /// <param name="this">The runtime.</param>
-    /// <param name="usage">The usage flags of the buffer. Default is BufferUsage.Default.</param>
+    /// <param name="usage">The usage flags of the buffer. Default is BufferUsage.All.</param>
     /// <param name="storage">The type of storage that is preferred. Default is BufferStorage.Host.</param>
     [<Extension>]
     static member CreateManagedBuffer<'T when 'T : unmanaged>(
                         this : IBufferRuntime,
-                        [<Optional; DefaultParameterValue(BufferUsage.Default)>] usage : BufferUsage,
+                        [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
                         [<Optional; DefaultParameterValue(BufferStorage.Host)>] storage : BufferStorage
                     ) =
         ManagedBuffer.create<'T> this usage storage
@@ -338,12 +338,12 @@ type ManagedBufferRuntimeExtensions private() =
     /// </summary>
     /// <param name="this">The runtime.</param>
     /// <param name="elementType">The element type of the buffer.</param>
-    /// <param name="usage">The usage flags of the buffer. Default is BufferUsage.Default.</param>
+    /// <param name="usage">The usage flags of the buffer. Default is BufferUsage.All.</param>
     /// <param name="storage">The type of storage that is preferred. Default is BufferStorage.Host.</param>
     [<Extension>]
     static member CreateManagedBuffer(
                         this : IBufferRuntime, elementType : Type,
-                        [<Optional; DefaultParameterValue(BufferUsage.Default)>] usage : BufferUsage,
+                        [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
                         [<Optional; DefaultParameterValue(BufferStorage.Host)>] storage : BufferStorage
                     ) =
         ManagedBuffer.createWithType elementType this usage storage

@@ -98,7 +98,7 @@ type AdaptiveBufferExtensions private() =
 
 /// Adaptive buffer that can be resized and written to in an imperative fashion.
 type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
-                    [<Optional; DefaultParameterValue(BufferUsage.Default)>] usage : BufferUsage,
+                    [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
                     [<Optional; DefaultParameterValue(BufferStorage.Host)>] storage : BufferStorage) =
     inherit AdaptiveResource<IBackendBuffer>()
 

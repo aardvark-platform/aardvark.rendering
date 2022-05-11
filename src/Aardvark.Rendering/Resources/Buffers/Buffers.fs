@@ -50,7 +50,7 @@ type BufferUsage =
     | AccelerationStructure = 0x80
 
     /// Equivalent to combination of all other usage flags.
-    | Default               = 0xFF
+    | All                   = 0xFF
 
 type IBuffer = interface end
 
@@ -77,18 +77,18 @@ and IBufferRuntime =
     /// If the given data is an IBackendBuffer the operation performs NOP.
     ///</summary>
     ///<param name="data">The data to upload to the buffer.</param>
-    ///<param name="usage">The usage flags of the buffer. Default is BufferUsage.Default.</param>
+    ///<param name="usage">The usage flags of the buffer. Default is BufferUsage.All.</param>
     ///<param name="storage">The type of storage that is preferred. Default is BufferStorage.Device.</param>
     abstract member PrepareBuffer : data : IBuffer *
-                                    [<Optional; DefaultParameterValue(BufferUsage.Default)>] usage : BufferUsage *
+                                    [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage *
                                     [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage -> IBackendBuffer
 
     ///<summary>Creates a GPU buffer.</summary>
     ///<param name="sizeInBytes">The size (in bytes) of the buffer.</param>
-    ///<param name="usage">The usage flags of the buffer. Default is BufferUsage.Default.</param>
+    ///<param name="usage">The usage flags of the buffer. Default is BufferUsage.All.</param>
     ///<param name="storage">The type of storage that is preferred. Default is BufferStorage.Device.</param>
     abstract member CreateBuffer : sizeInBytes : nativeint *
-                                   [<Optional; DefaultParameterValue(BufferUsage.Default)>] usage : BufferUsage *
+                                   [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage *
                                    [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage -> IBackendBuffer
 
     abstract member Copy : srcData : nativeint * dst : IBackendBuffer * dstOffset : nativeint * size : nativeint -> unit

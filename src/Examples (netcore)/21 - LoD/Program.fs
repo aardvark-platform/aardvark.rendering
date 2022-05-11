@@ -326,7 +326,7 @@ let main argv =
         let rand = System.Random()
         Array.init cnt (fun _ -> V3f(rand.NextDouble(),rand.NextDouble(),rand.NextDouble())*1000.0f)
     
-    let buffer = win.Runtime.PrepareBuffer(ArrayBuffer(points), BufferUsage.Default) :> IBuffer
+    let buffer = win.Runtime.PrepareBuffer(ArrayBuffer(points), BufferUsage.All) :> IBuffer
 
     let drawCallsCnt = AVal.init 1
 

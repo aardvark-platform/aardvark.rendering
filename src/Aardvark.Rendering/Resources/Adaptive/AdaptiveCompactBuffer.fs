@@ -190,7 +190,7 @@ type RuntimeAdaptiveCompactBufferExtensions private() =
                                       acquire : 'Key -> unit,
                                       release : 'Key -> unit,
                                       input : aset<'Key>,
-                                      [<Optional; DefaultParameterValue(BufferUsage.Default)>] usage : BufferUsage,
+                                      [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
                                       [<Optional; DefaultParameterValue(BufferStorage.Host)>] storage : BufferStorage) =
         CompactBufferImplementation.AdaptiveCompactBuffer<'Key, 'Value>(
             this, evaluate, acquire, release, input, usage, storage
@@ -209,7 +209,7 @@ type RuntimeAdaptiveCompactBufferExtensions private() =
                                       this : IBufferRuntime,
                                       evaluate : 'Key -> 'Value,
                                       input : aset<'Key>,
-                                      [<Optional; DefaultParameterValue(BufferUsage.Default)>] usage : BufferUsage,
+                                      [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
                                       [<Optional; DefaultParameterValue(BufferStorage.Host)>] storage : BufferStorage) =
         CompactBufferImplementation.ConstantCompactBuffer<'Key, 'Value>(
             this, evaluate, input, usage, storage
@@ -226,7 +226,7 @@ type RuntimeAdaptiveCompactBufferExtensions private() =
     static member CreateCompactBuffer<'T when 'T : unmanaged>(
                                       this : IBufferRuntime,
                                       input : aset<'T>,
-                                      [<Optional; DefaultParameterValue(BufferUsage.Default)>] usage : BufferUsage,
+                                      [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
                                       [<Optional; DefaultParameterValue(BufferStorage.Host)>] storage : BufferStorage) =
         this.CreateCompactBuffer(id, input, usage, storage)
 
@@ -241,7 +241,7 @@ type RuntimeAdaptiveCompactBufferExtensions private() =
     static member CreateCompactBuffer<'T, 'U when 'T : unmanaged and 'U :> aval<'T>>(
                                       this : IBufferRuntime,
                                       input : aset<'U>,
-                                      [<Optional; DefaultParameterValue(BufferUsage.Default)>] usage : BufferUsage,
+                                      [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
                                       [<Optional; DefaultParameterValue(BufferStorage.Host)>] storage : BufferStorage) =
         let evaluate t (x : 'U) = x.GetValue(t)
         let acquire (x : 'U) = x.Acquire()
