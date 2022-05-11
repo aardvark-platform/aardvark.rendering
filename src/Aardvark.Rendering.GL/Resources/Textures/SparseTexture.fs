@@ -174,7 +174,7 @@ module ``Sparse Texture Extensions`` =
                 failwith "[GL] texture upload region out of bounds"
                 
             if size.AllGreater 0 then
-                data |> Texture.uploadNativeTensor4 t false level 0 min size
+                data |> Texture.uploadNativeTensor4 t false level 0 min size data.Format
 
         member x.Download(t : SparseTexture, level : int, offset : V3i, target : NativeTensor4<'a>) =
             t.Context.Download(t, level, offset, target)

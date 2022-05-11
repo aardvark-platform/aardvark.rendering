@@ -348,7 +348,8 @@ type Runtime(device : Device, debug : DebugLevel) as this =
 
 
     // upload
-    member x.Upload<'a when 'a : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'a>, offset : V3i, size : V3i) =
+    member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'T>,
+                                            format : Col.Format, offset : V3i, size : V3i) =
         let size =
             if size = V3i.Zero then
                 V3i source.Size
@@ -360,10 +361,11 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         texture.Texture |> ResourceValidation.Textures.validateUploadWindow texture.Level offset size
 
         let image = ImageSubresource.ofTextureSubResource texture
-        device.UploadLevel(image, source, offset, size)
+        device.UploadLevel(image, source, format, offset, size)
 
     // download
-    member x.Download<'a when 'a : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'a>, offset : V3i, size : V3i) =
+    member x.Download<'T when 'T : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'T>,
+                                              format : Col.Format, offset : V3i, size : V3i) =
         let size =
             if size = V3i.Zero then
                 V3i target.Size
@@ -375,7 +377,7 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         texture.Texture |> ResourceValidation.Textures.validateWindow texture.Level offset size
 
         let image = ImageSubresource.ofTextureSubResource texture
-        device.DownloadLevel(image, target, offset, size)
+        device.DownloadLevel(image, target, format, offset, size)
 
     // copy
     member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
@@ -489,11 +491,13 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         member x.Compile (commands : list<ComputeCommand>) =
             ComputeCommand.compile commands device
 
-        member x.Upload<'a when 'a : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'a>, offset : V3i, size : V3i) =
-            x.Upload(texture, source, offset, size)
+        member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource,
+                                                source : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) =
+            x.Upload(texture, source, format, offset, size)
 
-        member x.Download<'a when 'a : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'a>, offset : V3i, size : V3i) =
-            x.Download(texture, target, offset, size)
+        member x.Download<'T when 'T : unmanaged>(texture : ITextureSubResource,
+                                                  target : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) =
+            x.Download(texture, target, format, offset, size)
 
         member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
             x.Copy(src, srcOffset, dst, dstOffset, size)

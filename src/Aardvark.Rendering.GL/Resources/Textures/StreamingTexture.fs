@@ -59,7 +59,7 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
             currentFormat <- f
             textureFormat <- TextureFormat.ofPixFormat f TextureParams.empty
             pixelType <- PixelType.ofType f.Type
-            pixelFormat <- PixelFormat.ofColFormat f.Format
+            pixelFormat <- PixelFormat.ofColFormat textureFormat.IsIntegerFormat f.Format
             channels <- PixelFormat.channels pixelFormat
             channelSize <- PixelType.size pixelType
 
@@ -354,7 +354,7 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
             textureFormat <- TextureFormat.ofPixFormat f TextureParams.empty
 
             pixelType <- PixelType.ofType f.Type
-            pixelFormat <- PixelFormat.ofColFormat f.Format
+            pixelFormat <- PixelFormat.ofColFormat textureFormat.IsIntegerFormat f.Format
             channels <- PixelFormat.channels pixelFormat
             channelSize <- PixelType.size pixelType
 

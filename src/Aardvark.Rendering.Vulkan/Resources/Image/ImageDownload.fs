@@ -152,23 +152,25 @@ module ImageDownloadExtensions =
                 buffer.Dispose()
 
 
-        let private downloadLevelColor (offset : V3i) (size : V3i) (src : ImageSubresource) (dst : NativeTensor4<'T>) (device : Device) =
-            let format = src.Image.Format
-            let srcPixFormat = PixFormat(VkFormat.expectedType format, VkFormat.toColFormat format)
+        let private downloadLevelColor (offset : V3i) (size : V3i) (format : Col.Format)
+                                       (src : ImageSubresource) (dst : NativeTensor4<'T>) (device : Device) =
+            let imageFormat = src.Image.Format
+            let srcPixFormat = PixFormat(VkFormat.expectedType imageFormat, VkFormat.toColFormat imageFormat)
 
-            let temp = device.CreateTensorImage(V3i dst.Size, srcPixFormat, VkFormat.isSrgb src.Image.Format)
+            let temp = device.CreateTensorImage(V3i dst.Size, srcPixFormat, VkFormat.isSrgb imageFormat)
 
             try
                 (src, device) ||> resolveAndCopy (fun resolved ->
                     Command.Copy(resolved, offset, temp, size)
                 )
-                temp.Read(dst.Format, dst)
+                temp.Read(format, dst)
 
             finally
                 temp.Dispose()
 
 
-        let downloadLevel (offset : V3i) (size : V3i) (src : ImageSubresource) (dst : NativeTensor4<'T>) (device : Device) =
+        let downloadLevel (offset : V3i) (size : V3i) (format : Col.Format)
+                          (src : ImageSubresource) (dst : NativeTensor4<'T>) (device : Device) =
             let dst, offset =
                 if src.Image.IsCubeOr2D then
                     dst.SubTensor4(V4l.Zero, V4l(V3l size, dst.SW)).MirrorY(),
@@ -176,11 +178,11 @@ module ImageDownloadExtensions =
                 else
                     dst, offset
 
-            let format = (src.Image :> IBackendTexture).Format
+            let textureFormat = (src.Image :> IBackendTexture).Format
 
-            match format.CompressionMode with
+            match textureFormat.CompressionMode with
             | CompressionMode.None ->
-                downloadLevelColor offset size src dst device
+                downloadLevelColor offset size format src dst device
 
             | mode ->
                 downloadLevelCompressed mode offset size src dst device
@@ -230,8 +232,9 @@ module ImageDownloadExtensions =
     type ContextImageDownloadExtensions private() =
 
         [<Extension>]
-        static member inline DownloadLevel(this : Device, src : ImageSubresource, dst : NativeTensor4<'T>, offset : V3i, size : V3i) =
-            this |> Image.downloadLevel offset size src dst
+        static member inline DownloadLevel(this : Device, src : ImageSubresource, dst : NativeTensor4<'T>,
+                                           format : Col.Format, offset : V3i, size : V3i) =
+            this |> Image.downloadLevel offset size format src dst
 
         [<Extension>]
         static member inline DownloadDepth(this : Device, src : ImageSubresource, dst : Matrix<float32>, offset : V2i) =

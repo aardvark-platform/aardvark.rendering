@@ -101,7 +101,7 @@ type Runtime(debug : DebugLevel) =
 
         member x.DeviceCount = 1
 
-        member x.Upload<'a when 'a : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'a>, offset : V3i, size : V3i) : unit =
+        member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource, source : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) : unit =
             let size =
                 if size = V3i.Zero then
                     V3i source.Size
@@ -115,9 +115,9 @@ type Runtime(debug : DebugLevel) =
             dst |> ResourceValidation.Textures.validateLevel level
             dst |> ResourceValidation.Textures.validateSlice slice
             dst |> ResourceValidation.Textures.validateUploadWindow level offset size
-            ctx.Upload(dst, level, slice, offset, size, source)
-  
-        member x.Download<'a when 'a : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'a>, offset : V3i, size : V3i) : unit =
+            ctx.Upload(dst, level, slice, offset, size, source, format)
+
+        member x.Download<'T when 'T : unmanaged>(texture : ITextureSubResource, target : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) : unit =
             let size =
                 if size = V3i.Zero then
                     V3i target.Size
@@ -131,7 +131,7 @@ type Runtime(debug : DebugLevel) =
             src |> ResourceValidation.Textures.validateLevel level
             src |> ResourceValidation.Textures.validateSlice slice
             src |> ResourceValidation.Textures.validateWindow level offset size
-            ctx.Download(src, level, slice, offset, size, target)
+            ctx.Download(src, level, slice, offset, size, target, format)
 
         member x.Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) : unit =
 

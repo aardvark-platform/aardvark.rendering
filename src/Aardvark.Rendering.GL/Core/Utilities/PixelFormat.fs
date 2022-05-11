@@ -5,19 +5,27 @@ open OpenTK.Graphics.OpenGL4
 
 module internal PixelFormat =
 
-    let ofColFormat =
-        LookupTable.lookupTable [
-            Col.Format.Alpha,     PixelFormat.Alpha
-            Col.Format.BW,        PixelFormat.Red
-            Col.Format.Gray,      PixelFormat.Red
-            Col.Format.GrayAlpha, PixelFormat.Rg
-            Col.Format.RGB,       PixelFormat.Rgb
-            Col.Format.BGR,       PixelFormat.Bgr
-            Col.Format.RGBA,      PixelFormat.Rgba
-            Col.Format.BGRA,      PixelFormat.Bgra
-            Col.Format.RGBP,      PixelFormat.Rgba
-            Col.Format.NormalUV,  PixelFormat.Rg
-        ]
+    let private ofColFormatTable, private ofColFormatTableInteger =
+        let build (wantInteger : bool) =
+            let choose a b = if wantInteger then b else a
+
+            LookupTable.lookupTable [
+                Col.Format.Alpha,     choose PixelFormat.Alpha PixelFormat.AlphaInteger
+                Col.Format.BW,        choose PixelFormat.Red PixelFormat.RedInteger
+                Col.Format.Gray,      choose PixelFormat.Red PixelFormat.RedInteger
+                Col.Format.GrayAlpha, choose PixelFormat.Rg PixelFormat.RgInteger
+                Col.Format.RGB,       choose PixelFormat.Rgb PixelFormat.RgbInteger
+                Col.Format.BGR,       choose PixelFormat.Bgr PixelFormat.BgrInteger
+                Col.Format.RGBA,      choose PixelFormat.Rgba PixelFormat.RgbaInteger
+                Col.Format.BGRA,      choose PixelFormat.Bgra PixelFormat.RgbaInteger
+                Col.Format.RGBP,      choose PixelFormat.Rgba PixelFormat.RgbaInteger
+                Col.Format.NormalUV,  choose PixelFormat.Rg PixelFormat.RgInteger
+            ]
+
+        build false, build true
+
+    let ofColFormat (wantInteger : bool) =
+        if wantInteger then ofColFormatTableInteger else ofColFormatTable
 
     let channels =
         LookupTable.lookupTable [
