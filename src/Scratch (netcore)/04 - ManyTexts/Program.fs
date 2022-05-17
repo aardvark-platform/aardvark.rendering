@@ -61,7 +61,7 @@ let main argv =
         )
     )
 
-    
+
     let box = Box3d(-5.0 * V3d.III, 5.0 * V3d.III)
     win.Keyboard.DownWithRepeats.Values.Add (fun k ->
         match k with
@@ -77,6 +77,7 @@ let main argv =
     )
 
     let font = Font "Consolas"
+    //let font = FontSquirrel.Leafy_glade.Regular
 
     //let shapes =
     //    Text.Layout(font, TextAlignment.Center, Box2d(V2d(0.0, -0.25), V2d(1.0, 0.5)), "HUGO g | µ\nWAWAWA ||| )(){}\nWAWAW")
@@ -85,10 +86,10 @@ let main argv =
 
     let cfg : TextConfig = 
         {
-            font = Font "Consolas"
+            font = font
             color = C4b.White
             align = TextAlignment.Center
-            flipViewDependent = true
+            flipViewDependent = false
             renderStyle       = RenderStyle.NoBoundary
         }
         
@@ -126,6 +127,9 @@ let main argv =
 
     let bias = AVal.init (1.0 / float (1 <<< 22))
 
+    let fill = AVal.init FillMode.Fill
+    let cull = AVal.init CullMode.None
+
     let shapes =
         let dark = C4b(30uy, 30uy, 30uy, 255uy)
         let blue = C4b(0uy, 122uy, 204uy, 255uy)
@@ -150,6 +154,14 @@ let main argv =
         transact (fun () -> bias.Value <- bias.Value / 2.0)
         printfn "bias: %.10f" bias.Value
     )
+    win.Keyboard.KeyDown(Keys.End).Values.Add(fun () ->
+        transact (fun () -> fill.Value <- if fill.Value = FillMode.Fill then FillMode.Line else FillMode.Fill)
+        printfn "fill: %A" fill.Value
+    )
+    win.Keyboard.KeyDown(Keys.Home).Values.Add(fun () ->
+        transact (fun () -> cull.Value <- if cull.Value = CullMode.None then CullMode.Back else CullMode.None)
+        printfn "cull: %A" cull.Value
+    )
 
 
     let sg =
@@ -157,6 +169,8 @@ let main argv =
             //|> Sg.transform (Trafo3d.FromOrthoNormalBasis(V3d.IOO, V3d.OOI, -V3d.OIO))
             |> Sg.andAlso coord
             |> Sg.uniform "DepthBias" bias
+            |> Sg.fillMode fill
+            |> Sg.cullMode cull
         //let bounds = shapes.bounds.EnlargedBy(V2d(0.05, 0.0))
         //let rect = ConcreteShape.fillRoundedRectangle C4b.White 0.1 bounds
         ////let rectb = ConcreteShape.roundedRectangle C4b.Gray 0.05 0.125 (bounds.EnlargedBy 0.025)
