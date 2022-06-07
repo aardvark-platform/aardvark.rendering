@@ -942,6 +942,17 @@ module Image =
             let properties =
                 device.PhysicalDevice.GetImageFormatProperties(fmt, typ, VkImageTiling.Optimal, usage, flags)
 
+            let maxExtent = V3l.OfExtent properties.maxExtent
+
+            if Vec.anyGreater (V3l size) maxExtent then
+                failf "cannot create %A image with size %A (maximum is %A)" fmt size maxExtent
+
+            if uint32 layers > properties.maxArrayLayers then
+                failf "cannot create %A image with %d layers (maximum is %d)" fmt layers properties.maxArrayLayers
+
+            if uint32 mipMapLevels > properties.maxMipLevels then
+                failf "cannot create %A image with %d mip-map levels (maximum is %d)" fmt mipMapLevels properties.maxMipLevels
+
             let samples =
                 let counts = VkSampleCountFlags.toSet properties.sampleCounts
                 if counts.Contains samples then samples
