@@ -61,7 +61,8 @@ module private OpenGL =
                     with _ -> NativePtr.zero
 
                 if w = NativePtr.zero then
-                    Log.warn "OpenGL %A not working" v
+                    let error, _ = glfw.GetError()
+                    Log.warn "OpenGL %A not working: %A" v error
                     false
                 else
                     glfw.DestroyWindow(w)
