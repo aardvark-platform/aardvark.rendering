@@ -476,24 +476,26 @@ module ProgramExtensions =
                     
         member x.TryGetProgramBinary(prog : Program) =
             use __ = x.ResourceLock
-            GL.GetError() |> ignore
 
-            let mutable length = 0
-            GL.GetProgram(prog.Handle, unbox 0x8741, &length)
-            let err = GL.GetError()
-            if err <> ErrorCode.NoError then 
-                None
-            else
-                let data : byte[] = Array.zeroCreate length
-                let mutable format = Unchecked.defaultof<BinaryFormat>
-                GL.GetProgramBinary(prog.Handle, length, &length, &format, data)
+            if GL.ARB_get_program_binary then
+                GL.GetError() |> ignore
+
+                let mutable length = 0
+                GL.GetProgram(prog.Handle, GetProgramParameterName.ProgramBinaryLength, &length)
                 let err = GL.GetError()
                 if err <> ErrorCode.NoError then 
                     None
                 else
-                    Some (format, data)
-
-
+                    let data : byte[] = Array.zeroCreate length
+                    let mutable format = Unchecked.defaultof<BinaryFormat>
+                    GL.GetProgramBinary(prog.Handle, length, &length, &format, data)
+                    let err = GL.GetError()
+                    if err <> ErrorCode.NoError then 
+                        None
+                    else
+                        Some (format, data)
+            else
+                None
 
         member x.TryCompileProgramCode(fboSignature : Map<string, int>, expectsRowMajorMatrices : bool, code : string) =
             Operators.using x.ResourceLock (fun _ ->
