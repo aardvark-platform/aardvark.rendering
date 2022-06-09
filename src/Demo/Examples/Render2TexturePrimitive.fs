@@ -81,7 +81,7 @@ module Render2TexturePrimitive =
         let pi = PixImage<byte>(Col.Format.BGRA, size) 
         color.Download(pi)
         let tempFileName = Path.ChangeExtension( Path.combine [__SOURCE_DIRECTORY__;  Path.GetTempFileName() ], ".bmp" )
-        pi.SaveAsImage tempFileName
+        pi.Save tempFileName
     
         // download is done, do winforms magic in order to present the result
         let f = new Form()

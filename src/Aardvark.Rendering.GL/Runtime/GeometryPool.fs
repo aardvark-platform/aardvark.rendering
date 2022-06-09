@@ -795,7 +795,7 @@ type TextureManager(ctx : Context, semantic : string, format : TextureFormat, sa
                 let dst = dst.SubImage(b.Min, V2i.II + b.Max - b.Min)
                 dst.Volume.Set(src.Volume) |> ignore
             
-            dst.SaveAsImage(System.IO.Path.Combine(path, name), PixFileFormat.Png)
+            dst.Save(System.IO.Path.Combine(path, name), PixFileFormat.Png)
             ()
         Log.stop()
         

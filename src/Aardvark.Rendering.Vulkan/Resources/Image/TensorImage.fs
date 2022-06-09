@@ -343,7 +343,7 @@ module TensorImage =
         dst
 
     let ofStream (stream : IO.Stream) (srgb : bool) (device : Device) =
-        let img = PixImage.Create stream
+        let img = PixImage.Load stream
         ofPixImage img srgb device
 
 

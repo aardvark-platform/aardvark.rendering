@@ -238,14 +238,28 @@ module BaseLibExtensions =
     type V2i with
         static member OfExtent (e : VkExtent2D) =
             V2i(int e.width, int e.height)
-        
+
+        member x.ToExtent() =
+            VkExtent2D(uint32 x.X, uint32 x.Y)
+
+    type V2l with
+        static member OfExtent (e : VkExtent2D) =
+            V2l(int64 e.width, int64 e.height)
+
         member x.ToExtent() =
             VkExtent2D(uint32 x.X, uint32 x.Y)
 
     type V3i with
         static member OfExtent (e : VkExtent3D) =
             V3i(int e.width, int e.height, int e.depth)
-        
+
+        member x.ToExtent() =
+            VkExtent3D(uint32 x.X, uint32 x.Y, uint32 x.Z)
+
+    type V3l with
+        static member OfExtent (e : VkExtent3D) =
+            V3l(int64 e.width, int64 e.height, int64 e.depth)
+
         member x.ToExtent() =
             VkExtent3D(uint32 x.X, uint32 x.Y, uint32 x.Z)
 

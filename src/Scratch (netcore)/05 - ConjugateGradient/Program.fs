@@ -913,7 +913,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
                             dst.GetMatrix<C4f>().SetMap(dst.GetMatrix<C4f>(), fun v -> ((v.ToV4f() + V4f.IIII) * 0.5f).ToC4f()) |> ignore
                         
                         let name = sprintf @"%d_%s_input_%dx%d.jpg" iter name size.X size.Y
-                        dst.SaveAsImage (Path.combine [path; name])
+                        dst.Save (Path.combine [path; name])
                 )
 
                 bPing |> Map.iter (fun name t ->
@@ -921,7 +921,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
                     t.Texture.Download(dst, t.Level, t.Slice)
                     dst.GetMatrix<C4f>().SetMap(dst.GetMatrix<C4f>(), fun v -> ((v.ToV4f() + V4f.IIII) * 0.5f).ToC4f()) |> ignore
                     let name = sprintf @"%d_%s_ping_%dx%d.jpg" iter name size.X size.Y
-                    dst.SaveAsImage (Path.combine [path; name]) 
+                    dst.Save (Path.combine [path; name]) 
                 )
             | None -> 
                 ()
@@ -994,7 +994,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
                 dst.GetMatrix<C4f>().SetMap(dst.GetMatrix<C4f>(), fun v -> ((v.ToV4f() + V4f.IIII) * 0.5f).ToC4f()) |> ignore
 
                 let name = sprintf @"%d_%s_output_%dx%d.jpg" iter name size.X size.Y
-                dst.SaveAsImage (Path.combine [path; name])
+                dst.Save (Path.combine [path; name])
             | None ->
                 ()
             
@@ -1118,7 +1118,7 @@ type MultigridSolver2d<'f, 'v when 'v : unmanaged and 'f :> FShade.Formats.IFloa
                     let name = sprintf "%d_xsl.jpg" iter
                     let dst = PixImage<float32>(Col.Format.RGBA, xsl.Size.XY)
                     xsl.Texture.Download(dst, xsl.Level, xsl.Slice)
-                    dst.SaveAsImage(Path.combine [path; name])
+                    dst.Save(Path.combine [path; name])
                 | None ->
                     ()
 
@@ -1356,7 +1356,7 @@ module PixImageExtensionsNew =
             map mapping img
 
         let save (path : string) (img : PixImage) =
-            img.SaveAsImage path
+            img.Save path
 
 type DepthMapSolver(runtime : IRuntime, lambda : float, sigma : float) =
 
@@ -1499,8 +1499,8 @@ type ImageResonstructionSolver(runtime : IRuntime) =
 
 
 let depth (runtime : IRuntime) =
-    let color = PixImage.Create @"C:\temp\b\P9094511.png"
-    let depthValues = PixImage.Create @"C:\temp\b\P9094511.exr"
+    let color = PixImage.Load @"C:\temp\b\P9094511.png"
+    let depthValues = PixImage.Load @"C:\temp\b\P9094511.exr"
     let depthWeight = depthValues |> PixImage.map (fun v -> if v.X > 0.0 then V4d.IIII else V4d.Zero)
     let solver = DepthMapSolver(runtime, 10.0, 0.1)
 
@@ -1521,14 +1521,14 @@ let depth (runtime : IRuntime) =
         
 
     let res = solver.Solve(depthValues, depthWeight, color, config)
-    res.SaveAsImage @"C:\temp\b\depth.exr"
+    res.Save @"C:\temp\b\depth.exr"
 
     let n = PixImage.normalize res |> PixImage.toRGBAByteImage
-    n.SaveAsImage @"C:\temp\b\depth.png"
+    n.Save @"C:\temp\b\depth.png"
 
 let reconstruct (runtime : IRuntime) =
 
-    let color = PixImage.Create @"C:\temp\a\bla.png"
+    let color = PixImage.Load @"C:\temp\a\bla.png"
     let size = color.Size
     let edgeSize = 2L
     let isXEdge (v : V2l) = v.X < edgeSize || v.X >= int64 size.X - edgeSize
@@ -1558,7 +1558,7 @@ let reconstruct (runtime : IRuntime) =
         
 
     let res = solver.Solve(color, weight, config)
-    res.SaveAsImage @"C:\temp\a\result.png"
+    res.Save @"C:\temp\a\result.png"
 
 [<EntryPoint>]
 let main argv = 

@@ -61,7 +61,8 @@ module private OpenGL =
                     with _ -> NativePtr.zero
 
                 if w = NativePtr.zero then
-                    Log.warn "OpenGL %A not working" v
+                    let error, _ = glfw.GetError()
+                    Log.warn "OpenGL %A not working: %A" v error
                     false
                 else
                     glfw.DestroyWindow(w)
@@ -204,12 +205,17 @@ module private OpenGL =
     let mutable private lastWindow = None
 
     let getFramebufferSamples() =
-        GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
-        GL.Check "could not bind default framebuffer"
+        if GL.getVersion() >= System.Version(4, 5) then
+            GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+            GL.Check "could not bind default framebuffer"
 
-        let samples = GL.GetFramebufferParameter(FramebufferTarget.DrawFramebuffer, unbox GetFramebufferParameter.Samples)
-        GL.Check "could not retrieve framebuffer samples"
-        samples
+            let samples = GL.Dispatch.GetFramebufferParameter(FramebufferTarget.DrawFramebuffer, unbox GetFramebufferParameter.Samples)
+            GL.Check "could not retrieve framebuffer samples"
+            Some samples
+
+        else
+            Log.warn "[GL] could not query sample count of default framebuffer."
+            None
 
     let createSurface (runtime : Runtime) (cfg: WindowConfig) (glfw : Glfw) (win : nativeptr<WindowHandle>) =
         let old = glfw.GetCurrentContext()
@@ -236,7 +242,7 @@ module private OpenGL =
                 Log.error "[GLFW] could not make context current"
             ctx.LoadAll()          
             glfw.SwapInterval(if cfg.vsync then 1 else 0)
-            samples <- getFramebufferSamples()
+            samples <- getFramebufferSamples() |> Option.defaultValue cfg.samples
             glfw.MakeContextCurrent(NativePtr.zero)
 
         if old <> NativePtr.zero then

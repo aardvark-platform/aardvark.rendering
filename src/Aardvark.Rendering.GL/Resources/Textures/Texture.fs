@@ -327,13 +327,10 @@ module internal TextureUtilitiesAndExtensions =
 [<AutoOpen>]
 module TextureCreationExtensions =
     type Context with
-        member private x.SetDefaultTextureParams(target : TextureTarget, mipMapLevels : int) =
-            GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels - 1)
-            GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
-            GL.TexParameter(target, TextureParameterName.TextureWrapS, int TextureWrapMode.ClampToEdge)
-            GL.TexParameter(target, TextureParameterName.TextureWrapT, int TextureWrapMode.ClampToEdge)
-            GL.TexParameter(target, TextureParameterName.TextureMinFilter, int TextureMinFilter.Linear)
-            GL.TexParameter(target, TextureParameterName.TextureMagFilter, int TextureMagFilter.Linear)
+
+        // ================================================================================================================
+        // CreateTexture
+        // ================================================================================================================
 
         member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, slices : int, levels : int, samples : int) =
             using x.ResourceLock (fun _ ->
@@ -440,22 +437,87 @@ module TextureCreationExtensions =
                 tex
             )
 
+
+        // ================================================================================================================
+        // AllocateTexture
+        // ================================================================================================================
+
+        member private x.SetDefaultTextureParams(target : TextureTarget, mipMapLevels : int) =
+            GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels - 1)
+            GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
+            GL.TexParameter(target, TextureParameterName.TextureWrapS, int TextureWrapMode.ClampToEdge)
+            GL.TexParameter(target, TextureParameterName.TextureWrapT, int TextureWrapMode.ClampToEdge)
+            GL.TexParameter(target, TextureParameterName.TextureMinFilter, int TextureMinFilter.Linear)
+            GL.TexParameter(target, TextureParameterName.TextureMagFilter, int TextureMagFilter.Linear)
+
+        member private x.ValidateAndAllocateTexture(target : TextureTarget, size : 'T, create : TextureTarget -> unit) =
+            // Allocate using proxy target
+            let proxyTarget = TextureTarget.toProxy target
+            create proxyTarget
+
+            // Check for success
+            let mutable width = 0
+            GL.GetTexLevelParameter(proxyTarget, 0, GetTextureParameter.TextureWidth, &width)
+            GL.Check "could not get texture parameter"
+
+            if width = 0 then
+                failwithf "[GL] cannot create a texture with size %A as it exceeds device limits" size
+
+            // Allocate for real using regular target
+            create target
+
+        member inline private x.AllocateTexture1D(target : TextureTarget, mipMapLevels : int, format : SizedInternalFormat, size : int) =
+            x.SetDefaultTextureParams(target, mipMapLevels)
+
+            x.ValidateAndAllocateTexture(target, size, fun target ->
+                GL.Dispatch.TexStorage1D(unbox target, mipMapLevels, format, size)
+            )
+
+        member inline private x.AllocateTexture2D(target : TextureTarget, mipMapLevels : int, format : SizedInternalFormat, size : V2i) =
+            x.SetDefaultTextureParams(target, mipMapLevels)
+
+            x.ValidateAndAllocateTexture(target, size, fun target ->
+                GL.Dispatch.TexStorage2D(unbox target, mipMapLevels, format, size.X, size.Y)
+            )
+
+        member inline private x.AllocateTexture2DMultisample(target : TextureTarget, samples : int,
+                                                             format : SizedInternalFormat, size : V2i, fixedSampleLocations : bool) =
+            x.ValidateAndAllocateTexture(target, size, fun target ->
+                GL.Dispatch.TexStorage2DMultisample(unbox target, samples, format, size.X, size.Y, fixedSampleLocations)
+            )
+
+        member inline private x.AllocateTexture3D(target : TextureTarget, mipMapLevels : int, format : SizedInternalFormat, size : V3i) =
+            x.SetDefaultTextureParams(target, mipMapLevels)
+
+            x.ValidateAndAllocateTexture(target, size, fun target ->
+                GL.Dispatch.TexStorage3D(unbox target, mipMapLevels, format, size.X, size.Y, size.Z)
+            )
+
+        member inline private x.AllocateTexture3DMultisample(target : TextureTarget, samples : int,
+                                                             format : SizedInternalFormat, size : V3i, fixedSampleLocations : bool) =
+            x.ValidateAndAllocateTexture(target, size, fun target ->
+                GL.Dispatch.TexStorage3DMultisample(unbox target, samples, format, size.X, size.Y, size.Z, fixedSampleLocations)
+            )
+
+
+        // ================================================================================================================
+        // UpdateTexture
+        // ================================================================================================================
+
         member private x.UpdateTexture1D(tex : Texture, size : int, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
                 GL.BindTexture(TextureTarget.Texture1D, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let sizeInBytes = ResourceCounts.texSizeInBytes(V3i(size, 1, 1), format, 1, mipMapLevels)
-                ResourceCounts.updateTexture tex.Context tex.SizeInBytes sizeInBytes
-                tex.SizeInBytes <- sizeInBytes
-
-                x.SetDefaultTextureParams(TextureTarget.Texture1D, mipMapLevels)
-
-                GL.Dispatch.TexStorage1D(TextureTarget1d.Texture1D, mipMapLevels, TextureFormat.toSizedInternalFormat format, size)
+                x.AllocateTexture1D(TextureTarget.Texture1D, mipMapLevels, TextureFormat.toSizedInternalFormat format, size)
                 GL.Check "could not allocate texture"
 
                 GL.BindTexture(TextureTarget.Texture1D, 0)
                 GL.Check "could not unbind texture"
+
+                let sizeInBytes = ResourceCounts.texSizeInBytes(V3i(size, 1, 1), format, 1, mipMapLevels)
+                ResourceCounts.updateTexture tex.Context tex.SizeInBytes sizeInBytes
+                tex.SizeInBytes <- sizeInBytes
 
                 tex.MipMapLevels <- mipMapLevels
                 tex.Dimension <- TextureDimension.Texture1D
@@ -464,6 +526,8 @@ module TextureCreationExtensions =
             )
 
         member private x.UpdateTexture2D(tex : Texture, size : V2i, mipMapLevels : int, format : TextureFormat, samples : int) =
+            let ifmt = TextureFormat.toSizedInternalFormat format
+
             using x.ResourceLock (fun _ ->
                 let target =
                     if samples = 1 then TextureTarget.Texture2D
@@ -480,26 +544,22 @@ module TextureCreationExtensions =
                     else
                         1
 
-                let ifmt = TextureFormat.toSizedInternalFormat format
-
                 GL.BindTexture(target, tex.Handle)
                 GL.Check "could not bind texture"
+
+                if samples = 1 then
+                    x.AllocateTexture2D(target, mipMapLevels, ifmt, size)
+                else
+                    x.AllocateTexture2DMultisample(target, samples, ifmt, size, true)
+
+                GL.Check "could not allocate texture"
+
+                GL.BindTexture(target, 0)
+                GL.Check "could not unbind texture"
 
                 let sizeInBytes = ResourceCounts.texSizeInBytes(size.XYI, format, samples, mipMapLevels)
                 ResourceCounts.updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
-
-                if samples = 1 then
-                    // parameters only valid for non-multisampled textures
-                    x.SetDefaultTextureParams(target, mipMapLevels)
-                    GL.Dispatch.TexStorage2D(TextureTarget2d.Texture2D, mipMapLevels, ifmt, size.X, size.Y)
-                else
-                    if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
-                    GL.Dispatch.TexStorage2DMultisample(TextureTargetMultisample2d.Texture2DMultisample, samples, ifmt, size.X, size.Y, true)
-
-                GL.Check "could not allocate texture"
-                GL.BindTexture(target, 0)
-                GL.Check "could not unbind texture"
 
                 tex.MipMapLevels <- mipMapLevels
                 tex.Dimension <- TextureDimension.Texture2D
@@ -510,23 +570,21 @@ module TextureCreationExtensions =
             )
 
         member private x.UpdateTexture3D(tex : Texture, size : V3i, mipMapLevels : int, format : TextureFormat) =
+            let ifmt = TextureFormat.toSizedInternalFormat format
+
             using x.ResourceLock (fun _ ->
                 GL.BindTexture(TextureTarget.Texture3D, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let ifmt = TextureFormat.toSizedInternalFormat format
-
-                let sizeInBytes = ResourceCounts.texSizeInBytes(size, format, 1, mipMapLevels)
-                ResourceCounts.updateTexture tex.Context tex.SizeInBytes sizeInBytes
-                tex.SizeInBytes <- sizeInBytes
-
-                x.SetDefaultTextureParams(TextureTarget.Texture3D, mipMapLevels)
-
-                GL.Dispatch.TexStorage3D(TextureTarget3d.Texture3D, mipMapLevels, ifmt, size.X, size.Y, size.Z)
+                x.AllocateTexture3D(TextureTarget.Texture3D, mipMapLevels, ifmt, size)
                 GL.Check "could not allocate texture"
 
                 GL.BindTexture(TextureTarget.Texture3D, 0)
                 GL.Check "could not unbind texture"
+
+                let sizeInBytes = ResourceCounts.texSizeInBytes(size, format, 1, mipMapLevels)
+                ResourceCounts.updateTexture tex.Context tex.SizeInBytes sizeInBytes
+                tex.SizeInBytes <- sizeInBytes
 
                 tex.MipMapLevels <- mipMapLevels
                 tex.Dimension <- TextureDimension.Texture3D
@@ -537,12 +595,14 @@ module TextureCreationExtensions =
             )
 
         member private x.UpdateTextureCube(tex : Texture, size : int, mipMapLevels : int, format : TextureFormat) =
+            let ifmt = TextureFormat.toSizedInternalFormat format
+
             using x.ResourceLock (fun _ ->
                 GL.BindTexture(TextureTarget.TextureCubeMap, tex.Handle)
                 GL.Check "could not bind texture"
 
-                x.SetDefaultTextureParams(TextureTarget.TextureCubeMap, mipMapLevels)
-                GL.Dispatch.TexStorage2D(TextureTarget2d.TextureCubeMap, mipMapLevels, TextureFormat.toSizedInternalFormat format, size, size)
+                x.AllocateTexture2D(TextureTarget.TextureCubeMap, mipMapLevels, ifmt, V2i(size))
+                GL.Check "could not allocate texture"
 
                 GL.BindTexture(TextureTarget.TextureCubeMap, 0)
                 GL.Check "could not unbind texture"
@@ -559,21 +619,21 @@ module TextureCreationExtensions =
             )
 
         member private x.UpdateTexture1DArray(tex : Texture, size : int, count : int, mipMapLevels : int, format : TextureFormat) =
+            let ifmt = TextureFormat.toSizedInternalFormat format
+
             using x.ResourceLock (fun _ ->
                 GL.BindTexture(TextureTarget.Texture1DArray, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let sizeInBytes = ResourceCounts.texSizeInBytes(V3i(size, 1, 1), format, 1, mipMapLevels) * (int64 count)
-                ResourceCounts.updateTexture tex.Context tex.SizeInBytes sizeInBytes
-                tex.SizeInBytes <- sizeInBytes
-
-                x.SetDefaultTextureParams(TextureTarget.Texture1DArray, mipMapLevels)
-
-                GL.Dispatch.TexStorage2D(TextureTarget2d.Texture1DArray, mipMapLevels, TextureFormat.toSizedInternalFormat format, size, count)
+                x.AllocateTexture2D(TextureTarget.Texture1DArray, mipMapLevels, ifmt, V2i(size, count))
                 GL.Check "could not allocate texture"
 
                 GL.BindTexture(TextureTarget.Texture1DArray, 0)
                 GL.Check "could not unbind texture"
+
+                let sizeInBytes = ResourceCounts.texSizeInBytes(V3i(size, 1, 1), format, 1, mipMapLevels) * (int64 count)
+                ResourceCounts.updateTexture tex.Context tex.SizeInBytes sizeInBytes
+                tex.SizeInBytes <- sizeInBytes
 
                 tex.IsArray <- true
                 tex.MipMapLevels <- mipMapLevels
@@ -606,21 +666,19 @@ module TextureCreationExtensions =
                 GL.BindTexture(target, tex.Handle)
                 GL.Check "could not bind texture"
 
-                let sizeInBytes = ResourceCounts.texSizeInBytes(size.XYI, format, samples, mipMapLevels) * (int64 count)
-                ResourceCounts.updateTexture tex.Context tex.SizeInBytes sizeInBytes
-                tex.SizeInBytes <- sizeInBytes
-
                 if samples = 1 then
-                    x.SetDefaultTextureParams(target, mipMapLevels)
-                    GL.Dispatch.TexStorage3D(TextureTarget3d.Texture2DArray, mipMapLevels, ifmt, size.X, size.Y, count)
+                    x.AllocateTexture3D(TextureTarget.Texture2DArray, mipMapLevels, ifmt, V3i(size.X, size.Y, count))
                 else
-                    if mipMapLevels > 1 then failwith "multisampled textures cannot have MipMaps"
-                    GL.Dispatch.TexStorage3DMultisample(TextureTargetMultisample3d.Texture2DMultisampleArray, samples, ifmt, size.X, size.Y, count, true)
+                    x.AllocateTexture3DMultisample(TextureTarget.Texture2DMultisampleArray, samples, ifmt, V3i(size.X, size.Y, count), true)
 
                 GL.Check "could not allocate texture"
 
                 GL.BindTexture(target, 0)
                 GL.Check "could not unbind texture"
+
+                let sizeInBytes = ResourceCounts.texSizeInBytes(size.XYI, format, samples, mipMapLevels) * (int64 count)
+                ResourceCounts.updateTexture tex.Context tex.SizeInBytes sizeInBytes
+                tex.SizeInBytes <- sizeInBytes
 
                 tex.MipMapLevels <- mipMapLevels
                 tex.Dimension <- TextureDimension.Texture2D
@@ -633,21 +691,18 @@ module TextureCreationExtensions =
 
         member private x.UpdateTextureCubeArray(tex : Texture, size : int, count : int, mipMapLevels : int, format : TextureFormat) =
             using x.ResourceLock (fun _ ->
-                let target = TextureTarget.TextureCubeMapArray
-                GL.BindTexture(target, tex.Handle)
+                GL.BindTexture(TextureTarget.TextureCubeMapArray, tex.Handle)
                 GL.Check "could not bind texture"
+
+                x.AllocateTexture3D(TextureTarget.TextureCubeMapArray, mipMapLevels, TextureFormat.toSizedInternalFormat format, V3i(size, size, count * 6))
+                GL.Check "could not allocate texture"
+
+                GL.BindTexture(TextureTarget.TextureCubeMapArray, 0)
+                GL.Check "could not unbind texture"
 
                 let sizeInBytes = ResourceCounts.texSizeInBytes(V3i(size, size, 1), format, 1, mipMapLevels) * 6L * (int64 count)
                 ResourceCounts.updateTexture tex.Context tex.SizeInBytes sizeInBytes
                 tex.SizeInBytes <- sizeInBytes
-
-                x.SetDefaultTextureParams(target, mipMapLevels)
-                GL.Dispatch.TexStorage3D(unbox (int target), mipMapLevels, TextureFormat.toSizedInternalFormat format, size, size, count * 6)
-
-                GL.Check "could not allocate texture"
-
-                GL.BindTexture(target, 0)
-                GL.Check "could not unbind texture"
 
                 tex.MipMapLevels <- mipMapLevels
                 tex.Dimension <- TextureDimension.TextureCube

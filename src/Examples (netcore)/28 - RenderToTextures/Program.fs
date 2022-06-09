@@ -118,7 +118,7 @@ let main argv =
         let t = (Map.find DefaultSemantic.Colors pass0)
         let gah = t.GetValue()
         let tex = win.Runtime.Download(gah)
-        tex.SaveAsImage("guh.jpg")
+        tex.Save("guh.jpg")
     )
     
     let finalComposite = 

@@ -286,10 +286,10 @@ module TextureCompression =
 
 
         let encodeBC4u() =
-            testCompressionUnsigned (CompressionMode.BC4 false) "data/spiral.png" 60.8 0.65
+            testCompressionUnsigned (CompressionMode.BC4 false) "data/spiral.png" 51.9 0.65
 
         let encodeBC4s() =
-            testCompressionSigned (CompressionMode.BC4 true) "data/spiral.png" 57.7 0.72
+            testCompressionSigned (CompressionMode.BC4 true) "data/spiral.png" 51.0 0.72
 
         let mirrorCopyBC4 (height : int) () =
             let region = Box2i.FromMinAndSize(0, 0, 134, height)
@@ -297,7 +297,7 @@ module TextureCompression =
 
 
         let encodeBC5u() =
-            testCompressionUnsigned (CompressionMode.BC5 false) "data/spiral.png" 48.7 0.98
+            testCompressionUnsigned (CompressionMode.BC5 false) "data/spiral.png" 48.3 0.98
 
         let encodeBC5s() =
             testCompressionSigned (CompressionMode.BC5 true) "data/spiral.png" 46.5 1.06

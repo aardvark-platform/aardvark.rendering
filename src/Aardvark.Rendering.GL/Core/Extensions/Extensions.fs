@@ -17,6 +17,9 @@ module ExtensionDispatcher =
         type Dispatch private() =
             class end
 
+        let getVersion() =
+            Version(GL.GetInteger(GetPName.MajorVersion), GL.GetInteger(GetPName.MinorVersion), 0)
+
 module ExtensionHelpers =
     let private suffixes = [""; "EXT"; "ARB"; "NV"; "AMD"]
 
@@ -39,8 +42,7 @@ module ExtensionHelpers =
         let ctx = GraphicsContext.CurrentContext
         if isNull ctx then failwithf "[GL] cannot initialize %s without a context" e
 
-        let version = Version(GL.GetInteger(GetPName.MajorVersion), GL.GetInteger(GetPName.MinorVersion), 0)
-        if version >= v then
+        if GL.getVersion() >= v then
             true
         else
             let count = GL.GetInteger(GetPName.NumExtensions)

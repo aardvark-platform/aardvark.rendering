@@ -21,7 +21,7 @@ module EmbeddedResource =
 
     let loadPixImage<'T> (path : string) =
         use stream = get path
-        PixImage.Create(stream).AsPixImage<'T>()
+        PixImage.Load(stream).AsPixImage<'T>()
 
     let getTexture (textureParams : TextureParams) (path : string) =
         let openStream = fun () -> get path
@@ -150,7 +150,7 @@ module PixData =
         let saveToDesktop (fileName : string) (img : #PixImage) =
             let dir = Path.combine [desktopPath; "UnitTests"]
             Directory.CreateDirectory(dir) |> ignore
-            img.SaveAsImage(Path.combine [dir; fileName])
+            img.Save(Path.combine [dir; fileName])
 
         let isColor (color : 'T[]) (pi : PixImage<'T>) =
             for c in 0 .. pi.ChannelCount - 1 do
@@ -197,7 +197,7 @@ module PixData =
 
         let inline peakSignalToNoiseRatio (offset : V2i) (input : PixImage<'T>) (output : PixImage<'T>) =
             let maxValue = maxValues typeof<'T>
-            20.0 * (log10 maxValue) - 10.0 * log2 (meanSquaredError offset input output)
+            20.0 * (log10 maxValue) - 10.0 * log10 (meanSquaredError offset input output)
 
         let compareWithComparer (comparer : 'T -> 'T -> string -> unit)
                                 (offset : V2i) (input : PixImage<'T>) (output : PixImage<'T>) =
