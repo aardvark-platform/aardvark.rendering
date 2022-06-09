@@ -34,7 +34,7 @@ module Jpeg =
         let diffPath = @"C:\volumes\diff.png"
 
         // load the input
-        let input = PixImage.Create @"C:\volumes\dog2.tif"
+        let input = PixImage.Load @"C:\volumes\dog2.tif"
         let tex = runtime.PrepareTexture(PixTexture2d(PixImageMipMap [| input |], TextureParams.empty))
 
 
@@ -71,7 +71,7 @@ module Jpeg =
 //        Log.line "compress took: %A" (sw.MicroTime / 1000)
 
         // diff with input
-        let result = PixImage.Create outputPath
+        let result = PixImage.Load outputPath
         let input = input.ToPixImage<byte>(Col.Format.RGBA).GetMatrix<C4b>()
         let result = result.ToPixImage<byte>(Col.Format.RGBA).GetMatrix<C4b>()
         let outputImage = PixImage<byte>(Col.Format.RGBA, input.Size)
@@ -87,7 +87,7 @@ module Jpeg =
                 C4f(ic.ToC3f().ToV3f() * 0.5f).ToC4b()
 
         ) |> ignore
-        outputImage.SaveAsImage diffPath
+        outputImage.Save diffPath
 
 
         runtime.DeleteTexture tex

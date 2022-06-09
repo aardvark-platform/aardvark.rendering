@@ -181,7 +181,7 @@ type PatchLodTree(globalCenter : V3d, opc : OpcPaths, root : option<ILodTreeNode
 
             let img =
                 let path = Patch.extractTexturePath opc patch.info 0
-                try PixImage.Create(path).ToPixImage<byte>(Col.Format.RGBA)
+                try PixImage.Load(path).ToPixImage<byte>(Col.Format.RGBA)
                 with _ -> DefaultTextures.checkerboardPix
 
             let tex = 

@@ -202,13 +202,13 @@ let main argv =
     
     Aardvark.Init()
 
-    let img = PixImage.Create(@"C:\volumes\bigger.png") |> unbox<PixImage<byte>>
+    let img = PixImage.Load(@"C:\volumes\bigger.png") |> unbox<PixImage<byte>>
     let a = DistanceField.computeDistance img
     let a = DistanceField.computeDistance img
     let a = DistanceField.computeDistance img
     let a = DistanceField.computeDistance img
     let r = DistanceField.computeDistanceGPU img
-    r.SaveAsImage(@"C:\volumes\gabbl.tiff")
+    r.Save(@"C:\volumes\gabbl.tiff")
 
     System.Environment.Exit 0
     

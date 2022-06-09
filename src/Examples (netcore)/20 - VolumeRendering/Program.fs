@@ -170,7 +170,7 @@ let main argv =
     let folder = @"C:\Users\Schorsch\Development\WorkDirectory\hechtkopfsalamander male - Copy"
     let files = Directory.GetFiles folder
 
-    let images = files |> Array.map (fun p -> PixImage.Create(p).ToPixImage<byte>(Col.Format.Gray))
+    let images = files |> Array.map (fun p -> PixImage.Load(p).ToPixImage<byte>(Col.Format.Gray))
 
     let s2d = images.[0].Size
     let volume = PixVolume<byte>(s2d.X, s2d.Y, files.Length, 1)
