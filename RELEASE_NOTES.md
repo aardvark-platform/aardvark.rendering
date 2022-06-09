@@ -1,3 +1,9 @@
+### 5.2.5
+- [Text] Winding order of triangles is consistent, degenerated triangles get removed
+- [Vulkan] Added image limits checks for layers, levels and size
+- [GL] Added texture size limit checks
+- [GLFW] Fixed issues with MacOS and other platforms with poor GL support
+
 ### 5.2.4
 - [Vulkan] Implemented host-side texture compression
 - Added RenderTo overloads with adaptive clear values
