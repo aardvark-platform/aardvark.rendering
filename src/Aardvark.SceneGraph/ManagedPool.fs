@@ -385,6 +385,7 @@ module ManagedPoolSg =
 
 
 module ``Pool Semantics`` =
+    open Aardvark.SceneGraph.Semantics
 
     module private DrawCallBuffer =
 
@@ -405,7 +406,7 @@ module ``Pool Semantics`` =
                 IndirectBuffer.ofBuffer true sizeof<DrawCallInfo>
             )
 
-    [<Aardvark.Base.Rule>]
+    [<Rule>]
     type PoolSem() =
         member x.RenderObjects(p : Sg.PoolNode, scope : Ag.Scope) : aset<IRenderObject> =
             let pool = p.Pool
@@ -413,11 +414,40 @@ module ``Pool Semantics`` =
 
             let mutable ro = Unchecked.defaultof<RenderObject>
 
-            ro <- Aardvark.SceneGraph.Semantics.RenderObject.ofScope scope
+            ro <- RenderObject.ofScope scope
             ro.Mode <- p.Mode
             ro.Indices <- Some pool.IndexBuffer
             ro.VertexAttributes <- pool.VertexAttributes
             ro.InstanceAttributes <- pool.InstanceAttributes
             ro.DrawCalls <- Indirect calls
+
+            ASet.single (ro :> IRenderObject)
+
+    [<Rule>]
+    type GeometrySetSem() =
+        member x.RenderObjects(node : Sg.GeometrySetNode, scope : Ag.Scope) : aset<IRenderObject> =
+            let signature =
+                { IndexType              = typeof<int>
+                  VertexAttributeTypes   = node.AttributeTypes
+                  InstanceAttributeTypes = Map.empty }
+
+            let pool = scope.Runtime.CreateManagedPool signature    // Disposed via activate of RO
+
+            let calls =
+                node.Geometries |> ASet.mapUse (fun g ->
+                    let ag = g |> AdaptiveGeometry.ofIndexedGeometry []
+                    pool.Add ag
+                )
+                |> snd
+                |> DrawCallBuffer.create pool.Runtime BufferStorage.Device
+
+            let mutable ro = Unchecked.defaultof<RenderObject>
+            ro <- RenderObject.ofScope scope
+            ro.Mode <- node.Mode
+            ro.Indices <- Some pool.IndexBuffer
+            ro.VertexAttributes <- pool.VertexAttributes
+            ro.InstanceAttributes <- pool.InstanceAttributes
+            ro.DrawCalls <- Indirect calls
+            ro.Activate <- fun () -> pool
 
             ASet.single (ro :> IRenderObject)

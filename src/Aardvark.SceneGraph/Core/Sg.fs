@@ -320,9 +320,8 @@ module Sg =
 
         new(items : seq<ISg>) = Set(items |> ASet.ofSeq)
 
-    type GeometrySet(runtime : IRuntime, geometries : aset<IndexedGeometry>, mode : IndexedGeometryMode, attributeTypes : Map<Symbol,Type>) =
+    type GeometrySetNode(geometries : aset<IndexedGeometry>, mode : IndexedGeometryMode, attributeTypes : Map<Symbol,Type>) =
         interface ISg
-        member x.Runtime = runtime
         member x.Geometries = geometries
         member x.Mode = mode
         member x.AttributeTypes = attributeTypes
