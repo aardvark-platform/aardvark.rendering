@@ -78,7 +78,6 @@
     <Compile Include="Resources\ResourceValidation.fs" />
     <Compile Include="Geometry\IndexedGeometry.fs" />
     <Compile Include="Geometry\Geometry.fs" />
-    <Compile Include="Geometry\GeometryPacker.fs" />
     <Compile Include="Geometry\GeometryPool.fs" />
     <Compile Include="Uniforms\UniformWriters.fs" />
     <Compile Include="Uniforms\UniformProvider.fs" />
