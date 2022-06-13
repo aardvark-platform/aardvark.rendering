@@ -115,26 +115,6 @@ module BoundingBoxes =
 
         let boxFromArray (v : V3d[]) = if v.Length = 0 then Box3d.Invalid else Box3d v
 
-        let computeBoundingBox (g : IndexedGeometry) =
-            match g.IndexedAttributes.TryGetValue DefaultSemantic.Positions with
-                | (true, arr) ->
-                    match arr with
-                        | :? array<V3f> as arr -> Box3f(arr) |> Box3d.op_Explicit
-                        | :? array<V4f> as arr -> Box3f(arr |> Array.map Vec.xyz) |> Box3d.op_Explicit
-                        | _ -> failwithf "unknown position-type: %A" arr
-                | _ ->
-                    Box3d.Invalid
-
-        member x.LocalBoundingBox(r : Sg.GeometrySetNode, scope : Ag.Scope) : aval<Box3d> =
-            r.Geometries 
-                |> ASet.map computeBoundingBox
-                |> ASet.foldHalfGroup (curry Box.Union) trySub Box3d.Invalid
-
-        member x.GlobalBoundingBox(r : Sg.GeometrySetNode, scope : Ag.Scope) : aval<Box3d> =
-            let l = r.LocalBoundingBox(scope)
-            let t = scope.ModelTrafo
-            AVal.map2 (fun (t : Trafo3d) (b : Box3d) -> b.Transformed(t)) t l
-
         member x.GlobalBoundingBox(r : Sg.RenderObjectNode, scope : Ag.Scope) : aval<Box3d> =
             r.Objects |> ASet.mapA (fun o -> o.GetBoundingBox()) |> ASet.fold  (curry Box.Union) Box3d.Invalid
 

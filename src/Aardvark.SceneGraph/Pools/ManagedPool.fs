@@ -387,7 +387,7 @@ module ManagedPoolSg =
 module ``Pool Semantics`` =
     open Aardvark.SceneGraph.Semantics
 
-    module private DrawCallBuffer =
+    module internal DrawCallBuffer =
 
         let private evaluate (mdc : ManagedDrawCall) =
             let mutable c = mdc.Call
@@ -420,34 +420,5 @@ module ``Pool Semantics`` =
             ro.VertexAttributes <- pool.VertexAttributes
             ro.InstanceAttributes <- pool.InstanceAttributes
             ro.DrawCalls <- Indirect calls
-
-            ASet.single (ro :> IRenderObject)
-
-    [<Rule>]
-    type GeometrySetSem() =
-        member x.RenderObjects(node : Sg.GeometrySetNode, scope : Ag.Scope) : aset<IRenderObject> =
-            let signature =
-                { IndexType              = typeof<int>
-                  VertexAttributeTypes   = node.AttributeTypes
-                  InstanceAttributeTypes = Map.empty }
-
-            let pool = scope.Runtime.CreateManagedPool signature    // Disposed via activate of RO
-
-            let calls =
-                node.Geometries |> ASet.mapUse (fun g ->
-                    let ag = g |> AdaptiveGeometry.ofIndexedGeometry []
-                    pool.Add ag
-                )
-                |> snd
-                |> DrawCallBuffer.create pool.Runtime BufferStorage.Device
-
-            let mutable ro = Unchecked.defaultof<RenderObject>
-            ro <- RenderObject.ofScope scope
-            ro.Mode <- node.Mode
-            ro.Indices <- Some pool.IndexBuffer
-            ro.VertexAttributes <- pool.VertexAttributes
-            ro.InstanceAttributes <- pool.InstanceAttributes
-            ro.DrawCalls <- Indirect calls
-            ro.Activate <- fun () -> pool
 
             ASet.single (ro :> IRenderObject)

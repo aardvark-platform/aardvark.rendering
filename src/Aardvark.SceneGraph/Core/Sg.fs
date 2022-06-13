@@ -319,9 +319,3 @@ module Sg =
         new([<ParamArray>] items: ISg[]) = Set(items |> ASet.ofArray)
 
         new(items : seq<ISg>) = Set(items |> ASet.ofSeq)
-
-    type GeometrySetNode(geometries : aset<IndexedGeometry>, mode : IndexedGeometryMode, attributeTypes : Map<Symbol,Type>) =
-        interface ISg
-        member x.Geometries = geometries
-        member x.Mode = mode
-        member x.AttributeTypes = attributeTypes

@@ -794,10 +794,6 @@ module SgFSharp =
         let pass (pass : RenderPass) (sg : ISg) =
             Sg.PassApplicator(pass, sg) :> ISg
 
-        /// Draws an adaptive set of indexed geometries.
-        let geometrySet (mode : IndexedGeometryMode) (attributeTypes : Map<Symbol, Type>) (geometries : aset<IndexedGeometry>) =
-            Sg.GeometrySetNode(geometries, mode, attributeTypes) :> ISg
-
         /// Creates a single draw call for the given geometry mode.
         let draw (mode : IndexedGeometryMode) =
             Sg.RenderNode(

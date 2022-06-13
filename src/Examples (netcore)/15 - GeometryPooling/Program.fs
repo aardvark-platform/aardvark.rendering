@@ -4,6 +4,8 @@ open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
 open Aardvark.Application
 
+module Semantic =
+    let Offset = Sym.ofString "Offset"
 
 module Shader =
 
@@ -32,24 +34,31 @@ let main argv =
     // first we need to initialize Aardvark's core components
     
     Aardvark.Init()
-
-    Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- true
     
     let geometries = 
         [
-            IndexedGeometryPrimitives.Box.solidBox Box3d.Unit C4b.White 
-            IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere Sphere3d.Unit 10 C4b.Gray
-            IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere Sphere3d.Unit 10 C4b.Red
-            IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere Sphere3d.Unit 10 C4b.Green
-            IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere Sphere3d.Unit 10 C4b.Blue
-        ] |> List.map (fun ig -> ig.Flat) |> List.toArray
-
+            IndexedGeometryPrimitives.Box.solidBox Box3d.Unit C4b.DeepSkyBlue
+            IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere Sphere3d.Unit 10 C4b.Chocolate
+            IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere Sphere3d.Unit 10 C4b.CadetBlue
+            IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere Sphere3d.Unit 10 C4b.Gainsboro
+            IndexedGeometryPrimitives.Sphere.solidPhiThetaSphere Sphere3d.Unit 10 C4b.ForestGreen
+        ] |> List.toArray
     
     let signature =
         {
-            mode = IndexedGeometryMode.TriangleList
-            vertexTypes = Map.ofList [DefaultSemantic.Positions, typeof<V3f>; DefaultSemantic.Colors, typeof<C4b>; DefaultSemantic.Normals, typeof<V3f>; ]
-            uniformTypes = Map.ofList ["Offset", typeof<V4f>]
+            IndexType = typeof<int16>
+
+            VertexAttributeTypes =
+                Map.ofList [
+                    DefaultSemantic.Positions, typeof<V3f>
+                    DefaultSemantic.Colors, typeof<C4b>
+                    DefaultSemantic.Normals, typeof<V3f>
+                ]
+
+            InstanceAttributeTypes =
+                Map.ofList [
+                    Semantic.Offset, typeof<V4f>
+                ]
         }
 
     let showScene = AVal.init true
@@ -65,7 +74,16 @@ let main argv =
             )            
         )
 
-    let node = Sg.indirect signature (set |> ASet.map (fun (ig,pos) -> ig,Map.ofList ["Offset", scale |> AVal.map (fun s -> (pos * s * V4f.One)) :> IAdaptiveValue]))
+    let node =
+        Sg.geometrySetInstanced signature IndexedGeometryMode.TriangleList (set |> ASet.map (fun (ig, pos) ->
+            let attributes =
+                Map.ofList [
+                    Semantic.Offset, scale |> AVal.map (fun s -> pos * s) :> IAdaptiveValue
+                ]
+
+            { Geometry = ig
+              InstanceAttributes = attributes }
+        ))
 
     let sg =
         node 
@@ -81,12 +99,11 @@ let main argv =
 
 
     let win = window {
-        backend Backend.GL
+        backend Backend.Vulkan
         display Display.Mono
-        debug false
+        debug true
         samples 8
     }
-
 
     win.Keyboard.DownWithRepeats.Values.Add(fun k -> 
         match k with
