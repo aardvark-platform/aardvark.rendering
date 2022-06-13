@@ -31,6 +31,8 @@
     <Compile Include="Semantics\Runtime.fs" />
     <Compile Include="Semantics\Adapter.fs" />
     <Compile Include="Semantics\Environment.fs" />
+    <Compile Include="Pools\ManagedPool.fs" />
+    <Compile Include="Pools\ManagedTracePool.fs" />
     <Compile Include="HighLevelSceneGraph\LodTree.fs" />
     <Compile Include="HighLevelSceneGraph\Commands.fs" />
     <Compile Include="HighLevelSceneGraph\CommandsCSharp.fs" />
@@ -43,8 +45,6 @@
     <Compile Include="Primitives.fs" />
     <Compile Include="IndexedGeometryPrimitives.fs" />
     <Compile Include="PointCloud.fs" />
-    <Compile Include="ManagedPool.fs" />
-    <Compile Include="ManagedTracePool.fs" />
     <Compile Include="ShaderCompositions.fs" />
     <Compile Include="Imperative.fs" />
     <Compile Include="SgCSharp.fs" />
