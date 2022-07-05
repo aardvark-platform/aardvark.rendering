@@ -69,27 +69,33 @@ type UniformBufferManager(ctx : Context) =
             block.ubFields 
             |> List.map (fun f ->
                 let name = f.ufName
-                let sem = Symbol.Create name
 
-                match Uniforms.tryGetDerivedUniform name u with
-                    | Some v -> sem, v
-                    | None -> 
-                        match u.TryGetUniform(scope, sem) with
-                            | Some v -> sem, v
+                let value = match Uniforms.tryGetDerivedUniform name u with
+                            | Some v -> v
                             | None -> 
-                                match additional.TryGetValue sem with
-                                    | (true, m) -> sem, m
+                                
+                                let sem = Symbol.Create name
+                                match u.TryGetUniform(scope, sem) with
+                                | Some v -> v
+                                | None -> 
+                                    match additional.TryGetValue sem with
+                                    | (true, m) -> m
                                     | _ -> failwithf "[GL] could not get uniform: %A" f
+
+                if Object.ReferenceEquals(value, null) then
+                    failwithf "[GL] uniform of %A is null" f
+
+                value
             )
 
-        let key = values |> List.map (fun (_,v) -> v :> obj)
+        let key = values |> List.map (fun v -> v :> obj)
 
         let alignedSize = (block.ubSize + 255) &&& ~~~255 // needs to be multiple of GL_UNIFORM_BUFFER_OFFSET_ALIGNMENT (currently 256)
 
         viewCache.GetOrCreate(
             key,
             fun () ->
-                let writers = List.map2 (fun (f : FShade.GLSL.GLSLUniformBufferField) (_,v) -> nativeint f.ufOffset, ShaderParameterWriter.adaptive v (ShaderParameterType.ofGLSLType f.ufType)) block.ubFields values
+                let writers = List.map2 (fun (f : FShade.GLSL.GLSLUniformBufferField) v -> nativeint f.ufOffset, ShaderParameterWriter.adaptive v (ShaderParameterType.ofGLSLType f.ufType)) block.ubFields values
 
                 let mutable block = Unchecked.defaultof<_>
                 let mutable store = 0n
