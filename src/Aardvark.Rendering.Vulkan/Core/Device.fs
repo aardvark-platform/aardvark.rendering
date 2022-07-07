@@ -1882,10 +1882,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                         
                         let exportFlags = 
                             if sharing then
-                                if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
-                                    VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit
-                                else
-                                    VkExternalMemoryHandleTypeFlags.OpaqueFdBit
+                                VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit ||| VkExternalMemoryHandleTypeFlags.OpaqueFdBit
                             else
                                 VkExternalMemoryHandleTypeFlags.None
 

@@ -59,7 +59,10 @@ type IBackendTexture =
     abstract member MipMapLevels : int
     abstract member Size : V3i
     abstract member Handle : obj
-    //TODO: abstract member OpaqueHandle : nativeint
+    //TODO: abstract member MemoryBlockHandle : nativeint // required for sharing (block)
+    //TODO: abstract member MemoryBlockSize : uint64 // require for sharing (block)
+    //TODO: abstract member TextureMemorySize : uint64 // required for sharing (texture)
+    //TODO: abstract member TextureMemoryOffset : uint64 // require for sharing? (texture)
 
 and IFramebufferOutput =
     abstract member Runtime : ITextureRuntime

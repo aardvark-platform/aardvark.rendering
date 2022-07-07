@@ -94,7 +94,7 @@ type Image =
         val public PeerHandles : VkImage[]
         val public Version : cval<int>
         val public SamplerLayout : VkImageLayout
-        val public SharedHandle : nativeint
+        val public SharedHandle : nativeint // TODO: move to DeviceMemory
 
         // ISSUE: This is not safe, generally it's not possible to track the layout
         val mutable public Layout : VkImageLayout
@@ -107,7 +107,10 @@ type Image =
                     x.PeerHandles.[i] <- VkImage.Null
                 x.Memory.Dispose()
                 x.Handle <- VkImage.Null
+
+                // TODO: move to DeviceMemory
                 if x.SharedHandle <> 0n && RuntimeInformation.IsOSPlatform(OSPlatform.Windows) then
+                    // NOTE: CloseHandle only required on Windows
                     if not (Kernel32.CloseHandle(x.SharedHandle)) then
                         Log.warn "Could not close Shared texture handle!"
                                         
@@ -982,7 +985,7 @@ module Image =
                 let! pNext = 
                     VkExternalMemoryImageCreateInfo(
                         if sharing then 
-                            VkExternalMemoryHandleTypeFlags.OpaqueFdBit 
+                            VkExternalMemoryHandleTypeFlags.OpaqueFdBit ||| VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit
                         else 
                             VkExternalMemoryHandleTypeFlags.None)
 
@@ -1076,10 +1079,15 @@ module Image =
 
                     let sharedHandle =
                         if sharing then
+                            // TODO: offset here ?? or add this to the texture sharing information 
+                            //    -> there is an offset when importing to OpenGl
+                            //    -> would mean that the sharing handle (Image.SharedHandle/OpaqueHandle) should actuall be moved to the entive memory block (DeviceMemory)
+                            //    -> this would also mean that we need MemoryBlockSize + TextureMemoryOffset + TextureMemorySize for import and only import memory block once
                             let sharedTextureMemory = VkDeviceMemory(ptr.Memory.Handle.Handle + uint64 ptr.Offset)
                             let sharedMemoryHandle : nativeptr<nativeint> = NativePtr.alloc 1
 
                             native {
+                                // NOTE: The following call will crash the application if the appropriate extensions are not imported!
                                 if RuntimeInformation.IsOSPlatform(OSPlatform.Windows) then
                                     let! handleInfo = KHRExternalMemoryWin32.VkMemoryGetWin32HandleInfoKHR(sharedTextureMemory, Vulkan11.VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit)
                                     return KHRExternalMemoryWin32.VkRaw.vkGetMemoryWin32HandleKHR(device.Handle, handleInfo, sharedMemoryHandle)
