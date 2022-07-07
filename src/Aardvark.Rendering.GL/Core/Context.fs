@@ -218,6 +218,11 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
 
     let formatSampleCounts = FastConcurrentDict()
     
+    /// <summary>
+    /// Creates custom OpenGl context. Usage:
+    /// let customCtx = app.Context.CreateContext()
+    /// use __ = app.Context.RenderingLock(customCtx)
+    /// </summary>
     member x.CreateContext() = createContext()
 
     member internal x.ShaderCache = shaderCache
