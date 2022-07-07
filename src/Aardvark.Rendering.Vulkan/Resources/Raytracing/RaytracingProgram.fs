@@ -30,38 +30,6 @@ type RaytracingProgram(device : Device, effect : FShade.RaytracingEffect,
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RaytracingProgram =
 
-    module private Logging =
-
-        let logLines (code : string) =
-            let lineCount = String.lineCount code
-            let lineColumns = 1 + int (Fun.Log10 lineCount)
-            let lineFormatLen = lineColumns + 3
-            let sb = new System.Text.StringBuilder(code.Length + lineFormatLen * lineCount + 10)
-
-            let fmtStr = "{0:" + lineColumns.ToString() + "} : "
-            let mutable lineEnd = code.IndexOf('\n')
-            let mutable lineStart = 0
-            let mutable lineCnt = 1
-            while (lineEnd >= 0) do
-                sb.Clear() |> ignore
-                let line = code.Substring(lineStart, lineEnd - lineStart)
-                sb.Append(lineCnt.ToString().PadLeft(lineColumns)) |> ignore
-                sb.Append(": ")  |> ignore
-                sb.Append(line) |> ignore
-                Report.Line("{0}", sb.ToString())
-                lineStart <- lineEnd + 1
-                lineCnt <- lineCnt + 1
-                lineEnd <- code.IndexOf('\n', lineStart)
-                ()
-
-            let lastLine = code.Substring(lineStart)
-            if lastLine.Length > 0 then
-                sb.Clear() |> ignore
-                sb.Append(lineCnt.ToString()) |> ignore
-                sb.Append(": ")  |> ignore
-                sb.Append(lastLine) |> ignore
-                Report.Line("{0}", sb.ToString())
-
     module private ShaderSlot =
         let ofStage (name : Option<Symbol>) (ray : Option<Symbol>) (stage : ShaderStage) =
             match stage, name, ray with
@@ -104,7 +72,8 @@ module RaytracingProgram =
         let glsl =
             effect |> FShade.RaytracingEffect.toModule |> FShade.Backends.ModuleCompiler.compileGLSLRaytracing
 
-        Logging.logLines glsl.code
+        if RuntimeConfig.PrintShaderCode then
+            ShaderCodeReporting.logLines glsl.code
 
         let stages =
             let mutable index = 0

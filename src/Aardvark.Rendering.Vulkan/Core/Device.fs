@@ -109,6 +109,10 @@ type UploadMode =
     | Sync
     | Async
 
+module Kernel32 =
+    [<DllImport("Kernel32.dll")>]
+    extern bool internal CloseHandle(nativeint handle)
+
 type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as this =
     let isGroup, deviceGroup =
         match dev with
@@ -1838,7 +1842,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
             else
                 0n
 
-        new DeviceMemory(this, mem, 0L, hostPtr, false)
+        new DeviceMemory(this, mem, 0L, hostPtr, 0n)
 
     let mutable nullptr = None
 
@@ -1882,10 +1886,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                         
                         let exportFlags = 
                             if sharing then
-                                if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
-                                    VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit
-                                else
-                                    VkExternalMemoryHandleTypeFlags.OpaqueFdBit
+                                VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit ||| VkExternalMemoryHandleTypeFlags.OpaqueFdBit
                             else
                                 VkExternalMemoryHandleTypeFlags.None
 
@@ -1913,6 +1914,31 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                         return NativePtr.read pHandle
                     }
 
+                let sharedHandle = 
+                    if sharing then
+                    
+                        let sharedMemoryHandle : nativeptr<nativeint> = NativePtr.alloc 1
+
+                        native {
+                            // NOTE: The following call will crash the application if the appropriate extensions are not imported!
+                            if RuntimeInformation.IsOSPlatform(OSPlatform.Windows) then
+                                let! handleInfo = KHRExternalMemoryWin32.VkMemoryGetWin32HandleInfoKHR(mem, Vulkan11.VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit)
+                                return KHRExternalMemoryWin32.VkRaw.vkGetMemoryWin32HandleKHR(device.Handle, handleInfo, sharedMemoryHandle)
+                            else
+                                let! handleInfo = KHRExternalMemoryFd.VkMemoryGetFdInfoKHR(mem, Vulkan11.VkExternalMemoryHandleTypeFlags.OpaqueFdBit)
+                                return KHRExternalMemoryFd.VkRaw.vkGetMemoryFdKHR(device.Handle, handleInfo, NativePtr.cast sharedMemoryHandle)
+                        } |> check "could not create shared handle"
+
+                        let sharedMemoryHandleValue = Microsoft.FSharp.NativeInterop.NativePtr.read sharedMemoryHandle
+                        NativePtr.free sharedMemoryHandle
+
+                        if sharedMemoryHandleValue = 0n then
+                            Log.warn "SharedMemoryHandle is null! Memory block probably not allocated with proper sharing flags!"
+
+                        sharedMemoryHandleValue 
+                    else
+                        0n
+
                 let hostPtr = 
                     if hostVisible then
                         temporary<nativeint, nativeint> (fun pPtr ->
@@ -1924,7 +1950,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                         0n
 
 
-                ptr <- new DeviceMemory(x, mem, size, hostPtr, sharing)
+                ptr <- new DeviceMemory(x, mem, size, hostPtr, sharedHandle)
                 true
             else
                 false
@@ -1955,6 +1981,14 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                     VkRaw.vkFreeMemory(device.Handle, ptr.Handle, NativePtr.zero)
                     ptr.Handle <- VkDeviceMemory.Null
                     ptr.Size <- 0L
+                                        
+                    if ptr.SharedHandle <> 0n then
+                        if RuntimeInformation.IsOSPlatform(OSPlatform.Windows) then
+                            // NOTE: CloseHandle only required on Windows
+                            if not (Kernel32.CloseHandle(ptr.SharedHandle)) then
+                                Log.warn "Could not close Shared texture handle!"
+
+                        ptr.SharedHandle <- 0n
             )
 
     member x.Dispose() =
@@ -2194,12 +2228,13 @@ and DeviceMemoryManager internal(heap : DeviceHeap, blockSize : int64, keepReser
         )
             
 
-and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int64, hostPtr : nativeint, shared : bool) =
+and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int64, hostPtr : nativeint, sharedHandle : nativeint) =
     inherit DevicePtr(Unchecked.defaultof<_>, 0L, size)
-    static let nullptr = new DeviceMemory(Unchecked.defaultof<_>, VkDeviceMemory.Null, 0L, 0n, false)
+    static let nullptr = new DeviceMemory(Unchecked.defaultof<_>, VkDeviceMemory.Null, 0L, 0n, 0n)
 
     let mutable handle = handle
     let mutable size = size
+    let mutable sharedHandle = sharedHandle
 
     do if handle <> VkDeviceMemory.Null then heap.Device.Instance.RegisterDebugTrace(handle.Handle)
 
@@ -2216,12 +2251,16 @@ and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int
         and internal set s = size <- s
 
     member x.IsShared 
-        with get() = shared
+        with get() = sharedHandle <> 0n
 
     member x.IsNull = handle.IsNull
     member x.IsValid = handle.IsValid
 
     member x.HostPointer = hostPtr
+
+    member x.SharedHandle
+        with get() : nativeint = sharedHandle
+        and internal set h = sharedHandle <- h
 
     override x.Dispose() = heap.Free(x)
     override x.Memory = x

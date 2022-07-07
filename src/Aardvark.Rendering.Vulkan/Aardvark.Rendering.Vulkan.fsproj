@@ -22,6 +22,7 @@
     <Compile Include="Wrapper\Vulkan.fs" />
     <Compile Include="Wrapper\PCI.fs" />
     <Compile Include="Wrapper\VKVM.fs" />
+    <Compile Include="Core\Config.fs" />
     <Compile Include="Core\Utilities.fs" />
     <Compile Include="Core\Info.fs" />
     <Compile Include="Core\Formats.fs" />

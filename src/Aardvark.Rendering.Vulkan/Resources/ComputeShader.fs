@@ -1036,7 +1036,8 @@ module ComputeShader =
     let private ofFShadeInternal (shader : FShade.ComputeShader) (device : Device) =
         let glsl = shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSLVulkan
         
-        ShaderProgram.logLines glsl.code
+        if RuntimeConfig.PrintShaderCode then
+            ShaderCodeReporting.logLines glsl.code
 
         let localSize =
             if shader.csLocalSize.AllGreater 0 then shader.csLocalSize
