@@ -75,6 +75,11 @@ module VkImageAspectFlags =
         a |> int |> unbox<TextureAspect>
 
 
+
+module Kernel32 =
+    [<DllImport("Kernel32.dll")>]
+    extern bool internal CloseHandle(nativeint handle)
+
 type Image =
     class
         inherit Resource<VkImage>
@@ -89,6 +94,7 @@ type Image =
         val public PeerHandles : VkImage[]
         val public Version : cval<int>
         val public SamplerLayout : VkImageLayout
+        val public SharedHandle : nativeint
 
         // ISSUE: This is not safe, generally it's not possible to track the layout
         val mutable public Layout : VkImageLayout
@@ -101,6 +107,13 @@ type Image =
                     x.PeerHandles.[i] <- VkImage.Null
                 x.Memory.Dispose()
                 x.Handle <- VkImage.Null
+                if x.SharedHandle <> 0n && RuntimeInformation.IsOSPlatform(OSPlatform.Windows) then
+                    if not (Kernel32.CloseHandle(x.SharedHandle)) then
+                        Log.warn "Could not close Shared texture handle!"
+                                        
+
+        member x.IsShared =
+            x.SharedHandle <> 0n
 
         member x.Count =
             match x.Dimension with
@@ -147,7 +160,7 @@ type Image =
         override x.ToString() =
             sprintf "0x%08X" x.Handle.Handle
 
-        new(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, samplerLayout, peerHandles) =
+        new(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, samplerLayout, peerHandles, sharedHandle) =
             {
                 inherit Resource<_>(dev, handle);
                 Size = s
@@ -161,16 +174,20 @@ type Image =
                 PeerHandles = peerHandles
                 Version = AVal.init 0
                 SamplerLayout = samplerLayout
+                SharedHandle = sharedHandle
             }
 
         new(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, peerHandles) =
-            new Image(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, VkImageLayout.ShaderReadOnlyOptimal, peerHandles)
+            new Image(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, VkImageLayout.ShaderReadOnlyOptimal, peerHandles, 0n)
 
         new(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, samplerLayout) =
-            new Image(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, samplerLayout, [||])
+            new Image(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, samplerLayout, [||], 0n)
 
         new(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout) =
-            new Image(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, [||])
+            new Image(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, VkImageLayout.ShaderReadOnlyOptimal, [||], 0n)
+
+        new(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, sharedHandle) =
+            new Image(dev, handle, s, levels, layers, samples, dim, fmt, mem, layout, VkImageLayout.ShaderReadOnlyOptimal, [||], sharedHandle)
     end
 
 and ImageSubresourceRange(image : Image, aspect : TextureAspect, baseLevel : int, levelCount : int, baseSlice : int, sliceCount : int) =
@@ -896,13 +913,13 @@ module Image =
 
 
     let rec alloc (size : V3i) (mipMapLevels : int) (count : int) (samples : int)
-                  (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
+                  (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (sharing : bool) (device : Device) =
 
         let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, fmt)
 
         if features = VkFormatFeatureFlags.None then
             match fmt.NextBetter with
-            | Some fmt -> alloc size mipMapLevels count samples dim fmt usage device
+            | Some fmt -> alloc size mipMapLevels count samples dim fmt usage sharing device
             | None -> failf "bad image format %A" fmt
         else
             let mayHavePeers =
@@ -961,100 +978,131 @@ module Image =
                     Log.warn "[Vulkan] cannot create %A image with %d samples (using %d instead)" fmt samples max
                     max
 
-            let info =
-                VkImageCreateInfo(
-                    flags,
-                    typ,
-                    fmt,
-                    VkExtent3D(uint32 size.X, uint32 size.Y, uint32 size.Z),
-                    uint32 mipMapLevels,
-                    uint32 layers,
-                    unbox<VkSampleCountFlags> samples,
-                    VkImageTiling.Optimal,
-                    usage,
-                    VkSharingMode.Exclusive,
-                    0u, NativePtr.zero,
-                    VkImageLayout.Undefined
-                )
+            native {
+                let! pNext = 
+                    VkExternalMemoryImageCreateInfo(
+                        if sharing then 
+                            VkExternalMemoryHandleTypeFlags.OpaqueFdBit 
+                        else 
+                            VkExternalMemoryHandleTypeFlags.None)
 
-            let handle =
-                temporary (fun pHandle ->
-                    info |> pin (fun pInfo ->
+                let! pInfo = 
+                    VkImageCreateInfo(
+                        NativePtr.toNativeInt pNext,
+                        flags,
+                        typ,
+                        fmt,
+                        VkExtent3D(uint32 size.X, uint32 size.Y, uint32 size.Z),
+                        uint32 mipMapLevels,
+                        uint32 layers,
+                        unbox<VkSampleCountFlags> samples,
+                        VkImageTiling.Optimal,
+                        usage,
+                        VkSharingMode.Exclusive,
+                        0u, NativePtr.zero,
+                        VkImageLayout.Undefined
+                    )
+
+                let handle =
+                    temporary (fun pHandle ->
                         VkRaw.vkCreateImage(device.Handle, pInfo, NativePtr.zero, pHandle)
                             |> check "could not create image"
                         NativePtr.read pHandle
                     )
-                )
-            let reqs =
-                temporary (fun ptr ->
-                    VkRaw.vkGetImageMemoryRequirements(device.Handle, handle,ptr)
-                    NativePtr.read ptr
-                )
-            let memalign = int64 reqs.alignment |> Alignment.next device.BufferImageGranularity
-            let memsize = int64 reqs.size |> Alignment.next device.BufferImageGranularity
-            let ptr = device.Alloc(VkMemoryRequirements(uint64 memsize, uint64 memalign, reqs.memoryTypeBits), true)
+
+                let reqs =
+                    temporary (fun ptr ->
+                        VkRaw.vkGetImageMemoryRequirements(device.Handle, handle,ptr)
+                        NativePtr.read ptr
+                    )
+
+                let memalign = int64 reqs.alignment |> Alignment.next device.BufferImageGranularity
+                let memsize = int64 reqs.size |> Alignment.next device.BufferImageGranularity
+                let ptr = device.Alloc(VkMemoryRequirements(uint64 memsize, uint64 memalign, reqs.memoryTypeBits), true, sharing)
 
 
-
-            if mayHavePeers then
-                let indices = device.AllIndicesArr
-                let handles = Array.zeroCreate indices.Length
-                handles.[0] <- handle
-                for i in 1 .. indices.Length - 1 do
-                    let handle =
-                        temporary (fun pHandle ->
-                            info |> pin (fun pInfo ->
+                if mayHavePeers then
+                    let indices = device.AllIndicesArr
+                    let handles = Array.zeroCreate indices.Length
+                    handles.[0] <- handle
+                    for i in 1 .. indices.Length - 1 do
+                        let handle =
+                            temporary (fun pHandle ->    
                                 VkRaw.vkCreateImage(device.Handle, pInfo, NativePtr.zero, pHandle)
                                     |> check "could not create image"
                                 NativePtr.read pHandle
                             )
-                        )
-                    handles.[1] <- handle
+                        handles.[1] <- handle
 
-                for off in 0 .. indices.Length - 1 do
-                    let deviceIndices =
-                        Array.init indices.Length (fun i ->
-                            indices.[(i+off) % indices.Length] |> uint32
-                        )
+                    for off in 0 .. indices.Length - 1 do
+                        let deviceIndices =
+                            Array.init indices.Length (fun i ->
+                                indices.[(i+off) % indices.Length] |> uint32
+                            )
 
-                    native {
-                        let! pDeviceIndices = deviceIndices
-                        let groupInfo =
-                            VkBindImageMemoryDeviceGroupInfo(
-                                uint32 deviceIndices.Length, pDeviceIndices,
-                                0u, NativePtr.zero
-                            )
-                        let! pGroup = groupInfo
-                        let! pInfo =
-                            VkBindImageMemoryInfo(
-                                NativePtr.toNativeInt pGroup,
-                                handles.[off],
-                                ptr.Memory.Handle,
-                                uint64 ptr.Offset
-                            )
-                        VkRaw.vkBindImageMemory2(device.Handle, 1u, pInfo)
-                            |> check "could not bind image memory"
+                        native {
+                            let! pDeviceIndices = deviceIndices
+                            let groupInfo =
+                                VkBindImageMemoryDeviceGroupInfo(
+                                    uint32 deviceIndices.Length, pDeviceIndices,
+                                    0u, NativePtr.zero
+                                )
+                            let! pGroup = groupInfo
+                            let! pInfo =
+                                VkBindImageMemoryInfo(
+                                    NativePtr.toNativeInt pGroup,
+                                    handles.[off],
+                                    ptr.Memory.Handle,
+                                    uint64 ptr.Offset
+                                )
+                            VkRaw.vkBindImageMemory2(device.Handle, 1u, pInfo)
+                                |> check "could not bind image memory"
+                        }
+
+
+                    let peerHandles = Array.skip 1 handles
+                    let result = new Image(device, handles.[0], size, mipMapLevels, layers, samples, dim, fmt, ptr, VkImageLayout.Undefined, peerHandles)
+
+                    device.perform {
+                        for i in 1 .. handles.Length - 1 do
+                            let img = new Image(device, handles.[i], size, mipMapLevels, layers, samples, dim, fmt, ptr, VkImageLayout.Undefined)
+                            do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
                     }
 
+                    return result
+                else
+                    VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
+                        |> check "could not bind image memory"
 
-                let peerHandles = Array.skip 1 handles
-                let result = new Image(device, handles.[0], size, mipMapLevels, layers, samples, dim, fmt, ptr, VkImageLayout.Undefined, peerHandles)
+                    let sharedHandle =
+                        if sharing then
+                            let sharedTextureMemory = VkDeviceMemory(ptr.Memory.Handle.Handle + uint64 ptr.Offset)
+                            let sharedMemoryHandle : nativeptr<nativeint> = NativePtr.alloc 1
 
-                device.perform {
-                    for i in 1 .. handles.Length - 1 do
-                        let img = new Image(device, handles.[i], size, mipMapLevels, layers, samples, dim, fmt, ptr, VkImageLayout.Undefined)
-                        do! Command.TransformLayout(img, VkImageLayout.TransferDstOptimal)
+                            native {
+                                if RuntimeInformation.IsOSPlatform(OSPlatform.Windows) then
+                                    let! handleInfo = KHRExternalMemoryWin32.VkMemoryGetWin32HandleInfoKHR(sharedTextureMemory, Vulkan11.VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit)
+                                    return KHRExternalMemoryWin32.VkRaw.vkGetMemoryWin32HandleKHR(device.Handle, handleInfo, sharedMemoryHandle)
+                                else
+                                    let! handleInfo = KHRExternalMemoryFd.VkMemoryGetFdInfoKHR(sharedTextureMemory, Vulkan11.VkExternalMemoryHandleTypeFlags.OpaqueFdBit)
+                                    return KHRExternalMemoryFd.VkRaw.vkGetMemoryFdKHR(device.Handle, handleInfo, NativePtr.cast sharedMemoryHandle)
+                            } |> check "could not create shared handle"
+
+                            let sharedMemoryHandleValue = Microsoft.FSharp.NativeInterop.NativePtr.read sharedMemoryHandle
+                            NativePtr.free sharedMemoryHandle
+
+                            if sharedMemoryHandleValue = 0n then
+                                Log.warn "SharedMemoryHandle is null! Memory block probably not allocated with proper sharing flags!"
+
+                            sharedMemoryHandleValue 
+                        else
+                            0n
+
+                    return new Image(device, handle, size, mipMapLevels, layers, samples, dim, fmt, ptr, VkImageLayout.Undefined, sharedHandle)
                 }
 
-                result
-            else
-                VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
-                    |> check "could not bind image memory"
-
-                new Image(device, handle, size, mipMapLevels, layers, samples, dim, fmt, ptr, VkImageLayout.Undefined)
-
-    let create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (device : Device) =
-        alloc size mipMapLevels count samples dim fmt usage device
+    let create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags) (sharing : bool) (device : Device) =
+        alloc size mipMapLevels count samples dim fmt usage sharing device
 
 
 [<AbstractClass; Sealed; Extension>]
@@ -1062,12 +1110,22 @@ type ContextImageExtensions private() =
 
     [<Extension>]
     static member inline CreateImage(this : Device, size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : VkFormat, usage : VkImageUsageFlags) =
-        this |> Image.create size mipMapLevels count samples dim fmt usage
+        this |> Image.create size mipMapLevels count samples dim fmt usage false
 
+    [<Extension>]
+    static member inline CreateImage(this : Device, size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : VkFormat, usage : VkImageUsageFlags, sharing : bool) =
+        this |> Image.create size mipMapLevels count samples dim fmt usage sharing
+        
     [<Extension>]
     static member inline CreateImage(this : Device, size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : TextureFormat, usage : VkImageUsageFlags) =
         let fmt = VkFormat.ofTextureFormat fmt
-        this.CreateImage(size, mipMapLevels, count, samples, dim, fmt, usage)
+        this.CreateImage(size, mipMapLevels, count, samples, dim, fmt, usage, false)
+
+    [<Extension>]
+    static member inline CreateImage(this : Device, size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : TextureFormat, usage : VkImageUsageFlags, sharing : bool) =
+        let fmt = VkFormat.ofTextureFormat fmt
+        this.CreateImage(size, mipMapLevels, count, samples, dim, fmt, usage, sharing)
+
 
 [<AutoOpen>]
 module private ImageRanges =

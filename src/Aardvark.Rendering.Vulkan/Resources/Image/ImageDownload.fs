@@ -76,8 +76,8 @@ module ImageDownloadExtensions =
                 let srcImg = src.Image
 
                 let usage = VkImageUsageFlags.TransferDstBit ||| VkImageUsageFlags.TransferSrcBit
-                let resolved = Image.create srcImg.Size srcImg.MipMapLevels srcImg.Layers 1 srcImg.Dimension format usage device
-
+                let resolved = device.CreateImage(srcImg.Size, srcImg.MipMapLevels, srcImg.Layers, 1, srcImg.Dimension, format, usage)  
+                               
                 try
                     let cmd =
                         { new Command() with

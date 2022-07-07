@@ -616,6 +616,23 @@ module Instance =
                 KHRShaderFloatControls.Name
             ]
 
+        let Sharing = [
+                // instance
+                KHRExternalMemoryCapabilities.Name
+                KHRGetPhysicalDeviceProperties2.Name
+                KHRExternalSemaphoreCapabilities.Name
+
+                // device
+                KHRExternalSemaphore.Name
+                KHRExternalMemory.Name
+                // device win32
+                KHRExternalSemaphoreWin32.Name
+                KHRExternalMemoryWin32.Name
+                // device fd
+                //KHRExternalSemaphoreFd.Name
+                //KHRExternalMemoryFd.Name
+            ]
+
     module Layers =
         let ApiDump             = "VK_LAYER_LUNARG_api_dump"
         let DeviceLimits        = "VK_LAYER_LUNARG_device_limits"

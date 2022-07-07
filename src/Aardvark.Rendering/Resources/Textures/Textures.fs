@@ -59,6 +59,7 @@ type IBackendTexture =
     abstract member MipMapLevels : int
     abstract member Size : V3i
     abstract member Handle : obj
+    //TODO: abstract member OpaqueHandle : nativeint
 
 and IFramebufferOutput =
     abstract member Runtime : ITextureRuntime

@@ -103,6 +103,8 @@ type VulkanApplication(debug : DebugLevel, chooseDevice : list<PhysicalDevice> -
 
             yield! Instance.Extensions.Raytracing
 
+            yield! Instance.Extensions.Sharing
+
             if debug > DebugLevel.None then
                 yield Instance.Extensions.DebugReport
                 yield Instance.Extensions.DebugUtils
