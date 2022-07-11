@@ -46,7 +46,7 @@ module Sg =
 [<EntryPoint>]
 let main argv = 
 
-    Aardvark.Rendering.Vulkan.Config.showRecompile <- false
+    Aardvark.Rendering.Vulkan.RuntimeConfig.ShowRecompile <- false
     
     
     Aardvark.Init()
