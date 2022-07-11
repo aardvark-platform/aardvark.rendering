@@ -50,6 +50,7 @@
     <Compile Include="Core\GLVM.fs" />
     <Compile Include="Core\ContextHandles.fs" />
     <Compile Include="Core\ShaderCache.fs" />
+    <Compile Include="Core\SharedMemory.fs" />
     <Compile Include="Core\Context.fs" />
     <Compile Include="Core\UnsharedObject.fs" />
     <Compile Include="Core\ModeHandles.fs" />
@@ -61,6 +62,7 @@
     <Compile Include="Resources\Textures\PixelTransfer.fs" />
     <Compile Include="Resources\Textures\Renderbuffer.fs" />
     <Compile Include="Resources\Textures\Texture.fs" />
+    <Compile Include="Resources\Textures\TextureSharing.fs" />
     <Compile Include="Resources\Textures\TextureCopy.fs" />
     <Compile Include="Resources\Textures\TextureUpload.fs" />
     <Compile Include="Resources\Textures\TextureDownload.fs" />

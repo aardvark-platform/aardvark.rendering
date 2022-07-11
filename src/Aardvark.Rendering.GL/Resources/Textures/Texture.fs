@@ -21,6 +21,7 @@ type Texture =
         val mutable public MipMapLevels : int
         val mutable public SizeInBytes : int64
         val mutable public IsArray : bool
+        val mutable public ImportHandle : option<ImportedMemoryHandle>
 
         member x.IsMultisampled = x.Multisamples > 1
 
@@ -38,6 +39,7 @@ type Texture =
             member x.Count = x.Count
             member x.Format = x.Format
             member x.Samples = x.Multisamples
+            member x.ShareInfo = None
 
         new(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int,
             size : V3i, count : Option<int>, format : TextureFormat, sizeInBytes : int64) =
@@ -46,7 +48,13 @@ type Texture =
                     | Some cnt -> cnt, true
                     | None -> 1, false
             { Context = ctx; Handle = handle; Dimension = dimension; MipMapLevels = mipMapLevels; Multisamples = multisamples;
-              Size = size; Count = cnt; IsArray = isArray; Format = format; SizeInBytes = sizeInBytes }
+              Size = size; Count = cnt; IsArray = isArray; Format = format; SizeInBytes = sizeInBytes; ImportHandle = None}
+
+        new (ctx : Context, handle : int, import : IBackendTexture, importHandle : ImportedMemoryHandle) =
+            let shareInfo = import.ShareInfo |> Option.get
+            { Context = ctx; Handle = handle; Dimension = import.Dimension; MipMapLevels = import.MipMapLevels; Multisamples = import.Samples;
+              Size = import.Size; Count = import.Count; IsArray = shareInfo.IsArray; Format = import.Format; SizeInBytes = shareInfo.SizeInBytes; ImportHandle = Some importHandle }
+              
 
     end
 
@@ -764,6 +772,13 @@ module TextureCreationExtensions =
                 | _ -> ResourceCounts.removeTexture x t.SizeInBytes
                 GL.DeleteTexture(t.Handle)
                 GL.Check "could not delete texture"
+
+                match t.ImportHandle with
+                | Some import -> 
+                        x.ReleaseShareHandle import
+                        t.ImportHandle <- None
+                | None -> ()
+
                 t.Handle <- 0
             )
 

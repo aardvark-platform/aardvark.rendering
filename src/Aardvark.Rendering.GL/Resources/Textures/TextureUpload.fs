@@ -334,6 +334,9 @@ module ContextTextureUploadExtensions =
                 | :? Texture as o ->
                     o
 
+                | :? IBackendTexture as t when t.ShareInfo.IsSome -> 
+                    this.ImportTexture t
+
                 | :? INativeTexture as data ->
                     let slices = if data.Count > 1 then data.Count else 0
                     let levels = if data.WantMipMaps then Fun.MipmapLevels(data.[0, 0].Size) else 1

@@ -75,17 +75,6 @@ module VkImageAspectFlags =
         a |> int |> unbox<TextureAspect>
 
 
-
-// TODO: make IBackendTextureShareInfo
-type ImageShareInfo = 
-    {
-        IsTextureArray : bool // distinguish between single textures and array textue with count = 1 -> required for shared texture to handle both cases in OpenGL
-        MemoryBlockHandle : nativeint // required for sharing (block)
-        MemoryBlockSize : int64 // require for sharing (block)
-        TextureMemoryOffset : int64 // require for sharing? (texture)
-        //TextureMemorySize : int64 // required for sharing (texture) // actually not needed
-    }
-
 type Image =
     class
         inherit Resource<VkImage>
@@ -100,7 +89,7 @@ type Image =
         val public PeerHandles : VkImage[]
         val public Version : cval<int>
         val public SamplerLayout : VkImageLayout
-        val public ShareInfo : option<ImageShareInfo>
+        val public ShareInfo : option<TextureShareInfo>
 
         // ISSUE: This is not safe, generally it's not possible to track the layout
         val mutable public Layout : VkImageLayout
@@ -134,6 +123,7 @@ type Image =
             member x.MipMapLevels = x.MipMapLevels
             member x.Samples = x.Samples
             member x.Size = x.Size
+            member x.ShareInfo = x.ShareInfo
 
         interface IRenderbuffer with
             member x.Runtime = x.Device.Runtime :> ITextureRuntime
@@ -1081,11 +1071,11 @@ module Image =
                         if sharing then
                             Some
                                 {
-                                    IsTextureArray = isArray
-                                    MemoryBlockHandle = ptr.Memory.SharedHandle
-                                    MemoryBlockSize = ptr.Memory.Size
-                                    //TextureMemorySize = ptr.Size
-                                    TextureMemoryOffset = ptr.Offset
+                                    IsArray = isArray
+                                    BlockHandle = ptr.Memory.SharedHandle
+                                    BlockSize = ptr.Memory.Size
+                                    SizeInBytes = ptr.Size
+                                    Offset = ptr.Offset
                                 }
                         else
                             None

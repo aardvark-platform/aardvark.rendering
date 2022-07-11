@@ -3,6 +3,7 @@
 open System
 open System.Threading
 open System.Collections.Concurrent
+open System.Runtime.InteropServices
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 open Aardvark.Rendering
@@ -217,6 +218,8 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
     let mutable shaderCachePath : Option<string> = None
 
     let formatSampleCounts = FastConcurrentDict()
+
+    let importedMemoryBlocks = System.Collections.Generic.Dictionary<nativeint, SharedMemoryEntry>()
     
     /// <summary>
     /// Creates custom OpenGl context. Usage:
@@ -280,6 +283,54 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
                 )
             unpackAlignment <- Some p
             p
+
+    member x.ReleaseShareHandle(shareHandle : ImportedMemoryHandle) =
+        lock importedMemoryBlocks (fun () -> 
+                match importedMemoryBlocks.TryGetValue shareHandle.OpaqueHandle with
+                | (true, v) -> 
+                    if v.RefCount = 1 then
+                        importedMemoryBlocks.Remove shareHandle.OpaqueHandle |> ignore
+                        OpenTK.Graphics.OpenGL.GL.Ext.DeleteMemoryObject(v.GLHandle)
+                        GL.Check "DeleteMemoryObject"
+                    else 
+                        v.RefCount <- v.RefCount - 1
+                | _ -> failwith "invalid handle"
+            )
+
+    member x.ImportMemoryBlock(shareHandle : nativeint, blockSize : int64) =
+        
+        lock importedMemoryBlocks (fun () -> 
+                let glHandle = 
+                    match importedMemoryBlocks.TryGetValue shareHandle with
+                    | (true, v) -> 
+                        if v.Size <> blockSize then
+                            failwith "multiple import of same block but different size!"
+
+                        v.RefCount <- v.RefCount + 1
+                        v.GLHandle
+                    | _ ->
+                        let mutable sharedMemHandle = 0
+                        using x.ResourceLock (fun _ ->
+                            OpenTK.Graphics.OpenGL.GL.Ext.CreateMemoryObjects(1, &sharedMemHandle)
+                            GL.Check "CreateMemoryObjects"
+
+                            if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
+                                OpenTK.Graphics.OpenGL.GL.Ext.ImportMemoryWin32Handle(sharedMemHandle, blockSize, OpenTK.Graphics.OpenGL.ExternalHandleType.HandleTypeOpaqueWin32Ext, shareHandle)
+                            else
+                                OpenTK.Graphics.OpenGL.GL.Ext.ImportMemoryF(sharedMemHandle, blockSize, OpenTK.Graphics.OpenGL.ExternalHandleType.HandleTypeOpaqueFdExt, int shareHandle) // TODO test
+                            
+                            GL.Check "ImportMemoryWin32Handle"
+                        )
+
+                        let entry = SharedMemoryEntry(shareHandle, blockSize, sharedMemHandle)
+                        importedMemoryBlocks.Add(shareHandle, entry)
+
+                        sharedMemHandle
+
+                ImportedMemoryHandle(shareHandle, glHandle)
+            )
+
+
 
     /// <summary>
     /// makes the given render context current providing a re-entrant
