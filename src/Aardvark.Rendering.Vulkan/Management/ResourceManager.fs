@@ -574,7 +574,7 @@ module Resources =
             owner, key,
             input,
             {
-                icreate = fun (t : ITexture) -> device.CreateImage(t)
+                icreate = fun (t : ITexture) -> device.CreateImage(t, false)
                 idestroy = fun t -> t.Dispose()
                 ieagerDestroy = true
             }

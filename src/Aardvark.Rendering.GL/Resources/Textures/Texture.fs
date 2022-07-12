@@ -450,7 +450,7 @@ module TextureCreationExtensions =
         // AllocateTexture
         // ================================================================================================================
 
-        member private x.SetDefaultTextureParams(target : TextureTarget, mipMapLevels : int) =
+        member internal x.SetDefaultTextureParams(target : TextureTarget, mipMapLevels : int) =
             GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels - 1)
             GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
             GL.TexParameter(target, TextureParameterName.TextureWrapS, int TextureWrapMode.ClampToEdge)

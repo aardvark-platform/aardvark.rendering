@@ -1,16 +1,10 @@
 ﻿namespace Aardvark.Rendering.GL
 
-open System.Runtime.InteropServices
-open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 open Aardvark.Rendering
-open Microsoft.FSharp.NativeInterop
 open Aardvark.Rendering.GL
 open System.Runtime.CompilerServices
-
-
-
 
 [<Extension; AbstractClass; Sealed>]
 type ContextTextureSharingExtensions =
@@ -40,6 +34,8 @@ type ContextTextureSharingExtensions =
             else
                 OpenTK.Graphics.OpenGL.GL.Ext.TextureStorageMem2D(glTexHandle, texture.MipMapLevels, unbox internalFormat, texture.Size.X, texture.Size.Y, sharedMemory.GLHandle, shareInfo.Offset);
             GL.Check "TextureStorageMemXX"
+
+            this.SetDefaultTextureParams(textureTarget, texture.MipMapLevels)
 
             let cnt = if shareInfo.IsArray then Some texture.Count else None
             let tex = Texture(this, glTexHandle, texture.Dimension, texture.MipMapLevels, texture.Samples, texture.Size, cnt, texture.Format, shareInfo.SizeInBytes)

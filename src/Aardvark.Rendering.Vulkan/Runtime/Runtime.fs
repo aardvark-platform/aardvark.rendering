@@ -132,8 +132,8 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     member x.DeleteSurface (bs : IBackendSurface) =
         Disposable.dispose (unbox<ShaderProgram> bs)
 
-    member x.PrepareTexture (t : ITexture) =
-        device.CreateImage(t) :> IBackendTexture
+    member x.PrepareTexture (t : ITexture, openGlSharing : bool) =
+        device.CreateImage(t, openGlSharing) :> IBackendTexture
 
     member x.DeleteTexture(t : IBackendTexture) =
         Disposable.dispose (unbox<Image> t)
@@ -524,7 +524,7 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         member x.PrepareSurface(signature, s) = x.PrepareSurface(signature, s)
         member x.DeleteSurface(s) = x.DeleteSurface(s)
         member x.PrepareRenderObject(fboSignature, rj) = x.PrepareRenderObject(fboSignature, rj)
-        member x.PrepareTexture(t) = x.PrepareTexture(t)
+        member x.PrepareTexture(t) = x.PrepareTexture(t, false)
         member x.DeleteTexture(t) = x.DeleteTexture(t)
         member x.PrepareBuffer(b, u) = x.PrepareBuffer(b, u)
         member x.DeleteBuffer(b) = x.DeleteBuffer(b)
