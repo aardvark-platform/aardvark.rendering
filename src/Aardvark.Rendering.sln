@@ -2,6 +2,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.32002.185
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "19 - AsyncTexture", "Scratch (netcore)\19 - AsyncTexture\19 - AsyncTexture.fsproj", "{A004765C-65AE-4C80-96C5-BF2FD74340A9}"
+EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "36 - Raytracing", "Examples (netcore)\36 - Raytracing\36 - Raytracing.fsproj", "{118F8B34-3207-49C5-A8A4-6668D847A6BF}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "35 - Picking", "Examples (netcore)\35 - Picking\35 - Picking.fsproj", "{870F49B5-7919-4792-BAC0-B7198E2640D1}"
@@ -210,6 +212,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{A004765C-65AE-4C80-96C5-BF2FD74340A9}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A004765C-65AE-4C80-96C5-BF2FD74340A9}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A004765C-65AE-4C80-96C5-BF2FD74340A9}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A004765C-65AE-4C80-96C5-BF2FD74340A9}.Release|Any CPU.Build.0 = Release|Any CPU
 		{118F8B34-3207-49C5-A8A4-6668D847A6BF}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{118F8B34-3207-49C5-A8A4-6668D847A6BF}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{118F8B34-3207-49C5-A8A4-6668D847A6BF}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -563,6 +569,7 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{A004765C-65AE-4C80-96C5-BF2FD74340A9} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{118F8B34-3207-49C5-A8A4-6668D847A6BF} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{870F49B5-7919-4792-BAC0-B7198E2640D1} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{43F063C0-1BE0-4478-BCD3-9F9C83F97172} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
