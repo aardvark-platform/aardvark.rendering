@@ -231,23 +231,25 @@ module SgFSharp =
 
         /// Sets the given scope-dependent texture to the slot with the given name.
         /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
-        let inline scopeDependentTexture (name : ^Name) (tex : Scope -> aval<ITexture>) (sg : ISg) =
-            let sym = name |> Symbol.convert Symbol.Converters.typed<ITexture>
-            Sg.UniformApplicator(new Providers.ScopeDependentUniformHolder([sym, fun s -> tex s :> IAdaptiveValue]), sg) :> ISg
+        let inline scopeDependentTexture (name : ^Name) (tex : Scope -> aval<'Texture>) (sg : ISg) =
+            let sym = textureAux<Symbol.Converters.TypedConverter<ITexture>, ^Name, 'Texture> name
+            let value = tex >> AdaptiveResource.cast<ITexture> >> unbox<IAdaptiveValue>
+            Sg.UniformApplicator(new Providers.ScopeDependentUniformHolder([sym, value]), sg) :> ISg
 
         /// Sets the given scope-dependent diffuse texture.
-        let scopeDependentDiffuseTexture (tex : Scope -> aval<ITexture>) (sg : ISg) =
+        let scopeDependentDiffuseTexture (tex : Scope -> aval<#ITexture>) (sg : ISg) =
             scopeDependentTexture DefaultSemantic.DiffuseColorTexture tex sg
 
 
         /// Sets the given runtime-dependent texture to the slot with the given name.
         /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
-        let inline runtimeDependentTexture (name : ^Name) (tex : IRuntime -> aval<ITexture>) (sg : ISg) =
-            let sym = name |> Symbol.convert Symbol.Converters.typed<ITexture>
-            Sg.UniformApplicator(new Providers.RuntimeDependentUniformHolder([sym, fun s -> tex s :> IAdaptiveValue]), sg) :> ISg
+        let inline runtimeDependentTexture (name : ^Name) (tex : IRuntime -> aval<'Texture>) (sg : ISg) =
+            let sym = textureAux<Symbol.Converters.TypedConverter<ITexture>, ^Name, 'Texture> name
+            let value = tex >> AdaptiveResource.cast<ITexture> >> unbox<IAdaptiveValue>
+            Sg.UniformApplicator(new Providers.RuntimeDependentUniformHolder([sym, value]), sg) :> ISg
 
         /// Sets the given runtime-dependent diffuse texture.
-        let runtimeDependentDiffuseTexture(tex : IRuntime -> aval<ITexture>) (sg : ISg) =
+        let runtimeDependentDiffuseTexture(tex : IRuntime -> aval<#ITexture>) (sg : ISg) =
             runtimeDependentTexture DefaultSemantic.DiffuseColorTexture tex sg
 
 
