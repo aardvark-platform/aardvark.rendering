@@ -239,6 +239,7 @@ module internal ManagedBufferImplementation =
     and [<AbstractClass>] private AbstractWriter(input : IAdaptiveValue, elementSize : nativeint) =
         inherit AdaptiveObject()
 
+        do input.Acquire()
         let regions = ReferenceCountingSet<Range1l>()
 
         abstract member Write : AdaptiveToken * nativeint -> unit
@@ -264,6 +265,7 @@ module internal ManagedBufferImplementation =
             )
 
         member x.Dispose() =
+            input.Release()
             // TODO: Check if these comments are still valid
             // in case the data Mod is a PrimitiveValueConverter, it would be garbage collected and removal of the output is not essential
             // in case the data Mod is directly from the application (no converter), removing the Writer from its Output is essential

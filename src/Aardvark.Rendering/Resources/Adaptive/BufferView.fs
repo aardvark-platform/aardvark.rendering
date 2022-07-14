@@ -19,7 +19,7 @@ type BufferView(b : aval<IBuffer>, elementType : Type, [<Optional; DefaultParame
     member x.IsSingleValue = Option.isSome singleValue
 
     new(b : aval<IBackendBuffer>, elementType : Type, [<Optional; DefaultParameterValue(0)>] offset : int, [<Optional; DefaultParameterValue(0)>] stride : int) =
-        BufferView(AVal.cast<IBuffer> b, elementType, offset, stride)
+        BufferView(AdaptiveResource.cast<IBuffer> b, elementType, offset, stride)
 
     new(b : IBuffer, elementType : Type, [<Optional; DefaultParameterValue(0)>] offset : int, [<Optional; DefaultParameterValue(0)>] stride : int) =
         BufferView(AVal.constant b, elementType, offset, stride)
@@ -93,9 +93,9 @@ module BufferView =
 
         match view.SingleValue with
         | Some value ->
-            value |> AVal.map (fun v -> reader.Initialize(v, count))
+            value |> AdaptiveResource.map (fun v -> reader.Initialize(v, count))
         | _ ->
-            view.Buffer |> AVal.map (fun b ->
+            view.Buffer |> AdaptiveResource.map (fun b ->
                 match b with
                 | :? ArrayBuffer as a when stride = elementSize && offset = 0 ->
                     if count = a.Data.Length then
