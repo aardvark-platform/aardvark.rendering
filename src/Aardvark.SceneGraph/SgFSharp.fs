@@ -243,16 +243,8 @@ module SgFSharp =
         /// Sets the given runtime-dependent texture to the slot with the given name.
         /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
         let inline runtimeDependentTexture (name : ^Name) (tex : IRuntime -> aval<ITexture>) (sg : ISg) =
-            let cache = Dictionary<IRuntime, aval<ITexture>>()
-            let tex runtime =
-                match cache.TryGetValue runtime with
-                | (true, v) -> v
-                | _ ->
-                    let v = tex runtime
-                    cache.[runtime] <- v
-                    v
-
-            scopeDependentTexture name (fun s -> s.Runtime |> tex) sg
+            let sym = name |> Symbol.convert Symbol.Converters.typed<ITexture>
+            Sg.UniformApplicator(new Providers.RuntimeDependentUniformHolder([sym, fun s -> tex s :> IAdaptiveValue]), sg) :> ISg
 
         /// Sets the given runtime-dependent diffuse texture.
         let runtimeDependentDiffuseTexture(tex : IRuntime -> aval<ITexture>) (sg : ISg) =
