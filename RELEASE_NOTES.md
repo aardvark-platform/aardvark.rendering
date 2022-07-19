@@ -1,3 +1,6 @@
+### 5.2.6
+- [Vulkan] updated vk.xml to latest version (1.3)
+
 ### 5.2.5
 - [Text] Winding order of triangles is consistent, degenerated triangles get removed
 - [Vulkan] Added image limits checks for layers, levels and size

@@ -22,7 +22,7 @@ module XmlStuff =
             | null -> None
             | e -> Some e.Value
 
-    let private numericValue = Regex @"^(?<value>-?[0-9a-fA-F]*(\.[0-9]*)?)(f|U|ULL)?$"
+    let numericValue = Regex @"^(?<value>-?[0-9a-fA-F]*(\.[0-9]*)?)(f|F|U|ULL)?$"
 
     type Numeric =
         | Int32 of int32
@@ -78,12 +78,18 @@ module XmlStuff =
             if m.Success then
                 let value = m.Groups.["value"].Value
 
-                if v.EndsWith "f" then
-                    System.Convert.ToSingle(value, System.Globalization.CultureInfo.InvariantCulture.NumberFormat) |> Float32
+                if v.EndsWith "f" || v.EndsWith "F" then
+                    try System.Convert.ToSingle(value, System.Globalization.CultureInfo.InvariantCulture.NumberFormat) |> Float32
+                    with e -> 
+                        
+                        try System.Convert.ToUInt32(value, 16) |> UInt32
+                        with e -> failwithf "not a uint32: %A" v
                 elif v.EndsWith "U" then
-                    System.Convert.ToUInt32(value, radix) |> UInt32
+                    try System.Convert.ToUInt32(value, radix) |> UInt32
+                    with e -> failwithf "not a uint32: %A" v
                 elif v.EndsWith "ULL" then
-                    System.Convert.ToUInt64(value, radix) |> UInt64
+                    try System.Convert.ToUInt64(value, radix) |> UInt64
+                    with e -> failwithf "not a uint64: %A" v
                 else
                     System.Convert.ToInt32(value, radix) |> Int32
             else
@@ -187,6 +193,14 @@ module Type =
     let private cleanRx = Regex @"([ \t\r\n]+|const)"
     let private typeRx = Regex @"(?<name>[a-zA-Z_0-9]+)(\[(?<width>[a-zA-Z_0-9]+)\])?(\[(?<height>[a-zA-Z_0-9]+)\])?(?<ptr>[\*]*)(:(?<bits>[0-9]+))?"
 
+    let rec baseTypeName (t : Type) =
+        match t with
+        | Literal n -> n
+        | Ptr t -> baseTypeName t
+        | FixedArray(t,_) -> baseTypeName t
+        | FixedArray2d(t,_,_) -> baseTypeName t
+        | BitField(t,_) -> baseTypeName t
+
     let private tryMatch (regex : Regex) (str : string) =
         let ret = regex.Match str
         if ret.Success then Some ret else None
@@ -207,6 +221,9 @@ module Type =
         let h = arraySize defines height
         w, h
 
+    let private cleanName (name : string) =
+        name.Trim().Replace("FlagBits", "Flags")
+
     let parseTypeAndName (defined : Map<string, string>) (strangeType : string) (strangeName : string) =
         let cleaned = cleanRx.Replace(strangeType, "")
 
@@ -215,7 +232,7 @@ module Type =
             let id = m.Groups.["name"].Value
             let ptr = m.Groups.["ptr"].Length
 
-            let mutable t = Literal id
+            let mutable t = Literal (cleanName id)
             for i in 1..ptr do
                 t <- Ptr(t)
 
@@ -236,10 +253,10 @@ module Type =
 
             if bits <> "" then
                 match System.Int32.TryParse(bits) with
-                | (true, size) -> BitField(t, size), strangeName
+                | (true, size) -> BitField(t, size), cleanName strangeName
                 | _ -> failwith "non integer bit field size"
             else
-                t, strangeName
+                t, cleanName strangeName
 
         | _ ->
             failwithf "failed to parse type %s" cleaned
@@ -288,23 +305,23 @@ type Enum =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Enum =
 
-    let baseName (suffices : string list) (e : string) =
-        let rec remove (str : string) =
-            let suffix = suffices |> List.filter str.EndsWith
-            match suffix with
-            | x :: _ -> str.Substring(0, str.Length - x.Length)
-            | [] -> str
+    //let baseName (suffices : string list) (e : string) =
+    //    let rec remove (str : string) =
+    //        let suffix = suffices |> List.filter str.EndsWith
+    //        match suffix with
+    //        | x :: _ -> str.Substring(0, str.Length - x.Length)
+    //        | [] -> str
 
-        let name = remove e
-        let suffix = "Flags"
+    //    let name = remove e
+    //    let suffix = "Flags"
 
-        if name.EndsWith suffix then
-            name.Substring(0, name.Length - suffix.Length)
-        else
-            name
+    //    if name.EndsWith suffix then
+    //        name.Substring(0, name.Length - suffix.Length)
+    //    else
+    //        name
 
     let cleanName (name : string) =
-        name.Replace("FlagBits", "Flags")
+        name.Trim().Replace("FlagBits", "Flags")
 
     let valueToStr (v : EnumValue) =
         match v with
@@ -444,8 +461,15 @@ module Typedef =
         match child e "name", child e "type" with
         | Some n, Some t ->
             let (t, n) = Type.parseTypeAndName defines t n
-            Some { name = n; baseType = t}
 
+            let emit = 
+                match t with
+                | Type.Literal t -> Enum.cleanName t <> Enum.cleanName n
+                | _ -> true
+            if emit then
+                Some { name = Enum.cleanName n; baseType = t}
+            else
+                None
         | _ -> None
 
 
@@ -462,7 +486,10 @@ module Alias =
         match attrib e "name", attrib e "alias" with
         | Some n, Some a ->
             let (n, a) = Enum.cleanName n, Enum.cleanName a
-            Some { name = n; baseSym = a }
+            if n <> a then
+                Some { name = n; baseSym = a }
+            else
+                None
         | _ ->
             None
 
@@ -559,15 +586,17 @@ type VkVersion =
     | VkVersion10
     | VkVersion11
     | VkVersion12
+    | VkVersion13
 
     static member All =
-        [VkVersion10; VkVersion11; VkVersion12]
+        [VkVersion10; VkVersion11; VkVersion12; VkVersion13]
 
     static member Parse(str) =
         match str with
         | "VK_VERSION_1_0" -> VkVersion10
         | "VK_VERSION_1_1" -> VkVersion11
         | "VK_VERSION_1_2" -> VkVersion12
+        | "VK_VERSION_1_3" -> VkVersion13
         | _ -> failwithf "failed to parse version %s" str
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -577,11 +606,13 @@ module VkVersion =
         | VkVersion10 -> false
         | VkVersion11 -> false
         | VkVersion12 -> false
+        | VkVersion13 -> false
 
     let toModuleName = function
         | VkVersion10 -> None
         | VkVersion11 -> Some "Vulkan11"
         | VkVersion12 -> Some "Vulkan12"
+        | VkVersion13 -> Some "Vulkan13"
 
     let getPriorModules (version : VkVersion) =
         let index = VkVersion.All |> List.findIndex ((=) version)
@@ -643,10 +674,10 @@ module Require =
                 enumExtensions = mapOfListUnion x.enumExtensions y.enumExtensions
                 enums = x.enums @ y.enums
                 structs = x.structs @ y.structs
-                aliases = x.aliases  @ y.aliases
+                aliases = x.aliases  @ y.aliases |> List.distinct
                 commands = x.commands @ y.commands
                 funcpointers = x.funcpointers @ y.funcpointers
-                typedefs = x.typedefs @ y.typedefs
+                typedefs = x.typedefs @ y.typedefs |> List.distinct
                 handles = x.handles @ y.handles
                 comment = None
                 requiredBy = x.requiredBy
@@ -717,6 +748,8 @@ module XmlReader =
             |> List.choose (fun e ->
                 match attrib e "extends", attrib e "name" with
                 | Some baseType, Some name ->
+                    let name = Enum.cleanName name
+                    let baseType = Enum.cleanName baseType
                     match Enum.tryGetValue e with
                     | Some value -> Some (baseType, { name = name; value = value; comment = Comment.tryRead e })
                     | None -> None
@@ -729,13 +762,15 @@ module XmlReader =
                 |> Seq.toList
                 |> List.choose (fun t ->
                     match attrib t "name" with
-                    | Some name ->
-                        match definitions |> Definitions.tryFindType name with
-                        | Some t -> Some t
-                        | None ->
-                            printfn "WARNING: Could not find type definition: %A" name
-                            None
+                    | Some name -> Some (Enum.cleanName name)
+                    | None -> None
+                )
+                |> List.distinct
+                |> List.choose (fun name ->
+                    match definitions |> Definitions.tryFindType name with
+                    | Some t -> Some t
                     | None ->
+                        printfn "WARNING: Could not find type definition: %A" name
                         None
                 )
 
@@ -752,7 +787,7 @@ module XmlReader =
         let structs      = types |> List.choose (function Choice2Of6 e -> Some e | _ -> None)
         let aliases      = types |> List.choose (function Choice3Of6 e -> Some e | _ -> None)
         let funcpointers = types |> List.choose (function Choice4Of6 e -> Some e | _ -> None)
-        let typedefs     = types |> List.choose (function Choice5Of6 e -> Some e | _ -> None)
+        let typedefs     = types |> List.choose (function Choice5Of6 e -> Some e | _ -> None) |> List.distinct
         let handles      = types |> List.choose (function Choice6Of6 e -> Some e | _ -> None)
 
         let groups =
@@ -770,7 +805,7 @@ module XmlReader =
             enumExtensions  = groups
             enums           = enums
             structs         = structs
-            aliases         = aliases
+            aliases         = []
             commands        = commands
             funcpointers    = funcpointers
             typedefs        = typedefs
@@ -870,7 +905,7 @@ module XmlReader =
         registry.Elements(xname "enums")
             |> Seq.filter (fun e -> attrib e "name" <> Some "API Constants")
             |> Seq.choose Enum.tryRead
-            |> Seq.map (fun e -> e.name, e)
+            |> Seq.map (fun e -> Enum.cleanName e.name, e)
             |> Map.ofSeq
 
     let structureTypes (registry : XElement) =
@@ -925,7 +960,6 @@ module XmlReader =
             |> Seq.collect (fun tc -> tc.Elements (xname "type"))
             |> Seq.filter (fun t ->  attrib t "alias" |> Option.isSome)
             |> Seq.choose Alias.tryRead
-            |> Seq.toList
             |> Seq.map (fun t -> t.name, t)
             |> Map.ofSeq
 
@@ -988,6 +1022,7 @@ module FSharpWriter =
     let definitionLocations = Collections.Generic.Dictionary<string, Location>()
 
     let tryGetTypeAlias (location : Location) (name : string) =
+        let name = Enum.cleanName name
         match definitionLocations.TryGetValue(name) with
         | true, alias ->
             let path = alias.RelativePath(location)
@@ -1146,7 +1181,8 @@ module FSharpWriter =
             printfn "            member x.GetEnumerator() = let x = x in (Seq.init %d (fun i -> x.[i])).GetEnumerator()" size
             printfn "    end"
         | Some alias ->
-            printfn "type %s = %s" name alias
+            if name <> alias then
+                printfn "type %s = %s" name alias
 
 //    let extendedEnums() =
 //        printfn "[<AutoOpen>]"
@@ -1239,7 +1275,7 @@ module FSharpWriter =
             "LPCWSTR", "cstr"
         ]
 
-    let reservedKeywords = Set.ofList ["module"; "type"; "object"; "SFRRectCount"]
+    let reservedKeywords = Set.ofList ["module"; "type"; "object"; "SFRRectCount"; "function"]
 
     let vulkanTypeArrays =
         [
@@ -1413,8 +1449,15 @@ module FSharpWriter =
                         printfn  "    | %s = %s"  c.name (Enum.valueToStr c.value)
                     printfn ""
 
-                | Some alias ->
-                    printfn "type %s = %s" name alias
+                    if name = "VkQueueGlobalPriorityKHR" then
+                        printfn ""
+                        inlineArray "    " (Extension("VK_KHR_global_priority", RequiredBy.Core VkVersion13)) "VkQueueGlobalPriorityKHR" 4 16
+
+
+
+                | Some alias -> 
+                    if name <> alias then
+                        printfn "type %s = %s" name alias
 
             match vulkanTypeArrays |> Map.tryFind name with
             | Some arr -> inlineArray indent location name arr.baseTypeSize arr.count
@@ -1451,7 +1494,8 @@ module FSharpWriter =
                     printfn "        member x.IsValid = x.Handle <> 0UL"
                     printfn "    end"
                 | Some alias ->
-                    printfn "type %s = %s" h.name alias
+                    if h.name <> alias then
+                        printfn "type %s = %s" h.name alias
             else
                 printfn "type %s = nativeint" h.name
 
@@ -1467,7 +1511,8 @@ module FSharpWriter =
 
     let typedefs (indent : string) (location : Location) (l : list<Typedef>) =
         for x in l do
-            printfn "%stype %s = %s" indent x.name (typeName x.baseType)
+            if x.name <> typeName x.baseType then
+                printfn "%stype %s = %s" indent x.name (typeName x.baseType)
 
         for t in l do
             match vulkanTypeArrays |> Map.tryFind t.name with
@@ -1481,7 +1526,8 @@ module FSharpWriter =
 
     let aliases (indent : string) (location : Location) (aliases : list<Alias>) =
         for a in aliases do
-            printfn "%stype %s = %s" indent a.name a.baseSym
+            if a.name <> a.baseSym then
+                printfn "%stype %s = %s" indent a.name a.baseSym
 
         for a in aliases do
             match vulkanTypeArrays |> Map.tryFind a.name with
@@ -1557,11 +1603,13 @@ module FSharpWriter =
 
             match s.alias, tryGetTypeAlias location s.name with
             | _, Some alias ->
-                printfn "type %s = %s" s.name alias
-                printfn ""
+                if s.name <> alias then
+                    printfn "type %s = %s" s.name alias
+                    printfn ""
             | Some alias, _ ->
-                printfn "type %s = %s" s.name alias
-                printfn ""
+                if s.name <> alias then
+                    printfn "type %s = %s" s.name alias
+                    printfn ""
             | None, None ->
 
                 if s.isUnion then printfn "[<StructLayout(LayoutKind.Explicit)>]"
@@ -1728,6 +1776,9 @@ module FSharpWriter =
     let primitiveArrays() =
         printfn ""
         inlineArray "" (Global VkVersion10) "uint32" 4 32
+
+        printfn ""
+        inlineArray "" (Global VkVersion10) "byte" 1 32
 
         printfn ""
         inlineArray "" (Global VkVersion10) "byte" 1 8
@@ -1996,6 +2047,16 @@ module FSharpWriter =
             Console.WriteLine("WARNING: Ignoring extension '{0}'", e.name)
         else
             printfn "module %s =" name
+            
+            // Extensions make use of types defined by extended core versions
+            // but do not declare it for some reason. Therefore we have to open all core
+            // modules.
+            for v in VkVersion.allModules do
+                printfn "    open %s" v
+
+            for r in e.references do
+                printfn "    open %s" <| extCamelCase r
+
             printfn "    let Name = \"%s\"" e.name
             printfn "    let Number = %d" e.number
             printfn ""
@@ -2005,14 +2066,6 @@ module FSharpWriter =
                 printfn "    let Required = %s" exts
                 printfn ""
 
-            for r in e.references do
-                printfn "    open %s" <| extCamelCase r
-
-            // Extensions make use of types defined by extended core versions
-            // but do not declare it for some reason. Therefore we have to open all core
-            // modules.
-            for v in VkVersion.allModules do
-                printfn "    open %s" v
             printfn ""
 
             // Group requires by requiredBy property
@@ -2097,18 +2150,31 @@ let run () =
     let vendorTags = XmlReader.vendorTags vk
     let defines = XmlReader.defines vk
     let structureTypes = XmlReader.structureTypes vk
-    let emptyBitfields = XmlReader.emptyBitfields vk
+    let enums = XmlReader.enums vk
+    let emptyBitfields = XmlReader.emptyBitfields vk |> List.filter (fun n -> not (Map.containsKey (Enum.cleanName n) enums))
+
+    let aliases = XmlReader.aliases vk
+    let mutable defs = XmlReader.typedefs defines vk
+
+    for KeyValue(k,a) in aliases do
+        match Map.tryFind k defs with
+        | None ->   
+            let def = { name = a.name; baseType = Literal a.baseSym }
+            defs <- Map.add k def defs
+        | _ ->
+            ()
 
     let definitions =
         {
-            enums = XmlReader.enums vk
-            aliases = XmlReader.aliases vk
+            enums = enums
+            aliases = Map.empty
             structs = XmlReader.structs defines vk
             commands = XmlReader.commands defines vk
             funcpointers = XmlReader.funcpointers vk
             handles = XmlReader.handles vk
-            typedefs = XmlReader.typedefs defines vk
+            typedefs = defs
         }
+
 
     let features = XmlReader.features definitions vk
     let exts = XmlReader.extensions definitions vk
