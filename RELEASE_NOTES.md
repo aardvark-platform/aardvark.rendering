@@ -1,3 +1,6 @@
+### 5.2.7
+- [Vulkan] requesting all queues for device
+
 ### 5.2.6
 - [Vulkan] updated vk.xml to latest version (1.3)
 
