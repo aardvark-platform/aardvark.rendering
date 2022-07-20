@@ -210,6 +210,8 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                 QueueFlags.Graphics, "graphics"
                 QueueFlags.Transfer, "transfer"
                 QueueFlags.SparseBinding, "sparsebinding"
+                QueueFlags.VideoDecode, "video-decode"
+                QueueFlags.VideoEncode, "video-encode"
             ]
 
         let capString (c : QueueFlags) =
