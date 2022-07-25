@@ -1302,7 +1302,7 @@ module Resources =
         override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
                 let image = image.Update(token, renderToken)
-                if image.handle.IsNull then failwith ""
+                if image.handle.IsNull then raise <| NullReferenceException("[Vulkan] Image handle of view is null")
                 let contentVersion = image.handle.Version.GetValue token
 
                 let isIdentical =

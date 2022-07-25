@@ -102,6 +102,14 @@ type VulkanApplication(debug : DebugLevel, chooseDevice : list<PhysicalDevice> -
             yield Instance.Extensions.GetPhysicalDeviceProperties2
 
             yield! Instance.Extensions.Raytracing
+            
+            yield KHRVideoQueue.Name
+            yield KHRVideoDecodeQueue.Name
+            yield KHRVideoEncodeQueue.Name
+            yield EXTVideoDecodeH264.Name
+            yield EXTVideoEncodeH264.Name
+            yield EXTVideoDecodeH265.Name
+            yield EXTVideoEncodeH265.Name
 
             yield! Instance.Extensions.Sharing
 

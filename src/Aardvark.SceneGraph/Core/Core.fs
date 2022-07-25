@@ -40,18 +40,38 @@ module Providers =
 
         interface IUniformProvider with
             member x.Dispose () = cache.Clear()
-            member x.TryGetUniform (scope,name) = 
-                match cache.TryGetValue((scope,name)) with
-                    | (true, v) -> v
-                    | _ ->
-                        let v =
-                            match Map.tryFind name values with
-                                | Some f -> f scope |> Some
-                                | None -> None
-                        cache.[(scope,name)] <- v
-                        v
+            member x.TryGetUniform(scope, name) =
+                match cache.TryGetValue((scope, name)) with
+                | (true, v) -> v
+                | _ ->
+                    let v =
+                        match Map.tryFind name values with
+                        | Some f -> f scope |> Some
+                        | None -> None
+                    cache.[(scope, name)] <- v
+                    v
 
         new(l) = new ScopeDependentUniformHolder(Map.ofList l)
+
+    type RuntimeDependentUniformHolder(values : Map<Symbol, IRuntime -> IAdaptiveValue>) =
+        let cache = Dictionary<IRuntime * Symbol, Option<IAdaptiveValue>>()
+
+        interface IUniformProvider with
+            member x.Dispose () = cache.Clear()
+            member x.TryGetUniform(scope, name) =
+                let runtime : IRuntime = scope?Runtime
+
+                match cache.TryGetValue((runtime, name)) with
+                | (true, v) -> v
+                | _ ->
+                    let v =
+                        match Map.tryFind name values with
+                        | Some f -> f runtime |> Some
+                        | None -> None
+                    cache.[(runtime, name)] <- v
+                    v
+
+        new(l) = new RuntimeDependentUniformHolder(Map.ofList l)
 
 
     type AttributeProvider(scope : Scope, attName : string) =

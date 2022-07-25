@@ -14,8 +14,15 @@ type HeadlessVulkanApplication(debug : DebugLevel, instanceExtensions : list<str
             yield Instance.Extensions.GetPhysicalDeviceProperties2
 
             yield! Instance.Extensions.Raytracing
-
             yield! Instance.Extensions.Sharing
+            
+            yield KHRVideoQueue.Name
+            yield KHRVideoDecodeQueue.Name
+            yield KHRVideoEncodeQueue.Name
+            yield EXTVideoDecodeH264.Name
+            yield EXTVideoEncodeH264.Name
+            yield EXTVideoDecodeH265.Name
+            yield EXTVideoEncodeH265.Name
 
             if debug > DebugLevel.None then
                 yield Instance.Extensions.DebugReport
