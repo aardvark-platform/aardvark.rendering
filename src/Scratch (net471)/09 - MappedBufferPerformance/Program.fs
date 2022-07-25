@@ -7,6 +7,65 @@ open Aardvark.Application
 open Aardvark.Application.WinForms
 open System.Diagnostics
 
+
+module AdaptiveGeometryCustom =
+
+    let references = Dict<obj, int>()
+
+    let add (key : obj) =
+        lock references (fun _ ->
+            let value = references.GetOrDefault(key)
+            references.[key] <- value + 1
+        )
+
+    let remove (key : obj) =
+        lock references (fun _ ->
+            let value = references.Get(key)
+            references.[key] <- value - 1
+        )
+
+    let allReleased() =
+        lock references (fun _ ->
+            references |> Seq.forall (fun (KeyValue(_, value)) -> value = 0)
+        )
+
+    type ArrayResource(array : Array) =
+        inherit AdaptiveResource<IBuffer>()
+
+        let buffer = ArrayBuffer(array) :> IBuffer
+
+        override x.Create() =
+            add array
+
+        override x.Destroy() =
+            remove array
+
+        override x.Compute(t, rt) =
+            buffer
+
+    let ofIndexedGeometry (instanceAttributes : list<Symbol * IAdaptiveValue>) (ig : IndexedGeometry) =
+        let anyAtt = (ig.IndexedAttributes |> Seq.head).Value
+
+        let faceVertexCount, index =
+            match ig.IndexArray with
+                | null -> anyAtt.Length, None
+                | index -> index.Length, Some (BufferView.ofArray index)
+
+        let vertexCount =
+            anyAtt.Length
+
+        {
+            FaceVertexCount = faceVertexCount
+            VertexCount = vertexCount
+            Indices = index
+            VertexAttributes =
+                ig.IndexedAttributes |> SymDict.toMap |> Map.map (fun _ arr ->
+                    let res = ArrayResource(arr)
+                    BufferView(res, arr.GetType().GetElementType())
+                )
+            InstanceAttributes = Map.ofList instanceAttributes
+        }
+
 [<AutoOpen>]
 module Shader =
     open FShade 
@@ -94,7 +153,7 @@ let main argv =
     let disp, pooledGeometries = 
         geometries |> ASet.map (fun (g, t) -> 
                                         let ntr = t|> AVal.map(fun t -> t.Backward.Transposed |> M33d.op_Explicit)
-                                        g |> AdaptiveGeometry.ofIndexedGeometry [ (Sem.InstanceTrafo, (t :> IAdaptiveValue)); (Sem.InstanceNormalTrafo, (ntr :> IAdaptiveValue)) ])
+                                        g |> AdaptiveGeometryCustom.ofIndexedGeometry [ (Sem.InstanceTrafo, (t :> IAdaptiveValue)); (Sem.InstanceNormalTrafo, (ntr :> IAdaptiveValue)) ])
                     |> ASet.mapUse (fun ag -> addToPool ag)
                     
     let sg = 
@@ -140,5 +199,7 @@ let main argv =
 
     // either dispose the pool directly, or dispose all the draw calls
     disp.Dispose()
+
+    assert (AdaptiveGeometryCustom.allReleased())
     
     0

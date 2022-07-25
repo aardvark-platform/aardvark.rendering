@@ -56,6 +56,10 @@ type RenderControl() as this =
         c.Dock <- DockStyle.Fill
         self.Controls.Add c
 
+        c.HandleDestroyed.AddHandler <| EventHandler (fun sender args ->
+            self.Controls.Remove c
+        )
+
         match cr with
             | :? IRenderControl as cr -> 
                 keyboard.Use cr.Keyboard |> ignore

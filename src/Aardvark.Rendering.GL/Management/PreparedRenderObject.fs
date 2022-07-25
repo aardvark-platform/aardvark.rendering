@@ -1515,6 +1515,8 @@ module rec Command =
                 let key = key v
                 match cache.TryRemove key with
                 | (true, cmd) ->
+                    dirty.Remove cmd |> ignore
+
                     match trie.TryRemove key with
                     | ValueSome (l, r) ->
                         match l with
