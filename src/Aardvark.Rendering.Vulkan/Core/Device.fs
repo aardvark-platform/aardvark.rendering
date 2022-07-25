@@ -12,10 +12,25 @@ open Aardvark.Rendering
 open KHRSwapchain
 open KHRSurface
 open KHRBufferDeviceAddress
+open KHRExternalMemoryWin32
+open KHRExternalMemoryFd
 open Vulkan11
 
 #nowarn "9"
 //// #nowarn "51"
+
+[<AutoOpen>]
+module private ExternalHandles =
+
+    module Kernel32 =
+
+        [<DllImport("Kernel32.dll")>]
+        extern bool CloseHandle(nativeint handle)
+
+    module Posix =
+
+        [<DllImport("libc")>]
+        extern int close(int fd)
 
 type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
     let available = Array.copy allFamilies
@@ -108,10 +123,6 @@ type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
 type UploadMode =
     | Sync
     | Async
-
-module Kernel32 =
-    [<DllImport("Kernel32.dll")>]
-    extern bool internal CloseHandle(nativeint handle)
 
 type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as this =
     let isGroup, deviceGroup =
@@ -411,6 +422,9 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     member x.QueueFamilies = queueFamilies
     
     member x.EnabledExtensions = extensions
+
+    member x.IsExtensionEnabled(extension) =
+        extensions |> List.contains extension
 
     member x.MinMemoryMapAlignment = memoryLimits.MinMemoryMapAlignment
     member x.MinTexelBufferOffsetAlignment = memoryLimits.MinTexelBufferOffsetAlignment
@@ -1801,6 +1815,56 @@ and Event internal(device : Device) =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
+and private Win32Handle(device : Device, memory : VkDeviceMemory) =
+
+    do if not <| device.IsExtensionEnabled KHRExternalMemoryWin32.Name then
+        failwith "[Vulkan] Cannot create external handle when KHRExternalMemoryWin32 extension is disabled"
+
+    let handle =
+        native {
+            let! pHandle = 0n
+            let! pInfo = VkMemoryGetWin32HandleInfoKHR(memory, VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit)
+
+            VkRaw.vkGetMemoryWin32HandleKHR(device.Handle, pInfo, pHandle)
+                |> check "could not create shared handle"
+
+            return !!pHandle
+        }
+
+    member x.Handle = handle
+    member x.Dispose() =
+        if not <| Kernel32.CloseHandle handle then
+            Log.warn "[Vulkan] Could not close external memory handle."
+
+    interface IExternalMemoryHandle with
+        member x.Handle = x.Handle
+        member x.Dispose() = x.Dispose()
+
+and private PosixHandle(device : Device, memory : VkDeviceMemory) =
+
+    do if not <| device.IsExtensionEnabled KHRExternalMemoryFd.Name then
+        failwith "[Vulkan] Cannot create external handle when KHRExternalMemoryFd extension is disabled"
+
+    let handle =
+        native {
+            let! pHandle = 0
+            let! pInfo = VkMemoryGetFdInfoKHR(memory, Vulkan11.VkExternalMemoryHandleTypeFlags.OpaqueFdBit)
+
+            VkRaw.vkGetMemoryFdKHR(device.Handle, pInfo, pHandle)
+                |> check "could not create shared handle"
+
+            return !!pHandle
+        }
+
+    member x.Handle = handle
+    member x.Dispose() =
+        if Posix.close handle <> 0 then
+            Log.warn "[Vulkan] Could not close external memory handle."
+
+    interface IExternalMemoryHandle with
+        member x.Handle = nativeint x.Handle
+        member x.Dispose() = x.Dispose()
+
 
 and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : MemoryInfo, heap : MemoryHeapInfo, isHostMemory : bool) as this =
     let hostVisible = memory.flags |> MemoryFlags.hostVisible
@@ -1836,7 +1900,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
             else
                 0n
 
-        new DeviceMemory(this, mem, 0L, hostPtr, 0n)
+        new DeviceMemory(this, mem, 0L, hostPtr)
 
     let mutable nullptr = None
 
@@ -1865,12 +1929,11 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                     ptr
         )
 
-    member x.Alloc(align : int64, size : int64) = manager.Alloc(align, size, false)
-    member x.Alloc(align : int64, size : int64, sharing : bool) = manager.Alloc(align, size, sharing)
+    member x.Alloc(align : int64, size : int64, [<Optional; DefaultParameterValue(false)>] export : bool) = manager.Alloc(align, size, export)
     member x.Free(ptr : DevicePtr) = ptr.Dispose()
 
 
-    member x.TryAllocRaw(size : int64, sharing : bool, [<Out>] ptr : byref<DeviceMemory>) =
+    member x.TryAllocRaw(size : int64, [<Optional; DefaultParameterValue(false)>] export : bool, [<Out>] ptr : byref<DeviceMemory>) =
         if size > maxAllocationSize then
             false
         else
@@ -1879,7 +1942,7 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                     native {
                         
                         let exportFlags = 
-                            if sharing then
+                            if export then
                                 VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit ||| VkExternalMemoryHandleTypeFlags.OpaqueFdBit
                             else
                                 VkExternalMemoryHandleTypeFlags.None
@@ -1905,33 +1968,17 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                         VkRaw.vkAllocateMemory(device.Handle, pInfo, NativePtr.zero, pHandle)
                                |> check "could not allocate memory"
 
-                        return NativePtr.read pHandle
+                        return !!pHandle
                     }
 
-                let sharedHandle = 
-                    if sharing then
-                    
-                        let sharedMemoryHandle : nativeptr<nativeint> = NativePtr.alloc 1
-
-                        native {
-                            // NOTE: The following call will crash the application if the appropriate extensions are not imported!
-                            if RuntimeInformation.IsOSPlatform(OSPlatform.Windows) then
-                                let! handleInfo = KHRExternalMemoryWin32.VkMemoryGetWin32HandleInfoKHR(mem, Vulkan11.VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit)
-                                return KHRExternalMemoryWin32.VkRaw.vkGetMemoryWin32HandleKHR(device.Handle, handleInfo, sharedMemoryHandle)
-                            else
-                                let! handleInfo = KHRExternalMemoryFd.VkMemoryGetFdInfoKHR(mem, Vulkan11.VkExternalMemoryHandleTypeFlags.OpaqueFdBit)
-                                return KHRExternalMemoryFd.VkRaw.vkGetMemoryFdKHR(device.Handle, handleInfo, NativePtr.cast sharedMemoryHandle)
-                        } |> check "could not create shared handle"
-
-                        let sharedMemoryHandleValue = Microsoft.FSharp.NativeInterop.NativePtr.read sharedMemoryHandle
-                        NativePtr.free sharedMemoryHandle
-
-                        if sharedMemoryHandleValue = 0n then
-                            Log.warn "SharedMemoryHandle is null! Memory block probably not allocated with proper sharing flags!"
-
-                        sharedMemoryHandleValue 
+                let externalHandle : IExternalMemoryHandle =
+                    if export then
+                        if RuntimeInformation.IsOSPlatform(OSPlatform.Windows) then
+                            new Win32Handle(device, mem)
+                        else
+                            new PosixHandle(device, mem)
                     else
-                        0n
+                        null
 
                 let hostPtr = 
                     if hostVisible then
@@ -1944,25 +1991,23 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                         0n
 
 
-                ptr <- new DeviceMemory(x, mem, size, hostPtr, sharedHandle)
+                ptr <- new DeviceMemory(x, mem, size, hostPtr, externalHandle)
                 true
             else
                 false
 
-    member x.AllocRaw(size : int64, sharing : bool) =
+    member x.AllocRaw(size : int64, [<Optional; DefaultParameterValue(false)>] export : bool) =
         if size > maxAllocationSize then
             failf "could not allocate %A (exceeds MaxAllocationSize: %A)" (Mem size) (Mem maxAllocationSize)
         else
-            match x.TryAllocRaw(size, sharing) with
+            match x.TryAllocRaw(size, export) with
                 | (true, ptr) -> ptr
                 | _ -> failf "could not allocate %A (only %A available)" (Mem size) heap.Available
             
-    member x.TryAllocRaw(size : int64, [<Out>] ptr : byref<DeviceMemory>) = x.TryAllocRaw(size, false, &ptr)
     member x.TryAllocRaw(mem : Mem, [<Out>] ptr : byref<DeviceMemory>) = x.TryAllocRaw(mem.Bytes, false, &ptr)
     member x.TryAllocRaw(mem : VkDeviceSize, [<Out>] ptr : byref<DeviceMemory>) = x.TryAllocRaw(int64 mem, false, &ptr)
-    member x.AllocRaw(size : int64) = x.AllocRaw(size, false)
-    member x.AllocRaw(mem : Mem) = x.AllocRaw(mem.Bytes, false)
-    member x.AllocRaw(mem : VkDeviceSize) = x.AllocRaw(int64 mem, false)
+    member x.AllocRaw(mem : Mem) = x.AllocRaw(mem.Bytes)
+    member x.AllocRaw(mem : VkDeviceSize) = x.AllocRaw(int64 mem)
 
 
 
@@ -1975,14 +2020,10 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                     VkRaw.vkFreeMemory(device.Handle, ptr.Handle, NativePtr.zero)
                     ptr.Handle <- VkDeviceMemory.Null
                     ptr.Size <- 0L
-                                        
-                    if ptr.SharedHandle <> 0n then
-                        if RuntimeInformation.IsOSPlatform(OSPlatform.Windows) then
-                            // NOTE: CloseHandle only required on Windows
-                            if not (Kernel32.CloseHandle(ptr.SharedHandle)) then
-                                Log.warn "Could not close Shared texture handle!"
 
-                        ptr.SharedHandle <- 0n
+                    if ptr.IsExported then
+                        ptr.ExternalHandle.Dispose()
+                        ptr.ExternalHandle <- null
             )
 
     member x.Dispose() =
@@ -2049,18 +2090,18 @@ and DeviceFreeList() =
         else v + (align - v % align)
 
 
-    let storeUnshared = SortedSetExt<DeviceBlock>(Seq.empty, comparer)
-    let storeShared = SortedSetExt<DeviceBlock>(Seq.empty, comparer)
+    let store = SortedSetExt<DeviceBlock>(Seq.empty, comparer)
+    let storeExported = SortedSetExt<DeviceBlock>(Seq.empty, comparer)
 
-    let getStore (shared : bool) =
-        if shared then 
-            storeShared 
+    let getStore (export : bool) =
+        if export then 
+            storeExported 
         else 
-            storeUnshared
+            store
 
-    member x.TryGetAligned(align : int64, size : int64, sharing : bool) =
+    member x.TryGetAligned(align : int64, size : int64, [<Optional; DefaultParameterValue(false)>] export : bool) =
         let min = new DeviceBlock(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1L, size, false, null, null)
-        let store = getStore sharing
+        let store = getStore export
         let view = store.GetViewBetween(min, null)
 
         let res = 
@@ -2077,18 +2118,17 @@ and DeviceFreeList() =
             | None ->
                 None
 
-
     member x.Insert(b : DeviceBlock) =
-        let store = getStore b.Memory.IsShared
+        let store = getStore b.Memory.IsExported
         store.Add b |> ignore
 
     member x.Remove(b : DeviceBlock) =
-        let store = getStore b.Memory.IsShared
+        let store = getStore b.Memory.IsExported
         store.Remove b |> ignore
 
     member x.Clear() =
-        storeShared.Clear()
-        storeUnshared.Clear()
+        storeExported.Clear()
+        store.Clear()
 
 and DeviceMemoryManager internal(heap : DeviceHeap, blockSize : int64, keepReserveBlock : bool) =
     static let next (align : int64) (v : int64) =
@@ -2100,9 +2140,8 @@ and DeviceMemoryManager internal(heap : DeviceHeap, blockSize : int64, keepReser
     let mutable allocatedMemory = 0L
     let mutable usedMemory = 0L
 
-    let addBlock(this : DeviceMemoryManager) (sharing : bool) =
-        let store = heap.AllocRaw(blockSize, sharing)
-
+    let addBlock(this : DeviceMemoryManager) (export : bool) =
+        let store = heap.AllocRaw(blockSize, export)
 
         Interlocked.Add(&allocatedMemory, blockSize) |> ignore
         blocks.Add store |> ignore
@@ -2113,11 +2152,11 @@ and DeviceMemoryManager internal(heap : DeviceHeap, blockSize : int64, keepReser
     member x.AllocatedMemory = Mem allocatedMemory
     member x.UsedMemory = Mem usedMemory
 
-    member x.Alloc(align : int64, size : int64, sharing : bool) =
+    member x.Alloc(align : int64, size : int64, export : bool) =
         if size <= 0L then
             DevicePtr.Null
         elif size >= blockSize then
-            let mem = heap.AllocRaw(size, sharing)
+            let mem = heap.AllocRaw(size, export)
             Interlocked.Add(&usedMemory, size) |> ignore
             Interlocked.Add(&allocatedMemory, size) |> ignore
             { new DevicePtr(mem, 0L, size) with
@@ -2129,35 +2168,35 @@ and DeviceMemoryManager internal(heap : DeviceHeap, blockSize : int64, keepReser
 
         else
             lock free (fun () ->
-                match free.TryGetAligned(align, size, sharing) with
-                    | Some b ->
-                        let alignedOffset = next align b.Offset
-                        let alignedSize = b.Size - (alignedOffset - b.Offset)
-                        if alignedOffset > b.Offset then
-                            let l = new DeviceBlock(x, b.Memory, b.Offset, alignedOffset - b.Offset, true, b.Prev, b)
+                match free.TryGetAligned(align, size, export) with
+                | Some b ->
+                    let alignedOffset = next align b.Offset
+                    let alignedSize = b.Size - (alignedOffset - b.Offset)
+                    if alignedOffset > b.Offset then
+                        let l = new DeviceBlock(x, b.Memory, b.Offset, alignedOffset - b.Offset, true, b.Prev, b)
 
-                            if not (isNull l.Prev) then l.Prev.Next <- l
-                            b.Prev <- l
+                        if not (isNull l.Prev) then l.Prev.Next <- l
+                        b.Prev <- l
 
-                            free.Insert(l)
-                            b.Offset <- alignedOffset
-                            b.Size <- alignedSize    
+                        free.Insert(l)
+                        b.Offset <- alignedOffset
+                        b.Size <- alignedSize    
 
                 
-                        if alignedSize > size then
-                            let r = new DeviceBlock(x, b.Memory, alignedOffset + size, alignedSize - size, true, b, b.Next)
-                            if not (isNull r.Next) then r.Next.Prev <- r
-                            b.Next <- r
-                            free.Insert(r)
-                            b.Size <- size
+                    if alignedSize > size then
+                        let r = new DeviceBlock(x, b.Memory, alignedOffset + size, alignedSize - size, true, b, b.Next)
+                        if not (isNull r.Next) then r.Next.Prev <- r
+                        b.Next <- r
+                        free.Insert(r)
+                        b.Size <- size
 
-                        Interlocked.Add(&usedMemory, size) |> ignore
-                        b.IsFree <- false
-                        b :> DevicePtr
+                    Interlocked.Add(&usedMemory, size) |> ignore
+                    b.IsFree <- false
+                    b :> DevicePtr
 
-                    | None ->
-                        addBlock x sharing
-                        x.Alloc(align, size, sharing)
+                | None ->
+                    addBlock x export
+                    x.Alloc(align, size, export)
             )
 
     member internal x.Free(b : DeviceBlock) =
@@ -2222,17 +2261,20 @@ and DeviceMemoryManager internal(heap : DeviceHeap, blockSize : int64, keepReser
         )
             
 
-and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int64, hostPtr : nativeint, sharedHandle : nativeint) =
+and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int64, hostPtr : nativeint, externalHandle : IExternalMemoryHandle) =
     inherit DevicePtr(Unchecked.defaultof<_>, 0L, size)
-    static let nullptr = new DeviceMemory(Unchecked.defaultof<_>, VkDeviceMemory.Null, 0L, 0n, 0n)
+    static let nullptr = new DeviceMemory(Unchecked.defaultof<_>, VkDeviceMemory.Null, 0L, 0n, null)
 
     let mutable handle = handle
     let mutable size = size
-    let mutable sharedHandle = sharedHandle
+    let mutable externalHandle = externalHandle
 
     do if handle <> VkDeviceMemory.Null then heap.Device.Instance.RegisterDebugTrace(handle.Handle)
 
     static member Null = nullptr
+
+    new (heap : DeviceHeap, handle : VkDeviceMemory, size : int64, hostPtr : nativeint) =
+        new DeviceMemory(heap, handle, size, hostPtr, null)
 
     member x.Heap = heap
 
@@ -2244,17 +2286,19 @@ and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int
         with get() : int64 = size
         and internal set s = size <- s
 
-    member x.IsShared 
-        with get() = sharedHandle <> 0n
-
     member x.IsNull = handle.IsNull
     member x.IsValid = handle.IsValid
+    member x.IsExported = externalHandle <> null
 
     member x.HostPointer = hostPtr
 
-    member x.SharedHandle
-        with get() : nativeint = sharedHandle
-        and internal set h = sharedHandle <- h
+    member x.ExternalHandle
+        with get() : IExternalMemoryHandle = externalHandle
+        and internal set h = externalHandle <- h
+
+    member x.ExternalBlock =
+        { Handle = x.ExternalHandle
+          SizeInBytes = x.Size }
 
     override x.Dispose() = heap.Free(x)
     override x.Memory = x
@@ -3019,27 +3063,27 @@ type DeviceExtensions private() =
             else
                 tryFindDeviceMemory bits (i + 1) memories
 
-    static let rec tryAlloc (reqs : VkMemoryRequirements) (i : int) (memories : DeviceHeap[]) (sharing : bool) =
+    static let rec tryAlloc (reqs : VkMemoryRequirements) (export : bool) (i : int) (memories : DeviceHeap[]) =
         if i >= memories.Length then
             None
         else
             let mem = memories.[i]
             if mem.Mask &&& reqs.memoryTypeBits <> 0u then
-                let ptr = mem.Alloc(int64 reqs.alignment, int64 reqs.size, sharing)
+                let ptr = mem.Alloc(int64 reqs.alignment, int64 reqs.size, export)
                 Some ptr
             else
-                tryAlloc reqs (i + 1) memories sharing
+                tryAlloc reqs export (i + 1) memories
 
-    static let rec tryAllocDevice (reqs : VkMemoryRequirements) (i : int) (memories : DeviceHeap[]) (sharing : bool) =
+    static let rec tryAllocDevice (reqs : VkMemoryRequirements) (export : bool) (i : int) (memories : DeviceHeap[]) =
         if i >= memories.Length then
             None
         else
             let mem = memories.[i]
             if mem.Mask &&& reqs.memoryTypeBits <> 0u && mem.Info.flags &&& MemoryFlags.DeviceLocal <> MemoryFlags.None then
-                let ptr = mem.Alloc(int64 reqs.alignment, int64 reqs.size, sharing)
+                let ptr = mem.Alloc(int64 reqs.alignment, int64 reqs.size, export)
                 Some ptr
             else
-                tryAllocDevice reqs (i + 1) memories sharing
+                tryAllocDevice reqs export (i + 1) memories
 
 
     [<Extension>]
@@ -3047,41 +3091,32 @@ type DeviceExtensions private() =
         new Device(this, wantedExtensions)
 
     [<Extension>]
-    static member GetMemory(this : Device, bits : uint32, preferDevice : bool) =
+    static member GetMemory(this : Device, bits : uint32,
+                            [<Optional; DefaultParameterValue(false)>] preferDevice : bool) =
         if preferDevice then
             match tryFindDeviceMemory bits 0 this.Memories with
-                 | Some mem -> mem
-                 | None -> 
-                    match tryFindMemory bits 0 this.Memories with
-                        | Some mem -> mem
-                        | None -> failf "could not find compatible memory for types: %A" bits
-        else
-            match tryFindMemory bits 0 this.Memories with
+            | Some mem -> mem
+            | None -> 
+                match tryFindMemory bits 0 this.Memories with
                 | Some mem -> mem
                 | None -> failf "could not find compatible memory for types: %A" bits
+        else
+            match tryFindMemory bits 0 this.Memories with
+            | Some mem -> mem
+            | None -> failf "could not find compatible memory for types: %A" bits
 
     [<Extension>]
-    static member Alloc(this : Device, reqs : VkMemoryRequirements, preferDevice : bool, externalSharing : bool) =
+    static member Alloc(this : Device, reqs : VkMemoryRequirements,
+                        [<Optional; DefaultParameterValue(false)>] preferDevice : bool,
+                        [<Optional; DefaultParameterValue(false)>] export : bool) =
         if preferDevice then
-            match tryAllocDevice reqs 0 this.Memories externalSharing with
-                 | Some mem -> mem
-                 | None -> 
-                    match tryAlloc reqs 0 this.Memories externalSharing with
-                        | Some mem -> mem
-                        | None -> failf "could not find compatible memory for %A" reqs
-        else
-            match tryAlloc reqs 0 this.Memories externalSharing with
+            match tryAllocDevice reqs export 0 this.Memories with
+            | Some mem -> mem
+            | None -> 
+                match tryAlloc reqs export 0 this.Memories with
                 | Some mem -> mem
                 | None -> failf "could not find compatible memory for %A" reqs
-
-    [<Extension>]
-    static member GetMemory(this : Device, bits : uint32) =
-        DeviceExtensions.GetMemory(this, bits, false)
-
-    [<Extension>]
-    static member Alloc(this : Device, reqs : VkMemoryRequirements, preferDevice : bool) =
-        DeviceExtensions.Alloc(this, reqs, preferDevice, false)
-
-    [<Extension>]
-    static member Alloc(this : Device, reqs : VkMemoryRequirements) =
-        DeviceExtensions.Alloc(this, reqs, false, false)
+        else
+            match tryAlloc reqs export 0 this.Memories with
+            | Some mem -> mem
+            | None -> failf "could not find compatible memory for %A" reqs

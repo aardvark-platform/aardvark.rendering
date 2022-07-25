@@ -49,15 +49,6 @@ type IStreamingTexture =
     abstract member UpdateAsync : format : PixFormat * size : V2i * data : nativeint -> Transaction
     abstract member ReadPixel : pos : V2i -> C4f
 
-type TextureShareInfo = 
-    {
-        IsArray : bool          // distinguish between single textures and array textue with count = 1 -> required for shared texture to handle both cases in OpenGL
-        BlockHandle : nativeint // Shared handle of block (required to import memory into OpenGL)
-        BlockSize : int64       // Block memory size in bytes (required to import memory into OpenGL)
-        Offset : int64          // Memory offset in block (required to initialize OpenGL texture)
-        SizeInBytes : int64     // Texture memory size (required for OpenGL memory info)
-    }
-
 type IBackendTexture =
     inherit ITexture
     abstract member Runtime : ITextureRuntime
@@ -68,7 +59,13 @@ type IBackendTexture =
     abstract member MipMapLevels : int
     abstract member Size : V3i
     abstract member Handle : obj
-    abstract member ShareInfo : option<TextureShareInfo> // or ISharedBackendTexture interface that provides this info?
+
+/// Interface for textures that are backed by exported memory.
+/// Used for sharing textures between different backends.
+and IExportedBackendTexture =
+    inherit IBackendTexture
+    inherit IExportedResource
+    abstract member IsArray : bool
 
 and IFramebufferOutput =
     abstract member Runtime : ITextureRuntime

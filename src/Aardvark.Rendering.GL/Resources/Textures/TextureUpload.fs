@@ -334,7 +334,7 @@ module ContextTextureUploadExtensions =
                 | :? Texture as o ->
                     o
 
-                | :? IBackendTexture as t when t.ShareInfo.IsSome -> 
+                | :? IExportedBackendTexture as t ->
                     this.ImportTexture t
 
                 | :? INativeTexture as data ->

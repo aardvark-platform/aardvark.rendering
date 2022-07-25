@@ -132,8 +132,8 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     member x.DeleteSurface (bs : IBackendSurface) =
         Disposable.dispose (unbox<ShaderProgram> bs)
 
-    member x.PrepareTexture (t : ITexture, openGlSharing : bool) =
-        device.CreateImage(t, openGlSharing) :> IBackendTexture
+    member x.PrepareTexture (t : ITexture, [<Optional; DefaultParameterValue(ImageExportMode.None)>] export : ImageExportMode) =
+        device.CreateImage(t, export) :> IBackendTexture
 
     member x.DeleteTexture(t : IBackendTexture) =
         Disposable.dispose (unbox<Image> t)
@@ -148,7 +148,7 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     member x.DeleteBuffer(t : IBackendBuffer) =
         Disposable.dispose(unbox<Buffer> t)
 
-    member private x.CreateTextureInner(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int, isArray : bool, openGlSharing : bool) =
+    member private x.CreateTextureInner(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int, export : ImageExportMode) =
         let layout =
             VkImageLayout.ShaderReadOnlyOptimal
 
@@ -163,19 +163,21 @@ type Runtime(device : Device, debug : DebugLevel) as this =
             else
                 def ||| VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.StorageBit
 
-        let img = device.CreateImage(size, levels, count, samples, dim, format, usage, isArray, openGlSharing)
+        let img = device.CreateImage(size, levels, count, samples, dim, format, usage, export)
         device.GraphicsFamily.run {
             do! Command.TransformLayout(img, layout)
         }
         img :> IBackendTexture
 
-    member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, openGlSharing : bool) : IBackendTexture =
+    member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int,
+                           [<Optional; DefaultParameterValue(false)>] export : bool) : IBackendTexture =
         ResourceValidation.Textures.validateCreationParams dim size levels samples
-        x.CreateTextureInner(size, dim, format, levels, samples, 1, false, openGlSharing)
+        x.CreateTextureInner(size, dim, format, levels, samples, 1, if export then ImageExportMode.Export else ImageExportMode.None)
 
-    member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int, openGlSharing : bool) : IBackendTexture =
+    member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int,
+                                [<Optional; DefaultParameterValue(false)>] export : bool) : IBackendTexture =
         ResourceValidation.Textures.validateCreationParamsArray dim size levels samples count
-        x.CreateTextureInner(size, dim, format, levels, samples, count, true, openGlSharing)
+        x.CreateTextureInner(size, dim, format, levels, samples, count, if export then ImageExportMode.ExportArray else ImageExportMode.None)
 
     member x.CreateRenderbuffer(size : V2i, format : TextureFormat, samples : int) : IRenderbuffer =
         if samples < 1 then raise <| ArgumentException("[Renderbuffer] samples must be greater than 0")
@@ -524,7 +526,7 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         member x.PrepareSurface(signature, s) = x.PrepareSurface(signature, s)
         member x.DeleteSurface(s) = x.DeleteSurface(s)
         member x.PrepareRenderObject(fboSignature, rj) = x.PrepareRenderObject(fboSignature, rj)
-        member x.PrepareTexture(t) = x.PrepareTexture(t, false)
+        member x.PrepareTexture(t) = x.PrepareTexture(t)
         member x.DeleteTexture(t) = x.DeleteTexture(t)
         member x.PrepareBuffer(b, u) = x.PrepareBuffer(b, u)
         member x.DeleteBuffer(b) = x.DeleteBuffer(b)

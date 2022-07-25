@@ -4,10 +4,12 @@ open System
 open System.Threading
 open System.Collections.Concurrent
 open System.Runtime.InteropServices
+open OpenTK.Graphics.OpenGL
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 open Aardvark.Rendering
 
+type private ExternalHandleType = OpenTK.Graphics.OpenGL.ExternalHandleType
 
 [<Struct>] // TODO ref struct?
 type RenderingLockDisposable =
@@ -219,7 +221,7 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
 
     let formatSampleCounts = FastConcurrentDict()
 
-    let importedMemoryBlocks = System.Collections.Generic.Dictionary<nativeint, SharedMemoryEntry>()
+    let importedMemoryBlocks = System.Collections.Generic.Dictionary<IExternalMemoryHandle, SharedMemoryEntry>()
     
     /// <summary>
     /// Creates custom OpenGl context. Usage:
@@ -290,14 +292,14 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
                 | (true, v) -> 
                     if v.RefCount = 1 then
                         importedMemoryBlocks.Remove shareHandle.OpaqueHandle |> ignore
-                        OpenTK.Graphics.OpenGL.GL.Ext.DeleteMemoryObject(v.GLHandle)
+                        GL.Ext.DeleteMemoryObject(v.GLHandle)
                         GL.Check "DeleteMemoryObject"
                     else 
                         v.RefCount <- v.RefCount - 1
                 | _ -> failwith "invalid handle"
             )
 
-    member x.ImportMemoryBlock(shareHandle : nativeint, blockSize : int64) =
+    member x.ImportMemoryBlock(shareHandle : IExternalMemoryHandle, blockSize : int64) =
         
         lock importedMemoryBlocks (fun () -> 
                 let glHandle = 
@@ -315,10 +317,10 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
                             GL.Check "CreateMemoryObjects"
 
                             if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
-                                OpenTK.Graphics.OpenGL.GL.Ext.ImportMemoryWin32Handle(sharedMemHandle, blockSize, OpenTK.Graphics.OpenGL.ExternalHandleType.HandleTypeOpaqueWin32Ext, shareHandle)
+                                GL.Ext.ImportMemoryWin32Handle(sharedMemHandle, blockSize, ExternalHandleType.HandleTypeOpaqueWin32Ext, shareHandle.Handle)
                             else
-                                OpenTK.Graphics.OpenGL.GL.Ext.ImportMemoryF(sharedMemHandle, blockSize, OpenTK.Graphics.OpenGL.ExternalHandleType.HandleTypeOpaqueFdExt, int shareHandle) // TODO test
-                            
+                                GL.Ext.ImportMemoryF(sharedMemHandle, blockSize, ExternalHandleType.HandleTypeOpaqueFdExt, int shareHandle.Handle) // TODO test
+
                             GL.Check "ImportMemoryWin32Handle"
                         )
 

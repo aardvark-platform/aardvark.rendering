@@ -165,8 +165,8 @@ module ImageUploadExtensions =
                 buffers |> create levels
 
 
-        let ofImageBufferArray (dimension : TextureDimension) (wantMipmap : bool)
-                               (buffers : ImageBufferArray) (sharing : bool) (device : Device) =
+        let ofImageBufferArray (dimension : TextureDimension) (wantMipmap : bool) (export : ImageExportMode)
+                               (buffers : ImageBufferArray) (device : Device) =
             let slices = buffers.Slices
 
             let uploadLevels =
@@ -185,9 +185,7 @@ module ImageUploadExtensions =
             let generateMipmap =
                 uploadLevels < mipMapLevels
 
-            let isArray = if dimension = TextureDimension.TextureCube then slices > 6 else slices > 1
-
-            let image = device.CreateImage(buffers.BaseSize, mipMapLevels, slices, 1, dimension, buffers.TextureFormat, Image.defaultUsage, isArray, sharing)
+            let image = device.CreateImage(buffers.BaseSize, mipMapLevels, slices, 1, dimension, buffers.TextureFormat, Image.defaultUsage, export)
             let imageRange = image.[TextureAspect.Color]
 
             match device.UploadMode with
@@ -240,9 +238,9 @@ module ImageUploadExtensions =
 
             image
 
-        let ofImageBuffer (dimension : TextureDimension) (wantMipmap : bool) (buffer : ImageBuffer) (sharing : bool) (device : Device) =
+        let ofImageBuffer (dimension : TextureDimension) (wantMipmap : bool) (buffer : ImageBuffer) (export : ImageExportMode) (device : Device) =
             let buffers = [| buffer |] |> ImageBufferArray.create 1
-            device |> ofImageBufferArray dimension wantMipmap buffers sharing
+            device |> ofImageBufferArray dimension wantMipmap export buffers
 
         let uploadNativeTensor4<'T when 'T : unmanaged> (dst : ImageSubresource) (offset : V3i) (size : V3i) (src : NativeTensor4<'T>) =
             let device = dst.Image.Device
@@ -276,43 +274,43 @@ module ImageUploadExtensions =
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Image =
 
-        let ofNativeTexture (data : INativeTexture) (sharing : bool) (device : Device) =
+        let ofNativeTexture (data : INativeTexture) (export : ImageExportMode) (device : Device) =
             let buffers = device |> ImageBufferArray.ofNativeTexture data
-            device |> ofImageBufferArray data.Dimension data.WantMipMaps buffers sharing
+            device |> ofImageBufferArray data.Dimension data.WantMipMaps export buffers
 
-        let ofPixImageMipMap (data : PixImageMipMap) (info : TextureParams) (sharing : bool) (device : Device) =
+        let ofPixImageMipMap (data : PixImageMipMap) (info : TextureParams) (export : ImageExportMode) (device : Device) =
             let buffers = device |> ImageBufferArray.ofPixImageMipMaps info [| data |]
-            device |> ofImageBufferArray TextureDimension.Texture2D info.wantMipMaps buffers sharing
+            device |> ofImageBufferArray TextureDimension.Texture2D info.wantMipMaps export buffers
 
-        let ofPixVolume (data : PixVolume) (info : TextureParams) (sharing : bool) (device : Device) =
+        let ofPixVolume (data : PixVolume) (info : TextureParams) (export : ImageExportMode) (device : Device) =
             let buffer = device |> ImageBuffer.ofPixVolume info data
-            device |> ofImageBuffer TextureDimension.Texture3D info.wantMipMaps buffer sharing
+            device |> ofImageBuffer TextureDimension.Texture3D info.wantMipMaps buffer export
 
-        let ofPixImageCube (data : PixImageCube) (info : TextureParams) (sharing : bool) (device : Device) =
+        let ofPixImageCube (data : PixImageCube) (info : TextureParams) (export : ImageExportMode) (device : Device) =
             let buffers = device |> ImageBufferArray.ofPixImageMipMaps info data.MipMapArray
-            device |> ofImageBufferArray TextureDimension.TextureCube info.wantMipMaps buffers sharing
+            device |> ofImageBufferArray TextureDimension.TextureCube info.wantMipMaps export buffers
 
-        let ofStream (stream : IO.Stream) (info : TextureParams) (sharing : bool) (device : Device) =
+        let ofStream (stream : IO.Stream) (info : TextureParams) (export : ImageExportMode) (device : Device) =
             let temp = device |> TensorImage.ofStream stream info.wantSrgb
-            device |> ofImageBuffer TextureDimension.Texture2D info.wantMipMaps temp sharing
+            device |> ofImageBuffer TextureDimension.Texture2D info.wantMipMaps temp export
 
-        let ofFile (path : string) (info : TextureParams) (sharing : bool) (device : Device) =
+        let ofFile (path : string) (info : TextureParams) (export : ImageExportMode) (device : Device) =
             use stream = IO.File.OpenRead(path)
-            ofStream stream info sharing device
+            ofStream stream info export device
 
-        let rec ofTexture (t : ITexture) (sharing : bool) (device : Device) : Image =
-            match t with
+        let rec ofTexture (export : ImageExportMode) (texture : ITexture) (device : Device) : Image =
+            match texture with
             | :? PixTexture2d as t ->
-                device |> ofPixImageMipMap t.PixImageMipMap t.TextureParams sharing
+                device |> ofPixImageMipMap t.PixImageMipMap t.TextureParams export
 
             | :? PixTextureCube as c ->
-                device |> ofPixImageCube c.PixImageCube c.TextureParams sharing
+                device |> ofPixImageCube c.PixImageCube c.TextureParams export
 
             | :? NullTexture as t ->
-                device |> ofPixImageMipMap (PixImageMipMap [| PixImage<byte>(Col.Format.RGBA, V2i.II) :> PixImage |]) TextureParams.empty sharing
+                device |> ofPixImageMipMap (PixImageMipMap [| PixImage<byte>(Col.Format.RGBA, V2i.II) :> PixImage |]) TextureParams.empty export
 
             | :? PixTexture3d as t ->
-                device |> ofPixVolume t.PixVolume t.TextureParams sharing
+                device |> ofPixVolume t.PixVolume t.TextureParams export
 
             | :? StreamTexture as t ->
                 use stream = t.Open(true)
@@ -324,23 +322,26 @@ module ImageUploadExtensions =
 
                 match compressed with
                 | Some t ->
-                    device |> ofTexture t sharing
+                    device |> ofTexture export t
 
                 | _ ->
                     stream.Position <- initialPos
-                    device |> ofStream stream t.TextureParams sharing
+                    device |> ofStream stream t.TextureParams export
 
             | :? INativeTexture as nt ->
-                device |> ofNativeTexture nt sharing
+                device |> ofNativeTexture nt export
+
+            | :? ExportedImage as t when export <> ImageExportMode.None ->
+                device |> ofTexture ImageExportMode.None t
 
             | :? Image as t ->
-                if sharing && t.ShareInfo.IsNone then
-                    failwith "cannot prepare already preparted texture with different sharing option"
+                if export <> ImageExportMode.None then
+                    failf "cannot export image after it has been created"
                 t.AddReference()
                 t
 
             | _ ->
-                failf "unsupported texture-type: %A" t
+                failf "unsupported texture-type: %A" texture
 
         let uploadLevel (offset : V3i) (size : V3i) (src : NativeTensor4<'T>) (dst : ImageSubresource) (device : Device) =
             src |> uploadNativeTensor4 dst offset size
@@ -349,16 +350,19 @@ module ImageUploadExtensions =
     type DeviceImageUploadExtensions private() =
 
         [<Extension>]
-        static member inline CreateImage(this : Device, pi : PixImageMipMap, info : TextureParams, sharing : bool) =
-            this |> Image.ofPixImageMipMap pi info sharing
+        static member inline CreateImage(this : Device, pi : PixImageMipMap, info : TextureParams,
+                                         [<Optional; DefaultParameterValue(ImageExportMode.None)>] export : ImageExportMode) =
+            this |> Image.ofPixImageMipMap pi info export
 
         [<Extension>]
-        static member inline CreateImage(this : Device, file : string, info : TextureParams, sharing : bool) =
-            this |> Image.ofFile file info sharing
+        static member inline CreateImage(this : Device, file : string, info : TextureParams,
+                                         [<Optional; DefaultParameterValue(ImageExportMode.None)>] export : ImageExportMode) =
+            this |> Image.ofFile file info export
 
         [<Extension>]
-        static member inline CreateImage(this : Device, t : ITexture, sharing : bool) =
-            this |> Image.ofTexture t sharing
+        static member inline CreateImage(this : Device, t : ITexture,
+                                         [<Optional; DefaultParameterValue(ImageExportMode.None)>] export : ImageExportMode) =
+            this |> Image.ofTexture export t
 
         [<Extension>]
         static member inline UploadLevel(this : Device, dst : ImageSubresource, src : NativeTensor4<'T>, offset : V3i, size : V3i) =
