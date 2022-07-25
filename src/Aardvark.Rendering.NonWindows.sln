@@ -3,6 +3,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio 15
 VisualStudioVersion = 16.0.29609.76
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "20 - ResourceSharing", "Scratch (netcore)\20 - ResourceSharing\20 - ResourceSharing.fsproj", "{52C3F24C-E096-49F9-BBD2-BAEFC222FD4F}"
+EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "19 - AsyncTexture", "Scratch (netcore)\19 - AsyncTexture\19 - AsyncTexture.fsproj", "{D55E6034-2C78-4A96-8EF8-758E8A904218}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "35 - Picking", "Examples (netcore)\35 - Picking\35 - Picking.fsproj", "{C65585C4-A3E6-4AB9-8C13-842FDF73BCED}"
@@ -104,8 +106,8 @@ EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Rendering.Text", "Aardvark.Rendering.Text\Aardvark.Rendering.Text.fsproj", "{FB0C63A7-519A-4FCC-9A4B-841AEE5B8C97}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Dependencies", "Dependencies", "{B5AD6854-A8DC-475D-8B09-242DDB5D79BC}"
-	ProjectSection(SolutionItems) = preProject
-		..\paket.dependencies  = ..\paket.dependencies
+	ProjectSection(SolutionItems) = preProject
+		..\paket.dependencies   = ..\paket.dependencies
 EndProjectSection
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.SceneGraph.IO", "Aardvark.SceneGraph.IO\Aardvark.SceneGraph.IO.fsproj", "{D7B02E89-DC77-462D-A3D4-A28DAA403AAF}"
@@ -119,8 +121,8 @@ EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.GPGPU", "Aardvark.GPGPU\Aardvark.GPGPU.fsproj", "{68E3B876-EB23-4D61-A71F-EF35A146F276}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Examples (netcore)", "Examples (netcore)", "{5E3312C4-1B3C-4D41-964C-C3A3E01DA966}"
-	ProjectSection(SolutionItems) = preProject
-		Examples (netcore)\new.fsx  = Examples (netcore)\new.fsx
+	ProjectSection(SolutionItems) = preProject
+		Examples (netcore)\new.fsx   = Examples (netcore)\new.fsx
 EndProjectSection
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "01 - Triangle", "Examples (netcore)\01 - Triangle\01 - Triangle.fsproj", "{586B6699-E349-4173-BB3F-6DA125EFFFDA}"
@@ -144,15 +146,15 @@ EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "17 - TextureArrays", "Examples (netcore)\17 - TextureArrays\17 - TextureArrays.fsproj", "{2C25EACD-8E56-4BE5-8BB7-0CB9ED004096}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{21DE79CD-4706-473E-9655-ACD9A7A3D5D3}"
-	ProjectSection(SolutionItems) = preProject
-		Performance1.psess  = Performance1.psess
+	ProjectSection(SolutionItems) = preProject
+		Performance1.psess   = Performance1.psess
 EndProjectSection
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.SceneGraph.Opc", "Aardvark.SceneGraph.Opc\Aardvark.SceneGraph.Opc.fsproj", "{97CF1A7D-9858-4552-8EBF-ADBD6FF68FFA}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Scratch (netcore)", "Scratch (netcore)", "{29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}"
-	ProjectSection(SolutionItems) = preProject
-		Scratch (netcore)\new.fsx  = Scratch (netcore)\new.fsx
+	ProjectSection(SolutionItems) = preProject
+		Scratch (netcore)\new.fsx   = Scratch (netcore)\new.fsx
 EndProjectSection
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "01 - Triangle", "Scratch (netcore)\01 - Triangle\01 - Triangle.fsproj", "{73D82892-93D0-402C-B561-F25B5D1804B0}"
@@ -181,9 +183,10 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "36 - Raytracing", "Examples
 EndProject
 Global
 	GlobalSection(ExtensibilityGlobals) = postSolution
-		SolutionGuid  = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}
+		SolutionGuid   = {C41172B9-09C3-4327-8CE2-CB47CBAA29AC}
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{52C3F24C-E096-49F9-BBD2-BAEFC222FD4F} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{D55E6034-2C78-4A96-8EF8-758E8A904218} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{C65585C4-A3E6-4AB9-8C13-842FDF73BCED} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 		{43F063C0-1BE0-4478-BCD3-9F9C83F97172} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
@@ -252,6 +255,10 @@ Global
 		{E322ADB1-724E-4C6F-B1B2-D99D72AF0F3C} = {5E3312C4-1B3C-4D41-964C-C3A3E01DA966}
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{52C3F24C-E096-49F9-BBD2-BAEFC222FD4F}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{52C3F24C-E096-49F9-BBD2-BAEFC222FD4F}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{52C3F24C-E096-49F9-BBD2-BAEFC222FD4F}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{52C3F24C-E096-49F9-BBD2-BAEFC222FD4F}.Release|Any CPU.Build.0 = Release|Any CPU
 		{D55E6034-2C78-4A96-8EF8-758E8A904218}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{D55E6034-2C78-4A96-8EF8-758E8A904218}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D55E6034-2C78-4A96-8EF8-758E8A904218}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -558,6 +565,6 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
-		HideSolutionNode  = FALSE
+		HideSolutionNode   = FALSE
 	EndGlobalSection
 EndGlobal
