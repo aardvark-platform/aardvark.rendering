@@ -132,7 +132,7 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     member x.DeleteSurface (bs : IBackendSurface) =
         Disposable.dispose (unbox<ShaderProgram> bs)
 
-    member x.PrepareTexture (t : ITexture, [<Optional; DefaultParameterValue(ImageExportMode.None)>] export : ImageExportMode) =
+    member x.PrepareTexture (t : ITexture, [<Optional; DefaultParameterValue(false)>] export : bool) =
         device.CreateImage(t, export) :> IBackendTexture
 
     member x.DeleteTexture(t : IBackendTexture) =
@@ -172,12 +172,12 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int,
                            [<Optional; DefaultParameterValue(false)>] export : bool) : IBackendTexture =
         ResourceValidation.Textures.validateCreationParams dim size levels samples
-        x.CreateTextureInner(size, dim, format, levels, samples, 1, if export then ImageExportMode.Export else ImageExportMode.None)
+        x.CreateTextureInner(size, dim, format, levels, samples, 1, if export then ImageExportMode.Export false else ImageExportMode.None)
 
     member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int,
                                 [<Optional; DefaultParameterValue(false)>] export : bool) : IBackendTexture =
         ResourceValidation.Textures.validateCreationParamsArray dim size levels samples count
-        x.CreateTextureInner(size, dim, format, levels, samples, count, if export then ImageExportMode.ExportArray else ImageExportMode.None)
+        x.CreateTextureInner(size, dim, format, levels, samples, count, if export then ImageExportMode.Export true else ImageExportMode.None)
 
     member x.CreateRenderbuffer(size : V2i, format : TextureFormat, samples : int) : IRenderbuffer =
         if samples < 1 then raise <| ArgumentException("[Renderbuffer] samples must be greater than 0")

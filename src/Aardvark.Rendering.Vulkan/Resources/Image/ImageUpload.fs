@@ -165,7 +165,7 @@ module ImageUploadExtensions =
                 buffers |> create levels
 
 
-        let ofImageBufferArray (dimension : TextureDimension) (wantMipmap : bool) (export : ImageExportMode)
+        let ofImageBufferArray (dimension : TextureDimension) (wantMipmap : bool) (export : bool)
                                (buffers : ImageBufferArray) (device : Device) =
             let slices = buffers.Slices
 
@@ -185,7 +185,13 @@ module ImageUploadExtensions =
             let generateMipmap =
                 uploadLevels < mipMapLevels
 
-            let image = device.CreateImage(buffers.BaseSize, mipMapLevels, slices, 1, dimension, buffers.TextureFormat, Image.defaultUsage, export)
+            let exportMode =
+                if export then
+                    ImageExportMode.Export false
+                else
+                    ImageExportMode.None
+
+            let image = device.CreateImage(buffers.BaseSize, mipMapLevels, slices, 1, dimension, buffers.TextureFormat, Image.defaultUsage, exportMode)
             let imageRange = image.[TextureAspect.Color]
 
             match device.UploadMode with
@@ -238,7 +244,7 @@ module ImageUploadExtensions =
 
             image
 
-        let ofImageBuffer (dimension : TextureDimension) (wantMipmap : bool) (buffer : ImageBuffer) (export : ImageExportMode) (device : Device) =
+        let ofImageBuffer (dimension : TextureDimension) (wantMipmap : bool) (buffer : ImageBuffer) (export : bool) (device : Device) =
             let buffers = [| buffer |] |> ImageBufferArray.create 1
             device |> ofImageBufferArray dimension wantMipmap export buffers
 
@@ -274,31 +280,31 @@ module ImageUploadExtensions =
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module Image =
 
-        let ofNativeTexture (data : INativeTexture) (export : ImageExportMode) (device : Device) =
+        let ofNativeTexture (data : INativeTexture) (export : bool) (device : Device) =
             let buffers = device |> ImageBufferArray.ofNativeTexture data
             device |> ofImageBufferArray data.Dimension data.WantMipMaps export buffers
 
-        let ofPixImageMipMap (data : PixImageMipMap) (info : TextureParams) (export : ImageExportMode) (device : Device) =
+        let ofPixImageMipMap (data : PixImageMipMap) (info : TextureParams) (export : bool) (device : Device) =
             let buffers = device |> ImageBufferArray.ofPixImageMipMaps info [| data |]
             device |> ofImageBufferArray TextureDimension.Texture2D info.wantMipMaps export buffers
 
-        let ofPixVolume (data : PixVolume) (info : TextureParams) (export : ImageExportMode) (device : Device) =
+        let ofPixVolume (data : PixVolume) (info : TextureParams) (export : bool) (device : Device) =
             let buffer = device |> ImageBuffer.ofPixVolume info data
             device |> ofImageBuffer TextureDimension.Texture3D info.wantMipMaps buffer export
 
-        let ofPixImageCube (data : PixImageCube) (info : TextureParams) (export : ImageExportMode) (device : Device) =
+        let ofPixImageCube (data : PixImageCube) (info : TextureParams) (export : bool) (device : Device) =
             let buffers = device |> ImageBufferArray.ofPixImageMipMaps info data.MipMapArray
             device |> ofImageBufferArray TextureDimension.TextureCube info.wantMipMaps export buffers
 
-        let ofStream (stream : IO.Stream) (info : TextureParams) (export : ImageExportMode) (device : Device) =
+        let ofStream (stream : IO.Stream) (info : TextureParams) (export : bool) (device : Device) =
             let temp = device |> TensorImage.ofStream stream info.wantSrgb
             device |> ofImageBuffer TextureDimension.Texture2D info.wantMipMaps temp export
 
-        let ofFile (path : string) (info : TextureParams) (export : ImageExportMode) (device : Device) =
+        let ofFile (path : string) (info : TextureParams) (export : bool) (device : Device) =
             use stream = IO.File.OpenRead(path)
             ofStream stream info export device
 
-        let rec ofTexture (export : ImageExportMode) (texture : ITexture) (device : Device) : Image =
+        let rec ofTexture (export : bool) (texture : ITexture) (device : Device) : Image =
             match texture with
             | :? PixTexture2d as t ->
                 device |> ofPixImageMipMap t.PixImageMipMap t.TextureParams export
@@ -331,11 +337,11 @@ module ImageUploadExtensions =
             | :? INativeTexture as nt ->
                 device |> ofNativeTexture nt export
 
-            | :? ExportedImage as t when export <> ImageExportMode.None ->
-                device |> ofTexture ImageExportMode.None t
+            | :? ExportedImage as t when export ->
+                device |> ofTexture false t
 
             | :? Image as t ->
-                if export <> ImageExportMode.None then
+                if export then
                     failf "cannot export image after it has been created"
                 t.AddReference()
                 t
@@ -351,17 +357,17 @@ module ImageUploadExtensions =
 
         [<Extension>]
         static member inline CreateImage(this : Device, pi : PixImageMipMap, info : TextureParams,
-                                         [<Optional; DefaultParameterValue(ImageExportMode.None)>] export : ImageExportMode) =
+                                         [<Optional; DefaultParameterValue(false)>] export : bool) =
             this |> Image.ofPixImageMipMap pi info export
 
         [<Extension>]
         static member inline CreateImage(this : Device, file : string, info : TextureParams,
-                                         [<Optional; DefaultParameterValue(ImageExportMode.None)>] export : ImageExportMode) =
+                                         [<Optional; DefaultParameterValue(false)>] export : bool) =
             this |> Image.ofFile file info export
 
         [<Extension>]
         static member inline CreateImage(this : Device, t : ITexture,
-                                         [<Optional; DefaultParameterValue(ImageExportMode.None)>] export : ImageExportMode) =
+                                         [<Optional; DefaultParameterValue(false)>] export : bool) =
             this |> Image.ofTexture export t
 
         [<Extension>]

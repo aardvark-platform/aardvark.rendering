@@ -74,11 +74,10 @@ module VkImageAspectFlags =
     let toTextureAspect (a : VkImageAspectFlags) =
         a |> int |> unbox<TextureAspect>
 
-
+[<RequireQualifiedAccess>]
 type ImageExportMode =
-    | None        = 0
-    | Export      = 1
-    | ExportArray = 2
+    | None
+    | Export of preferArray: bool
 
 type Image =
     class
@@ -172,19 +171,22 @@ type Image =
 and ExportedImage =
     class
         inherit Image
-        val public IsArray : bool
+        val public PreferArray : bool
         val public ExternalMemory : ExternalMemory
+
+        member x.IsArray =
+            x.Count > 1 || x.PreferArray
 
         interface IExportedBackendTexture with
             member x.IsArray = x.IsArray
             member x.Memory = x.ExternalMemory
 
-        new(device, handle, size, levels, layers, samples, dimension, format, isArray, memory, externalMemory, layout,
+        new(device, handle, size, levels, layers, samples, dimension, format, preferArray, memory, externalMemory, layout,
             [<Optional; DefaultParameterValue(VkImageLayout.ShaderReadOnlyOptimal)>] samplerLayout : VkImageLayout,
             [<Optional; DefaultParameterValue(null : VkImage[])>] peerHandles : VkImage[]) =
             {
                 inherit Image(device, handle, size, levels, layers, samples, dimension, format, memory, layout, samplerLayout, peerHandles)
-                IsArray = isArray
+                PreferArray = preferArray
                 ExternalMemory = externalMemory
             }
 
@@ -1074,16 +1076,18 @@ module Image =
                     VkRaw.vkBindImageMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
                         |> check "could not bind image memory"
 
-                    if export <> ImageExportMode.None then
-                        let isArray = export = ImageExportMode.ExportArray
-
+                    match export with
+                    | ImageExportMode.Export preferArray ->
                         let externalMemory =
                             { Block  = ptr.Memory.ExternalBlock
                               Offset = ptr.Offset
                               Size   = ptr.Size }
 
-                        return new ExportedImage(device, handle, size, mipMapLevels, layers, samples, dim, fmt, isArray, ptr, externalMemory, VkImageLayout.Undefined)
-                    else
+                        return new ExportedImage(
+                            device, handle, size, mipMapLevels, layers, samples, dim, fmt, preferArray, ptr, externalMemory, VkImageLayout.Undefined
+                        )
+
+                    | _ ->
                         return new Image(device, handle, size, mipMapLevels, layers, samples, dim, fmt, ptr, VkImageLayout.Undefined)
                 }
 
@@ -1098,13 +1102,27 @@ type ContextImageExtensions private() =
     [<Extension>]
     static member inline CreateImage(this : Device,
                                      size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : VkFormat, usage : VkImageUsageFlags,
-                                     [<Optional; DefaultParameterValue(ImageExportMode.None)>] export : ImageExportMode) =
+                                     export : ImageExportMode) =
         this |> Image.create size mipMapLevels count samples dim fmt usage export
 
     [<Extension>]
     static member inline CreateImage(this : Device,
+                                     size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : VkFormat, usage : VkImageUsageFlags,
+                                     [<Optional; DefaultParameterValue(false)>] export : bool) =
+        let export = if export then ImageExportMode.Export false else ImageExportMode.None
+        this.CreateImage(size, mipMapLevels, count, samples, dim, fmt, usage, export)
+
+    [<Extension>]
+    static member inline CreateImage(this : Device,
                                      size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : TextureFormat, usage : VkImageUsageFlags,
-                                     [<Optional; DefaultParameterValue(ImageExportMode.None)>] export : ImageExportMode) =
+                                     export : ImageExportMode) =
+        let fmt = VkFormat.ofTextureFormat fmt
+        this.CreateImage(size, mipMapLevels, count, samples, dim, fmt, usage, export)
+
+    [<Extension>]
+    static member inline CreateImage(this : Device,
+                                     size : V3i, mipMapLevels : int, count : int, samples : int, dim : TextureDimension, fmt : TextureFormat, usage : VkImageUsageFlags,
+                                     [<Optional; DefaultParameterValue(false)>] export : bool) =
         let fmt = VkFormat.ofTextureFormat fmt
         this.CreateImage(size, mipMapLevels, count, samples, dim, fmt, usage, export)
 
