@@ -631,8 +631,8 @@ module Instance =
                 KHRExternalSemaphoreWin32.Name
                 KHRExternalMemoryWin32.Name
                 // device fd
-                //KHRExternalSemaphoreFd.Name
-                //KHRExternalMemoryFd.Name
+                KHRExternalSemaphoreFd.Name
+                KHRExternalMemoryFd.Name
             ]
 
     module Layers =
