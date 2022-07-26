@@ -11,8 +11,8 @@ open System.Runtime.CompilerServices
 type ContextTextureSharingExtensions =
 
     [<Extension>]
-    static member ImportTexture(this : Context, texture : IExportedBackendTexture) =
-        
+    static member internal ImportTexture(this : Context, texture : IExportedBackendTexture) =
+
         using this.ResourceLock (fun _ ->
             let memory = texture.Memory
 
@@ -22,36 +22,36 @@ type ContextTextureSharingExtensions =
             if texture.Samples > 1 && texture.MipMapLevels > 1 then
                 failwith "[GL] ImportTexture: multisampled textures cannot have mipmaps"
 
-            let sharedMemory = this.ImportMemoryBlock(memory.Block.Handle, memory.Block.SizeInBytes)
-        
+            let sharedMemory = this.ImportMemoryBlock memory.Block
+
             let glTexHandle = GL.GenTexture()
             let textureTarget = TextureTarget.ofParameters texture.Dimension texture.IsArray (texture.Samples > 1)
             GL.BindTexture(textureTarget, glTexHandle)
 
             let internalFormat = TextureFormat.toInternalFormat texture.Format
             match texture.Dimension with
-            | TextureDimension.Texture1D -> 
+            | TextureDimension.Texture1D ->
                 if texture.IsArray then
-                    GL.Ext.TextureStorageMem2D(glTexHandle, texture.MipMapLevels, unbox internalFormat, texture.Size.X, texture.Count, sharedMemory.GLHandle, memory.Offset);
+                    GL.Ext.TextureStorageMem2D(glTexHandle, texture.MipMapLevels, unbox internalFormat, texture.Size.X, texture.Count, sharedMemory.Handle, memory.Offset);
                 else
-                    GL.Ext.TextureStorageMem1D(glTexHandle, texture.MipMapLevels, unbox internalFormat, texture.Size.X, sharedMemory.GLHandle, memory.Offset);
+                    GL.Ext.TextureStorageMem1D(glTexHandle, texture.MipMapLevels, unbox internalFormat, texture.Size.X, sharedMemory.Handle, memory.Offset);
             | TextureDimension.Texture2D
             | TextureDimension.TextureCube ->
                 if (texture.IsArray) then
                     if texture.Samples > 1 then
-                        GL.Ext.TextureStorageMem3DMultisample(glTexHandle, texture.Samples, unbox internalFormat, texture.Size.X, texture.Size.Y, texture.Count, true, sharedMemory.GLHandle, memory.Offset);
+                        GL.Ext.TextureStorageMem3DMultisample(glTexHandle, texture.Samples, unbox internalFormat, texture.Size.X, texture.Size.Y, texture.Count, true, sharedMemory.Handle, memory.Offset);
                     else
-                        GL.Ext.TextureStorageMem3D(glTexHandle, texture.MipMapLevels, unbox internalFormat, texture.Size.X, texture.Size.Y, texture.Count, sharedMemory.GLHandle, memory.Offset);
+                        GL.Ext.TextureStorageMem3D(glTexHandle, texture.MipMapLevels, unbox internalFormat, texture.Size.X, texture.Size.Y, texture.Count, sharedMemory.Handle, memory.Offset);
                 else
                     if texture.Samples > 1 then
-                        GL.Ext.TextureStorageMem2DMultisample(glTexHandle, texture.Samples, unbox internalFormat, texture.Size.X, texture.Size.Y, true, sharedMemory.GLHandle, memory.Offset);
+                        GL.Ext.TextureStorageMem2DMultisample(glTexHandle, texture.Samples, unbox internalFormat, texture.Size.X, texture.Size.Y, true, sharedMemory.Handle, memory.Offset);
                     else
-                        GL.Ext.TextureStorageMem2D(glTexHandle, texture.MipMapLevels, unbox internalFormat, texture.Size.X, texture.Size.Y, sharedMemory.GLHandle, memory.Offset);
+                        GL.Ext.TextureStorageMem2D(glTexHandle, texture.MipMapLevels, unbox internalFormat, texture.Size.X, texture.Size.Y, sharedMemory.Handle, memory.Offset);
             | TextureDimension.Texture3D ->
-                GL.Ext.TextureStorageMem3D(glTexHandle, texture.MipMapLevels, unbox internalFormat, texture.Size.X, texture.Size.Y, texture.Size.Z, sharedMemory.GLHandle, memory.Offset);
-            | _ -> 
+                GL.Ext.TextureStorageMem3D(glTexHandle, texture.MipMapLevels, unbox internalFormat, texture.Size.X, texture.Size.Y, texture.Size.Z, sharedMemory.Handle, memory.Offset);
+            | _ ->
                 GL.DeleteTexture glTexHandle
-                this.ReleaseShareHandle sharedMemory
+                sharedMemory.Dispose()
                 failwith "invalid TextureDimension"
 
             GL.Check "TextureStorageMemXX"

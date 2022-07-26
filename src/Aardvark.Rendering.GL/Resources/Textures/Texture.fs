@@ -62,14 +62,13 @@ type Texture =
             Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, cnt, isArray, format, sizeInBytes)
     end
 
-type SharedTexture(ctx : Context, handle : int, external : IExportedBackendTexture, imported : ImportedMemoryHandle) =
+type internal SharedTexture(ctx : Context, handle : int, external : IExportedBackendTexture, memory : SharedMemoryBlock) =
     inherit Texture(ctx, handle,
                     external.Dimension, external.MipMapLevels, external.Samples, external.Size,
                     external.Count, external.IsArray, external.Format, external.Memory.Size)
 
     member x.External = external
-    member x.ImportedHandle = imported
-
+    member x.Memory = memory
 
 type TextureViewHandle(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int,
                        multisamples : int, size : V3i, count : Option<int>, format : TextureFormat) =
@@ -787,11 +786,8 @@ module TextureCreationExtensions =
                 GL.Check "could not delete texture"
 
                 match t with
-                | :? SharedTexture as t ->
-                    x.ReleaseShareHandle t.ImportedHandle
-
-                | _ ->
-                    ()
+                | :? SharedTexture as t -> t.Memory.Dispose()
+                | _ -> ()
 
                 t.Handle <- 0
             )

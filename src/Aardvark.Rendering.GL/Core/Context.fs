@@ -188,7 +188,7 @@ type MemoryUsage() =
 /// multiple threads to submit GL calls concurrently.
 /// </summary>
 [<AllowNullLiteral>]
-type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
+type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this =
 
     static let defaultShaderCachePath = 
                         Some (Path.combine [
@@ -221,8 +221,8 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
 
     let formatSampleCounts = FastConcurrentDict()
 
-    let importedMemoryBlocks = System.Collections.Generic.Dictionary<IExternalMemoryHandle, SharedMemoryEntry>()
-    
+    let sharedMemoryManager = SharedMemoryManager(fun _ -> this.ResourceLock)
+
     /// <summary>
     /// Creates custom OpenGl context. Usage:
     /// let customCtx = app.Context.CreateContext()
@@ -286,53 +286,8 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
             unpackAlignment <- Some p
             p
 
-    member x.ReleaseShareHandle(shareHandle : ImportedMemoryHandle) =
-        lock importedMemoryBlocks (fun () -> 
-                match importedMemoryBlocks.TryGetValue shareHandle.OpaqueHandle with
-                | (true, v) -> 
-                    if v.RefCount = 1 then
-                        importedMemoryBlocks.Remove shareHandle.OpaqueHandle |> ignore
-                        GL.Ext.DeleteMemoryObject(v.GLHandle)
-                        GL.Check "DeleteMemoryObject"
-                    else 
-                        v.RefCount <- v.RefCount - 1
-                | _ -> failwith "invalid handle"
-            )
-
-    member x.ImportMemoryBlock(shareHandle : IExternalMemoryHandle, blockSize : int64) =
-        
-        lock importedMemoryBlocks (fun () -> 
-                let glHandle = 
-                    match importedMemoryBlocks.TryGetValue shareHandle with
-                    | (true, v) -> 
-                        if v.Size <> blockSize then
-                            failwith "multiple import of same block but different size!"
-
-                        v.RefCount <- v.RefCount + 1
-                        v.GLHandle
-                    | _ ->
-                        let mutable sharedMemHandle = 0
-                        using x.ResourceLock (fun _ ->
-                            OpenTK.Graphics.OpenGL.GL.Ext.CreateMemoryObjects(1, &sharedMemHandle)
-                            GL.Check "CreateMemoryObjects"
-
-                            if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
-                                GL.Ext.ImportMemoryWin32Handle(sharedMemHandle, blockSize, ExternalHandleType.HandleTypeOpaqueWin32Ext, shareHandle.Handle)
-                            else
-                                GL.Ext.ImportMemoryF(sharedMemHandle, blockSize, ExternalHandleType.HandleTypeOpaqueFdExt, int shareHandle.Handle) // TODO test
-
-                            GL.Check "ImportMemoryWin32Handle"
-                        )
-
-                        let entry = SharedMemoryEntry(shareHandle, blockSize, sharedMemHandle)
-                        importedMemoryBlocks.Add(shareHandle, entry)
-
-                        sharedMemHandle
-
-                ImportedMemoryHandle(shareHandle, glHandle)
-            )
-
-
+    member internal x.ImportMemoryBlock(external : ExternalMemoryBlock) =
+        sharedMemoryManager.Import external
 
     /// <summary>
     /// makes the given render context current providing a re-entrant

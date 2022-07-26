@@ -1,31 +1,78 @@
 ﻿namespace Aardvark.Rendering.GL
 
 open Aardvark.Rendering
+open OpenTK.Graphics.OpenGL
+
+open System
+open System.Collections.Generic
 
 [<AutoOpen>]
-module SharedMemory =
+module internal SharedMemory =
 
-    type internal SharedMemoryEntry =
-        class 
-            val mutable public SharedHandle : IExternalMemoryHandle
-            val mutable public Size : int64
-            val mutable public GLHandle : int
-            val mutable public RefCount : int
+    type SharedMemoryBlock(manager : SharedMemoryManager, handle : int, external : ExternalMemoryBlock) =
+        let mutable refCount = 1
 
-            new(sharedHandle : IExternalMemoryHandle, size : int64, glHandle : int) =
-                { 
-                     SharedHandle = sharedHandle
-                     Size = size
-                     GLHandle = glHandle
-                     RefCount = 1
-                }
-        end
+        member x.Handle = handle
+        member x.External = external
+        member x.SizeInBytes = external.SizeInBytes
 
+        member x.AddReference() =
+            lock manager.Lock (fun _ ->
+                refCount <- refCount + 1
+            )
 
-    type ImportedMemoryHandle (opaqueHandle : IExternalMemoryHandle, glHandle : int) =
-        
-        member x.GLHandle
-            with get() = glHandle
+        member x.Dispose() =
+            lock manager.Lock (fun _ ->
+                refCount <- refCount - 1
+                if refCount = 0 then
+                    manager.Free x
+            )
 
-        member x.OpaqueHandle
-            with get() = opaqueHandle
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
+    and SharedMemoryManager(useContext : unit -> IDisposable) =
+
+        let blocks = Dictionary<IExternalMemoryHandle, SharedMemoryBlock>()
+
+        member x.Lock = blocks :> obj
+
+        member x.Free(block : SharedMemoryBlock) =
+            lock (useContext()) (fun _ ->
+                blocks.Remove block.External.Handle |> ignore
+                GL.Ext.DeleteMemoryObject block.Handle
+                GL.Check "DeleteMemoryObject"
+            )
+
+        member x.Import(external : ExternalMemoryBlock) =
+            lock blocks (fun _ ->
+                match blocks.TryGetValue external.Handle with
+                | (true, shared) ->
+                    if external.SizeInBytes <> shared.SizeInBytes then
+                        failwithf "[GL] Cannot import the same memory block with varying sizes"
+
+                    shared.AddReference()
+                    shared
+
+                | _ ->
+                    let mutable mo = 0
+
+                    using (useContext()) (fun _ ->
+                        GL.Ext.CreateMemoryObjects(1, &mo)
+                        GL.Check "CreateMemoryObjects"
+
+                        match external.Handle with
+                        | :? Win32Handle as h ->
+                            GL.Ext.ImportMemoryWin32Handle(mo, external.SizeInBytes, ExternalHandleType.HandleTypeOpaqueWin32Ext, h.Handle)
+                        | :? PosixHandle as h ->
+                            GL.Ext.ImportMemoryF(mo, external.SizeInBytes, ExternalHandleType.HandleTypeOpaqueFdExt, h.Handle)
+                        | h ->
+                            failwithf "[GL] Unknown memory handle %A" <| h.GetType()
+
+                        GL.Check "ImportMemory"
+                    )
+
+                    let shared = new SharedMemoryBlock(x, mo, external)
+                    blocks.[external.Handle] <- shared
+                    shared
+            )

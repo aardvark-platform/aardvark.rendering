@@ -12,25 +12,55 @@ open Aardvark.Rendering
 open KHRSwapchain
 open KHRSurface
 open KHRBufferDeviceAddress
-open KHRExternalMemoryWin32
-open KHRExternalMemoryFd
 open Vulkan11
 
 #nowarn "9"
 //// #nowarn "51"
 
 [<AutoOpen>]
-module private ExternalHandles =
+module private NativeMemoryHandles =
 
-    module Kernel32 =
+    module Win32Handle =
+        open KHRExternalMemoryWin32
 
-        [<DllImport("Kernel32.dll")>]
-        extern bool CloseHandle(nativeint handle)
+        let getMemoryHandle (hasExtension : string -> bool) (device : VkDevice) (memory : VkDeviceMemory) =
 
-    module Posix =
+            if not <| hasExtension KHRExternalMemoryWin32.Name then
+                failwith "[Vulkan] Cannot create external handle when KHRExternalMemoryWin32 extension is disabled"
 
-        [<DllImport("libc")>]
-        extern int close(int fd)
+            let handle =
+                native {
+                    let! pHandle = 0n
+                    let! pInfo = VkMemoryGetWin32HandleInfoKHR(memory, VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit)
+
+                    VkRaw.vkGetMemoryWin32HandleKHR(device, pInfo, pHandle)
+                        |> check "could not create shared handle"
+
+                    return !!pHandle
+                }
+
+            new Win32Handle(handle) :> IExternalMemoryHandle
+
+    module PosixHandle =
+        open KHRExternalMemoryFd
+
+        let getMemoryHandle (hasExtension : string -> bool) (device : VkDevice) (memory : VkDeviceMemory) =
+
+            if not <| hasExtension KHRExternalMemoryFd.Name then
+                failwith "[Vulkan] Cannot create external handle when KHRExternalMemoryFd extension is disabled"
+
+            let handle =
+                native {
+                    let! pHandle = 0
+                    let! pInfo = VkMemoryGetFdInfoKHR(memory, Vulkan11.VkExternalMemoryHandleTypeFlags.OpaqueFdBit)
+
+                    VkRaw.vkGetMemoryFdKHR(device, pInfo, pHandle)
+                        |> check "could not create shared handle"
+
+                    return !!pHandle
+                }
+
+            new PosixHandle(handle) :> IExternalMemoryHandle
 
 type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
     let available = Array.copy allFamilies
@@ -1815,57 +1845,6 @@ and Event internal(device : Device) =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-and private Win32Handle(device : Device, memory : VkDeviceMemory) =
-
-    do if not <| device.IsExtensionEnabled KHRExternalMemoryWin32.Name then
-        failwith "[Vulkan] Cannot create external handle when KHRExternalMemoryWin32 extension is disabled"
-
-    let handle =
-        native {
-            let! pHandle = 0n
-            let! pInfo = VkMemoryGetWin32HandleInfoKHR(memory, VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit)
-
-            VkRaw.vkGetMemoryWin32HandleKHR(device.Handle, pInfo, pHandle)
-                |> check "could not create shared handle"
-
-            return !!pHandle
-        }
-
-    member x.Handle = handle
-    member x.Dispose() =
-        if not <| Kernel32.CloseHandle handle then
-            Log.warn "[Vulkan] Could not close external memory handle."
-
-    interface IExternalMemoryHandle with
-        member x.Handle = x.Handle
-        member x.Dispose() = x.Dispose()
-
-and private PosixHandle(device : Device, memory : VkDeviceMemory) =
-
-    do if not <| device.IsExtensionEnabled KHRExternalMemoryFd.Name then
-        failwith "[Vulkan] Cannot create external handle when KHRExternalMemoryFd extension is disabled"
-
-    let handle =
-        native {
-            let! pHandle = 0
-            let! pInfo = VkMemoryGetFdInfoKHR(memory, Vulkan11.VkExternalMemoryHandleTypeFlags.OpaqueFdBit)
-
-            VkRaw.vkGetMemoryFdKHR(device.Handle, pInfo, pHandle)
-                |> check "could not create shared handle"
-
-            return !!pHandle
-        }
-
-    member x.Handle = handle
-    member x.Dispose() =
-        if Posix.close handle <> 0 then
-            Log.warn "[Vulkan] Could not close external memory handle."
-
-    interface IExternalMemoryHandle with
-        member x.Handle = nativeint x.Handle
-        member x.Dispose() = x.Dispose()
-
-
 and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : MemoryInfo, heap : MemoryHeapInfo, isHostMemory : bool) as this =
     let hostVisible = memory.flags |> MemoryFlags.hostVisible
     let manager = DeviceMemoryManager(this, 128L <<< 20, isHostMemory)
@@ -1973,10 +1952,10 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
 
                 let externalHandle : IExternalMemoryHandle =
                     if export then
-                        if RuntimeInformation.IsOSPlatform(OSPlatform.Windows) then
-                            new Win32Handle(device, mem)
+                        if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
+                            mem |> Win32Handle.getMemoryHandle device.IsExtensionEnabled device.Handle
                         else
-                            new PosixHandle(device, mem)
+                            mem |> PosixHandle.getMemoryHandle device.IsExtensionEnabled device.Handle
                     else
                         null
 
