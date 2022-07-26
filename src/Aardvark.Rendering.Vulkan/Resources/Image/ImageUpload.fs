@@ -185,7 +185,9 @@ module ImageUploadExtensions =
             let generateMipmap =
                 uploadLevels < mipMapLevels
 
-            let image = device.CreateImage(buffers.BaseSize, mipMapLevels, slices, 1, dimension, buffers.TextureFormat, Image.defaultUsage)
+            let count = if dimension = TextureDimension.TextureCube then slices / 6 else slices
+
+            let image = device.CreateImage(buffers.BaseSize, mipMapLevels, count, 1, dimension, buffers.TextureFormat, Image.defaultUsage)
             let imageRange = image.[TextureAspect.Color]
 
             match device.UploadMode with
