@@ -40,7 +40,7 @@ module internal SharedMemory =
         member x.Free(block : SharedMemoryBlock) =
             lock (useContext()) (fun _ ->
                 blocks.Remove block.External.Handle |> ignore
-                GL.Ext.DeleteMemoryObject block.Handle
+                GL.Dispatch.DeleteMemoryObject block.Handle
                 GL.Check "DeleteMemoryObject"
             )
 
@@ -55,24 +55,22 @@ module internal SharedMemory =
                     shared
 
                 | _ ->
-                    let mutable mo = 0
-
                     using (useContext()) (fun _ ->
-                        GL.Ext.CreateMemoryObjects(1, &mo)
+                        let mo = GL.Dispatch.CreateMemoryObject()
                         GL.Check "CreateMemoryObjects"
 
                         match external.Handle with
                         | :? Win32Handle as h ->
-                            GL.Ext.ImportMemoryWin32Handle(mo, external.SizeInBytes, ExternalHandleType.HandleTypeOpaqueWin32Ext, h.Handle)
+                            GL.Dispatch.ImportMemoryWin32Handle(mo, external.SizeInBytes, ExternalHandleType.HandleTypeOpaqueWin32Ext, h.Handle)
                         | :? PosixHandle as h ->
-                            GL.Ext.ImportMemoryF(mo, external.SizeInBytes, ExternalHandleType.HandleTypeOpaqueFdExt, h.Handle)
+                            GL.Dispatch.ImportMemoryFd(mo, external.SizeInBytes, ExternalHandleType.HandleTypeOpaqueFdExt, h.Handle)
                         | h ->
                             failwithf "[GL] Unknown memory handle %A" <| h.GetType()
 
                         GL.Check "ImportMemory"
-                    )
 
-                    let shared = new SharedMemoryBlock(x, mo, external)
-                    blocks.[external.Handle] <- shared
-                    shared
+                        let shared = new SharedMemoryBlock(x, mo, external)
+                        blocks.[external.Handle] <- shared
+                        shared
+                    )
             )

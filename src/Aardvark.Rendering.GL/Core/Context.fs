@@ -3,13 +3,9 @@
 open System
 open System.Threading
 open System.Collections.Concurrent
-open System.Runtime.InteropServices
-open OpenTK.Graphics.OpenGL
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 open Aardvark.Rendering
-
-type private ExternalHandleType = OpenTK.Graphics.OpenGL.ExternalHandleType
 
 [<Struct>] // TODO ref struct?
 type RenderingLockDisposable =
