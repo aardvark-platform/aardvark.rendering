@@ -674,7 +674,7 @@ module GeometryPoolUtilities =
         [<Extension>]
         static member CreateMappedBuffer(device : Device, lock : ResourceLock2, usage : VkBufferUsageFlags, size : int64) =
             let usage = VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.TransferSrcBit ||| usage
-            let b = device |> Buffer.allocConcurrent true usage size
+            let b = device |> Buffer.alloc' true false usage size
             new MappedBufferOld(device, lock, usage, b.Handle, b.Memory, size)
 
 
@@ -684,7 +684,7 @@ module GeometryPoolUtilities =
                 new StreamingBuffer(device, lock, usage, VkBuffer.Null, DevicePtr.Null, size)
             else
                 let usage = VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.TransferSrcBit ||| usage
-                let b = device |> Buffer.allocConcurrent true usage size
+                let b = device |> Buffer.alloc' true false usage size
                 new StreamingBuffer(device, lock, usage, b.Handle, b.Memory, size)
 
 

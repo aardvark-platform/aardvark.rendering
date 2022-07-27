@@ -78,7 +78,7 @@ module private NativeAccelerationStructureData =
              )
 
         let prepare (device : Device) (buffer : IBuffer) =
-            device |> Buffer.ofBuffer usage buffer
+            device |> Buffer.ofBuffer false usage buffer
 
     let private getFlags (allowUpdate : bool) (usage : AccelerationStructureUsage) =
         let hint =

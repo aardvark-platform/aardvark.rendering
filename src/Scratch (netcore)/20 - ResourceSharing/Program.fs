@@ -10,7 +10,7 @@ module Shader =
     open FShade
 
     type Fragment = {
-        [<FragCoord>]    coord : V4d
+        [<TexCoord>] tc : V2d
     }
 
     [<AutoOpen>]
@@ -28,17 +28,21 @@ module Shader =
                 filter Filter.MinMagPoint
             }
 
+    [<ReflectedDefinition>]
+    let toFragCoords (size : V2i) (tc : V2d) =
+        V2i(tc * V2d size)
+
     let resolve (samples : int) (f : Fragment) =
         fragment {
             if samples > 1 then
                 let mutable result = V4d.Zero
 
                 for i = 0 to samples - 1 do
-                    result <- result + diffuseSamplerMS.Read(V2i f.coord.XY, i)
+                    result <- result + diffuseSamplerMS.Read(f.tc |> toFragCoords diffuseSamplerMS.Size, i)
 
                 return result / float samples
             else
-                return diffuseSampler.Read(V2i f.coord.XY, 0)
+                return diffuseSampler.Read(f.tc |> toFragCoords diffuseSampler.Size, 0)
         }
 
 type SharedAdaptiveTexture(runtime : Runtime, size : aval<V2i>, format : TextureFormat, samples : int) =
@@ -66,13 +70,43 @@ type SharedAdaptiveTexture(runtime : Runtime, size : aval<V2i>, format : Texture
         match handle with
         | Some (h, s) when size = s ->
             h
-
         | Some (h, _) ->
             runtime.DeleteTexture h
             x.CreateHandle(size)
-
         | None ->
             x.CreateHandle(size)
+
+type SharedAdaptiveBuffer<'T>(runtime : Runtime, data : aval<'T[]>) =
+    inherit AdaptiveResource<IBackendBuffer>()
+
+    let mutable handle : Option<IBackendBuffer * 'T[]> = None
+
+    member private x.CreateHandle(data : 'T[]) =
+        let buf = runtime.PrepareBuffer(ArrayBuffer data, export = true)
+        handle <- Some (buf, data)
+        buf
+
+    override x.Create() = ()
+    override x.Destroy() =
+        match handle with
+        | Some (h, _) ->
+            h.Dispose()
+            handle <- None
+        | None ->
+            ()
+
+    override x.Compute(token : AdaptiveToken, t : RenderToken) =
+        let data = data.GetValue token
+
+        match handle with
+        | Some (h, d) when Object.ReferenceEquals(d, data) ->
+            h
+        | Some (h, _) ->
+            h.Dispose()
+            x.CreateHandle(data)
+        | None ->
+            x.CreateHandle(data)
+
 
 [<EntryPoint>]
 let main argv =
@@ -90,6 +124,29 @@ let main argv =
             debug true
             samples 8
         }
+
+    use vulkanFullscreenQuadPositionBuffer =
+        vulkan.Runtime.PrepareBuffer(
+            ArrayBuffer(
+                [| V3f(-1.0, -1.0, 1.0); V3f(1.0, -1.0, 1.0)
+                   V3f(-1.0, 1.0, 1.0); V3f(1.0, 1.0, 1.0) |]
+            ), export = true
+        )
+
+    let vulkanFullscreenQuadTexCoordBuffer =
+        let data =
+            let start = DateTime.Now
+
+            win.Time |> AVal.map (fun t ->
+                let elapsed = (start - t).TotalSeconds
+                let s1 = (sin elapsed + 1.0)
+                let s2 = (cos elapsed + 1.0)
+
+                [| V2f(0.0 + s1, 0.0); V2f(1.0 - s2, 0.0)
+                   V2f(0.0 + s2, 1.0); V2f(1.0 - s1, 1.0) |]
+            )
+
+        SharedAdaptiveBuffer(vulkan.Runtime, data)
 
     use vulkanFramebufferSignature =
         vulkan.Runtime.CreateFramebufferSignature(
@@ -113,7 +170,6 @@ let main argv =
             DefaultSemantic.Colors, colorBuffer
             DefaultSemantic.DepthStencil, depthBuffer
         ])
-
 
     use vulkanTask =
         let box = Box3d(-V3d.III, V3d.III)
@@ -142,7 +198,23 @@ let main argv =
         vulkanTask.RenderTo(vulkanFramebuffer, clear).GetOutputTexture(DefaultSemantic.Colors)
 
     let sg =
-        Sg.fullScreenQuad
+
+        let fullscreenQuad =
+            let drawCall =
+                DrawCallInfo(
+                    FaceVertexCount = 4,
+                    InstanceCount = 1
+                )
+
+            let positions = Aardvark.Rendering.BufferView(vulkanFullscreenQuadPositionBuffer, typeof<V3f>)
+            let texcoords = Aardvark.Rendering.BufferView(vulkanFullscreenQuadTexCoordBuffer, typeof<V2f>)
+
+            drawCall
+            |> Sg.render IndexedGeometryMode.TriangleStrip
+            |> Sg.vertexBuffer DefaultSemantic.Positions positions
+            |> Sg.vertexBuffer DefaultSemantic.DiffuseColorCoordinates texcoords
+
+        fullscreenQuad
         |> Sg.diffuseTexture vulkanRenderedTexture
         |> Sg.shader {
             do! Shader.resolve vulkanFramebufferSignature.Samples

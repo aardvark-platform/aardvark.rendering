@@ -141,10 +141,13 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     member x.DeletRenderbuffer(t : IRenderbuffer) =
         Disposable.dispose (unbox<Image> t)
 
-    member x.PrepareBuffer (t : IBuffer, usage : BufferUsage, storage : BufferStorage) =
+    member x.PrepareBuffer (data : IBuffer,
+                            [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
+                            [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage,
+                            [<Optional; DefaultParameterValue(false)>] export : bool) =
         let flags = VkBufferUsageFlags.ofBufferUsage usage
         let memory = if storage = BufferStorage.Device then device.DeviceMemory else device.HostMemory
-        memory.CreateBuffer(flags, t) :> IBackendBuffer
+        memory.CreateBuffer(flags, data, export = export) :> IBackendBuffer
 
     member x.DeleteBuffer(t : IBackendBuffer) =
         Disposable.dispose(unbox<Buffer> t)
@@ -254,10 +257,13 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-    member x.CreateBuffer(size : nativeint, usage : BufferUsage, storage : BufferStorage) =
+    member x.CreateBuffer(size : nativeint,
+                          [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
+                          [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage,
+                          [<Optional; DefaultParameterValue(false)>] export : bool) =
         let flags = VkBufferUsageFlags.ofBufferUsage usage
         let memory = if storage = BufferStorage.Device then device.DeviceMemory else device.HostMemory
-        memory.CreateBuffer(flags, int64 size)
+        memory.CreateBuffer(flags, int64 size, export = export)
 
     member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         let dst = unbox<Buffer> dst

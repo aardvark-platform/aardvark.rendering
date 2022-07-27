@@ -30,6 +30,12 @@ type Buffer =
             { Context = ctx; SizeInBytes = size; Handle = handle }
     end
 
+type internal SharedBuffer(ctx, size, handle, external : IExportedBackendBuffer, memory : SharedMemoryBlock) =
+    inherit Buffer(ctx, size, handle)
+
+    member x.External = external
+    member x.Memory = memory
+
 [<AutoOpen>]
 module BufferExtensions =
 
@@ -98,6 +104,23 @@ module BufferExtensions =
                 x.CreateBuffer(src, size, storage)
             )
 
+        member internal x.ImportBuffer(buffer : IExportedBackendBuffer) =
+            using x.ResourceLock (fun _ ->
+                let memory = buffer.Memory
+                let sharedMemory = x.ImportMemoryBlock memory.Block
+
+                let handle = GL.GenBuffer()
+                GL.Check "failed to create buffer"
+
+                GL.BindBuffer(BufferTarget.CopyWriteBuffer, handle)
+                GL.Check "failed to bind buffer"
+
+                GL.Dispatch.BufferStorageMem(BufferTarget.CopyWriteBuffer, nativeint memory.Size, sharedMemory.Handle, memory.Offset)
+                GL.Check "failed to import buffer"
+
+                new SharedBuffer(x, buffer.SizeInBytes, handle, buffer, sharedMemory)
+            )
+
         /// <summary>
         /// deletes the given buffer causing its memory to be freed
         /// </summary>
@@ -110,10 +133,10 @@ module BufferExtensions =
                     buffer.Handle <- 0
                     GL.DeleteBuffer handle
                     GL.Check "failed to delete buffer"
-                    #if DEBUG
-                    let isBuffer = GL.IsBuffer handle
-                    if isBuffer then Log.warn "deleted buffer which is still a buffer"
-                    #endif
+
+                    match buffer with
+                    | :? SharedBuffer as b -> b.Memory.Dispose()
+                    | _ -> ()
             )
 
         member x.CreateBuffer(data : IBuffer, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
@@ -130,6 +153,9 @@ module BufferExtensions =
                 let handle = bv.Buffer
                 x.CreateBuffer(handle, storage)
 
+            | :? IExportedBackendBuffer as b ->
+                x.ImportBuffer b
+
             | _ ->
                 failwith "unsupported buffer-type"
 
@@ -138,20 +164,20 @@ module BufferExtensions =
         member x.Upload(b : Buffer, data : IBuffer, useNamed : bool) =
             if b.Handle = 0 then failwith "cannot update null buffer"
             match data with
-                | :? ArrayBuffer as ab -> x.Upload(b, ab.Data, useNamed)
+            | :? ArrayBuffer as ab -> x.Upload(b, ab.Data, useNamed)
 
-                | :? Buffer as bb ->
-                    if bb.Handle <> b.Handle then failwith "cannot change backend-buffer handle"
+            | :? Buffer as bb ->
+                if bb.Handle <> b.Handle then failwith "cannot change backend-buffer handle"
 
-                | :? INativeBuffer as n ->
-                    n.Use (fun ptr -> x.Upload(b, ptr, n.SizeInBytes, useNamed))
+            | :? INativeBuffer as n ->
+                n.Use (fun ptr -> x.Upload(b, ptr, n.SizeInBytes, useNamed))
 
-                | :? IBufferRange as bv ->
-                    let handle = bv.Buffer
-                    x.Upload(b, handle, useNamed)
+            | :? IBufferRange as bv ->
+                let handle = bv.Buffer
+                x.Upload(b, handle, useNamed)
 
-                | _ ->
-                    failwithf "unsupported buffer-data-type: %A" data
+            | _ ->
+                failwithf "unsupported buffer-data-type: %A" data
 
         member x.Upload(b : Buffer, data : IBuffer) =
             x.Upload(b, data, true)

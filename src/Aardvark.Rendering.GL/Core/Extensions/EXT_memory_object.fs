@@ -68,6 +68,13 @@ module EXT_memory_object =
             else
                 failwith "glTexStorageMem3DMultisample is not available!"
 
+        // Buffer
+        static member BufferStorageMem(target : OpenGL4.BufferTarget, size : nativeint, memory : int, offset : int64) =
+            if GL.EXT_memory_object then
+                GL.Ext.BufferStorageMem(unbox target, size, memory, offset)
+            else
+                failwith "glBufferStorageMem is not available!"
+
 [<AutoOpen>]
 module EXT_memory_object_win32 =
 

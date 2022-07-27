@@ -68,6 +68,10 @@ type IBackendBuffer =
     abstract member Handle : obj
     abstract member SizeInBytes : nativeint
 
+and IExportedBackendBuffer =
+    inherit IBackendBuffer
+    inherit IExportedResource
+
 and IBufferRuntime =
     /// Deletes a buffer and releases all GPU resources and API handles
     abstract member DeleteBuffer : IBackendBuffer -> unit

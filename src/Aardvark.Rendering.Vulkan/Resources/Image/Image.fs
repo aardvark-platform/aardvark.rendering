@@ -168,11 +168,15 @@ type Image =
             }
     end
 
-and ExportedImage =
+and internal ExportedImage =
     class
         inherit Image
         val public PreferArray : bool
-        val public ExternalMemory : ExternalMemory
+
+        member x.ExternalMemory =
+            { Block  = x.Memory.Memory.ExternalBlock
+              Offset = x.Memory.Offset
+              Size   = x.Memory.Size }
 
         member x.IsArray =
             x.Count > 1 || x.PreferArray
@@ -181,13 +185,12 @@ and ExportedImage =
             member x.IsArray = x.IsArray
             member x.Memory = x.ExternalMemory
 
-        new(device, handle, size, levels, layers, samples, dimension, format, preferArray, memory, externalMemory, layout,
+        new(device, handle, size, levels, layers, samples, dimension, format, preferArray, memory, layout,
             [<Optional; DefaultParameterValue(VkImageLayout.ShaderReadOnlyOptimal)>] samplerLayout : VkImageLayout,
             [<Optional; DefaultParameterValue(null : VkImage[])>] peerHandles : VkImage[]) =
             {
                 inherit Image(device, handle, size, levels, layers, samples, dimension, format, memory, layout, samplerLayout, peerHandles)
                 PreferArray = preferArray
-                ExternalMemory = externalMemory
             }
 
     end
@@ -1078,13 +1081,8 @@ module Image =
 
                     match export with
                     | ImageExportMode.Export preferArray ->
-                        let externalMemory =
-                            { Block  = ptr.Memory.ExternalBlock
-                              Offset = ptr.Offset
-                              Size   = ptr.Size }
-
                         return new ExportedImage(
-                            device, handle, size, mipMapLevels, layers, samples, dim, fmt, preferArray, ptr, externalMemory, VkImageLayout.Undefined
+                            device, handle, size, mipMapLevels, layers, samples, dim, fmt, preferArray, ptr, VkImageLayout.Undefined
                         )
 
                     | _ ->
