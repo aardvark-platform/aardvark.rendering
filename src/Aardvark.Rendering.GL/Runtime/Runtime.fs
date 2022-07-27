@@ -210,11 +210,6 @@ type Runtime(debug : DebugLevel) =
                 | _ -> failwithf "unsupported texture-type: %A" t
 
         member x.PrepareBuffer (b : IBuffer, _ : BufferUsage, storage : BufferStorage) = x.PrepareBuffer(b, storage) :> IBackendBuffer
-        member x.DeleteBuffer (b : IBackendBuffer) =
-            match b with
-                | :? Aardvark.Rendering.GL.Buffer as b -> x.DeleteBuffer b
-                | _ -> failwithf "unsupported buffer-type: %A" b
-
 
         member x.DeleteRenderbuffer (b : IRenderbuffer) =
             match b with
@@ -516,9 +511,6 @@ type Runtime(debug : DebugLevel) =
 
     member x.DeleteSurface (p : Program) =
         ctx.Delete p
-
-    member x.DeleteBuffer (b : Aardvark.Rendering.GL.Buffer) =
-        ctx.Delete b
 
     member x.CreateStreamingTexture(mipMaps : bool) =
         ctx.CreateStreamingTexture(mipMaps) :> IStreamingTexture

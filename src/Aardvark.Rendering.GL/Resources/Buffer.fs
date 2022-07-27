@@ -6,9 +6,21 @@ open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
-open Microsoft.FSharp.NativeInterop
 
 #nowarn "9"
+
+[<AutoOpen>]
+module ContextBufferStats =
+    let addBuffer (ctx:Context) size =
+        Interlocked.Increment(&ctx.MemoryUsage.BufferCount) |> ignore
+        Interlocked.Add(&ctx.MemoryUsage.BufferMemory,size) |> ignore
+
+    let removeBuffer (ctx:Context) size =
+        Interlocked.Decrement(&ctx.MemoryUsage.BufferCount)  |> ignore
+        Interlocked.Add(&ctx.MemoryUsage.BufferMemory,-size) |> ignore
+
+    let updateBuffer (ctx:Context) oldSize newSize =
+        Interlocked.Add(&ctx.MemoryUsage.BufferMemory, newSize-oldSize) |> ignore
 
 /// <summary>
 /// Buffer simply wraps an OpenGL buffer object and
@@ -20,11 +32,25 @@ type Buffer =
         val mutable public Context : Context
         val mutable public SizeInBytes : nativeint
 
+        abstract member Destroy : unit -> unit
+        default x.Destroy() =
+            GL.DeleteBuffer x.Handle
+            GL.Check "failed to delete buffer"
+
+        member x.Dispose() =
+            using x.Context.ResourceLock (fun _ ->
+                x.Destroy()
+
+                removeBuffer x.Context (int64 x.SizeInBytes)
+                x.SizeInBytes <- 0n
+                x.Handle <- 0
+            )
+
         interface IBackendBuffer with
             member x.Runtime = x.Context.Runtime :> IBufferRuntime
             member x.Handle = x.Handle :> obj
             member x.SizeInBytes = x.SizeInBytes
-            member x.Dispose() = x.Context.Runtime.DeleteBuffer x
+            member x.Dispose() = x.Dispose()
 
         new(ctx : Context, size : nativeint, handle : int) =
             { Context = ctx; SizeInBytes = size; Handle = handle }
@@ -36,19 +62,12 @@ type internal SharedBuffer(ctx, size, handle, external : IExportedBackendBuffer,
     member x.External = external
     member x.Memory = memory
 
+    override x.Destroy() =
+        x.Memory.Dispose()
+        base.Destroy()
+
 [<AutoOpen>]
 module BufferExtensions =
-
-    let addBuffer (ctx:Context) size =
-        Interlocked.Increment(&ctx.MemoryUsage.BufferCount) |> ignore
-        Interlocked.Add(&ctx.MemoryUsage.BufferMemory,size) |> ignore
-
-    let removeBuffer (ctx:Context) size =
-        Interlocked.Decrement(&ctx.MemoryUsage.BufferCount)  |> ignore
-        Interlocked.Add(&ctx.MemoryUsage.BufferMemory,-size) |> ignore
-
-    let updateBuffer (ctx:Context) oldSize newSize =
-        Interlocked.Add(&ctx.MemoryUsage.BufferMemory, newSize-oldSize) |> ignore
 
     module private BufferStorage =
 
@@ -125,19 +144,7 @@ module BufferExtensions =
         /// deletes the given buffer causing its memory to be freed
         /// </summary>
         member x.Delete(buffer : Buffer) =
-            using x.ResourceLock (fun _ ->
-                let handle = Interlocked.Exchange(&buffer.Handle, -1)
-                if handle <> -1 then
-                    removeBuffer x (int64 buffer.SizeInBytes)
-                    buffer.SizeInBytes <- 0n
-                    buffer.Handle <- 0
-                    GL.DeleteBuffer handle
-                    GL.Check "failed to delete buffer"
-
-                    match buffer with
-                    | :? SharedBuffer as b -> b.Memory.Dispose()
-                    | _ -> ()
-            )
+            buffer.Dispose()
 
         member x.CreateBuffer(data : IBuffer, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
             match data with

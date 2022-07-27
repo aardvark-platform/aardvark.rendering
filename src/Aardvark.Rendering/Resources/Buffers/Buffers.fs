@@ -73,9 +73,6 @@ and IExportedBackendBuffer =
     inherit IExportedResource
 
 and IBufferRuntime =
-    /// Deletes a buffer and releases all GPU resources and API handles
-    abstract member DeleteBuffer : IBackendBuffer -> unit
-
     ///<summary>
     /// Prepares a buffer, allocating and uploading the data to GPU memory.
     /// If the given data is an IBackendBuffer the operation performs NOP.
@@ -153,7 +150,7 @@ module private RuntimeBufferImplementation =
     type RuntimeBuffer<'a when 'a : unmanaged>(buffer : IBackendBuffer, count : int) =
         inherit RuntimeBufferRange<'a>(buffer, 0n, count)
         interface IBuffer<'a> with
-            member x.Dispose() = buffer.Runtime.DeleteBuffer buffer
+            member x.Dispose() = buffer.Dispose()
 
     let nsa<'a when 'a : unmanaged> = nativeint sizeof<'a>
 
@@ -212,6 +209,11 @@ type IBufferRuntimeExtensions private() =
     static member Strided(this : IBufferVector<'a>, d : int) =
         let n = 1 + (this.Count - 1) / d
         IBufferRuntimeExtensions.SubVector(this, 0, d, n)
+
+    /// Deletes a buffer and releases all GPU resources and API handles
+    [<Extension>]
+    static member DeleteBuffer(this : IBufferRuntime, buffer : IBackendBuffer) =
+        buffer.Dispose()
 
     [<Extension>]
     static member Upload(this : IBackendBuffer, offset : nativeint, data : nativeint, size : nativeint) =

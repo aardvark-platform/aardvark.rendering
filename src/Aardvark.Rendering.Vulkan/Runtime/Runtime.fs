@@ -507,7 +507,6 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         member x.PrepareTexture(t) = x.PrepareTexture(t)
         member x.DeleteTexture(t) = x.DeleteTexture(t)
         member x.PrepareBuffer(b, u, s) = x.PrepareBuffer(b, u, s)
-        member x.DeleteBuffer(b) = x.DeleteBuffer(b)
 
         member x.DeleteRenderbuffer(b) = x.DeletRenderbuffer(b)
 
