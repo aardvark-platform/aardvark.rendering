@@ -132,8 +132,8 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     member x.DeleteSurface (bs : IBackendSurface) =
         Disposable.dispose (unbox<ShaderProgram> bs)
 
-    member x.PrepareTexture (t : ITexture) =
-        device.CreateImage(t) :> IBackendTexture
+    member x.PrepareTexture (t : ITexture, [<Optional; DefaultParameterValue(false)>] export : bool) =
+        device.CreateImage(t, export) :> IBackendTexture
 
     member x.DeleteTexture(t : IBackendTexture) =
         Disposable.dispose (unbox<Image> t)
@@ -149,7 +149,7 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     member x.DeleteBuffer(t : IBackendBuffer) =
         Disposable.dispose(unbox<Buffer> t)
 
-    member private x.CreateTextureInner(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) =
+    member private x.CreateTextureInner(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int, export : ImageExportMode) =
         let layout =
             VkImageLayout.ShaderReadOnlyOptimal
 
@@ -164,19 +164,21 @@ type Runtime(device : Device, debug : DebugLevel) as this =
             else
                 def ||| VkImageUsageFlags.ColorAttachmentBit ||| VkImageUsageFlags.StorageBit
 
-        let img = device.CreateImage(size, levels, count, samples, dim, format, usage)
+        let img = device.CreateImage(size, levels, count, samples, dim, format, usage, export)
         device.GraphicsFamily.run {
             do! Command.TransformLayout(img, layout)
         }
         img :> IBackendTexture
 
-    member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) : IBackendTexture =
+    member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int,
+                           [<Optional; DefaultParameterValue(false)>] export : bool) : IBackendTexture =
         ResourceValidation.Textures.validateCreationParams dim size levels samples
-        x.CreateTextureInner(size, dim, format, levels, samples, 1)
+        x.CreateTextureInner(size, dim, format, levels, samples, 1, if export then ImageExportMode.Export false else ImageExportMode.None)
 
-    member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) : IBackendTexture =
+    member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int,
+                                [<Optional; DefaultParameterValue(false)>] export : bool) : IBackendTexture =
         ResourceValidation.Textures.validateCreationParamsArray dim size levels samples count
-        x.CreateTextureInner(size, dim, format, levels, samples, count)
+        x.CreateTextureInner(size, dim, format, levels, samples, count, if export then ImageExportMode.Export true else ImageExportMode.None)
 
     member x.CreateRenderbuffer(size : V2i, format : TextureFormat, samples : int) : IRenderbuffer =
         if samples < 1 then raise <| ArgumentException("[Renderbuffer] samples must be greater than 0")
@@ -514,10 +516,10 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         member x.CreateFramebuffer(signature, bindings) = x.CreateFramebuffer(signature, bindings)
 
         member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) =
-            x.CreateTexture(size, dim, format, levels, samples)
+            x.CreateTexture(size, dim, format, levels, samples, false)
 
         member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) =
-            x.CreateTextureArray(size, dim, format, levels, samples, count)
+            x.CreateTextureArray(size, dim, format, levels, samples, count, false)
 
 
         member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)

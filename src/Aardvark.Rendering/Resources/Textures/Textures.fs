@@ -60,6 +60,13 @@ type IBackendTexture =
     abstract member Size : V3i
     abstract member Handle : obj
 
+/// Interface for textures that are backed by exported memory.
+/// Used for sharing textures between different backends.
+and IExportedBackendTexture =
+    inherit IBackendTexture
+    inherit IExportedResource
+    abstract member IsArray : bool
+
 and IFramebufferOutput =
     abstract member Runtime : ITextureRuntime
     abstract member Format : TextureFormat

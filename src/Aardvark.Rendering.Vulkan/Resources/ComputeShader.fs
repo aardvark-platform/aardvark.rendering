@@ -185,7 +185,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                             None
 
                         | :? ITexture as tex ->
-                            let image = device.CreateImage tex
+                            let image = device.CreateImage(tex)
                             let view = device.CreateInputImageView(image, info, VkComponentMapping.Identity)
                             content.[index] <- Some (VkImageLayout.General, view, sampler)
                             Some { new IDisposable with member x.Dispose() = image.Dispose(); view.Dispose() }
@@ -1036,7 +1036,8 @@ module ComputeShader =
     let private ofFShadeInternal (shader : FShade.ComputeShader) (device : Device) =
         let glsl = shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSLVulkan
         
-        ShaderProgram.logLines glsl.code
+        if RuntimeConfig.PrintShaderCode then
+            ShaderCodeReporting.logLines glsl.code
 
         let localSize =
             if shader.csLocalSize.AllGreater 0 then shader.csLocalSize

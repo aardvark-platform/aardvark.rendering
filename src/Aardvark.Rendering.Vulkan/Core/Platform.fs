@@ -210,6 +210,8 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                 QueueFlags.Graphics, "graphics"
                 QueueFlags.Transfer, "transfer"
                 QueueFlags.SparseBinding, "sparsebinding"
+                QueueFlags.VideoDecode, "video-decode"
+                QueueFlags.VideoEncode, "video-encode"
             ]
 
         let capString (c : QueueFlags) =
@@ -614,6 +616,23 @@ module Instance =
                 EXTDescriptorIndexing.Name
                 KHRSpirv14.Name
                 KHRShaderFloatControls.Name
+            ]
+
+        let Sharing = [
+                // instance
+                KHRExternalMemoryCapabilities.Name
+                KHRGetPhysicalDeviceProperties2.Name
+                KHRExternalSemaphoreCapabilities.Name
+
+                // device
+                KHRExternalSemaphore.Name
+                KHRExternalMemory.Name
+                // device win32
+                KHRExternalSemaphoreWin32.Name
+                KHRExternalMemoryWin32.Name
+                // device fd
+                KHRExternalSemaphoreFd.Name
+                KHRExternalMemoryFd.Name
             ]
 
     module Layers =

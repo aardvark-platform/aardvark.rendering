@@ -40,15 +40,35 @@ type Texture =
             member x.Samples = x.Multisamples
 
         new(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int,
+            size : V3i, count : int, isArray : bool, format : TextureFormat, sizeInBytes : int64) =
+            { Context = ctx
+              Handle = handle
+              Dimension = dimension
+              MipMapLevels = mipMapLevels
+              Multisamples = multisamples
+              Size = size
+              Count = count
+              IsArray = isArray
+              Format = format
+              SizeInBytes = sizeInBytes }
+
+        new(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int,
             size : V3i, count : Option<int>, format : TextureFormat, sizeInBytes : int64) =
             let cnt, isArray =
                 match count with
-                    | Some cnt -> cnt, true
-                    | None -> 1, false
-            { Context = ctx; Handle = handle; Dimension = dimension; MipMapLevels = mipMapLevels; Multisamples = multisamples;
-              Size = size; Count = cnt; IsArray = isArray; Format = format; SizeInBytes = sizeInBytes }
+                | Some cnt -> cnt, true
+                | None -> 1, false
 
+            Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, cnt, isArray, format, sizeInBytes)
     end
+
+type internal SharedTexture(ctx : Context, handle : int, external : IExportedBackendTexture, memory : SharedMemoryBlock) =
+    inherit Texture(ctx, handle,
+                    external.Dimension, external.MipMapLevels, external.Samples, external.Size,
+                    external.Count, external.IsArray, external.Format, external.Memory.Size)
+
+    member x.External = external
+    member x.Memory = memory
 
 type TextureViewHandle(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int,
                        multisamples : int, size : V3i, count : Option<int>, format : TextureFormat) =
@@ -442,7 +462,7 @@ module TextureCreationExtensions =
         // AllocateTexture
         // ================================================================================================================
 
-        member private x.SetDefaultTextureParams(target : TextureTarget, mipMapLevels : int) =
+        member internal x.SetDefaultTextureParams(target : TextureTarget, mipMapLevels : int) =
             GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels - 1)
             GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
             GL.TexParameter(target, TextureParameterName.TextureWrapS, int TextureWrapMode.ClampToEdge)
@@ -764,6 +784,11 @@ module TextureCreationExtensions =
                 | _ -> ResourceCounts.removeTexture x t.SizeInBytes
                 GL.DeleteTexture(t.Handle)
                 GL.Check "could not delete texture"
+
+                match t with
+                | :? SharedTexture as t -> t.Memory.Dispose()
+                | _ -> ()
+
                 t.Handle <- 0
             )
 

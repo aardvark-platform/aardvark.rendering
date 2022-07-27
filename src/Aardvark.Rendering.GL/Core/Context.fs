@@ -7,7 +7,6 @@ open OpenTK.Graphics.OpenGL4
 open Aardvark.Base
 open Aardvark.Rendering
 
-
 [<Struct>] // TODO ref struct?
 type RenderingLockDisposable =
     
@@ -185,7 +184,7 @@ type MemoryUsage() =
 /// multiple threads to submit GL calls concurrently.
 /// </summary>
 [<AllowNullLiteral>]
-type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
+type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this =
 
     static let defaultShaderCachePath = 
                         Some (Path.combine [
@@ -217,7 +216,14 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
     let mutable shaderCachePath : Option<string> = None
 
     let formatSampleCounts = FastConcurrentDict()
-    
+
+    let sharedMemoryManager = SharedMemoryManager(fun _ -> this.ResourceLock)
+
+    /// <summary>
+    /// Creates custom OpenGl context. Usage:
+    /// let customCtx = app.Context.CreateContext()
+    /// use __ = app.Context.RenderingLock(customCtx)
+    /// </summary>
     member x.CreateContext() = createContext()
 
     member internal x.ShaderCache = shaderCache
@@ -275,6 +281,9 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) =
                 )
             unpackAlignment <- Some p
             p
+
+    member internal x.ImportMemoryBlock(external : ExternalMemoryBlock) =
+        sharedMemoryManager.Import external
 
     /// <summary>
     /// makes the given render context current providing a re-entrant

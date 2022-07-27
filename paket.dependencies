@@ -35,8 +35,8 @@ nuget SharpDX.Direct3D9                  ~> 4.0.1
 nuget AssimpNet                          ~> 5.0.0-beta1
 nuget Offler                             ~> 2.0.3
 
-nuget Unofficial.OpenTK                  ~> 3.0.19
-nuget Unofficial.OpenTK.GLControl        ~> 3.0.19
+nuget Unofficial.OpenTK                  ~> 3.0.21
+nuget Unofficial.OpenTK.GLControl        ~> 3.0.21
 nuget Silk.NET.GLFW                      = 2.15.0
 nuget Silk.NET.Core                      = 2.15.0
 

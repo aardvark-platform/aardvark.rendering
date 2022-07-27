@@ -176,7 +176,7 @@ module ``IQuery Extensions`` =
         match query with
         | :? IVulkanQuery as q -> [q]
         | :? Queries as q -> List.concat <| q.Map unwrap
-        | _ -> failwithf "unsupported query: %A" query
+        | _ -> []
 
     type IQuery with
         member x.ToVulkanQuery() = unwrap x

@@ -90,6 +90,7 @@ module RuntimeConfig =
     /// </summary>
     let mutable SupressSparseBuffers = false
 
+    /// Prints the shader code during the compilation (will not show up when cached)
     let mutable PrintShaderCode = true
 
     /// <summary>

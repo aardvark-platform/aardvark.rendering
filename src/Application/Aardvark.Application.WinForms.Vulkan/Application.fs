@@ -102,6 +102,16 @@ type VulkanApplication(debug : DebugLevel, chooseDevice : list<PhysicalDevice> -
             yield Instance.Extensions.GetPhysicalDeviceProperties2
 
             yield! Instance.Extensions.Raytracing
+            
+            yield KHRVideoQueue.Name
+            yield KHRVideoDecodeQueue.Name
+            yield KHRVideoEncodeQueue.Name
+            yield EXTVideoDecodeH264.Name
+            yield EXTVideoEncodeH264.Name
+            yield EXTVideoDecodeH265.Name
+            yield EXTVideoEncodeH265.Name
+
+            yield! Instance.Extensions.Sharing
 
             if debug > DebugLevel.None then
                 yield Instance.Extensions.DebugReport
@@ -135,7 +145,7 @@ type VulkanApplication(debug : DebugLevel, chooseDevice : list<PhysicalDevice> -
         else
             chooseDevice (Seq.toList (CustomDeviceChooser.Filter instance.Devices))
 
-    do instance.PrintInfo(Logger.Get 2, physicalDevice)
+    do instance.PrintInfo(Logger.Get 4, physicalDevice)
 
     // create a device
     let device = 

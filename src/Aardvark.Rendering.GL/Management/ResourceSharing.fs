@@ -16,19 +16,19 @@ module Sharing =
         inherit Buffer(ctx, 0n, 0)
 
         let mutable refCount = 0
-
-
+        let mutable handle = Unchecked.defaultof<_>
 
         member x.Acquire() =
             if Interlocked.Increment &refCount = 1 then
                 let b = Operators.using ctx.ResourceLock (fun _ -> create())
                 x.Handle <- b.Handle
                 x.SizeInBytes <- b.SizeInBytes
+                handle <- b
 
         member x.Release() =
             if Interlocked.Decrement &refCount = 0 then
                 destroy()
-                Operators.using ctx.ResourceLock (fun _ -> ctx.Delete x)
+                Operators.using ctx.ResourceLock (fun _ -> ctx.Delete handle)
                 x.Handle <- 0
                 x.SizeInBytes <- 0n
 
@@ -36,6 +36,7 @@ module Sharing =
         inherit Texture(ctx, 0, TextureDimension.Texture2D, 0, 0, V3i.Zero, None, TextureFormat.Rgba8, 0L)
 
         let mutable refCount = 0
+        let mutable handle = Unchecked.defaultof<_>
 
         member x.Acquire() =
             if Interlocked.Increment &refCount = 1 then
@@ -49,11 +50,12 @@ module Sharing =
                 x.Format <- b.Format
                 x.MipMapLevels <- b.MipMapLevels
                 x.SizeInBytes <- b.SizeInBytes
+                handle <- b
 
         member x.Release() =
             if Interlocked.Decrement &refCount = 0 then
                 destroy()
-                Operators.using ctx.ResourceLock (fun _ -> ctx.Delete x)
+                Operators.using ctx.ResourceLock (fun _ -> ctx.Delete handle)
                 x.Handle <- 0
 
 

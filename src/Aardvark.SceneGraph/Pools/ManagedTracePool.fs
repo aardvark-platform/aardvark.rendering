@@ -679,21 +679,27 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
         |> Option.map AdaptiveResource.cast<IBuffer>
 
     member x.GetVertexAttribute(semantic : Symbol) =
-        x.TryGetVertexAttribute semantic |> Option.get
+        match x.TryGetVertexAttribute semantic with
+        | Some attr -> attr
+        | None _ -> failwithf "[ManagedTracePool] could not find vertex attribute %A" semantic
 
     member x.TryGetInstanceAttribute(semantic : Symbol) =
         instanceAttributeBuffers |> Map.tryFind semantic
         |> Option.map AdaptiveResource.cast<IBuffer>
 
     member x.GetInstanceAttribute(semantic : Symbol) =
-        x.TryGetInstanceAttribute semantic |> Option.get
+        match x.TryGetInstanceAttribute semantic with
+        | Some attr -> attr
+        | None _ -> failwithf "[ManagedTracePool] could not find instance attribute %A" semantic
 
     member x.TryGetGeometryAttribute(semantic : Symbol) =
         geometryAttributeBuffers |> Map.tryFind semantic
         |> Option.map AdaptiveResource.cast<IBuffer>
 
     member x.GetGeometryAttribute(semantic : Symbol) =
-        x.TryGetGeometryAttribute semantic |> Option.get
+        match x.TryGetGeometryAttribute semantic with
+        | Some attr -> attr
+        | None _ -> failwithf "[ManagedTracePool] could not find geometry attribute %A" semantic
 
     member x.Dispose() =
         lock x clear

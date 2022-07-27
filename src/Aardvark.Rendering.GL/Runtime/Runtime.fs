@@ -65,9 +65,6 @@ type Runtime(debug : DebugLevel) =
                 if OpenGl.Pointers.ActiveTexture = 0n then
                     failwith "Essentinal OpenGL procedure missing"
 
-                OpenGl.Unsafe.ActiveTexture (int OpenTK.Graphics.OpenGL4.TextureUnit.Texture0)
-                GL.Check "first GL call failed"
-
             finally
                 Log.stop()
         )

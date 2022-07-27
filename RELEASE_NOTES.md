@@ -1,3 +1,12 @@
+### 5.2.7
+- [Vulkan] requesting all queues for device
+
+### 5.2.6
+- [Vulkan] updated vk.xml to latest version (1.3)
+- [GL] improved error handling when retrieving uniforms
+- [Sg] Fixed runtime-dependent texture caching
+- [GL] Remove render task commands from dirty set
+
 ### 5.2.5
 - [Text] Winding order of triangles is consistent, degenerated triangles get removed
 - [Vulkan] Added image limits checks for layers, levels and size

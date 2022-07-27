@@ -10,10 +10,6 @@ open Aardvark.Rendering
 
 #nowarn "9"
 
-module Config =
-    let mutable showRecompile = true
-
-
 [<AutoOpen>]
 module private Utilities =
 

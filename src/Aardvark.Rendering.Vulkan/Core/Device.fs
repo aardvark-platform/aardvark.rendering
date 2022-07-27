@@ -17,6 +17,51 @@ open Vulkan11
 #nowarn "9"
 //// #nowarn "51"
 
+[<AutoOpen>]
+module private NativeMemoryHandles =
+
+    module Win32Handle =
+        open KHRExternalMemoryWin32
+
+        let getMemoryHandle (hasExtension : string -> bool) (device : VkDevice) (memory : VkDeviceMemory) =
+
+            if not <| hasExtension KHRExternalMemoryWin32.Name then
+                failwith "[Vulkan] Cannot create external handle when KHRExternalMemoryWin32 extension is disabled"
+
+            let handle =
+                native {
+                    let! pHandle = 0n
+                    let! pInfo = VkMemoryGetWin32HandleInfoKHR(memory, VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit)
+
+                    VkRaw.vkGetMemoryWin32HandleKHR(device, pInfo, pHandle)
+                        |> check "could not create shared handle"
+
+                    return !!pHandle
+                }
+
+            new Win32Handle(handle) :> IExternalMemoryHandle
+
+    module PosixHandle =
+        open KHRExternalMemoryFd
+
+        let getMemoryHandle (hasExtension : string -> bool) (device : VkDevice) (memory : VkDeviceMemory) =
+
+            if not <| hasExtension KHRExternalMemoryFd.Name then
+                failwith "[Vulkan] Cannot create external handle when KHRExternalMemoryFd extension is disabled"
+
+            let handle =
+                native {
+                    let! pHandle = 0
+                    let! pInfo = VkMemoryGetFdInfoKHR(memory, Vulkan11.VkExternalMemoryHandleTypeFlags.OpaqueFdBit)
+
+                    VkRaw.vkGetMemoryFdKHR(device, pInfo, pHandle)
+                        |> check "could not create shared handle"
+
+                    return !!pHandle
+                }
+
+            new PosixHandle(handle) :> IExternalMemoryHandle
+
 type private QueueFamilyPool(allFamilies : array<QueueFamilyInfo>) =
     let available = Array.copy allFamilies
 
@@ -186,22 +231,15 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
             ptr
 
         let queueInfos =
-            let counts = Dictionary.empty
-            for (fam, cnt) in List.concat [Option.toList graphicsQueues; Option.toList computeQueues; Option.toList transferQueues] do
-                match counts.TryGetValue fam.index with
-                    | (true, o) -> counts.[fam.index] <- o + cnt
-                    | _ -> counts.[fam.index] <- cnt
-
-            counts 
-                |> Dictionary.toArray 
-                |> Array.map (fun (familyIndex, count) ->
-                    VkDeviceQueueCreateInfo(
-                        VkDeviceQueueCreateFlags.None,
-                        uint32 familyIndex,
-                        uint32 count,
-                        queuePriorities
-                    )
+            physical.QueueFamilies |> Array.map (fun fam ->
+                VkDeviceQueueCreateInfo(
+                    VkDeviceQueueCreateFlags.None,
+                    uint32 fam.index,
+                    uint32 fam.count,
+                    queuePriorities
                 )
+            )
+
 
         native {
             let! ptr = queueInfos
@@ -239,44 +277,45 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
             return !!pDevice
         }
 
-    let graphicsFamily, computeFamily, transferFamily =
+    let usedFamilies =
         let offsets = Array.zeroCreate physical.QueueFamilies.Length
-
-        let toFamily (fam : QueueFamilyInfo, count : int) =
+        physical.QueueFamilies |> Array.map (fun fam ->
             let offset = offsets.[fam.index]
-            offsets.[fam.index] <- offset + count
+            offsets.[fam.index] <- offset + fam.count
 
             let queues =
-                List.init count (fun i ->
+                List.init fam.count (fun i ->
                     DeviceQueue(this, device, fam, offset + i)
                 )
 
             let family = new DeviceQueueFamily(this, physical, fam, queues)
             family
+            
+        )
 
-        let graphicsFamily  = graphicsQueues |> Option.map toFamily
-        let computeFamily   = computeQueues |> Option.map toFamily
-        let transferFamily  = transferQueues |> Option.map toFamily
+    let graphicsFamily =
+        match graphicsQueues with
+        | Some (info,_) ->
+            usedFamilies |> Array.tryFind (fun f -> f.Index = info.index)
+        | None ->
+            None
+            
+    let computeFamily =
+        match computeQueues with
+        | Some (info,_) ->
+            usedFamilies |> Array.tryFind (fun f -> f.Index = info.index)
+        | None ->
+            None
+    let transferFamily =
+        match transferQueues with
+        | Some (info,_) ->
+            usedFamilies |> Array.tryFind (fun f -> f.Index = info.index)
+        | None ->
+            None
+    
+    let queueFamilies = usedFamilies
 
-        let computeFamily =
-            match computeFamily with
-                | Some c -> Some c
-                | None -> graphicsFamily
-
-        graphicsFamily, computeFamily, transferFamily
-
-    let queueFamilies =
-        Array.concat [
-            Option.toArray graphicsFamily
-            Option.toArray computeFamily
-            Option.toArray transferFamily
-        ]
-
-    let usedFamilies = 
-        List.concat [ Option.toList graphicsQueues; Option.toList computeQueues; Option.toList transferQueues ]
-            |> List.map (fun (f,_) -> f.index)
-            |> Set.ofList
-            |> Set.toArray
+    let usedFamilies = usedFamilies |> Array.map (fun f -> f.Index) |> Set.ofArray |> Set.toArray
 
     let pAllFamilies =
         if usedFamilies.Length <= 1 then
@@ -413,6 +452,9 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     member x.QueueFamilies = queueFamilies
     
     member x.EnabledExtensions = extensions
+
+    member x.IsExtensionEnabled(extension) =
+        extensions |> List.contains extension
 
     member x.MinMemoryMapAlignment = memoryLimits.MinMemoryMapAlignment
     member x.MinTexelBufferOffsetAlignment = memoryLimits.MinTexelBufferOffsetAlignment
@@ -1803,7 +1845,6 @@ and Event internal(device : Device) =
     interface IDisposable with
         member x.Dispose() = x.Dispose()
 
-
 and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : MemoryInfo, heap : MemoryHeapInfo, isHostMemory : bool) as this =
     let hostVisible = memory.flags |> MemoryFlags.hostVisible
     let manager = DeviceMemoryManager(this, 128L <<< 20, isHostMemory)
@@ -1867,25 +1908,33 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                     ptr
         )
 
-    member x.Alloc(align : int64, size : int64) = manager.Alloc(align, size)
+    member x.Alloc(align : int64, size : int64, [<Optional; DefaultParameterValue(false)>] export : bool) = manager.Alloc(align, size, export)
     member x.Free(ptr : DevicePtr) = ptr.Dispose()
 
 
-    member x.TryAllocRaw(size : int64, [<Out>] ptr : byref<DeviceMemory>) =
+    member x.TryAllocRaw(size : int64, [<Optional; DefaultParameterValue(false)>] export : bool, [<Out>] ptr : byref<DeviceMemory>) =
         if size > maxAllocationSize then
             false
         else
             if heap.TryAdd size then
                 let mem =
                     native {
-                        let flags =
+                        
+                        let exportFlags = 
+                            if export then
+                                VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit ||| VkExternalMemoryHandleTypeFlags.OpaqueFdBit
+                            else
+                                VkExternalMemoryHandleTypeFlags.None
+
+                        let allocFlags =
                             if device.PhysicalDevice.Features.Memory.BufferDeviceAddress then
                                 VkMemoryAllocateFlags.DeviceAddressBitKhr
                             else
                                 VkMemoryAllocateFlags.None
 
-                        let! pFlagsInfo =
-                            VkMemoryAllocateFlagsInfo(flags, 0u)
+                        let! exportInfo = VkExportMemoryAllocateInfo(exportFlags)
+
+                        let! pFlagsInfo = VkMemoryAllocateFlagsInfo(NativePtr.toNativeInt exportInfo, allocFlags, 0u)
                     
                         let! pInfo =
                             VkMemoryAllocateInfo(
@@ -1898,8 +1947,17 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                         VkRaw.vkAllocateMemory(device.Handle, pInfo, NativePtr.zero, pHandle)
                                |> check "could not allocate memory"
 
-                        return NativePtr.read pHandle
+                        return !!pHandle
                     }
+
+                let externalHandle : IExternalMemoryHandle =
+                    if export then
+                        if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
+                            mem |> Win32Handle.getMemoryHandle device.IsExtensionEnabled device.Handle
+                        else
+                            mem |> PosixHandle.getMemoryHandle device.IsExtensionEnabled device.Handle
+                    else
+                        null
 
                 let hostPtr = 
                     if hostVisible then
@@ -1912,21 +1970,21 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                         0n
 
 
-                ptr <- new DeviceMemory(x, mem, size, hostPtr)
+                ptr <- new DeviceMemory(x, mem, size, hostPtr, externalHandle)
                 true
             else
                 false
 
-    member x.AllocRaw(size : int64) =
+    member x.AllocRaw(size : int64, [<Optional; DefaultParameterValue(false)>] export : bool) =
         if size > maxAllocationSize then
             failf "could not allocate %A (exceeds MaxAllocationSize: %A)" (Mem size) (Mem maxAllocationSize)
         else
-            match x.TryAllocRaw size with
+            match x.TryAllocRaw(size, export) with
                 | (true, ptr) -> ptr
                 | _ -> failf "could not allocate %A (only %A available)" (Mem size) heap.Available
             
-    member x.TryAllocRaw(mem : Mem, [<Out>] ptr : byref<DeviceMemory>) = x.TryAllocRaw(mem.Bytes, &ptr)
-    member x.TryAllocRaw(mem : VkDeviceSize, [<Out>] ptr : byref<DeviceMemory>) = x.TryAllocRaw(int64 mem, &ptr)
+    member x.TryAllocRaw(mem : Mem, [<Out>] ptr : byref<DeviceMemory>) = x.TryAllocRaw(mem.Bytes, false, &ptr)
+    member x.TryAllocRaw(mem : VkDeviceSize, [<Out>] ptr : byref<DeviceMemory>) = x.TryAllocRaw(int64 mem, false, &ptr)
     member x.AllocRaw(mem : Mem) = x.AllocRaw(mem.Bytes)
     member x.AllocRaw(mem : VkDeviceSize) = x.AllocRaw(int64 mem)
 
@@ -1941,6 +1999,10 @@ and DeviceHeap internal(device : Device, physical : PhysicalDevice, memory : Mem
                     VkRaw.vkFreeMemory(device.Handle, ptr.Handle, NativePtr.zero)
                     ptr.Handle <- VkDeviceMemory.Null
                     ptr.Size <- 0L
+
+                    if ptr.IsExported then
+                        ptr.ExternalHandle.Dispose()
+                        ptr.ExternalHandle <- null
             )
 
     member x.Dispose() =
@@ -2008,9 +2070,17 @@ and DeviceFreeList() =
 
 
     let store = SortedSetExt<DeviceBlock>(Seq.empty, comparer)
+    let storeExported = SortedSetExt<DeviceBlock>(Seq.empty, comparer)
 
-    member x.TryGetAligned(align : int64, size : int64) =
+    let getStore (export : bool) =
+        if export then 
+            storeExported 
+        else 
+            store
+
+    member x.TryGetAligned(align : int64, size : int64, [<Optional; DefaultParameterValue(false)>] export : bool) =
         let min = new DeviceBlock(Unchecked.defaultof<_>, Unchecked.defaultof<_>, -1L, size, false, null, null)
+        let store = getStore export
         let view = store.GetViewBetween(min, null)
 
         let res = 
@@ -2028,12 +2098,15 @@ and DeviceFreeList() =
                 None
 
     member x.Insert(b : DeviceBlock) =
+        let store = getStore b.Memory.IsExported
         store.Add b |> ignore
 
     member x.Remove(b : DeviceBlock) =
+        let store = getStore b.Memory.IsExported
         store.Remove b |> ignore
 
     member x.Clear() =
+        storeExported.Clear()
         store.Clear()
 
 and DeviceMemoryManager internal(heap : DeviceHeap, blockSize : int64, keepReserveBlock : bool) =
@@ -2046,9 +2119,8 @@ and DeviceMemoryManager internal(heap : DeviceHeap, blockSize : int64, keepReser
     let mutable allocatedMemory = 0L
     let mutable usedMemory = 0L
 
-    let addBlock(this : DeviceMemoryManager) =
-        let store = heap.AllocRaw blockSize
-
+    let addBlock(this : DeviceMemoryManager) (export : bool) =
+        let store = heap.AllocRaw(blockSize, export)
 
         Interlocked.Add(&allocatedMemory, blockSize) |> ignore
         blocks.Add store |> ignore
@@ -2059,11 +2131,11 @@ and DeviceMemoryManager internal(heap : DeviceHeap, blockSize : int64, keepReser
     member x.AllocatedMemory = Mem allocatedMemory
     member x.UsedMemory = Mem usedMemory
 
-    member x.Alloc(align : int64, size : int64) =
+    member x.Alloc(align : int64, size : int64, export : bool) =
         if size <= 0L then
             DevicePtr.Null
         elif size >= blockSize then
-            let mem = heap.AllocRaw(size)
+            let mem = heap.AllocRaw(size, export)
             Interlocked.Add(&usedMemory, size) |> ignore
             Interlocked.Add(&allocatedMemory, size) |> ignore
             { new DevicePtr(mem, 0L, size) with
@@ -2075,35 +2147,35 @@ and DeviceMemoryManager internal(heap : DeviceHeap, blockSize : int64, keepReser
 
         else
             lock free (fun () ->
-                match free.TryGetAligned(align, size) with
-                    | Some b ->
-                        let alignedOffset = next align b.Offset
-                        let alignedSize = b.Size - (alignedOffset - b.Offset)
-                        if alignedOffset > b.Offset then
-                            let l = new DeviceBlock(x, b.Memory, b.Offset, alignedOffset - b.Offset, true, b.Prev, b)
+                match free.TryGetAligned(align, size, export) with
+                | Some b ->
+                    let alignedOffset = next align b.Offset
+                    let alignedSize = b.Size - (alignedOffset - b.Offset)
+                    if alignedOffset > b.Offset then
+                        let l = new DeviceBlock(x, b.Memory, b.Offset, alignedOffset - b.Offset, true, b.Prev, b)
 
-                            if not (isNull l.Prev) then l.Prev.Next <- l
-                            b.Prev <- l
+                        if not (isNull l.Prev) then l.Prev.Next <- l
+                        b.Prev <- l
 
-                            free.Insert(l)
-                            b.Offset <- alignedOffset
-                            b.Size <- alignedSize    
+                        free.Insert(l)
+                        b.Offset <- alignedOffset
+                        b.Size <- alignedSize    
 
                 
-                        if alignedSize > size then
-                            let r = new DeviceBlock(x, b.Memory, alignedOffset + size, alignedSize - size, true, b, b.Next)
-                            if not (isNull r.Next) then r.Next.Prev <- r
-                            b.Next <- r
-                            free.Insert(r)
-                            b.Size <- size
+                    if alignedSize > size then
+                        let r = new DeviceBlock(x, b.Memory, alignedOffset + size, alignedSize - size, true, b, b.Next)
+                        if not (isNull r.Next) then r.Next.Prev <- r
+                        b.Next <- r
+                        free.Insert(r)
+                        b.Size <- size
 
-                        Interlocked.Add(&usedMemory, size) |> ignore
-                        b.IsFree <- false
-                        b :> DevicePtr
+                    Interlocked.Add(&usedMemory, size) |> ignore
+                    b.IsFree <- false
+                    b :> DevicePtr
 
-                    | None ->
-                        addBlock x
-                        x.Alloc(align, size)
+                | None ->
+                    addBlock x export
+                    x.Alloc(align, size, export)
             )
 
     member internal x.Free(b : DeviceBlock) =
@@ -2168,16 +2240,20 @@ and DeviceMemoryManager internal(heap : DeviceHeap, blockSize : int64, keepReser
         )
             
 
-and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int64, hostPtr : nativeint) =
+and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int64, hostPtr : nativeint, externalHandle : IExternalMemoryHandle) =
     inherit DevicePtr(Unchecked.defaultof<_>, 0L, size)
-    static let nullptr = new DeviceMemory(Unchecked.defaultof<_>, VkDeviceMemory.Null, 0L, 0n)
+    static let nullptr = new DeviceMemory(Unchecked.defaultof<_>, VkDeviceMemory.Null, 0L, 0n, null)
 
     let mutable handle = handle
     let mutable size = size
+    let mutable externalHandle = externalHandle
 
     do if handle <> VkDeviceMemory.Null then heap.Device.Instance.RegisterDebugTrace(handle.Handle)
 
     static member Null = nullptr
+
+    new (heap : DeviceHeap, handle : VkDeviceMemory, size : int64, hostPtr : nativeint) =
+        new DeviceMemory(heap, handle, size, hostPtr, null)
 
     member x.Heap = heap
 
@@ -2191,8 +2267,17 @@ and DeviceMemory internal(heap : DeviceHeap, handle : VkDeviceMemory, size : int
 
     member x.IsNull = handle.IsNull
     member x.IsValid = handle.IsValid
+    member x.IsExported = externalHandle <> null
 
     member x.HostPointer = hostPtr
+
+    member x.ExternalHandle
+        with get() : IExternalMemoryHandle = externalHandle
+        and internal set h = externalHandle <- h
+
+    member x.ExternalBlock =
+        { Handle = x.ExternalHandle
+          SizeInBytes = x.Size }
 
     override x.Dispose() = heap.Free(x)
     override x.Memory = x
@@ -2957,27 +3042,27 @@ type DeviceExtensions private() =
             else
                 tryFindDeviceMemory bits (i + 1) memories
 
-    static let rec tryAlloc (reqs : VkMemoryRequirements) (i : int) (memories : DeviceHeap[]) =
+    static let rec tryAlloc (reqs : VkMemoryRequirements) (export : bool) (i : int) (memories : DeviceHeap[]) =
         if i >= memories.Length then
             None
         else
             let mem = memories.[i]
             if mem.Mask &&& reqs.memoryTypeBits <> 0u then
-                let ptr = mem.Alloc(int64 reqs.alignment, int64 reqs.size)
+                let ptr = mem.Alloc(int64 reqs.alignment, int64 reqs.size, export)
                 Some ptr
             else
-                tryAlloc reqs (i + 1) memories
+                tryAlloc reqs export (i + 1) memories
 
-    static let rec tryAllocDevice (reqs : VkMemoryRequirements) (i : int) (memories : DeviceHeap[]) =
+    static let rec tryAllocDevice (reqs : VkMemoryRequirements) (export : bool) (i : int) (memories : DeviceHeap[]) =
         if i >= memories.Length then
             None
         else
             let mem = memories.[i]
             if mem.Mask &&& reqs.memoryTypeBits <> 0u && mem.Info.flags &&& MemoryFlags.DeviceLocal <> MemoryFlags.None then
-                let ptr = mem.Alloc(int64 reqs.alignment, int64 reqs.size)
+                let ptr = mem.Alloc(int64 reqs.alignment, int64 reqs.size, export)
                 Some ptr
             else
-                tryAllocDevice reqs (i + 1) memories
+                tryAllocDevice reqs export (i + 1) memories
 
 
     [<Extension>]
@@ -2985,37 +3070,32 @@ type DeviceExtensions private() =
         new Device(this, wantedExtensions)
 
     [<Extension>]
-    static member GetMemory(this : Device, bits : uint32, preferDevice : bool) =
+    static member GetMemory(this : Device, bits : uint32,
+                            [<Optional; DefaultParameterValue(false)>] preferDevice : bool) =
         if preferDevice then
             match tryFindDeviceMemory bits 0 this.Memories with
-                 | Some mem -> mem
-                 | None -> 
-                    match tryFindMemory bits 0 this.Memories with
-                        | Some mem -> mem
-                        | None -> failf "could not find compatible memory for types: %A" bits
-        else
-            match tryFindMemory bits 0 this.Memories with
+            | Some mem -> mem
+            | None -> 
+                match tryFindMemory bits 0 this.Memories with
                 | Some mem -> mem
                 | None -> failf "could not find compatible memory for types: %A" bits
+        else
+            match tryFindMemory bits 0 this.Memories with
+            | Some mem -> mem
+            | None -> failf "could not find compatible memory for types: %A" bits
 
     [<Extension>]
-    static member Alloc(this : Device, reqs : VkMemoryRequirements, preferDevice : bool) =
+    static member Alloc(this : Device, reqs : VkMemoryRequirements,
+                        [<Optional; DefaultParameterValue(false)>] preferDevice : bool,
+                        [<Optional; DefaultParameterValue(false)>] export : bool) =
         if preferDevice then
-            match tryAllocDevice reqs 0 this.Memories with
-                 | Some mem -> mem
-                 | None -> 
-                    match tryAlloc reqs 0 this.Memories with
-                        | Some mem -> mem
-                        | None -> failf "could not find compatible memory for %A" reqs
-        else
-            match tryAlloc reqs 0 this.Memories with
+            match tryAllocDevice reqs export 0 this.Memories with
+            | Some mem -> mem
+            | None -> 
+                match tryAlloc reqs export 0 this.Memories with
                 | Some mem -> mem
                 | None -> failf "could not find compatible memory for %A" reqs
-
-    [<Extension>]
-    static member GetMemory(this : Device, bits : uint32) =
-        DeviceExtensions.GetMemory(this, bits, false)
-
-    [<Extension>]
-    static member Alloc(this : Device, reqs : VkMemoryRequirements) =
-        DeviceExtensions.Alloc(this, reqs, false)
+        else
+            match tryAlloc reqs export 0 this.Memories with
+            | Some mem -> mem
+            | None -> failf "could not find compatible memory for %A" reqs

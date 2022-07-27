@@ -148,7 +148,7 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
                 compiled.Update(token)
 
             if commandChanged || resourcesChanged then
-                if Config.showRecompile then
+                if RuntimeConfig.ShowRecompile then
                     let cause =
                         String.concat "; " [
                             if commandChanged then yield "content"
