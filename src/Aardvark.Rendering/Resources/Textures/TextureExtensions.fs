@@ -141,6 +141,17 @@ type ITextureRuntimeExtensions private() =
             region
 
     // ================================================================================================================
+    // Delete textures
+    // ================================================================================================================
+
+    ///<summary>Deletes the given backend texture.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="texture">The texture to delete.</param>
+    [<Extension>]
+    static member DeleteTexture(this : ITextureRuntime, texture : IBackendTexture) =
+        texture.Dispose()
+
+    // ================================================================================================================
     // Create textures
     // ================================================================================================================
 

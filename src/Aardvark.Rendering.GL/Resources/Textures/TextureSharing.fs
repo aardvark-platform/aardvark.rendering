@@ -66,5 +66,5 @@ type ContextTextureSharingExtensions =
 
             this.SetDefaultTextureParams(target, texture.MipMapLevels)
 
-            SharedTexture(this, handle, texture, sharedMemory)
+            new SharedTexture(this, handle, texture, sharedMemory)
         )

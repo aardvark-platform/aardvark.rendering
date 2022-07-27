@@ -135,9 +135,6 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     member x.PrepareTexture (t : ITexture, [<Optional; DefaultParameterValue(false)>] export : bool) =
         device.CreateImage(t, export) :> IBackendTexture
 
-    member x.DeleteTexture(t : IBackendTexture) =
-        Disposable.dispose (unbox<Image> t)
-
     member x.DeletRenderbuffer(t : IRenderbuffer) =
         Disposable.dispose (unbox<Image> t)
 
@@ -505,7 +502,6 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         member x.DeleteSurface(s) = x.DeleteSurface(s)
         member x.PrepareRenderObject(fboSignature, rj) = x.PrepareRenderObject(fboSignature, rj)
         member x.PrepareTexture(t) = x.PrepareTexture(t)
-        member x.DeleteTexture(t) = x.DeleteTexture(t)
         member x.PrepareBuffer(b, u, s) = x.PrepareBuffer(b, u, s)
 
         member x.DeleteRenderbuffer(b) = x.DeletRenderbuffer(b)

@@ -51,6 +51,7 @@ type IStreamingTexture =
 
 type IBackendTexture =
     inherit ITexture
+    inherit IDisposable
     abstract member Runtime : ITextureRuntime
     abstract member Dimension : TextureDimension
     abstract member Format : TextureFormat
@@ -128,8 +129,6 @@ and ITextureRuntime =
     abstract member Copy : src : IFramebufferOutput * srcOffset : V3i *
                            dst : IFramebufferOutput * dstOffset : V3i *
                            size : V3i -> unit
-
-    abstract member DeleteTexture : IBackendTexture -> unit
 
     ///<summary>Creates a renderbuffer.</summary>
     ///<param name="size">The size of the renderbuffer.</param>

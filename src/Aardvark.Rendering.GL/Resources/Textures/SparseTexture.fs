@@ -117,7 +117,7 @@ module ``Sparse Texture Extensions`` =
             GL.Check "could not unbind sparse texture"
 
 
-            SparseTexture(x, handle, TextureDimension.Texture3D, levels, 1, size, None, format, pageSize, sparseLevels)
+            new SparseTexture(x, handle, TextureDimension.Texture3D, levels, 1, size, None, format, pageSize, sparseLevels)
 
         member x.Commitment(t : SparseTexture, level : int, region : Box3i, commit : bool) =
             use __ = x.ResourceLock

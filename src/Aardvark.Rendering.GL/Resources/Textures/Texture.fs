@@ -9,74 +9,8 @@ open Aardvark.Rendering.GL
 
 #nowarn "9"
 
-type Texture =
-    class
-        val mutable public Context : Context
-        val mutable public Handle : int
-        val mutable public Dimension : TextureDimension
-        val mutable public Multisamples : int
-        val mutable public Size : V3i
-        val mutable public Count : int
-        val mutable public Format : TextureFormat
-        val mutable public MipMapLevels : int
-        val mutable public SizeInBytes : int64
-        val mutable public IsArray : bool
-
-        member x.IsMultisampled = x.Multisamples > 1
-
-        member x.Size1D = x.Size.X
-        member x.Size2D = x.Size.XY
-        member x.Size3D = x.Size
-
-        interface IBackendTexture with
-            member x.Runtime = x.Context.Runtime :> ITextureRuntime
-            member x.WantMipMaps = x.MipMapLevels > 1
-            member x.Dimension = x.Dimension
-            member x.MipMapLevels = x.MipMapLevels
-            member x.Handle = x.Handle :> obj
-            member x.Size = x.Size
-            member x.Count = x.Count
-            member x.Format = x.Format
-            member x.Samples = x.Multisamples
-
-        new(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int,
-            size : V3i, count : int, isArray : bool, format : TextureFormat, sizeInBytes : int64) =
-            { Context = ctx
-              Handle = handle
-              Dimension = dimension
-              MipMapLevels = mipMapLevels
-              Multisamples = multisamples
-              Size = size
-              Count = count
-              IsArray = isArray
-              Format = format
-              SizeInBytes = sizeInBytes }
-
-        new(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int,
-            size : V3i, count : Option<int>, format : TextureFormat, sizeInBytes : int64) =
-            let cnt, isArray =
-                match count with
-                | Some cnt -> cnt, true
-                | None -> 1, false
-
-            Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, cnt, isArray, format, sizeInBytes)
-    end
-
-type internal SharedTexture(ctx : Context, handle : int, external : IExportedBackendTexture, memory : SharedMemoryBlock) =
-    inherit Texture(ctx, handle,
-                    external.Dimension, external.MipMapLevels, external.Samples, external.Size,
-                    external.Count, external.IsArray, external.Format, external.Memory.Size)
-
-    member x.External = external
-    member x.Memory = memory
-
-type TextureViewHandle(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int,
-                       multisamples : int, size : V3i, count : Option<int>, format : TextureFormat) =
-    inherit Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, count, format, 0L)
-
-
 [<AutoOpen>]
-module internal TextureUtilitiesAndExtensions =
+module internal TextureResourceCounts =
 
     module ResourceCounts =
 
@@ -105,6 +39,97 @@ module internal TextureUtilitiesAndExtensions =
                 temp <- temp >>> 2
                 size <- size + temp
             size
+
+type Texture =
+    class
+        val mutable public Context : Context
+        val mutable public Handle : int
+        val mutable public Dimension : TextureDimension
+        val mutable public Multisamples : int
+        val mutable public Size : V3i
+        val mutable public Count : int
+        val mutable public Format : TextureFormat
+        val mutable public MipMapLevels : int
+        val mutable public SizeInBytes : int64
+        val mutable public IsArray : bool
+
+        member x.IsMultisampled = x.Multisamples > 1
+
+        member x.Size1D = x.Size.X
+        member x.Size2D = x.Size.XY
+        member x.Size3D = x.Size
+
+        abstract member Destroy : unit -> unit
+        default x.Destroy() =
+            GL.DeleteTexture x.Handle
+            ResourceCounts.removeTexture x.Context x.SizeInBytes
+            GL.Check "could not delete texture"
+
+        member x.Dispose() =
+            using x.Context.ResourceLock (fun _ ->
+                x.Destroy()
+                x.Handle <- 0
+            )
+
+        interface IBackendTexture with
+            member x.Runtime = x.Context.Runtime :> ITextureRuntime
+            member x.WantMipMaps = x.MipMapLevels > 1
+            member x.Dimension = x.Dimension
+            member x.MipMapLevels = x.MipMapLevels
+            member x.Handle = x.Handle :> obj
+            member x.Size = x.Size
+            member x.Count = x.Count
+            member x.Format = x.Format
+            member x.Samples = x.Multisamples
+            member x.Dispose() = x.Dispose()
+
+        new(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int,
+            size : V3i, count : int, isArray : bool, format : TextureFormat, sizeInBytes : int64) =
+            { Context = ctx
+              Handle = handle
+              Dimension = dimension
+              MipMapLevels = mipMapLevels
+              Multisamples = multisamples
+              Size = size
+              Count = count
+              IsArray = isArray
+              Format = format
+              SizeInBytes = sizeInBytes }
+
+        new(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int, multisamples : int,
+            size : V3i, count : Option<int>, format : TextureFormat, sizeInBytes : int64) =
+            let cnt, isArray =
+                match count with
+                | Some cnt -> cnt, true
+                | None -> 1, false
+
+            new Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, cnt, isArray, format, sizeInBytes)
+    end
+
+type internal SharedTexture(ctx : Context, handle : int, external : IExportedBackendTexture, memory : SharedMemoryBlock) =
+    inherit Texture(ctx, handle,
+                    external.Dimension, external.MipMapLevels, external.Samples, external.Size,
+                    external.Count, external.IsArray, external.Format, external.Memory.Size)
+
+    member x.External = external
+    member x.Memory = memory
+
+    override x.Destroy() =
+        x.Memory.Dispose()
+        base.Destroy()
+
+type TextureViewHandle(ctx : Context, handle : int, dimension : TextureDimension, mipMapLevels : int,
+                       multisamples : int, size : V3i, count : Option<int>, format : TextureFormat) =
+    inherit Texture(ctx, handle, dimension, mipMapLevels, multisamples, size, count, format, 0L)
+
+    override x.Destroy() =
+        GL.DeleteTexture x.Handle
+        ResourceCounts.removeTextureView x.Context
+        GL.Check "could not delete texture view"
+
+
+[<AutoOpen>]
+module internal TextureUtilitiesAndExtensions =
 
     module TextureTarget =
 
@@ -377,7 +402,7 @@ module TextureCreationExtensions =
                 GL.Check "could not create texture"
 
                 ResourceCounts.addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture1D, mipMapLevels, 1, V3i.Zero, None, format, 0L)
+                let tex = new Texture(x, h, TextureDimension.Texture1D, mipMapLevels, 1, V3i.Zero, None, format, 0L)
                 x.UpdateTexture1D(tex, size, mipMapLevels, format)
 
                 tex
@@ -389,7 +414,7 @@ module TextureCreationExtensions =
                 GL.Check "could not create texture"
 
                 ResourceCounts.addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture2D, mipMapLevels, 1, V3i.Zero, None, format, 0L)
+                let tex = new Texture(x, h, TextureDimension.Texture2D, mipMapLevels, 1, V3i.Zero, None, format, 0L)
 
                 x.UpdateTexture2D(tex, size, mipMapLevels, format, samples)
 
@@ -402,7 +427,7 @@ module TextureCreationExtensions =
                 GL.Check "could not create texture"
 
                 ResourceCounts.addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture3D, mipMapLevels, 1, V3i.Zero, None, format, 0L)
+                let tex = new Texture(x, h, TextureDimension.Texture3D, mipMapLevels, 1, V3i.Zero, None, format, 0L)
                 x.UpdateTexture3D(tex, size, mipMapLevels, format)
 
                 tex
@@ -414,7 +439,7 @@ module TextureCreationExtensions =
                 GL.Check "could not create texture"
 
                 ResourceCounts.addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.TextureCube, mipMapLevels, 1, V3i(size, size, 0), None, format, 0L)
+                let tex = new Texture(x, h, TextureDimension.TextureCube, mipMapLevels, 1, V3i(size, size, 0), None, format, 0L)
                 x.UpdateTextureCube(tex, size, mipMapLevels, format)
 
                 tex
@@ -426,7 +451,7 @@ module TextureCreationExtensions =
                 GL.Check "could not create texture"
 
                 ResourceCounts.addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture1D, mipMapLevels, 1, V3i.Zero, Some count, format, 0L)
+                let tex = new Texture(x, h, TextureDimension.Texture1D, mipMapLevels, 1, V3i.Zero, Some count, format, 0L)
                 x.UpdateTexture1DArray(tex, size, count, mipMapLevels, format)
 
                 tex
@@ -438,7 +463,7 @@ module TextureCreationExtensions =
                 GL.Check "could not create texture"
 
                 ResourceCounts.addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.Texture2D, mipMapLevels, 1, V3i.Zero, Some count, format, 0L)
+                let tex = new Texture(x, h, TextureDimension.Texture2D, mipMapLevels, 1, V3i.Zero, Some count, format, 0L)
 
                 x.UpdateTexture2DArray(tex, size, count, mipMapLevels, format, samples)
 
@@ -451,7 +476,7 @@ module TextureCreationExtensions =
                 GL.Check "could not create texture"
 
                 ResourceCounts.addTexture x 0L
-                let tex = Texture(x, h, TextureDimension.TextureCube, mipMapLevels, 1, V3i(size, size, 0), Some count, format, 0L)
+                let tex = new Texture(x, h, TextureDimension.TextureCube, mipMapLevels, 1, V3i(size, size, 0), Some count, format, 0L)
                 x.UpdateTextureCubeArray(tex, size, count, mipMapLevels, format)
 
                 tex
@@ -756,7 +781,7 @@ module TextureCreationExtensions =
                     if isArray || orig.Dimension = TextureDimension.TextureCube && slices.Min <> slices.Max then Some (1 + slices.Max - slices.Min)
                     else None
 
-                let tex = TextureViewHandle(x, handle, dim, levelCount, orig.Multisamples, orig.Size, sliceCountHandle, orig.Format)
+                let tex = new TextureViewHandle(x, handle, dim, levelCount, orig.Multisamples, orig.Size, sliceCountHandle, orig.Format)
                 let target = TextureTarget.ofTexture tex
 
                 GL.Dispatch.TextureView(
@@ -778,26 +803,13 @@ module TextureCreationExtensions =
             x.CreateTextureView(orig, levels, slices, orig.IsArray)
 
         member x.Delete(t : Texture) =
-            using x.ResourceLock (fun _ ->
-                match t with
-                | :? TextureViewHandle -> ResourceCounts.removeTextureView x
-                | _ -> ResourceCounts.removeTexture x t.SizeInBytes
-                GL.DeleteTexture(t.Handle)
-                GL.Check "could not delete texture"
-
-                match t with
-                | :? SharedTexture as t -> t.Memory.Dispose()
-                | _ -> ()
-
-                t.Handle <- 0
-            )
-
+            t.Dispose()
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Texture =
 
     let empty =
-        Texture(null, 0, TextureDimension.Texture2D, 0, 0, V3i.Zero, None, TextureFormat.Rgba8, 0L)
+        new Texture(null, 0, TextureDimension.Texture2D, 0, 0, V3i.Zero, None, TextureFormat.Rgba8, 0L)
 
     let create1D (c : Context) (size : int) (mipLevels : int) (format : TextureFormat) =
         c.CreateTexture1D(size, mipLevels, format)

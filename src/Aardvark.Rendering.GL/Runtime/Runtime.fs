@@ -204,10 +204,6 @@ type Runtime(debug : DebugLevel) =
         member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) = x.PrepareRenderObject(fboSignature, rj)
 
         member x.PrepareTexture (t : ITexture) = x.PrepareTexture t :> IBackendTexture
-        member x.DeleteTexture (t : IBackendTexture) =
-            match t with
-                | :? Texture as t -> x.DeleteTexture t
-                | _ -> failwithf "unsupported texture-type: %A" t
 
         member x.PrepareBuffer (b : IBuffer, _ : BufferUsage, storage : BufferStorage) = x.PrepareBuffer(b, storage) :> IBackendBuffer
 
@@ -504,10 +500,6 @@ type Runtime(debug : DebugLevel) =
             AVal.force program :> IBackendSurface
 
         )
-
-
-    member x.DeleteTexture (t : Texture) =
-        ctx.Delete t
 
     member x.DeleteSurface (p : Program) =
         ctx.Delete p

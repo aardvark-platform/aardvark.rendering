@@ -110,11 +110,11 @@ module Sharing =
     type TextureManager(ctx : Context, active : bool) =
         let cache = ConcurrentDictionary<ITexture, RefCountedTexture>()
 
-        let nullTex = Texture(ctx, 0, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L)
+        let nullTex = new Texture(ctx, 0, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L)
 
         let get (b : ITexture) =
             cache.GetOrAdd(b, fun v -> 
-                RefCountedTexture(
+                new RefCountedTexture(
                     ctx,
                     (fun () -> ctx.CreateTexture b),
                     (fun () -> cache.TryRemove b |> ignore)

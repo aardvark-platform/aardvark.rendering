@@ -10,17 +10,20 @@ open OpenTK.Graphics.OpenGL4
 #nowarn "9"
 
 [<AutoOpen>]
-module ContextBufferStats =
-    let addBuffer (ctx:Context) size =
-        Interlocked.Increment(&ctx.MemoryUsage.BufferCount) |> ignore
-        Interlocked.Add(&ctx.MemoryUsage.BufferMemory,size) |> ignore
+module internal BufferResourceCounts =
 
-    let removeBuffer (ctx:Context) size =
-        Interlocked.Decrement(&ctx.MemoryUsage.BufferCount)  |> ignore
-        Interlocked.Add(&ctx.MemoryUsage.BufferMemory,-size) |> ignore
+    module ResourceCounts =
 
-    let updateBuffer (ctx:Context) oldSize newSize =
-        Interlocked.Add(&ctx.MemoryUsage.BufferMemory, newSize-oldSize) |> ignore
+        let addBuffer (ctx:Context) size =
+            Interlocked.Increment(&ctx.MemoryUsage.BufferCount) |> ignore
+            Interlocked.Add(&ctx.MemoryUsage.BufferMemory,size) |> ignore
+
+        let removeBuffer (ctx:Context) size =
+            Interlocked.Decrement(&ctx.MemoryUsage.BufferCount)  |> ignore
+            Interlocked.Add(&ctx.MemoryUsage.BufferMemory,-size) |> ignore
+
+        let updateBuffer (ctx:Context) oldSize newSize =
+            Interlocked.Add(&ctx.MemoryUsage.BufferMemory, newSize-oldSize) |> ignore
 
 /// <summary>
 /// Buffer simply wraps an OpenGL buffer object and
@@ -41,7 +44,7 @@ type Buffer =
             using x.Context.ResourceLock (fun _ ->
                 x.Destroy()
 
-                removeBuffer x.Context (int64 x.SizeInBytes)
+                ResourceCounts.removeBuffer x.Context (int64 x.SizeInBytes)
                 x.SizeInBytes <- 0n
                 x.Handle <- 0
             )
@@ -88,7 +91,7 @@ module BufferExtensions =
         /// to treat the buffer internally
         /// </summary>
         member x.CreateBuffer(data : nativeint, sizeInBytes : nativeint, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
-            addBuffer x (int64 sizeInBytes)
+            ResourceCounts.addBuffer x (int64 sizeInBytes)
 
             let handle =
                 using x.ResourceLock (fun _ ->
@@ -352,8 +355,8 @@ module BufferExtensions =
             assert(src <> 0n)
 
             if buffer.SizeInBytes <> size then
-                removeBuffer x (int64 buffer.SizeInBytes)
-                addBuffer x (int64 size)
+                ResourceCounts.removeBuffer x (int64 buffer.SizeInBytes)
+                ResourceCounts.addBuffer x (int64 size)
                 buffer.SizeInBytes <- size
                 let source = if size = 0n then 0n else src
 
