@@ -62,7 +62,7 @@ type OpenGlRenderControl(runtime : Runtime, debug : DebugLevel, samples : int) =
             ctx, fboSignature,
             (fun _ -> 0),
             ignore,
-            [0, DefaultSemantic.Colors, Renderbuffer(ctx, 0, V2i.Zero, TextureFormat.Rgba8, samples, 0L) :> IFramebufferOutput], None
+            [0, DefaultSemantic.Colors, new Renderbuffer(ctx, 0, V2i.Zero, TextureFormat.Rgba8, samples, 0L) :> IFramebufferOutput], None
         )
 
     let mutable framebuffer : option<Texture * Texture * Framebuffer * option<Texture * Framebuffer>> = None

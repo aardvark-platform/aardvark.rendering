@@ -135,9 +135,6 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     member x.PrepareTexture (t : ITexture, [<Optional; DefaultParameterValue(false)>] export : bool) =
         device.CreateImage(t, export) :> IBackendTexture
 
-    member x.DeletRenderbuffer(t : IRenderbuffer) =
-        Disposable.dispose (unbox<Image> t)
-
     member x.PrepareBuffer (data : IBuffer,
                             [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
                             [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage,
@@ -503,8 +500,6 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         member x.PrepareRenderObject(fboSignature, rj) = x.PrepareRenderObject(fboSignature, rj)
         member x.PrepareTexture(t) = x.PrepareTexture(t)
         member x.PrepareBuffer(b, u, s) = x.PrepareBuffer(b, u, s)
-
-        member x.DeleteRenderbuffer(b) = x.DeletRenderbuffer(b)
 
         member x.CreateStreamingTexture(mipMap) = x.CreateStreamingTexture(mipMap)
         member x.DeleteStreamingTexture(t) = x.DeleteStreamingTexture(t)

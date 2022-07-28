@@ -1,5 +1,6 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
+open System
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open Aardvark.Base
@@ -130,6 +131,9 @@ type Image =
             member x.Samples = x.Samples
             member x.Format = VkFormat.toTextureFormat x.Format
             member x.Handle = x.Handle :> obj
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
 
         member x.IsNull = x.Handle.IsNull
 

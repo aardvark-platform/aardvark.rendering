@@ -151,6 +151,13 @@ type ITextureRuntimeExtensions private() =
     static member DeleteTexture(this : ITextureRuntime, texture : IBackendTexture) =
         texture.Dispose()
 
+    ///<summary>Deletes the given renderbuffer.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="renderbuffer">The renderbuffer to delete.</param>
+    [<Extension>]
+    static member DeleteRenderbuffer(this : ITextureRuntime, renderbuffer : IRenderbuffer) =
+        renderbuffer.Dispose()
+
     // ================================================================================================================
     // Create textures
     // ================================================================================================================

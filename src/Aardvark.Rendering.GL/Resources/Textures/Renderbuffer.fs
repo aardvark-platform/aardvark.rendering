@@ -6,33 +6,11 @@ open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
 
-type Renderbuffer =
-    class
-        val mutable public Context : Context
-        val mutable public Handle : int
-        val mutable public Size : V2i
-        val mutable public Format : TextureFormat
-        val mutable public Samples : int
-        val mutable public SizeInBytes : int64
-
-        interface IFramebufferOutput with
-            member x.Runtime = x.Context.Runtime :> ITextureRuntime
-            member x.Format = x.Format
-            member x.Size = x.Size
-            member x.Samples = x.Samples
-
-        interface IRenderbuffer with
-            member x.Handle = x.Handle :> obj
-
-        new (ctx : Context, handle : int, size : V2i, format : TextureFormat, samples : int, sizeInBytes : int64) =
-            { Context = ctx; Handle = handle; Size = size; Format = format; Samples = samples; SizeInBytes = sizeInBytes }
-    end
-
-
 [<AutoOpen>]
-module RenderbufferExtensions =
+module internal RenderbufferResourceCounts =
 
-    module private ResourceCounts =
+    module ResourceCounts =
+
         let addRenderbuffer (ctx:Context) size =
             Interlocked.Increment(&ctx.MemoryUsage.RenderBufferCount) |> ignore
             Interlocked.Add(&ctx.MemoryUsage.RenderBufferMemory,size) |> ignore
@@ -44,6 +22,44 @@ module RenderbufferExtensions =
         let resizeRenderbuffer(ctx:Context) oldSize newSize =
             Interlocked.Add(&ctx.MemoryUsage.RenderBufferMemory,newSize - oldSize) |> ignore
 
+type Renderbuffer =
+    class
+        val mutable public Context : Context
+        val mutable public Handle : int
+        val mutable public Size : V2i
+        val mutable public Format : TextureFormat
+        val mutable public Samples : int
+        val mutable public SizeInBytes : int64
+
+        abstract member Destroy : unit -> unit
+        default x.Destroy() =
+            GL.DeleteRenderbuffer(x.Handle)
+            ResourceCounts.removeRenderbuffer x.Context x.SizeInBytes
+            GL.Check "could not delete renderbuffer"
+
+        member x.Dispose() =
+            using x.Context.ResourceLock (fun _ ->
+                x.Destroy()
+                x.Handle <- 0
+            )
+
+        interface IFramebufferOutput with
+            member x.Runtime = x.Context.Runtime :> ITextureRuntime
+            member x.Format = x.Format
+            member x.Size = x.Size
+            member x.Samples = x.Samples
+
+        interface IRenderbuffer with
+            member x.Handle = x.Handle :> obj
+            member x.Dispose() = x.Dispose()
+
+        new (ctx : Context, handle : int, size : V2i, format : TextureFormat, samples : int, sizeInBytes : int64) =
+            { Context = ctx; Handle = handle; Size = size; Format = format; Samples = samples; SizeInBytes = sizeInBytes }
+    end
+
+
+[<AutoOpen>]
+module RenderbufferExtensions =
 
     let private updateRenderbuffer (cxt : Context) (handle : int) (size : V2i) (format : TextureFormat) (samples : int) =
         GL.BindRenderbuffer(RenderbufferTarget.Renderbuffer, handle)
@@ -84,7 +100,7 @@ module RenderbufferExtensions =
 
                 let sizeInBytes = (int64 size.X * int64 size.Y * int64 format.PixelSizeInBits) / 8L
                 ResourceCounts.addRenderbuffer x sizeInBytes
-                Renderbuffer(x, handle, size, format, samples, sizeInBytes)
+                new Renderbuffer(x, handle, size, format, samples, sizeInBytes)
             )
 
         member x.Update(r : Renderbuffer, size : V2i, format : TextureFormat, ?samples : int) =

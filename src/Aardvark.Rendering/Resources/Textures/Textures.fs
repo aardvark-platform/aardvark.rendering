@@ -96,6 +96,7 @@ and ITextureSubResource =
 
 and IRenderbuffer =
     inherit IFramebufferOutput
+    inherit IDisposable
     abstract member Handle : obj
 
 and ITextureRuntime =
@@ -136,7 +137,6 @@ and ITextureRuntime =
     ///<param name="samples">The number of samples.</param>
     ///<exception cref="ArgumentException">if <paramref name="samples"/> is less than 1.</exception>
     abstract member CreateRenderbuffer : size : V2i * format : TextureFormat * samples : int -> IRenderbuffer
-    abstract member DeleteRenderbuffer : IRenderbuffer -> unit
 
     abstract member CreateStreamingTexture : mipMaps : bool -> IStreamingTexture
     abstract member DeleteStreamingTexture : IStreamingTexture -> unit

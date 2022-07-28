@@ -207,11 +207,6 @@ type Runtime(debug : DebugLevel) =
 
         member x.PrepareBuffer (b : IBuffer, _ : BufferUsage, storage : BufferStorage) = x.PrepareBuffer(b, storage) :> IBackendBuffer
 
-        member x.DeleteRenderbuffer (b : IRenderbuffer) =
-            match b with
-                | :? Aardvark.Rendering.GL.Renderbuffer as b -> ctx.Delete b
-                | _ -> failwithf "unsupported renderbuffer-type: %A" b
-
         member x.CreateStreamingTexture mipMaps = x.CreateStreamingTexture mipMaps
         member x.DeleteStreamingTexture tex = x.DeleteStreamingTexture tex
 

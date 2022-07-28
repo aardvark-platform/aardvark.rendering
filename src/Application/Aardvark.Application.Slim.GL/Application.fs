@@ -175,7 +175,7 @@ module private OpenGL =
                 runtime.Context, signature, 
                 (fun _ -> 0), 
                 ignore, 
-                [0, DefaultSemantic.Colors, Aardvark.Rendering.GL.Renderbuffer(runtime.Context, 0, size, TextureFormat.Rgba8, signature.Samples, 0L) :> IFramebufferOutput], None
+                [0, DefaultSemantic.Colors, new Renderbuffer(runtime.Context, 0, size, TextureFormat.Rgba8, signature.Samples, 0L) :> IFramebufferOutput], None
             ) 
 
         { new ISwapchain with
