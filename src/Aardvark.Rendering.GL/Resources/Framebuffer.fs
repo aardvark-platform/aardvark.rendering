@@ -79,7 +79,8 @@ module FramebufferExtensions =
         GL.DeleteFramebuffer handle
         GL.Check "could not delete framebuffer"
 
-    let private init (bindings : list<int * Symbol * IFramebufferOutput>) (depthStencil : Option<IFramebufferOutput>) (c : ContextHandle) : int =
+    let private init (signature : IFramebufferSignature) (bindings : list<int * Symbol * IFramebufferOutput>) (depthStencil : Option<IFramebufferOutput>)
+                     (context : ContextHandle) : int =
 
         let mutable oldFbo = 0
         GL.GetInteger(GetPName.DrawFramebufferBinding, &oldFbo)
@@ -90,10 +91,14 @@ module FramebufferExtensions =
         GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, handle)
         GL.Check "could not bind framebuffer"
 
-        let attach (o : IFramebufferOutput) (attachment) =
-            match o with
+        let attach (semantic : Symbol) (attachment : FramebufferAttachment) (output : IFramebufferOutput) =
+            let validateLayerCount (count : int) =
+                if count < signature.LayerCount then
+                    failf "framebuffer attachment %A does not have enough layers for signature (attachment has %d, signature requires %d)" semantic count signature.LayerCount
 
+            match output with
             | :? Renderbuffer as o ->
+                validateLayerCount 1
                 GL.FramebufferRenderbuffer(FramebufferTarget.DrawFramebuffer, attachment, RenderbufferTarget.Renderbuffer, o.Handle)
                 GL.Check "could not attach renderbuffer"
 
@@ -104,9 +109,11 @@ module FramebufferExtensions =
                 let slices = 1 + r.Slices.Max - baseSlice
                 let level = r.Level
 
+                validateLayerCount slices
+
                 if slices > 1 then
                     if baseSlice <> 0 || slices <> (if o.Dimension = TextureDimension.TextureCube then 6 * o.Count else o.Count) then // TODO: Is it possible to bind a cubemap array as texture layers?
-                        failwith "sub-layers not supported atm."
+                        failf "sub-layers not supported atm."
   
                     GL.FramebufferTexture(FramebufferTarget.DrawFramebuffer, attachment, o.Handle, level)
                     GL.Check "could not attach texture"
@@ -116,7 +123,7 @@ module FramebufferExtensions =
                     | TextureDimension.TextureCube ->
                         let (_,target) = TextureTarget.cubeSides.[baseSlice]
                         if o.IsArray then
-                            failwith "cubemaparray currently not implemented"
+                            failf "cubemaparray currently not implemented"
                         else
                             GL.FramebufferTexture2D(FramebufferTarget.DrawFramebuffer, attachment, target, o.Handle, level)
                         GL.Check "could not attach texture"
@@ -128,22 +135,25 @@ module FramebufferExtensions =
                         GL.Check "could not attach texture"
 
             | v ->
-                failwithf "unsupported view: %A" v
+                failf "unsupported view: %A" v
 
         // attach all colors
-        for (i,s,o) in bindings do
+        for (i, s, o) in bindings do
             let attachment = int FramebufferAttachment.ColorAttachment0 + i |> unbox<FramebufferAttachment>
-            attach o attachment
+            o |> attach s attachment
 
         // attach depth-stencil
         match depthStencil with
         | Some o ->
-            if o.Format.IsDepthStencil then
-                attach o FramebufferAttachment.DepthStencilAttachment
-            elif o.Format.IsDepth then
-                attach o FramebufferAttachment.DepthAttachment
-            else
-                attach o FramebufferAttachment.StencilAttachment
+            let attachment =
+                if o.Format.IsDepthStencil then
+                    FramebufferAttachment.DepthStencilAttachment
+                elif o.Format.IsDepth then
+                    FramebufferAttachment.DepthAttachment
+                else
+                    FramebufferAttachment.StencilAttachment
+
+            o |> attach DefaultSemantic.DepthStencil attachment
         | None ->
             ()
 
@@ -166,7 +176,7 @@ module FramebufferExtensions =
     type Context with
 
         member x.CreateFramebuffer (signature : IFramebufferSignature, bindings : list<int * Symbol * IFramebufferOutput>, depthStencil : Option<IFramebufferOutput>) =
-            let init = init bindings depthStencil
+            let init = init signature bindings depthStencil
             addVirtualFbo x
             new Framebuffer(x, signature, init, destroy, bindings, depthStencil)
 
@@ -175,5 +185,5 @@ module FramebufferExtensions =
             f.DestroyHandles()
 
         member x.Update (f : Framebuffer, bindings : list<int * Symbol * IFramebufferOutput>, depthStencil : Option<IFramebufferOutput>) =
-            let init = init bindings depthStencil
+            let init = init f.Signature bindings depthStencil
             f.Update(init, bindings, depthStencil)
