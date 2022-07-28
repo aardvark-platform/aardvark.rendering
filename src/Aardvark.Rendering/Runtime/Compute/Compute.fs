@@ -11,6 +11,7 @@ open System.Runtime.CompilerServices
 #nowarn "51"
 
 type IComputeShader =
+    inherit IDisposable
     abstract member Runtime : IComputeRuntime
     abstract member LocalSize : V3i
 
@@ -28,7 +29,6 @@ and IComputeRuntime =
 
     abstract member MaxLocalSize : V3i
     abstract member CreateComputeShader : FShade.ComputeShader -> IComputeShader
-    abstract member DeleteComputeShader : IComputeShader -> unit
     abstract member NewInputBinding : IComputeShader -> IComputeShaderInputBinding
     abstract member Run : list<ComputeCommand> * IQuery -> unit
     abstract member Compile : list<ComputeCommand> -> ComputeProgram<unit>
@@ -156,6 +156,10 @@ type IComputeRuntimeExtensions private() =
     static member CreateComputeShader (this : IComputeRuntime, shader : 'a -> 'b) =
         let sh = FShade.ComputeShader.ofFunction this.MaxLocalSize shader
         this.CreateComputeShader(sh)
+
+    [<Extension>]
+    static member DeleteComputeShader (this : IComputeRuntime, shader : IComputeShader) =
+        shader.Dispose()
 
     [<Extension>]
     static member Run (this : IComputeRuntime, commands : list<ComputeCommand>) =

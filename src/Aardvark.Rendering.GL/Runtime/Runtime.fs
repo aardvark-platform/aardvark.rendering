@@ -224,7 +224,6 @@ type Runtime(debug : DebugLevel) =
         member x.MaxLocalSize = compute.Value.WorkGroupSize
         member x.CreateComputeShader (c : FShade.ComputeShader) = ctx.CompileKernel c :> IComputeShader
         member x.NewInputBinding(c : IComputeShader) = new ComputeShaderInputBinding(unbox c) :> IComputeShaderInputBinding
-        member x.DeleteComputeShader (shader : IComputeShader) = ctx.Delete(unbox<GL.ComputeShader> shader)
         member x.Run (commands : list<ComputeCommand>, queries : IQuery) = ctx.Run(commands, queries)
         member x.Compile (commands : list<ComputeCommand>) =
             let x = x :> IComputeRuntime

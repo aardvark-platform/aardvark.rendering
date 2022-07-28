@@ -139,9 +139,6 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         let memory = if storage = BufferStorage.Device then device.DeviceMemory else device.HostMemory
         memory.CreateBuffer(flags, data, export = export) :> IBackendBuffer
 
-    member x.DeleteBuffer(t : IBackendBuffer) =
-        Disposable.dispose(unbox<Buffer> t)
-
     member private x.CreateTextureInner(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int, export : ImageExportMode) =
         let layout =
             VkImageLayout.ShaderReadOnlyOptimal
@@ -447,9 +444,6 @@ type Runtime(device : Device, debug : DebugLevel) as this =
 
         member x.NewInputBinding(c : IComputeShader) =
             ComputeShader.newInputBinding (unbox c) :> IComputeShaderInputBinding
-
-        member x.DeleteComputeShader (shader : IComputeShader) =
-            Disposable.dispose (unbox<ComputeShader> shader)
 
         member x.Run (commands : list<ComputeCommand>, queries : IQuery) =
             ComputeCommand.run commands queries device
