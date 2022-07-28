@@ -128,9 +128,6 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     member x.PrepareSurface (signature : IFramebufferSignature, surface : ISurface) =
         device.CreateShaderProgram(unbox<RenderPass> signature, surface) :> IBackendSurface
 
-    member x.DeleteSurface (bs : IBackendSurface) =
-        Disposable.dispose (unbox<ShaderProgram> bs)
-
     member x.PrepareTexture (t : ITexture, [<Optional; DefaultParameterValue(false)>] export : bool) =
         device.CreateImage(t, export) :> IBackendTexture
 
@@ -495,7 +492,6 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         member x.CompileClear(signature, values) = x.CompileClear(signature, values)
 
         member x.PrepareSurface(signature, s) = x.PrepareSurface(signature, s)
-        member x.DeleteSurface(s) = x.DeleteSurface(s)
         member x.PrepareRenderObject(fboSignature, rj) = x.PrepareRenderObject(fboSignature, rj)
         member x.PrepareTexture(t) = x.PrepareTexture(t)
         member x.PrepareBuffer(b, u, s) = x.PrepareBuffer(b, u, s)

@@ -103,6 +103,13 @@ module IRuntimeFSharpExtensions =
 [<AbstractClass; Sealed; Extension>]
 type IRuntimeExtensions private() =
 
+    ///<summary>Deletes the given backend surface.</summary>
+    ///<param name="this">The runtime.</param>
+    ///<param name="surface">The surface to delete.</param>
+    [<Extension>]
+    static member DeleteSurface(this : IRuntime, surface : IBackendSurface) =
+        surface.Dispose()
+
     // ================================================================================================================
     // CompileRender
     // ================================================================================================================

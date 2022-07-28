@@ -196,10 +196,6 @@ type Runtime(debug : DebugLevel) =
 
         member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
         member x.PrepareSurface (signature, s : ISurface) : IBackendSurface = x.PrepareSurface(signature, s)
-        member x.DeleteSurface (s : IBackendSurface) =
-            match s with
-                | :? Program as p -> x.DeleteSurface p
-                | _ -> failwithf "unsupported program-type: %A" s
 
         member x.PrepareRenderObject(fboSignature : IFramebufferSignature, rj : IRenderObject) = x.PrepareRenderObject(fboSignature, rj)
 
@@ -494,9 +490,6 @@ type Runtime(debug : DebugLevel) =
             AVal.force program :> IBackendSurface
 
         )
-
-    member x.DeleteSurface (p : Program) =
-        ctx.Delete p
 
     member x.CreateStreamingTexture(mipMaps : bool) =
         ctx.CreateStreamingTexture(mipMaps) :> IStreamingTexture

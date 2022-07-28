@@ -16,11 +16,13 @@ open System.Runtime.CompilerServices
 
 [<AutoOpen>]
 module private ShaderProgramCounters =
-    let addProgram (ctx : Context) =
-        Interlocked.Increment(&ctx.MemoryUsage.ShaderProgramCount) |> ignore
 
-    let removeProgram (ctx : Context) =
-        Interlocked.Decrement(&ctx.MemoryUsage.ShaderProgramCount) |> ignore
+    module ResourceCounts =
+        let addProgram (ctx : Context) =
+            Interlocked.Increment(&ctx.MemoryUsage.ShaderProgramCount) |> ignore
+
+        let removeProgram (ctx : Context) =
+            Interlocked.Decrement(&ctx.MemoryUsage.ShaderProgramCount) |> ignore
 
 
 type ActiveUniform = { slot : int; index : int; location : int; name : string; semantic : string; samplerState : Option<SamplerState>; size : int; uniformType : ActiveUniformType; offset : int; arrayStride : int; isRowMajor : bool } with
@@ -69,8 +71,16 @@ type Program =
     member x.WritesPointSize =
         FShade.GLSL.GLSLProgramInterface.usesPointSize x.Interface
 
+    member x.Dispose() =
+        using x.Context.ResourceLock (fun _ ->
+            ResourceCounts.removeProgram x.Context
+            GL.DeleteProgram(x.Handle)
+            GL.Check "could not delete program"
+        )
+
     interface IBackendSurface with
         member x.Handle = x.Handle :> obj
+        member x.Dispose() = x.Dispose()
 
 [<AutoOpen>]
 module ProgramExtensions =
@@ -429,7 +439,7 @@ module ProgramExtensions =
 
             match x |> ShaderCompiler.tryCompileCompute code with
                 | Success shaders ->
-                    addProgram x
+                    ResourceCounts.addProgram x
                     let handle = GL.CreateProgram()
                     GL.Check "could not create program"
 
@@ -474,7 +484,7 @@ module ProgramExtensions =
                 match x |> ShaderCompiler.tryCompileShaders true code with
                     | Success shaders ->
                         let firstTexture = 0
-                        addProgram x
+                        ResourceCounts.addProgram x
                         let handle = GL.CreateProgram()
                         GL.Check "could not create program"
 
@@ -502,11 +512,7 @@ module ProgramExtensions =
                     failwithf "[GL] shader compiler returned errors: %s" e
 
         member x.Delete(p : Program) =
-            Operators.using x.ResourceLock (fun _ ->
-                removeProgram x
-                GL.DeleteProgram(p.Handle)
-                GL.Check "could not delete program"
-            )
+            p.Dispose()
 
         member x.TryCompileProgram(id : string, signature : IFramebufferSignature, code : Lazy<GLSL.GLSLShader>) =
             x.TryCompileProgram(id, signature.Layout, code)
@@ -605,7 +611,7 @@ module ProgramExtensions =
                     | Some c ->
                         
                         let prog = GL.CreateProgram()
-                        addProgram x
+                        ResourceCounts.addProgram x
                         GL.ProgramBinary(prog, c.format, c.binary, c.binary.Length)
                         GL.Check "could not create program from binary"
                         

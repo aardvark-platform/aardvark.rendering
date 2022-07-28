@@ -7,13 +7,9 @@ open FSharp.Data.Adaptive
 [<AllowNullLiteral>]
 type ISurface = interface end
 
-[<AllowNullLiteral>]
-type IDisposableSurface =
-    inherit ISurface
-    inherit IDisposable
-
 type IBackendSurface =
     inherit ISurface
+    inherit IDisposable
     abstract member Handle : obj
 
 [<RequireQualifiedAccess>]
