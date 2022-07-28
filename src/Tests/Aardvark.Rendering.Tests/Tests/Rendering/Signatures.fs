@@ -291,6 +291,54 @@ module FramebufferSignature =
             finally
                 result.Release()
 
+        let renderToCubeArrayLayered (runtime : IRuntime) =
+            use signature =
+                runtime.CreateFramebufferSignature(
+                    [ DefaultSemantic.Colors, TextureFormat.Rgba8],
+                    layers = 12, perLayerUniforms = [ "Color" ]
+                )
+
+            let colorBuffer =
+                runtime.CreateTextureCubeArray(512, TextureFormat.Rgba8, count = 2)
+
+            use framebuffer =
+                runtime.CreateFramebuffer(signature, [
+                    DefaultSemantic.Colors, colorBuffer.GetOutputView()
+                ])
+
+            let colors =
+                [|
+                    C4f.Aqua
+                    C4f.Azure
+                    C4f.Beige
+                    C4f.BurlyWood
+                    C4f.CadetBlue
+                    C4f.Crimson
+                    C4f.DeepPink
+                    C4f.Gold
+                    C4f.Indigo
+                    C4f.Linen
+                    C4f.Moccasin
+                    C4f.Tomato
+                |]
+
+            use task =
+                Sg.fullScreenQuad
+                |> Sg.uniform' "Color" colors
+                |> Sg.shader { do! DefaultSurfaces.sgColor }
+                |> Sg.compile runtime signature
+
+            try
+                task.Run framebuffer
+
+                for i = 0 to colors.Length - 1 do
+                    let pi = colorBuffer.Download(slice = i).AsPixImage<uint8>()
+                    let c = C4b colors.[i]
+                    pi |> PixImage.isColor [| c.R; c.G; c.B; c.A |]
+
+            finally
+                runtime.DeleteTexture colorBuffer
+
 
     let tests (backend : Backend) =
         [
@@ -301,5 +349,7 @@ module FramebufferSignature =
                 "Render subset",       Cases.renderToSubset
                 "Render combined",     Cases.renderCombined
                 "Render multisampled", Cases.renderToMultisampled
+
+            "Render to cube array (layered)", Cases.renderToCubeArrayLayered
         ]
         |> prepareCases backend "Framebuffer signatures"
