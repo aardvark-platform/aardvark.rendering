@@ -160,12 +160,16 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
     static member CreateFramebuffer (this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<V2i>, writeOnly : Set<Symbol>) =
 
         let inline createAttachment (sem : Symbol) (format : TextureFormat) =
-            if writeOnly |> Set.contains sem then
-                let rb = this.CreateRenderbuffer(size, format, signature.Samples)
-                this.CreateRenderbufferAttachment(rb) :> aval<_>
+            if signature.LayerCount > 1 then
+                let tex = this.CreateTexture2DArray(size, format, samples = signature.Samples, count = signature.LayerCount)
+                this.CreateTextureAttachment(tex) :> aval<_>
             else
-                let tex = this.CreateTexture2D(size, format, samples = signature.Samples)
-                this.CreateTextureAttachment(tex, 0) :> aval<_>
+                if writeOnly |> Set.contains sem then
+                    let rb = this.CreateRenderbuffer(size, format, signature.Samples)
+                    this.CreateRenderbufferAttachment(rb) :> aval<_>
+                else
+                    let tex = this.CreateTexture2D(size, format, samples = signature.Samples)
+                    this.CreateTextureAttachment(tex, 0) :> aval<_>
 
         let atts = SymDict.empty
 
