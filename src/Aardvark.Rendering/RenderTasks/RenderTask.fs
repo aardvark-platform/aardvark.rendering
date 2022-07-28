@@ -165,9 +165,8 @@ module RenderTask =
         let task = tasks.Data.[0]
         let runtime = task.Runtime.Value
         let signature = task.FramebufferSignature.Value
-        let attachments = signature.GetSemantics()
 
-        let fbo = runtime.CreateFramebufferCube(signature, size, tasks.Levels, Set.difference attachments output)
+        let fbo = runtime.CreateFramebufferCube(signature, size, tasks.Levels)
         let res = tasks.RenderTo(fbo, clearValues)
         output |> Seq.map (fun k -> k, getResultCube k res) |> Map.ofSeq
 

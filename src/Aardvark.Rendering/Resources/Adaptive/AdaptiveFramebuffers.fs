@@ -2,6 +2,7 @@
 
 open Aardvark.Base
 open FSharp.Data.Adaptive
+open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
 
 [<AutoOpen>]
@@ -213,27 +214,24 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
         this.CreateFramebufferCube(signature, atts)
 
     /// Creates a cube framebuffer of the given signature for the given adaptive size and number of levels.
-    /// writeOnly indicates which attachments can be represented as render buffers instead of textures.
     [<Extension>]
-    static member CreateFramebufferCube(this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<int>, levels : int, writeOnly : Set<Symbol>) =
+    static member CreateFramebufferCube(this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<int>,
+                                        [<Optional; DefaultParameterValue(1)>] levels : int) =
+        if signature.Samples > 1 then
+            failwith "Cannot create cube framebuffer with multisampling"
+
+        if signature.LayerCount > 1 then
+            failwith "Cannot create layered cube framebuffer"
+
         let textures = SymDict.empty
-        let renderBuffers = SymDict.empty
 
         let createAttachment (sem : Symbol) (face : CubeSide) (level : int) (format : TextureFormat) =
-            if writeOnly |> Set.contains sem then
-                let rb =
-                    renderBuffers.GetOrCreate(sem, fun _ ->
-                        this.CreateRenderbuffer(size |> AVal.map V2i, format, signature.Samples)
-                    )
+            let tex =
+                textures.GetOrCreate(sem, fun _ ->
+                    this.CreateTextureCube(size, format, levels)
+                )
 
-                this.CreateRenderbufferAttachment(rb) :> aval<_>
-            else
-                let tex =
-                    textures.GetOrCreate(sem, fun _ ->
-                        this.CreateTextureCube(size, format, levels)
-                    )
-
-                this.CreateTextureAttachment(tex, int face, level) :> aval<_>
+            this.CreateTextureAttachment(tex, int face, level) :> aval<_>
 
         let attachments =
             CubeMap.init levels (fun face level ->
@@ -250,21 +248,3 @@ type IFramebufferRuntimeAdaptiveExtensions private() =
             )
 
         this.CreateFramebufferCube(signature, attachments)
-
-    /// Creates a cube framebuffer of the given signature for the given adaptive size and number of levels.
-    /// Textures are used for all attachments except depth-stencil.
-    [<Extension>]
-    static member CreateFramebufferCube(this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<int>, levels : int) =
-        this.CreateFramebufferCube(signature, size, levels, Set.ofList [DefaultSemantic.DepthStencil])
-
-    /// Creates a cube framebuffer of the given signature for the given adaptive size.
-    /// writeOnly indicates which attachments can be represented as render buffers instead of textures.
-    [<Extension>]
-    static member CreateFramebufferCube(this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<int>, writeOnly : Set<Symbol>) =
-        this.CreateFramebufferCube(signature, size, 1, writeOnly)
-
-    /// Creates a cube framebuffer of the given signature for the given adaptive size.
-    /// Textures are used for all attachments except depth and stencil.
-    [<Extension>]
-    static member CreateFramebufferCube(this : IFramebufferRuntime, signature : IFramebufferSignature, size : aval<int>) =
-        this.CreateFramebufferCube(signature, size, 1)
