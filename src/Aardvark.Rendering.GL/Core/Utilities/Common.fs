@@ -7,6 +7,15 @@ open Aardvark.Base
 open Aardvark.Rendering
 
 [<AutoOpen>]
+module private ErrorUtilities =
+
+    let inline failf fmt =
+        Printf.kprintf (fun str ->
+            Log.error "[GL] %s" str
+            failwith ("[GL] " + str)
+        ) fmt
+
+[<AutoOpen>]
 module TypeSizeExtensions =
     type Type with
         /// <summary>
