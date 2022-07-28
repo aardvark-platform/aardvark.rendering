@@ -44,7 +44,6 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     member x.ContextLock = device.Token :> IDisposable
 
     member x.CreateStreamingTexture (mipMaps : bool) = failf "not implemented"
-    member x.DeleteStreamingTexture (texture : IStreamingTexture) = failf "not implemented"
 
     member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
         new SparseTextureImplemetation.DoubleBufferedSparseImage<'a>(
@@ -502,7 +501,6 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         member x.PrepareBuffer(b, u, s) = x.PrepareBuffer(b, u, s)
 
         member x.CreateStreamingTexture(mipMap) = x.CreateStreamingTexture(mipMap)
-        member x.DeleteStreamingTexture(t) = x.DeleteStreamingTexture(t)
 
         member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
             x.CreateSparseTexture<'a>(size, levels, slices, dim, format, brickSize, maxMemory)

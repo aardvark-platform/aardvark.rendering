@@ -537,6 +537,7 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
         member x.Update(f,s,d) = x.Update(f,s,d)
         member x.UpdateAsync(f,s,d) = x.UpdateAsync(f,s,d)
         member x.ReadPixel(pos) = x.ReadPixel(pos)
+        member x.Dispose() = x.Dispose()
 
 
 

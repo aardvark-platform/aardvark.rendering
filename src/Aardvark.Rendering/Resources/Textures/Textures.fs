@@ -45,6 +45,7 @@ type INativeTexture =
 
 type IStreamingTexture =
     inherit aval<ITexture>
+    inherit IDisposable
     abstract member Update : format : PixFormat * size : V2i * data : nativeint -> unit
     abstract member UpdateAsync : format : PixFormat * size : V2i * data : nativeint -> Transaction
     abstract member ReadPixel : pos : V2i -> C4f
@@ -139,7 +140,6 @@ and ITextureRuntime =
     abstract member CreateRenderbuffer : size : V2i * format : TextureFormat * samples : int -> IRenderbuffer
 
     abstract member CreateStreamingTexture : mipMaps : bool -> IStreamingTexture
-    abstract member DeleteStreamingTexture : IStreamingTexture -> unit
 
     abstract member CreateSparseTexture<'a when 'a : unmanaged> : size : V3i * levels : int * slices : int * dim : TextureDimension * format : Col.Format * brickSize : V3i * maxMemory : int64 -> ISparseTexture<'a>
 

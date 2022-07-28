@@ -208,7 +208,6 @@ type Runtime(debug : DebugLevel) =
         member x.PrepareBuffer (b : IBuffer, _ : BufferUsage, storage : BufferStorage) = x.PrepareBuffer(b, storage) :> IBackendBuffer
 
         member x.CreateStreamingTexture mipMaps = x.CreateStreamingTexture mipMaps
-        member x.DeleteStreamingTexture tex = x.DeleteStreamingTexture tex
 
         member x.CreateSparseTexture<'a when 'a : unmanaged> (size : V3i, levels : int, slices : int, dim : TextureDimension, format : Col.Format, brickSize : V3i, maxMemory : int64) : ISparseTexture<'a> =
             failwith "not implemented"
@@ -503,13 +502,6 @@ type Runtime(debug : DebugLevel) =
         ctx.CreateStreamingTexture(mipMaps) :> IStreamingTexture
 
     member x.ResourceManager = manager
-
-    member x.DeleteStreamingTexture(t : IStreamingTexture) =
-        match t with
-            | :? StreamingTexture as t ->
-                ctx.Delete(t)
-            | _ ->
-                failwithf "unsupported streaming texture: %A" t
 
     member private x.CompileRender (signature : IFramebufferSignature, set : aset<IRenderObject>, debug : bool) =
         let set = EffectDebugger.Hook set
