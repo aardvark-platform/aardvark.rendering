@@ -2,13 +2,14 @@
 
 open Aardvark.Base
 open System
+open System.Threading
 open System.Runtime.InteropServices
 
 /// Interface for external memory handles.
 [<AllowNullLiteral>]
 type IExternalMemoryHandle =
     inherit IDisposable
-    abstract member Handle : nativeint
+    abstract member IsValid : bool
 
 [<AutoOpen>]
 module NativePlatformHandles =
@@ -25,15 +26,24 @@ module NativePlatformHandles =
 
     [<AbstractClass>]
     type NativeHandle<'T when 'T : equality>(handle : 'T) =
+        let mutable isValid = 1
 
+        member x.IsValid = isValid = 1
         member x.Handle = handle
 
-        abstract member GetHandle : 'T -> nativeint
-        abstract member CloseHandle : 'T -> bool
+        /// Performs the given action for the handle and invalidates it.
+        member x.UseHandle(action : 'T -> 'U) =
+            if Interlocked.Exchange(&isValid, 0) = 1 then
+                action handle
+            else
+                failwithf "External memory handle %A is invalid" handle
+
+        abstract member CloseHandle : unit -> bool
 
         member x.Dispose() =
-            if not <| x.CloseHandle handle then
-                Log.warn "Could not close external memory handle."
+            if Interlocked.Exchange(&isValid, 0) = 1 then
+                if not <| x.CloseHandle() then
+                    Log.warn "Could not close external memory handle."
 
         override x.Equals(other : obj) =
             match other with
@@ -47,20 +57,18 @@ module NativePlatformHandles =
             member x.Equals(o) = handle = o.Handle
 
         interface IExternalMemoryHandle with
-            member x.Handle = x.GetHandle handle
+            member x.IsValid = x.IsValid
             member x.Dispose() = x.Dispose()
 
     type Win32Handle(handle : nativeint) =
         inherit NativeHandle<nativeint>(handle)
 
-        override x.GetHandle(handle) = handle
-        override x.CloseHandle(handle) = Kernel32.CloseHandle handle
+        override x.CloseHandle() = Kernel32.CloseHandle handle
 
     type PosixHandle(handle : int) =
         inherit NativeHandle<int>(handle)
 
-        override x.GetHandle(handle) = nativeint handle
-        override x.CloseHandle(handle) = Posix.close handle <> 0
+        override x.CloseHandle() = Posix.close handle = 0
 
 
 /// Represents a block of external memory.

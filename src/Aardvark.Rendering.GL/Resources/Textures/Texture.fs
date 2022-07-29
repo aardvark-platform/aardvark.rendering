@@ -488,12 +488,16 @@ module TextureCreationExtensions =
         // ================================================================================================================
 
         member internal x.SetDefaultTextureParams(target : TextureTarget, mipMapLevels : int) =
-            GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels - 1)
-            GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
-            GL.TexParameter(target, TextureParameterName.TextureWrapS, int TextureWrapMode.ClampToEdge)
-            GL.TexParameter(target, TextureParameterName.TextureWrapT, int TextureWrapMode.ClampToEdge)
-            GL.TexParameter(target, TextureParameterName.TextureMinFilter, int TextureMinFilter.Linear)
-            GL.TexParameter(target, TextureParameterName.TextureMagFilter, int TextureMagFilter.Linear)
+            match target with
+            | TextureTarget.Texture2DMultisample
+            | TextureTarget.Texture2DMultisampleArray -> ()
+            | _ ->
+                GL.TexParameter(target, TextureParameterName.TextureMaxLevel, mipMapLevels - 1)
+                GL.TexParameter(target, TextureParameterName.TextureBaseLevel, 0)
+                GL.TexParameter(target, TextureParameterName.TextureWrapS, int TextureWrapMode.ClampToEdge)
+                GL.TexParameter(target, TextureParameterName.TextureWrapT, int TextureWrapMode.ClampToEdge)
+                GL.TexParameter(target, TextureParameterName.TextureMinFilter, int TextureMinFilter.Linear)
+                GL.TexParameter(target, TextureParameterName.TextureMagFilter, int TextureMagFilter.Linear)
 
         member private x.ValidateAndAllocateTexture(target : TextureTarget, size : 'T, create : TextureTarget -> unit) =
             // Allocate using proxy target
