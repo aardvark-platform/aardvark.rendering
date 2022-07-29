@@ -38,7 +38,7 @@ module AdaptivePrimitiveValueConverterExtensions =
 
         let convertArray (inputElementType : Type) (m : aval<Array>) : aval<'T[]> =
             if inputElementType = typeof<'T> then
-                m |> AdaptiveResource.cast
+                m |> AdaptiveResource.mapNonAdaptive unbox
             else
                 let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputElementType; typeof<'T> |]
                 let converter : AdaptiveConverter<'T> = tconv |> getStaticField "Instance"
