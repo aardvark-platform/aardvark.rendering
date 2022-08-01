@@ -37,10 +37,9 @@ type VertexData<'T> =
         Stride : uint64
     }
 
-[<RequireQualifiedAccess>]
 type IndexType =
-    | UInt16
-    | UInt32
+    | UInt16 = 0
+    | UInt32 = 1
 
 /// Describes a buffer containing index data.
 [<CLIMutable>]
@@ -119,13 +118,12 @@ type TraceGeometry =
         | Triangles arr -> arr |> Array.map (fun mesh -> mesh.Primitives)
         | AABBs arr -> arr |> Array.map (fun bb -> bb.Count)
 
-[<RequireQualifiedAccess>]
 type AccelerationStructureUsage =
     /// Favor fast tracing over fast building.
-    | Static
+    | Static = 0
 
     /// Favor fast building over fast tracing.
-    | Dynamic
+    | Dynamic = 1
 
 type IAccelerationStructure =
     inherit IDisposable

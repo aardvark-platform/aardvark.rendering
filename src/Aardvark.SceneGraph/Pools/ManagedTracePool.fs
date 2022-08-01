@@ -385,7 +385,7 @@ module private ManagedTracePoolUtils =
         member x.Type =
             match x with
             | IndexType.UInt16 -> typeof<uint16>
-            | IndexType.UInt32 -> typeof<uint32>
+            | _                -> typeof<uint32>
 
     type IManagedBuffer with
         member x.Add(data : IndexData<aval<IBuffer>>, range : Range1l) =

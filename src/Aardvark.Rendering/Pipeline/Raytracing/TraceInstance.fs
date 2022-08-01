@@ -28,16 +28,15 @@ type CullMode =
     /// Cull all back-facing triangles.
     | Enabled of front: WindingOrder
 
-[<RequireQualifiedAccess>]
 type GeometryMode =
     /// Do not override individual geometry flags.
-    | Default
+    | Default = 0
 
     /// Treat all geometries as if GeometryFlags.Opaque was specified.
-    | Opaque
+    | Opaque = 1
 
     /// Treat all geometries as if GeometryFlags.Opaque was not specified.
-    | Transparent
+    | Transparent = 2
 
 
 type HitConfig = List<Symbol>

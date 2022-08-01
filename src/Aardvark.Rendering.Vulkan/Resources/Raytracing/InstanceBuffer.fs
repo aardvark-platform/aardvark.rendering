@@ -28,9 +28,9 @@ module internal InstanceBuffer =
 
             let g =
                 geometryMode |> (function
-                    | GeometryMode.Default     -> VkGeometryInstanceFlagsKHR.None
-                    | GeometryMode.Opaque      -> VkGeometryInstanceFlagsKHR.ForceOpaqueBit
-                    | GeometryMode.Transparent -> VkGeometryInstanceFlagsKHR.ForceNoOpaqueBit
+                    | GeometryMode.Default -> VkGeometryInstanceFlagsKHR.None
+                    | GeometryMode.Opaque  -> VkGeometryInstanceFlagsKHR.ForceOpaqueBit
+                    | _                    -> VkGeometryInstanceFlagsKHR.ForceNoOpaqueBit
                 )
 
             uint8 (c ||| g)

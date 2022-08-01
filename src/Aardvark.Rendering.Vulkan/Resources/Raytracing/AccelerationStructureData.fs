@@ -84,7 +84,7 @@ module private NativeAccelerationStructureData =
         let hint =
             match usage with
             | AccelerationStructureUsage.Static -> VkBuildAccelerationStructureFlagsKHR.PreferFastTraceBit
-            | AccelerationStructureUsage.Dynamic -> VkBuildAccelerationStructureFlagsKHR.PreferFastBuildBit
+            | _                                 -> VkBuildAccelerationStructureFlagsKHR.PreferFastBuildBit
 
         let update =
             if allowUpdate then
@@ -137,7 +137,7 @@ module private NativeAccelerationStructureData =
                 indexData |> Option.map (fun d ->
                     match d.Type with
                     | IndexType.UInt16 -> VkIndexType.Uint16
-                    | IndexType.UInt32 -> VkIndexType.Uint32
+                    | _ -> VkIndexType.Uint32
                 )
                 |> Option.defaultValue VkIndexType.NoneKhr
 
