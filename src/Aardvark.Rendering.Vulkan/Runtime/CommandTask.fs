@@ -642,7 +642,7 @@ module private RuntimeCommands =
                                 vertexTypes |> Map.map (fun name (_,t) ->
                                     let elementSize = Marshal.SizeOf t
                                     let sizeInBytes = int64 elementSize * int64 vertexCount
-                                    let buffer = device.DeviceMemory |> Buffer.create' true false (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit) sizeInBytes
+                                    let buffer = device.DeviceMemory |> Buffer.create' true false 1UL (VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit) sizeInBytes
                                     (buffer, elementSize)
                                 )
                             vertexBuffers.[id] <- buffers

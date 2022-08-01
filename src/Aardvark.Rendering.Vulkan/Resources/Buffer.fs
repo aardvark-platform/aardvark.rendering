@@ -346,7 +346,7 @@ module Buffer =
         buffer.AddReference()
         buffer
 
-    let create' (concurrent : bool) (export : bool) (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
+    let create' (concurrent : bool) (export : bool) (alignment : uint64) (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
         let device = memory.Device
 
         if size > 0L then
@@ -389,7 +389,8 @@ module Buffer =
             if reqs.memoryTypeBits &&& (1u <<< memory.Index) = 0u then
                 failf "cannot create buffer using memory %A" memory
 
-            let ptr = memory.Alloc(int64 reqs.alignment, int64 reqs.size, export)
+            let alignment = Fun.LeastCommonMultiple(alignment, reqs.alignment)
+            let ptr = memory.Alloc(int64 alignment, int64 reqs.size, export)
 
             VkRaw.vkBindBufferMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
                 |> check "could not bind buffer-memory"
@@ -402,20 +403,20 @@ module Buffer =
             memory |> empty export flags
 
     let inline create (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
-        create' false false flags size memory
+        create' false false 1UL flags size memory
 
-    let inline alloc' (concurrent : bool) (export : bool) (flags : VkBufferUsageFlags) (size : int64) (device : Device) =
-        create' concurrent export flags size device.DeviceMemory
+    let inline alloc' (concurrent : bool) (export : bool) (alignment : uint64) (flags : VkBufferUsageFlags) (size : int64) (device : Device) =
+        create' concurrent export alignment flags size device.DeviceMemory
 
     let inline alloc (flags : VkBufferUsageFlags) (size : int64) (device : Device) =
-        alloc' false false flags size device
+        alloc' false false 1UL flags size device
 
     let internal ofWriter (export : bool) (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (memory : DeviceHeap) =
         let device = memory.Device
 
         if size > 0n then
             let size = int64 size
-            let buffer = memory |> create' false export flags size
+            let buffer = memory |> create' false export 1UL flags size
 
             if memory.IsHostVisible then
                 buffer.Memory.Mapped (fun dst -> writer dst)
@@ -642,12 +643,12 @@ type ContextBufferExtensions private() =
     [<Extension>]
     static member inline CreateBuffer(device : Device, flags : VkBufferUsageFlags, size : int64,
                                       [<Optional; DefaultParameterValue(false)>] export : bool) =
-        device |> Buffer.alloc' false export flags size
+        device |> Buffer.alloc' false export 1UL flags size
 
     [<Extension>]
     static member inline CreateBuffer(memory : DeviceHeap, flags : VkBufferUsageFlags, size : int64,
                                       [<Optional; DefaultParameterValue(false)>] export : bool) =
-        memory |> Buffer.create' false export flags size
+        memory |> Buffer.create' false export 1UL flags size
 
     [<Extension>]
     static member inline CreateBuffer(device : Device, flags : VkBufferUsageFlags, data : IBuffer,

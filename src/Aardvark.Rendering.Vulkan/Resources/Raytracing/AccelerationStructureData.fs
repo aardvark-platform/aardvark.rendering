@@ -213,8 +213,9 @@ module private NativeAccelerationStructureData =
             device |> Buffer.alloc flags (int64 sizes.accelerationStructureSize)
 
         let scratchBuffer =
+            let alignment = uint64 device.PhysicalDevice.Limits.Raytracing.Value.MinAccelerationStructureScratchOffsetAlignment
             let flags = VkBufferUsageFlags.StorageBufferBit ||| VkBufferUsageFlags.ShaderDeviceAddressBitKhr
             let size = max sizes.buildScratchSize sizes.updateScratchSize
-            device |> Buffer.alloc flags (int64 size)
+            device |> Buffer.alloc' false false alignment flags (int64 size)
 
         {| ResultBuffer = resultBuffer; ScratchBuffer = scratchBuffer |}
