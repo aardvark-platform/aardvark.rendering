@@ -1181,11 +1181,44 @@ type CompilerInfo =
 
 [<AutoOpen>]
 module rec ChangeableProgram =
-
     open System.IO
     open System.Runtime.InteropServices
     open Aardvark.Rendering.Management
     open Aardvark.Assembler
+    
+    
+    
+
+    let private beginFunction (ass : IAssemblerStream) =
+        ass.BeginFunction()
+        match ass with
+        | :? AMD64.AssemblerStream as amd ->
+            amd.Push AMD64.Register.R8
+            amd.Push AMD64.Register.R9
+            amd.Push AMD64.Register.R10
+            amd.Push AMD64.Register.R11
+            amd.Push AMD64.Register.R12
+            amd.Push AMD64.Register.R13
+            amd.Push AMD64.Register.R14
+            amd.Push AMD64.Register.R15
+        | _ ->
+            ()
+            
+    let private endFunction (ass : IAssemblerStream) =
+        match ass with
+        | :? AMD64.AssemblerStream as amd ->
+            amd.Pop AMD64.Register.R15
+            amd.Pop AMD64.Register.R14
+            amd.Pop AMD64.Register.R13
+            amd.Pop AMD64.Register.R12
+            amd.Pop AMD64.Register.R11
+            amd.Pop AMD64.Register.R10
+            amd.Pop AMD64.Register.R9
+            amd.Pop AMD64.Register.R8
+        | _ ->
+            ()
+        ass.EndFunction()
+        
     module Memory =
         let executable : Memory<nativeint> =
             {
@@ -1429,7 +1462,7 @@ module rec ChangeableProgram =
 
         static let epilog =
             assemble (fun s ->
-                s.EndFunction()
+                endFunction s
                 s.Ret()
             )
 
@@ -1440,7 +1473,7 @@ module rec ChangeableProgram =
         static let prologSize =
             let mem = 
                 assemble (fun s ->
-                    s.BeginFunction()
+                    beginFunction s
                     s.Jump 34325324
                 )
             mem.Length
@@ -1468,7 +1501,7 @@ module rec ChangeableProgram =
                 use ms = new SystemMemoryStream()
                 use ass = AssemblerStream.create ms
 
-                ass.BeginFunction()
+                beginFunction ass
                 ass.Jump (jumpDistance block.Offset block.Size epilog.Offset)
 
                 let arr = ms.ToMemory()
