@@ -666,7 +666,8 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
             glfw.WindowHint(WindowHintBool.FocusOnShow, cfg.focus)
 
             let win = glfw.CreateWindow(cfg.width, cfg.height, cfg.title, NativePtr.zero, parent)
-            if win = NativePtr.zero then failwith "GLFW could not create window"
+            if win = NativePtr.zero then
+                failwithf "GLFW could not create window: %A" (glfw.GetError())
 
             lastWindow <- Some win
             
