@@ -165,7 +165,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     let pool = QueueFamilyPool(physical.QueueFamilies)
     let graphicsQueues  = pool.TryTakeSingleFamily(QueueFlags.Graphics, 1)
     let computeQueues   = pool.TryTakeExplicit(QueueFlags.Compute, QueueFlags.Graphics, 1)
-    let transferQueues  = pool.TryTakeSingleFamily(QueueFlags.Transfer, 1)
+    let transferQueues  = pool.TryTakeExplicit(QueueFlags.Transfer, QueueFlags.Graphics ||| QueueFlags.Compute, 1)
     let onDispose = Event<unit>()
     
     let mutable shaderCachePath : Option<string> = None
