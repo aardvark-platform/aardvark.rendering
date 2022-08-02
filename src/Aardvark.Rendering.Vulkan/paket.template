@@ -9,3 +9,4 @@ repositoryUrl https://github.com/aardvark-platform/aardvark.rendering
 description
     Aardvark is an open-source platform for visual computing, real-time graphics and visualization.
 include-pdbs true
+include-referenced-projects true

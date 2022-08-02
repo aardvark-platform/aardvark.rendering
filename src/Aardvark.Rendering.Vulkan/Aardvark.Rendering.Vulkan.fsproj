@@ -16,12 +16,9 @@
     <OutputPath>..\..\bin\Release\</OutputPath>
   </PropertyGroup>
   <ItemGroup>
-    <None Include="Wrapper\vk.xml" />
-    <None Include="Wrapper\Generator.fsx" />
-    <Compile Include="Wrapper\Types.fs" />
-    <Compile Include="Wrapper\Vulkan.fs" />
-    <Compile Include="Wrapper\PCI.fs" />
-    <Compile Include="Wrapper\VKVM.fs" />
+    <EmbeddedResource Remove="Wrapper\**" />
+  </ItemGroup>
+  <ItemGroup>
     <Compile Include="Core\Config.fs" />
     <Compile Include="Core\Utilities.fs" />
     <Compile Include="Core\Info.fs" />
@@ -90,6 +87,7 @@
     <None Include="paket.references" />
   </ItemGroup>
   <ItemGroup>
+    <ProjectReference Include="..\Aardvark.Rendering.Vulkan.Wrapper\Aardvark.Rendering.Vulkan.Wrapper.fsproj" />
     <ProjectReference Include="..\Aardvark.Rendering\Aardvark.Rendering.fsproj" />
   </ItemGroup>
   <Import Project="..\..\.paket\Paket.Restore.targets" />

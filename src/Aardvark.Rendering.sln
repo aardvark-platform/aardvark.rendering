@@ -210,6 +210,8 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "18 - UniformUpdates", "Scra
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "05 - Points", "Examples (netcore)\05 - Points\05 - Points.fsproj", "{D362070A-E74D-47D5-A029-12E1987DC4A2}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Vulkan.Wrapper", "Aardvark.Rendering.Vulkan.Wrapper\Aardvark.Rendering.Vulkan.Wrapper.fsproj", "{3C17A71D-E2DC-42A5-9BD4-5EF2A9E9C495}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -576,6 +578,10 @@ Global
 		{D362070A-E74D-47D5-A029-12E1987DC4A2}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D362070A-E74D-47D5-A029-12E1987DC4A2}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D362070A-E74D-47D5-A029-12E1987DC4A2}.Release|Any CPU.Build.0 = Release|Any CPU
+		{3C17A71D-E2DC-42A5-9BD4-5EF2A9E9C495}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{3C17A71D-E2DC-42A5-9BD4-5EF2A9E9C495}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{3C17A71D-E2DC-42A5-9BD4-5EF2A9E9C495}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{3C17A71D-E2DC-42A5-9BD4-5EF2A9E9C495}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
