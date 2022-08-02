@@ -1,6 +1,7 @@
 namespace Aardvark.Application.Slim
 
 open System.Reflection
+open System.Runtime.InteropServices
 open Aardvark.Base
 open Silk.NET.GLFW
 open Aardvark.Rendering
@@ -22,6 +23,12 @@ module private OpenGL =
     open System.Runtime.InteropServices
 
     let mutable version = System.Version(3,3)
+    let mutable useNoError = false
+    
+    type GLGetDelegate = delegate of GetPName * byref<int> -> unit
+    type GLGetStringiDelegate = delegate of StringNameIndexed * int -> nativeint
+    type GLGetStringDelegate = delegate of StringName -> nativeint
+    
     let initVersion (glfw : Glfw) =
         let defaultVersion = System.Version(Config.MajorVersion, Config.MinorVersion)
 
@@ -37,17 +44,10 @@ module private OpenGL =
                 System.Version(3,3)
             ]
 
-        let startAt =
-            match versions |> List.tryFindIndex ((=) defaultVersion) with
-            | Some idx -> idx
-            | _ ->
-                Log.warn "OpenGL version %A is invalid" defaultVersion
-                0
-
         let best = 
             versions
-            |> List.skip startAt
-            |> List.tryFind (fun v -> 
+            |> List.skipWhile ((<>) defaultVersion)
+            |> List.tryPick (fun v -> 
                 glfw.DefaultWindowHints()
                 glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.OpenGL)
                 glfw.WindowHint(WindowHintInt.ContextVersionMajor, v.Major)
@@ -63,15 +63,40 @@ module private OpenGL =
                 if w = NativePtr.zero then
                     let error, _ = glfw.GetError()
                     Log.warn "OpenGL %A not working: %A" v error
-                    false
+                    None
                 else
+                    glfw.MakeContextCurrent(w)
+                    
+                    let useNoError = 
+                        let glGet = Marshal.GetDelegateForFunctionPointer<GLGetDelegate>(glfw.GetProcAddress "glGetIntegerv")
+                        let glGetString = Marshal.GetDelegateForFunctionPointer<GLGetStringDelegate>(glfw.GetProcAddress "glGetString")
+                        let glGetStringi = Marshal.GetDelegateForFunctionPointer<GLGetStringiDelegate>(glfw.GetProcAddress "glGetStringi")
+                        
+                        let ven = Marshal.PtrToStringAnsi(glGetString.Invoke(StringName.Vendor))
+                        
+                        if ven.ToLower().Contains "intel" then
+                            false
+                        else
+                            let mutable cnt = 0
+                            glGet.Invoke(GetPName.NumExtensions, &cnt)
+                            let arr =
+                                Array.init cnt (fun i ->
+                                    let ptr = glGetStringi.Invoke(StringNameIndexed.Extensions, i)
+                                    Marshal.PtrToStringAnsi ptr
+                                )
+                                
+                            Array.contains "GL_KHR_no_error" arr
+                            
+                    glfw.MakeContextCurrent(NativePtr.zero)
                     glfw.DestroyWindow(w)
                     Log.line "OpenGL %A working" v
-                    true
+                    Some (v, useNoError)
 
             )
         match best with
-        | Some b -> version <- b
+        | Some (b, noErr) ->
+            version <- b
+            useNoError <- noErr 
         | None -> failwith "no compatible OpenGL version found"
 
     type MyWindowInfo(win : nativeptr<WindowHandle>) =
@@ -273,7 +298,7 @@ module private OpenGL =
             override __.CreateSurface(runtime : IRuntime, cfg: WindowConfig, glfw: Glfw, win: nativeptr<WindowHandle>) = 
                 createSurface (runtime :?> _) cfg glfw win
 
-            override __.WindowHints(cfg: WindowConfig, glfw: Glfw) = 
+            override __.WindowHints(cfg: WindowConfig, glfw: Glfw) =
                 glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.OpenGL)
                 glfw.WindowHint(WindowHintInt.ContextVersionMajor, version.Major)
                 glfw.WindowHint(WindowHintInt.ContextVersionMinor, version.Minor)
@@ -293,7 +318,7 @@ module private OpenGL =
                 glfw.WindowHint(WindowHintBool.OpenGLForwardCompat, true)
                 glfw.WindowHint(WindowHintBool.DoubleBuffer, true)
                 glfw.WindowHint(WindowHintBool.OpenGLDebugContext, false)
-                glfw.WindowHint(WindowHintBool.ContextNoError, true)
+                if useNoError then glfw.WindowHint(WindowHintBool.ContextNoError, true)
                 glfw.WindowHint(WindowHintBool.SrgbCapable, false)
                 if RuntimeInformation.IsOSPlatform(OSPlatform.OSX) then
                     glfw.WindowHint(unbox<WindowHintBool> 0x00023001, cfg.physicalSize)
@@ -303,7 +328,10 @@ module private OpenGL =
         }
 
 type OpenGlApplication(forceNvidia : bool, debug : DebugLevel, shaderCachePath : Option<string>, hideCocoaMenuBar : bool) =
-    do if forceNvidia then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
+    do if forceNvidia then
+        if RuntimeInformation.IsOSPlatform OSPlatform.Linux then Aardvark.Base.DynamicLinker.tryLoadLibrary "libnvidia-cfg.so" |> ignore
+        elif RuntimeInformation.IsOSPlatform OSPlatform.Windows then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
+        else ()
        // hs, 01-02.2021, this should NOT be necessary in slim. 
        //OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
        
