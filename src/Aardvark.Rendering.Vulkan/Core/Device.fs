@@ -231,15 +231,22 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
             ptr
 
         let queueInfos =
-            physical.QueueFamilies |> Array.map (fun fam ->
-                VkDeviceQueueCreateInfo(
-                    VkDeviceQueueCreateFlags.None,
-                    uint32 fam.index,
-                    uint32 fam.count,
-                    queuePriorities
-                )
-            )
+            let counts = Dictionary.empty
+            for (fam, cnt) in List.concat [Option.toList graphicsQueues; Option.toList computeQueues; Option.toList transferQueues] do
+                match counts.TryGetValue fam.index with
+                    | (true, o) -> counts.[fam.index] <- o + cnt
+                    | _ -> counts.[fam.index] <- cnt
 
+            counts 
+                |> Dictionary.toArray 
+                |> Array.map (fun (familyIndex, count) ->
+                    VkDeviceQueueCreateInfo(
+                        VkDeviceQueueCreateFlags.None,
+                        uint32 familyIndex,
+                        uint32 count,
+                        queuePriorities
+                    )
+                )
 
         native {
             let! ptr = queueInfos
@@ -277,45 +284,44 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
             return !!pDevice
         }
 
-    let usedFamilies =
+    let graphicsFamily, computeFamily, transferFamily =
         let offsets = Array.zeroCreate physical.QueueFamilies.Length
-        physical.QueueFamilies |> Array.map (fun fam ->
+
+        let toFamily (fam : QueueFamilyInfo, count : int) =
             let offset = offsets.[fam.index]
-            offsets.[fam.index] <- offset + fam.count
+            offsets.[fam.index] <- offset + count
 
             let queues =
-                List.init fam.count (fun i ->
+                List.init count (fun i ->
                     DeviceQueue(this, device, fam, offset + i)
                 )
 
             let family = new DeviceQueueFamily(this, physical, fam, queues)
             family
-            
-        )
 
-    let graphicsFamily =
-        match graphicsQueues with
-        | Some (info,_) ->
-            usedFamilies |> Array.tryFind (fun f -> f.Index = info.index)
-        | None ->
-            None
-            
-    let computeFamily =
-        match computeQueues with
-        | Some (info,_) ->
-            usedFamilies |> Array.tryFind (fun f -> f.Index = info.index)
-        | None ->
-            None
-    let transferFamily =
-        match transferQueues with
-        | Some (info,_) ->
-            usedFamilies |> Array.tryFind (fun f -> f.Index = info.index)
-        | None ->
-            None
-    
-    let queueFamilies = usedFamilies
+        let graphicsFamily  = graphicsQueues |> Option.map toFamily
+        let computeFamily   = computeQueues |> Option.map toFamily
+        let transferFamily  = transferQueues |> Option.map toFamily
 
-    let usedFamilies = usedFamilies |> Array.map (fun f -> f.Index) |> Set.ofArray |> Set.toArray
+        let computeFamily =
+            match computeFamily with
+                | Some c -> Some c
+                | None -> graphicsFamily
+
+        graphicsFamily, computeFamily, transferFamily
+
+    let queueFamilies =
+        Array.concat [
+            Option.toArray graphicsFamily
+            Option.toArray computeFamily
+            Option.toArray transferFamily
+        ]
+
+    let usedFamilies = 
+        List.concat [ Option.toList graphicsQueues; Option.toList computeQueues; Option.toList transferQueues ]
+            |> List.map (fun (f,_) -> f.index)
+            |> Set.ofList
+            |> Set.toArray
 
     let pAllFamilies =
         if usedFamilies.Length <= 1 then
