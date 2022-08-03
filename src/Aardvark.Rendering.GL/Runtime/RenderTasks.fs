@@ -59,6 +59,7 @@ module RenderTasks =
     [<AbstractClass>]
     type AbstractOpenGlRenderTask(manager : ResourceManager, signature : IFramebufferSignature, shareTextures : bool, shareBuffers : bool) =
         inherit AbstractRenderTask()
+
         let ctx = manager.Context
         let renderTaskLock = RenderTaskLock()
         let manager = ResourceManager(manager, Some (signature, renderTaskLock), shareTextures, shareBuffers)
@@ -66,14 +67,13 @@ module RenderTasks =
         let runtimeStats = NativePtr.alloc 1
         let resources = new Aardvark.Rendering.ResourceInputSet()
 
-        let mutable isDisposed = false
         let currentContext = AVal.init Unchecked.defaultof<ContextHandle>
         let contextHandle = NativePtr.alloc 1
         do NativePtr.write contextHandle 0n
 
 
         let scope =
-            { 
+            {
                 resources = resources
                 runtimeStats = runtimeStats
                 currentContext = currentContext
@@ -85,10 +85,10 @@ module RenderTasks =
                 task = RenderTask.empty
                 tags = Map.empty
             }
-            
+
         let beforeRender = new Event<unit>()
         let afterRender = new Event<unit>()
-        
+
         member x.Resources = resources
 
         member x.BeforeRender = beforeRender.Publish :> IObservable<_>
@@ -108,60 +108,63 @@ module RenderTasks =
         member x.RenderTaskLock = renderTaskLock
         member x.ResourceManager = manager
 
-        override x.PerformUpdate(token, renderToken) =
-            use ct = ctx.ResourceLock
-
-            x.ProcessDeltas(token, renderToken)
-            x.UpdateResources(token, renderToken)
-
-            renderTaskLock.Run (fun () ->
-                x.Update(token, renderToken)
-            )
+        override x.Runtime = Some ctx.Runtime
+        override x.FramebufferSignature = Some signature
 
         override x.Release() =
-            if not isDisposed then
-                isDisposed <- true
-                currentContext.Outputs.Clear()
-                x.Release2()
-        override x.FramebufferSignature = Some signature
-        override x.Runtime = Some ctx.Runtime
-        override x.Perform(token : AdaptiveToken, renderToken : RenderToken, desc : OutputDescription) =
+            currentContext.Outputs.Clear()
+            x.Release2()
 
-            let fbo = desc.framebuffer // TODO: fix outputdesc
-            signature |> FramebufferSignature.validateCompability fbo
+        override x.PerformUpdate(token, renderToken) =
+            lock AbstractRenderTask.ResourcesInUse (fun _ ->
+                use __ = ctx.ResourceLock
 
-            use __ = ctx.ResourceLock
-            GL.Check "[RenderTask.Run] Entry"
+                x.ProcessDeltas(token, renderToken)
+                x.UpdateResources(token, renderToken)
 
-            if currentContext.Value <> ctx.CurrentContextHandle.Value then
-                let intCtx = ctx.CurrentContextHandle.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
-                NativePtr.write contextHandle intCtx.Context.Handle
-                transact (fun () -> currentContext.Value <- ctx.CurrentContextHandle.Value)
-
-            let fbo =
-                match fbo with
-                    | :? Framebuffer as fbo -> fbo
-                    | _ -> failwithf "unsupported framebuffer: %A" fbo
-
-            x.ProcessDeltas(token, renderToken)
-            x.UpdateResources(token, renderToken)
-
-            Framebuffer.draw signature fbo desc.viewport (fun _ ->
                 renderTaskLock.Run (fun () ->
-                    beforeRender.Trigger()
-                    NativePtr.write runtimeStats V2i.Zero       
-
-                    x.Perform(token, renderToken, fbo, desc)
-                    GL.Check "[RenderTask.Run] Perform"
-   
-                    afterRender.Trigger()
-                    let rt = NativePtr.read runtimeStats
-                    renderToken.AddDrawCalls(rt.X, rt.Y)
+                    x.Update(token, renderToken)
                 )
             )
-                            
-            GL.BindVertexArray 0
-            GL.BindBuffer(BufferTarget.DrawIndirectBuffer, 0)
+
+        override x.Perform(token : AdaptiveToken, renderToken : RenderToken, desc : OutputDescription) =
+            lock AbstractRenderTask.ResourcesInUse (fun _ ->
+                let fbo = desc.framebuffer // TODO: fix outputdesc
+                signature |> FramebufferSignature.validateCompability fbo
+
+                use __ = ctx.ResourceLock
+                GL.Check "[RenderTask.Run] Entry"
+
+                if currentContext.Value <> ctx.CurrentContextHandle.Value then
+                    let intCtx = ctx.CurrentContextHandle.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
+                    NativePtr.write contextHandle intCtx.Context.Handle
+                    transact (fun () -> currentContext.Value <- ctx.CurrentContextHandle.Value)
+
+                let fbo =
+                    match fbo with
+                        | :? Framebuffer as fbo -> fbo
+                        | _ -> failwithf "unsupported framebuffer: %A" fbo
+
+                x.ProcessDeltas(token, renderToken)
+                x.UpdateResources(token, renderToken)
+
+                Framebuffer.draw signature fbo desc.viewport (fun _ ->
+                    renderTaskLock.Run (fun () ->
+                        beforeRender.Trigger()
+                        NativePtr.write runtimeStats V2i.Zero
+
+                        x.Perform(token, renderToken, fbo, desc)
+                        GL.Check "[RenderTask.Run] Perform"
+
+                        afterRender.Trigger()
+                        let rt = NativePtr.read runtimeStats
+                        renderToken.AddDrawCalls(rt.X, rt.Y)
+                    )
+                )
+
+                GL.BindVertexArray 0
+                GL.BindBuffer(BufferTarget.DrawIndirectBuffer, 0)
+            )
 
     [<AbstractClass>]
     type AbstractSubTask() =

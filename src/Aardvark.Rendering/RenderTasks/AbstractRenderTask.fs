@@ -64,6 +64,9 @@ type AbstractRenderTask() =
     member x.HookRenderObject (ro : RenderObject) =
         { ro with Uniforms = hookProvider ro.Uniforms }
 
+    // NOTE: Hacky solution for concurrency issues.
+    // This is lock is used for all OpenGL render tasks, basically preventing any concurrency.
+    // The Vulkan backend has finer grained control over resource ownership, and does not use this lock.
     static member ResourcesInUse = resourcesInUse
 
     abstract member FramebufferSignature : Option<IFramebufferSignature>
@@ -79,26 +82,22 @@ type AbstractRenderTask() =
 
     member x.FrameId = frameId
     member x.Run(token : AdaptiveToken, renderToken : RenderToken, out : OutputDescription) =
-        lock resourcesInUse (fun _ ->
-            x.EvaluateAlways token (fun token ->
-                use __ = renderToken.Use()
+        x.EvaluateAlways token (fun token ->
+            use __ = renderToken.Use()
 
-                x.OutOfDate <- true
-                x.UseValues(token, out, fun token ->
-                    x.Perform(token, renderToken, out)
-                    frameId <- frameId + 1UL
-                )
+            x.OutOfDate <- true
+            x.UseValues(token, out, fun token ->
+                x.Perform(token, renderToken, out)
+                frameId <- frameId + 1UL
             )
         )
 
     member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
-        lock resourcesInUse (fun _ ->
-            x.EvaluateAlways token (fun token ->
-                use __ = renderToken.Use()
+        x.EvaluateAlways token (fun token ->
+            use __ = renderToken.Use()
 
-                if x.OutOfDate then
-                    x.PerformUpdate(token, renderToken)
-            )
+            if x.OutOfDate then
+                x.PerformUpdate(token, renderToken)
         )
 
     interface IDisposable with
