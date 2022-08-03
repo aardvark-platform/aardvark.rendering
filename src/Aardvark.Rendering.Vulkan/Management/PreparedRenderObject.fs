@@ -69,9 +69,7 @@ type PreparedMultiRenderObject(children : list<PreparedRenderObject>) =
     member x.Children = children
 
     member x.Dispose() =
-        lock AbstractRenderTask.ResourcesInUse (fun _ -> 
-            children |> List.iter (fun c -> c.Dispose())
-        )
+        children |> List.iter Disposable.dispose
 
     member x.Update(caller : AdaptiveToken, token : RenderToken) =
         children |> List.iter (fun c -> c.Update(caller, token))

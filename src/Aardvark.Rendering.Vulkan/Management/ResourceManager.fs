@@ -185,45 +185,32 @@ type ImmutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, 
         let n = input.GetValue(token, renderToken)
 
         match handle with
-            | Some(o,h) when Unchecked.equals o n ->
-                h
-            | Some(o,h) ->
-                owner.ReplaceLocked (Some o, Some n)
+        | Some(o,h) when Unchecked.equals o n ->
+            h
+        | Some(o,h) ->
+            owner.ReplaceLocked (Some o, Some n)
 
-                desc.idestroy h
-                let r = desc.icreate n
-                handle <- Some(n,r)
-                r
-            | None ->
-                owner.ReplaceLocked (None, Some n)
+            desc.idestroy h
+            let r = desc.icreate n
+            handle <- Some(n,r)
+            r
+        | None ->
+            owner.ReplaceLocked (None, Some n)
 
-                let r = desc.icreate n
-                handle <- Some(n,r)
-                r
-
+            let r = desc.icreate n
+            handle <- Some(n,r)
+            r
 
     override x.MarkObject() =
-        let mutable lockTaken = false
-        try
-            // check if currently rendering, aquire lock. In case of contention, give up, the render task will take care of it
-            // after rendering.
-            // there is one issue: i observed finished transactions not resulting in out of date marking of the render task.
-            Monitor.TryEnter(AbstractRenderTask.ResourcesInUse, &lockTaken)
-            if lockTaken then
-                if desc.ieagerDestroy  then
-                    match handle with
-                        | Some(_,h) ->
-                            desc.idestroy h
-                            handle <- None
-                        | None ->
-                            ()
-                true
-            else
-                // eager update prevention should kick in against running/updating renderTasks
-                //Log.warn "prevented eager destroy"
-                true
-        finally
-            if lockTaken then Monitor.Exit AbstractRenderTask.ResourcesInUse
+        if desc.ieagerDestroy then
+            if Monitor.TryEnter x then
+                try
+                    handle |> Option.iter (snd >> desc.idestroy)
+                    handle <- None
+                finally
+                    Monitor.Exit x
+
+        true
 
     override x.Create() =
         input.Acquire()
@@ -231,12 +218,12 @@ type ImmutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, 
     override x.Destroy() =
         input.Outputs.Remove x |> ignore
         match handle with
-            | Some(a,h) ->
-                desc.idestroy h
-                handle <- None
-                owner.ReplaceLocked(Some a, None)
-            | None ->
-                ()
+        | Some (a, h) ->
+            desc.idestroy h
+            handle <- None
+            owner.ReplaceLocked(Some a, None)
+        | None ->
+            ()
         input.Release()
 
     override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
@@ -245,8 +232,8 @@ type ImmutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, 
             { handle = handle; version = 0 }
         else
             match handle with
-                | Some(_,h) -> { handle = h; version = 0 }
-                | None -> failwith "[Resource] inconsistent state"
+            | Some(_,h) -> { handle = h; version = 0 }
+            | None -> failwith "[Resource] inconsistent state"
 
 type MutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, input : aval<'a>, desc : MutableResourceDescription<'a, 'h>) =
     inherit AbstractResourceLocation<'h>(owner, key)
