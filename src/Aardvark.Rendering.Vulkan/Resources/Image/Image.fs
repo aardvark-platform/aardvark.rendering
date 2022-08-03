@@ -5,7 +5,6 @@ open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Rendering
-open FSharp.Data.Adaptive
 open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
 
@@ -92,7 +91,6 @@ type Image =
         val public Format : VkFormat
         val public Memory : DevicePtr
         val public PeerHandles : VkImage[]
-        val public Version : cval<int>
         val public SamplerLayout : VkImageLayout
 
         // ISSUE: This is not safe, generally it's not possible to track the layout
@@ -168,7 +166,6 @@ type Image =
                 Layout = layout
                 SamplerLayout = samplerLayout
                 PeerHandles = if isNull peerHandles then [||] else peerHandles
-                Version = AVal.init 0
             }
     end
 

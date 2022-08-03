@@ -2276,13 +2276,6 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
             do! Command.Execute [inner]
             do! Command.EndPass
 
-            if ranges.Length > 1 then
-                for (_, view) in views do
-                    transact (fun () ->
-                        let v = view.Image.Version
-                        lock v (fun () -> v.Value <- v.Value + 1)
-                    )
-
             for i in 0 .. views.Length - 1 do
                 let _, view = views.[i]
                 do! Command.TransformLayout(view, oldLayouts.[i])

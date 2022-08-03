@@ -11,21 +11,17 @@ open Microsoft.FSharp.NativeInterop
 type ImageView =
     class
         inherit Resource<VkImageView>
-        val public Image            : Image
-        val public ImageViewType    : VkImageViewType
-        val public Aspect           : TextureAspect
-        val public MipLevelRange    : Range1i
-        val public ArrayRange       : Range1i
-        val public IsResolved       : bool
+        val public Image         : Image
+        val public ImageViewType : VkImageViewType
+        val public Aspect        : TextureAspect
+        val public MipLevelRange : Range1i
+        val public ArrayRange    : Range1i
 
         override x.Destroy() =
             if x.Device.Handle <> 0n && x.Handle.IsValid then
                 VkRaw.vkDestroyImageView(x.Device.Handle, x.Handle, NativePtr.zero)
                 x.Handle <- VkImageView.Null
-
-                if x.IsResolved then
-                    x.Image.Dispose()
-
+                x.Image.Dispose()
 
         interface IFramebufferOutput with
             member x.Runtime = x.Device.Runtime :> ITextureRuntime
@@ -49,14 +45,13 @@ type ImageView =
                 let d = 1 <<< x.MipLevelRange.Min
                 V3i(max 1 (s.X / d), max 1 (s.Y / d), max 1 (s.Z / d))
 
-        new(device : Device, handle : VkImageView, img, viewType, aspect, levelRange, arrayRange, resolved) =
+        new(device : Device, handle : VkImageView, img, viewType, aspect, levelRange, arrayRange) =
             { inherit Resource<_>(device, handle);
                 Image = img;
                 ImageViewType = viewType;
                 Aspect = aspect;
                 MipLevelRange = levelRange;
                 ArrayRange = arrayRange;
-                IsResolved = resolved
             }
     end
 
@@ -84,61 +79,61 @@ module ImageView =
 
     let private viewType (count : int) (isArray : bool) (dim : FShade.SamplerDimension) =
         match dim with
-            | FShade.SamplerDimension.Sampler1d ->
-                if isArray then VkImageViewType.D1dArray
-                else VkImageViewType.D1d
+        | FShade.SamplerDimension.Sampler1d ->
+            if isArray then VkImageViewType.D1dArray
+            else VkImageViewType.D1d
 
-            | FShade.SamplerDimension.Sampler2d ->
-                if isArray then VkImageViewType.D2dArray
-                else VkImageViewType.D2d
+        | FShade.SamplerDimension.Sampler2d ->
+            if isArray then VkImageViewType.D2dArray
+            else VkImageViewType.D2d
 
-            | FShade.SamplerDimension.Sampler3d ->
-                if isArray then failf "3d array textures not supported"
-                else VkImageViewType.D3d
+        | FShade.SamplerDimension.Sampler3d ->
+            if isArray then failf "3d array textures not supported"
+            else VkImageViewType.D3d
 
-            | FShade.SamplerDimension.SamplerCube ->
-                if count % 6 <> 0 then failf "ill-aligned cube-count %A" count
-                if isArray then VkImageViewType.CubeArray
-                else VkImageViewType.Cube
+        | FShade.SamplerDimension.SamplerCube ->
+            if count % 6 <> 0 then failf "ill-aligned cube-count %A" count
+            if isArray then VkImageViewType.CubeArray
+            else VkImageViewType.Cube
 
-            | _ ->
-                failf "invalid view type: %A" (count, isArray, dim)
+        | _ ->
+            failf "invalid view type: %A" (count, isArray, dim)
 
     let private viewTypeTex (count : int) (dim : TextureDimension) =
         let isArray = count > 1
 
         match dim with
-            | TextureDimension.Texture1D ->
-                if isArray then VkImageViewType.D1dArray
-                else VkImageViewType.D1d
+        | TextureDimension.Texture1D ->
+            if isArray then VkImageViewType.D1dArray
+            else VkImageViewType.D1d
 
-            | TextureDimension.Texture2D ->
-                if isArray then VkImageViewType.D2dArray
-                else VkImageViewType.D2d
+        | TextureDimension.Texture2D ->
+            if isArray then VkImageViewType.D2dArray
+            else VkImageViewType.D2d
 
-            | TextureDimension.Texture3D ->
-                if isArray then failf "3d array textures not supported"
-                else VkImageViewType.D3d
+        | TextureDimension.Texture3D ->
+            if isArray then failf "3d array textures not supported"
+            else VkImageViewType.D3d
 
-            | TextureDimension.TextureCube ->
-                if isArray then
-                    if count % 6 <> 0 then failf "ill-aligned cube-count %A" count
-                    if count / 6 > 1 then VkImageViewType.CubeArray
-                    else VkImageViewType.Cube
-                else
-                    VkImageViewType.D2d
+        | TextureDimension.TextureCube ->
+            if isArray then
+                if count % 6 <> 0 then failf "ill-aligned cube-count %A" count
+                if count / 6 > 1 then VkImageViewType.CubeArray
+                else VkImageViewType.Cube
+            else
+                VkImageViewType.D2d
 
-            | _ ->
-                failf "invalid view type: %A" (count, isArray, dim)
+        | _ ->
+            failf "invalid view type: %A" (count, isArray, dim)
 
-    let createInputView (componentMapping : VkComponentMapping) (img : Image) (samplerType : FShade.GLSL.GLSLSamplerType) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
+    let createInputView (componentMapping : VkComponentMapping) (img : Image) (samplerType : FShade.GLSL.GLSLSamplerType)
+                        (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
         let levels = 1 + levelRange.Max - levelRange.Min |> min img.MipMapLevels
         let slices = 1 + arrayRange.Max - arrayRange.Min |> min img.Layers
         if levels < 1 then failf "cannot create image view with level-count: %A" levels
         if slices < 1 then failf "cannot create image view with slice-count: %A" levels
 
         let aspect = VkFormat.toShaderAspect img.Format
-
 
         let isResolved, img = 
             if samplerType.isMS then
@@ -190,17 +185,20 @@ module ImageView =
             VkRaw.vkCreateImageView(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create image view"
 
-            return new ImageView(device, !!pHandle, img, viewType, VkImageAspectFlags.toTextureAspect aspect, levelRange, arrayRange, isResolved)
+            if not isResolved then
+                img.AddReference()
+
+            return new ImageView(device, !!pHandle, img, viewType, VkImageAspectFlags.toTextureAspect aspect, levelRange, arrayRange)
         }
 
-    let createStorageView (componentMapping : VkComponentMapping) (img : Image) (imageType : FShade.GLSL.GLSLImageType) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
+    let createStorageView (componentMapping : VkComponentMapping) (img : Image) (imageType : FShade.GLSL.GLSLImageType)
+                          (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
         let levels = 1 + levelRange.Max - levelRange.Min |> min img.MipMapLevels
         let slices = 1 + arrayRange.Max - arrayRange.Min |> min img.Layers
         if levels < 1 then failf "cannot create image view with level-count: %A" levels
         if slices < 1 then failf "cannot create image view with slice-count: %A" levels
 
         let aspect = VkFormat.toShaderAspect img.Format
-
 
         let isResolved, img = 
             if imageType.isMS then
@@ -249,7 +247,10 @@ module ImageView =
             VkRaw.vkCreateImageView(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create image view"
 
-            return new ImageView(device, !!pHandle, img, viewType, VkImageAspectFlags.toTextureAspect aspect, levelRange, arrayRange, isResolved)
+            if not isResolved then
+                img.AddReference()
+
+            return new ImageView(device, !!pHandle, img, viewType, VkImageAspectFlags.toTextureAspect aspect, levelRange, arrayRange)
         }
 
     let createOutputView (img : Image) (levelRange : Range1i) (arrayRange : Range1i) (device : Device) =
@@ -281,7 +282,8 @@ module ImageView =
             VkRaw.vkCreateImageView(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create image view"
 
-            return new ImageView(device, !!pHandle, img, viewType, VkImageAspectFlags.toTextureAspect aspect, levelRange, arrayRange, false)
+            img.AddReference()
+            return new ImageView(device, !!pHandle, img, viewType, VkImageAspectFlags.toTextureAspect aspect, levelRange, arrayRange)
         }
 
 [<AbstractClass; Sealed; Extension>]

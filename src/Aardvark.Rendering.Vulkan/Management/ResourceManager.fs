@@ -1228,33 +1228,31 @@ module Resources =
             //ibo.TryDispose()
             ()
 
-    type ImageViewResource(owner : IResourceCache, key : list<obj>, device : Device, samplerType : FShade.GLSL.GLSLSamplerType, image : IResourceLocation<Image>) =
+    [<AbstractClass>]
+    type AbstractImageViewResource(owner : IResourceCache, key : list<obj>, image : IResourceLocation<Image>) =
         inherit AbstractResourceLocation<ImageView>(owner, key)
 
         let mutable handle : Option<ImageView> = None
-        let mutable viewVersion = -1
+
+        abstract member CreateImageView : Image -> ImageView
 
         override x.Create() =
             image.Acquire()
 
         override x.Destroy() =
-            match handle with
-            | Some h ->
-                h.Dispose()
-                handle <- None
-            | None -> ()
+            handle |> Option.iter Disposable.dispose
+            handle <- None
             image.Release()
 
         override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
                 let image = image.Update(token, renderToken)
                 if image.handle.IsNull then raise <| NullReferenceException("[Vulkan] Image handle of view is null")
-                let contentVersion = image.handle.Version.GetValue token
 
                 let isIdentical =
                     match handle with
-                        | Some h -> h.Image = image.handle && viewVersion = contentVersion
-                        | None -> false
+                    | Some h -> h.Image = image.handle
+                    | None -> false
 
                 if isIdentical then
                     { handle = handle.Value; version = 0 }
@@ -1263,59 +1261,26 @@ module Resources =
                     | Some h -> h.Dispose()
                     | None -> ()
 
-                    let h = device.CreateInputImageView(image.handle, samplerType, VkComponentMapping.Identity)
+                    let h = x.CreateImageView image.handle
                     handle <- Some h
-                    viewVersion <- contentVersion
 
                     { handle = h; version = 0 }
             else
                 match handle with
-                    | Some h -> { handle = h; version = 0 }
-                    | None -> failwith "[Resource] inconsistent state"
+                | Some h -> { handle = h; version = 0 }
+                | None -> failwith "[Resource] inconsistent state"
+
+    type ImageViewResource(owner : IResourceCache, key : list<obj>, device : Device, samplerType : FShade.GLSL.GLSLSamplerType, image : IResourceLocation<Image>) =
+        inherit AbstractImageViewResource(owner, key, image)
+
+        override x.CreateImageView(image : Image) =
+            device.CreateInputImageView(image, samplerType, VkComponentMapping.Identity)
 
     type StorageImageViewResource(owner : IResourceCache, key : list<obj>, device : Device, imageType : FShade.GLSL.GLSLImageType, image : IResourceLocation<Image>) =
-        inherit AbstractResourceLocation<ImageView>(owner, key)
+        inherit AbstractImageViewResource(owner, key, image)
 
-        let mutable handle : Option<ImageView> = None
-        let mutable viewVersion = -1
-
-        override x.Create() =
-            image.Acquire()
-
-        override x.Destroy() =
-            match handle with
-                | Some h ->
-                    h.Dispose()
-                    handle <- None
-                | None -> ()
-            image.Release()
-
-        override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
-            if x.OutOfDate then
-                let image = image.Update(token, renderToken)
-                let contentVersion = image.handle.Version.GetValue token
-
-                let isIdentical =
-                    match handle with
-                        | Some h -> h.Image = image.handle && viewVersion = contentVersion
-                        | None -> false
-
-                if isIdentical then
-                    { handle = handle.Value; version = 0 }
-                else
-                    match handle with
-                    | Some h -> h.Dispose()
-                    | None -> ()
-
-                    let h = device.CreateStorageView(image.handle, imageType, VkComponentMapping.Identity)
-                    handle <- Some h
-                    viewVersion <- contentVersion
-
-                    { handle = h; version = 0 }
-            else
-                match handle with
-                    | Some h -> { handle = h; version = 0 }
-                    | None -> failwith "[Resource] inconsistent state"
+        override x.CreateImageView(image : Image) =
+            device.CreateStorageView(image, imageType, VkComponentMapping.Identity)
 
     type IsActiveResource(owner : IResourceCache, key : list<obj>, input : aval<bool>) =
         inherit AbstractPointerResourceWithEquality<int>(owner, key)
