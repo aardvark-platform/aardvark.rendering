@@ -18,13 +18,6 @@
   <ItemGroup>
     <None Include="Wrapper\gl.xml" />
     <None Include="Wrapper\Generator.fsx" />
-	<Compile Include="Assembler\SystemMemoryStream.fs" />
-	<Compile Include="Assembler\ARM64.fs" />
-	<Compile Include="Assembler\AMD64.fs" />
-	<Compile Include="Assembler\Assembler.fs" />
-	<Compile Include="Assembler\JitMem.fs" />
-	<Compile Include="Assembler\FragmentProgram.fs" />
-	<Compile Include="Assembler\AdaptiveFragmentProgram.fs" />
     <Compile Include="Core\Utilities\Common.fs" />
     <Compile Include="Core\Utilities\PixelType.fs" />
     <Compile Include="Core\Utilities\PixelFormat.fs" />

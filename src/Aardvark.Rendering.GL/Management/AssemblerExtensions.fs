@@ -1110,6 +1110,7 @@ module GLAssemblerExtensions =
                 let s = sampler.Handle.GetValue().Description
                 let target = int OpenGl.Enums.TextureTarget.Texture2D
                 let unit = int OpenGl.Enums.TextureUnit.Texture0 + slot
+                x.SetActiveTexture(unit)
                 x.TexParameteri(target, TextureParameterName.TextureWrapS, SamplerStateHelpers.wrapMode s.AddressU)
                 x.TexParameteri(target, TextureParameterName.TextureWrapT, SamplerStateHelpers.wrapMode s.AddressV)
                 x.TexParameteri(target, TextureParameterName.TextureWrapR, SamplerStateHelpers.wrapMode s.AddressW)
@@ -1185,40 +1186,7 @@ module rec ChangeableProgram =
     open System.Runtime.InteropServices
     open Aardvark.Rendering.Management
     open Aardvark.Assembler
-    
-    
-    
-
-    let private beginFunction (ass : IAssemblerStream) =
-        ass.BeginFunction()
-        match ass with
-        | :? AMD64.AssemblerStream as amd ->
-            amd.Push AMD64.Register.R8
-            amd.Push AMD64.Register.R9
-            amd.Push AMD64.Register.R10
-            amd.Push AMD64.Register.R11
-            amd.Push AMD64.Register.R12
-            amd.Push AMD64.Register.R13
-            amd.Push AMD64.Register.R14
-            amd.Push AMD64.Register.R15
-        | _ ->
-            ()
-            
-    let private endFunction (ass : IAssemblerStream) =
-        match ass with
-        | :? AMD64.AssemblerStream as amd ->
-            amd.Pop AMD64.Register.R15
-            amd.Pop AMD64.Register.R14
-            amd.Pop AMD64.Register.R13
-            amd.Pop AMD64.Register.R12
-            amd.Pop AMD64.Register.R11
-            amd.Pop AMD64.Register.R10
-            amd.Pop AMD64.Register.R9
-            amd.Pop AMD64.Register.R8
-        | _ ->
-            ()
-        ass.EndFunction()
-        
+ 
     module Memory =
         let executable : Memory<nativeint> =
             {
@@ -1255,7 +1223,7 @@ module rec ChangeableProgram =
         let targets = Dict<nativeint, AdaptiveToken -> unit>()
 
         member x.Dispose() =
-            for KeyValue(o, (r, release, ptr)) in pointers do
+            for KeyValue(o, (_, release, ptr)) in pointers do
                 o.Outputs.Remove x |> ignore
                 release()
                 Marshal.FreeHGlobal ptr
@@ -1263,7 +1231,7 @@ module rec ChangeableProgram =
             pointers.Clear()
             targets.Clear()
 
-        override x.InputChangedObject(t : obj, o : IAdaptiveObject) =
+        override x.InputChangedObject(_t : obj, o : IAdaptiveObject) =
             lock pointers (fun () ->
                 match pointers.TryGetValue o with
                 | (true, (_, _, ptr)) ->
@@ -1278,8 +1246,8 @@ module rec ChangeableProgram =
             lock pointers (fun () ->
                 match pointers.TryGetValue value with
                 | (true, (ref, release, ptr)) ->
-                    ref := !ref - 1
-                    if !ref = 0 then
+                    ref.Value <- ref.Value - 1
+                    if ref.Value = 0 then
                         pointers.Remove value |> ignore
                         targets.Remove ptr |> ignore
                         value.Outputs.Remove x |> ignore
@@ -1292,8 +1260,8 @@ module rec ChangeableProgram =
         member x.Add(value : IAdaptiveObject, evaluate : AdaptiveToken -> 'a, release : unit -> unit) =
             lock pointers (fun () ->
                 let ref, _, ptr = pointers.GetOrCreate(value, fun _ -> ref 0, release, Marshal.AllocHGlobal sizeof<'a>)
-                ref := !ref + 1
-                if !ref = 1 then
+                ref.Value <- ref.Value + 1
+                if ref.Value = 1 then
                     let write(token : AdaptiveToken) =
                         let v = evaluate token
                         NativeInt.write ptr v
@@ -1462,7 +1430,7 @@ module rec ChangeableProgram =
 
         static let epilog =
             assemble (fun s ->
-                endFunction s
+                s.EndFunction()
                 s.Ret()
             )
 
@@ -1473,7 +1441,7 @@ module rec ChangeableProgram =
         static let prologSize =
             let mem = 
                 assemble (fun s ->
-                    beginFunction s
+                    s.BeginFunction()
                     s.Jump 34325324
                 )
             mem.Length
@@ -1501,7 +1469,7 @@ module rec ChangeableProgram =
                 use ms = new SystemMemoryStream()
                 use ass = AssemblerStream.create ms
 
-                beginFunction ass
+                ass.BeginFunction()
                 ass.Jump (jumpDistance block.Offset block.Size epilog.Offset)
 
                 let arr = ms.ToMemory()
