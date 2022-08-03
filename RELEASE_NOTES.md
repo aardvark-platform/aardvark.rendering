@@ -1,3 +1,6 @@
+### 5.2.8
+- fixed GLFW init problem
+
 ### 5.2.7
 - [Vulkan] requesting all queues for device
 
