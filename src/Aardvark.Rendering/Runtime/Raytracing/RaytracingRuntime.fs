@@ -8,6 +8,7 @@ open System.Runtime.CompilerServices
 
 type IRaytracingTask =
     inherit IDisposable
+    abstract member Update : token: AdaptiveToken * query: IQuery -> unit
     abstract member Run : token: AdaptiveToken * query: IQuery -> unit
 
 and IRaytracingRuntime =

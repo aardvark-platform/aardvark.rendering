@@ -129,6 +129,9 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
     let compiled = CompiledCommand(preparedPipeline.ShaderBindingTable, commands)
 
+    member x.Update(token : AdaptiveToken, queries : IQuery) =
+        ()
+
     member x.Run(token : AdaptiveToken, queries : IQuery) =
         x.EvaluateAlways token (fun token ->
 
@@ -193,6 +196,7 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
         )
 
     interface IRaytracingTask with
+        member x.Update(token, query) = x.Update(token, query)
         member x.Run(token, query) = x.Run(token, query)
 
     interface IDisposable with
