@@ -18,26 +18,21 @@ let main argv =
     (* see: https://github.com/aardvark-platform/aardvark.rendering/issues/69 *)
 
     let mutable running = true
-    let prepareIt = true       // OK
-    let inlineDispose = true   // OK
-    let perObjTexture = true   // OK
-    let prepareTexture = true  // OK
-    let addRemoveTest = true   // OK
-    let textureTest = true     // OK
-    let jitterFrames = false   // OK
+    let prepareIt       = true  // OK
+    let inlineDispose   = true  // OK
+    let perObjTexture   = false // OK
+    let prepareTexture  = true  // OK
+    let addRemoveTest   = true  // OK
+    let textureTest     = true  // OK
+    let jitterFrames    = false // OK
 
     Aardvark.Init()
 
     use app = new VulkanApplication(DebugLevel.Normal)
-    //GL.Config.UseNewRenderTask <- true
     //use app = new OpenGlApplication()
     use win = app.CreateGameWindow(1)
 
     let signature = win.FramebufferSignature
-        //win.Runtime.CreateFramebufferSignature [
-        //    DefaultSemantic.Colors, { format = TextureFormat.Rgba8; samples = 1 }
-        //    DefaultSemantic.Depth, { format = TextureFormat.Depth24Stencil8; samples = 1 }
-        //]
 
     let box = Box3d(-V3d.III, V3d.III)
     let color = C4b.Red
@@ -79,7 +74,8 @@ let main argv =
 
     let removeTexture (t : IBackendTexture) =
         lock textureLock (fun _ ->
-            preparedTextures.Remove(t) |> ignore
+            if preparedTextures.Remove t then
+                t.Dispose()
         )
 
     let createTexture (d : C4b) = 
@@ -103,7 +99,7 @@ let main argv =
         Thread.Sleep 2000
         let rnd = new System.Random()
         while running do
-            let d = if rnd.NextDouble() < 0.5 then C4b.White else C4b.Gray
+            let d = if rnd.NextDouble() < 0.5 then C4b.HoneyDew else C4b.SkyBlue
             let tex = createTexture d
 
             transact (fun _ -> texture.Value <- tex)
@@ -179,9 +175,7 @@ let main argv =
 
                     let activate =
                         { new IDisposable with
-                            member x.Dispose() =
-                                removeTexture pTex
-                                win.Runtime.DeleteTexture pTex
+                            member x.Dispose() = removeTexture pTex
                         }
 
                     AVal.constant (pTex :> ITexture), fun () -> activate
@@ -268,7 +262,7 @@ let main argv =
     use task =
         let rnd = System.Random()
         RenderTask.ofList [
-            if jitterFrames then RenderTask.custom (fun (a,rt,ot) -> Thread.Sleep(rnd.Next(0,100))) else RenderTask.empty
+            if jitterFrames then RenderTask.custom (fun (a,rt,ot) -> Thread.Sleep(rnd.Next(0,200))) else RenderTask.empty
             win.Runtime.CompileRender(signature,sg)
         ]
 
@@ -282,7 +276,7 @@ let main argv =
         o.Dispose()
 
     for t in preparedTextures do
-       win.Runtime.DeleteTexture(t)
+        removeTexture t
 
     cleanup()
 
