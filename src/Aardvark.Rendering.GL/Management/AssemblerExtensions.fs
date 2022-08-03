@@ -1110,6 +1110,7 @@ module GLAssemblerExtensions =
                 let s = sampler.Handle.GetValue().Description
                 let target = int OpenGl.Enums.TextureTarget.Texture2D
                 let unit = int OpenGl.Enums.TextureUnit.Texture0 + slot
+                x.SetActiveTexture(unit)
                 x.TexParameteri(target, TextureParameterName.TextureWrapS, SamplerStateHelpers.wrapMode s.AddressU)
                 x.TexParameteri(target, TextureParameterName.TextureWrapT, SamplerStateHelpers.wrapMode s.AddressV)
                 x.TexParameteri(target, TextureParameterName.TextureWrapR, SamplerStateHelpers.wrapMode s.AddressW)
@@ -1181,11 +1182,11 @@ type CompilerInfo =
 
 [<AutoOpen>]
 module rec ChangeableProgram =
-
     open System.IO
     open System.Runtime.InteropServices
     open Aardvark.Rendering.Management
     open Aardvark.Assembler
+ 
     module Memory =
         let executable : Memory<nativeint> =
             {
@@ -1222,7 +1223,7 @@ module rec ChangeableProgram =
         let targets = Dict<nativeint, AdaptiveToken -> unit>()
 
         member x.Dispose() =
-            for KeyValue(o, (r, release, ptr)) in pointers do
+            for KeyValue(o, (_, release, ptr)) in pointers do
                 o.Outputs.Remove x |> ignore
                 release()
                 Marshal.FreeHGlobal ptr
@@ -1230,7 +1231,7 @@ module rec ChangeableProgram =
             pointers.Clear()
             targets.Clear()
 
-        override x.InputChangedObject(t : obj, o : IAdaptiveObject) =
+        override x.InputChangedObject(_t : obj, o : IAdaptiveObject) =
             lock pointers (fun () ->
                 match pointers.TryGetValue o with
                 | (true, (_, _, ptr)) ->
@@ -1245,8 +1246,8 @@ module rec ChangeableProgram =
             lock pointers (fun () ->
                 match pointers.TryGetValue value with
                 | (true, (ref, release, ptr)) ->
-                    ref := !ref - 1
-                    if !ref = 0 then
+                    ref.Value <- ref.Value - 1
+                    if ref.Value = 0 then
                         pointers.Remove value |> ignore
                         targets.Remove ptr |> ignore
                         value.Outputs.Remove x |> ignore
@@ -1259,8 +1260,8 @@ module rec ChangeableProgram =
         member x.Add(value : IAdaptiveObject, evaluate : AdaptiveToken -> 'a, release : unit -> unit) =
             lock pointers (fun () ->
                 let ref, _, ptr = pointers.GetOrCreate(value, fun _ -> ref 0, release, Marshal.AllocHGlobal sizeof<'a>)
-                ref := !ref + 1
-                if !ref = 1 then
+                ref.Value <- ref.Value + 1
+                if ref.Value = 1 then
                     let write(token : AdaptiveToken) =
                         let v = evaluate token
                         NativeInt.write ptr v

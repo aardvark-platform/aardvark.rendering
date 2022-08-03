@@ -684,6 +684,31 @@ module ConsoleDeviceChooser =
             let state = GetKeyState(key) 
             (state &&& 0x8000us) = 0x8000us
 
+    module private X11 =
+        let XK_Alt_L = 0xffe9
+
+        [<DllImport("X11")>]
+        extern nativeint XOpenDisplay(nativeint ptr)
+
+        [<DllImport("X11")>]
+        extern int XCloseDisplay(nativeint ptr)
+
+        [<DllImport("X11")>]
+        extern int XQueryKeymap(nativeint dpy, byte[] keys)
+
+        [<DllImport("X11")>]
+        extern byte XKeysymToKeycode(nativeint dpy, int thing)
+
+
+        let altDown() =
+            let dpy = XOpenDisplay(0)
+            let keys = Array.zeroCreate<byte> 256
+            XQueryKeymap(dpy, keys) |> ignore
+            let kc2 = XKeysymToKeycode(dpy, XK_Alt_L) |> int
+            let pressed = keys.[ kc2>>>3 ] &&& ( 1uy<<<(kc2&&&7) ) 
+            XCloseDisplay(dpy) |> ignore
+            pressed <> 0uy
+    
     let private md5 = System.Security.Cryptography.MD5.Create()
 
     let private newHash() =
@@ -751,6 +776,7 @@ module ConsoleDeviceChooser =
                 let altDown = 
                     match System.Environment.OSVersion with
                         | Windows -> Win32.isDown KeyCode.LeftAlt || Win32.isDown KeyCode.RightAlt
+                        | Linux -> X11.altDown()
                         | _ -> false
 
                 if altDown then
