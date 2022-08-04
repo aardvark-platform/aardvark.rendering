@@ -66,10 +66,11 @@ type Texture =
             GL.Check "could not delete texture"
 
         member x.Dispose() =
-            using x.Context.ResourceLock (fun _ ->
-                x.Destroy()
-                x.Handle <- 0
-            )
+            if x.Context <> null then // NullTexture has no context
+                using x.Context.ResourceLock (fun _ ->
+                    x.Destroy()
+                    x.Handle <- 0
+                )
 
         interface IBackendTexture with
             member x.Runtime = x.Context.Runtime :> ITextureRuntime
