@@ -1,3 +1,7 @@
+### 5.2.9-prerelease0001
+- test release
+- moved to Aardvark.Assembler
+
 ### 5.2.8
 - fixed GLFW init problem
 

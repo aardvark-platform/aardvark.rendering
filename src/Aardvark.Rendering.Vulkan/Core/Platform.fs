@@ -686,7 +686,7 @@ module ConsoleDeviceChooser =
 
 
         let altDown() =
-            let dpy = XOpenDisplay(0)
+            let dpy = XOpenDisplay(0n)
             let keys = Array.zeroCreate<byte> 256
             XQueryKeymap(dpy, keys) |> ignore
             let kc2 = XKeysymToKeycode(dpy, XK_Alt_L) |> int

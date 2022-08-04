@@ -1509,7 +1509,9 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
     let isOutdated = NativePtr.allocArray [| 1 |]
     let updateFun = Marshal.PinDelegate(new System.Action(this.Update))
     let mutable oldCalls : list<Option<DrawElementsType> * nativeptr<GLBeginMode> * VertexInputBindingHandle * array<int*int*int> * IndirectBuffer> = []
-    let program = new ChangeableNativeProgram<_, _>((fun a s -> compile a (AssemblerCommandStream s)), NativeStats.Zero, (+), (-))
+    let program = 
+        new Aardvark.Assembler.FragmentProgram<_>(fun a (s : IAssemblerStream) -> compile a (AssemblerCommandStream s :> ICommandStream) |> ignore)
+        //new ChangeableNativeProgram<_, _>((fun a s -> compile a (AssemblerCommandStream s)), NativeStats.Zero, (+), (-))
     let puller = 
         { new AdaptiveObject() with
             override x.MarkObject() =
@@ -1659,7 +1661,10 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                 )
 
             program.Clear()
-            for a in calls do program.Add a |> ignore
+            let mutable last = null
+            for a in calls do 
+                let f = program.InsertAfter(last, a)
+                last <- f
             
             oldCalls |> List.iter (fun (_,beginMode,bufferBinding,_,indirect) -> 
                 NativePtr.free beginMode; ctx.Delete bufferBinding
