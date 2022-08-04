@@ -1,3 +1,7 @@
+### 5.2.9
+- Arch/Fedora working
+- moved to Aardvark.Assembler
+
 ### 5.2.9-prerelease0002
 - added missing FragmentProgram.Update
 
