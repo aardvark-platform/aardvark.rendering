@@ -192,153 +192,117 @@ module PreparedPipelineState =
 
         member x.CreateTextureBindings(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) = 
 
-            let samplerModifier = 
+            let samplerModifier =
                 match uniforms.TryGetUniform(scope, DefaultSemantic.SamplerStateModifier) with
-                    | Some(:? aval<Symbol -> SamplerState -> SamplerState> as mode) ->
-                        Some mode
-                    | _ ->
-                        None
+                | Some(:? aval<Symbol -> SamplerState -> SamplerState> as mode) ->
+                    Some mode
+                | _ ->
+                    None
 
-            let createSammy (sam : FShade.SamplerState) (tex : Symbol) =
-            
-                let sammy =
+            let createSampler (sam : FShade.SamplerState) (tex : Symbol) =
+                let sampler =
                     match samplerModifier with
-                        | Some modifier -> 
-                            let samplerState = x.GetSamplerStateDescription(sam)
-                            x.GetDynamicSamplerState(tex, samplerState, modifier)
-                        | None -> 
-                            x.GetStaticSamplerState(sam)
+                    | Some modifier ->
+                        let samplerState = x.GetSamplerStateDescription(sam)
+                        x.GetDynamicSamplerState(tex, samplerState, modifier)
+                    | None ->
+                        x.GetStaticSamplerState(sam)
 
-                x.CreateSampler(sammy)
+                x.CreateSampler(sampler)
 
             iface.samplers
-                |> Array.choose (fun (_,u) ->
-                         
-                        // check if sampler is an array 
-                        //  -> compose (Texture, SamplerState)[] resource
-                        //      * case 1: individual slots
-                        //      * case 2: dependent on aval<ITexture[]> and single SamplerState
-                        // otherwise
-                        //  -> create singe (Texture, SamplerState) resource
-                        
-                        if u.samplerCount = 0 || u.samplerTextures |> List.isEmpty then 
-                            None
-                        elif u.samplerCount = 1 then
-                                  
-                            let (texName, sam) = u.samplerTextures.Head
+            |> Array.choose (fun (_, u) ->
+                // check if sampler is an array
+                //  -> compose (Texture, SamplerState)[] resource
+                //      * case 1: individual slots
+                //      * case 2: dependent on aval<ITexture[]> and single SamplerState
+                // otherwise
+                //  -> create singe (Texture, SamplerState) resource
+                if u.samplerCount = 0 || u.samplerTextures |> List.isEmpty then
+                    None
+                elif u.samplerCount = 1 then
+                    let (texName, sam) = u.samplerTextures.Head
+                    let texSym = Symbol.Create texName
+
+                    let samRes = createSampler sam texSym
+
+                    let texRes =
+                        match uniforms.TryGetUniform(scope, texSym) with
+                        | Some (:? aval<ITexture> as value) -> x.CreateTexture(value)
+                        | Some (:? aval<IBackendTexture> as value) -> x.CreateTexture(value)
+                        | Some u ->
+                            Log.error "[GL] invalid texture type: %s %s -> expecting aval<ITexture> or aval<IBackendTexture>" texName (u.GetType().Name)
+                            x.CreateTexture(helper.NullTexture)
+                        | None ->
+                            Log.error "[GL] texture uniform \"%s\" not found" texName
+                            x.CreateTexture(helper.NullTexture)
+
+                    Some struct(Range1i(u.samplerBinding), (SingleBinding (texRes, samRes)))
+
+                else
+                    // FShade allows each slot to be its own unique texture (uniform) and sampler state
+                    // check for special cases:
+                    //  1. all the same sampler state
+                    //  2. texture uniform names of form TextureUniformName<[0..N-1]>
+                    //  && uniform of type ITexture[] is provided
+                    let slotRange = Range1i.FromMinAndSize(u.samplerBinding, u.samplerCount - 1)
+
+                    let arraySingle =
+                        u.Array |> Option.bind (fun (name, sampler) ->
+                            let texSym = Symbol.Create name
+                            match uniforms.TryGetUniform(scope, texSym) with
+                            | Some (:? aval<ITexture[]> as texArr) ->
+                                // create single value (startSlot + count + sam + tex[])
+                                let samRes = createSampler sampler texSym
+                                let texArr = x.CreateTextureArray(u.samplerCount, texArr)
+                                let arrayBinding = x.CreateTextureBinding(slotRange, texArr, samRes)
+                                Some arrayBinding
+
+                            | Some u ->
+                                Log.error "[GL] invalid texture type %s: %s -> expecting aval<ITexture[]>" name (u.GetType().Name)
+                                None
+
+                            | _ -> // could not find texture array uniform -> try individual
+                                None
+                        )
+
+                    match arraySingle with
+                    | Some binding ->
+                        Some struct(slotRange, ArrayBinding binding)
+                    | _ ->
+                        // create array texture binding
+                        let textures = u.samplerTextures |> List.mapi (fun i (texName, sam) ->
                             let texSym = Symbol.Create texName
 
-                            let samRes = createSammy sam texSym
-
-                            let texRes = 
+                            let texRes =
                                 match uniforms.TryGetUniform(scope, texSym) with
-                                | Some tex ->
-                                    match tex with
-                                    | :? aval<ITexture> as value -> x.CreateTexture(value)
-                                    | :? aval<IBackendTexture> as value -> x.CreateTexture'(value)
-                                    | _ -> 
-                                        Log.error "[GL] invalid texture type: %s %s -> expecting aval<ITexture> or aval<IBackendTexture>" texName (tex.GetType().Name)
-                                        x.CreateTexture(helper.NullTexture)
-                                | None -> 
+                                | Some (:? aval<ITexture> as value) -> Some <| x.CreateTexture value
+                                | Some (:? aval<IBackendTexture> as value) -> Some <| x.CreateTexture value
+                                | Some u ->
+                                    Log.error "[GL] invalid texture type: %s %s -> expecting aval<ITexture> or aval<IBackendTexture>" texName (u.GetType().Name)
+                                    None
+                                | None ->
                                     Log.error "[GL] texture uniform \"%s\" not found" texName
-                                    x.CreateTexture(helper.NullTexture)
+                                    None
 
-                            Some struct(Range1i(u.samplerBinding), (SingleBinding (texRes, samRes)))
+                            match texRes with
+                            | Some texRes ->
+                                let samRes = createSampler sam texSym
+                                Some (texRes, samRes)
+                            | None -> None
+                        )
 
-                        else
-                            // FShade allows each slot to be its own unique texture (uniform) and sampler state
-                            // check for special cases: 
-                            //  1. all the same sampler state
-                            //  2. texture uniform names of form TextureUniformName<[0..N-1]>
-                            //  && uniform of type ITexture[] is provided
-                            
-                            let slotRange = Range1i.FromMinAndSize(u.samplerBinding, u.samplerCount - 1)
-                            let (tex0, sam0) = u.samplerTextures |> List.head
-                            // NOTE: shaderPickler.UnPickle (shader cache) does not preserve reference equal SamplerStates
-                            // NOTE2: when using shader modules (switches) the samplerTextures are replaced by the one from the module and thereby will have reference equality
-                            let sameSam = u.samplerTextures |> List.skip 1 |> List.forall (fun s -> Object.Equals(sam0, snd s))
-                            
-                            let arraySingle =
-                                if sameSam && tex0.[tex0.Length - 1] = '0' then    
-                                    let pre = tex0.Substring(0, tex0.Length - 1)
-                                    let mutable arrayNames = true
-                                    let mutable i = 1
-                                    let mutable tt = u.samplerTextures.Tail // start with second item
-                                    while arrayNames && not tt.IsEmpty do
-                                        let t = fst tt.Head
-                                        arrayNames <- arrayNames && t.StartsWith(pre) && t.Substring(pre.Length) = i.ToString()
-                                        tt <- tt.Tail
-                                        i <- i + 1
+                        let binding = x.CreateTextureBinding(slotRange, textures)
 
-                                    if i = u.samplerCount && arrayNames then
-                                        
-                                        // try find array uniform
-                                        // otherwise try get individual uniforms
-                                        let texSym = Symbol.Create pre
-                                        match uniforms.TryGetUniform(scope, texSym) with
-                                        | Some texArr ->
-                                            match texArr with
-                                            | :? aval<ITexture[]> as texArr ->
-                                                // create single value (startSlot + count + sam + tex[])
+                        // fix texture ref-count
+                        textures |> List.iter (fun v ->
+                            match v with
+                            | Some (t, s) -> t.RemoveRef(); s.RemoveRef()
+                            | None -> ()
+                        )
 
-                                                let samRes = createSammy sam0 texSym
-
-                                                let texArr = x.CreateTextureArray(u.samplerCount, texArr)
-
-                                                let arrayBinding = x.CreateTextureBinding'((slotRange, texArr, samRes))
-
-                                                Some arrayBinding
-                                            | _ -> 
-                                                Log.error "[GL] invalid texture type %s: %s -> expecting aval<ITexture[]>" pre (texArr.GetType().Name)
-                                                None
-
-                                        | _ -> // could not find texture array uniform -> try individual
-                                            None 
-                                    else
-                                        None // samplerTextures description is not qualified for a single array uniform
-                                else
-                                    None // samplerTextures description is not qualified for a single array uniform
-
-                            if Option.isSome arraySingle then
-                                Some struct(slotRange, ArrayBinding (arraySingle.Value))
-                            else 
-                                
-                                // create array texture binding
-                                let textures = u.samplerTextures |> List.mapi (fun i (texName, sam) ->
-                                        let texSym = Symbol.Create texName
-                                    
-                                        let texRes =
-                                            match uniforms.TryGetUniform(scope, texSym) with
-                                            | Some tex ->
-                                                match tex with
-                                                | :? aval<ITexture> as value -> Some (x.CreateTexture(value))
-                                                | :? aval<IBackendTexture> as value -> Some (x.CreateTexture'(value))
-                                                | _ -> 
-                                                    Log.error "[GL] invalid texture type: %s %s -> expecting aval<ITexture> or aval<IBackendTexture>" texName (tex.GetType().Name)
-                                                    None
-                                            | None -> 
-                                                    Log.error "[GL] texture uniform \"%s\" not found" texName
-                                                    None
-
-                                        match texRes with
-                                        | Some texRes ->
-
-                                            let samRes = createSammy sam texSym
-
-                                            Some (texRes, samRes)
-                                        | None -> None
-                                    )
-
-                                let binding = x.CreateTextureBinding(slotRange, textures)
-
-                                // fix texture ref-count
-                                textures |> List.iter (fun v -> 
-                                    match v with
-                                    | Some (t, s) -> t.RemoveRef(); s.RemoveRef()
-                                    | None -> ())
-
-                                Some struct(slotRange, (ArrayBinding (binding)))
-                    )
+                        Some struct(slotRange, (ArrayBinding (binding)))
+                )
 
     let ofRenderObject (fboSignature : IFramebufferSignature) (x : ResourceManager) (rj : RenderObject) =
         // use a context token to avoid making context current/uncurrent repeatedly

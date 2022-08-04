@@ -346,7 +346,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Texture
         })
 
-    member x.CreateTexture'(data : aval<IBackendTexture>) : IResource<Texture, V2i> =
+    member x.CreateTexture(data : aval<IBackendTexture>) : IResource<Texture, V2i> =
         textureCache.GetOrCreate<IBackendTexture>(data, fun () -> {
             create = fun b      -> textureManager.Create b
             update = fun h b    -> textureManager.Update(h, b)
@@ -476,9 +476,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.SamplerState
         })
 
-    member x.CreateTextureBinding(bindings : Range1i * List<Option<IResource<Texture, V2i> * IResource<Sampler, int>>>) =
+    member x.CreateTextureBinding(slots : Range1i, bindings : List<Option<IResource<Texture, V2i> * IResource<Sampler, int>>>) =
         textureBindingCache.GetOrCreate(
-            [bindings :> obj],
+            [slots :> obj; bindings :> obj],
             fun () ->
                 { new Resource<TextureBinding, TextureBinding>(ResourceKind.Unknown) with
 
@@ -487,9 +487,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                     member x.GetInfo _ = ResourceInfo.Zero
 
                     member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<TextureBinding>) =
-
-                        let (slots, bindings) = bindings
-
                         let slotCount = slots.Size + 1
                         if slotCount <= 0 then
                             failwith "invalid slot range"
@@ -550,8 +547,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                         bindingHandle
 
                     member x.Destroy (b : TextureBinding) =
-
-                        let (slots, bindings) = bindings
                         if slots.Size >= 0 then
                             
                             NativePtr.free b.targets
@@ -569,9 +564,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 }
         )
 
-    member x.CreateTextureBinding'(bindings : Range1i * List<IResource<Texture, V2i>> * IResource<Sampler, int>) =
+    member x.CreateTextureBinding(slots : Range1i, textures : List<IResource<Texture, V2i>>, sampler : IResource<Sampler, int>) =
         textureBindingCache.GetOrCreate(
-            [bindings :> obj],
+            [slots :> obj; textures :> obj; sampler :> obj],
             fun () ->
                 { new Resource<TextureBinding, TextureBinding>(ResourceKind.Unknown) with
 
@@ -580,8 +575,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                     member x.GetInfo _ = ResourceInfo.Zero
 
                     member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<TextureBinding>) =
-
-                        let (slots, texArr, sam) = bindings
 
                         let slotCount = slots.Size + 1
                         if slotCount <= 0 then
@@ -593,8 +586,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                                     o
                                 | _ ->
 
-                                    sam.AddRef()
-                                    texArr |> List.iter (fun t -> t.AddRef())
+                                    sampler.AddRef()
+                                    textures |> List.iter (fun t -> t.AddRef())
 
                                     let offset = slots.Min
                                     let count = slotCount
@@ -609,10 +602,10 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                                         textures = textures
                                     }                        
                           
-                        let mutable slotTex = texArr
+                        let mutable slotTex = textures
 
-                        sam.Update(token, rt)
-                        let ss = NativePtr.read sam.Pointer
+                        sampler.Update(token, rt)
+                        let ss = NativePtr.read sampler.Pointer
 
                         for i in 0..slotCount-1 do
                             if slotTex.IsEmpty then
@@ -637,17 +630,15 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                         bindingHandle
 
                     member x.Destroy (b : TextureBinding) =
-
-                        let (slots, texArr, sam) = bindings
                         if slots.Size >= 0 then
                             
                             NativePtr.free b.targets
                             NativePtr.free b.textures
                             NativePtr.free b.samplers
 
-                            sam.RemoveRef()
+                            sampler.RemoveRef()
 
-                            texArr |> List.iter (fun t -> t.RemoveRef())
+                            textures |> List.iter (fun t -> t.RemoveRef())
 
                 }
         )

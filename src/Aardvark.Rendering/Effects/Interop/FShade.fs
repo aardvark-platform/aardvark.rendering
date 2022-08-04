@@ -75,6 +75,31 @@ module FShadeInterop =
         member x.HasLightMapTexture : bool = x?PerMaterial?HasLightMapTexture
         member x.HasNormalMapTexture : bool = x?PerMaterial?HasNormalMapTexture
 
+    module private GLSLSampler =
+
+        let private (|BaseName|_|) (name : string) =
+            if name.Length <= 1 || name.[name.Length - 1] <> '0' then None
+            else Some <| name.Substring(0, name.Length - 1)
+
+        let private areElementNames (baseName : string) (baseIndex : int) (names : string list) =
+            names |> List.indexed |> List.forall (fun (i, n) ->
+                n = baseName + string (baseIndex + i)
+            )
+
+        let (|Array|_|) (sampler : GLSL.GLSLSampler) =
+            match sampler.samplerTextures with
+            | [] | _::[] ->
+                None
+            | (BaseName baseName, state)::xs ->
+                let names, samplers = List.unzip xs
+                if names |> areElementNames baseName 1 &&
+                   samplers |> List.forall ((=) state) then
+                    Some (baseName, state)
+                else
+                    None
+            | _ ->
+                None
+
     let private toSamplerState (state : SamplerState) : Aardvark.Rendering.SamplerState =
 
         let def =
@@ -280,6 +305,15 @@ module FShadeInterop =
 
     type SamplerState with
         member x.SamplerState = toSamplerState x
+
+    type GLSL.GLSLSampler with
+
+        /// Base name and state of array of samplers.
+        /// Returns None if not an array, elements do not follow the naming convention, or elements have varying sampler states.
+        member x.Array =
+            match x with
+            | GLSLSampler.Array name -> Some name
+            | _ -> None
 
     let toInputTopology =
         LookupTable.lookupTable [
