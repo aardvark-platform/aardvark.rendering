@@ -1,3 +1,6 @@
+### 5.2.9-prerelease0002
+- added missing FragmentProgram.Update
+
 ### 5.2.9-prerelease0001
 - test release
 - moved to Aardvark.Assembler

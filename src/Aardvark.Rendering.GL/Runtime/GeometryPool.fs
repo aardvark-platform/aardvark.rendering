@@ -1666,6 +1666,8 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                 let f = program.InsertAfter(last, a)
                 last <- f
             
+            program.Update()
+
             oldCalls |> List.iter (fun (_,beginMode,bufferBinding,_,indirect) -> 
                 NativePtr.free beginMode; ctx.Delete bufferBinding
             )
