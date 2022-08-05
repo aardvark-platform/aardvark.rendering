@@ -11,7 +11,7 @@ module Semantic =
 
 module Shader =
 
-    let MaxTextureSlices = 32
+    let MaxTextureSlices = 16
 
     type UniformScope with
         member x.DiffuseColorTextureSlice : int = x?DiffuseColorTextureSlice
@@ -107,7 +107,7 @@ let main argv =
 
     let win =
         window {
-            backend Backend.GL
+            backend Backend.Vulkan
             display Display.Mono
             debug true
             samples 8
@@ -134,10 +134,11 @@ let main argv =
     let onoff = AVal.init true
 
     // Setting this to true results in an array of samplers with
-    // individual textures to be created. These do need to be the same size
+    // individual textures to be created. These do not need to be the same size
     // as is the case with a real texture array. However, the number of textures
-    // must be known in advance, and all elements must be set.
-    let useArrayOfSamplers = false
+    // must be known in advance, and the maximum supported number is usally
+    // much smaller than for texture arrays.
+    let useArrayOfSamplers = true
 
     let applyTexture =
         if useArrayOfSamplers then
@@ -147,11 +148,14 @@ let main argv =
                         if i < count then
                             Texture.generate size
                         else
-                            NullTexture() :> ITexture
+                            NullTexture()
                     )
                 )
 
-            Sg.uniform DefaultSemantic.DiffuseColorTexture textures
+            // Set the adaptive array aval<#ITexture[]>, alternatively you can also
+            // bind each indiviual texture to DiffuseColorTexture0, DiffuseColorTexture1, and so forth.
+            // Note: The Vulkan backend also supports amap<int, aval<ITexture>> for a more convenient sparse mapping.
+            Sg.textureArray DefaultSemantic.DiffuseColorTexture textures
 
         else
             let texture = AdaptiveTexture2DArray(runtime, size, count)
@@ -172,7 +176,7 @@ let main argv =
                     else
                         Shader.diffuseTextureArray |> toEffect
                 ]
-                |> Sg.uniform Semantic.DiffuseColorTextureSlice  slice
+                |> Sg.uniform Semantic.DiffuseColorTextureSlice slice
                 |> applyTexture
         ) |> Sg.dynamic
 

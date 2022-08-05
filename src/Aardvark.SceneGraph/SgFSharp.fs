@@ -253,6 +253,24 @@ module SgFSharp =
             runtimeDependentTexture DefaultSemantic.DiffuseColorTexture tex sg
 
 
+        /// Sets the given array of textures to the slots with the given name, which can be accessed by a sampler array.
+        /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
+        let inline textureArray (name : ^Name) (textures : aval<'Texture[]>) (sg : ISg) =
+            let sym = textureAux<Symbol.Converters.TypedConverter<ITexture>, ^Name, 'Texture> name
+            let value : aval<ITexture[]> =
+                if typeof<'Texture> = typeof<ITexture> then
+                    textures |> unbox
+                else
+                    textures |> AdaptiveResource.mapNonAdaptive (Array.map unbox)
+
+            Sg.UniformApplicator(sym, value :> IAdaptiveValue, sg) :> ISg
+
+        /// Sets the given array of textures to the slots with the given name, which can be accessed by a sampler array.
+        /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
+        let inline textureArray' (name : ^Name) (textures : 'Texture[]) (sg : ISg) =
+            sg |> textureArray name ~~textures
+
+
         /// Sets the sampler state for the texture slot with the given name.
         /// The name can be a string, Symbol, or TypedSymbol<ITexture>.
         let inline samplerState (name : ^Name) (state : aval<SamplerState option>) (sg : ISg) =
@@ -1050,8 +1068,13 @@ module SgFSharp =
             let someNormals = ~~[| V3f.Zero |]
             let someNormals' = ~~[| C3f.Zero |]
 
+            let backendTexArray = [| backendTex |]
+
             let myCoolFunc tex sg =
                 sg |> Sg.texture "" tex
+
+            let myCoolArrayFunc tex sg =
+                sg |> Sg.textureArray "" tex
 
             let myCoolAttribFunc data sg =
                 sg |> Sg.vertexAttribute "" data
@@ -1071,6 +1094,7 @@ module SgFSharp =
                 |> Sg.vertexBufferValue' MyNormals V3f.Zero
                 |> myCoolFunc ~~texture
                 |> myCoolFunc ~~backendTex
+                |> myCoolArrayFunc ~~backendTexArray
                 |> myCoolAttribFunc someNormals
                 |> myCoolAttribFunc someNormals'
                 |> myCoolInstAttribFunc [| V3d.Zero |]
