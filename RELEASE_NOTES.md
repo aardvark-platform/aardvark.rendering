@@ -1,3 +1,6 @@
+### 5.2.10
+- text rendering workaround linux(nvidia)
+
 ### 5.2.9
 - Arch/Fedora working
 - moved to Aardvark.Assembler

@@ -329,8 +329,7 @@ module private OpenGL =
 
 type OpenGlApplication(forceNvidia : bool, debug : DebugLevel, shaderCachePath : Option<string>, hideCocoaMenuBar : bool) =
     do if forceNvidia then
-        if RuntimeInformation.IsOSPlatform OSPlatform.Linux then Aardvark.Base.DynamicLinker.tryLoadLibrary "libnvidia-cfg.so" |> ignore
-        elif RuntimeInformation.IsOSPlatform OSPlatform.Windows then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
+        if RuntimeInformation.IsOSPlatform OSPlatform.Windows then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
         else ()
        // hs, 01-02.2021, this should NOT be necessary in slim. 
        //OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
