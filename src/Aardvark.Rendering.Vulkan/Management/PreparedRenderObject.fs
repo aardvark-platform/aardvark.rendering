@@ -127,23 +127,54 @@ type DevicePreparedRenderObjectExtensions private() =
                             None
 
                         | descriptions ->
-                            let list =
-                                descriptions
-                                |> List.choosei (fun i (textureName, samplerState) ->
+                            let arraySampler =
+                                sam.Array |> Option.bind (fun (textureName, samplerState) ->
                                     let textureName = Symbol.Create textureName
 
                                     match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                                    | Some (:? aval<ITexture> as tex) ->
+                                    | Some (:? amap<int, aval<ITexture>> as tex) ->
                                         let s = createSamplerState this textureName uniforms samplerState
-                                        let vs = this.CreateImageSampler(sam.samplerType, tex, s)
-                                        Some(i, vs)
-                                    | _ ->
-                                        Log.error "[Vulkan] could not find texture: %A" textureName
+                                        let is = this.CreateImageSamplerArray(sam.samplerType, tex, s)
+                                        Some is
+
+                                    | Some (:? aval<ITexture[]> as tex) ->
+                                        let s = createSamplerState this textureName uniforms samplerState
+                                        let is = this.CreateImageSamplerArray(sam.samplerType, tex, s)
+                                        Some is
+
+                                    | Some t ->
+                                        Log.error "[Vulkan] invalid type for sampler array texture %A (%A)" textureName (t.GetType())
                                         None
+
+                                    | _ -> None
                                 )
 
-                            let viewSam = this.CreateImageSamplerArray(list)
-                            AdaptiveDescriptor.AdaptiveCombinedImageSampler(b.Binding, viewSam) |> Some
+                            let sampler =
+                                arraySampler |> Option.defaultWith (fun _ ->
+                                    let list =
+                                        descriptions
+                                        |> List.choosei (fun i (textureName, samplerState) ->
+                                            let textureName = Symbol.Create textureName
+
+                                            match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                                            | Some (:? aval<ITexture> as tex) ->
+                                                let s = createSamplerState this textureName uniforms samplerState
+                                                let vs = this.CreateImageSampler(sam.samplerType, tex, s)
+                                                Some(i, vs)
+
+                                            | Some t ->
+                                                Log.error "[Vulkan] invalid type for texture %A (%A)" textureName (t.GetType())
+                                                None
+
+                                            | _ ->
+                                                Log.error "[Vulkan] could not find texture: %A" textureName
+                                                None
+                                        )
+
+                                    this.CreateImageSamplerArray(list)
+                                )
+
+                            AdaptiveDescriptor.AdaptiveCombinedImageSampler(b.Binding, sampler) |> Some
 
                     | ImageParameter img ->
                         let viewSam = 

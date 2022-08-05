@@ -180,6 +180,7 @@ type ImmutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, 
     inherit AbstractResourceLocation<'h>(owner, key)
 
     let mutable handle : Option<'a * 'h> = None
+    let mutable version = 0
 
     let recreate (token : AdaptiveToken) (renderToken : RenderToken) =
         let n = input.GetValue(token, renderToken)
@@ -193,12 +194,14 @@ type ImmutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, 
             desc.idestroy h
             let r = desc.icreate n
             handle <- Some(n,r)
+            inc &version
             r
         | None ->
             owner.ReplaceLocked (None, Some n)
 
             let r = desc.icreate n
             handle <- Some(n,r)
+            inc &version
             r
 
     override x.MarkObject() =
@@ -229,10 +232,10 @@ type ImmutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, 
     override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
         if x.OutOfDate then
             let handle = recreate token renderToken
-            { handle = handle; version = 0 }
+            { handle = handle; version = version }
         else
             match handle with
-            | Some(_,h) -> { handle = h; version = 0 }
+            | Some(_,h) -> { handle = h; version = version }
             | None -> failwith "[Resource] inconsistent state"
 
 type MutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, input : aval<'a>, desc : MutableResourceDescription<'a, 'h>) =
@@ -443,7 +446,7 @@ module Resources =
 
     type ImageSampler = ImageView * Sampler
 
-    type ImageSamplerArray = array<int * IResourceLocation<ImageSampler>>
+    type ImageSamplerArray = Map<int, ImageSampler>
 
     type AdaptiveDescriptor =
         | AdaptiveUniformBuffer         of slot: int * buffer: IResourceLocation<UniformBuffer>
@@ -570,42 +573,61 @@ module Resources =
             | Some (v, s) -> { handle = (v.handle, s.handle); version = max v.version s.version }
             | _ -> failwith "[Resource] inconsistent state"
 
-    type ImageSamplerArrayResource(owner : IResourceCache, key : list<obj>, input : amap<int, _>) =
+
+    type ImageSamplerArrayResource(owner : IResourceCache, key : list<obj>, input : amap<int, IResourceLocation<ImageSampler>>) =
         inherit AbstractResourceLocation<ImageSamplerArray>(owner, key)
 
-        let mutable reader = input.GetReader()
+        let reader = input.GetReader()
 
-        let mutable handle : ImageSamplerArray = [||]
-        let mutable version = 0
+        // Use a pending set and InputChangedObject() to
+        // avoid iterating over all image samplers in GetHandle()
+        let pending = LockedSet<_>()
 
         // Sparsely maps resources to a binding slot
-        let slots = Dict<int, IResourceLocation<_>>()
+        let images = Dict<int, IResourceLocation<_>>()
+        let indices = MultiDict<IResourceLocation<_>, int>()
 
-        // Remove a resource from the given dictionary if it exists
+        // For each bound slot store the last seen version
+        // Whenever a version has changed, this resource's version is incremented
+        let mutable version = 0
+        let versions = Dict<int, int>()
+
+        // The map with evaluated image samplers
+        let mutable handle = Map.empty<int, ImageSampler>
+
+        // Remove a resource from the given index if it exists
         let remove (i : int) =
-            match slots.TryGetValue i with
-            | true, x ->
-                slots.Remove i |> ignore
-                x.Release()
+            versions.Remove i |> ignore
+
+            match images.TryRemove i with
+            | true, r ->
+                if indices |> MultiDict.remove r i then
+                    r.Release()
+                    pending.Remove r |> ignore
             | _ -> ()
 
-        // Add a resource to the given dictionary
+        // Add a resource to the given index
         let set (i : int) (r : IResourceLocation<_>) =
-            r.Acquire()
-            remove i
-            slots.[i] <- r
+            if indices |> MultiDict.add r i then
+                r.Acquire()
 
-        override x.Create() = ()
+            pending.Add r |> ignore
+            versions.[i] <- -1
+            images.[i] <- r
+
+        override x.Create() =
+            for KeyValue(i, _) in indices do
+                i.Acquire()
+                pending.Add i |> ignore
 
         override x.Destroy() =
-            for (_, r) in handle do
-                r.Release()
+            for KeyValue(i, _) in indices do
+                i.Release()
 
-            reader <- Unchecked.defaultof<_>
+            pending.Clear()
 
         override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
-
                 let deltas = reader.GetChanges token
 
                 for (i, op) in deltas do
@@ -613,11 +635,26 @@ module Resources =
                     | Set r -> set i r
                     | Remove -> remove i
 
-                if not deltas.IsEmpty then
-                    handle <- Dict.toArray slots
+                let mutable changed = deltas.Count > 0
+
+                for image in pending.GetAndClear() do
+                    let info = image.Update(token, renderToken)
+
+                    for i in indices.[image] do
+                        if info.version <> versions.[i] then
+                            changed <- true
+                            versions.[i] <- info.version
+                            handle <- handle |> Map.add i info.handle
+
+                if changed then
                     inc &version
 
             { handle = handle; version = version }
+
+        override x.InputChangedObject(_, object) =
+            match object with
+            | :? IResourceLocation<ImageSampler> as r -> pending.Add r |> ignore
+            | _ -> ()
 
     type ShaderProgramEffectResource(owner : IResourceCache, key : list<obj>, device : Device, layout : PipelineLayout, input : aval<FShade.Imperative.Module>) =
         inherit ImmutableResourceLocation<FShade.Imperative.Module, ShaderProgram>(
@@ -948,8 +985,8 @@ module Resources =
                         | AdaptiveCombinedImageSampler(slot, arr) ->
                             let arr =
                                 arr.Update(token, renderToken).handle
-                                |> Array.map (fun (i, r) ->
-                                    let (v, s) = r.Update(token, renderToken).handle
+                                |> Map.toArray
+                                |> Array.map (fun (i, (v, s)) ->
                                     i, v.Image.SamplerLayout, v, s
                                 )
 
@@ -1220,6 +1257,7 @@ module Resources =
         inherit AbstractResourceLocation<ImageView>(owner, key)
 
         let mutable handle : Option<ImageView> = None
+        let mutable version = 0
 
         abstract member CreateImageView : Image -> ImageView
 
@@ -1242,7 +1280,7 @@ module Resources =
                     | None -> false
 
                 if isIdentical then
-                    { handle = handle.Value; version = 0 }
+                    { handle = handle.Value; version = version }
                 else
                     match handle with
                     | Some h -> h.Dispose()
@@ -1250,11 +1288,12 @@ module Resources =
 
                     let h = x.CreateImageView image.handle
                     handle <- Some h
+                    inc &version
 
-                    { handle = h; version = 0 }
+                    { handle = h; version = version }
             else
                 match handle with
-                | Some h -> { handle = h; version = 0 }
+                | Some h -> { handle = h; version = version }
                 | None -> failwith "[Resource] inconsistent state"
 
     type ImageViewResource(owner : IResourceCache, key : list<obj>, device : Device, samplerType : FShade.GLSL.GLSLSamplerType, image : IResourceLocation<Image>) =
@@ -1389,7 +1428,6 @@ module Resources =
                 { handle = table; version = version }
 
             let update hitConfigs pipeline table =
-                inc &version
                 table |> ShaderBindingTable.update hitConfigs pipeline
                 { handle = table; version = version }
 
@@ -1541,6 +1579,38 @@ type ResourceManager(user : IResourceUser, device : Device) =
         imageSamplerCache.GetOrCreate(
             [view :> obj; sampler :> obj],
             fun cache key -> new ImageSamplerResource(cache, key, view, sampler)
+        )
+
+    member x.CreateImageSamplerArray(samplerType : FShade.GLSL.GLSLSamplerType,
+                                     textures : amap<int, aval<ITexture>>, samplerDesc : aval<SamplerState>) =
+        imageSamplerArrayCache.GetOrCreate(
+            [samplerType :> obj; textures :> obj; samplerDesc :> obj],
+            fun cache key ->
+                let map =
+                    textures |> AMap.map (fun _ t ->
+                        x.CreateImageSampler(samplerType, t, samplerDesc)
+                    )
+
+                x.CreateImageSamplerArray(map)
+        )
+
+    member x.CreateImageSamplerArray(samplerType : FShade.GLSL.GLSLSamplerType,
+                                     textures : aval<ITexture[]>, samplerDesc : aval<SamplerState>) =
+        imageSamplerArrayCache.GetOrCreate(
+            [samplerType :> obj; textures :> obj; samplerDesc :> obj],
+            fun cache key ->
+                let length = textures |> AVal.map Array.length
+
+                let map =
+                    length |> AVal.map (fun n ->
+                        Array.init n (fun i ->
+                            let t = textures |> AVal.map (fun arr -> Array.get arr i)
+                            i, x.CreateImageSampler(samplerType, t, samplerDesc)
+                        )
+                    )
+                    |> AMap.ofAVal
+
+                x.CreateImageSamplerArray(map)
         )
 
     member x.CreateImageSamplerArray(input : seq<int * IResourceLocation<ImageSampler>>) =

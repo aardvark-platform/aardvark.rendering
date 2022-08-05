@@ -40,6 +40,7 @@
     <Compile Include="Utilities\CompactSet.fs" />
     <Compile Include="Utilities\SymbolConverter.fs" />
     <Compile Include="Utilities\ShaderCodeReporting.fs" />
+    <Compile Include="Utilities\MultiDict.fs" />
     <Compile Include="Resources\Buffers\ExternalMemory.fs" />
     <Compile Include="Resources\Buffers\Buffers.fs" />
     <Compile Include="Resources\Buffers\ArrayBuffer.fs" />
