@@ -318,7 +318,8 @@ module private OpenGL =
                 glfw.WindowHint(WindowHintBool.OpenGLForwardCompat, true)
                 glfw.WindowHint(WindowHintBool.DoubleBuffer, true)
                 glfw.WindowHint(WindowHintBool.OpenGLDebugContext, false)
-                if useNoError then glfw.WindowHint(WindowHintBool.ContextNoError, true)
+                //as 2022-08: doesnt work on various non-windows hardwares (intel, steam deck, etc)
+                //if useNoError then glfw.WindowHint(WindowHintBool.ContextNoError, true)
                 glfw.WindowHint(WindowHintBool.SrgbCapable, false)
                 if RuntimeInformation.IsOSPlatform(OSPlatform.OSX) then
                     glfw.WindowHint(unbox<WindowHintBool> 0x00023001, cfg.physicalSize)

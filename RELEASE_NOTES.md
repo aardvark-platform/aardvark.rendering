@@ -1,3 +1,6 @@
+### 5.2.11
+- disabled useNoError (linux intel, steamdeck compat)
+
 ### 5.2.10
 - text rendering workaround linux(nvidia)
 
