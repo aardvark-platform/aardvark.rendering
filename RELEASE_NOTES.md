@@ -1,3 +1,7 @@
+### 5.2.12
+- reverted Vulkan queue creation
+- enabled sharing extensions by default (windows/linux)
+
 ### 5.2.11
 - disabled useNoError (linux intel, steamdeck compat)
 

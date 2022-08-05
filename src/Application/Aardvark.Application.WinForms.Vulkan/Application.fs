@@ -9,6 +9,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
+open System.Runtime.InteropServices
 
 module VisualDeviceChooser =
     open System.IO
@@ -102,18 +103,30 @@ type VulkanApplication(debug : DebugLevel, chooseDevice : list<PhysicalDevice> -
             yield Instance.Extensions.GetPhysicalDeviceProperties2
 
             yield! Instance.Extensions.Raytracing
-            
-            yield KHRVideoQueue.Name
-            yield KHRVideoDecodeQueue.Name
-            yield KHRVideoEncodeQueue.Name
-            yield EXTVideoDecodeH264.Name
-            yield EXTVideoEncodeH264.Name
-            yield EXTVideoDecodeH265.Name
-            yield EXTVideoEncodeH265.Name
 
             if debug > DebugLevel.None then
                 yield Instance.Extensions.DebugReport
                 yield Instance.Extensions.DebugUtils
+
+            yield KHRGetPhysicalDeviceProperties2.Name
+            yield KHRExternalMemoryCapabilities.Name
+            yield KHRExternalMemory.Name
+            yield KHRExternalFenceCapabilities.Name
+            yield KHRExternalFence.Name
+            yield KHRExternalSemaphoreCapabilities.Name
+            yield KHRExternalSemaphore.Name
+            yield EXTExternalMemoryHost.Name
+            yield EXTExternalMemoryDmaBuf.Name
+
+            if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
+                yield KHRExternalMemoryWin32.Name
+                yield KHRExternalFenceWin32.Name
+                yield KHRExternalSemaphoreWin32.Name
+
+            elif RuntimeInformation.IsOSPlatform OSPlatform.Linux then
+                yield KHRExternalMemoryFd.Name
+                yield KHRExternalFenceFd.Name
+                yield KHRExternalSemaphoreFd.Name
         ]
 
     let requestedLayers =
