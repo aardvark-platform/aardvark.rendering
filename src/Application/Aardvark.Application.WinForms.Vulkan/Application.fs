@@ -9,6 +9,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
+open System.Runtime.InteropServices
 
 module VisualDeviceChooser =
     open System.IO
@@ -102,7 +103,6 @@ type VulkanApplication(debug : DebugLevel, chooseDevice : list<PhysicalDevice> -
             yield Instance.Extensions.GetPhysicalDeviceProperties2
 
             yield! Instance.Extensions.Raytracing
-
             yield! Instance.Extensions.Sharing
 
             if debug > DebugLevel.None then

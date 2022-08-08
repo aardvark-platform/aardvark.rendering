@@ -14,7 +14,7 @@ module ARB_sparse_buffer =
     type GL private() =
         static let supported =
             let vendor = GL.GetString(StringName.Vendor).ToLower()
-            let reallySupportsSparse = vendor.Contains("nvidia")
+            let reallySupportsSparse = vendor.Contains("nvidia") && not (RuntimeInformation.IsOSPlatform OSPlatform.Linux)
             reallySupportsSparse && ExtensionHelpers.isSupported (Version(666,666,666)) "GL_ARB_sparse_buffer"
 
         static member ARB_sparse_buffer = supported

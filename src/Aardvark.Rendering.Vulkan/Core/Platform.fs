@@ -617,20 +617,26 @@ module Instance =
             ]
 
         let Sharing = [
-                // instance
-                KHRExternalMemoryCapabilities.Name
                 KHRGetPhysicalDeviceProperties2.Name
-                KHRExternalSemaphoreCapabilities.Name
-
-                // device
-                KHRExternalSemaphore.Name
+                KHRExternalMemoryCapabilities.Name
                 KHRExternalMemory.Name
-                // device win32
-                KHRExternalSemaphoreWin32.Name
-                KHRExternalMemoryWin32.Name
-                // device fd
-                KHRExternalSemaphoreFd.Name
-                KHRExternalMemoryFd.Name
+                KHRExternalFenceCapabilities.Name
+                KHRExternalFence.Name
+                KHRExternalSemaphoreCapabilities.Name
+                KHRExternalSemaphore.Name
+                EXTExternalMemoryHost.Name
+
+                if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
+                    KHRExternalMemoryWin32.Name
+                    KHRExternalFenceWin32.Name
+                    KHRExternalSemaphoreWin32.Name
+                else
+                    KHRExternalMemoryFd.Name
+                    KHRExternalFenceFd.Name
+                    KHRExternalSemaphoreFd.Name
+
+                    if RuntimeInformation.IsOSPlatform OSPlatform.Linux then
+                        EXTExternalMemoryDmaBuf.Name
             ]
 
     module Layers =
@@ -701,7 +707,7 @@ module ConsoleDeviceChooser =
 
 
         let altDown() =
-            let dpy = XOpenDisplay(0)
+            let dpy = XOpenDisplay(0n)
             let keys = Array.zeroCreate<byte> 256
             XQueryKeymap(dpy, keys) |> ignore
             let kc2 = XKeysymToKeycode(dpy, XK_Alt_L) |> int

@@ -1,3 +1,24 @@
+### 5.2.12
+- reverted Vulkan queue creation
+- enabled sharing extensions by default (windows/linux)
+
+### 5.2.11
+- disabled useNoError (linux intel, steamdeck compat)
+
+### 5.2.10
+- text rendering workaround linux(nvidia)
+
+### 5.2.9
+- Arch/Fedora working
+- moved to Aardvark.Assembler
+
+### 5.2.9-prerelease0002
+- added missing FragmentProgram.Update
+
+### 5.2.9-prerelease0001
+- test release
+- moved to Aardvark.Assembler
+
 ### 5.2.8
 - fixed GLFW init problem
 

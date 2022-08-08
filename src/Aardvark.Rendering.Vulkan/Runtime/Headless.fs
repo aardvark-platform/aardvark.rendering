@@ -3,6 +3,7 @@
 open System
 open Aardvark.Base
 open Aardvark.Rendering
+open System.Runtime.InteropServices
 
 type HeadlessVulkanApplication(debug : DebugLevel, instanceExtensions : list<string>, deviceExtensions : PhysicalDevice -> list<string>) =
     let requestedExtensions =
