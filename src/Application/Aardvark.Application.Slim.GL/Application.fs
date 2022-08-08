@@ -17,6 +17,13 @@ open Aardvark.Glfw
 
 #nowarn "9"
 
+[<AutoOpen>]
+module private WindowHintExtensions =
+    
+    type WindowHintBool with
+        static member CocoaRetinaFramebuffer = unbox<WindowHintBool> 0x00023001
+        static member ScaleToMonitor = unbox<WindowHintBool> 0x0002200C
+
 module private OpenGL =
     open System
     open FSharp.Data.Adaptive
@@ -30,6 +37,7 @@ module private OpenGL =
         glfw.WindowHint(WindowHintInt.ContextVersionMajor, version.Major)
         glfw.WindowHint(WindowHintInt.ContextVersionMinor, version.Minor)
         glfw.WindowHint(WindowHintBool.ContextNoError, useNoError)
+        glfw.WindowHint(WindowHintRobustness.ContextRobustness, Robustness.LoseContextOnReset)
         glfw.WindowHint(WindowHintBool.OpenGLForwardCompat, true)
         glfw.WindowHint(WindowHintOpenGlProfile.OpenGlProfile, OpenGlProfile.Core)
         glfw.WindowHint(WindowHintBool.Visible, false)
@@ -300,9 +308,9 @@ module private OpenGL =
                 if useNoError then glfw.WindowHint(WindowHintBool.ContextNoError, true)
                 glfw.WindowHint(WindowHintBool.SrgbCapable, false)
                 if RuntimeInformation.IsOSPlatform(OSPlatform.OSX) then
-                    glfw.WindowHint(unbox<WindowHintBool> 0x00023001, cfg.physicalSize)
+                    glfw.WindowHint(WindowHintBool.CocoaRetinaFramebuffer, cfg.physicalSize)
 
-                glfw.WindowHint(unbox<WindowHintBool> 0x0002200C, true)
+                glfw.WindowHint(WindowHintBool.ScaleToMonitor, true)
                 glfw.WindowHint(WindowHintInt.Samples, cfg.samples)
         }
 
