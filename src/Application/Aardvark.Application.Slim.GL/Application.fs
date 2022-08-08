@@ -18,85 +18,64 @@ open Aardvark.Glfw
 #nowarn "9"
 
 module private OpenGL =
-    open System.Runtime.InteropServices
+    open System
     open FSharp.Data.Adaptive
-    open System.Runtime.InteropServices
 
     let mutable version = System.Version(3,3)
     let mutable useNoError = false
-    
-    type GLGetDelegate = delegate of GetPName * byref<int> -> unit
-    type GLGetStringiDelegate = delegate of StringNameIndexed * int -> nativeint
-    type GLGetStringDelegate = delegate of StringName -> nativeint
-    
+
+    let private tryCreateOffscreenWindow (version : Version) (useNoError : bool) (glfw : Glfw) =
+        glfw.DefaultWindowHints()
+        glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.OpenGL)
+        glfw.WindowHint(WindowHintInt.ContextVersionMajor, version.Major)
+        glfw.WindowHint(WindowHintInt.ContextVersionMinor, version.Minor)
+        glfw.WindowHint(WindowHintBool.ContextNoError, useNoError)
+        glfw.WindowHint(WindowHintBool.OpenGLForwardCompat, true)
+        glfw.WindowHint(WindowHintOpenGlProfile.OpenGlProfile, OpenGlProfile.Core)
+        glfw.WindowHint(WindowHintBool.Visible, false)
+
+        let w =
+            try glfw.CreateWindow(1, 1, "", NativePtr.zero, NativePtr.zero)
+            with _ -> NativePtr.zero
+
+        if w = NativePtr.zero then
+            false
+        else
+            glfw.DestroyWindow w
+            true
+
     let initVersion (glfw : Glfw) =
-        let defaultVersion = System.Version(Config.MajorVersion, Config.MinorVersion)
+        let defaultVersion = Version(Config.MajorVersion, Config.MinorVersion)
 
         let versions =
             [
-                System.Version(4,6)
-                System.Version(4,5)
-                System.Version(4,4)
-                System.Version(4,3)
-                System.Version(4,2)
-                System.Version(4,1)
-                System.Version(4,0)
-                System.Version(3,3)
+                Version(4,6)
+                Version(4,5)
+                Version(4,4)
+                Version(4,3)
+                Version(4,2)
+                Version(4,1)
+                Version(4,0)
+                Version(3,3)
             ]
 
-        let best = 
+        let best =
             versions
             |> List.skipWhile ((<>) defaultVersion)
-            |> List.tryPick (fun v -> 
-                glfw.DefaultWindowHints()
-                glfw.WindowHint(WindowHintClientApi.ClientApi, ClientApi.OpenGL)
-                glfw.WindowHint(WindowHintInt.ContextVersionMajor, v.Major)
-                glfw.WindowHint(WindowHintInt.ContextVersionMinor, v.Minor)
-                glfw.WindowHint(WindowHintBool.OpenGLForwardCompat, true)
-                glfw.WindowHint(WindowHintOpenGlProfile.OpenGlProfile, OpenGlProfile.Core)
-                glfw.WindowHint(WindowHintBool.Visible, false)
-
-                let w = 
-                    try glfw.CreateWindow(1, 1, "", NativePtr.zero, NativePtr.zero)
-                    with _ -> NativePtr.zero
-
-                if w = NativePtr.zero then
+            |> List.tryFind (fun v ->
+                if tryCreateOffscreenWindow v false glfw then
+                    Log.line "OpenGL %A working" v
+                    true
+                else
                     let error, _ = glfw.GetError()
                     Log.warn "OpenGL %A not working: %A" v error
-                    None
-                else
-                    glfw.MakeContextCurrent(w)
-                    
-                    let useNoError = 
-                        let glGet = Marshal.GetDelegateForFunctionPointer<GLGetDelegate>(glfw.GetProcAddress "glGetIntegerv")
-                        let glGetString = Marshal.GetDelegateForFunctionPointer<GLGetStringDelegate>(glfw.GetProcAddress "glGetString")
-                        let glGetStringi = Marshal.GetDelegateForFunctionPointer<GLGetStringiDelegate>(glfw.GetProcAddress "glGetStringi")
-                        
-                        let ven = Marshal.PtrToStringAnsi(glGetString.Invoke(StringName.Vendor))
-                        
-                        if ven.ToLower().Contains "intel" then
-                            false
-                        else
-                            let mutable cnt = 0
-                            glGet.Invoke(GetPName.NumExtensions, &cnt)
-                            let arr =
-                                Array.init cnt (fun i ->
-                                    let ptr = glGetStringi.Invoke(StringNameIndexed.Extensions, i)
-                                    Marshal.PtrToStringAnsi ptr
-                                )
-                                
-                            Array.contains "GL_KHR_no_error" arr
-                            
-                    glfw.MakeContextCurrent(NativePtr.zero)
-                    glfw.DestroyWindow(w)
-                    Log.line "OpenGL %A working" v
-                    Some (v, useNoError)
+                    false
 
             )
         match best with
-        | Some (b, noErr) ->
+        | Some b ->
             version <- b
-            useNoError <- noErr 
+            useNoError <- tryCreateOffscreenWindow b true glfw
         | None -> failwith "no compatible OpenGL version found"
 
     type MyWindowInfo(win : nativeptr<WindowHandle>) =
@@ -318,8 +297,7 @@ module private OpenGL =
                 glfw.WindowHint(WindowHintBool.OpenGLForwardCompat, true)
                 glfw.WindowHint(WindowHintBool.DoubleBuffer, true)
                 glfw.WindowHint(WindowHintBool.OpenGLDebugContext, false)
-                //as 2022-08: doesnt work on various non-windows hardwares (intel, steam deck, etc)
-                //if useNoError then glfw.WindowHint(WindowHintBool.ContextNoError, true)
+                if useNoError then glfw.WindowHint(WindowHintBool.ContextNoError, true)
                 glfw.WindowHint(WindowHintBool.SrgbCapable, false)
                 if RuntimeInformation.IsOSPlatform(OSPlatform.OSX) then
                     glfw.WindowHint(unbox<WindowHintBool> 0x00023001, cfg.physicalSize)
