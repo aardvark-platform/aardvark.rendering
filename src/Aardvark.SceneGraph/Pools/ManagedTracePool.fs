@@ -449,31 +449,36 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
     let instanceAttributeManager = LayoutManager<Map<Symbol, IAdaptiveValue>>()
     let geometryAttributeManager = LayoutManager<Map<Symbol, IAdaptiveValue>[]>()
 
+    let createManagedBuffer t u s =
+        let b = runtime.CreateManagedBuffer(t, u, s)
+        b.Acquire()
+        b
+
     let indexBuffer =
         let usage = BufferUsage.ReadWrite ||| BufferUsage.Storage ||| BufferUsage.AccelerationStructure
-        runtime.CreateManagedBuffer(indexType, usage, indexBufferStorage)
+        createManagedBuffer indexType usage indexBufferStorage
 
     let vertexBuffers =
         let usage = BufferUsage.ReadWrite ||| BufferUsage.Storage ||| BufferUsage.AccelerationStructure
         signature.VertexAttributeTypes |> Map.map (fun s t ->
-            runtime.CreateManagedBuffer(t, usage, vertexBufferStorage s)
+            createManagedBuffer t usage (vertexBufferStorage s)
         )
 
     let instanceAttributeBuffers =
         let usage = BufferUsage.ReadWrite ||| BufferUsage.Storage
         instanceAttributeTypes |> Map.map (fun s t ->
-            runtime.CreateManagedBuffer(t, usage, instanceAttributeBufferStorage s)
+            createManagedBuffer t usage (instanceAttributeBufferStorage s)
         )
 
     let geometryAttributeBuffers =
         let usage = BufferUsage.ReadWrite ||| BufferUsage.Storage
         geometryAttributeTypes |> Map.map (fun s t ->
-            runtime.CreateManagedBuffer(t, usage, geometryAttributeBufferStorage s)
+            createManagedBuffer t usage (geometryAttributeBufferStorage s)
         )
 
     let geometryBuffer =
         let usage = BufferUsage.ReadWrite ||| BufferUsage.Storage
-        runtime.CreateManagedBuffer(typeof<TraceGeometryInfo>, usage, geometryBufferStorage)
+        createManagedBuffer typeof<TraceGeometryInfo> usage geometryBufferStorage
 
     let accelerationStructures =
         Dict<AdaptiveTraceGeometry * AccelerationStructureUsage, aval<IAccelerationStructure>>()
@@ -702,7 +707,15 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
         | None _ -> failwithf "[ManagedTracePool] could not find geometry attribute %A" semantic
 
     member x.Dispose() =
-        lock x clear
+        lock x (fun _ ->
+            clear()
+
+            indexBuffer.Release()
+            geometryBuffer.Release()
+            for KeyValue(_, b) in vertexBuffers do b.Release()
+            for KeyValue(_, b) in instanceAttributeBuffers do b.Release()
+            for KeyValue(_, b) in geometryAttributeBuffers do b.Release()
+        )
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

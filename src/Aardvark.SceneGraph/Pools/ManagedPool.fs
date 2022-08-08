@@ -149,20 +149,25 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
 
     let toDict f = Map.toSeq >> Seq.map f >> SymDict.ofSeq
 
+    let createManagedBuffer t u s =
+        let b = runtime.CreateManagedBuffer(t, u, s)
+        b.Acquire()
+        b
+
     let indexBuffer =
         let usage = indexBufferUsage ||| BufferUsage.Index ||| BufferUsage.ReadWrite
-        runtime.CreateManagedBuffer(signature.IndexType, usage, indexBufferStorage)
+        createManagedBuffer signature.IndexType usage indexBufferStorage
 
     let vertexBuffers =
         let usage = vertexBufferUsage ||| BufferUsage.Vertex ||| BufferUsage.ReadWrite
         signature.VertexAttributeTypes |> toDict (fun (k, t) ->
-            k, runtime.CreateManagedBuffer(t, usage, vertexBufferStorage k)
+            k, createManagedBuffer t usage (vertexBufferStorage k)
         )
 
     let instanceBuffers =
         let usage = instanceBufferUsage ||| BufferUsage.Vertex ||| BufferUsage.ReadWrite
         signature.InstanceAttributeTypes |> toDict (fun (k, t) ->
-            k, runtime.CreateManagedBuffer(t, usage, instanceBufferStorage k)
+            k, createManagedBuffer t usage (instanceBufferStorage k)
         )
 
     let vertexBufferTypes = Map.toArray signature.VertexAttributeTypes
@@ -182,7 +187,7 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
 
         indexBuffer.Clear()
         for KeyValue(_, b) in vertexBuffers do b.Clear()
-        for KeyValue(_, b)in instanceBuffers do b.Clear()
+        for KeyValue(_, b) in instanceBuffers do b.Clear()
         drawCalls.Clear()
 
     new (runtime : IRuntime, signature : GeometrySignature,
@@ -318,7 +323,13 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
         BufferView(indexBuffer, indexBuffer.ElementType)
 
     member x.Dispose() =
-        lock x clear
+        lock x (fun _ ->
+            clear()
+
+            indexBuffer.Release()
+            for KeyValue(_, b) in vertexBuffers do b.Release()
+            for KeyValue(_, b) in instanceBuffers do b.Release()
+        )
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()
