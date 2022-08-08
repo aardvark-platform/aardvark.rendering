@@ -119,19 +119,6 @@ module internal ManagedBufferImplementation =
         let writers = Dict<obj, AbstractWriter>()
         let pending = LockedSet<AbstractWriter>()
 
-        let getOrCreateWriter (input : 'Input) (create : 'Input -> #AbstractWriter) =
-            lock writers (fun _ ->
-                writers.GetOrCreate(input, fun _ ->
-                    (create input) :> AbstractWriter
-                )
-            )
-
-        let removeWriter (input : obj) =
-            lock writers (fun _ ->
-                let writer = writers.GetAndRemove input
-                pending.Remove(writer) |> ignore
-            )
-
         member inline private x.Allocate(range : Range1l) =
             let min = nativeint (range.Max + 1L) * elementSize
             if x.Size < min then
@@ -155,9 +142,12 @@ module internal ManagedBufferImplementation =
 
             { new IDisposable with
                 member x.Dispose() =
-                    if writer.RemoveRange range then
-                        removeWriter input
-                        writer.Dispose()
+                    lock writers (fun _ ->
+                        if writer.RemoveRange range then
+                            writers.Remove input |> ignore
+                            pending.Remove writer |> ignore
+                            writer.Dispose()
+                    )
             }
 
         member x.Set(data : nativeint, sizeInBytes : nativeint, range : Range1l) =
@@ -189,14 +179,16 @@ module internal ManagedBufferImplementation =
                     x.Set(converted, range)
                     empty
                 else
-                    let writer =
-                        getOrCreateWriter view (fun view ->
-                            let data = BufferView.download 0 (int count) view
-                            let converted : aval<'T[]> = data |> PrimitiveValueConverter.convertArray view.ElementType
-                            new ArrayWriter<'T>(x, converted)
-                        )
+                    lock writers (fun _ ->
+                        let writer =
+                            writers.GetOrCreate(view, fun _ ->
+                                let data = BufferView.download 0 (int count) view
+                                let converted : aval<'T[]> = data |> PrimitiveValueConverter.convertArray view.ElementType
+                                new ArrayWriter<'T>(x, converted)
+                            )
 
-                    x.AddRange(writer, view, range)
+                        x.AddRange(writer, view, range)
+                    )
 
         member x.Add(value : IAdaptiveValue, index : int64) =
             if value.IsConstant then
@@ -204,14 +196,16 @@ module internal ManagedBufferImplementation =
                 x.Set(converted, index)
                 empty
             else
-                let writer =
-                    getOrCreateWriter value (fun value ->
-                        let converted : aval<'T> = value |> PrimitiveValueConverter.convertValue
-                        new SingleWriter<'T>(x, converted)
-                    )
+                lock writers (fun _ ->
+                    let writer =
+                        writers.GetOrCreate(value, fun _ ->
+                            let converted : aval<'T> = value |> PrimitiveValueConverter.convertValue
+                            new SingleWriter<'T>(x, converted)
+                        )
 
-                let range = Range1l(int64 index, int64 index)
-                x.AddRange(writer, value, range)
+                    let range = Range1l(int64 index, int64 index)
+                    x.AddRange(writer, value, range)
+                )
 
         override x.Destroy() =
             writers.Clear()
