@@ -250,7 +250,7 @@ module internal ManagedBufferImplementation =
                 regions.Add range
             )
 
-        /// Removes the given range as target regions and retuns if all ranges are removed.
+        /// Removes the given range as target regions and returns true if all ranges are removed.
         member x.RemoveRange(range : Range1l) : bool =
             lock x (fun () ->
                 regions.Remove range |> ignore
