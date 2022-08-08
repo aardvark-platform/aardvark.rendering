@@ -51,6 +51,14 @@ module private OpenGL =
         else
             glfw.DestroyWindow w
             true
+            
+    let supportsNoError (version : Version) (glfw : Glfw) =
+        if tryCreateOffscreenWindow version true glfw then
+            true
+        else
+            let error, _ = glfw.GetError()
+            Report.Line(2, "OpenGL does not support KHR_no_error: {0}", error)
+            false
 
     let initVersion (glfw : Glfw) =
         let defaultVersion = Version(Config.MajorVersion, Config.MinorVersion)
@@ -83,7 +91,7 @@ module private OpenGL =
         match best with
         | Some b ->
             version <- b
-            useNoError <- tryCreateOffscreenWindow b true glfw
+            useNoError <- glfw |> supportsNoError b
         | None -> failwith "no compatible OpenGL version found"
 
     type MyWindowInfo(win : nativeptr<WindowHandle>) =
