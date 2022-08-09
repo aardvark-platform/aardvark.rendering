@@ -72,7 +72,8 @@ module IndirectBuffer =
           Indexed = indexed }
 
     /// Creates an indirect buffer of the given array.
-    /// The indexed parameter determines the data layout of the draw calls (default is false).
+    /// The indexed parameter determines the data layout of the draw calls.
+    /// The DrawCallInfo struct follows the non-indexed layout by default.
     let inline ofArray' (indexed : bool) (calls : DrawCallInfo[]) =
         { Buffer  = ArrayBuffer calls
           Count   = calls.Length
@@ -80,16 +81,17 @@ module IndirectBuffer =
           Indexed = indexed }
 
     /// Creates an indirect buffer of the given array.
-    /// The draw calls are assumed to be in the non-indexed layout.
+    /// The draw calls are assumed to be in the non-indexed layout (default struct layout).
     let inline ofArray (calls : DrawCallInfo[]) =
         calls |> ofArray' false
 
     /// Creates an indirect buffer of the given list.
     /// The indexed parameter determines the data layout of the draw calls (default is false).
+    /// The DrawCallInfo struct follows the non-indexed layout by default.
     let inline ofList' (indexed : bool) (calls : DrawCallInfo list) =
         calls |> List.toArray |> ofArray' indexed
 
     /// Creates an indirect buffer of the given list.
-    /// The draw calls are assumed to be in the non-indexed layout.
+    /// The draw calls are assumed to be in the non-indexed layout (default struct layout).
     let inline ofList (calls : DrawCallInfo list) =
         calls |> ofList' false
