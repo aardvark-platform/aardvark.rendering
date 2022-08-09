@@ -113,7 +113,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
         }
 
 
-    let update (set : int) (binding : int) (d : Descriptor) =
+    let update (set : int) (binding : int) (d : Descriptor[]) =
         changed.Trigger()
         pendingWrites <-
             pendingWrites |> MapExt.alter set (fun o ->
@@ -172,7 +172,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                 if not isValidFormat then
                     failf "expected image with format %A but got %A" expectedFormat.Value imageFormat
 
-                let write = Descriptor.StorageImage(binding, view)
+                let write = [| Descriptor.StorageImage(binding, view) |]
                 update set binding write
                 setResource set binding 0 res
 
@@ -199,15 +199,14 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                         | _ -> 
                             failf "invalid storage image argument: %A" value
 
-                let content =
+                let write =
                     content
                     |> Array.choosei (fun i x ->
                         x |> Option.map (fun (layout, view, sampler) ->
-                            i, layout, view, sampler
+                            Descriptor.CombinedImageSampler(binding, i, view, sampler, layout) 
                         )
                     )
 
-                let write = Descriptor.CombinedImageSampler(binding, content)
                 update set binding write
                 setResource set binding index res
 
@@ -225,7 +224,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                         | _ -> 
                             failf "unexpected storage buffer %A" value
 
-                let write = Descriptor.StorageBuffer(binding, buffer, offset, size)
+                let write = [| Descriptor.StorageBuffer(binding, buffer, offset, size) |]
                 update set binding write
                 setResource set binding 0 res
         )
@@ -241,7 +240,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                 token.Sync()
 
             for (set, desc) in MapExt.toSeq writes do   
-                let values = desc |> MapExt.toSeq |> Seq.map snd |> Seq.toArray
+                let values = desc |> MapExt.toSeq |> Seq.collect snd |> Seq.toArray
                 sets.[set].Update(values)
         )
 

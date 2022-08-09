@@ -449,19 +449,19 @@ module AdaptiveResource =
     open AdaptiveResourceImplementations
 
     /// Increases the reference count and creates the resource if necessary.
-    let acquire (r : IAdaptiveResource) =
+    let inline acquire (r : IAdaptiveResource) =
         r.Acquire()
 
     /// Decreases the reference count and destroys the resource if it is no longer used.
-    let release (r : IAdaptiveResource) =
+    let inline release (r : IAdaptiveResource) =
         r.Release()
 
     /// Resets the reference count and destroys the resource.
-    let releaseAll (r : IAdaptiveResource) =
+    let inline releaseAll (r : IAdaptiveResource) =
         r.ReleaseAll()
 
     /// Gets the resource handle.
-    let getValue (t : AdaptiveToken) (rt : RenderToken) (r : IAdaptiveResource<'a>) =
+    let inline getValue (t : AdaptiveToken) (rt : RenderToken) (r : IAdaptiveResource<'a>) =
         r.GetValue(t, rt)
 
     /// Creates an adaptive resource using the given create and destroy functions.

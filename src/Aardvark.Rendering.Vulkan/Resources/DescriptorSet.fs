@@ -1,9 +1,6 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
-open System
-open System.Threading
 open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
 open Aardvark.Base
 
 open Aardvark.Rendering.Vulkan
@@ -16,7 +13,7 @@ open Microsoft.FSharp.NativeInterop
 type Descriptor =
     | UniformBuffer         of slot: int * buffer: UniformBuffer
     | StorageBuffer         of slot: int * buffer: Buffer * offset: int64 * size: int64
-    | CombinedImageSampler  of slot: int * images: array<int * VkImageLayout * ImageView * Sampler>
+    | CombinedImageSampler  of slot: int * element: int * view: ImageView * sampler: Sampler * layout: VkImageLayout
     | StorageImage          of slot: int * view: ImageView
     | AccelerationStructure of slot: int * accel: AccelerationStructure
 
@@ -147,7 +144,7 @@ module DescriptorSet =
         let device = pool.Device
 
         let mutable imageInfos =
-            let cnt = descriptors |> Array.sumBy (function CombinedImageSampler(_, arr) -> arr.Length | StorageImage _ -> 1 | _ -> 0)
+            let cnt = descriptors |> Array.sumBy (function CombinedImageSampler _ | StorageImage _ -> 1 | _ -> 0)
             NativePtr.stackalloc cnt
 
         let mutable bufferInfos =
@@ -166,8 +163,8 @@ module DescriptorSet =
                     [| b |]
                 | UniformBuffer (_, b) ->
                     [| b |]
-                | CombinedImageSampler (_, arr) ->
-                    arr |> Array.collect (fun (_, _, v, s) -> [| v; s |] )
+                | CombinedImageSampler (_, _, v, s, _) ->
+                    [| v; s |]
                 | StorageImage (_, v) ->
                     [| v |]
                 | AccelerationStructure (_, a) ->
@@ -176,7 +173,7 @@ module DescriptorSet =
 
         let writes =
             descriptors
-            |> Array.collect (fun desc ->
+            |> Array.map (fun desc ->
                 match desc with
                 | StorageBuffer (binding, b, offset, size) ->
                     let info =
@@ -190,16 +187,14 @@ module DescriptorSet =
                     let ptr = bufferInfos
                     bufferInfos <- NativePtr.step 1 bufferInfos
 
-                    [|
-                        VkWriteDescriptorSet(
-                            set.Handle,
-                            uint32 binding,
-                            0u, 1u, VkDescriptorType.StorageBuffer,
-                            NativePtr.zero,
-                            ptr,
-                            NativePtr.zero
-                        )
-                    |]
+                    VkWriteDescriptorSet(
+                        set.Handle,
+                        uint32 binding,
+                        0u, 1u, VkDescriptorType.StorageBuffer,
+                        NativePtr.zero,
+                        ptr,
+                        NativePtr.zero
+                    )
 
                 | UniformBuffer (binding, ub) ->
                     let info =
@@ -213,38 +208,34 @@ module DescriptorSet =
                     let ptr = bufferInfos
                     bufferInfos <- NativePtr.step 1 bufferInfos
 
-                    [|
-                        VkWriteDescriptorSet(
-                            set.Handle,
-                            uint32 binding,
-                            0u, 1u, VkDescriptorType.UniformBuffer,
-                            NativePtr.zero,
-                            ptr,
-                            NativePtr.zero
+                    VkWriteDescriptorSet(
+                        set.Handle,
+                        uint32 binding,
+                        0u, 1u, VkDescriptorType.UniformBuffer,
+                        NativePtr.zero,
+                        ptr,
+                        NativePtr.zero
+                    )
+
+                | CombinedImageSampler (binding, element, view, sampler, layout) ->
+                    let info =
+                        VkDescriptorImageInfo(
+                            sampler.Handle,
+                            view.Handle,
+                            layout
                         )
-                    |]
 
-                | CombinedImageSampler(binding, arr) ->
-                    arr |> Array.map (fun (i, expectedLayout, view, sam) ->
-                        let info =
-                            VkDescriptorImageInfo(
-                                sam.Handle,
-                                view.Handle,
-                                expectedLayout
-                            )
+                    NativePtr.write imageInfos info
+                    let ptr = imageInfos
+                    imageInfos <- NativePtr.step 1 imageInfos
 
-                        NativePtr.write imageInfos info
-                        let ptr = imageInfos
-                        imageInfos <- NativePtr.step 1 imageInfos
-
-                        VkWriteDescriptorSet(
-                            set.Handle,
-                            uint32 binding,
-                            uint32 i, 1u, VkDescriptorType.CombinedImageSampler,
-                            ptr,
-                            NativePtr.zero,
-                            NativePtr.zero
-                        )
+                    VkWriteDescriptorSet(
+                        set.Handle,
+                        uint32 binding,
+                        uint32 element, 1u, VkDescriptorType.CombinedImageSampler,
+                        ptr,
+                        NativePtr.zero,
+                        NativePtr.zero
                     )
 
                 | StorageImage(binding, view) ->
@@ -259,17 +250,14 @@ module DescriptorSet =
                     let ptr = imageInfos
                     imageInfos <- NativePtr.step 1 imageInfos
 
-                    let write =
-                        VkWriteDescriptorSet(
-                            set.Handle,
-                            uint32 binding,
-                            0u, 1u, VkDescriptorType.StorageImage,
-                            ptr,
-                            NativePtr.zero,
-                            NativePtr.zero
-                        )
-
-                    [| write |]
+                    VkWriteDescriptorSet(
+                        set.Handle,
+                        uint32 binding,
+                        0u, 1u, VkDescriptorType.StorageImage,
+                        ptr,
+                        NativePtr.zero,
+                        NativePtr.zero
+                    )
 
                 | AccelerationStructure(binding, accel) ->
                     NativePtr.write accelHandles accel.Handle
@@ -283,18 +271,15 @@ module DescriptorSet =
                     let ptr = accelWrites
                     accelWrites <- NativePtr.step 1 accelWrites
 
-                    let write =
-                        VkWriteDescriptorSet(
-                            NativePtr.toNativeInt ptr,
-                            set.Handle,
-                            uint32 binding,
-                            0u, 1u, VkDescriptorType.AccelerationStructureKhr,
-                            NativePtr.zero,
-                            NativePtr.zero,
-                            NativePtr.zero
-                        )
-
-                    [| write |]
+                    VkWriteDescriptorSet(
+                        NativePtr.toNativeInt ptr,
+                        set.Handle,
+                        uint32 binding,
+                        0u, 1u, VkDescriptorType.AccelerationStructureKhr,
+                        NativePtr.zero,
+                        NativePtr.zero,
+                        NativePtr.zero
+                    )
                 )
 
         resources |> Array.iter (fun r -> r.AddReference())

@@ -244,44 +244,41 @@ type MutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, in
     let mutable handle : Option<'a * 'h> = None
     let mutable version = 0
 
-
     let recreate (n : 'a) =
         match handle with
-            | Some(o,h) ->
-                owner.ReplaceLocked (Some o, Some n)
+        | Some(o,h) ->
+            owner.ReplaceLocked (Some o, Some n)
 
-                desc.mdestroy h
-                let r = desc.mcreate n
-                handle <- Some(n,r)
-                r
-            | None ->
-                owner.ReplaceLocked (None, Some n)
+            desc.mdestroy h
+            let r = desc.mcreate n
+            handle <- Some(n,r)
+            r
+        | None ->
+            owner.ReplaceLocked (None, Some n)
 
-                let r = desc.mcreate n
-                handle <- Some(n,r)
-                r
-
-
+            let r = desc.mcreate n
+            handle <- Some(n,r)
+            r
 
     let update (token : AdaptiveToken) (renderToken : RenderToken) =
         let n = input.GetValue(token, renderToken)
 
         match handle with
-            | None ->
+        | None ->
+            inc &version
+            recreate n
+
+        | Some (oa, oh) when Unchecked.equals oa n ->
+            oh
+
+        | Some(oa, oh) ->
+            if desc.mtryUpdate oh n then
+                owner.ReplaceLocked(Some oa, Some n)
+                handle <- Some(n, oh)
+                oh
+            else
                 inc &version
                 recreate n
-
-            | Some (oa, oh) when Unchecked.equals oa n ->
-                oh
-
-            | Some(oa,oh) ->
-                if desc.mtryUpdate oh n then
-                    owner.ReplaceLocked(Some oa, Some n)
-                    handle <- Some(n, oh)
-                    oh
-                else
-                    recreate n
-
 
     override x.Create() =
         input.Acquire()
@@ -289,12 +286,12 @@ type MutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, in
     override x.Destroy() =
         input.Outputs.Remove x |> ignore
         match handle with
-            | Some(a,h) ->
-                desc.mdestroy h
-                handle <- None
-                owner.ReplaceLocked(Some a, None)
-            | None ->
-                ()
+        | Some(a, h) ->
+            desc.mdestroy h
+            handle <- None
+            owner.ReplaceLocked(Some a, None)
+        | None ->
+            ()
         input.Release()
 
     override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
@@ -303,8 +300,8 @@ type MutableResourceLocation<'a, 'h>(owner : IResourceCache, key : list<obj>, in
             { handle = handle; version = version }
         else
             match handle with
-                | Some(_,h) -> { handle = h; version = version }
-                | None -> failwith "[Resource] inconsistent state"
+            | Some(_, h) -> { handle = h; version = version }
+            | None -> failwith "[Resource] inconsistent state"
 
 [<AbstractClass>]
 type AbstractPointerResource<'a when 'a : unmanaged>(owner : IResourceCache, key : list<obj>) =
@@ -446,14 +443,113 @@ module Resources =
 
     type ImageSampler = ImageView * Sampler
 
-    type ImageSamplerArray = Map<int, ImageSampler>
+    type ImageSamplerArray = Map<int, ResourceInfo<ImageSampler>>
 
-    type AdaptiveDescriptor =
-        | AdaptiveUniformBuffer         of slot: int * buffer: IResourceLocation<UniformBuffer>
-        | AdaptiveCombinedImageSampler  of slot: int * images: IResourceLocation<ImageSamplerArray>
-        | AdaptiveStorageBuffer         of slot: int * buffer: IResourceLocation<Buffer>
-        | AdaptiveStorageImage          of slot: int * view: IResourceLocation<ImageView>
-        | AdaptiveAccelerationStructure of slot: int * accel: IResourceLocation<Raytracing.AccelerationStructure>
+    [<Struct>]
+    type DescriptorInfo =
+        { Version    : int
+          Descriptor : Descriptor }
+
+    type IAdaptiveDescriptor =
+        inherit IAdaptiveResource<DescriptorInfo[]>
+        abstract member Slot : int
+        abstract member Count : int
+
+    module AdaptiveDescriptor =
+
+        module Abstract =
+
+            [<AbstractClass>]
+            type AdaptiveDescriptor<'T>(slot : int, count : int, resource : IResourceLocation<'T>) =
+                inherit AdaptiveObject()
+
+                let mutable cache = Array.replicate count { Version = -1; Descriptor = Unchecked.defaultof<_> }
+
+                member x.Slot = slot
+                member x.Count = count
+                member x.Resource = resource
+
+                abstract member GetDescriptors : ResourceInfo<'T> * byref<DescriptorInfo[]> -> unit
+
+                member x.Acquire() = resource.Acquire()
+                member x.Release() = resource.Release()
+                member x.ReleaseAll() = resource.ReleaseAll()
+
+                member x.GetValue(t, rt) =
+                    x.EvaluateAlways t (fun t ->
+                        if x.OutOfDate then
+                            let info = resource.Update(t, rt)
+                            x.GetDescriptors(info, &cache)
+
+                        cache
+                    )
+
+                member x.GetValue(t) =
+                    x.GetValue(t, RenderToken.Empty)
+
+                interface IAdaptiveValue with
+                    member x.IsConstant = false
+                    member x.ContentType = typeof<DescriptorInfo[]>
+                    member x.GetValueUntyped(t) = x.GetValue(t) :> obj
+                    member x.Accept (v : IAdaptiveValueVisitor<'R>) = v.Visit x
+
+                interface IAdaptiveValue<DescriptorInfo[]> with
+                    member x.GetValue(t) = x.GetValue(t)
+
+                interface IAdaptiveResource with
+                    member x.Acquire() = x.Acquire()
+                    member x.Release() = x.Release()
+                    member x.ReleaseAll() = x.ReleaseAll()
+                    member x.GetValue(t, rt) = x.GetValue(t, rt) :> obj
+
+                interface IAdaptiveResource<DescriptorInfo[]> with
+                    member x.GetValue(t, rt) = x.GetValue(t, rt)
+
+                interface IAdaptiveDescriptor with
+                    member x.Slot = x.Slot
+                    member x.Count = x.Count
+
+            [<AbstractClass>]
+            type AdaptiveSingleDescriptor<'T>(slot : int, resource : IResourceLocation<'T>) =
+                inherit AdaptiveDescriptor<'T>(slot, 1, resource)
+
+                abstract member GetDescriptor : 'T -> Descriptor
+
+                override x.GetDescriptors(info, cache) =
+                    cache.[0] <- { Version = info.version; Descriptor = x.GetDescriptor info.handle }
+
+        type UniformBuffer(slot : int, buffer : IResourceLocation<_>) =
+            inherit Abstract.AdaptiveSingleDescriptor<Vulkan.UniformBuffer>(slot, buffer)
+
+            override x.GetDescriptor(buffer) =
+                Descriptor.UniformBuffer(slot, buffer)
+
+        type StorageBuffer(slot : int, buffer : IResourceLocation<_>) =
+            inherit Abstract.AdaptiveSingleDescriptor<Buffer>(slot, buffer)
+
+            override x.GetDescriptor(buffer) =
+                Descriptor.StorageBuffer(slot, buffer, 0L, buffer.Size)
+
+        type StorageImage(slot : int, image : IResourceLocation<_>) =
+            inherit Abstract.AdaptiveSingleDescriptor<ImageView>(slot, image)
+
+            override x.GetDescriptor(view) =
+                Descriptor.StorageImage(slot, view)
+
+        type AccelerationStructure(slot : int, image : IResourceLocation<_>) =
+            inherit Abstract.AdaptiveSingleDescriptor<Raytracing.AccelerationStructure>(slot, image)
+
+            override x.GetDescriptor(accel) =
+                Descriptor.AccelerationStructure(slot, accel)
+
+        type CombinedImageSampler(slot : int, count : int, images : IResourceLocation<_>) =
+            inherit Abstract.AdaptiveDescriptor<ImageSamplerArray>(slot, count, images)
+
+            override x.GetDescriptors(images, cache) =
+                for KeyValue(i, r) in images.handle do
+                    let v, s = r.handle
+                    let desc = Descriptor.CombinedImageSampler(slot, i, v, s, v.Image.SamplerLayout)
+                    cache.[i] <- { Version = r.version; Descriptor = desc }
 
     type BufferResource(owner : IResourceCache, key : list<obj>, device : Device, usage : VkBufferUsageFlags, input : aval<IBuffer>) =
         inherit MutableResourceLocation<IBuffer, Buffer>(
@@ -481,7 +577,6 @@ module Resources =
         inherit AbstractResourceLocation<UniformBuffer>(owner, key)
 
         let mutable handle : UniformBuffer = Unchecked.defaultof<_>
-        let mutable version = 0
 
         member x.Handle = handle
 
@@ -500,10 +595,9 @@ module Resources =
 
                 device.Upload handle
 
-                inc &version
-                { handle = handle; version = version }
+                { handle = handle; version = 0 }
             else
-                { handle = handle; version = version }
+                { handle = handle; version = 0 }
 
     type ImageResource(owner : IResourceCache, key : list<obj>, device : Device, input : aval<ITexture>) =
         inherit ImmutableResourceLocation<ITexture, Image>(
@@ -570,7 +664,7 @@ module Resources =
                 cache <- Some (v, s)
 
             match cache with
-            | Some (v, s) -> { handle = (v.handle, s.handle); version = max v.version s.version }
+            | Some (v, s) -> { handle = (v.handle, s.handle); version = v.version + s.version }
             | _ -> failwith "[Resource] inconsistent state"
 
 
@@ -593,7 +687,7 @@ module Resources =
         let versions = Dict<int, int>()
 
         // The map with evaluated image samplers
-        let mutable handle = Map.empty<int, ImageSampler>
+        let mutable handle = Map.empty<int, ResourceInfo<ImageSampler>>
 
         // Remove a resource from the given index if it exists
         let remove (i : int) =
@@ -644,7 +738,7 @@ module Resources =
                         if info.version <> versions.[i] then
                             changed <- true
                             versions.[i] <- info.version
-                            handle <- handle |> Map.add i info.handle
+                            handle <- handle |> Map.add i info
 
                 if changed then
                     inc &version
@@ -910,112 +1004,69 @@ module Resources =
             let calls = calls.GetValue(token, renderToken)
             DrawCall.Direct(indexed, List.toArray calls)
 
-
-    type DescriptorSetResource(owner : IResourceCache, key : list<obj>, layout : DescriptorSetLayout, bindings : AdaptiveDescriptor[]) =
+    type DescriptorSetResource(owner : IResourceCache, key : list<obj>, layout : DescriptorSetLayout, bindings : IAdaptiveDescriptor[]) =
         inherit AbstractResourceLocation<DescriptorSet>(owner, key)
 
-        let mutable handle : Option<DescriptorSet> = None
+        let mutable handle = Unchecked.defaultof<DescriptorSet>
         let mutable version = 0
 
-        let mutable state = [||]
-        let device = layout.Device
+        // Use a pending set and InputChangedObject() to
+        // avoid iterating over all descriptors in GetHandle()
+        let pending = LockedSet<_>(bindings)
+
+        // Save the array index of each descriptor
+        do assert (bindings = Array.distinct bindings)
+        let indices = bindings |> Array.indexed |> Array.map (fun (i, d) -> d, i) |> HashMap.ofArray
+
+        // List to collect all descriptor writes in GetHandle()
+        let writes = System.Collections.Generic.List<Descriptor>()
+
+        // We save the last seen version for each descriptor element.
+        // If the version didn't change, we won't bother updating the set.
+        let versions =
+            Array.init bindings.Length (fun i ->
+                Array.replicate bindings.[i].Count -1
+            )
 
         override x.Create() =
             for b in bindings do
-                match b with
-                | AdaptiveCombinedImageSampler(_,arr) ->
-                    arr.Acquire()
+                b.Acquire()
 
-                | AdaptiveStorageBuffer(_,b) ->
-                    b.Acquire()
-
-                | AdaptiveStorageImage(_,v) ->
-                    v.Acquire()
-
-                | AdaptiveUniformBuffer(_,b) ->
-                    b.Acquire()
-
-                | AdaptiveAccelerationStructure(_,a) ->
-                    a.Acquire()
-
-            ()
+            handle <- layout.Device.CreateDescriptorSet(layout)
 
         override x.Destroy() =
             for b in bindings do
-                match b with
-                | AdaptiveCombinedImageSampler(_,arr) ->
-                    arr.Release()
-                | AdaptiveStorageImage(_,v) ->
-                    v.Release()
-                | AdaptiveStorageBuffer(_,b) ->
-                    b.Release()
-                | AdaptiveUniformBuffer(_,b) ->
-                    b.Release()
-                | AdaptiveAccelerationStructure(_,a) ->
-                    a.Release()
+                b.Release()
 
-            match handle with
-            | Some set ->
-                set.Dispose()
-                handle <- None
-            | _ -> ()
+            if handle <> Unchecked.defaultof<_> then
+                handle.Dispose()
+                handle <- Unchecked.defaultof<_>
 
         override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
 
-                let bindings =
-                    bindings |> Array.map (fun b ->
-                        match b with
-                        | AdaptiveUniformBuffer(slot, b) ->
-                            let handle =
-                                match b with
-                                    | :? UniformBufferResource as b -> b.Handle
-                                    | b -> b.Update(AdaptiveToken.Top, renderToken).handle
+                writes.Clear()
 
-                            UniformBuffer(slot,  handle)
+                for d in pending.GetAndClear() do
+                    let i = indices.[d]
+                    let infos = d.GetValue(token, renderToken)
 
-                        | AdaptiveStorageImage(slot,v) ->
-                            let image = v.Update(token, renderToken).handle
-                            StorageImage(slot, image)
+                    for j = 0 to infos.Length - 1 do
+                        if versions.[i].[j] <> infos.[j].Version then
+                            versions.[i].[j] <- infos.[j].Version
+                            writes.Add infos.[j].Descriptor
 
-                        | AdaptiveStorageBuffer(slot, b) ->
-                            let buffer = b.Update(token, renderToken).handle
-                            StorageBuffer(slot, buffer, 0L, buffer.Size)
-
-                        | AdaptiveCombinedImageSampler(slot, arr) ->
-                            let arr =
-                                arr.Update(token, renderToken).handle
-                                |> Map.toArray
-                                |> Array.map (fun (i, (v, s)) ->
-                                    i, v.Image.SamplerLayout, v, s
-                                )
-
-                            CombinedImageSampler(slot, arr)
-
-
-                        | AdaptiveAccelerationStructure(slot, a) ->
-                            let accel = a.Update(token, renderToken).handle
-                            AccelerationStructure(slot, accel)
-                    )
-
-                let handle =
-                    match handle with
-                        | Some h -> h
-                        | None ->
-                            let h = device.CreateDescriptorSet(layout)
-                            handle <- Some h
-                            h
-
-                if bindings <> state then
-                    handle.Update(bindings)
-                    state <- bindings
+                if writes.Count > 0 then
+                    handle.Update(writes.ToArray())
                     inc &version
 
-                { handle = handle; version = version }
-            else
-                match handle with
-                    | Some h -> { handle = h; version = version }
-                    | None -> failwith "[Resource] inconsistent state"
+            { handle = handle; version = version }
+
+        override x.InputChangedObject(_, object) =
+            match object with
+            | :? IAdaptiveDescriptor as r -> pending.Add r |> ignore
+            | _ -> ()
+
 
     type PipelineResource(owner : IResourceCache, key : list<obj>,
                           renderPass : RenderPass,
@@ -1582,12 +1633,12 @@ type ResourceManager(user : IResourceUser, device : Device) =
         )
 
     member x.CreateImageSamplerArray(samplerType : FShade.GLSL.GLSLSamplerType,
-                                     textures : amap<int, aval<ITexture>>, samplerDesc : aval<SamplerState>) =
+                                     textures : aval<#seq<int * aval<ITexture>>>, samplerDesc : aval<SamplerState>) =
         imageSamplerArrayCache.GetOrCreate(
             [samplerType :> obj; textures :> obj; samplerDesc :> obj],
             fun cache key ->
                 let map =
-                    textures |> AMap.map (fun _ t ->
+                    textures |> AMap.ofAVal |> AMap.map (fun _ t ->
                         x.CreateImageSampler(samplerType, t, samplerDesc)
                     )
 
@@ -1757,7 +1808,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
         let key = (layout :> obj) :: (values |> List.map (fun (_,v) -> v :> obj))
         uniformBufferCache.GetOrCreate(key, fun cache key -> UniformBufferResource(cache, key, device, layout, writers))
 
-    member x.CreateDescriptorSet(layout : DescriptorSetLayout, bindings : AdaptiveDescriptor[]) =
+    member x.CreateDescriptorSet(layout : DescriptorSetLayout, bindings : IAdaptiveDescriptor[]) =
         descriptorSetCache.GetOrCreate([layout :> obj; bindings :> obj], fun cache key -> new DescriptorSetResource(cache, key, layout, bindings))
 
     member x.CreateVertexInputState(program : PipelineInfo, mode : aval<Map<Symbol, VertexInputDescription>>) =
@@ -1916,11 +1967,6 @@ type ResourceLocationReader(resource : IResourceLocation) =
 
     let mutable lastVersion = 0
 
-    let changable =
-        match resource with
-        | :? IResourceLocation<UniformBuffer> -> false
-        | _ -> true
-
     let priority =
         match resource with
         | :? INativeResourceLocation<DrawCall> -> 0
@@ -1938,7 +1984,7 @@ type ResourceLocationReader(resource : IResourceLocation) =
             let info = resource.Update(t, renderToken)
             if info.version <> lastVersion then
                 lastVersion <- info.version
-                changable
+                true
             else
                 false
         )

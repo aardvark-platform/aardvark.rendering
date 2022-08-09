@@ -275,7 +275,7 @@ module BaseLibExtensions =
 
             res.ToArray()
 
-        let collecti (f : int -> 'a -> list<'b>) (a : 'a[]) =
+        let collecti (f : int -> 'a -> #seq<'b>) (a : 'a[]) =
             let mutable i = 0
             let res = System.Collections.Generic.List<'b>()
             for v in a do

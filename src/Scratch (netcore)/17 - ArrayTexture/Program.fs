@@ -140,22 +140,48 @@ let main argv =
     // much smaller than for texture arrays.
     let useArrayOfSamplers = true
 
-    let applyTexture =
+    let applyTexture : ISg -> ISg =
         if useArrayOfSamplers then
-            let textures =
-                count |> AVal.map (fun count ->
-                    Array.init Shader.MaxTextureSlices (fun i ->
-                        if i < count then
-                            Texture.generate size
-                        else
-                            NullTexture()
+
+            if not <| runtime :? Vulkan.Runtime then
+                let textures =
+                    count |> AVal.map (fun count ->
+                        Array.init Shader.MaxTextureSlices (fun i ->
+                            if i < count then
+                                Texture.generate size
+                            else
+                                NullTexture()
+                        )
                     )
+
+                // Set the adaptive array aval<#ITexture[]>, alternatively you can also
+                // bind each indiviual texture to DiffuseColorTexture0, DiffuseColorTexture1, and so forth.
+                Sg.textureArray DefaultSemantic.DiffuseColorTexture textures
+
+            else
+                // The Vulkan backend also supports aval<array<int * aval<ITexture>>> for a more convenient sparse mapping.
+                let single =
+                    AVal.init <| Texture.generate size
+
+                // Updating a single texture only results in a single descriptor write
+                win.Keyboard.DownWithRepeats.Values.Add (function
+                    | Keys.K -> transact (fun _ -> single.Value <- Texture.generate size)
+                    | _ -> ()
                 )
 
-            // Set the adaptive array aval<#ITexture[]>, alternatively you can also
-            // bind each indiviual texture to DiffuseColorTexture0, DiffuseColorTexture1, and so forth.
-            // Note: The Vulkan backend also supports amap<int, aval<ITexture>> for a more convenient sparse mapping.
-            Sg.textureArray DefaultSemantic.DiffuseColorTexture textures
+                let textures =
+                    count |> AVal.map (fun count ->
+                        Array.init Shader.MaxTextureSlices (fun i ->
+                            if i = 0 then
+                                i, single :> aval<_>
+                            elif i < count then
+                                i, AVal.constant <| Texture.generate size
+                            else
+                                i, AVal.constant <| NullTexture()
+                        )
+                    )
+
+                Sg.uniform DefaultSemantic.DiffuseColorTexture textures
 
         else
             let texture = AdaptiveTexture2DArray(runtime, size, count)

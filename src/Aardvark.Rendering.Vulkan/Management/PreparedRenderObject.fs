@@ -105,20 +105,18 @@ type DevicePreparedRenderObjectExtensions private() =
         | _ ->
             AVal.constant state.SamplerState
 
-    static let createDescriptorSets (this : ResourceManager) (layout : PipelineLayout) (uniforms : IUniformProvider)
-                                    (resources : System.Collections.Generic.List<IResourceLocation>) =
+    static let createDescriptorSets (this : ResourceManager) (layout : PipelineLayout) (uniforms : IUniformProvider) =
         layout.DescriptorSetLayouts |> Array.map (fun ds ->
-            let descriptors = 
+            let descriptors =
                 ds.Bindings |> Array.choose (fun b ->
                     match b.Parameter with
                     | UniformBlockParameter block ->
                         let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
-                        resources.Add buffer
-                        AdaptiveDescriptor.AdaptiveUniformBuffer (b.Binding, buffer) |> Some
+                        AdaptiveDescriptor.UniformBuffer (b.Binding, buffer) :> IAdaptiveDescriptor |> Some
 
                     | StorageBufferParameter block ->
                         let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
-                        AdaptiveDescriptor.AdaptiveStorageBuffer (b.Binding, buffer) |> Some
+                        AdaptiveDescriptor.StorageBuffer (b.Binding, buffer) :> IAdaptiveDescriptor |> Some
 
                     | SamplerParameter sam ->
                         match sam.samplerTextures with
@@ -132,7 +130,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                     let textureName = Symbol.Create textureName
 
                                     match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                                    | Some (:? amap<int, aval<ITexture>> as tex) ->
+                                    | Some (:? aval<array<int * aval<ITexture>>> as tex) ->
                                         let s = createSamplerState this textureName uniforms samplerState
                                         let is = this.CreateImageSamplerArray(sam.samplerType, tex, s)
                                         Some is
@@ -174,7 +172,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                     this.CreateImageSamplerArray(list)
                                 )
 
-                            AdaptiveDescriptor.AdaptiveCombinedImageSampler(b.Binding, sampler) |> Some
+                            AdaptiveDescriptor.CombinedImageSampler(b.Binding, b.DescriptorCount, sampler) :> IAdaptiveDescriptor |> Some
 
                     | ImageParameter img ->
                         let viewSam = 
@@ -190,7 +188,7 @@ type DevicePreparedRenderObjectExtensions private() =
                             | _ ->
                                 failf "could not find texture: %A" textureName
 
-                        AdaptiveDescriptor.AdaptiveStorageImage(b.Binding, viewSam) |> Some
+                        AdaptiveDescriptor.StorageImage(b.Binding, viewSam) :> IAdaptiveDescriptor |> Some
 
                     | AccelerationStructureParameter a ->
                         let accel =
@@ -199,7 +197,7 @@ type DevicePreparedRenderObjectExtensions private() =
                             | Some (:? IResourceLocation<Raytracing.AccelerationStructure> as accel) -> accel
                             | _ -> failf "could not find acceleration structure: %A" name
 
-                        AdaptiveDescriptor.AdaptiveAccelerationStructure(a.accelBinding, accel) |> Some
+                        AdaptiveDescriptor.AccelerationStructure(a.accelBinding, accel) :> IAdaptiveDescriptor |> Some
                 )
 
             let res = this.CreateDescriptorSet(ds, descriptors)
@@ -213,7 +211,7 @@ type DevicePreparedRenderObjectExtensions private() =
 
         let programLayout, program = this.CreateShaderProgram(renderPass, ro.Surface, ro.Mode)
 
-        let descriptorSets = createDescriptorSets this programLayout ro.Uniforms resources     
+        let descriptorSets = createDescriptorSets this programLayout ro.Uniforms
 
         let isCompatible (shaderType : FShade.GLSL.GLSLType) (dataType : Type) =
             // TODO: verify type compatibility
@@ -339,7 +337,7 @@ type DevicePreparedRenderObjectExtensions private() =
     [<Extension>]
     static member CreateDescriptorSets (this : ResourceManager, layout : PipelineLayout, uniforms : IUniformProvider) =
         let resources = System.Collections.Generic.List<IResourceLocation>()
-        let sets = createDescriptorSets this layout uniforms resources
+        let sets = createDescriptorSets this layout uniforms
         sets, CSharpList.toList resources
 
     [<Extension>]
