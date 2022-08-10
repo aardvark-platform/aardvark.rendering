@@ -7,6 +7,7 @@ open Aardvark.Application
 open Aardvark.SceneGraph
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
+open FShade
 open Expecto
 
 module TextureUpload =
@@ -111,6 +112,69 @@ module TextureUpload =
         let texture1DArrayLevelSubwindow (runtime : IRuntime) =
             let region = Some <| Range1i(13, 47)
             uploadAndDownloadTexture1D runtime 100 4 5 1 3 region
+
+        let private renderQuadWithNullTexture (shader : ISg -> ISg) (runtime : IRuntime) =
+            use signature =
+                runtime.CreateFramebufferSignature([
+                    DefaultSemantic.Colors, TextureFormat.Rgba8
+                ])
+
+            use task =
+                Sg.fullScreenQuad
+                |> Sg.diffuseTexture' (NullTexture())
+                |> shader
+                |> Sg.compile runtime signature
+
+            let buffer = task |> RenderTask.renderToColor (AVal.init <| V2i(256))
+            buffer.Acquire()
+
+            try
+                let result = buffer.GetValue().Download().AsPixImage<byte>().ToFormat(Col.Format.RGB)
+                PixImage.isColor [| 0uy; 0uy; 0uy |] result
+            finally
+                buffer.Release()
+
+        let texture1DNull (runtime : IRuntime) =
+            let diffuseSampler =
+                sampler1d {
+                    texture uniform?DiffuseColorTexture
+                    filter Filter.MinMagLinear
+                    addressU WrapMode.Clamp
+                    addressV WrapMode.Clamp
+                }
+
+            let diffuseTexture (v : Effects.Vertex) =
+                fragment {
+                    return diffuseSampler.Sample(v.tc.X)
+                }
+
+            let shader =
+                Sg.shader {
+                    do! diffuseTexture
+                }
+
+            runtime |> renderQuadWithNullTexture shader
+
+        let texture1DNullArray (runtime : IRuntime) =
+            let diffuseSampler =
+                sampler1dArray {
+                    texture uniform?DiffuseColorTexture
+                    filter Filter.MinMagLinear
+                    addressU WrapMode.Clamp
+                    addressV WrapMode.Clamp
+                }
+
+            let diffuseTexture (v : Effects.Vertex) =
+                fragment {
+                    return diffuseSampler.Sample(v.tc.X, 32)
+                }
+
+            let shader =
+                Sg.shader {
+                    do! diffuseTexture
+                }
+
+            runtime |> renderQuadWithNullTexture shader
 
 
         let private uploadAndDownloadTexture2D' (randomPix : V2i -> PixImage<'T>)
@@ -449,6 +513,77 @@ module TextureUpload =
             let count = 3
             uploadAndDownloadTextureNative runtime size levels count true
 
+        let texture2DNull (runtime : IRuntime) =
+            let shader =
+                Sg.shader {
+                    do! DefaultSurfaces.diffuseTexture
+                }
+
+            runtime |> renderQuadWithNullTexture shader
+
+        let texture2DNullArray (runtime : IRuntime) =
+            let diffuseSampler =
+                sampler2dArray {
+                    texture uniform?DiffuseColorTexture
+                    filter Filter.MinMagLinear
+                    addressU WrapMode.Clamp
+                    addressV WrapMode.Clamp
+                }
+
+            let diffuseTexture (v : Effects.Vertex) =
+                fragment {
+                    return diffuseSampler.Sample(v.tc, 16)
+                }
+
+            let shader =
+                Sg.shader {
+                    do! diffuseTexture
+                }
+
+            runtime |> renderQuadWithNullTexture shader
+
+        let texture2DNullMultisampled (runtime : IRuntime) =
+            let diffuseSampler =
+                sampler2dMS {
+                    texture uniform?DiffuseColorTexture
+                    filter Filter.MinMagLinear
+                    addressU WrapMode.Clamp
+                    addressV WrapMode.Clamp
+                }
+
+            let diffuseTexture (v : Effects.Vertex) =
+                fragment {
+                    return diffuseSampler.Read(V2i.Zero, 0)
+                }
+
+            let shader =
+                Sg.shader {
+                    do! diffuseTexture
+                }
+
+            runtime |> renderQuadWithNullTexture shader
+
+        let texture2DNullMultisampledArray (runtime : IRuntime) =
+            let diffuseSampler =
+                sampler2dArrayMS {
+                    texture uniform?DiffuseColorTexture
+                    filter Filter.MinMagLinear
+                    addressU WrapMode.Clamp
+                    addressV WrapMode.Clamp
+                }
+
+            let diffuseTexture (v : Effects.Vertex) =
+                fragment {
+                    return diffuseSampler.Read(V2i.Zero, 0, 0)
+                }
+
+            let shader =
+                Sg.shader {
+                    do! diffuseTexture
+                }
+
+            runtime |> renderQuadWithNullTexture shader
+
         let texture2DStreaming (runtime : IRuntime) =
             let texture = runtime.CreateStreamingTexture(false)
 
@@ -515,6 +650,27 @@ module TextureUpload =
             let size = V3i(100, 75, 66)
             let region = Some <| Box3i(13, 5, 7, 47, 30, 31)
             uploadAndDownloadTexture3D runtime size 4 1 region
+
+        let texture3DNull (runtime : IRuntime) =
+            let diffuseSampler =
+                sampler3d {
+                    texture uniform?DiffuseColorTexture
+                    filter Filter.MinMagLinear
+                    addressU WrapMode.Clamp
+                    addressV WrapMode.Clamp
+                }
+
+            let diffuseTexture (v : Effects.Vertex) =
+                fragment {
+                    return diffuseSampler.Sample(V3d(v.tc.XY))
+                }
+
+            let shader =
+                Sg.shader {
+                    do! diffuseTexture
+                }
+
+            runtime |> renderQuadWithNullTexture shader
 
         let private uploadAndDownloadPixTexture3D (runtime : IRuntime) (size : V3i) (levels : int) (textureParams : TextureParams) =
             let expectedLevels =
@@ -664,6 +820,48 @@ module TextureUpload =
             let levels = mipmapInput.GetLevels(size)
             uploadAndDownloadPixTextureCube runtime size levels TextureParams.mipmapped
 
+        let textureCubeNull (runtime : IRuntime) =
+            let diffuseSampler =
+                samplerCube {
+                    texture uniform?DiffuseColorTexture
+                    filter Filter.MinMagLinear
+                    addressU WrapMode.Clamp
+                    addressV WrapMode.Clamp
+                }
+
+            let diffuseTexture (v : Effects.Vertex) =
+                fragment {
+                    return diffuseSampler.Sample(V3d.Zero)
+                }
+
+            let shader =
+                Sg.shader {
+                    do! diffuseTexture
+                }
+
+            runtime |> renderQuadWithNullTexture shader
+
+        let textureCubeNullArray (runtime : IRuntime) =
+            let diffuseSampler =
+                samplerCubeArray {
+                    texture uniform?DiffuseColorTexture
+                    filter Filter.MinMagLinear
+                    addressU WrapMode.Clamp
+                    addressV WrapMode.Clamp
+                }
+
+            let diffuseTexture (v : Effects.Vertex) =
+                fragment {
+                    return diffuseSampler.Sample(V3d.Zero, 32)
+                }
+
+            let shader =
+                Sg.shader {
+                    do! diffuseTexture
+                }
+
+            runtime |> renderQuadWithNullTexture shader
+
     let tests (backend : Backend) =
         [
             "1D",                        Cases.texture1D
@@ -675,6 +873,9 @@ module TextureUpload =
             "1D array subwindow",        Cases.texture1DArraySubwindow
             "1D array level",            Cases.texture1DArrayLevel
             "1D array level subwindow",  Cases.texture1DArrayLevelSubwindow
+
+            "1D NullTexture",            Cases.texture1DNull
+            "1D NullTexture array",      Cases.texture1DNullArray
 
             "2D",                           Cases.texture2D
             "2D BGRA",                      Cases.texture2DBgra
@@ -688,6 +889,11 @@ module TextureUpload =
             "2D array subwindow",        Cases.texture2DArraySubwindow
             "2D array level",            Cases.texture2DArrayLevel
             "2D array level subwindow",  Cases.texture2DArrayLevelSubwindow
+
+            "2D NullTexture",                       Cases.texture2DNull
+            "2D NullTexture array",                 Cases.texture2DNullArray
+            "2D NullTexture multisampled",          Cases.texture2DNullMultisampled
+            "2D NullTexture multisampled array",    Cases.texture2DNullMultisampledArray
 
             "2D PixTexture",                           Cases.pixTexture2D
             "2D PixTexture BGRA",                      Cases.pixTexture2DBgra
@@ -724,6 +930,8 @@ module TextureUpload =
             "3D level",                     Cases.texture3DLevel
             "3D level subwindow",           Cases.texture3DLevelSubwindow
 
+            "3D NullTexture",               Cases.texture3DNull
+
             "3D PixTexture",                    Cases.pixTexture3D
             "3D PixTexture sRGB",               Cases.pixTexture3DSrgb
             "3D PixTexture mipmap generation",  Cases.pixTexture3DMipmapGeneration
@@ -737,6 +945,9 @@ module TextureUpload =
             "Cube array subwindow",         Cases.textureCubeArraySubwindow
             "Cube array level",             Cases.textureCubeArrayLevel
             "Cube array level subwindow",   Cases.textureCubeArrayLevelSubwindow
+
+            "Cube NullTexture",             Cases.textureCubeNull
+            "Cube NullTexture array",       Cases.textureCubeNullArray
 
             "Cube PixTexture",                           Cases.pixTextureCube
             "Cube PixTexture sRGB",                      Cases.pixTextureCubeSrgb
