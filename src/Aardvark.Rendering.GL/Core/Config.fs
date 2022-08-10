@@ -88,7 +88,7 @@ module RuntimeConfig =
     /// broken on non-Windows platforms with some NVIDIA hardware, even though the
     /// required extension is present.
     /// </summary>
-    let mutable SupressSparseBuffers = false
+    let mutable SuppressSparseBuffers = false
 
     /// Prints the shader code during the compilation (will not show up when cached)
     let mutable PrintShaderCode = true

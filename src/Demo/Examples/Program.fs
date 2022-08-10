@@ -1221,7 +1221,7 @@ let main args =
     
     Interactive.Renderer <- Vulkan
     
-    Aardvark.Rendering.GL.RuntimeConfig.SupressSparseBuffers <- false
+    Aardvark.Rendering.GL.RuntimeConfig.SuppressSparseBuffers <- false
     //Examples.PostProcessing.run()
 
     //Examples.CommandTest.run()

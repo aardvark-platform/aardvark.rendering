@@ -290,7 +290,7 @@ module SparseBufferExtensions =
         member x.CreateSparseBuffer(beforeRender : unit -> unit, afterRender : unit -> unit) =
             use __ = x.ResourceLock
 
-            if not RuntimeConfig.SupressSparseBuffers && GL.ARB_sparse_buffer then
+            if not RuntimeConfig.SuppressSparseBuffers && GL.ARB_sparse_buffer then
                 let pageSize = GL.GetInteger(GetPName.BufferPageSize) |> nativeint
                 let pageSize = 2n * pageSize
 
