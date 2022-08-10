@@ -135,9 +135,10 @@ and ITextureRuntime =
     ///<summary>Creates a renderbuffer.</summary>
     ///<param name="size">The size of the renderbuffer.</param>
     ///<param name="format">The desired renderbuffer format.</param>
-    ///<param name="samples">The number of samples.</param>
+    ///<param name="samples">The number of samples. Default is 1.</param>
     ///<exception cref="ArgumentException">if <paramref name="samples"/> is less than 1.</exception>
-    abstract member CreateRenderbuffer : size : V2i * format : TextureFormat * samples : int -> IRenderbuffer
+    abstract member CreateRenderbuffer : size : V2i * format : TextureFormat *
+                                         [<Optional; DefaultParameterValue(1)>] samples : int -> IRenderbuffer
 
     abstract member CreateStreamingTexture : mipMaps : bool -> IStreamingTexture
 
