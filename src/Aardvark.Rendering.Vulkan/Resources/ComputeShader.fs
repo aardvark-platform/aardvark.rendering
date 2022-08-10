@@ -185,7 +185,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
                             None
 
                         | :? ITexture as tex ->
-                            let image = device.CreateImage(tex)
+                            let image = device.CreateImage(tex, info.dimension.TextureDimension, info.isMS, false)
                             let view = device.CreateInputImageView(image, info, VkComponentMapping.Identity)
                             content.[index] <- Some (VkImageLayout.General, view, sampler)
                             Some { new IDisposable with member x.Dispose() = image.Dispose(); view.Dispose() }

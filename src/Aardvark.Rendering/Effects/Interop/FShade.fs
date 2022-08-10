@@ -75,6 +75,15 @@ module FShadeInterop =
         member x.HasLightMapTexture : bool = x?PerMaterial?HasLightMapTexture
         member x.HasNormalMapTexture : bool = x?PerMaterial?HasNormalMapTexture
 
+    module private SamplerDimension =
+
+        let toTextureDimension = function
+            | SamplerDimension.Sampler1d   -> TextureDimension.Texture1D
+            | SamplerDimension.Sampler2d   -> TextureDimension.Texture2D
+            | SamplerDimension.Sampler3d   -> TextureDimension.Texture3D
+            | SamplerDimension.SamplerCube -> TextureDimension.TextureCube
+            | d -> failwithf "Invalid sampler dimension %A" d
+
     module private GLSLSampler =
 
         let private (|BaseName|_|) (name : string) =
@@ -306,6 +315,9 @@ module FShadeInterop =
     type SamplerState with
         member x.SamplerState = toSamplerState x
 
+    type SamplerDimension with
+        member x.TextureDimension = SamplerDimension.toTextureDimension x
+
     type GLSL.GLSLSampler with
 
         /// Base name and state of array of samplers.
@@ -314,6 +326,14 @@ module FShadeInterop =
             match x with
             | GLSLSampler.Array name -> Some name
             | _ -> None
+
+        member x.Dimension =
+            x.samplerType.dimension.TextureDimension
+
+    type GLSL.GLSLImage with
+
+        member x.Dimension =
+            x.imageType.dimension.TextureDimension
 
     let toInputTopology =
         LookupTable.lookupTable [

@@ -859,6 +859,7 @@ module private ImageExtensions =
 // ===========================================================================================
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Image =
+    open System.Collections.Concurrent
     open KHRBindMemory2
     open Vulkan11
 
@@ -1093,6 +1094,34 @@ module Image =
     let create (size : V3i) (mipMapLevels : int) (count : int) (samples : int) (dim : TextureDimension) (fmt : VkFormat) (usage : VkImageUsageFlags)
                (export : ImageExportMode) (device : Device) =
         alloc size mipMapLevels count samples dim fmt usage export device
+
+    /// Returns a black image with size 8 in each dimension, used as NullTexture counter-part
+    let internal empty =
+        let store = ConcurrentDictionary<TextureDimension * bool, Image>()
+
+        fun (dimension : TextureDimension) (multisampled : bool) (device : Device) ->
+            let key = (dimension, multisampled)
+
+            let image =
+                store.GetOrAdd(key, fun _ ->
+                    let size = V3i 8
+                    let samples = if multisampled then 2 else 1
+                    let image = device |> create size 1 1 samples dimension VkFormat.R8g8b8a8Unorm defaultUsage ImageExportMode.None
+
+                    device.perform {
+                        do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
+                    }
+
+                    device.OnDispose.Add(fun _ ->
+                        store.TryRemove key |> ignore
+                        image.Dispose()
+                    )
+
+                    image
+                )
+
+            image.AddReference()
+            image
 
 
 [<AbstractClass; Sealed; Extension>]

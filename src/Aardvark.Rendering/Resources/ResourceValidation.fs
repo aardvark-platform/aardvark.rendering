@@ -254,6 +254,12 @@ module ResourceValidation =
             if not format.IsFilterable then
                 Utils.failf dimension "cannot generate mipmaps for textures with format %A" format
 
+        /// Raises an ArgumentException if the texture is a null texture.
+        let inline validateForPrepare (texture : ITexture) =
+            match texture with
+            | :? NullTexture -> raise <| ArgumentException("Cannot prepare a NullTexture")
+            | _ -> ()
+
     module Framebuffers =
 
         module private Utils =

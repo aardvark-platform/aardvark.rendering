@@ -129,7 +129,12 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         device.CreateShaderProgram(unbox<RenderPass> signature, surface) :> IBackendSurface
 
     member x.PrepareTexture (t : ITexture, [<Optional; DefaultParameterValue(false)>] export : bool) =
-        device.CreateImage(t, export) :> IBackendTexture
+        ResourceValidation.Textures.validateForPrepare t
+
+        // Note: Dimension and multisampled parameters are only relevant for NullTexture at the moment.
+        // Other texture types could use those parameters for validation in the future.
+        // Since the PrepareTexture() API does not pass these parameters, we do not allow preparing NullTexture
+        device.CreateImage(t, TextureDimension.Texture2D, false, export) :> IBackendTexture
 
     member x.PrepareBuffer (data : IBuffer,
                             [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,

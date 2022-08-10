@@ -307,7 +307,7 @@ module ImageUploadExtensions =
             use stream = IO.File.OpenRead(path)
             ofStream stream info export device
 
-        let rec ofTexture (export : bool) (texture : ITexture) (device : Device) : Image =
+        let rec ofTexture (texture : ITexture) (dimension : TextureDimension) (multisampled : bool) (export : bool) (device : Device) : Image =
             match texture with
             | :? PixTexture2d as t ->
                 device |> ofPixImageMipMap t.PixImageMipMap t.TextureParams export
@@ -315,8 +315,8 @@ module ImageUploadExtensions =
             | :? PixTextureCube as c ->
                 device |> ofPixImageCube c.PixImageCube c.TextureParams export
 
-            | :? NullTexture as t ->
-                device |> ofPixImageMipMap (PixImageMipMap [| PixImage<byte>(Col.Format.RGBA, V2i.II) :> PixImage |]) TextureParams.empty export
+            | :? NullTexture ->
+                device |> Image.empty dimension multisampled
 
             | :? PixTexture3d as t ->
                 device |> ofPixVolume t.PixVolume t.TextureParams export
@@ -331,7 +331,7 @@ module ImageUploadExtensions =
 
                 match compressed with
                 | Some t ->
-                    device |> ofTexture export t
+                    device |> ofTexture t dimension multisampled export 
 
                 | _ ->
                     stream.Position <- initialPos
@@ -341,7 +341,7 @@ module ImageUploadExtensions =
                 device |> ofNativeTexture nt export
 
             | :? ExportedImage as t when export ->
-                device |> ofTexture false t
+                device |> ofTexture t dimension multisampled false
 
             | :? Image as t ->
                 if export then
@@ -370,9 +370,8 @@ module ImageUploadExtensions =
             this |> Image.ofFile file info export
 
         [<Extension>]
-        static member inline CreateImage(this : Device, t : ITexture,
-                                         [<Optional; DefaultParameterValue(false)>] export : bool) =
-            this |> Image.ofTexture export t
+        static member inline CreateImage(this : Device, texture : ITexture, dimension : TextureDimension, multisampled : bool, export : bool) =
+            this |> Image.ofTexture texture dimension multisampled export
 
         [<Extension>]
         static member inline UploadLevel(this : Device, dst : ImageSubresource, src : NativeTensor4<'T>,
