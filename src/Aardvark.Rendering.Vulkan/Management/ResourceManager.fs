@@ -4,6 +4,8 @@ open System
 open System.Threading
 open System.Runtime.CompilerServices
 open System.Runtime.InteropServices
+open System.Collections.Generic
+open System.Collections.Concurrent
 open Aardvark.Base
 
 open Aardvark.Rendering
@@ -443,7 +445,7 @@ module Resources =
 
     type ImageSampler = ImageView * Sampler
 
-    type ImageSamplerArray = Map<int, ResourceInfo<ImageSampler>>
+    type ImageSamplerArray = ResourceInfo<ImageSampler>[]
 
     [<Struct>]
     type DescriptorInfo =
@@ -463,13 +465,13 @@ module Resources =
             type AdaptiveDescriptor<'T>(slot : int, count : int, resource : IResourceLocation<'T>) =
                 inherit AdaptiveObject()
 
-                let mutable cache = Array.replicate count { Version = -1; Descriptor = Unchecked.defaultof<_> }
+                let cache = Array.replicate count { Version = -1; Descriptor = Unchecked.defaultof<_> }
 
                 member x.Slot = slot
                 member x.Count = count
                 member x.Resource = resource
 
-                abstract member GetDescriptors : ResourceInfo<'T> * byref<DescriptorInfo[]> -> unit
+                abstract member GetDescriptors : ResourceInfo<'T> * DescriptorInfo[] -> unit
 
                 member x.Acquire() = resource.Acquire()
                 member x.Release() = resource.Release()
@@ -479,7 +481,7 @@ module Resources =
                     x.EvaluateAlways t (fun t ->
                         if x.OutOfDate then
                             let info = resource.Update(t, rt)
-                            x.GetDescriptors(info, &cache)
+                            x.GetDescriptors(info, cache)
 
                         cache
                     )
@@ -546,10 +548,12 @@ module Resources =
             inherit Abstract.AdaptiveDescriptor<ImageSamplerArray>(slot, count, images)
 
             override x.GetDescriptors(images, cache) =
-                for KeyValue(i, r) in images.handle do
-                    let v, s = r.handle
+                let images = images.handle
+
+                for i = 0 to images.Length - 1 do
+                    let v, s = images.[i].handle
                     let desc = Descriptor.CombinedImageSampler(slot, i, v, s, v.Image.SamplerLayout)
-                    cache.[i] <- { Version = r.version; Descriptor = desc }
+                    cache.[i] <- { Version = images.[i].version; Descriptor = desc }
 
     type BufferResource(owner : IResourceCache, key : list<obj>, device : Device, usage : VkBufferUsageFlags, input : aval<IBuffer>) =
         inherit MutableResourceLocation<IBuffer, Buffer>(
@@ -668,8 +672,11 @@ module Resources =
             | _ -> failwith "[Resource] inconsistent state"
 
 
-    type ImageSamplerArrayResource(owner : IResourceCache, key : list<obj>, input : amap<int, IResourceLocation<ImageSampler>>) =
+    type ImageSamplerArrayResource(owner : IResourceCache, key : list<obj>, count : int,
+                                   empty : IResourceLocation<ImageSampler>, input : amap<int, IResourceLocation<ImageSampler>>) =
         inherit AbstractResourceLocation<ImageSamplerArray>(owner, key)
+
+        static let zeroHandle = { version = Int32.MinValue; handle = Unchecked.defaultof<_> }
 
         let reader = input.GetReader()
 
@@ -677,42 +684,53 @@ module Resources =
         // avoid iterating over all image samplers in GetHandle()
         let pending = LockedSet<_>()
 
-        // Sparsely maps resources to a binding slot
-        let images = Dict<int, IResourceLocation<_>>()
+        // Maps resources to a binding slot
+        // There must be a resource in a slot at all times, initially the image sampler is set for a slots.
+        let images = Array.zeroCreate<IResourceLocation<_>> count
         let indices = MultiDict<IResourceLocation<_>, int>()
 
         // For each bound slot store the last seen version
         // Whenever a version has changed, this resource's version is incremented
         let mutable version = 0
-        let versions = Dict<int, int>()
 
         // The map with evaluated image samplers
-        let mutable handle = Map.empty<int, ResourceInfo<ImageSampler>>
+        let handle = Array.zeroCreate<ResourceInfo<ImageSampler>> count
 
-        // Remove a resource from the given index if it exists
-        let remove (i : int) =
-            versions.Remove i |> ignore
+        // Removes a resource from the given index
+        let remove (i : int) (r : IResourceLocation<_>) =
+            if indices |> MultiDict.remove r i then
+                r.Release()
+                pending.Remove r |> ignore
 
-            match images.TryRemove i with
-            | true, r ->
-                if indices |> MultiDict.remove r i then
-                    r.Release()
-                    pending.Remove r |> ignore
-            | _ -> ()
+            handle.[i] <- zeroHandle
 
-        // Add a resource to the given index
+        // Adds a resource to the given index
         let set (i : int) (r : IResourceLocation<_>) =
             if indices |> MultiDict.add r i then
                 r.Acquire()
 
             pending.Add r |> ignore
-            versions.[i] <- -1
+            handle.[i] <- zeroHandle
             images.[i] <- r
+
+        // Save deltas to process later
+        let removals = List(count)
+        let additions = List(count)
+
+        let replace i r =
+            removals.Add((images.[i], i))
+            additions.Add((r, i))
+
+        // Set every slot to empty initially
+        do for i = 0 to count - 1 do
+            set i empty
 
         override x.Create() =
             for KeyValue(i, _) in indices do
                 i.Acquire()
                 pending.Add i |> ignore
+
+            pending.Add empty |> ignore
 
         override x.Destroy() =
             for KeyValue(i, _) in indices do
@@ -722,23 +740,35 @@ module Resources =
 
         override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
             if x.OutOfDate then
+
+                // Process additions, moves and removals
+                // Positive deltas are processed first, removals lead to the empty image sampler being set.
+                removals.Clear()
+                additions.Clear()
+
                 let deltas = reader.GetChanges token
-
-                for (i, op) in deltas do
+                for i, op in deltas do
                     match op with
-                    | Set r -> set i r
-                    | Remove -> remove i
+                    | Set r -> replace i r
+                    | Remove -> replace i empty
 
+                for r, i in additions do
+                    set i r
+
+                for r, i in removals do
+                    remove i r
+
+                // Process pending inputs (i.e. image samplers)
+                // We check the new version each handle to detect if anything actually changed.
                 let mutable changed = deltas.Count > 0
 
                 for image in pending.GetAndClear() do
                     let info = image.Update(token, renderToken)
 
                     for i in indices.[image] do
-                        if info.version <> versions.[i] then
+                        if info.version <> handle.[i].version then
                             changed <- true
-                            versions.[i] <- info.version
-                            handle <- handle |> Map.add i info
+                            handle.[i] <- info
 
                 if changed then
                     inc &version
@@ -1523,9 +1553,10 @@ type ResourceManager(user : IResourceUser, device : Device) =
     let samplerStateCache       = ResourceLocationCache<SamplerState>(user)
     let imageSamplerCache       = ResourceLocationCache<ImageSampler>(user)
     let imageSamplerArrayCache  = ResourceLocationCache<ImageSamplerArray>(user)
+    let imageSamplerMapCache    = ConcurrentDictionary<IAdaptiveValue, amap<int, IResourceLocation<ImageSampler>>>()
     let programCache            = ResourceLocationCache<ShaderProgram>(user)
-    let simpleSurfaceCache      = System.Collections.Concurrent.ConcurrentDictionary<obj, ShaderProgram>()
-    let fshadeThingCache        = System.Collections.Concurrent.ConcurrentDictionary<obj, PipelineLayout * aval<FShade.Imperative.Module>>()
+    let simpleSurfaceCache      = ConcurrentDictionary<obj, ShaderProgram>()
+    let fshadeThingCache        = ConcurrentDictionary<obj, PipelineLayout * aval<FShade.Imperative.Module>>()
 
     let accelerationStructureCache = ResourceLocationCache<Raytracing.AccelerationStructure>(user)
     let raytracingPipelineCache    = ResourceLocationCache<Raytracing.RaytracingPipeline>(user)
@@ -1632,46 +1663,41 @@ type ResourceManager(user : IResourceUser, device : Device) =
             fun cache key -> new ImageSamplerResource(cache, key, view, sampler)
         )
 
-    member x.CreateImageSamplerArray(samplerType : FShade.GLSL.GLSLSamplerType,
-                                     textures : aval<#seq<int * aval<ITexture>>>, samplerDesc : aval<SamplerState>) =
-        imageSamplerArrayCache.GetOrCreate(
-            [samplerType :> obj; textures :> obj; samplerDesc :> obj],
-            fun cache key ->
-                let map =
-                    textures |> AMap.ofAVal |> AMap.map (fun _ t ->
-                        x.CreateImageSampler(samplerType, t, samplerDesc)
-                    )
+    member x.CreateImageSamplerArray(count : int, samplerType : FShade.GLSL.GLSLSamplerType,
+                                     textures : aval<array<int * aval<ITexture>>>, samplerDesc : aval<SamplerState>) =
 
-                x.CreateImageSamplerArray(map)
-        )
+        let empty = x.CreateImageSampler(samplerType, AVal.constant <| NullTexture(), AVal.constant SamplerState.Default)
 
-    member x.CreateImageSamplerArray(samplerType : FShade.GLSL.GLSLSamplerType,
+        let map =
+            imageSamplerMapCache.GetOrAdd(textures, fun _ ->
+                textures |> AMap.ofAVal |> AMap.map (fun _ texture ->
+                    x.CreateImageSampler(samplerType, texture, samplerDesc)
+                )
+            )
+
+        x.CreateImageSamplerArray(count, empty, map)
+
+    member x.CreateImageSamplerArray(count : int, samplerType : FShade.GLSL.GLSLSamplerType,
                                      textures : aval<ITexture[]>, samplerDesc : aval<SamplerState>) =
+
+        let empty = x.CreateImageSampler(samplerType, AVal.constant <| NullTexture(), AVal.constant SamplerState.Default)
+
+        let map =
+            imageSamplerMapCache.GetOrAdd(textures, fun _ ->
+                textures |> AVal.map (Array.mapi (fun i texture ->
+                    i, x.CreateImageSampler(samplerType, AVal.constant texture, samplerDesc)
+                ))
+                |> AMap.ofAVal
+            )
+
+        x.CreateImageSamplerArray(count, empty, map)
+
+    member x.CreateImageSamplerArray(count : int, empty : IResourceLocation<ImageSampler>, input : seq<int * IResourceLocation<ImageSampler>>) =
+        x.CreateImageSamplerArray(count, empty, AMap.ofSeq input)
+
+    member x.CreateImageSamplerArray(count : int, empty : IResourceLocation<ImageSampler>, input : amap<int, IResourceLocation<ImageSampler>>) =
         imageSamplerArrayCache.GetOrCreate(
-            [samplerType :> obj; textures :> obj; samplerDesc :> obj],
-            fun cache key ->
-                let length = textures |> AVal.map Array.length
-
-                let map =
-                    length |> AVal.map (fun n ->
-                        Array.init n (fun i ->
-                            let t = textures |> AVal.map (fun arr -> Array.get arr i)
-                            i, x.CreateImageSampler(samplerType, t, samplerDesc)
-                        )
-                    )
-                    |> AMap.ofAVal
-
-                x.CreateImageSamplerArray(map)
-        )
-
-    member x.CreateImageSamplerArray(input : seq<int * IResourceLocation<ImageSampler>>) =
-        imageSamplerArrayCache.GetOrCreate(
-            [input :> obj], fun cache key -> new ImageSamplerArrayResource(cache, key, AMap.ofSeq input)
-        )
-
-    member x.CreateImageSamplerArray(input : amap<int, IResourceLocation<ImageSampler>>) =
-        imageSamplerArrayCache.GetOrCreate(
-            [input :> obj], fun cache key -> new ImageSamplerArrayResource(cache, key, input)
+            [count :> obj, empty :> obj; input :> obj], fun cache key -> new ImageSamplerArrayResource(cache, key, count, empty, input)
         )
 
     member x.CreateShaderProgram(pass : RenderPass, data : ISurface) =

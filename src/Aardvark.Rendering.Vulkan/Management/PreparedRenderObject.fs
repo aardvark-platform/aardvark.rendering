@@ -132,12 +132,12 @@ type DevicePreparedRenderObjectExtensions private() =
                                     match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
                                     | Some (:? aval<array<int * aval<ITexture>>> as tex) ->
                                         let s = createSamplerState this textureName uniforms samplerState
-                                        let is = this.CreateImageSamplerArray(sam.samplerType, tex, s)
+                                        let is = this.CreateImageSamplerArray(sam.samplerCount, sam.samplerType, tex, s)
                                         Some is
 
                                     | Some (:? aval<ITexture[]> as tex) ->
                                         let s = createSamplerState this textureName uniforms samplerState
-                                        let is = this.CreateImageSamplerArray(sam.samplerType, tex, s)
+                                        let is = this.CreateImageSamplerArray(sam.samplerCount, sam.samplerType, tex, s)
                                         Some is
 
                                     | Some t ->
@@ -169,7 +169,8 @@ type DevicePreparedRenderObjectExtensions private() =
                                                 None
                                         )
 
-                                    this.CreateImageSamplerArray(list)
+                                    let empty = this.CreateImageSampler(sam.samplerType, AVal.constant <| NullTexture(), AVal.constant SamplerState.Default)
+                                    this.CreateImageSamplerArray(sam.samplerCount, empty, list)
                                 )
 
                             AdaptiveDescriptor.CombinedImageSampler(b.Binding, b.DescriptorCount, sampler) :> IAdaptiveDescriptor |> Some

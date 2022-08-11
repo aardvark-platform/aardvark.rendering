@@ -146,12 +146,7 @@ let main argv =
             if not <| runtime :? Vulkan.Runtime then
                 let textures =
                     count |> AVal.map (fun count ->
-                        Array.init Shader.MaxTextureSlices (fun i ->
-                            if i < count then
-                                Texture.generate size
-                            else
-                                NullTexture()
-                        )
+                        Array.init count (fun _ -> Texture.generate size)
                     )
 
                 // Set the adaptive array aval<#ITexture[]>, alternatively you can also
@@ -171,13 +166,11 @@ let main argv =
 
                 let textures =
                     count |> AVal.map (fun count ->
-                        Array.init Shader.MaxTextureSlices (fun i ->
+                        Array.init count (fun i ->
                             if i = 0 then
                                 i, single :> aval<_>
-                            elif i < count then
-                                i, AVal.constant <| Texture.generate size
                             else
-                                i, AVal.constant <| NullTexture()
+                                i, AVal.constant <| Texture.generate size
                         )
                     )
 
