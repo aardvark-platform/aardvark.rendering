@@ -584,6 +584,48 @@ module TextureUpload =
 
             runtime |> renderQuadWithNullTexture shader
 
+        let texture2DNullInt(runtime : IRuntime) =
+            let diffuseSampler =
+                intSampler2d {
+                    texture uniform?DiffuseColorTexture
+                    filter Filter.MinMagPoint
+                    addressU WrapMode.Clamp
+                    addressV WrapMode.Clamp
+                }
+
+            let diffuseTexture (v : Effects.Vertex) =
+                fragment {
+                    return V4d(diffuseSampler.Read(V2i.Zero, 0))
+                }
+
+            let shader =
+                Sg.shader {
+                    do! diffuseTexture
+                }
+
+            runtime |> renderQuadWithNullTexture shader
+
+        let texture2DNullShadow(runtime : IRuntime) =
+            let diffuseSampler =
+                sampler2dShadow {
+                    texture uniform?DiffuseColorTexture
+                    filter Filter.MinMagLinear
+                    addressU WrapMode.Clamp
+                    addressV WrapMode.Clamp
+                }
+
+            let diffuseTexture (v : Effects.Vertex) =
+                fragment {
+                    return V4d(diffuseSampler.Sample(v.tc, 0.0))
+                }
+
+            let shader =
+                Sg.shader {
+                    do! diffuseTexture
+                }
+
+            runtime |> renderQuadWithNullTexture shader
+
         let texture2DStreaming (runtime : IRuntime) =
             let texture = runtime.CreateStreamingTexture(false)
 
@@ -894,6 +936,8 @@ module TextureUpload =
             "2D NullTexture array",                 Cases.texture2DNullArray
             "2D NullTexture multisampled",          Cases.texture2DNullMultisampled
             "2D NullTexture multisampled array",    Cases.texture2DNullMultisampledArray
+            "2D NullTexture int",                   Cases.texture2DNullInt
+            "2D NullTexture shadow",                Cases.texture2DNullShadow
 
             "2D PixTexture",                           Cases.pixTexture2D
             "2D PixTexture BGRA",                      Cases.pixTexture2DBgra

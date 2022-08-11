@@ -287,7 +287,35 @@ and ImageSubresource(image : Image, aspect : TextureAspect, level : int, slice :
     member x.Slice = slice
     member x.VkImageSubresource = VkImageSubresource(x.VkImageAspectFlags, uint32 level, uint32 slice)
 
+type ImageProperties =
+    { Dimension      : TextureDimension
+      Format         : TextureFormat
+      IsMultisampled : bool }
 
+[<AutoOpen>]
+module internal ImagePropertiesExtensions =
+
+    type FShade.GLSL.GLSLSamplerType with
+        member x.Properties =
+            let format =
+                if x.isShadow then TextureFormat.Depth24Stencil8
+                elif x.IsInteger then TextureFormat.Rgba8i
+                else TextureFormat.Rgba8
+
+            { Dimension      = x.dimension.TextureDimension
+              Format         = format
+              IsMultisampled = x.isMS }
+
+    type FShade.GLSL.GLSLImageType with
+        member x.Properties =
+            let format =
+                match x.format with
+                | Some fmt -> fmt.TextureFormat
+                | _ -> if x.IsInteger then TextureFormat.Rgba8i else TextureFormat.Rgba8
+
+            { Dimension      = x.dimension.TextureDimension
+              Format         = format
+              IsMultisampled = x.isMS }
 
 [<AutoOpen>]
 module DeviceTensorCommandExtensions =
@@ -1095,25 +1123,24 @@ module Image =
                (export : ImageExportMode) (device : Device) =
         alloc size mipMapLevels count samples dim fmt usage export device
 
-    /// Returns a black image with size 8 in each dimension, used as NullTexture counter-part
+    /// Returns an uninitialized image with size 8 in each dimension, used as NullTexture counter-part
     let internal empty =
-        let store = ConcurrentDictionary<TextureDimension * bool, Image>()
+        let store = ConcurrentDictionary<ImageProperties, Image>()
 
-        fun (dimension : TextureDimension) (multisampled : bool) (device : Device) ->
-            let key = (dimension, multisampled)
-
+        fun (properties : ImageProperties) (device : Device) ->
             let image =
-                store.GetOrAdd(key, fun _ ->
+                store.GetOrAdd(properties, fun _ ->
                     let size = V3i 8
-                    let samples = if multisampled then 2 else 1
-                    let image = device |> create size 1 1 samples dimension VkFormat.R8g8b8a8Unorm defaultUsage ImageExportMode.None
+                    let format = VkFormat.ofTextureFormat properties.Format
+                    let samples = if properties.IsMultisampled then 2 else 1
+                    let image = device |> create size 1 1 samples properties.Dimension format defaultUsage ImageExportMode.None
 
                     device.perform {
                         do! Command.TransformLayout(image, VkImageLayout.ShaderReadOnlyOptimal)
                     }
 
                     device.OnDispose.Add(fun _ ->
-                        store.TryRemove key |> ignore
+                        store.TryRemove properties |> ignore
                         image.Dispose()
                     )
 

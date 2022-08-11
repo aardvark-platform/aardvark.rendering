@@ -131,10 +131,11 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     member x.PrepareTexture (t : ITexture, [<Optional; DefaultParameterValue(false)>] export : bool) =
         ResourceValidation.Textures.validateForPrepare t
 
-        // Note: Dimension and multisampled parameters are only relevant for NullTexture at the moment.
-        // Other texture types could use those parameters for validation in the future.
-        // Since the PrepareTexture() API does not pass these parameters, we do not allow preparing NullTexture
-        device.CreateImage(t, TextureDimension.Texture2D, false, export) :> IBackendTexture
+        // Note: Image properties are only relevant for NullTexture at the moment.
+        // These are used to create the right kind of texture for a given sampler.
+        // Other texture types could use those properties for validation in the future.
+        // Since the PrepareTexture() API does not pass these properties, we do not allow preparing NullTexture
+        device.CreateImage(t, Unchecked.defaultof<_>, export) :> IBackendTexture
 
     member x.PrepareBuffer (data : IBuffer,
                             [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,

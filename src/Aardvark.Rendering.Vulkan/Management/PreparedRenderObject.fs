@@ -181,7 +181,7 @@ type DevicePreparedRenderObjectExtensions private() =
                             match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
                             | Some (:? aval<ITexture> as tex) ->
 
-                                let tex = this.CreateImage(img.Dimension, img.imageType.isMS, tex)
+                                let tex = this.CreateImage(img.imageType.Properties, tex)
                                 let view = this.CreateImageView(img.imageType, tex)
 
                                 view

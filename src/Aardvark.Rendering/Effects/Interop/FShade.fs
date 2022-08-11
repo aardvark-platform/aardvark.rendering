@@ -75,6 +75,89 @@ module FShadeInterop =
         member x.HasLightMapTexture : bool = x?PerMaterial?HasLightMapTexture
         member x.HasNormalMapTexture : bool = x?PerMaterial?HasNormalMapTexture
 
+    module private ImageFormat =
+
+        let toTextureFormat =
+            LookupTable.lookupTable [
+                ImageFormat.DepthComponent,    TextureFormat.DepthComponent32
+                ImageFormat.R3G3B2,            TextureFormat.R3G3B2
+                ImageFormat.Rgb4,              TextureFormat.Rgb4
+                ImageFormat.Rgb5,              TextureFormat.Rgb5
+                ImageFormat.Rgb8,              TextureFormat.Rgb8
+                ImageFormat.Rgb10,             TextureFormat.Rgb10
+                ImageFormat.Rgb12,             TextureFormat.Rgb12
+                ImageFormat.Rgb16,             TextureFormat.Rgb16
+                ImageFormat.Rgba2,             TextureFormat.Rgba2
+                ImageFormat.Rgba4,             TextureFormat.Rgba4
+                ImageFormat.Rgba8,             TextureFormat.Rgba8
+                ImageFormat.Rgb10A2,           TextureFormat.Rgb10A2
+                ImageFormat.Rgba12,            TextureFormat.Rgba12
+                ImageFormat.Rgba16,            TextureFormat.Rgba16
+                ImageFormat.DepthComponent16,  TextureFormat.DepthComponent16
+                ImageFormat.DepthComponent24,  TextureFormat.DepthComponent24
+                ImageFormat.DepthComponent32,  TextureFormat.DepthComponent32
+                ImageFormat.R8,                TextureFormat.R8
+                ImageFormat.R16,               TextureFormat.R16
+                ImageFormat.Rg8,               TextureFormat.Rg8
+                ImageFormat.Rg16,              TextureFormat.Rg16
+                ImageFormat.R16f,              TextureFormat.R16f
+                ImageFormat.R32f,              TextureFormat.R32f
+                ImageFormat.Rg16f,             TextureFormat.Rg16f
+                ImageFormat.Rg32f,             TextureFormat.Rg32f
+                ImageFormat.R8i,               TextureFormat.R8i
+                ImageFormat.R8ui,              TextureFormat.R8ui
+                ImageFormat.R16i,              TextureFormat.R16i
+                ImageFormat.R16ui,             TextureFormat.R16ui
+                ImageFormat.R32i,              TextureFormat.R32i
+                ImageFormat.R32ui,             TextureFormat.R32ui
+                ImageFormat.Rg8i,              TextureFormat.Rg8i
+                ImageFormat.Rg8ui,             TextureFormat.Rg8ui
+                ImageFormat.Rg16i,             TextureFormat.Rg16i
+                ImageFormat.Rg16ui,            TextureFormat.Rg16ui
+                ImageFormat.Rg32i,             TextureFormat.Rg32i
+                ImageFormat.Rg32ui,            TextureFormat.Rg32ui
+                ImageFormat.DepthStencil,      TextureFormat.Depth24Stencil8
+                ImageFormat.Rgba32f,           TextureFormat.Rgba32f
+                ImageFormat.Rgb32f,            TextureFormat.Rgb32f
+                ImageFormat.Rgba16f,           TextureFormat.Rgba16f
+                ImageFormat.Rgb16f,            TextureFormat.Rgb16f
+                ImageFormat.Depth24Stencil8,   TextureFormat.Depth24Stencil8
+                ImageFormat.R11fG11fB10f,      TextureFormat.R11fG11fB10f
+                ImageFormat.Rgb9E5,            TextureFormat.Rgb9E5
+                ImageFormat.Srgb8,             TextureFormat.Srgb8
+                ImageFormat.Srgb8Alpha8,       TextureFormat.Srgb8Alpha8
+                ImageFormat.DepthComponent32f, TextureFormat.DepthComponent32f
+                ImageFormat.Depth32fStencil8,  TextureFormat.Depth32fStencil8
+                ImageFormat.StencilIndex1,     TextureFormat.StencilIndex8
+                ImageFormat.StencilIndex4,     TextureFormat.StencilIndex8
+                ImageFormat.StencilIndex8,     TextureFormat.StencilIndex8
+                ImageFormat.StencilIndex16,    TextureFormat.StencilIndex8
+                ImageFormat.Rgba32ui,          TextureFormat.Rgba32ui
+                ImageFormat.Rgb32ui,           TextureFormat.Rgb32ui
+                ImageFormat.Rgba16ui,          TextureFormat.Rgba16ui
+                ImageFormat.Rgb16ui,           TextureFormat.Rgb16ui
+                ImageFormat.Rgba8ui,           TextureFormat.Rgba8ui
+                ImageFormat.Rgb8ui,            TextureFormat.Rgb8ui
+                ImageFormat.Rgba32i,           TextureFormat.Rgba32i
+                ImageFormat.Rgb32i,            TextureFormat.Rgb32i
+                ImageFormat.Rgba16i,           TextureFormat.Rgba16i
+                ImageFormat.Rgb16i,            TextureFormat.Rgb16i
+                ImageFormat.Rgba8i,            TextureFormat.Rgba8i
+                ImageFormat.Rgb8i,             TextureFormat.Rgb8i
+        ]
+
+    module private GLSLType =
+
+        let rec isIntegerType = function
+            | GLSL.GLSLType.Int _ -> true
+            | GLSL.GLSLType.Vec (_, t)
+            | GLSL.GLSLType.Mat (_, _, t)
+            | GLSL.GLSLType.Array (_, t, _)
+            | GLSL.GLSLType.DynamicArray (t, _) -> isIntegerType t
+            | GLSL.GLSLType.Sampler s -> isIntegerType s.valueType
+            | GLSL.GLSLType.Image i -> isIntegerType i.valueType
+            | _ -> false
+
     module private SamplerDimension =
 
         let toTextureDimension = function
@@ -318,6 +401,9 @@ module FShadeInterop =
     type SamplerDimension with
         member x.TextureDimension = SamplerDimension.toTextureDimension x
 
+    type GLSL.GLSLSamplerType with
+        member x.IsInteger = GLSLType.isIntegerType x.valueType
+
     type GLSL.GLSLSampler with
 
         /// Base name and state of array of samplers.
@@ -329,6 +415,12 @@ module FShadeInterop =
 
         member x.Dimension =
             x.samplerType.dimension.TextureDimension
+
+    type ImageFormat with
+        member x.TextureFormat = ImageFormat.toTextureFormat x
+
+    type GLSL.GLSLImageType with
+        member x.IsInteger = GLSLType.isIntegerType x.valueType
 
     type GLSL.GLSLImage with
 

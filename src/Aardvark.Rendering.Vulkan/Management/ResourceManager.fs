@@ -603,12 +603,12 @@ module Resources =
             else
                 { handle = handle; version = 0 }
 
-    type ImageResource(owner : IResourceCache, key : list<obj>, device : Device, dimension : TextureDimension, multisampled : bool, input : aval<ITexture>) =
+    type ImageResource(owner : IResourceCache, key : list<obj>, device : Device, properties : ImageProperties, input : aval<ITexture>) =
         inherit ImmutableResourceLocation<ITexture, Image>(
             owner, key,
             input,
             {
-                icreate = fun (t : ITexture) -> device.CreateImage(t, dimension, multisampled, false)
+                icreate = fun (t : ITexture) -> device.CreateImage(t, properties)
                 idestroy = fun t -> t.Dispose()
                 ieagerDestroy = true
             }
@@ -1634,8 +1634,8 @@ type ResourceManager(user : IResourceUser, device : Device) =
     member x.CreateIndirectBuffer(indexed : bool, input : aval<Aardvark.Rendering.IndirectBuffer>) =
         indirectBufferCache.GetOrCreate([indexed :> obj; input :> obj], fun cache key -> new IndirectBufferResource(cache, key, device, indexed, input))
 
-    member x.CreateImage(dimension : TextureDimension, multisampled : bool, input : aval<ITexture>) =
-        imageCache.GetOrCreate([dimension :> obj; multisampled :> obj; input :> obj], fun cache key -> new ImageResource(cache, key, device, dimension, multisampled, input))
+    member x.CreateImage(properties : ImageProperties, input : aval<ITexture>) =
+        imageCache.GetOrCreate([properties :> obj; input :> obj], fun cache key -> new ImageResource(cache, key, device, properties, input))
 
     member x.CreateImageView(samplerType : FShade.GLSL.GLSLSamplerType, input : IResourceLocation<Image>) =
         imageViewCache.GetOrCreate([samplerType :> obj; input :> obj], fun cache key -> new ImageViewResource(cache, key, device, samplerType, input))
@@ -1654,7 +1654,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
     member x.CreateImageSampler(samplerType : FShade.GLSL.GLSLSamplerType,
                                 texture : aval<ITexture>, samplerDesc : aval<SamplerState>) =
-        let image = x.CreateImage(samplerType.dimension.TextureDimension, samplerType.isMS, texture)
+        let image = x.CreateImage(samplerType.Properties, texture)
         let view = x.CreateImageView(samplerType, image)
         let sampler = x.CreateSampler(samplerDesc)
 
