@@ -1,3 +1,6 @@
+### 5.3.0-prerelease0001
+- Initial prerelease for 5.3
+
 ### 5.2.12
 - reverted Vulkan queue creation
 - enabled sharing extensions by default (windows/linux)
