@@ -132,20 +132,21 @@ type IAccelerationStructure =
     abstract member GeometryCount : int
 
 type IAccelerationStructureRuntime =
+
+    ///<summary>
+    /// Creates an acceleration structure from the given trace geometry.
+    ///</summary>
+    ///<param name="geometry">The geometry to build the acceleration structure from.</param>
+    ///<param name="usage">The usage flag of the acceleration structure. Default is AccelerationStructureUsage.Static.</param>
+    ///<param name="allowUpdate">Determines if the acceleration structure may be updated, instead of requiring a rebuild. Default is true.</param>
     abstract member CreateAccelerationStructure : geometry: TraceGeometry *
-                                                  usage: AccelerationStructureUsage *
-                                                  allowUpdate: bool -> IAccelerationStructure
+                                                  [<Optional; DefaultParameterValue(AccelerationStructureUsage.Static)>] usage: AccelerationStructureUsage *
+                                                  [<Optional; DefaultParameterValue(true)>] allowUpdate: bool -> IAccelerationStructure
+
+    ///<summary>
+    /// Tries to update an acceleration structure with the given trace geometry.
+    ///</summary>
+    ///<param name="handle">The acceleration structure to update.</param>
+    ///<param name="geometry">The geometry to update the acceleration structure from.</param>
+    ///<returns>True if the acceleration structure could be updated, false otherwise.</returns>
     abstract member TryUpdateAccelerationStructure : handle: IAccelerationStructure * geometry: TraceGeometry -> bool
-
-
-[<Extension>]
-type AccelerationStructureRuntimeExtensions() =
-
-    [<Extension>]
-    static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : TraceGeometry, usage : AccelerationStructureUsage) =
-        this.CreateAccelerationStructure(geometry, usage, true)
-
-    [<Extension>]
-    static member CreateAccelerationStructure(this : IAccelerationStructureRuntime, geometry : TraceGeometry,
-                                              [<Optional; DefaultParameterValue(true)>] allowUpdate : bool) =
-        this.CreateAccelerationStructure(geometry, AccelerationStructureUsage.Static, allowUpdate)
