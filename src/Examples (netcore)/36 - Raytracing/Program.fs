@@ -22,6 +22,9 @@ module Semantics =
         let ModelMatrix = Sym.ofString "ModelMatrix"
         let NormalMatrix = Sym.ofString "NormalMatrix"
 
+    module FaceAttribute =
+        let Colors = Sym.ofString "FaceColors"
+
     module GeometryAttribute =
         let Colors = Sym.ofString "Colors"
 
@@ -43,6 +46,7 @@ module Effect =
             member x.TextureCoords  : V2d[]                 = uniform?StorageBuffer?TextureCoords
             member x.ModelMatrices  : M44d[]                = uniform?StorageBuffer?ModelMatrices
             member x.NormalMatrices : M33d[]                = uniform?StorageBuffer?NormalMatrices
+            member x.FaceColors     : V3d[]                 = uniform?StorageBuffer?FaceColors
             member x.Colors         : V3d[]                 = uniform?StorageBuffer?Colors
 
             member x.SphereOffsets  : V3d[]                 = uniform?StorageBuffer?SphereOffsets
@@ -204,9 +208,7 @@ module Effect =
                 let specular = specularLighting shininess normal position
                 result + specularAmount * V3d(specular)
 
-        let chitSolidColor (color : C3d) (input : RayHitInput<Payload>) =
-            let color = V3d color
-
+        let chitFaceColor (input : RayHitInput<Payload>) =
             closestHit {
                 let info = getGeometryInfo input
                 let indices = getIndices info input
@@ -221,6 +223,7 @@ module Effect =
                     let m = uniform.NormalMatrices.[info.InstanceAttributeIndex]
                     (m * n) |> Vec.normalize
 
+                let color = uniform.FaceColors.[info.BasePrimitive + input.geometry.primitiveId]
                 let diffuse = lightingWithShadow 0xFF 0.0 1.0 16.0 position normal input
                 return { color = color * diffuse; recursionDepth = 0 }
             }
@@ -273,7 +276,7 @@ module Effect =
 
     let private hitGroupModel =
         hitgroup {
-            closestHit (chitSolidColor C3d.BurlyWood)
+            closestHit chitFaceColor
         }
 
     let private hitGroupFloor =
@@ -340,6 +343,11 @@ let main argv =
                     InstanceAttribute.NormalMatrix, typeof<M34f>
                 ]
 
+            let faceAttributes =
+                Map.ofList [
+                    FaceAttribute.Colors, typeof<V4f>
+                ]
+
             let geometryAttributes =
                 Map.ofList [
                     GeometryAttribute.Colors, typeof<V4f>
@@ -347,6 +355,7 @@ let main argv =
 
             { IndexType              = IndexType.UInt32
               VertexAttributeTypes   = vertexAttributes
+              FaceAttributeTypes     = faceAttributes
               InstanceAttributeTypes = instanceAttributes
               GeometryAttributeTypes = geometryAttributes }
 
@@ -357,6 +366,14 @@ let main argv =
 
         let trafo =
             Trafo3d.Scale(5.0, 5.0, -5.0) * Trafo3d.Translation(0.0, 0.0, 1.5)
+
+        let colors =
+            let rnd = RandomSystem()
+
+            Array.init scene.meshes.[0].geometry.FaceCount (fun _ ->
+                rnd.UniformC3d()
+            )
+            |> BufferView.ofArray
 
         let instanceAttr =
             let normalMatrix =
@@ -370,6 +387,7 @@ let main argv =
         traceObject {
             indexedGeometry (scene.meshes.[0].geometry, trafo, GeometryFlags.Opaque)
             instanceAttributes instanceAttr
+            faceAttribute FaceAttribute.Colors colors
             hitGroup HitGroup.Model
             culling (CullMode.Enabled WindingOrder.Clockwise)
         }
@@ -434,6 +452,9 @@ let main argv =
     let normalMatrices =
         geometryPool.GetInstanceAttribute InstanceAttribute.NormalMatrix
 
+    let faceColors =
+        geometryPool.GetFaceAttribute FaceAttribute.Colors
+
     let colors =
         geometryPool.GetGeometryAttribute GeometryAttribute.Colors
 
@@ -461,6 +482,7 @@ let main argv =
             Sym.ofString "TextureCoords",    textureCoordinates :> IAdaptiveValue
             Sym.ofString "ModelMatrices",    modelMatrices :> IAdaptiveValue
             Sym.ofString "NormalMatrices",   normalMatrices :> IAdaptiveValue
+            Sym.ofString "FaceColors",       faceColors :> IAdaptiveValue
             Sym.ofString "Colors",           colors :> IAdaptiveValue
             Sym.ofString "SphereOffsets",    sphereOffsets |> Array.map V4f |> ArrayBuffer :> IBuffer |> AVal.constant :> IAdaptiveValue
             Sym.ofString "TextureFloor",     DefaultTextures.checkerboard :> IAdaptiveValue
