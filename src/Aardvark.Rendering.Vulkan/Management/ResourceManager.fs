@@ -693,6 +693,10 @@ module Resources =
         // Whenever a version has changed, this resource's version is incremented
         let mutable version = 0
 
+        // Stores version increments to signal changes even when the resource's version did not change.
+        // E.g. when two different image samplers with the same version swap position.
+        let versionOffsets = Array.zeroCreate<int> count
+
         // The map with evaluated image samplers
         let handle = Array.zeroCreate<ResourceInfo<ImageSampler>> count
 
@@ -702,14 +706,13 @@ module Resources =
                 r.Release()
                 pending.Remove r |> ignore
 
-            handle.[i] <- zeroHandle
-
         // Adds a resource to the given index
         let set (i : int) (r : IResourceLocation<_>) =
             if indices |> MultiDict.add r i then
                 r.Acquire()
 
             pending.Add r |> ignore
+            versionOffsets.[i] <- versionOffsets.[i] + 1
             handle.[i] <- zeroHandle
             images.[i] <- r
 
@@ -766,9 +769,11 @@ module Resources =
                     let info = image.Update(token, renderToken)
 
                     for i in indices.[image] do
-                        if info.version <> handle.[i].version then
+                        let version = info.version + versionOffsets.[i]
+
+                        if version <> handle.[i].version then
                             changed <- true
-                            handle.[i] <- info
+                            handle.[i] <- { info with version = version }
 
                 if changed then
                     inc &version
