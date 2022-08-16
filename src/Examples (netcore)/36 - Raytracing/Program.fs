@@ -39,7 +39,6 @@ module Effect =
             member x.OutputBuffer : Image2d<Formats.rgba32f> = uniform?OutputBuffer
             member x.RecursionDepth : int = uniform?RecursionDepth
 
-            member x.GeometryInfos  : TraceGeometryInfo[]   = uniform?StorageBuffer?GeometryInfos
             member x.Positions      : V3d[]                 = uniform?StorageBuffer?Positions
             member x.Normals        : V3d[]                 = uniform?StorageBuffer?Normals
             member x.Indices        : int[]                 = uniform?StorageBuffer?Indices
@@ -124,11 +123,6 @@ module Effect =
             v0 * barycentricCoords.X + v1 * barycentricCoords.Y + v2 * barycentricCoords.Z
 
         [<ReflectedDefinition>]
-        let getGeometryInfo (input : RayHitInput<'T, 'U>) =
-            let id = input.geometry.instanceCustomIndex + input.geometry.geometryIndex
-            uniform.GeometryInfos.[id]
-
-        [<ReflectedDefinition>]
         let getIndices (info : TraceGeometryInfo) (input : RayHitInput<'T, 'U>) =
             let firstIndex = info.FirstIndex + 3 * input.geometry.primitiveId
             let baseVertex = info.BaseVertex
@@ -210,7 +204,7 @@ module Effect =
 
         let chitFaceColor (input : RayHitInput<Payload>) =
             closestHit {
-                let info = getGeometryInfo input
+                let info = TraceGeometryInfo.ofRayHit input
                 let indices = getIndices info input
 
                 let position =
@@ -230,7 +224,7 @@ module Effect =
 
         let chitTextured (input : RayHitInput<Payload>) =
             closestHit {
-                let info = getGeometryInfo input
+                let info = TraceGeometryInfo.ofRayHit input
                 let indices = getIndices info input
 
                 let position =
@@ -248,7 +242,7 @@ module Effect =
 
         let chitSphere (input : RayHitInput<Payload>) =
             closestHit {
-                let info = getGeometryInfo input
+                let info = TraceGeometryInfo.ofRayHit input
                 let position = input.ray.origin + input.hit.t * input.ray.direction
                 let center = input.objectSpace.objectToWorld.TransformPos uniform.SphereOffsets.[input.geometry.geometryIndex]
                 let normal = Vec.normalize (position - center)
@@ -470,23 +464,23 @@ let main argv =
 
     let uniforms =
         Map.ofList [
-            Sym.ofString "OutputBuffer",     traceTexture |> AdaptiveResource.mapNonAdaptive (fun t -> t :> ITexture) :> IAdaptiveValue
-            Sym.ofString "RecursionDepth",   AVal.constant 4 :> IAdaptiveValue
-            Sym.ofString "ViewTrafo",        viewTrafo :> IAdaptiveValue
-            Sym.ofString "ProjTrafo",        projTrafo :> IAdaptiveValue
-            Sym.ofString "CameraLocation",   cameraView |> AVal.map CameraView.location :> IAdaptiveValue
-            Sym.ofString "GeometryInfos",    geometryInfos :> IAdaptiveValue
-            Sym.ofString "Positions",        positions :> IAdaptiveValue
-            Sym.ofString "Normals",          normals :> IAdaptiveValue
-            Sym.ofString "Indices",          indices :> IAdaptiveValue
-            Sym.ofString "TextureCoords",    textureCoordinates :> IAdaptiveValue
-            Sym.ofString "ModelMatrices",    modelMatrices :> IAdaptiveValue
-            Sym.ofString "NormalMatrices",   normalMatrices :> IAdaptiveValue
-            Sym.ofString "FaceColors",       faceColors :> IAdaptiveValue
-            Sym.ofString "Colors",           colors :> IAdaptiveValue
-            Sym.ofString "SphereOffsets",    sphereOffsets |> Array.map V4f |> ArrayBuffer :> IBuffer |> AVal.constant :> IAdaptiveValue
-            Sym.ofString "TextureFloor",     DefaultTextures.checkerboard :> IAdaptiveValue
-            Sym.ofString "LightLocation",    lightLocation :> IAdaptiveValue
+            DefaultSemantic.TraceGeometryBuffer, geometryInfos :> IAdaptiveValue
+            Sym.ofString "OutputBuffer",         traceTexture |> AdaptiveResource.mapNonAdaptive (fun t -> t :> ITexture) :> IAdaptiveValue
+            Sym.ofString "RecursionDepth",       AVal.constant 4 :> IAdaptiveValue
+            Sym.ofString "ViewTrafo",            viewTrafo :> IAdaptiveValue
+            Sym.ofString "ProjTrafo",            projTrafo :> IAdaptiveValue
+            Sym.ofString "CameraLocation",       cameraView |> AVal.map CameraView.location :> IAdaptiveValue
+            Sym.ofString "Positions",            positions :> IAdaptiveValue
+            Sym.ofString "Normals",              normals :> IAdaptiveValue
+            Sym.ofString "Indices",              indices :> IAdaptiveValue
+            Sym.ofString "TextureCoords",        textureCoordinates :> IAdaptiveValue
+            Sym.ofString "ModelMatrices",        modelMatrices :> IAdaptiveValue
+            Sym.ofString "NormalMatrices",       normalMatrices :> IAdaptiveValue
+            Sym.ofString "FaceColors",           faceColors :> IAdaptiveValue
+            Sym.ofString "Colors",               colors :> IAdaptiveValue
+            Sym.ofString "SphereOffsets",        sphereOffsets |> Array.map V4f |> ArrayBuffer :> IBuffer |> AVal.constant :> IAdaptiveValue
+            Sym.ofString "TextureFloor",         DefaultTextures.checkerboard :> IAdaptiveValue
+            Sym.ofString "LightLocation",        lightLocation :> IAdaptiveValue
         ]
 
     let staticObjects =

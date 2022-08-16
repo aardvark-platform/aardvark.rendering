@@ -29,9 +29,36 @@ type TraceGeometryInfo =
         /// The index to look up values in a geometry attribute buffer.
         [<FieldOffset(12)>] GeometryAttributeIndex : int32
 
-        /// The index to look up values in a instance attribute buffer.
+        /// The index to look up values in an instance attribute buffer.
         [<FieldOffset(16)>] InstanceAttributeIndex : int32
     }
+
+
+[<AutoOpen>]
+module FShadeInterop =
+    open FShade
+
+    module DefaultSemantic =
+        let TraceGeometryBuffer = Sym.ofString "TraceGeometryBuffer"
+
+    type UniformScope with
+        member x.GeometryInfos : TraceGeometryInfo[] = uniform?StorageBuffer?TraceGeometryBuffer
+
+    module TraceGeometryInfo =
+
+        [<ReflectedDefinition; Inline>]
+        let ofGeometryInstance (input : RaytracingInputTypes.GeometryInstance) =
+            let id = input.instanceCustomIndex + input.geometryIndex
+            uniform.GeometryInfos.[id]
+
+        [<ReflectedDefinition; Inline>]
+        let ofRayIntersection (input : RayIntersectionInput) =
+            ofGeometryInstance input.geometry
+
+        [<ReflectedDefinition; Inline>]
+        let ofRayHit (input : RayHitInput<'T, 'U>) =
+            ofGeometryInstance input.geometry
+
 
 [<CLIMutable>]
 type TraceObjectSignature =
