@@ -391,7 +391,8 @@ module ManagedPoolSg =
             member x.Mode = mode
             member x.Storage = storage
 
-        let pool (pool : ManagedPool) (calls : aset<ManagedDrawCall>) (mode : IndexedGeometryMode)=
+        /// Draws an adaptive set of managed draw calls of the given pool.
+        let pool (pool : ManagedPool) (mode : IndexedGeometryMode) (calls : aset<ManagedDrawCall>) =
             PoolNode(pool, calls, mode) :> ISg
 
 
