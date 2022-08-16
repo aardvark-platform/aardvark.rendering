@@ -17,8 +17,8 @@ type TraceGeometryInfo =
     {
         [<FieldOffset(0)>]  FirstIndex             : int32
         [<FieldOffset(4)>]  BaseVertex             : int32
-        [<FieldOffset(8)>]  InstanceAttributeIndex : int32
-        [<FieldOffset(12)>] GeometryAttributeIndex : int32
+        [<FieldOffset(8)>]  GeometryAttributeIndex : int32
+        [<FieldOffset(12)>] InstanceAttributeIndex : int32
     }
 
 type TraceObjectSignature =
@@ -29,11 +29,11 @@ type TraceObjectSignature =
         /// Types of attributes defined for each vertex.
         VertexAttributeTypes   : Map<Symbol, Type>
 
-        /// Attributes defined for each instance.
-        InstanceAttributeTypes : Map<Symbol, Type>
-
         /// Attributes defined for each geometry of each instance.
         GeometryAttributeTypes : Map<Symbol, Type>
+
+        /// Attributes defined for each instance.
+        InstanceAttributeTypes : Map<Symbol, Type>
     }
 
 [<CLIMutable>]
@@ -48,11 +48,11 @@ type TraceObject =
         /// Vertex attributes of each geometry (ignored for AABBs).
         VertexAttributes   : Map<Symbol, BufferView> list
 
-        /// Attributes of the instance.
-        InstanceAttributes : Map<Symbol, IAdaptiveValue>
-
         /// Attributes of each geometry.
         GeometryAttributes : Map<Symbol, IAdaptiveValue> list
+
+        /// Attributes of the instance.
+        InstanceAttributes : Map<Symbol, IAdaptiveValue>
 
         /// The hit groups for each geometry of the instance.
         HitGroups    : aval<HitConfig>
@@ -125,21 +125,6 @@ module TraceObjectFSharp =
             )
 
 
-        let inline instanceAttributes (attributes : Map< ^Name, IAdaptiveValue>) (obj : TraceObject) =
-            let conv = Symbol.convert Symbol.Converters.untyped
-            let attributes = attributes |> Map.toList |> List.map (fun (k, v) -> conv k, v) |> Map.ofList
-            { obj with InstanceAttributes = attributes }
-
-        let inline instanceAttribute (name : ^Name) (value : IAdaptiveValue) (obj : TraceObject) =
-            let sym = name |> Symbol.convert Symbol.Converters.untyped
-            { obj with InstanceAttributes = obj.InstanceAttributes |> Map.add sym value }
-
-        let inline instanceAttribute' (name : ^Name) (value : 'T) (obj : TraceObject) =
-            let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
-            let value = AVal.constant value :> IAdaptiveValue
-            { obj with InstanceAttributes = obj.InstanceAttributes |> Map.add sym value }
-
-
         let inline geometryAttributes (attributes : Map< ^Name, IAdaptiveValue> seq) (obj : TraceObject) =
             let conv = Symbol.convert Symbol.Converters.untyped
             let attributes = attributes |> Seq.toList |> List.map (Map.mapKeys conv)
@@ -156,6 +141,21 @@ module TraceObjectFSharp =
         let inline geometryAttribute' (name : ^Name) (values : seq<'T>) (obj : TraceObject) =
             let values = values |> Array.ofSeq |> Array.map (fun x -> AVal.constant x :> IAdaptiveValue)
             obj |> geometryAttribute name values
+
+
+        let inline instanceAttributes (attributes : Map< ^Name, IAdaptiveValue>) (obj : TraceObject) =
+            let conv = Symbol.convert Symbol.Converters.untyped
+            let attributes = attributes |> Map.toList |> List.map (fun (k, v) -> conv k, v) |> Map.ofList
+            { obj with InstanceAttributes = attributes }
+
+        let inline instanceAttribute (name : ^Name) (value : IAdaptiveValue) (obj : TraceObject) =
+            let sym = name |> Symbol.convert Symbol.Converters.untyped
+            { obj with InstanceAttributes = obj.InstanceAttributes |> Map.add sym value }
+
+        let inline instanceAttribute' (name : ^Name) (value : 'T) (obj : TraceObject) =
+            let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
+            let value = AVal.constant value :> IAdaptiveValue
+            { obj with InstanceAttributes = obj.InstanceAttributes |> Map.add sym value }
 
 
         let hitGroups (hitConfig : aval<HitConfig>) (obj : TraceObject) =
@@ -266,26 +266,6 @@ module TraceObjectBuilder =
         member x.VertexAttribute(o : TraceObject, name : string, values : seq<BufferView>) =
             o |> TraceObject.vertexAttribute name values
 
-        [<CustomOperation("instanceAttributes")>]
-        member x.InstanceAttributes(o : TraceObject, attr : Map<Symbol, IAdaptiveValue>) =
-            o |> TraceObject.instanceAttributes attr
-
-        member x.InstanceAttributes(o : TraceObject, attr : Map<string, IAdaptiveValue>) =
-            o |> TraceObject.instanceAttributes attr
-
-        [<CustomOperation("instanceAttribute")>]
-        member x.InstanceAttribute(o : TraceObject, name : Symbol, value : IAdaptiveValue) =
-            o |> TraceObject.instanceAttribute name value
-
-        member x.InstanceAttribute(o : TraceObject, name : string, value : IAdaptiveValue) =
-            o |> TraceObject.instanceAttribute name value
-
-        member x.InstanceAttribute(o : TraceObject, name : Symbol, value : 'T) =
-            o |> TraceObject.instanceAttribute' name value
-
-        member x.InstanceAttribute(o : TraceObject, name : string, value : 'T) =
-            o |> TraceObject.instanceAttribute' name value
-
         [<CustomOperation("geometryAttributes")>]
         member x.GeometryAttributes(o : TraceObject, attr : Map<Symbol, IAdaptiveValue> seq) =
             o |> TraceObject.geometryAttributes attr
@@ -305,6 +285,26 @@ module TraceObjectBuilder =
 
         member x.GeometryAttribute(o : TraceObject, name : string, values : seq<'T>) =
             o |> TraceObject.geometryAttribute' name values
+
+        [<CustomOperation("instanceAttributes")>]
+        member x.InstanceAttributes(o : TraceObject, attr : Map<Symbol, IAdaptiveValue>) =
+            o |> TraceObject.instanceAttributes attr
+
+        member x.InstanceAttributes(o : TraceObject, attr : Map<string, IAdaptiveValue>) =
+            o |> TraceObject.instanceAttributes attr
+
+        [<CustomOperation("instanceAttribute")>]
+        member x.InstanceAttribute(o : TraceObject, name : Symbol, value : IAdaptiveValue) =
+            o |> TraceObject.instanceAttribute name value
+
+        member x.InstanceAttribute(o : TraceObject, name : string, value : IAdaptiveValue) =
+            o |> TraceObject.instanceAttribute name value
+
+        member x.InstanceAttribute(o : TraceObject, name : Symbol, value : 'T) =
+            o |> TraceObject.instanceAttribute' name value
+
+        member x.InstanceAttribute(o : TraceObject, name : string, value : 'T) =
+            o |> TraceObject.instanceAttribute' name value
 
         [<CustomOperation("hitGroups")>]
         member x.HitGroups(o : TraceObject, g : aval<HitConfig>) =
@@ -396,7 +396,7 @@ type internal TracePoolResources =
     {
         Pool                  : ManagedTracePool
         GeometryPtr           : managedptr
-        GeometryAttributePtr  : managedptr
+        GeometryAttributePtrs : List<managedptr>
         InstanceAttributePtr  : managedptr
         IndexPtrs             : List<managedptr>
         VertexPtrs            : List<managedptr>
@@ -445,9 +445,9 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
 
     let indexManager             = LayoutManager<Option<IndexData<aval<IBuffer>>> * int>()
     let vertexManager            = LayoutManager<Map<Symbol, BufferView>>()
-    let geometryManager          = LayoutManager<int32[] * int32[] * int32 * int32>()
+    let geometryManager          = LayoutManager<int32[] * int32[] * int32[] * int32>()
     let instanceAttributeManager = LayoutManager<Map<Symbol, IAdaptiveValue>>()
-    let geometryAttributeManager = LayoutManager<Map<Symbol, IAdaptiveValue>[]>()
+    let geometryAttributeManager = LayoutManager<Map<Symbol, IAdaptiveValue>>()
 
     let createManagedBuffer t u s =
         let b = runtime.CreateManagedBuffer(t, u, s)
@@ -490,9 +490,9 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
         for d in obj.Resources.Disposables do d.Dispose()
 
         geometryManager.Free(obj.Resources.GeometryPtr)
-        geometryAttributeManager.Free(obj.Resources.GeometryAttributePtr)
         instanceAttributeManager.Free(obj.Resources.InstanceAttributePtr)
 
+        for p in obj.Resources.GeometryAttributePtrs do geometryAttributeManager.Free(p)
         for p in obj.Resources.IndexPtrs do indexManager.Free(p)
         for p in obj.Resources.VertexPtrs do vertexManager.Free(p)
 
@@ -542,6 +542,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
             let ds = List()
             let vptrs = List()
             let iptrs = List()
+            let gptrs = List()
 
             let geometryCount      = obj.Geometry.Count
             let vertexAttributes   = obj.VertexAttributes |> List.toArray
@@ -549,17 +550,21 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
             let instanceAttributes = obj.InstanceAttributes
 
             // Geometry attributes
-            let geometryAttributePtr   = geometryAttributeManager.Alloc(geometryAttributes, geometryCount)
-            let geometryAttributeIndex = int geometryAttributePtr.Offset
+            let geometryAttributeIndices =
+                Array.init geometryCount (fun i ->
+                    let geometryAttributes = geometryAttributes.[i]
+                    let geometryAttributePtr = geometryAttributeManager.Alloc(geometryAttributes, 1)
+                    let geometryAttributeIndex = int geometryAttributePtr.Offset
 
-            for i = 0 to geometryAttributes.Length - 1 do
-                let attributes = geometryAttributes.[i]
+                    for KeyValue(k, _) in geometryAttributeTypes do
+                        let target = geometryAttributeBuffers.[k]
+                        match geometryAttributes |> Map.tryFind k with
+                        | Some v -> target.Add(v, geometryAttributeIndex) |> ds.Add
+                        | None -> target.Set(zero, Range1l.FromMinAndSize(int64 geometryAttributeIndex, 0L))
 
-                for KeyValue(k, _) in geometryAttributeTypes do
-                    let target = geometryAttributeBuffers.[k]
-                    match attributes |> Map.tryFind k with
-                    | Some v -> target.Add(v, geometryAttributeIndex + i) |> ds.Add
-                    | None -> target.Set(zero, Range1l.FromMinAndSize(int64 geometryAttributeIndex + int64 i, 0L))
+                    gptrs.Add(geometryAttributePtr)
+                    int32 geometryAttributePtr.Offset
+                )
 
             // Instance attributes
             let instanceAttributePtr   = instanceAttributeManager.Alloc(instanceAttributes, 1)
@@ -612,7 +617,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                             int32 indexPtr.Offset
                         )
 
-                    let geometryKey   = (vertexOffsets, indexOffsets, instanceAttributeIndex, geometryAttributeIndex)
+                    let geometryKey   = (vertexOffsets, indexOffsets, geometryAttributeIndices, instanceAttributeIndex)
                     let geometryPtr   = geometryManager.Alloc(geometryKey, geometryCount)
                     let geometryIndex = int geometryPtr.Offset
 
@@ -620,15 +625,15 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                         let info =
                             { FirstIndex             = indexOffsets.[i]
                               BaseVertex             = vertexOffsets.[i]
-                              InstanceAttributeIndex = instanceAttributeIndex
-                              GeometryAttributeIndex = geometryAttributeIndex + i }
+                              GeometryAttributeIndex = geometryAttributeIndices.[i]
+                              InstanceAttributeIndex = instanceAttributeIndex }
 
                         geometryBuffer.Set(info, geometryIndex + i)
 
                     geometryIndex, geometryPtr
 
                 | AdaptiveTraceGeometry.AABBs aabbs ->
-                    let geometryKey   = ([||], [||], instanceAttributeIndex, geometryAttributeIndex)
+                    let geometryKey   = ([||], [||], geometryAttributeIndices, instanceAttributeIndex)
                     let geometryPtr   = geometryManager.Alloc(geometryKey, geometryCount)
                     let geometryIndex = int geometryPtr.Offset
 
@@ -636,8 +641,8 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                         let info =
                             { FirstIndex             = 0
                               BaseVertex             = 0
-                              InstanceAttributeIndex = instanceAttributeIndex
-                              GeometryAttributeIndex = geometryAttributeIndex + i }
+                              GeometryAttributeIndex = geometryAttributeIndices.[i]
+                              InstanceAttributeIndex = instanceAttributeIndex }
 
                         geometryBuffer.Set(info, geometryIndex + i)
 
@@ -660,7 +665,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                 {
                     Pool                  = x
                     GeometryPtr           = geometryPtr
-                    GeometryAttributePtr  = geometryAttributePtr
+                    GeometryAttributePtrs = gptrs
                     InstanceAttributePtr  = instanceAttributePtr
                     IndexPtrs             = iptrs
                     VertexPtrs            = vptrs
