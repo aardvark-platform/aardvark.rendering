@@ -676,7 +676,7 @@ module Resources =
                                    empty : IResourceLocation<ImageSampler>, input : amap<int, IResourceLocation<ImageSampler>>) =
         inherit AbstractResourceLocation<ImageSamplerArray>(owner, key)
 
-        static let zeroHandle = { version = Int32.MinValue; handle = Unchecked.defaultof<_> }
+        static let zeroHandle = { version = -1; handle = Unchecked.defaultof<_> }
 
         let reader = input.GetReader()
 
@@ -695,10 +695,10 @@ module Resources =
 
         // Stores version increments to signal changes even when the resource's version did not change.
         // E.g. when two different image samplers with the same version swap position.
-        let versionOffsets = Array.zeroCreate<int> count
+        let versionOffsets = Array.replicate count zeroHandle.version
 
         // The map with evaluated image samplers
-        let handle = Array.zeroCreate<ResourceInfo<ImageSampler>> count
+        let handle = Array.replicate count zeroHandle
 
         // Removes a resource from the given index
         let remove (i : int) (r : IResourceLocation<_>) =
@@ -711,9 +711,13 @@ module Resources =
             if indices |> MultiDict.add r i then
                 r.Acquire()
 
+            // Save the previous slot version in offset array.
+            // If handle is zero, version offsets already saves the previous version.
+            if not <| Object.ReferenceEquals(handle.[i], zeroHandle) then
+                versionOffsets.[i] <- handle.[i].version
+                handle.[i] <- zeroHandle
+
             pending.Add r |> ignore
-            versionOffsets.[i] <- versionOffsets.[i] + 1
-            handle.[i] <- zeroHandle
             images.[i] <- r
 
         // Save deltas to process later
@@ -769,11 +773,24 @@ module Resources =
                     let info = image.Update(token, renderToken)
 
                     for i in indices.[image] do
-                        let version = info.version + versionOffsets.[i]
 
-                        if version <> handle.[i].version then
+                        // If handle is zero handle, a new resource has been bound to the slot.
+                        // In this case versionOffsets stores the previous version on that slot.
+                        // Compute a new offset for the new handle, so the effective version is incremented by 1.
+                        if Object.ReferenceEquals(handle.[i], zeroHandle) then
+                            let offset = (versionOffsets.[i] - info.version) + 1
+                            handle.[i] <- { info with version = info.version + offset }
+                            versionOffsets.[i] <- offset
                             changed <- true
-                            handle.[i] <- { info with version = version }
+
+                        // Otherwise, the bound resource has not changed.
+                        // Check if its version has changed.
+                        else
+                            let version = info.version + versionOffsets.[i]
+
+                            if version <> handle.[i].version then
+                                handle.[i] <- { info with version = version }
+                                changed <- true
 
                 if changed then
                     inc &version
