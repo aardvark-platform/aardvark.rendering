@@ -53,6 +53,14 @@ and [<RequireQualifiedAccess>] RaytracingCommand =
 type RaytracingTaskExtensions() =
 
     [<Extension>]
+    static member Update(this : IRaytracingTask) =
+        this.Update(AdaptiveToken.Top, Queries.none)
+
+    [<Extension>]
+    static member Update(this : IRaytracingTask, token : AdaptiveToken) =
+        this.Update(token, Queries.none)
+
+    [<Extension>]
     static member Run(this : IRaytracingTask) =
         this.Run(AdaptiveToken.Top, Queries.none)
 
