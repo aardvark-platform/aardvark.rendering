@@ -5,6 +5,7 @@ open FSharp.Data.Adaptive
 open System
 open System.Runtime.InteropServices
 open System.Runtime.CompilerServices
+open System.Collections.Generic
 open OptimizedClosures
 
 type ICompactBuffer =
@@ -24,6 +25,7 @@ module internal CompactBufferImplementation =
         let count = ASet.count input
         let compact = ASet.compact input
         let reader = compact.GetReader()
+        let removals = List()
 
         member inline private x.Transact =
             if x.ProcessDeltasInTransaction then transact
@@ -56,13 +58,19 @@ module internal CompactBufferImplementation =
 
             // Process deltas
             x.Transact (fun _ ->
+                removals.Clear()
+
                 for o in ops do
                     match o with
                     | value, Set index ->
                         x.Set(value, index)
 
                     | value, Remove ->
-                        x.Remove(value)
+                        removals.Add value
+
+                // Process removals after sets to prevent potential reaquiring of resources
+                for r in removals do
+                    x.Remove r
             )
 
             x.Update(t)
