@@ -129,8 +129,6 @@ type DevicePreparedRaytracingPipelineExtensions private() =
                 this.CreateAccelerationStructure(s.Instances, shaderBindingTable, s.Usage) :> IAdaptiveValue
             )
 
-        resources.AddRange(accelerationStructures |> Map.toList |> List.map (snd >> unbox))
-
         let uniforms =
             Map.union state.Uniforms accelerationStructures
             |> UniformProvider.ofMap

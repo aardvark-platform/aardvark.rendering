@@ -54,12 +54,13 @@ and IResourceLocation<'a> =
     abstract member Update : AdaptiveToken * RenderToken -> ResourceInfo<'a>
 
 and IResourceUser =
-    abstract member AddLocked       : ILockedResource -> unit
-    abstract member RemoveLocked    : ILockedResource -> unit
+    abstract member AddLocked    : ILockedResource -> unit
+    abstract member RemoveLocked : ILockedResource -> unit
 
 and IResourceCache =
     inherit IResourceUser
-    abstract member Remove          : key : list<obj> -> unit
+    abstract member Device : Device
+    abstract member Remove : key : list<obj> -> unit
 
 type INativeResourceLocation<'a when 'a : unmanaged> =
     inherit IResourceLocation<'a>
@@ -142,15 +143,16 @@ type AbstractResourceLocation<'a>(owner : IResourceCache, key : list<obj>) =
     interface IResourceLocation<'a> with
         member x.Update(t, rt) = x.Update(t, rt)
 
-type private DummyResourceCache() =
+type private DummyResourceCache(device : Device) =
     interface IResourceCache with
+        member x.Device = device
         member x.AddLocked l = ()
         member x.RemoveLocked l = ()
         member x.Remove key = ()
 
 [<AbstractClass>]
-type UncachedResourceLocation<'a>() =
-    inherit AbstractResourceLocation<'a>(DummyResourceCache(), [])
+type UncachedResourceLocation<'a>(device : Device) =
+    inherit AbstractResourceLocation<'a>(DummyResourceCache(device), [])
 
 [<AbstractClass; Sealed; Extension>]
 type ModResourceExtensionStuff() =
@@ -398,7 +400,7 @@ type AbstractPointerResourceWithEquality<'a when 'a : unmanaged>(owner : IResour
         else
             { handle = NativePtr.read ptr; version = version }
 
-type ResourceLocationCache<'h>(user : IResourceUser) =
+type ResourceLocationCache<'h>(user : IResourceUser, device : Device) =
     let store = System.Collections.Concurrent.ConcurrentDictionary<list<obj>, IResourceLocation<'h>>()
 
     member x.GetOrCreate(key : list<obj>, create : IResourceCache -> list<obj> -> #IResourceLocation<'h>) =
@@ -414,11 +416,12 @@ type ResourceLocationCache<'h>(user : IResourceUser) =
         for r in res do r.ReleaseAll()
 
     interface IResourceCache with
+        member x.Device = device
         member x.AddLocked l = user.AddLocked l
         member x.RemoveLocked l = user.RemoveLocked l
         member x.Remove key = store.TryRemove key |> ignore
 
-type NativeResourceLocationCache<'h when 'h : unmanaged>(user : IResourceUser) =
+type NativeResourceLocationCache<'h when 'h : unmanaged>(user : IResourceUser, device : Device) =
     let store = System.Collections.Concurrent.ConcurrentDictionary<list<obj>, INativeResourceLocation<'h>>()
 
     member x.GetOrCreate(key : list<obj>, create : IResourceCache -> list<obj> -> #INativeResourceLocation<'h>) =
@@ -434,6 +437,7 @@ type NativeResourceLocationCache<'h when 'h : unmanaged>(user : IResourceUser) =
         for r in res do r.ReleaseAll()
 
     interface IResourceCache with
+        member x.Device = device
         member x.AddLocked l = user.AddLocked l
         member x.RemoveLocked l = user.RemoveLocked l
         member x.Remove key = store.TryRemove key |> ignore
@@ -456,6 +460,7 @@ module Resources =
         inherit IAdaptiveResource<DescriptorInfo[]>
         abstract member Slot : int
         abstract member Count : int
+        abstract member UpdateAfterBind : bool
 
     module AdaptiveDescriptor =
 
@@ -472,6 +477,7 @@ module Resources =
                 member x.Resource = resource
 
                 abstract member GetDescriptors : ResourceInfo<'T> * DescriptorInfo[] -> unit
+                abstract member UpdateAfterBind : bool
 
                 member x.Acquire() = resource.Acquire()
                 member x.Release() = resource.Release()
@@ -510,6 +516,7 @@ module Resources =
                 interface IAdaptiveDescriptor with
                     member x.Slot = x.Slot
                     member x.Count = x.Count
+                    member x.UpdateAfterBind = x.UpdateAfterBind
 
             [<AbstractClass>]
             type AdaptiveSingleDescriptor<'T>(slot : int, resource : IResourceLocation<'T>) =
@@ -523,11 +530,21 @@ module Resources =
         type UniformBuffer(slot : int, buffer : IResourceLocation<_>) =
             inherit Abstract.AdaptiveSingleDescriptor<Vulkan.UniformBuffer>(slot, buffer)
 
+            let updateAfterBind =
+                buffer.Owner.Device.PhysicalDevice.Features.Descriptors.BindingUniformBufferUpdateAfterBind
+
+            override x.UpdateAfterBind = updateAfterBind
+
             override x.GetDescriptor(buffer) =
                 Descriptor.UniformBuffer(slot, buffer)
 
         type StorageBuffer(slot : int, buffer : IResourceLocation<_>) =
             inherit Abstract.AdaptiveSingleDescriptor<Buffer>(slot, buffer)
+
+            let updateAfterBind =
+                buffer.Owner.Device.PhysicalDevice.Features.Descriptors.BindingStorageBufferUpdateAfterBind
+
+            override x.UpdateAfterBind = updateAfterBind
 
             override x.GetDescriptor(buffer) =
                 Descriptor.StorageBuffer(slot, buffer, 0L, buffer.Size)
@@ -535,17 +552,32 @@ module Resources =
         type StorageImage(slot : int, image : IResourceLocation<_>) =
             inherit Abstract.AdaptiveSingleDescriptor<ImageView>(slot, image)
 
+            let updateAfterBind =
+                image.Owner.Device.PhysicalDevice.Features.Descriptors.BindingStorageImageUpdateAfterBind
+
+            override x.UpdateAfterBind = updateAfterBind
+
             override x.GetDescriptor(view) =
                 Descriptor.StorageImage(slot, view)
 
-        type AccelerationStructure(slot : int, image : IResourceLocation<_>) =
-            inherit Abstract.AdaptiveSingleDescriptor<Raytracing.AccelerationStructure>(slot, image)
+        type AccelerationStructure(slot : int, accel : IResourceLocation<_>) =
+            inherit Abstract.AdaptiveSingleDescriptor<Raytracing.AccelerationStructure>(slot, accel)
+
+            let updateAfterBind =
+                accel.Owner.Device.PhysicalDevice.Features.Descriptors.BindingAccelerationStructureUpdateAfterBind
+
+            override x.UpdateAfterBind = updateAfterBind
 
             override x.GetDescriptor(accel) =
                 Descriptor.AccelerationStructure(slot, accel)
 
         type CombinedImageSampler(slot : int, count : int, images : IResourceLocation<_>) =
             inherit Abstract.AdaptiveDescriptor<ImageSamplerArray>(slot, count, images)
+
+            let updateAfterBind =
+                images.Owner.Device.PhysicalDevice.Features.Descriptors.BindingSampledImageUpdateAfterBind
+
+            override x.UpdateAfterBind = updateAfterBind
 
             override x.GetDescriptors(images, cache) =
                 let images = images.handle
@@ -1098,6 +1130,7 @@ module Resources =
             if x.OutOfDate then
 
                 writes.Clear()
+                let mutable recompile = false
 
                 for d in pending.GetAndClear() do
                     let i = indices.[d]
@@ -1107,10 +1140,15 @@ module Resources =
                         if versions.[i].[j] <> infos.[j].Version then
                             versions.[i].[j] <- infos.[j].Version
                             writes.Add infos.[j].Descriptor
+                            recompile <- recompile || not d.UpdateAfterBind
 
                 if writes.Count > 0 then
                     handle.Update(writes.ToArray())
-                    inc &version
+
+                    // If we update a descriptor which does not
+                    // support update-after-bind, we have to rerecord the command buffer.
+                    if recompile then
+                        inc &version
 
             { handle = handle; version = version }
 
@@ -1564,39 +1602,39 @@ open Resources.Raytracing
 type ResourceManager(user : IResourceUser, device : Device) =
     //let descriptorPool = device.CreateDescriptorPool(1 <<< 22, 1 <<< 22)
 
-    let bufferCache             = ResourceLocationCache<Buffer>(user)
-    let indirectBufferCache     = ResourceLocationCache<IndirectBuffer>(user)
-    let indexBufferCache        = ResourceLocationCache<Buffer>(user)
-    let descriptorSetCache      = ResourceLocationCache<DescriptorSet>(user)
-    let uniformBufferCache      = ResourceLocationCache<UniformBuffer>(user)
-    let imageCache              = ResourceLocationCache<Image>(user)
-    let imageViewCache          = ResourceLocationCache<ImageView>(user)
-    let samplerCache            = ResourceLocationCache<Sampler>(user)
-    let samplerStateCache       = ResourceLocationCache<SamplerState>(user)
-    let imageSamplerCache       = ResourceLocationCache<ImageSampler>(user)
-    let imageSamplerArrayCache  = ResourceLocationCache<ImageSamplerArray>(user)
+    let bufferCache             = ResourceLocationCache<Buffer>(user, device)
+    let indirectBufferCache     = ResourceLocationCache<IndirectBuffer>(user, device)
+    let indexBufferCache        = ResourceLocationCache<Buffer>(user, device)
+    let descriptorSetCache      = ResourceLocationCache<DescriptorSet>(user, device)
+    let uniformBufferCache      = ResourceLocationCache<UniformBuffer>(user, device)
+    let imageCache              = ResourceLocationCache<Image>(user, device)
+    let imageViewCache          = ResourceLocationCache<ImageView>(user, device)
+    let samplerCache            = ResourceLocationCache<Sampler>(user, device)
+    let samplerStateCache       = ResourceLocationCache<SamplerState>(user, device)
+    let imageSamplerCache       = ResourceLocationCache<ImageSampler>(user, device)
+    let imageSamplerArrayCache  = ResourceLocationCache<ImageSamplerArray>(user, device)
     let imageSamplerMapCache    = ConcurrentDictionary<IAdaptiveValue, amap<int, IResourceLocation<ImageSampler>>>()
-    let programCache            = ResourceLocationCache<ShaderProgram>(user)
+    let programCache            = ResourceLocationCache<ShaderProgram>(user, device)
     let simpleSurfaceCache      = ConcurrentDictionary<obj, ShaderProgram>()
     let fshadeThingCache        = ConcurrentDictionary<obj, PipelineLayout * aval<FShade.Imperative.Module>>()
 
-    let accelerationStructureCache = ResourceLocationCache<Raytracing.AccelerationStructure>(user)
-    let raytracingPipelineCache    = ResourceLocationCache<Raytracing.RaytracingPipeline>(user)
-    let shaderBindingTableCache    = ResourceLocationCache<Raytracing.ShaderBindingTable>(user)
+    let accelerationStructureCache = ResourceLocationCache<Raytracing.AccelerationStructure>(user, device)
+    let raytracingPipelineCache    = ResourceLocationCache<Raytracing.RaytracingPipeline>(user, device)
+    let shaderBindingTableCache    = ResourceLocationCache<Raytracing.ShaderBindingTable>(user, device)
 
-    let vertexInputCache        = NativeResourceLocationCache<VkPipelineVertexInputStateCreateInfo>(user)
-    let inputAssemblyCache      = NativeResourceLocationCache<VkPipelineInputAssemblyStateCreateInfo>(user)
-    let depthStencilCache       = NativeResourceLocationCache<VkPipelineDepthStencilStateCreateInfo>(user)
-    let rasterizerStateCache    = NativeResourceLocationCache<VkPipelineRasterizationStateCreateInfo>(user)
-    let colorBlendStateCache    = NativeResourceLocationCache<VkPipelineColorBlendStateCreateInfo>(user)
-    let multisampleCache        = NativeResourceLocationCache<VkPipelineMultisampleStateCreateInfo>(user)
-    let pipelineCache           = NativeResourceLocationCache<VkPipeline>(user)
+    let vertexInputCache        = NativeResourceLocationCache<VkPipelineVertexInputStateCreateInfo>(user, device)
+    let inputAssemblyCache      = NativeResourceLocationCache<VkPipelineInputAssemblyStateCreateInfo>(user, device)
+    let depthStencilCache       = NativeResourceLocationCache<VkPipelineDepthStencilStateCreateInfo>(user, device)
+    let rasterizerStateCache    = NativeResourceLocationCache<VkPipelineRasterizationStateCreateInfo>(user, device)
+    let colorBlendStateCache    = NativeResourceLocationCache<VkPipelineColorBlendStateCreateInfo>(user, device)
+    let multisampleCache        = NativeResourceLocationCache<VkPipelineMultisampleStateCreateInfo>(user, device)
+    let pipelineCache           = NativeResourceLocationCache<VkPipeline>(user, device)
 
-    let drawCallCache           = NativeResourceLocationCache<DrawCall>(user)
-    let bufferBindingCache      = NativeResourceLocationCache<VertexBufferBinding>(user)
-    let descriptorBindingCache  = NativeResourceLocationCache<DescriptorSetBinding>(user)
-    let indexBindingCache       = NativeResourceLocationCache<IndexBufferBinding>(user)
-    let isActiveCache           = NativeResourceLocationCache<int>(user)
+    let drawCallCache           = NativeResourceLocationCache<DrawCall>(user, device)
+    let bufferBindingCache      = NativeResourceLocationCache<VertexBufferBinding>(user, device)
+    let descriptorBindingCache  = NativeResourceLocationCache<DescriptorSetBinding>(user, device)
+    let indexBindingCache       = NativeResourceLocationCache<IndexBufferBinding>(user, device)
+    let isActiveCache           = NativeResourceLocationCache<int>(user, device)
 
     member x.ResourceUser = user
 
@@ -1731,7 +1769,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
             )
 
         let resource =
-            { new UncachedResourceLocation<ShaderProgram>() with
+            { new UncachedResourceLocation<ShaderProgram>(pass.Device) with
                 override x.Create () = ()
                 override x.Destroy () = program.Dispose()
                 override x.GetHandle(t, rt) = { handle = program; version = 0 }
@@ -1748,7 +1786,7 @@ type ResourceManager(user : IResourceUser, device : Device) =
             FShade.EffectDebugger.saveCode data program.Surface
 
         let resource =
-            { new UncachedResourceLocation<ShaderProgram>() with
+            { new UncachedResourceLocation<ShaderProgram>(signature.Device) with
                 override x.Create () = ()
                 override x.Destroy () = program.Dispose()
                 override x.GetHandle(t, rt) = { handle = program; version = 0 }

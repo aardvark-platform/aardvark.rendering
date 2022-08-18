@@ -1,16 +1,12 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
-open System
-open System.Threading
-open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
-open Aardvark.Base
 
-open Aardvark.Rendering.Vulkan
+open Aardvark.Base
 open Microsoft.FSharp.NativeInterop
+open EXTDescriptorIndexing
+open KHRAccelerationStructure
 
 #nowarn "9"
-// #nowarn "51"
 
 [<AllowNullLiteral>]
 type DescriptorSetLayoutBinding =
@@ -72,14 +68,50 @@ module DescriptorSetLayout =
             (bindings, offsets) ||> Array.map2 (fun b o -> b.Binding = o) |> Array.forall id
         )
 
+        let features =
+            device.PhysicalDevice.Features.Descriptors
+
         native {
-            let! pArr = bindings |> Array.map (fun b -> b.Handle)
+            let! pBindings = bindings |> Array.map (fun b -> b.Handle)
+
+            let! pBindingFlags =
+                bindings |> Array.map (fun b ->
+                    if b.DescriptorType = VkDescriptorType.UniformBuffer then
+                        features.BindingUniformBufferUpdateAfterBind
+
+                    elif b.DescriptorType = VkDescriptorType.AccelerationStructureKhr then
+                        features.BindingAccelerationStructureUpdateAfterBind
+
+                    else
+                        // other features are mandatory if VK_EXT_descriptor_indexing is supported
+                        true
+                )
+                |> Array.map (fun updateAfterBind ->
+                    if updateAfterBind then VkDescriptorBindingFlagsEXT.UpdateAfterBindBit
+                    else VkDescriptorBindingFlagsEXT.None
+                )
+
+            let! pBindingFlagsCreateInfo =
+                VkDescriptorSetLayoutBindingFlagsCreateInfoEXT(
+                    uint32 bindings.Length,
+                    pBindingFlags
+                )
+
+            let pNext, flags =
+                if device.IsExtensionEnabled EXTDescriptorIndexing.Name then
+                    NativePtr.toNativeInt pBindingFlagsCreateInfo,
+                    VkDescriptorSetLayoutCreateFlags.UpdateAfterBindPoolBitExt
+                else
+                    0n,
+                    VkDescriptorSetLayoutCreateFlags.None
+
             let! pInfo =
                 VkDescriptorSetLayoutCreateInfo(
-                    VkDescriptorSetLayoutCreateFlags.None,
+                    pNext, flags,
                     uint32 bindings.Length,
-                    pArr
+                    pBindings
                 )
+
             let! pHandle = VkDescriptorSetLayout.Null
             VkRaw.vkCreateDescriptorSetLayout(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create DescriptorSetLayout"

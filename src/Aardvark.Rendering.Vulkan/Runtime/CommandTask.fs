@@ -460,8 +460,9 @@ module private RuntimeCommands =
             interface IDisposable with
                 member x.Dispose() = x.Dispose()
 
-        let private noOwner =
+        let private noOwner device =
             { new IResourceCache with
+                member x.Device = device
                 member x.AddLocked _ = ()
                 member x.RemoveLocked _ = ()
                 member x.Remove _ = ()
@@ -502,7 +503,7 @@ module private RuntimeCommands =
 
 
         type InstanceBufferPool(device : Device, types : Map<string, FShade.GLSL.GLSLParameter * Type>, initialCapacity : int) =
-            inherit AbstractResourceLocation<unit>(noOwner, [])
+            inherit AbstractResourceLocation<unit>(noOwner device, [])
 
             let elementSizes =
                 types |> Map.map (fun name (i,_) ->

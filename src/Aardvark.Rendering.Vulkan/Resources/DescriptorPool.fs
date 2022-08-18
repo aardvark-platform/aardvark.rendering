@@ -1,13 +1,10 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
-open System
+open Aardvark.Base
 open System.Threading
 open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
-open Aardvark.Base
-
-open Aardvark.Rendering.Vulkan
 open Microsoft.FSharp.NativeInterop
+open EXTDescriptorIndexing
 
 #nowarn "9"
 // #nowarn "51"
@@ -46,11 +43,18 @@ module DescriptorPool =
                 VkDescriptorPoolSize(t, uint32 c)  
             )
 
+        let flags =
+            if device.IsExtensionEnabled EXTDescriptorIndexing.Name then
+                VkDescriptorPoolCreateFlags.FreeDescriptorSetBit |||
+                VkDescriptorPoolCreateFlags.UpdateAfterBindBitExt
+            else
+                VkDescriptorPoolCreateFlags.FreeDescriptorSetBit
+
         native {
             let! pDescriptorCounts = descriptorCounts
             let! pInfo =
                 VkDescriptorPoolCreateInfo(
-                    VkDescriptorPoolCreateFlags.FreeDescriptorSetBit,
+                    flags,
                     uint32 setCount,
                     uint32 descriptorCounts.Length,
                     pDescriptorCounts
