@@ -1569,8 +1569,11 @@ module Resources =
                 { handle = table; version = version }
 
             let update hitConfigs pipeline table =
-                table |> ShaderBindingTable.update hitConfigs pipeline
-                { handle = table; version = version }
+                let updated = table |> ShaderBindingTable.updateOrRecreate hitConfigs pipeline
+                if updated <> table then
+                    inc &version
+                    handle <- Some updated
+                { handle = updated; version = version }
 
             override x.Create() =
                 pipeline.Acquire()
@@ -1585,11 +1588,8 @@ module Resources =
                     let configs = hitConfigs.GetValue(token, renderToken)
 
                     match handle with
-                    | Some tbl ->
-                        tbl |> update configs pipeline.handle
-                    | _ ->
-                        create configs pipeline.handle
-
+                    | Some tbl -> tbl |> update configs pipeline.handle
+                    | _ -> create configs pipeline.handle
                 else
                     match handle with
                     | Some tbl -> { handle = tbl; version = version }

@@ -15,22 +15,17 @@ open Aardvark.Rendering.Vulkan.KHRBufferDeviceAddress
 
 type ShaderBindingSubtable<'T when 'T : comparison> =
     class
-        inherit Resource
-        val public Buffer : Buffer
+        inherit BufferDecorator
         val public Stride : uint64
         val mutable public Indices : Map<'T, int>
 
         member x.AddressRegion =
             VkStridedDeviceAddressRegionKHR(
-                x.Buffer.DeviceAddress, x.Stride, uint64 x.Buffer.Size
+                x.DeviceAddress, x.Stride, uint64 x.Size
             )
 
-        override x.Destroy() =
-            x.Buffer.Dispose()
-
         new ( buffer : Buffer, lookup : Map<'T, int>, stride : uint64) =
-            { inherit Resource(buffer.Device)
-              Buffer = buffer
+            { inherit BufferDecorator(buffer)
               Stride = stride
               Indices = lookup }
     end
@@ -39,10 +34,10 @@ type ShaderBindingSubtable<'T when 'T : comparison> =
 type ShaderBindingTable =
     class
         inherit Resource
-        val mutable public RaygenTable : ShaderBindingSubtable<Symbol>
-        val mutable public MissTable : ShaderBindingSubtable<Symbol>
-        val mutable public CallableTable : ShaderBindingSubtable<Symbol>
-        val mutable public HitGroupTable : ShaderBindingSubtable<HitConfig>
+        val public RaygenTable   : ShaderBindingSubtable<Symbol>
+        val public MissTable     : ShaderBindingSubtable<Symbol>
+        val public CallableTable : ShaderBindingSubtable<Symbol>
+        val public HitGroupTable : ShaderBindingSubtable<HitConfig>
 
         override x.Destroy() =
             x.RaygenTable.Dispose()
@@ -159,8 +154,11 @@ module private ShaderBindingTableUtilities =
         { Entries : SubtableEntries<'T>
           Handles : ShaderHandles }
 
+        member x.Count =
+            x.Entries.Count
+
         member x.TotalSize =
-            x.Handles.SizeAligned * x.Entries.Count
+            x.Handles.SizeAligned * x.Count
 
         member x.Lookup =
             x.Entries.Lookup
@@ -256,10 +254,10 @@ module private ShaderBindingSubtable =
         VkBufferUsageFlags.ShaderDeviceAddressBitKhr
 
     let tryUpdate (data : SubtableData<'T>) (table : ShaderBindingSubtable<'T>) =
-        if data.TotalSize > int table.Buffer.Size then
+        if data.TotalSize > int table.Size then
             false
 
-        elif data.Entries.Count = 0 then
+        elif data.Count = 0 then
             true
 
         else
@@ -276,13 +274,14 @@ module private ShaderBindingSubtable =
                     offset <- offset + nativeint data.Handles.SizeAligned
 
                 let nb = NativeMemoryBuffer(src, nativeint data.TotalSize)
-                table.Buffer |> Buffer.tryUpdate nb
+                table |> Buffer.tryUpdate nb
 
             finally
                 NativePtr.free pSrc
 
-    let create (device : Device) (data : SubtableData<'T>) =
-        let size = max data.TotalSize data.Handles.SizeAligned
+    let createWithCount (device : Device) (count : int) (data : SubtableData<'T>) =
+        let requestedSize = count * data.Handles.SizeAligned
+        let size = max requestedSize data.Handles.SizeAligned
 
         let buffer = device |> Buffer.alloc bufferUsage (int64 size)
         let table = new ShaderBindingSubtable<'T>(buffer, data.Lookup, uint64 data.Handles.SizeAligned)
@@ -292,11 +291,14 @@ module private ShaderBindingSubtable =
 
         table
 
+    let create (device : Device) (data : SubtableData<'T>) =
+        data |> createWithCount device data.Count
+
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderBindingTable =
 
-    let update (hitConfigs : Set<HitConfig>) (pipeline : RaytracingPipeline) (table : ShaderBindingTable) =
+    let updateOrRecreate (hitConfigs : Set<HitConfig>) (pipeline : RaytracingPipeline) (table : ShaderBindingTable) =
         let device = pipeline.Device
 
         let shaderGroups =
@@ -308,17 +310,40 @@ module ShaderBindingTable =
         let tableData =
             TableData.create shaderHandles shaderGroups hitConfigs pipeline
 
+        let mutable recreated = false
+
         let updateOrRecreate (data : SubtableData<'T>) (table : ShaderBindingSubtable<'T>) =
             if ShaderBindingSubtable.tryUpdate data table then
+                table.AddReference()
                 table
             else
-                table.Dispose()
-                ShaderBindingSubtable.create device data
+                recreated <- true
+                let count = int <| Fun.NextPowerOfTwo data.Count
+                ShaderBindingSubtable.createWithCount device count data
 
-        table.RaygenTable   <- table.RaygenTable   |> updateOrRecreate tableData.RaygenData
-        table.MissTable     <- table.MissTable     |> updateOrRecreate tableData.MissData
-        table.CallableTable <- table.CallableTable |> updateOrRecreate tableData.CallableData
-        table.HitGroupTable <- table.HitGroupTable |> updateOrRecreate tableData.HitGroupData
+        let raygenTable   = table.RaygenTable   |> updateOrRecreate tableData.RaygenData
+        let missTable     = table.MissTable     |> updateOrRecreate tableData.MissData
+        let callableTable = table.CallableTable |> updateOrRecreate tableData.CallableData
+        let hitGroupTable = table.HitGroupTable |> updateOrRecreate tableData.HitGroupData
+
+        // At least one subtable had to be recreated.
+        // Build a new table with the new subtables, old subtables are re-used.
+        if recreated then
+            table.Dispose()
+
+            new ShaderBindingTable(
+                raygenTable, missTable,
+                callableTable, hitGroupTable
+            )
+
+        // Every subtable could be updated in-place.
+        // Remove the added references, and return the old table.
+        else
+            raygenTable.Dispose()
+            missTable.Dispose()
+            callableTable.Dispose()
+            hitGroupTable.Dispose()
+            table
 
     let create (hitConfigs : Set<HitConfig>) (pipeline : RaytracingPipeline) =
         let device = pipeline.Device
