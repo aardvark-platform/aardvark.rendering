@@ -1127,15 +1127,22 @@ module Resources =
                 writes.Clear()
                 let mutable recompile = false
 
-                for d in pending.GetAndClear() do
-                    let i = indices.[d]
-                    let infos = d.GetValue(token, renderToken)
+                // Get pending resources.
+                // May contain nested dependencies so we loop until there are no more pending inputs.
+                let mutable dirty = pending.GetAndClear()
 
-                    for j = 0 to infos.Length - 1 do
-                        if versions.[i].[j] <> infos.[j].Version then
-                            versions.[i].[j] <- infos.[j].Version
-                            writes.Add infos.[j].Descriptor
-                            recompile <- recompile || not d.UpdateAfterBind
+                while dirty.Count > 0 do
+                    for d in dirty do
+                        let i = indices.[d]
+                        let infos = d.GetValue(token, renderToken)
+
+                        for j = 0 to infos.Length - 1 do
+                            if versions.[i].[j] <> infos.[j].Version then
+                                versions.[i].[j] <- infos.[j].Version
+                                writes.Add infos.[j].Descriptor
+                                recompile <- recompile || not d.UpdateAfterBind
+
+                    dirty <- pending.GetAndClear()
 
                 if writes.Count > 0 then
                     handle.Update(writes.ToArray())
