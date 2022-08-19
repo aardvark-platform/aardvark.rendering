@@ -462,6 +462,11 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     member x.IsExtensionEnabled(extension) =
         extensions |> List.contains extension
 
+    /// Returns whether descriptors may be updated after being bound.
+    member x.UpdateDescriptorsAfterBind =
+        not <| RuntimeConfig.SuppressUpdateAfterBind &&
+        x.IsExtensionEnabled EXTDescriptorIndexing.Name
+
     member x.MinMemoryMapAlignment = memoryLimits.MinMemoryMapAlignment
     member x.MinTexelBufferOffsetAlignment = memoryLimits.MinTexelBufferOffsetAlignment
     member x.MinUniformBufferOffsetAlignment = memoryLimits.MinUniformBufferOffsetAlignment

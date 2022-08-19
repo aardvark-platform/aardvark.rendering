@@ -44,7 +44,7 @@ module DescriptorPool =
             )
 
         let flags =
-            if device.IsExtensionEnabled EXTDescriptorIndexing.Name then
+            if device.UpdateDescriptorsAfterBind then
                 VkDescriptorPoolCreateFlags.FreeDescriptorSetBit |||
                 VkDescriptorPoolCreateFlags.UpdateAfterBindBitExt
             else

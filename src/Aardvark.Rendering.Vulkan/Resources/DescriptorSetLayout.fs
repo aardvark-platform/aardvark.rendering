@@ -98,7 +98,7 @@ module DescriptorSetLayout =
                 )
 
             let pNext, flags =
-                if device.IsExtensionEnabled EXTDescriptorIndexing.Name then
+                if device.UpdateDescriptorsAfterBind then
                     NativePtr.toNativeInt pBindingFlagsCreateInfo,
                     VkDescriptorSetLayoutCreateFlags.UpdateAfterBindPoolBitExt
                 else

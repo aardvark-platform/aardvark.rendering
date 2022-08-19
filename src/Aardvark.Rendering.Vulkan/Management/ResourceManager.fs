@@ -9,6 +9,7 @@ open System.Collections.Concurrent
 open Aardvark.Base
 
 open Aardvark.Rendering
+open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Vulkan.Raytracing
 open FSharp.Data.Adaptive
 open Microsoft.FSharp.NativeInterop
@@ -46,7 +47,6 @@ type IResourceLocation =
     abstract member ReferenceCount : int
     abstract member Key : list<obj>
     abstract member Owner : IResourceCache
-
 
 and IResourceLocation<'a> =
     inherit IResourceLocation
@@ -442,8 +442,6 @@ type NativeResourceLocationCache<'h when 'h : unmanaged>(user : IResourceUser, d
         member x.RemoveLocked l = user.RemoveLocked l
         member x.Remove key = store.TryRemove key |> ignore
 
-open Aardvark.Rendering.Vulkan
-
 
 module Resources =
 
@@ -472,12 +470,19 @@ module Resources =
 
                 let cache = Array.replicate count { Version = -1; Descriptor = Unchecked.defaultof<_> }
 
+                let device = resource.Owner.Device
+                let updateAfterBindEnabled = device.UpdateDescriptorsAfterBind
+
                 member x.Slot = slot
                 member x.Count = count
                 member x.Resource = resource
 
                 abstract member GetDescriptors : ResourceInfo<'T> * DescriptorInfo[] -> unit
-                abstract member UpdateAfterBind : bool
+                abstract member GetUpdateAfterBindFeature : inref<DescriptorFeatures> -> bool
+
+                member x.UpdateAfterBind =
+                    updateAfterBindEnabled &&
+                    x.GetUpdateAfterBindFeature &device.PhysicalDevice.Features.Descriptors
 
                 member x.Acquire() = resource.Acquire()
                 member x.Release() = resource.Release()
@@ -530,10 +535,8 @@ module Resources =
         type UniformBuffer(slot : int, buffer : IResourceLocation<_>) =
             inherit Abstract.AdaptiveSingleDescriptor<Vulkan.UniformBuffer>(slot, buffer)
 
-            let updateAfterBind =
-                buffer.Owner.Device.PhysicalDevice.Features.Descriptors.BindingUniformBufferUpdateAfterBind
-
-            override x.UpdateAfterBind = updateAfterBind
+            override x.GetUpdateAfterBindFeature(features) =
+                features.BindingUniformBufferUpdateAfterBind
 
             override x.GetDescriptor(buffer) =
                 Descriptor.UniformBuffer(slot, buffer)
@@ -541,10 +544,8 @@ module Resources =
         type StorageBuffer(slot : int, buffer : IResourceLocation<_>) =
             inherit Abstract.AdaptiveSingleDescriptor<Buffer>(slot, buffer)
 
-            let updateAfterBind =
-                buffer.Owner.Device.PhysicalDevice.Features.Descriptors.BindingStorageBufferUpdateAfterBind
-
-            override x.UpdateAfterBind = updateAfterBind
+            override x.GetUpdateAfterBindFeature(features) =
+                features.BindingStorageBufferUpdateAfterBind
 
             override x.GetDescriptor(buffer) =
                 Descriptor.StorageBuffer(slot, buffer, 0L, buffer.Size)
@@ -552,10 +553,8 @@ module Resources =
         type StorageImage(slot : int, image : IResourceLocation<_>) =
             inherit Abstract.AdaptiveSingleDescriptor<ImageView>(slot, image)
 
-            let updateAfterBind =
-                image.Owner.Device.PhysicalDevice.Features.Descriptors.BindingStorageImageUpdateAfterBind
-
-            override x.UpdateAfterBind = updateAfterBind
+            override x.GetUpdateAfterBindFeature(features) =
+                features.BindingStorageImageUpdateAfterBind
 
             override x.GetDescriptor(view) =
                 Descriptor.StorageImage(slot, view)
@@ -563,10 +562,8 @@ module Resources =
         type AccelerationStructure(slot : int, accel : IResourceLocation<_>) =
             inherit Abstract.AdaptiveSingleDescriptor<Raytracing.AccelerationStructure>(slot, accel)
 
-            let updateAfterBind =
-                accel.Owner.Device.PhysicalDevice.Features.Descriptors.BindingAccelerationStructureUpdateAfterBind
-
-            override x.UpdateAfterBind = updateAfterBind
+            override x.GetUpdateAfterBindFeature(features) =
+                features.BindingAccelerationStructureUpdateAfterBind
 
             override x.GetDescriptor(accel) =
                 Descriptor.AccelerationStructure(slot, accel)
@@ -574,10 +571,8 @@ module Resources =
         type CombinedImageSampler(slot : int, count : int, images : IResourceLocation<_>) =
             inherit Abstract.AdaptiveDescriptor<ImageSamplerArray>(slot, count, images)
 
-            let updateAfterBind =
-                images.Owner.Device.PhysicalDevice.Features.Descriptors.BindingSampledImageUpdateAfterBind
-
-            override x.UpdateAfterBind = updateAfterBind
+            override x.GetUpdateAfterBindFeature(features) =
+                features.BindingSampledImageUpdateAfterBind
 
             override x.GetDescriptors(images, cache) =
                 let images = images.handle
