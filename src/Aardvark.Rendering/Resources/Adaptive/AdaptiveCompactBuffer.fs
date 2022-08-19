@@ -31,6 +31,10 @@ module internal CompactBufferImplementation =
             if x.ProcessDeltasInTransaction then transact
             else (fun ([<InlineIfLambda>] g) -> g())
 
+        member inline private x.GetAlignedSize(count : int) =
+            let count = nativeint <| Fun.NextPowerOfTwo(int64 count)
+            count * elementSize
+
         /// Indicates whether a transaction is used when processing deltas.
         abstract member ProcessDeltasInTransaction : bool
         default x.ProcessDeltasInTransaction = false
@@ -49,12 +53,13 @@ module internal CompactBufferImplementation =
         override x.Compute(t, rt) =
             let ops = reader.GetChanges(t)
 
-            // Grow buffer if necessary
+            // Grow or shrink buffer if necessary
             let count = count.GetValue(t)
+            let alignedSize = x.GetAlignedSize count
             let requiredSize = nativeint count * elementSize
 
-            if x.Size < requiredSize then
-                x.Resize(Fun.NextPowerOfTwo(int64 requiredSize) |> nativeint)
+            if x.Size < requiredSize || x.Size > 2n * alignedSize then
+                x.Resize alignedSize
 
             // Process deltas
             x.Transact (fun _ ->
