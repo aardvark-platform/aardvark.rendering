@@ -1,3 +1,14 @@
+### 5.3.0-prerelease0002
+- [Vulkan] Fixed issue in DescriptorSetResource related to nested dependencies
+- [Vulkan] Reworked RaytracingTask to prevent unnecessary recompilation
+- [Vulkan] Implemented update-after-bind descriptors to prevent recompilation of render tasks
+- [Vulkan] Added RuntimeConfig.SuppressUpdateAfterBind
+- [Vulkan] Fixed issues with dynamic image sampler arrays
+- Implemented shrinking of AdaptiveCompactBuffer
+- Fixed issue with addition and removal order in AdaptiveCompactBuffer
+- Added IRaytracingTask.Update() overloads
+- Changed parameter order of Sg.pool
+
 ### 5.3.0-prerelease0001
 - Initial prerelease for 5.3
 
