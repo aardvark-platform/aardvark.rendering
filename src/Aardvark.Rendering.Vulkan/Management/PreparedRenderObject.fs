@@ -337,9 +337,7 @@ type DevicePreparedRenderObjectExtensions private() =
 
     [<Extension>]
     static member CreateDescriptorSets (this : ResourceManager, layout : PipelineLayout, uniforms : IUniformProvider) =
-        let resources = System.Collections.Generic.List<IResourceLocation>()
-        let sets = createDescriptorSets this layout uniforms
-        sets, CSharpList.toList resources
+        createDescriptorSets this layout uniforms
 
     [<Extension>]
     static member PrepareRenderObject(this : ResourceManager, renderPass : RenderPass, ro : RenderObject) =

@@ -109,10 +109,8 @@ type ResourceManagerExtensions private() =
 
         let layout = state.ppLayout
 
-        let descriptorSets, additionalResources = 
+        let descriptorSets =
             this.CreateDescriptorSets(layout, UniformProvider.union uniforms state.ppUniforms)
-
-        resources.AddRange additionalResources
 
         let vertexBuffers = 
             layout.PipelineInfo.pInputs 
@@ -1769,9 +1767,9 @@ module private RuntimeCommands =
             let surface = Aardvark.Rendering.Surface.FShadeSimple effect
             compiler.manager.PreparePipelineState(compiler.renderPass, surface, state)
 
-        let descritorSet, descritorSetResources =
-            let sets, resources = compiler.manager.CreateDescriptorSets(pipeline.ppLayout, compiler.task.HookProvider state.GlobalUniforms)
-            compiler.manager.CreateDescriptorSetBinding(pipeline.ppLayout, sets), resources
+        let descriptorSet =
+            let sets = compiler.manager.CreateDescriptorSets(pipeline.ppLayout, compiler.task.HookProvider state.GlobalUniforms)
+            compiler.manager.CreateDescriptorSetBinding(pipeline.ppLayout, sets)
 
         let pipelineInfo = pipeline.ppLayout.PipelineInfo
 
@@ -1845,14 +1843,12 @@ module private RuntimeCommands =
 
                 // acquire the PreparedPipelineState
                 compiler.resources.Add pipeline.ppPipeline
-                for r in descritorSetResources do compiler.resources.Add r
-                compiler.resources.Add descritorSet
-
+                compiler.resources.Add descriptorSet
                 compiler.resources.Add instanceManager
 
                 // adjust the first-command to bind the pipeline
                 first.IndirectBindPipeline(pipeline.ppPipeline.Pointer) |> ignore
-                first.IndirectBindDescriptorSets(descritorSet.Pointer) |> ignore
+                first.IndirectBindDescriptorSets(descriptorSet.Pointer) |> ignore
 
                 // the main-stream just needs to call the first stream
                 stream.Clear()
@@ -1971,8 +1967,7 @@ module private RuntimeCommands =
             shutdown()
             if initialized then
                 compiler.resources.Remove pipeline.ppPipeline
-                for r in descritorSetResources do compiler.resources.Remove r
-                compiler.resources.Remove descritorSet
+                compiler.resources.Remove descriptorSet
                 compiler.resources.Remove instanceManager
 
             first.Dispose()

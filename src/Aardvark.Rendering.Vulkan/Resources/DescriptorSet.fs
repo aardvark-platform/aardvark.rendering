@@ -76,14 +76,9 @@ and DescriptorSet =
         val public Layout : DescriptorSetLayout
 
         val mutable private poolBag : Option<DescriptorPoolBag>
-        val mutable private boundResources : Resource[]
 
         member internal x.SetPoolBag(bag : DescriptorPoolBag) =
             x.poolBag <- Some bag
-
-        member x.BindResources(resources : Resource[]) =
-            x.boundResources |> Array.iter Disposable.dispose
-            x.boundResources <- resources
 
         override x.Destroy() =
             lock x.Pool (fun () ->
@@ -100,10 +95,8 @@ and DescriptorSet =
                     x.poolBag |> Option.iter (fun b -> b.RemoveSet(x))
             )
 
-            x.boundResources |> Array.iter Disposable.dispose
-
         new(device : Device, pool : DescriptorPool, layout : DescriptorSetLayout, handle : VkDescriptorSet) =
-            { inherit Resource<_>(device, handle); Pool = pool; Layout = layout; poolBag = None; boundResources = [||] }
+            { inherit Resource<_>(device, handle); Pool = pool; Layout = layout; poolBag = None }
     end
 
 
@@ -156,20 +149,6 @@ module DescriptorSet =
 
         let mutable accelWrites  = NativePtr.stackalloc accelCount
         let mutable accelHandles = NativePtr.stackalloc accelCount
-
-        let resources : Resource[] =
-            descriptors |> Array.collect (function
-                | StorageBuffer (_, b, _, _) ->
-                    [| b |]
-                | UniformBuffer (_, b) ->
-                    [| b |]
-                | CombinedImageSampler (_, _, v, s, _) ->
-                    [| v; s |]
-                | StorageImage (_, v) ->
-                    [| v |]
-                | AccelerationStructure (_, a) ->
-                    [| a |]
-            )
 
         let writes =
             descriptors
@@ -282,14 +261,10 @@ module DescriptorSet =
                     )
                 )
 
-        resources |> Array.iter (fun r -> r.AddReference())
-
         native {
             let! pWrites = writes
             VkRaw.vkUpdateDescriptorSets(device.Handle, uint32 writes.Length, pWrites, 0u, NativePtr.zero)
         }
-
-        set.BindResources(resources)
 
 [<AbstractClass; Sealed; Extension>]
 type ContextDescriptorSetExtensions private() =
