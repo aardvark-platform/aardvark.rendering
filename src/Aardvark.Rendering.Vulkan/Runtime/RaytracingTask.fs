@@ -14,7 +14,6 @@ open Aardvark.Rendering.Raytracing
 open FSharp.Data.Adaptive
 open Microsoft.FSharp.NativeInterop
 
-
 #nowarn "9"
 
 [<AutoOpen>]
@@ -86,29 +85,37 @@ module private ``Trace Command Extensions`` =
 [<AutoOpen>]
 module private RaytracingTaskInternals =
 
-    type CompiledCommand(shaderBindingTable : aval<ShaderBindingTable>, commands : aval<RaytracingCommand list>) =
+    type CompiledCommand(shaderBindingTable : IResourceLocation<ShaderBindingTable>, input : aval<RaytracingCommand[]>) =
         inherit AdaptiveObject()
 
-        let mutable compiled = []
+        let mutable shaderBindingTableVersion = -1
+        let mutable commands = [||]
+        let mutable compiled = [||]
 
-        new (shaderBindingTable : aval<ShaderBindingTable>, commands : alist<RaytracingCommand>) =
-            CompiledCommand(shaderBindingTable, commands |> AList.toAVal |> AVal.map IndexList.toList)
+        new (shaderBindingTable : IResourceLocation<ShaderBindingTable>, commands : alist<RaytracingCommand>) =
+            CompiledCommand(shaderBindingTable, commands |> AList.toAVal |> AVal.map IndexList.toArray)
 
         member x.Commands =
             compiled
 
-        member x.Update(token : AdaptiveToken) =
-            x.EvaluateIfNeeded token false (fun token ->
-                let sbt = shaderBindingTable.GetValue(token)
-                let commands = commands.GetValue(token)
+        member x.Update(t : AdaptiveToken) =
+            x.EvaluateIfNeeded t false (fun t ->
+                let mutable changed = false
 
-                let updated = commands |> List.map (RaytracingCommand.toCommand sbt)
+                let sbt = shaderBindingTable.Update(t, RenderToken.Empty)
+                if sbt.version <> shaderBindingTableVersion then
+                    changed <- true
+                    shaderBindingTableVersion <- sbt.version
 
-                if updated <> compiled then
-                    compiled <- updated
-                    true
-                else
-                    false
+                let cmds = input.GetValue t
+                if cmds <> commands then
+                    changed <- true
+                    commands <- cmds
+
+                if changed then
+                    compiled <- cmds |> Array.map (RaytracingCommand.toCommand sbt.handle)
+
+                changed
             )
 
 
@@ -120,6 +127,7 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
     let pool = device.ComputeFamily.CreateCommandPool(CommandPoolFlags.ResetBuffer)
     let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
+    let inner = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)
 
     let resources = ResourceLocationSet(user)
 
@@ -134,7 +142,6 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
     member x.Run(token : AdaptiveToken, queries : IQuery) =
         x.EvaluateAlways token (fun token ->
-
             let vulkanQueries = queries.ToVulkanQuery()
 
             use tt = device.Token
@@ -161,20 +168,27 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
                     Log.line "[Raytracing] recompile commands: %s" cause
 
+                let pipeline = preparedPipeline.Pipeline.GetValue()
+                let descriptorSets = preparedPipeline.DescriptorSets.GetValue()
 
-            let pipeline = preparedPipeline.Pipeline.Update(token, rt)
-            let descriptorSets = preparedPipeline.DescriptorSets.Update(token, rt)
+                inner.Begin CommandBufferUsage.None
 
-            cmd.Begin(CommandBufferUsage.OneTimeSubmit)
+                inner.enqueue {
+                    do! Command.BindRaytracingPipeline(pipeline, descriptorSets)
+
+                    for cmd in compiled.Commands do
+                        do! cmd
+                }
+
+                inner.End()
+
+            cmd.Begin CommandBufferUsage.OneTimeSubmit
 
             for q in vulkanQueries do
                 q.Begin cmd
 
             cmd.enqueue {
-                do! Command.BindRaytracingPipeline(pipeline.handle, descriptorSets.handle)
-
-                for cmd in compiled.Commands do
-                    do! cmd
+                do! Command.Execute inner
             }
 
             for q in vulkanQueries do
@@ -192,6 +206,7 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
             preparedPipeline.Dispose()
             cmd.Dispose()
+            inner.Dispose()
             pool.Dispose()
         )
 
