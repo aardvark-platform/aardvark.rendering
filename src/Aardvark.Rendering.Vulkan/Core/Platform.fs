@@ -20,16 +20,15 @@ open Vulkan11
 #nowarn "9"
 // #nowarn "51"
 
-type Instance(apiVersion : Version, layers : list<string>, extensions : list<string>) as this =   
+type Instance(apiVersion : Version, layers : list<string>, extensions : list<string>) as this =
     inherit VulkanObject()
-
 
     static let availableLayers =
         native {
             let! pCount = 0u
             VkRaw.vkEnumerateInstanceLayerProperties(pCount, NativePtr.zero)
                 |> check "could not get available instance layers"
-                
+
             let properties = Array.zeroCreate (int !!pCount)
             let! ptr = properties
             VkRaw.vkEnumerateInstanceLayerProperties(pCount, ptr)
@@ -42,7 +41,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
             let! pCount = 0u
             VkRaw.vkEnumerateInstanceExtensionProperties(null, pCount, NativePtr.zero)
                 |> check "could not get available instance layers"
-                
+
             let properties = Array.zeroCreate (int !!pCount)
             let! ptr = properties
             VkRaw.vkEnumerateInstanceExtensionProperties(null, pCount, ptr)
@@ -53,49 +52,47 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
     static let availableLayerNames = availableLayers |> Seq.map (fun l -> l.name.ToLower(), l) |> Map.ofSeq
     static let globalExtensionNames = globalExtensions |> Seq.map (fun p -> p.name.ToLower(), p.name) |> Map.ofSeq
 
-
-    static let filterLayersAndExtensions (wantedLayers : list<string>, wantedExtensions : list<string>) =
+    static let filterLayersAndExtensions (wantedLayers : list<string>) (wantedExtensions : list<string>) =
         let availableExtensions = Dictionary globalExtensionNames
 
-        let enabledLayers = 
-            wantedLayers |> List.filter (fun name ->
+        let enabledLayers =
+            wantedLayers |> List.distinct |> List.filter (fun name ->
                 let name = name.ToLower()
                 match Map.tryFind name availableLayerNames with
-                    | Some layer -> 
-                        VkRaw.debug "enabled layer %A" name
-                        for e in layer.extensions do
-                            availableExtensions.[e.name.ToLower()] <- e.name
-                        true
-                    | _ ->
-                        //VkRaw.warn "could not enable instance-layer '%s' since it is not available" name
-                        false
+                | Some layer ->
+                    VkRaw.debug "enabled layer %A" name
+                    for e in layer.extensions do
+                        availableExtensions.[e.name.ToLower()] <- e.name
+                    true
+                | _ ->
+                    false
             )
 
         let enabledExtensions =
             wantedExtensions |> List.choose (fun name ->
                 let name = name.ToLower()
                 match availableExtensions.TryGetValue name with
-                    | (true, realName) -> 
-                        VkRaw.debug "enabled extension %A" name
-                        Some realName
-                    | _ -> 
-                        //VkRaw.warn "could not enable instance-extension '%s' since it is not available" name
-                        None
+                | (true, realName) ->
+                    VkRaw.debug "enabled instance extension %A" name
+                    Some realName
+                | _ ->
+                    None
             )
 
         enabledLayers, enabledExtensions
 
-    let layers, extensions = filterLayersAndExtensions (layers, extensions)
+    let extensions = List.distinct extensions
+    let layers, instanceExtensions = filterLayersAndExtensions layers extensions
 
     let debugEnabled =
-        extensions |> List.contains EXTDebugReport.Name &&
-        extensions |> List.contains EXTDebugUtils.Name    
+        instanceExtensions |> List.contains EXTDebugReport.Name &&
+        instanceExtensions |> List.contains EXTDebugUtils.Name
     
     let appName = CStr.malloc "Aardvark"
 
     let mutable instance, apiVersion =
         let layers = List.toArray layers
-        let extensions = List.toArray extensions
+        let extensions = List.toArray instanceExtensions
 
         let rec tryCreate (apiVersion : Version) =
             native {
@@ -146,7 +143,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
             VkRaw.vkEnumeratePhysicalDevices(instance, pDeviceCount, ptr)
                 |> check "could not get physical devices"
 
-            return devices |> Array.map (fun d -> PhysicalDevice(this, d, extensions, apiVersion))
+            return devices |> Array.map (fun d -> PhysicalDevice(this, d))
         }
 
     let groups =    
@@ -170,7 +167,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                                 let handle = d.physicalDevices.[ii]
                                 devices |> Array.find (fun dd -> dd.Handle = handle)
                             )
-                        PhysicalDeviceGroup(this, devices, extensions, apiVersion)
+                        PhysicalDeviceGroup(this, devices)
                     )
                     |> Array.filter (fun g -> g.Devices.Length > 1)
             }
@@ -188,7 +185,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
         instance <- VkInstance.Zero
         
     member x.EnabledLayers = layers
-    member x.EnabledExtensions = extensions
+    member x.EnabledExtensions = instanceExtensions
 
     member x.DebugEnabled = debugEnabled
 
@@ -229,7 +226,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
 
             l.section "extensions:" (fun () ->
                 for ext in globalExtensions do
-                    let isEnabled = List.contains ext.name extensions
+                    let isEnabled = List.contains ext.name instanceExtensions
                     let suffix = if isEnabled then "(X)" else "( )"
                     l.line "%s (v%A) %s" ext.name ext.specification suffix
             )
@@ -312,7 +309,7 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
 
         )
 
-and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enabledInstanceExtensions : list<string>, instanceVersion : Version) =
+and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice) =
     static let allFormats = Enum.GetValues(typeof<VkFormat>) |> unbox<VkFormat[]>
     
 
@@ -344,7 +341,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
         }
 
     let hasInstanceExtension (name : string) =
-        enabledInstanceExtensions |> List.exists (fun e -> e = name)
+        instance.EnabledExtensions |> List.exists (fun e -> e = name)
 
     let hasExtension (name : string) =
         globalExtensions |> Array.exists (fun e -> e.name = name)
@@ -426,7 +423,7 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
             Int64.MaxValue, Int32.MaxValue
 
     let uniqueId, deviceMask =
-        if apiVersion >= Version(1,1,0) || hasInstanceExtension "VK_KHR_get_physical_device_properties2" then
+        if apiVersion >= Version(1,1,0) || hasInstanceExtension KHRGetPhysicalDeviceProperties2.Name then
             let id =
                 KHRExternalMemoryCapabilities.VkPhysicalDeviceIDPropertiesKHR(
                     Guid.Empty,
@@ -569,8 +566,8 @@ and PhysicalDevice internal(instance : Instance, handle : VkPhysicalDevice, enab
         sprintf "{ name = %s; type = %A; api = %A }" name x.Type x.APIVersion
     
 
-and PhysicalDeviceGroup internal(instance : Instance, devices : PhysicalDevice[], enabledInstanceExtensions : list<string>, apiVersion : Version) =
-    inherit PhysicalDevice(instance, devices.[0].Handle, enabledInstanceExtensions, apiVersion)
+and PhysicalDeviceGroup internal(instance : Instance, devices : PhysicalDevice[]) =
+    inherit PhysicalDevice(instance, devices.[0].Handle)
    
     let mask = devices |> Seq.map (fun d -> d.DeviceMask) |> Seq.fold (|||) 0u
 

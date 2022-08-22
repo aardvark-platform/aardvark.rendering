@@ -191,31 +191,19 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
 
     let extensions =
         let availableExtensions = physical.GlobalExtensions |> Seq.map (fun e -> e.name.ToLower(), e.name) |> Dictionary.ofSeq
-        //let availableLayerNames = physical.AvailableLayers |> Seq.map (fun l -> l.name.ToLower(), l) |> Map.ofSeq
-        //let enabledLayers = 
-        //    wantedLayers |> Set.filter (fun name ->
-        //        let name = name.ToLower()
-        //        match Map.tryFind name availableLayerNames with
-        //            | Some layer -> 
-        //                VkRaw.debug "enabled layer %A" name
-        //                for e in layer.extensions do
-        //                    availableExtensions.[e.name.ToLower()] <- e.name
-        //                true
-        //            | _ ->
-        //                VkRaw.warn "could not enable device-layer '%s' since it is not available" name
-        //                false
-        //    )
 
         let enabledExtensions =
-            wantedExtensions |> List.choose (fun name ->
+            wantedExtensions
+            |> List.filter (fun e -> dev.Instance.EnabledExtensions |> List.contains e |> not)
+            |> List.choose (fun name ->
                 let name = name.ToLower()
                 match availableExtensions.TryGetValue name with
-                    | (true, realName) -> 
-                        VkRaw.debug "enabled extension %A" name
-                        Some realName
-                    | _ -> 
-                        VkRaw.warn "could not enable device-extension '%s' since it is not available" name
-                        None
+                | (true, realName) ->
+                    VkRaw.debug "enabled device extension %A" name
+                    Some realName
+                | _ ->
+                    VkRaw.warn "could not enable extension '%s' since it is not available" name
+                    None
             )
 
         enabledExtensions
