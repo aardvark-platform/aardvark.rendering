@@ -1746,8 +1746,11 @@ type ResourceManager(user : IResourceUser, device : Device) =
 
         let map =
             imageSamplerMapCache.GetOrAdd(textures, fun _ ->
-                textures |> AVal.map (Array.mapi (fun i texture ->
-                    i, x.CreateImageSampler(samplerType, AVal.constant texture, samplerDesc)
+                textures |> AVal.map (Array.choosei (fun i texture ->
+                    if i < count then
+                        Some (i, x.CreateImageSampler(samplerType, AVal.constant texture, samplerDesc))
+                    else
+                        None
                 ))
                 |> AMap.ofAVal
             )
