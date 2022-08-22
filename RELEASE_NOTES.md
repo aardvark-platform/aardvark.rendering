@@ -1,3 +1,9 @@
+### 5.3.0-prerelease0003
+- [Vulkan] Fixed issue with duplicate descriptor writes
+- [Vulkan] Trim excess elements from image sampler array
+- [Vulkan] Fixed extensions being wrongly reported as unavailable
+- [Vulkan] Lock pending set during update loop of DescriptorSetResource
+
 ### 5.3.0-prerelease0002
 - [Vulkan] Fixed issue in DescriptorSetResource related to nested dependencies
 - [Vulkan] Reworked RaytracingTask to prevent unnecessary recompilation
