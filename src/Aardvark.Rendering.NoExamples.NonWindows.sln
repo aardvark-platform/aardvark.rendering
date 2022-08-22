@@ -54,6 +54,8 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CSharpInteropTest", "Tests\
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.SceneGraph.Browser", "Aardvark.SceneGraph.Browser\Aardvark.SceneGraph.Browser.fsproj", "{007A06EE-AC86-4446-BEE8-75CD27BD52FA}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Vulkan.Wrapper", "Aardvark.Rendering.Vulkan.Wrapper\Aardvark.Rendering.Vulkan.Wrapper.fsproj", "{22C71C51-8EC6-4194-991F-8F059C1BAD41}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -136,6 +138,10 @@ Global
 		{007A06EE-AC86-4446-BEE8-75CD27BD52FA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{007A06EE-AC86-4446-BEE8-75CD27BD52FA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{007A06EE-AC86-4446-BEE8-75CD27BD52FA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{22C71C51-8EC6-4194-991F-8F059C1BAD41}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{22C71C51-8EC6-4194-991F-8F059C1BAD41}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{22C71C51-8EC6-4194-991F-8F059C1BAD41}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{22C71C51-8EC6-4194-991F-8F059C1BAD41}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

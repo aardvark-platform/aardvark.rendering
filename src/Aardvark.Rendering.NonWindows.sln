@@ -182,6 +182,8 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "36 - Raytracing", "Examples
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "20 - ResourceSharing", "Scratch (netcore)\20 - ResourceSharing\20 - ResourceSharing.fsproj", "{82993F01-B6B2-4D53-9EE9-DAD7463E1708}"
 EndProject
+Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Vulkan.Wrapper", "Aardvark.Rendering.Vulkan.Wrapper\Aardvark.Rendering.Vulkan.Wrapper.fsproj", "{52031ED8-05D3-4C23-AF19-C077A8F4F0AC}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -496,6 +498,10 @@ Global
 		{82993F01-B6B2-4D53-9EE9-DAD7463E1708}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{82993F01-B6B2-4D53-9EE9-DAD7463E1708}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{82993F01-B6B2-4D53-9EE9-DAD7463E1708}.Release|Any CPU.Build.0 = Release|Any CPU
+		{52031ED8-05D3-4C23-AF19-C077A8F4F0AC}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{52031ED8-05D3-4C23-AF19-C077A8F4F0AC}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{52031ED8-05D3-4C23-AF19-C077A8F4F0AC}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{52031ED8-05D3-4C23-AF19-C077A8F4F0AC}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
