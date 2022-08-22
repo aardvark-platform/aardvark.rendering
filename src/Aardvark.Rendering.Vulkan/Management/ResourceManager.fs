@@ -1094,11 +1094,12 @@ module Resources =
         let pending = LockedSet<_>(bindings)
 
         // Save the array index of each descriptor
+        // Note: Index might be different from binding
         do assert (bindings = Array.distinct bindings)
         let indices = bindings |> Array.indexed |> Array.map (fun (i, d) -> d, i) |> HashMap.ofArray
 
-        // List to collect all descriptor writes in GetHandle()
-        let writes = System.Collections.Generic.List<Descriptor>()
+        // Dictionary to collect all descriptor writes in GetHandle()
+        let writes = Dictionary<struct (int * int), Descriptor>()
 
         // We save the last seen version for each descriptor element.
         // If the version didn't change, we won't bother updating the set.
@@ -1140,12 +1141,12 @@ module Resources =
                             for j = 0 to infos.Length - 1 do
                                 if versions.[i].[j] <> infos.[j].Version then
                                     versions.[i].[j] <- infos.[j].Version
-                                    writes.Add infos.[j].Descriptor
+                                    writes.[struct (i, j)] <- infos.[j].Descriptor
                                     recompile <- recompile || not d.UpdateAfterBind
                 )
 
                 if writes.Count > 0 then
-                    handle.Update(writes.ToArray())
+                    handle.Update(writes.Values.ToArray writes.Count)
 
                     // If we update a descriptor which does not
                     // support update-after-bind, we have to rerecord the command buffer.
