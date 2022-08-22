@@ -8,6 +8,10 @@ type LockedSet<'T>(elements : seq<'T>) =
     new() =
         LockedSet<'T>(Seq.empty)
 
+    /// Gets the number of elements that are contained in the set.
+    member x.Count =
+        store.Count
+
     /// Adds the given element and returns if it was newly added.
     member x.Add(item : 'T) =
         lock x (fun _ -> store.Add item)
@@ -27,3 +31,14 @@ type LockedSet<'T>(elements : seq<'T>) =
     /// Removes all elements from the set.
     member x.Clear() =
         lock x store.Clear
+
+    /// Locks the set and performs the given action.
+    member x.Lock(action : HashSet<'T> -> 'U) =
+        lock x (fun _ -> action store)
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module LockedSet =
+
+    /// Locks the set and performs the given action.
+    let lock (action : HashSet<'T> -> 'U) (set : LockedSet<'T>) =
+        set.Lock action
