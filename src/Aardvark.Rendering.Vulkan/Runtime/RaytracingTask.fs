@@ -137,51 +137,56 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
     let compiled = CompiledCommand(preparedPipeline.ShaderBindingTable, commands)
 
+    let update (t : AdaptiveToken) (rt : RenderToken) =
+        use tt = device.Token
+
+        let resourcesChanged =
+            resources.Update(t, rt)
+
+        tt.Sync()
+
+        let commandChanged =
+            compiled.Update t
+
+        if commandChanged || resourcesChanged then
+            if RuntimeConfig.ShowRecompile then
+                let cause =
+                    String.concat "; " [
+                        if commandChanged then yield "content"
+                        if resourcesChanged then yield "resources"
+                    ]
+                    |> sprintf "{ %s }"
+
+                Log.line "[Raytracing] recompile commands: %s" cause
+
+            let pipeline = preparedPipeline.Pipeline.GetValue()
+            let descriptorSets = preparedPipeline.DescriptorSets.GetValue()
+
+            inner.Begin CommandBufferUsage.None
+
+            inner.enqueue {
+                do! Command.BindRaytracingPipeline(pipeline, descriptorSets)
+
+                for cmd in compiled.Commands do
+                    do! cmd
+            }
+
+            inner.End()
+
     member x.Update(token : AdaptiveToken, queries : IQuery) =
-        ()
-
-    member x.Run(token : AdaptiveToken, queries : IQuery) =
-        x.EvaluateAlways token (fun token ->
-            let vulkanQueries = queries.ToVulkanQuery()
-
-            use tt = device.Token
-
+        x.EvaluateIfNeeded token () (fun t ->
             let rt = RenderToken.Empty |> RenderToken.withQuery queries
             use __ = rt.Use()
+            update t rt
+        )
 
-            let resourcesChanged =
-                resources.Update(token, rt)
+    member x.Run(token : AdaptiveToken, queries : IQuery) =
+        x.EvaluateAlways token (fun t ->
+            let rt = RenderToken.Empty |> RenderToken.withQuery queries
+            use __ = rt.Use()
+            update t rt
 
-            tt.Sync()
-
-            let commandChanged =
-                compiled.Update(token)
-
-            if commandChanged || resourcesChanged then
-                if RuntimeConfig.ShowRecompile then
-                    let cause =
-                        String.concat "; " [
-                            if commandChanged then yield "content"
-                            if resourcesChanged then yield "resources"
-                        ]
-                        |> sprintf "{ %s }"
-
-                    Log.line "[Raytracing] recompile commands: %s" cause
-
-                let pipeline = preparedPipeline.Pipeline.GetValue()
-                let descriptorSets = preparedPipeline.DescriptorSets.GetValue()
-
-                inner.Begin CommandBufferUsage.None
-
-                inner.enqueue {
-                    do! Command.BindRaytracingPipeline(pipeline, descriptorSets)
-
-                    for cmd in compiled.Commands do
-                        do! cmd
-                }
-
-                inner.End()
-
+            let vulkanQueries = queries.ToVulkanQuery()
             cmd.Begin CommandBufferUsage.OneTimeSubmit
 
             for q in vulkanQueries do
