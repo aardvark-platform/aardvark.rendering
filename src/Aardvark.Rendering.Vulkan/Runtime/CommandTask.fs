@@ -2132,6 +2132,8 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
     let stats = NativePtr.alloc 1
     let resources = ResourceLocationSet(user)
     let mutable lastFramebuffer = None
+    let mutable commandChanged = false
+    let mutable resourcesChanged = false
 
     let compiler =
         {
@@ -2146,6 +2148,22 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
     let compiled = compiler.Compile command
 
+    let update (t : AdaptiveToken) (rt : RenderToken) =
+        let cmd =
+            lock compiled (fun () ->
+                if compiled.OutOfDate then
+                    compiled.Update t
+                    true
+                else
+                    false
+            )
+
+        let res =
+            resources.Update(t, rt)
+
+        commandChanged <- commandChanged || cmd
+        resourcesChanged <- resourcesChanged || res
+
     override x.Release() =
         transact (fun () ->
             compiled.Dispose()
@@ -2158,8 +2176,9 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
     override x.Runtime = Some device.Runtime
 
-    override x.PerformUpdate(token : AdaptiveToken, rt : RenderToken) =
-        ()
+    override x.PerformUpdate(token : AdaptiveToken, renderToken : RenderToken) =
+        use __ = device.Token
+        update token renderToken |> ignore
 
     override x.Use(f : unit -> 'r) =
         f()
@@ -2205,17 +2224,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
                 true
 
         use tt = device.Token
-        let commandChanged =
-            lock compiled (fun () ->
-                if compiled.OutOfDate then
-                    compiled.Update(token)
-                    true
-                else
-                    false
-            )
-
-        let resourcesChanged =
-            resources.Update(token, renderToken)
+        update token renderToken
 
         let framebufferChanged =
             if lastFramebuffer <> Some fbo then
@@ -2248,6 +2257,9 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
             compiled.Stream.Run(inner.Handle)
 
             inner.End()
+
+            commandChanged <- false
+            resourcesChanged <- false
 
         tt.Sync()
 

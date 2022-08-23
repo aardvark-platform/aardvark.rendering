@@ -259,7 +259,7 @@ let main argv =
     Aardvark.Init()
 
     // uncomment/comment to switch between the backends
-    //use app = new VulkanApplication(debug = false)
+    //use app = new VulkanApplication(debug = DebugLevel.Normal)
     use app = new OpenGlApplication(DebugLevel.Normal)
     let runtime = app.Runtime :> IRuntime
     let samples = 16
