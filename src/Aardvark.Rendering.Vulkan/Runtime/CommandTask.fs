@@ -461,8 +461,6 @@ module private RuntimeCommands =
         let private noOwner device =
             { new IResourceCache with
                 member x.Device = device
-                member x.AddLocked _ = ()
-                member x.RemoveLocked _ = ()
                 member x.Remove _ = ()
             }
 
@@ -594,7 +592,7 @@ module private RuntimeCommands =
                 buffer |> Map.iter (fun _ b -> b.Dispose())
                 buffer <- Map.empty
 
-            override x.GetHandle(token : AdaptiveToken, renderToken : RenderToken) =
+            override x.GetHandle(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
                 use t = device.Token
                 for d in lock dead (fun () -> consumeList dead) do d.Dispose()
 
@@ -1462,7 +1460,7 @@ module private RuntimeCommands =
             if async then
                 let updateResources = pg.pgResources |> List.filter (fun r -> r.ReferenceCount = 0)
                 for r in pg.pgResources do r.Acquire()
-                for r in updateResources do r.Update(AdaptiveToken.Top, RenderToken.Empty) |> ignore
+                for r in updateResources do r.Update(IResourceUser.None, AdaptiveToken.Top, RenderToken.Empty) |> ignore
             else
                 for r in pg.pgResources do compiler.resources.Add r
                 
@@ -2120,7 +2118,6 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
     inherit AbstractRenderTask()
 
     let device = manager.Device
-    let user = manager.ResourceUser
 
     let pool = device.GraphicsFamily.CreateCommandPool(CommandPoolFlags.ResetBuffer)
     let viewports = AVal.init [||]
@@ -2130,10 +2127,8 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
     let inner = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)
 
     let stats = NativePtr.alloc 1
-    let resources = ResourceLocationSet(user)
+    let resources = ResourceLocationSet()
     let mutable lastFramebuffer = None
-    let mutable commandChanged = false
-    let mutable resourcesChanged = false
 
     let compiler =
         {
@@ -2148,21 +2143,19 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
     let compiled = compiler.Compile command
 
-    let update (t : AdaptiveToken) (rt : RenderToken) =
-        let cmd =
-            lock compiled (fun () ->
-                if compiled.OutOfDate then
-                    compiled.Update t
-                    true
-                else
-                    false
-            )
+    let updateCommands (token : AdaptiveToken) =
+        lock compiled (fun () ->
+            if compiled.OutOfDate then
+                compiled.Update token
+                true
+            else
+                false
+        )
 
-        let res =
-            resources.Update(t, rt)
-
-        commandChanged <- commandChanged || cmd
-        resourcesChanged <- resourcesChanged || res
+    let updateResources (token : AdaptiveToken) (renderToken : RenderToken) (action : bool -> 'T) =
+        resources.Use(token, renderToken, fun changed ->
+            action changed
+        )
 
     override x.Release() =
         transact (fun () ->
@@ -2178,14 +2171,13 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
 
     override x.PerformUpdate(token : AdaptiveToken, renderToken : RenderToken) =
         use __ = device.Token
-        update token renderToken |> ignore
+        updateCommands token |> ignore
+        updateResources token renderToken ignore
 
     override x.Use(f : unit -> 'r) =
         f()
 
     override x.Perform(token : AdaptiveToken, renderToken : RenderToken, desc : OutputDescription) =
-        x.OutOfDate <- true
-
         let vulkanQueries = renderToken.Query.ToVulkanQuery()
 
         let fbo =
@@ -2223,9 +2215,6 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
                 transact (fun () -> viewports.Value <- vp; scissors.Value <- sc)
                 true
 
-        use tt = device.Token
-        update token renderToken
-
         let framebufferChanged =
             if lastFramebuffer <> Some fbo then
                 lastFramebuffer <- Some fbo
@@ -2233,65 +2222,70 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
             else
                 false
 
-        if viewportChanged || commandChanged || resourcesChanged || framebufferChanged then
-            let cause =
-                String.concat "; " [
-                    if commandChanged then yield "content"
-                    if resourcesChanged then yield "resources"
-                    if viewportChanged then yield "viewport"
-                    if framebufferChanged then yield "framebuffer"
-                ]
-                |> sprintf "{ %s }"
+        use tt = device.Token
 
-            if RuntimeConfig.ShowRecompile then
-                Log.line "[Vulkan] recompile commands: %s" cause
+        let commandChanged =
+            updateCommands token
 
-            inner.Begin(renderPass, fbo, CommandBufferUsage.RenderPassContinue, true)
+        updateResources token renderToken (fun resourcesChanged ->
 
-            inner.enqueue {
-                do! Command.SetViewports(vp)
-                do! Command.SetScissors(sc)
+            if viewportChanged || commandChanged || resourcesChanged || framebufferChanged then
+                let cause =
+                    String.concat "; " [
+                        if commandChanged then yield "content"
+                        if resourcesChanged then yield "resources"
+                        if viewportChanged then yield "viewport"
+                        if framebufferChanged then yield "framebuffer"
+                    ]
+                    |> sprintf "{ %s }"
+
+                if RuntimeConfig.ShowRecompile then
+                    Log.line "[Vulkan] recompile commands: %s" cause
+
+                inner.Begin(renderPass, fbo, CommandBufferUsage.RenderPassContinue, true)
+
+                inner.enqueue {
+                    do! Command.SetViewports(vp)
+                    do! Command.SetScissors(sc)
+                }
+
+                inner.AppendCommand()
+                compiled.Stream.Run(inner.Handle)
+
+                inner.End()
+
+            tt.Sync()
+
+            cmd.Begin(renderPass, CommandBufferUsage.OneTimeSubmit)
+
+            for q in vulkanQueries do
+                q.Begin cmd
+
+            cmd.enqueue {
+                let views = Map.toArray fbo.Attachments
+                let oldLayouts = Array.zeroCreate views.Length
+
+                for i in 0 .. views.Length - 1 do
+                    let sem, view = views.[i]
+                    oldLayouts.[i] <- view.Image.Layout
+                    if sem = DefaultSemantic.DepthStencil then
+                        do! Command.TransformLayout(view, VkImageLayout.DepthStencilAttachmentOptimal)
+                    else
+                        do! Command.TransformLayout(view, VkImageLayout.ColorAttachmentOptimal)
+
+                do! Command.BeginPass(renderPass, fbo, false)
+                do! Command.Execute [inner]
+                do! Command.EndPass
+
+                for i in 0 .. views.Length - 1 do
+                    let _, view = views.[i]
+                    do! Command.TransformLayout(view, oldLayouts.[i])
             }
 
-            inner.AppendCommand()
-            compiled.Stream.Run(inner.Handle)
+            for q in vulkanQueries do
+                q.End cmd
 
-            inner.End()
+            cmd.End()
 
-            commandChanged <- false
-            resourcesChanged <- false
-
-        tt.Sync()
-
-        cmd.Begin(renderPass, CommandBufferUsage.OneTimeSubmit)
-
-        for q in vulkanQueries do
-            q.Begin cmd
-
-        cmd.enqueue {
-            let views = Map.toArray fbo.Attachments
-            let oldLayouts = Array.zeroCreate views.Length
-
-            for i in 0 .. views.Length - 1 do
-                let sem, view = views.[i]
-                oldLayouts.[i] <- view.Image.Layout
-                if sem = DefaultSemantic.DepthStencil then
-                    do! Command.TransformLayout(view, VkImageLayout.DepthStencilAttachmentOptimal)
-                else
-                    do! Command.TransformLayout(view, VkImageLayout.ColorAttachmentOptimal)
-
-            do! Command.BeginPass(renderPass, fbo, false)
-            do! Command.Execute [inner]
-            do! Command.EndPass
-
-            for i in 0 .. views.Length - 1 do
-                let _, view = views.[i]
-                do! Command.TransformLayout(view, oldLayouts.[i])
-        }
-
-        for q in vulkanQueries do
-            q.End cmd
-
-        cmd.End()
-
-        device.GraphicsFamily.RunSynchronously cmd
+            device.GraphicsFamily.RunSynchronously cmd
+        )

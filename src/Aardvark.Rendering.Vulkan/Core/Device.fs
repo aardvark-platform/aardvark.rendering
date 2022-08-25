@@ -947,6 +947,19 @@ and [<AbstractClass>] Resource =
         member x.ReferenceCount =
             x.refCount
 
+        /// Increments the reference count only if it greater than zero.
+        /// Returns if the reference count was incremented.
+        member x.TryAddReference() =
+            let mutable current = x.refCount
+
+            if current > 0 then
+                while Interlocked.CompareExchange(&x.refCount, current + 1, current) <> current do
+                    current <- x.refCount
+
+                true
+            else
+                false
+
         member x.AddReference() =
             Interlocked.Increment(&x.refCount) |> ignore
 

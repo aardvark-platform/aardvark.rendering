@@ -104,9 +104,6 @@ type PreparedRaytracingPipeline(device         : Device,
         program.Dispose()
         hitConfigPool.Dispose()
 
-    member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
-        for r in resources do r.Update(token, renderToken) |> ignore
-
 
 [<AbstractClass; Sealed; Extension>]
 type DevicePreparedRaytracingPipelineExtensions private() =

@@ -85,106 +85,127 @@ module private ``Trace Command Extensions`` =
 [<AutoOpen>]
 module private RaytracingTaskInternals =
 
-    type CompiledCommand(shaderBindingTable : IResourceLocation<ShaderBindingTable>, input : aval<RaytracingCommand[]>) =
+    type private ResourceHandle<'T>(location : IResourceLocation<'T>) =
+        let mutable cache = { version = -1; handle = Unchecked.defaultof<'T> }
+
+        member x.Handle = cache.handle
+
+        member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
+            let info = location.Update(IResourceUser.None, token, renderToken)
+            let changed = info.version <> cache.version
+            cache <- info
+            changed
+
+    type CompiledCommand(manager : ResourceManager, resources : ResourceLocationSet, pipelineState : RaytracingPipelineState, input : aval<RaytracingCommand[]>) =
         inherit AdaptiveObject()
 
-        let mutable shaderBindingTableVersion = -1
         let mutable commands = [||]
         let mutable compiled = [||]
 
-        new (shaderBindingTable : IResourceLocation<ShaderBindingTable>, commands : alist<RaytracingCommand>) =
-            CompiledCommand(shaderBindingTable, commands |> AList.toAVal |> AVal.map IndexList.toArray)
+        let preparedPipeline = manager.PrepareRaytracingPipeline(pipelineState)
 
-        member x.Commands =
-            compiled
+        let pipeline = ResourceHandle(preparedPipeline.Pipeline)
+        let descriptorSets = ResourceHandle(preparedPipeline.DescriptorSets)
+        let shaderBindingTable = ResourceHandle(preparedPipeline.ShaderBindingTable)
 
-        member x.Update(t : AdaptiveToken) =
-            x.EvaluateIfNeeded t false (fun t ->
+        do for r in preparedPipeline.Resources do
+            resources.Add(r)
+
+        new (manager : ResourceManager, resources : ResourceLocationSet, pipelineState : RaytracingPipelineState, commands : alist<RaytracingCommand>) =
+            let commands = commands |> AList.toAVal |> AVal.map IndexList.toArray
+            new CompiledCommand(manager, resources, pipelineState, commands)
+
+        member x.Commands = compiled
+
+        member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
+            x.EvaluateIfNeeded token false (fun token ->
                 let mutable changed = false
 
-                let sbt = shaderBindingTable.Update(t, RenderToken.Empty)
-                if sbt.version <> shaderBindingTableVersion then
-                    changed <- true
-                    shaderBindingTableVersion <- sbt.version
+                changed <- pipeline.Update(token, renderToken) || changed
+                changed <- descriptorSets.Update(token, renderToken) || changed
+                changed <- shaderBindingTable.Update(token, renderToken) || changed
 
-                let cmds = input.GetValue t
+                let cmds = input.GetValue token
                 if cmds <> commands then
                     changed <- true
                     commands <- cmds
 
                 if changed then
-                    compiled <- cmds |> Array.map (RaytracingCommand.toCommand sbt.handle)
+                    Array.Resize(&compiled, commands.Length + 1)
+
+                    compiled.[0] <- Command.BindRaytracingPipeline(pipeline.Handle, descriptorSets.Handle)
+
+                    for i = 0 to commands.Length - 1 do
+                        compiled.[i + 1] <- commands.[i] |> RaytracingCommand.toCommand shaderBindingTable.Handle
 
                 changed
             )
+
+        member x.Dispose() =
+            for r in preparedPipeline.Resources do
+                resources.Remove(r)
+
+            preparedPipeline.Dispose()
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
 
 
 type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineState, commands : alist<RaytracingCommand>) =
     inherit AdaptiveObject()
 
     let device = manager.Device
-    let user = manager.ResourceUser
 
     let pool = device.ComputeFamily.CreateCommandPool(CommandPoolFlags.ResetBuffer)
     let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
     let inner = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)
 
-    let resources = ResourceLocationSet(user)
+    let resources = ResourceLocationSet()
+    let compiled = new CompiledCommand(manager, resources, pipeline, commands)
 
-    let preparedPipeline = manager.PrepareRaytracingPipeline(pipeline)
-    do for r in preparedPipeline.Resources do
-        resources.Add(r)
-
-    let compiled = CompiledCommand(preparedPipeline.ShaderBindingTable, commands)
-
-    let update (t : AdaptiveToken) (rt : RenderToken) =
+    let updateCommandResources (t : AdaptiveToken) (rt : RenderToken) =
         use tt = device.Token
 
-        let resourcesChanged =
-            resources.Update(t, rt)
+        resources.Use(t, rt, fun resourcesChanged ->
+            let commandChanged =
+                compiled.Update(t, rt)
 
-        tt.Sync()
+            tt.Sync()
 
-        let commandChanged =
-            compiled.Update t
+            if commandChanged || resourcesChanged then
+                if RuntimeConfig.ShowRecompile then
+                    let cause =
+                        String.concat "; " [
+                            if commandChanged then yield "content"
+                            if resourcesChanged then yield "resources"
+                        ]
+                        |> sprintf "{ %s }"
 
-        if commandChanged || resourcesChanged then
-            if RuntimeConfig.ShowRecompile then
-                let cause =
-                    String.concat "; " [
-                        if commandChanged then yield "content"
-                        if resourcesChanged then yield "resources"
-                    ]
-                    |> sprintf "{ %s }"
+                    Log.line "[Raytracing] recompile commands: %s" cause
 
-                Log.line "[Raytracing] recompile commands: %s" cause
 
-            let pipeline = preparedPipeline.Pipeline.GetValue()
-            let descriptorSets = preparedPipeline.DescriptorSets.GetValue()
+                inner.Begin CommandBufferUsage.None
 
-            inner.Begin CommandBufferUsage.None
+                inner.enqueue {
+                    for cmd in compiled.Commands do
+                        do! cmd
+                }
 
-            inner.enqueue {
-                do! Command.BindRaytracingPipeline(pipeline, descriptorSets)
-
-                for cmd in compiled.Commands do
-                    do! cmd
-            }
-
-            inner.End()
+                inner.End()
+        )
 
     member x.Update(token : AdaptiveToken, queries : IQuery) =
         x.EvaluateIfNeeded token () (fun t ->
             let rt = RenderToken.Empty |> RenderToken.withQuery queries
             use __ = rt.Use()
-            update t rt
+            updateCommandResources t rt
         )
 
     member x.Run(token : AdaptiveToken, queries : IQuery) =
         x.EvaluateAlways token (fun t ->
             let rt = RenderToken.Empty |> RenderToken.withQuery queries
             use __ = rt.Use()
-            update t rt
+            updateCommandResources t rt
 
             let vulkanQueries = queries.ToVulkanQuery()
             cmd.Begin CommandBufferUsage.OneTimeSubmit
@@ -205,11 +226,8 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
         )
 
     member x.Dispose() =
-        transact (fun () ->
-            for r in preparedPipeline.Resources do
-                resources.Remove(r)
-
-            preparedPipeline.Dispose()
+        transact (fun _ ->
+            compiled.Dispose()
             cmd.Dispose()
             inner.Dispose()
             pool.Dispose()

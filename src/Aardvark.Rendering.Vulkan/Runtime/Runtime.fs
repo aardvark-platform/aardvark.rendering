@@ -18,13 +18,7 @@ type Runtime(device : Device, debug : DebugLevel) as this =
     let instance = device.Instance
     do device.Runtime <- this
 
-    let noUser =
-        { new IResourceUser with
-            member x.AddLocked _ = ()
-            member x.RemoveLocked _ = ()
-        }
-
-    let manager = new ResourceManager(noUser, device)
+    let manager = new ResourceManager(device)
 
     // install debug output to file (and errors/warnings to console)
     let debugSubscription = instance.SetupDebugMessageOutput debug
