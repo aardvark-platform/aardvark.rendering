@@ -411,7 +411,9 @@ module Buffer =
     let inline alloc (flags : VkBufferUsageFlags) (size : int64) (device : Device) =
         alloc' false false 1UL flags size device
 
-    let internal ofWriter (export : bool) (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (memory : DeviceHeap) =
+    let internal ofWriterWithToken (export : bool) (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit)
+                                   (memory : DeviceHeap) (token : DeviceToken) =
+        assert (memory.Device = token.Device)
         let device = memory.Device
 
         if size > 0n then
@@ -427,7 +429,7 @@ module Buffer =
                     let hostBuffer = device.HostMemory |> create VkBufferUsageFlags.TransferSrcBit size
                     hostBuffer.Memory.Mapped (fun dst -> writer dst)
 
-                    device.eventually {
+                    token.enqueue {
                         try do! Command.Copy(hostBuffer, buffer)
                         finally hostBuffer.Dispose()
                     }
@@ -438,17 +440,21 @@ module Buffer =
 
                     device.CopyEngine.EnqueueSafe [
                         CopyCommand.Copy(hostBuffer, buffer, int64 size)
-                        CopyCommand.Release(buffer, device.GraphicsFamily)
+                        CopyCommand.Release(buffer, token.Family)
                         CopyCommand.Callback (fun () -> hostBuffer.Dispose())
                     ]
 
-                    device.eventually {
+                    token.enqueue {
                         do! Command.Acquire(buffer, device.TransferFamily)
                     }
 
             buffer
         else
             empty false flags memory
+
+    let internal ofWriter (export : bool) (flags : VkBufferUsageFlags) (size : nativeint) (writer : nativeint -> unit) (memory : DeviceHeap) =
+        use token = memory.Device.Token
+        token |> ofWriterWithToken export flags size writer memory
 
     let internal updateRangeWriter (offset : int64) (size : int64) (writer : nativeint -> unit) (buffer : Buffer) =
         let device = buffer.Device
@@ -507,13 +513,13 @@ module Buffer =
         | _ ->
             false
 
-    let rec ofBufferWithMemory (export : bool) (flags : VkBufferUsageFlags) (buffer : IBuffer) (memory : DeviceHeap) =
+    let rec ofBufferWithMemory (export : bool) (flags : VkBufferUsageFlags) (buffer : IBuffer) (memory : DeviceHeap) (token : DeviceToken) =
         match buffer with
         | :? ArrayBuffer as ab ->
             if ab.Data.Length <> 0 then
                 let size = nativeint ab.Data.LongLength * nativeint (Marshal.SizeOf ab.ElementType)
                 let gc = GCHandle.Alloc(ab.Data, GCHandleType.Pinned)
-                try memory |> ofWriter export flags size (fun dst -> Marshal.Copy(gc.AddrOfPinnedObject(), dst, size))
+                try (memory, token) ||> ofWriterWithToken export flags size (fun dst -> Marshal.Copy(gc.AddrOfPinnedObject(), dst, size))
                 finally gc.Free()
             else
                 memory |> empty false flags
@@ -522,13 +528,13 @@ module Buffer =
             if nb.SizeInBytes <> 0n then
                 let size = nb.SizeInBytes
                 nb.Use(fun src ->
-                    memory |> ofWriter export flags size (fun dst -> Marshal.Copy(src, dst, size))
+                    (memory, token) ||> ofWriterWithToken export flags size (fun dst -> Marshal.Copy(src, dst, size))
                 )
             else
                 memory |> empty false flags
 
         | :? ExportedBuffer when export ->
-            ofBufferWithMemory false flags buffer memory
+            ofBufferWithMemory false flags buffer memory token
 
         | :? Buffer as b ->
             if export then
@@ -539,13 +545,14 @@ module Buffer =
 
         | :? IBufferRange as bv ->
             let handle = bv.Buffer
-            ofBufferWithMemory export flags handle memory
+            ofBufferWithMemory export flags handle memory token
 
         | _ ->
             failf "unsupported buffer type %A" buffer
 
     let rec ofBuffer (export : bool) (flags : VkBufferUsageFlags) (buffer : IBuffer) (device : Device) =
-        device.DeviceMemory |> ofBufferWithMemory export flags buffer
+        use token = device.Token
+        token |> ofBufferWithMemory export flags buffer device.DeviceMemory
 
     let inline upload (src : nativeint) (dst : Buffer) (dstOffset : nativeint) (sizeInBytes : nativeint)  =
         if sizeInBytes > 0n then
@@ -658,7 +665,8 @@ type ContextBufferExtensions private() =
     [<Extension>]
     static member inline CreateBuffer(memory : DeviceHeap, flags : VkBufferUsageFlags, data : IBuffer,
                                       [<Optional; DefaultParameterValue(false)>] export : bool) =
-        memory |> Buffer.ofBufferWithMemory export flags data
+        use token = memory.Device.Token
+        token |> Buffer.ofBufferWithMemory export flags data memory
 
     [<Extension>]
     static member inline UploadRanges(buffer : Buffer, ptr : nativeint, ranges : RangeSet) =

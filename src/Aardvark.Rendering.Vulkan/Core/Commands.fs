@@ -284,6 +284,7 @@ module CommandAPI =
 
     type DeviceToken with
         member x.enqueue = TokenCommandBuilder(x, ignore)
+        member x.perform = TokenCommandBuilder(x, fun t -> t.Sync())
 
     type Device with
         member x.eventually = TokenCommandBuilder(x.Token, Disposable.dispose)
