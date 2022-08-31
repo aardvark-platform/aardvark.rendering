@@ -338,7 +338,9 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     let hostMemory = memories.[physical.HostMemory.index]
     let deviceMemory = memories.[physical.DeviceMemory.index]
 
-    let currentResourceToken = new ThreadLocal<ref<Option<DeviceToken>>>(fun _ -> ref None)
+    let graphicsToken = DeviceTokenContainer(graphicsFamily.Value)
+    let computeToken = DeviceTokenContainer(computeFamily.Value)
+
     let mutable runtime = Unchecked.defaultof<IRuntime>
     let memoryLimits = physical.Limits.Memory
 
@@ -404,39 +406,16 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
         | _ -> ()
 
     member x.ComputeToken =
-        let ref = currentResourceToken.Value
-        match !ref with
-            | Some t ->
-                t.AddRef()
-                t
-            | None ->
-                let t = new DeviceToken(computeFamily.Value, ref)
-                ref := Some t
-                t 
+        computeToken.CurrentToken
 
     member x.Token =
-        let ref = currentResourceToken.Value
-        match !ref with
-            | Some t ->
-                t.AddRef()
-                t
-            | None ->
-                let t = new DeviceToken(graphicsFamily.Value, ref)
-                ref := Some t
-                t 
+        graphicsToken.CurrentToken
 
     member x.UnsafeCurrentToken =
-        !currentResourceToken.Value
+        graphicsToken.UnsafeCurrentToken
 
     member x.UnsafeSetToken (t : Option<DeviceToken>) =
-        let ref = currentResourceToken.Value
-        ref := t
-
-    member x.Sync() =
-        let ref = currentResourceToken.Value
-        match !ref with
-            | Some t -> t.Sync()
-            | _ -> ()
+        graphicsToken.UnsafeSetToken t
 
     member x.Runtime
         with get() = runtime
@@ -2882,7 +2861,32 @@ and DeviceQueueThread(family : DeviceQueueFamily) =
         x.Enqueue(item, task, priority)
         task
 
+and internal DeviceTokenContainer(family : DeviceQueueFamily) =
+    let token = new ThreadLocal<ref<DeviceToken option>>(fun _ -> ref None)
 
+    member x.CurrentToken =
+        let ref = token.Value
+        match ref.Value with
+        | Some t ->
+            t.AddRef()
+            t
+        | None ->
+            let t = new DeviceToken(family, ref)
+            ref.Value <- Some t
+            t
+
+    member x.UnsafeCurrentToken =
+        token.Value.Value
+
+    member x.UnsafeSetToken (t : Option<DeviceToken>) =
+        let ref = token.Value
+        ref.Value <- t
+
+    member x.Sync() =
+        let ref = token.Value
+        match ref.Value with
+        | Some t -> t.Sync()
+        | _ -> ()
 
 and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
     let mutable pool                : Option<CommandPool>   = None
@@ -2968,6 +2972,9 @@ and DeviceToken(family : DeviceQueueFamily, ref : ref<Option<DeviceToken>>) =
                     DeviceTask.Finished
             | None ->
                 DeviceTask.Finished
+
+    member x.Device = family.Device
+    member x.Family = family
 
     member x.Flush() =
         check()
