@@ -83,6 +83,14 @@ and IRuntime =
 type RenderTaskRunExtensions() =
 
     [<Extension>]
+    static member Update(t : IRenderTask) =
+        t.Update(AdaptiveToken.Top, RenderToken.Empty)
+
+    [<Extension>]
+    static member Update(t : IRenderTask, token : AdaptiveToken) =
+        t.Update(token, RenderToken.Empty)
+
+    [<Extension>]
     static member Run(t : IRenderTask, token : AdaptiveToken, renderToken : RenderToken, fbo : IFramebuffer) =
         t.Run(token, renderToken, OutputDescription.ofFramebuffer fbo)
 
