@@ -498,6 +498,20 @@ module Resources =
                         cache
                     )
 
+                member x.Equals(other : AdaptiveDescriptor<'T>) =
+                    slot = other.Slot && count = other.Count && resource = other.Resource
+
+                override x.Equals(other : obj) =
+                    match other with
+                    | :? AdaptiveDescriptor<'T> as o -> x.Equals o
+                    | _ -> false
+
+                override x.GetHashCode() =
+                    hash (slot, count, resource)
+
+                interface IEquatable<AdaptiveDescriptor<'T>> with
+                    member x.Equals other = x.Equals other
+
                 interface IAdaptiveValue with
                     member x.IsConstant = false
                     member x.ContentType = typeof<DescriptorInfo[]>
