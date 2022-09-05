@@ -2143,7 +2143,9 @@ type ResourceLocationSet() =
             else
                 changed
 
-        run false
+        dirty |> LockedSet.lock (fun _ ->
+            run false
+        )
 
     member private x.AddInput(r : IResourceLocation) =
         let reader = r.GetReader()
