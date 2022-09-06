@@ -1,5 +1,6 @@
 ﻿open Aardvark.Base
 open Aardvark.Rendering
+open Aardvark.Rendering.Text
 open Aardvark.Rendering.Vulkan
 open FSharp.Data.Adaptive
 open Aardvark.SceneGraph
@@ -197,6 +198,44 @@ let main argv =
         let clear = clear { color C4b.Black; depth 1.0 }
         vulkanTask.RenderTo(vulkanFramebuffer, clear).GetOutputTexture(DefaultSemantic.Colors)
 
+
+    let stats = cval ""
+
+    let puller =
+        let runtime = unbox<GL.Runtime> win.Runtime
+        let memory = runtime.Context.MemoryUsage
+
+        async {
+            while true do
+                transact (fun _ ->
+                    let data =
+                        [ sprintf "Textures: %d (%d bytes)" memory.TextureCount memory.TextureMemory
+                          sprintf "Buffers: %d (%d bytes)" memory.BufferCount memory.BufferMemory ]
+                        |> String.concat Environment.NewLine
+
+                    stats.Value <- data
+                )
+                do! Async.Sleep 200
+        }
+
+    Async.Start puller
+
+    let overlaySg =
+
+        let trafo =
+            win.Sizes |> AVal.map (fun size ->
+                let px = 2.0 / V2d size
+                Trafo3d.Scale(0.05) *
+                Trafo3d.Scale(1.0, float size.X / float size.Y, 1.0) *
+                Trafo3d.Translation(-1.0 + 20.0 * px.X, -1.0 + 45.0 * px.Y, 0.0)
+            )
+
+        //TextConfig
+        Sg.text FontSquirrel.Hack.Regular C4b.White stats
+            |> Sg.trafo trafo
+            |> Sg.viewTrafo' Trafo3d.Identity
+            |> Sg.projTrafo' Trafo3d.Identity
+
     let sg =
 
         let fullscreenQuad =
@@ -221,7 +260,7 @@ let main argv =
         }
 
     // show the window
-    win.Scene <- sg
+    win.Scene <- Sg.ofList [sg; overlaySg]
     win.Run()
 
     0

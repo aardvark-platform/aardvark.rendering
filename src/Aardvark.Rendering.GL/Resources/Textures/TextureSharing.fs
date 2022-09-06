@@ -66,5 +66,6 @@ type ContextTextureSharingExtensions =
 
             this.SetDefaultTextureParams(target, texture.MipMapLevels)
 
+            ResourceCounts.addTexture this memory.Size
             new SharedTexture(this, handle, texture, sharedMemory)
         )

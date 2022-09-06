@@ -140,6 +140,7 @@ module BufferExtensions =
                 GL.Dispatch.BufferStorageMem(BufferTarget.CopyWriteBuffer, nativeint memory.Size, sharedMemory.Handle, memory.Offset)
                 GL.Check "failed to import buffer"
 
+                ResourceCounts.addBuffer x (int64 buffer.SizeInBytes)
                 new SharedBuffer(x, buffer.SizeInBytes, handle, buffer, sharedMemory)
             )
 
