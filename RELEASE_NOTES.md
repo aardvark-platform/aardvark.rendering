@@ -1,3 +1,6 @@
+### 5.2.13
+- switched to aardvark.assembler
+
 ### 5.2.12
 - reverted Vulkan queue creation
 - enabled sharing extensions by default (windows/linux)
