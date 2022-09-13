@@ -48,9 +48,24 @@ module TestApplication =
 
         let create (debug : DebugLevel) =
             let app = new HeadlessVulkanApplication(debug)
+            let onExit =
+                { new IDisposable with
+                    member x.Dispose() =
+                        let failed, errors =
+                            let br = Environment.NewLine + Environment.NewLine
+                            let msgs = app.Instance.DebugSummary.ErrorMessages
+
+                            msgs.Length > 0,
+                            msgs |> String.concat br |> (+) br
+
+                        app.Dispose()
+
+                        if failed then
+                            failwithf "Vulkan validation triggered errors: %s" errors
+                }
 
             new TestApplication(
-                app.Runtime, app :> IDisposable
+                app.Runtime, onExit
             )
 
     let create' (debug : DebugLevel) (backend : Backend) =

@@ -6,7 +6,6 @@ open Aardvark.Rendering.Tests
 open Aardvark.SceneGraph
 open Aardvark.Application
 open FSharp.Data.Adaptive
-open FSharp.Data.Adaptive.Operators
 open Expecto
 
 module IntegerAttachments =

@@ -33,8 +33,17 @@ type DebugMessage =
 
 type DebugSummary =
     {
-        messageCounts   : Map<MessageSeverity, int>
+        messages   : Map<MessageSeverity, string list>
     }
+
+    member x.MessageCounts =
+        x.messages |> Map.map (fun _ -> List.length)
+
+    member x.GetMessages(severity : MessageSeverity) =
+        x.messages |> Map.tryFind severity |> Option.defaultValue []
+
+    member x.ErrorMessages =
+        x.GetMessages MessageSeverity.Error
 
 [<AutoOpen>]
 module private DebugReportHelpers =
@@ -98,7 +107,7 @@ module private DebugReportHelpers =
         let mutable currentId = 0
         let observers = ConcurrentDictionary<int, IObserver<DebugMessage>>()
         let objectTraces = ConcurrentDictionary<uint64, string[]>()
-        let messageCounts = ConcurrentDictionary<MessageSeverity, int>()
+        let messages = ConcurrentDictionary<MessageSeverity, string list>()
 
         let shutdown () =
             for (KeyValue(_,obs)) in observers do
@@ -113,8 +122,6 @@ module private DebugReportHelpers =
         let callback (severity : VkDebugUtilsMessageSeverityFlagsEXT) (messageType : VkDebugUtilsMessageTypeFlagsEXT) (data : nativeptr<VkDebugUtilsMessengerCallbackDataEXT>) (userData : nativeint) =
             let severity = VkDebugUtilsMessageSeverityFlagsEXT.toMessageSeverity severity
             if severity <= verbosity then
-                messageCounts.AddOrUpdate(severity, 1, fun _ -> (+) 1) |> ignore
-
                 let data = NativePtr.read data
 
                 let messageIdName =
@@ -155,6 +162,8 @@ module private DebugReportHelpers =
                 let msg =
                     let m = data.pMessage |> CStr.toString
                     (m :: objects) |> List.reduce (fun a b -> a + Environment.NewLine + b)
+
+                messages.AddOrUpdate(severity, [msg], fun _ l -> List.append l [msg]) |> ignore
 
                 let hash =
                     computeHash (fun w ->
@@ -239,8 +248,8 @@ module private DebugReportHelpers =
         let layer = CStr.malloc "DebugReport"
 
         member x.DebugSummary =
-            let counts = messageCounts |> Seq.map (fun (KeyValue(s, n)) -> s, n) |> Map.ofSeq
-            { messageCounts = counts }
+            let msg = messages |> Seq.map (fun (KeyValue(s, n)) -> s, n) |> Map.ofSeq
+            { messages = msg }
 
         member x.Verbosity
             with get() = verbosity
@@ -359,7 +368,7 @@ type InstanceExtensions private() =
     static member GetDebugSummary(this : Instance) =
         match getAdapter this with
         | Some a -> a.DebugSummary
-        | _ -> { messageCounts = Map.empty }
+        | _ -> { messages = Map.empty }
 
     [<Extension>]
     static member GetDebugVerbosity(this : Instance) =
@@ -431,9 +440,6 @@ module ``FSharp Style Debug Extensions`` =
 
         let debugBreak (level : DebugLevel) (msg : DebugMessage) =
             if level >= DebugLevel.Normal then
-                if msg.severity = MessageSeverity.Error then
-                    Debugger.Launch() |> ignore
-
                 if Debugger.IsAttached then
                     Debugger.Break()
 
@@ -454,16 +460,23 @@ module ``FSharp Style Debug Extensions`` =
                 Report.Line("[Vulkan] DEBUG: {0}", str)
 
         let printDebugSummary (summary : DebugSummary) =
-            let messages = summary.messageCounts
+            let messages = summary.MessageCounts
 
             if not messages.IsEmpty then
-                let summary =
+                let counts =
                     messages
                     |> Seq.map (fun (KeyValue(s, n)) -> sprintf "%A: %d" s n)
                     |> Seq.reduce (fun a b -> a + ", " + b)
 
                 Report.Begin("[Vulkan] Message summary")
-                Report.Line(2, summary)
+                Report.Line(2, counts)
+
+                let errors =
+                    let sep = Environment.NewLine + Environment.NewLine
+                    summary.ErrorMessages |> String.concat sep
+
+                Report.ErrorNoPrefix(errors)
+
                 Report.End() |> ignore
 
     type Instance with
