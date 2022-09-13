@@ -8,6 +8,7 @@ module ``Rendering Tests`` =
 
     let private tests = [
         FramebufferSignature.tests
+        IntegerAttachments.tests
     ]
 
     [<Tests>]
