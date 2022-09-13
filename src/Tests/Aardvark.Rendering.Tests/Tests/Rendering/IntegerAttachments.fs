@@ -85,12 +85,12 @@ module IntegerAttachments =
 
     let tests (backend : Backend) =
         [
-            "Render to R8i", Cases.renderToR32i 1
-            "Render to R16i", Cases.renderToR32i 1
-            "Render to R32i", Cases.renderToR32i 1
-            "Render to R8ui", Cases.renderToR32ui 1
-            "Render to R16ui", Cases.renderToR32ui 1
-            "Render to R32ui", Cases.renderToR32ui 1
-            "Render to R32ui multisampled", Cases.renderToR32ui 4
+            "2D r8i", Cases.renderToR8i 1
+            "2D r16i", Cases.renderToR16i 1
+            "2D r32i", Cases.renderToR32i 1
+            "2D r8ui", Cases.renderToR8ui 1
+            "2D r16ui", Cases.renderToR16ui 1
+            "2D r32ui", Cases.renderToR32ui 1
+            "2D r32ui multisampled", Cases.renderToR32ui 4
         ]
         |> prepareCases backend "Integer attachments"
