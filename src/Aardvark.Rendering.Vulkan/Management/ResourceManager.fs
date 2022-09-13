@@ -85,13 +85,13 @@ module internal ResourceUserExtensions =
         static member None = noUser
 
     type IAdaptiveValue with
-        member x.GetValueUntyped(user, token, renderToken) =
+        member x.GetValueUntyped(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
             match x with
             | :? IManagedResource as r -> r.GetValue(user, token, renderToken)
             | _ -> x.GetValue(token, renderToken)
 
     type IAdaptiveValue<'T> with
-        member x.GetValue(user, token, renderToken) =
+        member x.GetValue(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
             match x with
             | :? IManagedResource<'T> as r -> r.GetValue(user, token, renderToken)
             | _ -> x.GetValue(token, renderToken)
