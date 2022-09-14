@@ -197,6 +197,79 @@ module TextureUpload =
             let region = Some <| Box2i(11, 34, 87, 66)
             uploadAndDownloadTexture2D runtime size 1 5 4 0 2 region
 
+        let texture2DRgbVsBgrFormat (runtime : IRuntime) =
+            let size = V2i(256)
+            let piRgb = PixImage<byte>(Col.Format.RGB, size)
+            let piBgr = PixImage<byte>(Col.Format.BGR, size)
+
+            let fill (pi : PixImage<byte>) =
+                pi.GetChannel(Col.Channel.Red).SetByCoord(fun _ -> 255uy) |> ignore
+                pi.GetChannel(Col.Channel.Green).SetByCoord(fun _ -> 0uy) |> ignore
+                pi.GetChannel(Col.Channel.Blue).SetByCoord(fun _ -> 100uy) |> ignore
+
+            fill piRgb
+            fill piBgr
+
+            // Direct upload
+            let texture = runtime.CreateTexture2D(size, TextureFormat.Rgba8)
+
+            texture.Upload(piRgb)
+            let piRgbDirectlyUploaded = texture.Download().AsPixImage<uint8>().ToFormat(Col.Format.RGB)
+
+            texture.Upload(piBgr)
+            let piBgrDirectlyUploaded = texture.Download().AsPixImage<uint8>().ToFormat(Col.Format.BGR)
+
+            // Prepared
+            let texturePreparedRgb = runtime.PrepareTexture(PixTexture2d(piRgb, false))
+            let piRgbPrepared = texturePreparedRgb.Download().AsPixImage<uint8>().ToFormat(Col.Format.RGB)
+
+            let texturePreparedBgr = runtime.PrepareTexture(PixTexture2d(piBgr, false))
+            let piBgrPrepared = texturePreparedBgr.Download().AsPixImage<uint8>().ToFormat(Col.Format.BGR)
+
+            // Rendered
+            use signature =
+                runtime.CreateFramebufferSignature [
+                    DefaultSemantic.Colors, TextureFormat.Rgba8
+                ]
+
+            let compileTask (pi : PixImage) =
+                Sg.fullScreenQuad
+                |> Sg.diffuseTexture' (PixTexture2d(pi, false))
+                |> Sg.shader {
+                    do! DefaultSurfaces.diffuseTexture
+                }
+                |> Sg.compile runtime signature
+
+            let renderAndDownload (pi : PixImage<'T>) =
+                use task = compileTask pi
+                let buffer = task |> RenderTask.renderToColor ~~size
+                buffer.Acquire()
+
+                try
+                    buffer.GetValue().Download().AsPixImage<'T>().ToFormat(pi.Format)
+                finally
+                    buffer.Release()
+
+            let piRgbRendered = renderAndDownload piRgb
+            let piBgrRendered = renderAndDownload piBgr
+
+            try
+                PixImage.compare V2i.Zero piRgb piBgr
+
+                PixImage.compare V2i.Zero piRgb piRgbDirectlyUploaded
+                PixImage.compare V2i.Zero piBgr piBgrDirectlyUploaded
+
+                PixImage.compare V2i.Zero piRgb piRgbPrepared
+                PixImage.compare V2i.Zero piBgr piBgrPrepared
+
+                PixImage.compare V2i.Zero piRgb piRgbRendered
+                PixImage.compare V2i.Zero piBgr piBgrRendered
+
+            finally
+                runtime.DeleteTexture texture
+                runtime.DeleteTexture texturePreparedRgb
+                runtime.DeleteTexture texturePreparedBgr
+
         let private uploadAndDownloadPixTexture2D (runtime : IRuntime) (size : V2i) (levels : int) (textureParams : TextureParams) =
             let expectedLevels = if textureParams.wantMipMaps then Fun.MipmapLevels(size) else 1
 
@@ -670,6 +743,7 @@ module TextureUpload =
             "2D level subwindow",           Cases.texture2DLevelSubwindow
             "2D native",                    Cases.texture2DNative
             "2D native mipmap generation",  Cases.texture2DNativeMipmapGeneration
+            "2D RGB vs BGR format",         Cases.texture2DRgbVsBgrFormat
 
             "2D array",                  Cases.texture2DArray
             "2D array subwindow",        Cases.texture2DArraySubwindow
