@@ -9,6 +9,8 @@ open System
 open System.Reflection
 
 type TestApplication(runtime : IRuntime, disposable : IDisposable) =
+    do runtime.ShaderCachePath <- None
+
     member x.Runtime = runtime
     member x.Dispose() = disposable.Dispose()
 

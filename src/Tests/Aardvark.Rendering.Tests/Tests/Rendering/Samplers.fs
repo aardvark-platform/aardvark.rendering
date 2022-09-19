@@ -10,13 +10,6 @@ open Expecto
 
 module Samplers =
 
-    module private Literal =
-        [<Literal>]
-        let IntColor = "IntColor"
-
-    module private Semantic =
-        let IntColor = Sym.ofString Literal.IntColor
-
     module private Shader =
         open FShade
 
@@ -25,8 +18,7 @@ module Samplers =
         }
 
         type Fragment = {
-            //[<Color>] c : V4i
-            [<Semantic(Literal.IntColor)>] c : V4i
+            [<Color>] c : V4i
         }
 
         let private diffuseSampler =
@@ -36,7 +28,7 @@ module Samplers =
 
         let diffuseTexture (v : Vertex) =
             fragment {
-                return { c = diffuseSampler.Sample(v.tc) }
+                return diffuseSampler.Sample(v.tc)
             }
 
     module Cases =
@@ -46,7 +38,7 @@ module Samplers =
 
             use signature =
                 runtime.CreateFramebufferSignature([
-                    Semantic.IntColor, TextureFormat.Rgba32ui
+                    DefaultSemantic.Colors, TextureFormat.Rgba32ui
                 ])
 
             let input = PixImage.random32ui size
@@ -59,7 +51,7 @@ module Samplers =
                 }
                 |> Sg.compile runtime signature
 
-            let buffer = task |> RenderTask.renderSemantics (Set.ofList [Semantic.IntColor]) (AVal.constant size) |> Map.find Semantic.IntColor
+            let buffer = task |> RenderTask.renderToColor (AVal.constant size)
             buffer.Acquire()
 
             try

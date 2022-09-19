@@ -10,13 +10,6 @@ open Expecto
 
 module IntegerAttachments =
 
-    module private Literal =
-        [<Literal>]
-        let Id = "Id"
-
-    module private Semantic =
-        let Id = Sym.ofString Literal.Id
-
     module private Shader =
         open FShade
 
@@ -24,13 +17,9 @@ module IntegerAttachments =
             [<PrimitiveId>] primId : int
         }
 
-        type Fragment = {
-            [<Semantic(Literal.Id)>] id : int
-        }
-
         let primitiveId (v : Vertex) =
             fragment {
-                return { id = v.primId }
+                return V4i(v.primId)
             }
 
     module Cases =
@@ -40,8 +29,7 @@ module IntegerAttachments =
 
             use signature =
                 runtime.CreateFramebufferSignature([
-                    DefaultSemantic.Colors, TextureFormat.Rgba8
-                    Semantic.Id, format
+                    DefaultSemantic.Colors, format
                 ], samples = samples)
 
             use task =
@@ -52,7 +40,7 @@ module IntegerAttachments =
                 }
                 |> Sg.compile runtime signature
 
-            let buffer = task |> RenderTask.renderSemantics (Set.ofList [Semantic.Id]) (AVal.constant size) |> Map.find Semantic.Id
+            let buffer = task |> RenderTask.renderToColor (AVal.constant size)
             buffer.Acquire()
 
             try
