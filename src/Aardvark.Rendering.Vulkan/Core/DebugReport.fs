@@ -45,6 +45,9 @@ type DebugSummary =
     member x.ErrorMessages =
         x.GetMessages MessageSeverity.Error
 
+    member x.HasErrors =
+        x.ErrorMessages |> List.isEmpty |> not
+
 [<AutoOpen>]
 module private DebugReportHelpers =
     open System.Security.Cryptography
@@ -471,11 +474,12 @@ module ``FSharp Style Debug Extensions`` =
                 Report.Begin("[Vulkan] Message summary")
                 Report.Line(2, counts)
 
-                let errors =
-                    let sep = Environment.NewLine + Environment.NewLine
-                    summary.ErrorMessages |> String.concat sep
+                if summary.HasErrors then
+                    let errors =
+                        let sep = Environment.NewLine + Environment.NewLine
+                        summary.ErrorMessages |> String.concat sep
 
-                Report.ErrorNoPrefix(errors)
+                    Report.ErrorNoPrefix(errors)
 
                 Report.End() |> ignore
 
