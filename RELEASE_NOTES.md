@@ -1,3 +1,15 @@
+### 5.3.0-prerelease0004
+- [Vulkan] Implemented RaytracingTask.Update
+- [Vulkan] Implemented CommandTask.PerformUpdate
+- [Vulkan] Reworked resource manager to prevent disposal of resources in use
+- [Vulkan] Use separate device tokens for graphics and compute families
+- [Vulkan] Lock pending set during update loop of ResourceLocationSet
+- [Vulkan] Added basic support for validation features
+- [Raytracing] Fixed issue with acceleration structure building and device tokens
+- [GL] Fixed memory usage tracking for imported resources
+- Added IRenderTask.Update overloads
+- Updated to FShade 5.3 prerelease
+
 ### 5.3.0-prerelease0003
 - [Vulkan] Fixed issue with duplicate descriptor writes
 - [Vulkan] Trim excess elements from image sampler array
