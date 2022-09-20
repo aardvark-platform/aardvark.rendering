@@ -29,6 +29,7 @@ type DebugMessage =
         severity        : MessageSeverity
         layerPrefix     : string
         message         : string
+        objects         : string list
     }
 
 type DebugSummary =
@@ -162,10 +163,7 @@ module private DebugReportHelpers =
                         |> List.map (fun str -> indent 8 + str)
                     )
 
-                let msg =
-                    let m = data.pMessage |> CStr.toString
-                    (m :: objects) |> List.reduce (fun a b -> a + Environment.NewLine + b)
-
+                let msg = data.pMessage |> CStr.toString
                 messages.AddOrUpdate(severity, [msg], fun _ l -> List.append l [msg]) |> ignore
 
                 let hash =
@@ -182,6 +180,7 @@ module private DebugReportHelpers =
                     severity        = severity
                     layerPrefix     = messageIdName
                     message         = msg
+                    objects         = objects
                 }
 
             0
@@ -332,6 +331,7 @@ type InstanceExtensions private() =
                     performance     = false
                     layerPrefix     = "DR"
                     message         = "could not subscribe to DebugMessages since the instance does not provide the needed Extension"
+                    objects         = []
                 }
                 obs.OnCompleted()
                 { new IDisposable with member x.Dispose() = () }
@@ -441,13 +441,34 @@ module ``FSharp Style Debug Extensions`` =
     [<AutoOpen>]
     module private Output =
 
+        [<AutoOpen>]
+        module private Patterns =
+            open System.Text.RegularExpressions
+
+            let private debugPrintfRegex =
+                Regex @".*DEBUG-PRINTF.*\| MessageID = 0x[0-9a-fA-F]+ \| (.*)"
+
+            let (|DebugPrintf|_|) (msg : DebugMessage) =
+                let m = debugPrintfRegex.Match msg.message
+                if m.Success then
+                    Some m.Groups.[1].Value
+                else
+                    None
+
+        let private getMessageString = function
+            | DebugPrintf str -> str
+            | msg ->
+                let str = (msg.message :: msg.objects) |> String.concat Environment.NewLine
+                msg.layerPrefix + ": " + str
+
         let debugBreak (level : DebugLevel) (msg : DebugMessage) =
             if level >= DebugLevel.Normal then
                 if Debugger.IsAttached then
                     Debugger.Break()
 
         let debugMessage (onError : DebugMessage -> unit) (msg : DebugMessage) =
-            let str = msg.layerPrefix + ": " + msg.message
+            let str = getMessageString msg
+
             match msg.severity with
             | MessageSeverity.Error ->
                 Report.Error("[Vulkan] {0}", str)

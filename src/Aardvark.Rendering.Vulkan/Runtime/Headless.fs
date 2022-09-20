@@ -18,8 +18,7 @@ type HeadlessVulkanApplication(debug : DebugLevel, instanceExtensions : list<str
             yield! Instance.Extensions.Sharing
 
             if debug > DebugLevel.None then
-                yield Instance.Extensions.DebugReport
-                yield Instance.Extensions.DebugUtils
+                yield! Instance.Extensions.Debug
         ]
 
     let requestedLayers =

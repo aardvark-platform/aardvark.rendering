@@ -15,6 +15,7 @@ open KHRRayQuery
 open KHRAccelerationStructure
 open KHRBufferDeviceAddress
 open EXTDescriptorIndexing
+open EXTValidationFeatures
 open Vulkan11
 
 #nowarn "9"
@@ -108,9 +109,43 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                         0u,
                         version
                     )
-                    
+
+                let enabledValidationFeatures =
+                    [|
+                        if ValidationConfig.BestPracticesValidation then
+                            yield VkValidationFeatureEnableEXT.BestPractices
+
+                        if ValidationConfig.SynchronizationValidation then
+                            yield VkValidationFeatureEnableEXT.SynchronizationValidation
+
+                        match ValidationConfig.ShaderBasedValidation with
+                        | ValidationConfig.ShaderValidation.GpuAssisted ->
+                            yield VkValidationFeatureEnableEXT.GpuAssisted
+
+                        | ValidationConfig.ShaderValidation.DebugPrintf ->
+                            yield VkValidationFeatureEnableEXT.DebugPrintf
+
+                        | _ ->
+                            ()
+                    |]
+
+                let! pEnabledValidationFeatures = enabledValidationFeatures
+
+                let! pValidationFeatures =
+                    VkValidationFeaturesEXT(
+                        uint32 enabledValidationFeatures.Length, pEnabledValidationFeatures,
+                        0u, NativePtr.zero
+                    )
+
+                let pNext =
+                    if debugEnabled then
+                        NativePtr.toNativeInt pValidationFeatures
+                    else
+                        0n
+
                 let! pInfo =
                     VkInstanceCreateInfo(
+                        pNext,
                         VkInstanceCreateFlags.None,
                         pApplicationInfo,
                         uint32 layers.Length, pLayers,
@@ -586,8 +621,6 @@ and PhysicalDeviceGroup internal(instance : Instance, devices : PhysicalDevice[]
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Instance =
     module Extensions =
-        let DebugReport                     = EXTDebugReport.Name
-        let DebugUtils                      = EXTDebugUtils.Name
         let Surface                         = KHRSurface.Name
         let SwapChain                       = KHRSwapchain.Name
         let Display                         = KHRDisplay.Name
@@ -602,6 +635,12 @@ module Instance =
 
         let ShaderSubgroupVote              = EXTShaderSubgroupVote.Name
         let ShaderSubgroupBallot            = EXTShaderSubgroupBallot.Name
+
+        let Debug = [
+            EXTDebugReport.Name
+            EXTDebugUtils.Name
+            KHRShaderNonSemanticInfo.Name
+        ]
 
         let Raytracing = [
                 KHRRayTracingPipeline.Name
