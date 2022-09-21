@@ -602,6 +602,10 @@ module TextureFormat =
         elif s % 8 = 0 then s / 8
         else failwithf "[TextureFormat] ill-aligned size %A" s
 
+    /// Returns whether the given format is color renderable (i.e. an uncompressed color format)
+    let isColorRenderable (fmt : TextureFormat) =
+        not (hasDepth fmt || hasStencil fmt || isCompressed fmt)
+
 [<AutoOpen>]
 module TextureFormatExtensions =
     type TextureFormat with
@@ -612,6 +616,7 @@ module TextureFormatExtensions =
         member x.IsDepth = TextureFormat.isDepth x
         member x.IsStencil = TextureFormat.isStencil x
         member x.IsDepthStencil = TextureFormat.isDepthStencil x
+        member x.IsColorRenderable = TextureFormat.isColorRenderable x
         member x.HasDepth = TextureFormat.hasDepth x
         member x.HasStencil = TextureFormat.hasStencil x
         member x.Aspect = TextureFormat.toAspect x

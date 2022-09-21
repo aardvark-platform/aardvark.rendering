@@ -227,8 +227,9 @@ module FShadeInterop =
             MipLodBias    = state.MipLodBias    |> Option.map float32  |> Option.defaultValue def.MipLodBias
         }
 
-    let private formatToType =
-        LookupTable.lookupTable [
+    // Output types for color-renderable texture formats
+    let private colorFormatToType =
+        LookupTable.lookupTable' [
             TextureFormat.Bgr8,         typeof<V3d>
             TextureFormat.Bgra8,        typeof<V4d>
             TextureFormat.R3G3B2,       typeof<V3d>
@@ -294,31 +295,6 @@ module FShadeInterop =
             TextureFormat.Rgb16Snorm,   typeof<V3d>
             TextureFormat.Rgba16Snorm,  typeof<V4d>
             TextureFormat.Rgb10A2ui,    typeof<V4i>
-
-            TextureFormat.DepthComponent16,  typeof<float>
-            TextureFormat.DepthComponent24,  typeof<float>
-            TextureFormat.DepthComponent32,  typeof<float>
-            TextureFormat.DepthComponent32f, typeof<float>
-            TextureFormat.Depth24Stencil8,   typeof<float>
-            TextureFormat.Depth32fStencil8,  typeof<float>
-            TextureFormat.StencilIndex8,     typeof<int>
-
-            TextureFormat.CompressedRgbS3tcDxt1,          typeof<V3d>   // BC1
-            TextureFormat.CompressedSrgbS3tcDxt1,         typeof<V3d>
-            TextureFormat.CompressedRgbaS3tcDxt1,         typeof<V4d>
-            TextureFormat.CompressedSrgbAlphaS3tcDxt1,    typeof<V4d>
-            TextureFormat.CompressedRgbaS3tcDxt3,         typeof<V4d>   // BC2
-            TextureFormat.CompressedSrgbAlphaS3tcDxt3,    typeof<V4d>
-            TextureFormat.CompressedRgbaS3tcDxt5,         typeof<V4d>   // BC3
-            TextureFormat.CompressedSrgbAlphaS3tcDxt5,    typeof<V4d>
-            TextureFormat.CompressedRedRgtc1,             typeof<float> // BC4
-            TextureFormat.CompressedSignedRedRgtc1,       typeof<float>
-            TextureFormat.CompressedRgRgtc2,              typeof<V2d>   // BC5
-            TextureFormat.CompressedSignedRgRgtc2,        typeof<V2d>
-            TextureFormat.CompressedRgbBptcSignedFloat,   typeof<V3d>   // BC6h
-            TextureFormat.CompressedRgbBptcUnsignedFloat, typeof<V3d>
-            TextureFormat.CompressedRgbaBptcUnorm,        typeof<V4d>   // BC7
-            TextureFormat.CompressedSrgbAlphaBptcUnorm,   typeof<V4d>
         ]
 
     [<GLSLIntrinsic("gl_DeviceIndex", "GL_EXT_device_group")>]
@@ -390,7 +366,11 @@ module FShadeInterop =
                     failwithf "[FShade] cannot render to %d layers using %d devices" layerCount deviceCount
 
     type AttachmentSignature with
-        member x.Type = formatToType x.Format
+        member x.Type =
+            match colorFormatToType x.Format with
+            | Some typ -> typ
+            | _ ->
+                failwithf "%A is not a supported color-renderable format" x.Format
 
     type SamplerState with
         member x.SamplerState = toSamplerState x

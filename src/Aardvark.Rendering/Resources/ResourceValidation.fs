@@ -281,6 +281,12 @@ module ResourceValidation =
                     Utils.failf "color attachment slot must not be negative (is %d for %A)" slot att.Name
 
             colorAttachments
+            |> Map.iter (fun _ att ->
+                if not att.Format.IsColorRenderable then
+                    Utils.failf "format %A of color attachment %A is not color-renderable" att.Format att.Name
+            )
+
+            colorAttachments
             |> Map.toList
             |> List.groupBy (fun (_, att) -> att.Name)
             |> List.iter (fun (name, atts) ->
