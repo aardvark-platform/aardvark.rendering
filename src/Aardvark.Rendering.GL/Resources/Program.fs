@@ -88,6 +88,14 @@ module ProgramExtensions =
     open System.Text.RegularExpressions
     open System
 
+    [<AutoOpen>]
+    module private RuntimeExtensions =
+        type IRuntime with
+            member x.PrintShaderCode =
+                match x.DebugConfig with
+                | :? DebugConfig as cfg -> cfg.PrintShaderCode
+                | _ -> false
+
     module private FShadeBackend = 
         open FShade.GLSL
 
@@ -273,7 +281,7 @@ module ProgramExtensions =
                                 .Replace("out vec4 Colors3Out", "out vec4 ColorsOut")
                        else code
 
-            if RuntimeConfig.PrintShaderCode then
+            if x.Runtime.PrintShaderCode then
                 let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
                 let numberdLines = ShaderCodeReporting.withLineNumbers codeWithDefine
                 Report.Line("Compiling shader:\n{0}", numberdLines)

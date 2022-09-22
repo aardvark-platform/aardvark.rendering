@@ -2239,7 +2239,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
                     ]
                     |> sprintf "{ %s }"
 
-                if RuntimeConfig.ShowRecompile then
+                if device.DebugConfig.PrintRenderTaskRecompile then
                     Log.line "[Vulkan] recompile commands: %s" cause
 
                 inner.Begin(renderPass, fbo, CommandBufferUsage.RenderPassContinue, true)

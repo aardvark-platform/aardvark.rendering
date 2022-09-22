@@ -58,7 +58,7 @@ module StereoShader =
 type private DummyObject() =
     inherit AdaptiveObject()
 
-type VulkanVRApplicationLayered(samples : int, debug : DebugLevel, adjustSize : V2i -> V2i) as this  =
+type VulkanVRApplicationLayered(samples : int, debug : IDebugConfig, adjustSize : V2i -> V2i) as this  =
     inherit VrRenderer(adjustSize)
     
     let app = new HeadlessVulkanApplication(debug, this.GetVulkanInstanceExtensions(), fun d -> this.GetVulkanDeviceExtensions d.Handle)
@@ -134,17 +134,17 @@ type VulkanVRApplicationLayered(samples : int, debug : DebugLevel, adjustSize : 
     
     let queue = device.GraphicsFamily.Queues |> List.head
     
-    new(samples, debug, adjustSize) = new VulkanVRApplicationLayered(samples, DebugLevel.ofBool debug, adjustSize)
+    new(samples : int, debug : bool, adjustSize : V2i -> V2i) = new VulkanVRApplicationLayered(samples, DebugLevel.ofBool debug, adjustSize)
 
-    new(samples, adjustSize) = new VulkanVRApplicationLayered(samples, DebugLevel.None, adjustSize)
-    new(debug : DebugLevel, adjustSize) = new VulkanVRApplicationLayered(1, debug, adjustSize)
-    new(debug : bool, adjustSize) = new VulkanVRApplicationLayered(1, debug, adjustSize)
-    new(adjustSize) = new VulkanVRApplicationLayered(1, DebugLevel.None, adjustSize)
+    new(samples : int, adjustSize : V2i -> V2i) = new VulkanVRApplicationLayered(samples, DebugLevel.None, adjustSize)
+    new(debug : IDebugConfig, adjustSize : V2i -> V2i) = new VulkanVRApplicationLayered(1, debug, adjustSize)
+    new(debug : bool, adjustSize : V2i -> V2i) = new VulkanVRApplicationLayered(1, debug, adjustSize)
+    new(adjustSize : V2i -> V2i) = new VulkanVRApplicationLayered(1, DebugLevel.None, adjustSize)
     
-    new(samples, debug : bool) = new VulkanVRApplicationLayered(samples, debug, id)
-    new(samples, debug : DebugLevel) = new VulkanVRApplicationLayered(samples, debug, id)
-    new(samples) = new VulkanVRApplicationLayered(samples, DebugLevel.None, id)
-    new(debug : DebugLevel) = new VulkanVRApplicationLayered(1, debug, id)
+    new(samples : int, debug : bool) = new VulkanVRApplicationLayered(samples, debug, id)
+    new(samples : int, debug : IDebugConfig) = new VulkanVRApplicationLayered(samples, debug, id)
+    new(samples : int) = new VulkanVRApplicationLayered(samples, DebugLevel.None, id)
+    new(debug : IDebugConfig) = new VulkanVRApplicationLayered(1, debug, id)
     new(debug : bool) = new VulkanVRApplicationLayered(1, debug, id)
     new() = new VulkanVRApplicationLayered(1, DebugLevel.None, id)
 

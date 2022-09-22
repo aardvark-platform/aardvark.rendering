@@ -17,7 +17,7 @@ open BenchmarkDotNet.Toolchains
 
 let testCompile() =
     use runtime = new Runtime(DebugLevel.None)
-    let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create runtime.DebugLevel)
+    let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create runtime.DebugConfig)
     runtime.Initialize(ctx)
 
     let signature =

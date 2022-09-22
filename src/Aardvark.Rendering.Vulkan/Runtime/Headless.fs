@@ -3,9 +3,10 @@
 open System
 open Aardvark.Base
 open Aardvark.Rendering
-open System.Runtime.InteropServices
 
-type HeadlessVulkanApplication(debug : DebugLevel, instanceExtensions : list<string>, deviceExtensions : PhysicalDevice -> list<string>) =
+type HeadlessVulkanApplication(debug : IDebugConfig, instanceExtensions : list<string>, deviceExtensions : PhysicalDevice -> list<string>) =
+    let debug = DebugConfig.unbox debug
+
     let requestedExtensions =
         [
             yield! instanceExtensions
@@ -16,17 +17,10 @@ type HeadlessVulkanApplication(debug : DebugLevel, instanceExtensions : list<str
 
             yield! Instance.Extensions.Raytracing
             yield! Instance.Extensions.Sharing
-
-            if debug > DebugLevel.None then
-                yield! Instance.Extensions.Debug
         ]
 
     let requestedLayers =
-        [
-            if debug > DebugLevel.None then
-                yield Instance.Layers.Validation
-                yield Instance.Layers.AssistantLayer
-        ]
+        []
 
     let instance = 
         let availableExtensions =
@@ -39,7 +33,7 @@ type HeadlessVulkanApplication(debug : DebugLevel, instanceExtensions : list<str
         let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
         let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers)
     
-        new Instance(Version(1,1,0), enabledLayers, enabledExtensions)
+        new Instance(Version(1,1,0), enabledLayers, enabledExtensions, debug)
 
 
     // choose a physical device
@@ -49,7 +43,7 @@ type HeadlessVulkanApplication(debug : DebugLevel, instanceExtensions : list<str
         else
             ConsoleDeviceChooser.run (CustomDeviceChooser.Filter instance.Devices)
 
-    let logger = if debug > DebugLevel.None then Logger.Default else Logger.Get 4
+    let logger = Logger.Get debug.PlatformInformationVerbosity
     do instance.PrintInfo(logger, physicalDevice)
 
     // create a device
@@ -63,7 +57,7 @@ type HeadlessVulkanApplication(debug : DebugLevel, instanceExtensions : list<str
         physicalDevice.CreateDevice(requestedExtensions @ devExt)
 
     // create a runtime
-    let runtime = new Runtime(device, debug)
+    let runtime = new Runtime(device)
 
     do
         let dir =
@@ -88,7 +82,7 @@ type HeadlessVulkanApplication(debug : DebugLevel, instanceExtensions : list<str
         new HeadlessVulkanApplication(DebugLevel.ofBool debug, instanceExtensions, deviceExtensions)
 
     new() = new HeadlessVulkanApplication(DebugLevel.None, [], fun _ -> [])
-    new(debug : DebugLevel) = new HeadlessVulkanApplication(debug, [], fun _ -> [])
+    new(debug : IDebugConfig) = new HeadlessVulkanApplication(debug, [], fun _ -> [])
     new(debug : bool) = new HeadlessVulkanApplication(debug, [], fun _ -> [])
 
     interface IDisposable with

@@ -1035,7 +1035,7 @@ module ComputeShader =
     let private ofFShadeInternal (shader : FShade.ComputeShader) (device : Device) =
         let glsl = shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSLVulkan
         
-        if RuntimeConfig.PrintShaderCode then
+        if device.DebugConfig.PrintShaderCode then
             ShaderCodeReporting.logLines glsl.code
 
         let localSize =
@@ -1088,7 +1088,7 @@ module ComputeShader =
                     match tryRead file device with
                         | Loaded loaded -> 
                             
-                            if device.ValidateShaderCaches then
+                            if device.DebugConfig.VerifyShaderCacheIntegrity then
                                 let temp = ofFShadeInternal shader device
                                 let real = toByteArray loaded
                                 let should = toByteArray temp

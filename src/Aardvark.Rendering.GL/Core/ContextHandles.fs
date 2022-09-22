@@ -148,16 +148,19 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                     x.ReleaseCurrent()
 
     /// Sets default API states and initializes the debug output if required.
-    member x.Initialize (debug : DebugLevel, [<Optional; DefaultParameterValue(true)>] setDefaultStates : bool) =
+    member x.Initialize (debug : IDebugConfig, [<Optional; DefaultParameterValue(true)>] setDefaultStates : bool) =
+        let debug = DebugConfig.unbox debug
+
         x.Use (fun _ ->  
             if setDefaultStates then
                 GL.SetDefaultStates()
 
             debugOutput <-
-                if debug > DebugLevel.None && debugOutput.IsNone then
-                    match DebugOutput.tryInitialize debug with
+                match debug.DebugOutput with
+                | Some cfg when debugOutput.IsNone ->
+                    match DebugOutput.tryInitialize cfg.Verbosity with
                     | Some dbg ->
-                        let dbg = dbg |> DebugOutput.enable RuntimeConfig.DebugOutputSynchronous
+                        let dbg = dbg |> DebugOutput.enable cfg.Synchronous
 
                         let str = "debug output enabled"
                         GL.DebugMessageInsert(DebugSourceExternal.DebugSourceApplication, DebugType.DebugTypeOther, 1234,
@@ -168,7 +171,7 @@ type ContextHandle(handle : IGraphicsContext, window : IWindowInfo) =
                     | _ ->
                         Log.warn "Failed to initialize debug output"
                         None
-                else
+                | _ ->
                     debugOutput
         )
 
@@ -218,7 +221,7 @@ module ContextHandleOpenTK =
     /// <summary>
     /// creates a new context using the default configuration
     /// </summary>
-    let create (debug : DebugLevel) =
+    let create (debug : IDebugConfig) =
         let window, context =
             let prev = ContextHandle.Current
 

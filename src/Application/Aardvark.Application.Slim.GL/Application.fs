@@ -322,7 +322,7 @@ module private OpenGL =
                 glfw.WindowHint(WindowHintInt.Samples, cfg.samples)
         }
 
-type OpenGlApplication(forceNvidia : bool, debug : DebugLevel, shaderCachePath : Option<string>, hideCocoaMenuBar : bool) =
+type OpenGlApplication(forceNvidia : bool, debug : IDebugConfig, shaderCachePath : Option<string>, hideCocoaMenuBar : bool) =
     do if forceNvidia then
         if RuntimeInformation.IsOSPlatform OSPlatform.Windows then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
         else ()
@@ -358,16 +358,16 @@ type OpenGlApplication(forceNvidia : bool, debug : DebugLevel, shaderCachePath :
     do ctx.ShaderCachePath <- shaderCachePath
        runtime.Initialize(ctx)
 
-    new(forceNvidia, debug, shaderCachePath) =
+    new(forceNvidia : bool, debug : IDebugConfig, shaderCachePath : Option<string>) =
         new OpenGlApplication(forceNvidia, debug, shaderCachePath, false)
  
-    new(forceNvidia, debug, shaderCachePath) =
+    new(forceNvidia : bool, debug : bool, shaderCachePath : Option<string>) =
         new OpenGlApplication(forceNvidia, DebugLevel.ofBool debug, shaderCachePath)
 
-    new(forceNvidia, debug : DebugLevel) = new OpenGlApplication(forceNvidia, debug, Context.DefaultShaderCachePath)
-    new(forceNvidia, debug : bool) = new OpenGlApplication(forceNvidia, DebugLevel.ofBool debug, Context.DefaultShaderCachePath)
+    new(forceNvidia : bool, debug : IDebugConfig) = new OpenGlApplication(forceNvidia, debug, Context.DefaultShaderCachePath)
+    new(forceNvidia : bool, debug : bool) = new OpenGlApplication(forceNvidia, DebugLevel.ofBool debug, Context.DefaultShaderCachePath)
 
-    new(debug : DebugLevel) = new OpenGlApplication(true, debug)
+    new(debug : IDebugConfig) = new OpenGlApplication(true, debug)
     new(debug : bool) = new OpenGlApplication(true, DebugLevel.ofBool debug)
 
     new() = new OpenGlApplication(true, DebugLevel.None)

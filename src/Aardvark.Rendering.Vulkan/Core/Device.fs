@@ -162,6 +162,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
 
 
     let physical = deviceGroup.[0]
+    let instance = physical.Instance
     let pool = QueueFamilyPool(physical.QueueFamilies)
     let graphicsQueues  = pool.TryTakeSingleFamily(QueueFlags.Graphics, 1)
     let computeQueues   = pool.TryTakeExplicit(QueueFlags.Compute, QueueFlags.Graphics, 1)
@@ -169,7 +170,6 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     let onDispose = Event<unit>()
     
     let mutable shaderCachePath : Option<string> = None
-    let mutable validateShaderCaches = false
 
     let allIndicesArr = 
         [|
@@ -188,6 +188,12 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
         ptr
 
     let allMask = dev.DeviceMask
+
+    let wantedExtensions =
+        if instance.DebugConfig.DebugPrintEnabled then
+            wantedExtensions @ [KHRShaderNonSemanticInfo.Name]
+        else
+            wantedExtensions
 
     let extensions =
         let availableExtensions = physical.GlobalExtensions |> Seq.map (fun e -> e.name.ToLower(), e.name) |> Dictionary.ofSeq
@@ -210,7 +216,6 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
 
     let mutable isDisposed = 0
 
-    let instance = physical.Instance
 
     let mutable device =
         let queuePriorities =
@@ -360,10 +365,6 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
 
     member x.CopyEngine = copyEngine.Value
 
-    member x.ValidateShaderCaches
-        with get() = validateShaderCaches
-        and set v = validateShaderCaches <- v
-
     member x.ShaderCachePath
         with get() = shaderCachePath
         and set v = 
@@ -441,6 +442,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     member x.BufferImageGranularity = memoryLimits.BufferImageGranularity
 
     member x.Instance = instance
+    member x.DebugConfig = instance.DebugConfig
 
     member internal x.AllQueueFamiliesPtr = pAllFamilies
     member internal x.AllQueueFamiliesCnt = pAllFamiliesCnt

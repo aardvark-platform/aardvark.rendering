@@ -44,11 +44,17 @@ module Sg =
     let applyRuntime (r : IRuntime) (sg : ISg) = WtfRuntimeApplicator(r,sg) :> ISg
 
 [<EntryPoint>]
-let main argv = 
+let main argv =
 
-    Aardvark.Rendering.Vulkan.RuntimeConfig.ShowRecompile <- false
-    
-    
+    let renderBackend = Backend.GL
+
+    let debugConfig : IDebugConfig =
+        if renderBackend = Backend.Vulkan then
+            { Vulkan.DebugConfig.Normal with
+                PrintRenderTaskRecompile = false }
+        else
+            DebugLevel.Normal
+
     Aardvark.Init()
 
     // window { ... } is similar to show { ... } but instead
@@ -56,9 +62,9 @@ let main argv =
     // and may show it later.
     let win =
         window {
-            backend Backend.GL
+            backend renderBackend
             display Display.Mono
-            debug true
+            debug debugConfig
             samples 1
         }
 

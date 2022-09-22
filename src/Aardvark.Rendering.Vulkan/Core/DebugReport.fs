@@ -11,7 +11,6 @@ open System.Runtime.CompilerServices
 open System.Threading
 open System.Collections.Concurrent
 open Aardvark.Base
-open Aardvark.Rendering
 open Microsoft.FSharp.NativeInterop
 open EXTDebugReport
 open EXTDebugUtils
@@ -53,6 +52,15 @@ type DebugSummary =
 module private DebugReportHelpers =
     open System.Security.Cryptography
     open System.IO
+
+    module DebugReportVerbosity =
+        let toMessageSeverity =
+            LookupTable.lookupTable [
+                DebugReportVerbosity.Error, MessageSeverity.Error
+                DebugReportVerbosity.Warning, MessageSeverity.Warning
+                DebugReportVerbosity.Information, MessageSeverity.Information
+                DebugReportVerbosity.Debug, MessageSeverity.Debug
+            ]
 
     module VkDebugUtilsMessageSeverityFlagsEXT =
         let toMessageSeverity =
@@ -338,7 +346,7 @@ type InstanceExtensions private() =
         }
 
     static let getAdapter (instance : Instance) =
-        if instance.DebugEnabled then
+        if instance.DebugReportEnabled then
             lock table (fun () ->
                 match table.TryGetValue instance with
                     | (true, adapter) -> adapter
@@ -386,28 +394,13 @@ type InstanceExtensions private() =
         | Some a -> a.TracingEnabled
         | _ -> false
 
-    /// Sets the debug level
+    /// Sets the debug report verbosity.
     [<Extension>]
-    static member SetDebugLevel(this : Instance, level : DebugLevel) =
+    static member SetDebugVerbosity(this : Instance, verbosity : DebugReportVerbosity, traceHandles : bool) =
         match getAdapter this with
         | Some a ->
-            match level with
-            | DebugLevel.Full ->
-                a.TracingEnabled <- true
-                a.Verbosity <- MessageSeverity.Debug
-
-            | DebugLevel.Normal ->
-                a.TracingEnabled <- false
-                a.Verbosity <- MessageSeverity.Information
-
-            | DebugLevel.Minimal ->
-                a.TracingEnabled <- false
-                a.Verbosity <- MessageSeverity.Warning
-
-            | _ ->
-                a.TracingEnabled <- false
-                a.Verbosity <- MessageSeverity.Error
-                
+            a.Verbosity <- DebugReportVerbosity.toMessageSeverity verbosity
+            a.TracingEnabled <- traceHandles
         | _ -> ()
 
     /// Adds the object with the given handle for tracing its origin, which is displayed
@@ -461,8 +454,8 @@ module ``FSharp Style Debug Extensions`` =
                 let str = (msg.message :: msg.objects) |> String.concat Environment.NewLine
                 msg.layerPrefix + ": " + str
 
-        let debugBreak (level : DebugLevel) (msg : DebugMessage) =
-            if level >= DebugLevel.Normal then
+        let debugBreak (breakOnError : bool) (msg : DebugMessage) =
+            if breakOnError then
                 if Debugger.IsAttached then
                     Debugger.Break()
 
@@ -513,18 +506,20 @@ module ``FSharp Style Debug Extensions`` =
 
         member x.DebugTracingEnabled = x.GetDebugTracingEnabled()
 
-        member x.SetupDebugMessageOutput(level : DebugLevel) =
-            if level > DebugLevel.None then
+        member x.SetupDebugMessageOutput(config : DebugReportConfig option) =
+            match config with
+            | Some cfg ->
                 let res =
                     x.DebugMessages.Subscribe {
                         new IObserver<_> with
-                            member _.OnNext(msg) = msg |> debugMessage (debugBreak level)
+                            member _.OnNext(msg) = msg |> debugMessage (debugBreak cfg.BreakOnError)
                             member _.OnCompleted() = printDebugSummary x.DebugSummary
                             member _.OnError _ = ()
                     }
                 x.RaiseDebugMessage(MessageSeverity.Information, "Enabled debug report")
-                x.SetDebugLevel(level)
+                x.SetDebugVerbosity(cfg.Verbosity, cfg.TraceObjectHandles)
                 res
-            else
+
+            | _ ->
                 { new IDisposable with member x.Dispose() = () }
 

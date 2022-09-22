@@ -173,7 +173,7 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
             tt.Sync()
 
             if commandChanged || resourcesChanged then
-                if RuntimeConfig.ShowRecompile then
+                if device.DebugConfig.PrintRenderTaskRecompile then
                     let cause =
                         String.concat "; " [
                             if commandChanged then yield "content"

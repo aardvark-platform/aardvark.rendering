@@ -17,11 +17,6 @@ type SceneGraphRuntimeExtensions private() =
         app.RenderObjects(Ag.Scope.Root)
 
     [<Extension>]
-    static member CompileRender(this : IRuntime, signature : IFramebufferSignature, sg : ISg, debug : bool) =
-        let ro = sg |> toRenderObjects this
-        this.CompileRender(signature, ro, debug)
-
-    [<Extension>]
     static member CompileRender(this : IRuntime, signature : IFramebufferSignature, sg : ISg) =
         let ro = sg |> toRenderObjects this
         this.CompileRender(signature, ro)
@@ -32,6 +27,3 @@ module RuntimeSgExtensions =
 
         let compile (runtime : IRuntime) (signature : IFramebufferSignature) (sg : ISg) =
             runtime.CompileRender(signature, sg)
-
-        let compile' (runtime : IRuntime) (signature : IFramebufferSignature) (debug : bool) (sg : ISg) =
-            runtime.CompileRender(signature, sg, debug)

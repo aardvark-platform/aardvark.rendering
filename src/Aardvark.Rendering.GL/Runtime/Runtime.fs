@@ -11,10 +11,12 @@ open System.Runtime.InteropServices
 
 #nowarn "9"
 
-type Runtime(debug : DebugLevel) =
+type Runtime(debug : IDebugConfig) =
 
     let mutable ctx : Context = Unchecked.defaultof<_>
     let mutable manager : ResourceManager = Unchecked.defaultof<_>
+
+    let debug = DebugConfig.unbox debug
 
     let onDispose = Event<unit>()
 
@@ -22,7 +24,7 @@ type Runtime(debug : DebugLevel) =
 
     member x.Context = ctx
 
-    member x.DebugLevel = debug
+    member x.DebugConfig = debug
 
     member x.Initialize(context : Context) =
         if ctx <> null then
@@ -31,11 +33,7 @@ type Runtime(debug : DebugLevel) =
         ctx <- context
         manager <- ResourceManager(context, None, true, true)
 
-        RuntimeConfig.ErrorReporting <-
-            match debug with
-            | DebugLevel.Full | DebugLevel.Normal -> ErrorReporting.Exception
-            | DebugLevel.Minimal -> ErrorReporting.Log
-            | _ -> ErrorReporting.Disabled
+        GL.CheckErrors <- debug.ErrorFlagCheck
 
         Operators.using context.ResourceLock (fun _ ->
 
@@ -95,7 +93,7 @@ type Runtime(debug : DebugLevel) =
 
     interface IRuntime with
 
-        member x.DebugLevel = x.DebugLevel
+        member x.DebugConfig = x.DebugConfig
 
         member x.DeviceCount = 1
 
@@ -182,7 +180,7 @@ type Runtime(debug : DebugLevel) =
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
         member x.ContextLock = ctx.ResourceLock :> IDisposable
-        member x.CompileRender (signature, set : aset<IRenderObject>, debug : bool) = x.CompileRender(signature, set, debug)
+        member x.CompileRender (signature, set : aset<IRenderObject>) = x.CompileRender(signature, set)
         member x.CompileClear(signature, values) = x.CompileClear(signature, values)
 
         member x.CreateBuffer(size : nativeint, _ : BufferUsage, storage : BufferStorage) = x.CreateBuffer(size, storage) :> IBackendBuffer
@@ -495,7 +493,7 @@ type Runtime(debug : DebugLevel) =
 
     member x.ResourceManager = manager
 
-    member private x.CompileRender (signature : IFramebufferSignature, set : aset<IRenderObject>, debug : bool) =
+    member x.CompileRender (signature : IFramebufferSignature, set : aset<IRenderObject>) =
         let set = EffectDebugger.Hook set
         let shareTextures = RuntimeConfig.ShareTexturesBetweenTasks
         let shareBuffers = RuntimeConfig.ShareBuffersBetweenTasks
@@ -503,7 +501,7 @@ type Runtime(debug : DebugLevel) =
         if RuntimeConfig.UseNewRenderTask then
             new RenderTasks.NewRenderTask(manager, signature, set, shareTextures, shareBuffers) :> IRenderTask
         else
-            new RenderTasks.RenderTask(manager, signature, set, shareTextures, shareBuffers, debug) :> IRenderTask
+            new RenderTasks.RenderTask(manager, signature, set, shareTextures, shareBuffers, debug.DebugRenderTasks) :> IRenderTask
 
     member x.PrepareRenderObject(signature : IFramebufferSignature, rj : IRenderObject) : IPreparedRenderObject =
         PreparedCommand.ofRenderObject signature manager rj :> IPreparedRenderObject

@@ -259,7 +259,7 @@ module ShaderProgram =
         let code =
             versionRx.Replace(code, "#version 450 core")
 
-        if RuntimeConfig.PrintShaderCode then
+        if device.DebugConfig.PrintShaderCode then
             ShaderCodeReporting.logLines code
 
         let logs = System.Collections.Generic.Dictionary<FShade.ShaderSlot, string>()
@@ -652,7 +652,7 @@ module ShaderProgram =
                     let cacheFile = Path.Combine(shaderCachePath, fileName + ".effect")
                     match tryRead cacheFile device with
                         | Some p ->
-                            if device.ValidateShaderCaches then
+                            if device.DebugConfig.VerifyShaderCacheIntegrity then
                                 let glsl = 
                                     key.layout.Link(key.effect, key.deviceCount, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, key.topology)
                                     |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend

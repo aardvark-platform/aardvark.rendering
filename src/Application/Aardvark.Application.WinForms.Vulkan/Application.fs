@@ -89,7 +89,8 @@ module VisualDeviceChooser =
 
 
 
-type VulkanApplication(debug : DebugLevel, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
+type VulkanApplication(debug : IDebugConfig, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
+
     let requestedExtensions =
         [
             yield Instance.Extensions.Surface
@@ -104,16 +105,10 @@ type VulkanApplication(debug : DebugLevel, chooseDevice : list<PhysicalDevice> -
 
             yield! Instance.Extensions.Raytracing
             yield! Instance.Extensions.Sharing
-
-            if debug > DebugLevel.None then
-                yield! Instance.Extensions.Debug
         ]
 
     let requestedLayers =
         [
-            if debug > DebugLevel.None then
-                yield Instance.Layers.Validation
-                yield Instance.Layers.AssistantLayer
         ]
 
     let instance = 
@@ -127,7 +122,7 @@ type VulkanApplication(debug : DebugLevel, chooseDevice : list<PhysicalDevice> -
         let enabledExtensions = requestedExtensions |> List.filter (fun r -> Set.contains r availableExtensions)
         let enabledLayers = requestedLayers |> List.filter (fun r -> Set.contains r availableLayers)
     
-        new Instance(Version(1,1,0), enabledLayers, enabledExtensions)
+        new Instance(Version(1,1,0), enabledLayers, enabledExtensions, debug)
 
     // choose a physical device
     let physicalDevice = 
@@ -148,7 +143,7 @@ type VulkanApplication(debug : DebugLevel, chooseDevice : list<PhysicalDevice> -
         physicalDevice.CreateDevice(enabledExtensions)
 
     // create a runtime
-    let runtime = new Runtime(device, debug)
+    let runtime = new Runtime(device)
 
     do
         let dir =
@@ -203,7 +198,7 @@ type VulkanApplication(debug : DebugLevel, chooseDevice : list<PhysicalDevice> -
     new(debug : bool, chooseDevice : list<PhysicalDevice> -> PhysicalDevice) =
         new VulkanApplication(DebugLevel.ofBool debug, chooseDevice)
 
-    new(debug : DebugLevel)  = new VulkanApplication(debug, VisualDeviceChooser.run)
-    new(debug : bool)        = new VulkanApplication(debug, VisualDeviceChooser.run)
-    new(chooser)             = new VulkanApplication(DebugLevel.None, chooser)
-    new()                    = new VulkanApplication(DebugLevel.None, VisualDeviceChooser.run)
+    new(debug : IDebugConfig) = new VulkanApplication(debug, VisualDeviceChooser.run)
+    new(debug : bool)         = new VulkanApplication(debug, VisualDeviceChooser.run)
+    new(chooser)              = new VulkanApplication(DebugLevel.None, chooser)
+    new()                     = new VulkanApplication(DebugLevel.None, VisualDeviceChooser.run)

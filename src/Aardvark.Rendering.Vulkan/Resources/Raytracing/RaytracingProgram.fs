@@ -72,7 +72,7 @@ module RaytracingProgram =
         let glsl =
             effect |> FShade.RaytracingEffect.toModule |> FShade.Backends.ModuleCompiler.compileGLSLRaytracing
 
-        if RuntimeConfig.PrintShaderCode then
+        if device.DebugConfig.PrintShaderCode then
             ShaderCodeReporting.logLines glsl.code
 
         let stages =

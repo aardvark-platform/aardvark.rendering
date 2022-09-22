@@ -13,7 +13,7 @@ open FSharp.Data.Adaptive
 open Aardvark.Rendering.GL
 open Aardvark.Application
 
-type OpenGlRenderControl(runtime : Runtime, debug : DebugLevel, samples : int) =
+type OpenGlRenderControl(runtime : Runtime, debug : IDebugConfig, samples : int) =
     inherit GLControl(
         Graphics.GraphicsMode(
             OpenTK.Graphics.ColorFormat(Config.BitsPerPixel),
@@ -389,6 +389,6 @@ type OpenGlRenderControl(runtime : Runtime, debug : DebugLevel, samples : int) =
         member x.AfterRender = afterRender.Publish
 
     new(runtime : Runtime, debug : bool, samples : int) = new OpenGlRenderControl(runtime, DebugLevel.ofBool debug, samples)
-    new(runtime : Runtime, debug : DebugLevel) = new OpenGlRenderControl(runtime, debug, 1)
+    new(runtime : Runtime, debug : IDebugConfig) = new OpenGlRenderControl(runtime, debug, 1)
     new(runtime : Runtime, debug : bool) = new OpenGlRenderControl(runtime, debug, 1)
 

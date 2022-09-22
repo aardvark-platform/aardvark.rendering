@@ -16,14 +16,14 @@ module Error =
 
     type GL with
         static member Check str =
-            let mode = RuntimeConfig.ErrorReporting
+            let mode = GL.CheckErrors
 
-            if mode <> ErrorReporting.Disabled then
+            if mode <> ErrorFlagCheck.Disabled then
                 let err = GL.GetError()
                 if err <> ErrorCode.NoError then
                     Report.Error("{0}: {1}", err, str)
 
-                    if mode = ErrorReporting.Exception then
+                    if mode = ErrorFlagCheck.ThrowOnError then
                         raise <| OpenGLException(err, sprintf "%A" str)
 
 [<AutoOpen>]
@@ -78,11 +78,20 @@ type internal DebugOutput =
 module internal DebugOutput =
 
     module private DebugSeverityControl =
-        let All =
-            [ DebugSeverityControl.DebugSeverityNotification;
-              DebugSeverityControl.DebugSeverityLow;
-              DebugSeverityControl.DebugSeverityMedium;
-              DebugSeverityControl.DebugSeverityHigh ]
+
+        let ofVerbosity (verbosity : DebugOutputSeverity)=
+            [
+                DebugSeverityControl.DebugSeverityHigh
+
+                if verbosity <= DebugOutputSeverity.Medium then
+                    DebugSeverityControl.DebugSeverityMedium
+
+                if verbosity <= DebugOutputSeverity.Low then
+                    DebugSeverityControl.DebugSeverityLow
+
+                if verbosity <= DebugOutputSeverity.Notification then
+                    DebugSeverityControl.DebugSeverityNotification
+            ]
 
     let private enableMessages (severities : List<DebugSeverityControl>) =
 
@@ -94,7 +103,7 @@ module internal DebugOutput =
         enable false DebugSeverityControl.DontCare
         severities |> List.iter (enable true)
        
-    let tryInitialize (level : DebugLevel) =
+    let tryInitialize (verbosity : DebugOutputSeverity) =
         let ctx = GraphicsContext.CurrentContext |> unbox<IGraphicsContextInternal>
 
         match ctx.TryGetAddress("glDebugMessageCallback") with
@@ -111,14 +120,7 @@ module internal DebugOutput =
             // Set messages
             Report.BeginTimed(4, "[GL] debug message control")
 
-            let severities =
-                match level with
-                | DebugLevel.Minimal -> [ DebugSeverityControl.DebugSeverityHigh ]
-                | DebugLevel.Normal -> [ DebugSeverityControl.DebugSeverityHigh; DebugSeverityControl.DebugSeverityMedium; DebugSeverityControl.DebugSeverityLow ]
-                | DebugLevel.Full -> DebugSeverityControl.All
-                | _ -> []
-
-            enableMessages severities
+            enableMessages <| DebugSeverityControl.ofVerbosity verbosity
 
             Report.End(4) |> ignore
 

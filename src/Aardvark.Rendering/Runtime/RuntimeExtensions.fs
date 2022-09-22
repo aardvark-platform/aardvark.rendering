@@ -110,15 +110,6 @@ type IRuntimeExtensions private() =
     static member DeleteSurface(this : IRuntime, surface : IBackendSurface) =
         surface.Dispose()
 
-    // ================================================================================================================
-    // CompileRender
-    // ================================================================================================================
-
-    /// Compiles a render task for the given render objects.
-    [<Extension>]
-    static member CompileRender(this : IRuntime, signature : IFramebufferSignature, rjs : aset<IRenderObject>) =
-        this.CompileRender(signature, rjs, this.DebugLevel = DebugLevel.Full)
-
 
     // ================================================================================================================
     // CompileClear

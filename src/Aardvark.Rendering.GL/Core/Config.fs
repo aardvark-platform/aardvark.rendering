@@ -1,21 +1,10 @@
 ﻿namespace Aardvark.Rendering.GL
 
+open Aardvark.Rendering
 open System.Runtime.InteropServices
 open OpenTK.Graphics
 
 type DepthRange = MinusOneToOne=0 | ZeroToOne=1
-
-/// Reporting modes for GL errors.
-[<RequireQualifiedAccess>]
-type internal ErrorReporting =
-    /// Do not check for errors.
-    | Disabled
-
-    /// Log errors.
-    | Log
-
-    /// Throw an exception on errors.
-    | Exception
 
 /// <summary>
 /// A module containing default GL configuration properties
@@ -90,9 +79,6 @@ module RuntimeConfig =
     /// </summary>
     let mutable SuppressSparseBuffers = false
 
-    /// Prints the shader code during the compilation (will not show up when cached)
-    let mutable PrintShaderCode = true
-
     /// <summary>
     /// Use the "new" RenderTask OpenGL RenderTask supporting RuntimeCommands.
     /// </summary>
@@ -115,17 +101,122 @@ module RuntimeConfig =
     let mutable ShareTexturesBetweenTasks = true
 
     /// <summary>
-    /// Determines whether the debug output should be synchronous.
-    /// </summary>
-    let mutable DebugOutputSynchronous = true
-
-    /// <summary>
-    /// Determines if and how API errors are checked and reported.
-    /// </summary>
-    let mutable internal ErrorReporting = ErrorReporting.Disabled
-
-    /// <summary>
     /// Determines whether the CPU implementation of block compression should be
     /// used over the implicit encoding provided by OpenGL.
     /// </summary>
     let mutable PreferHostSideTextureCompression = true
+
+/// Reporting modes for OpenGL errors.
+type ErrorFlagCheck =
+
+    /// Do not check for errors.
+    | Disabled     = 0
+
+    /// Log errors without throwing any exception.
+    | PrintError   = 1
+
+    /// Throw an exception on errors.
+    | ThrowOnError = 2
+
+type DebugOutputSeverity =
+    | Notification = 0
+    | Low          = 1
+    | Medium       = 2
+    | High         = 3
+
+[<CLIMutable>]
+type DebugOutputConfig =
+    {
+        /// The lowest severity of messages to be printed.
+        Verbosity : DebugOutputSeverity
+
+        /// Use synchronous OpenGL debug output if available.
+        Synchronous : bool
+    }
+
+    static member Minimal =
+        { Verbosity = DebugOutputSeverity.High
+          Synchronous = true }
+
+    static member Normal =
+        { DebugOutputConfig.Minimal with
+            Verbosity = DebugOutputSeverity.Low }
+
+    static member Full =
+        { DebugOutputConfig.Minimal with
+            Verbosity = DebugOutputSeverity.Notification }
+
+[<CLIMutable>]
+type DebugConfig =
+    {
+        /// Settings controlling the OpenGL debug output.
+        /// None if the debug output is disabled.
+        DebugOutput : DebugOutputConfig option
+
+        /// Determines if and how OpenGL error flags are checked and reported.
+        ErrorFlagCheck : ErrorFlagCheck
+
+        /// Print OpenGL calls when a render task is run.
+        /// Only supported if RuntimeConfig.UseNewRenderTask = false.
+        DebugRenderTasks : bool
+
+        /// Print the GLSL code during compilation (will not show up when cached).
+        PrintShaderCode : bool
+    }
+
+    member internal x.DebugOutputEnabled =
+        x.DebugOutput.IsSome
+
+    /// Disables all debugging functionality.
+    static member None =
+        { DebugOutput      = None
+          ErrorFlagCheck   = ErrorFlagCheck.Disabled
+          DebugRenderTasks = false
+          PrintShaderCode  = false }
+
+    /// OpenGL errors are logged, debug output reports warnings and errors.
+    static member Minimal =
+        { DebugConfig.None with
+            DebugOutput    = Some DebugOutputConfig.Minimal
+            ErrorFlagCheck = ErrorFlagCheck.PrintError }
+
+    /// OpenGL errors raise an exception, debug output reports all messages but information, shader code is printed.
+    static member Normal =
+        { DebugConfig.Minimal with
+            DebugOutput     = Some DebugOutputConfig.Normal
+            ErrorFlagCheck  = ErrorFlagCheck.ThrowOnError
+            PrintShaderCode = true }
+
+    /// All messages are reported via debug output, render tasks print their OpenGL calls.
+    static member Full =
+        { DebugConfig.Normal with
+            DebugOutput      = Some DebugOutputConfig.Full
+            DebugRenderTasks = true }
+
+    interface IDebugConfig
+
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module DebugConfig =
+
+    let ofDebugLevel (level : DebugLevel) =
+        match level with
+        | DebugLevel.None    -> DebugConfig.None
+        | DebugLevel.Minimal -> DebugConfig.Minimal
+        | DebugLevel.Normal  -> DebugConfig.Normal
+        | DebugLevel.Full    -> DebugConfig.Full
+
+    let unbox (cfg : IDebugConfig) =
+        match cfg with
+        | :? DebugConfig as d -> d
+        | :? DebugLevel as level -> ofDebugLevel level
+        | _ -> failwithf "[GL] Unexpected debug configuration %A" cfg
+
+[<AutoOpen>]
+module internal GLCheckErrorsConfig =
+
+    module GL =
+
+        /// Internal global variable that is read by GL.Check() and set depending
+        /// on the debug config when the runtime is created.
+        let mutable CheckErrors = ErrorFlagCheck.Disabled

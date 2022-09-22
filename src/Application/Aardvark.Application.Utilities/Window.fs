@@ -40,7 +40,7 @@ type RenderConfig =
         app             : Option<IApplication>
         backend         : Backend
         showHelp        : bool
-        debug           : DebugLevel
+        debug           : IDebugConfig
         samples         : int
         display         : Display
         scene           : ISg
@@ -355,7 +355,7 @@ module Utilities =
             let sg = sg |> Sg.viewTrafo view |> Sg.projTrafo proj
             Sg.ofList [sg; overlay]
 
-    let c (debug : DebugLevel) (backend : Backend)  =
+    let c (debug : IDebugConfig) (backend : Backend)  =
         match backend with
             | Backend.GL -> new OpenGlApplication(debug) :> IApplication
             | Backend.Vulkan -> new VulkanApplication(debug) :> IApplication
@@ -776,7 +776,7 @@ module ``Render Utilities`` =
             { s with backend = b }
 
         [<CustomOperation("debug")>]
-        member x.Debug(s : RenderConfig, d : DebugLevel) =
+        member x.Debug(s : RenderConfig, d : IDebugConfig) =
             { s with debug = d }
 
         member x.Debug(s : RenderConfig, d : bool) =
@@ -826,7 +826,7 @@ module ``Render Utilities`` =
             { s with backend = b }
             
         [<CustomOperation("debug")>]
-        member x.Debug(s : RenderConfig, d : DebugLevel) =
+        member x.Debug(s : RenderConfig, d : IDebugConfig) =
             { s with debug = d }
 
         member x.Debug(s : RenderConfig, d : bool) =

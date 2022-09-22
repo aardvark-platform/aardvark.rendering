@@ -2,6 +2,8 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.32002.185
 MinimumVisualStudioVersion = 10.0.40219.1
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "21 - DebugPrint", "Scratch (netcore)\21 - DebugPrint\21 - DebugPrint.fsproj", "{8C626D69-45D4-4327-ADB9-5449DBCA0B06}"
+EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "07 - GeometrySet", "Scratch (netcore)\07 - GeometrySet\07 - GeometrySet.fsproj", "{C335111D-56DC-4053-958F-93B98EEDD02C}"
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "20 - ResourceSharing", "Scratch (netcore)\20 - ResourceSharing\20 - ResourceSharing.fsproj", "{9E044353-CB30-4F3E-A21D-0B38DCF7D6B6}"
@@ -210,7 +212,7 @@ Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "18 - UniformUpdates", "Scra
 EndProject
 Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "05 - Points", "Examples (netcore)\05 - Points\05 - Points.fsproj", "{D362070A-E74D-47D5-A029-12E1987DC4A2}"
 EndProject
-Project("{F2A71F9B-5D33-465A-A702-920D77279786}") = "Aardvark.Rendering.Vulkan.Wrapper", "Aardvark.Rendering.Vulkan.Wrapper\Aardvark.Rendering.Vulkan.Wrapper.fsproj", "{3C17A71D-E2DC-42A5-9BD4-5EF2A9E9C495}"
+Project("{6EC3EE1D-3C4E-46DD-8F32-0CC8E7565705}") = "Aardvark.Rendering.Vulkan.Wrapper", "Aardvark.Rendering.Vulkan.Wrapper\Aardvark.Rendering.Vulkan.Wrapper.fsproj", "{3C17A71D-E2DC-42A5-9BD4-5EF2A9E9C495}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -218,6 +220,10 @@ Global
 		Release|Any CPU = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(ProjectConfigurationPlatforms) = postSolution
+		{8C626D69-45D4-4327-ADB9-5449DBCA0B06}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8C626D69-45D4-4327-ADB9-5449DBCA0B06}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8C626D69-45D4-4327-ADB9-5449DBCA0B06}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8C626D69-45D4-4327-ADB9-5449DBCA0B06}.Release|Any CPU.Build.0 = Release|Any CPU
 		{C335111D-56DC-4053-958F-93B98EEDD02C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{C335111D-56DC-4053-958F-93B98EEDD02C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{C335111D-56DC-4053-958F-93B98EEDD02C}.Release|Any CPU.ActiveCfg = Release|Any CPU
@@ -587,6 +593,7 @@ Global
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
+		{8C626D69-45D4-4327-ADB9-5449DBCA0B06} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{C335111D-56DC-4053-958F-93B98EEDD02C} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{9E044353-CB30-4F3E-A21D-0B38DCF7D6B6} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}
 		{A004765C-65AE-4C80-96C5-BF2FD74340A9} = {29CA9CA1-CC31-4B5D-8DB0-2FEA748C09D8}

@@ -14,24 +14,21 @@ open System.Collections.Generic
 #nowarn "9"
 
 
-type Runtime(device : Device, debug : DebugLevel) as this =
+type Runtime(device : Device) as this =
     let instance = device.Instance
     do device.Runtime <- this
 
+    let debug = device.DebugConfig
     let manager = new ResourceManager(device)
 
     // install debug output to file (and errors/warnings to console)
-    let debugSubscription = instance.SetupDebugMessageOutput debug
+    let debugSubscription = instance.SetupDebugMessageOutput(debug.DebugReport)
 
     let onDispose = Event<unit>()
 
     member x.ShaderCachePath
         with get() = device.ShaderCachePath
         and set v = device.ShaderCachePath <- v
-
-    member x.ValidateShaderCaches
-        with get() = device.ValidateShaderCaches
-        and set v = device.ValidateShaderCaches <- v
 
     member x.Device = device
     member x.ResourceManager = manager
@@ -433,7 +430,7 @@ type Runtime(device : Device, debug : DebugLevel) as this =
 
     interface IRuntime with
 
-        member x.DebugLevel = debug
+        member x.DebugConfig = debug
 
         member x.DeviceCount = device.PhysicalDevices.Length
 
@@ -482,7 +479,7 @@ type Runtime(device : Device, debug : DebugLevel) as this =
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t) = x.GenerateMipMaps(t)
         member x.ContextLock = x.ContextLock
-        member x.CompileRender (signature, set, debug) = x.CompileRender(signature, set)
+        member x.CompileRender (signature, set) = x.CompileRender(signature, set)
         member x.CompileClear(signature, values) = x.CompileClear(signature, values)
 
         member x.PrepareSurface(signature, s) = x.PrepareSurface(signature, s)

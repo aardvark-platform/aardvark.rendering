@@ -1,12 +1,11 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
 open System
-open System.Threading
 open System.Collections.Generic
 open System.Runtime.InteropServices
-open System.Runtime.CompilerServices
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
+open Aardvark.Rendering
 open System.Reflection
 open KHRGetPhysicalDeviceProperties2
 open KHRExternalMemoryCapabilities
@@ -21,7 +20,76 @@ open Vulkan11
 #nowarn "9"
 // #nowarn "51"
 
-type Instance(apiVersion : Version, layers : list<string>, extensions : list<string>) as this =
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module Instance =
+    module Extensions =
+        let Surface                         = KHRSurface.Name
+        let SwapChain                       = KHRSwapchain.Name
+        let Display                         = KHRDisplay.Name
+        let DisplaySwapChain                = KHRDisplaySwapchain.Name
+
+        let AndroidSurface                  = KHRAndroidSurface.Name
+        let WaylandSurface                  = KHRWaylandSurface.Name
+        let Win32Surface                    = KHRWin32Surface.Name
+        let XcbSurface                      = KHRXcbSurface.Name
+        let XlibSurface                     = KHRXlibSurface.Name
+        let GetPhysicalDeviceProperties2    = KHRGetPhysicalDeviceProperties2.Name
+
+        let ShaderSubgroupVote              = EXTShaderSubgroupVote.Name
+        let ShaderSubgroupBallot            = EXTShaderSubgroupBallot.Name
+
+        let Debug = [
+            EXTDebugReport.Name
+            EXTDebugUtils.Name
+        ]
+
+        let Raytracing = [
+                KHRRayTracingPipeline.Name
+                KHRAccelerationStructure.Name
+                KHRBufferDeviceAddress.Name
+                KHRDeferredHostOperations.Name
+                EXTDescriptorIndexing.Name
+                KHRSpirv14.Name
+                KHRShaderFloatControls.Name
+            ]
+
+        let Sharing = [
+                KHRGetPhysicalDeviceProperties2.Name
+                KHRExternalMemoryCapabilities.Name
+                KHRExternalMemory.Name
+                KHRExternalFenceCapabilities.Name
+                KHRExternalFence.Name
+                KHRExternalSemaphoreCapabilities.Name
+                KHRExternalSemaphore.Name
+                EXTExternalMemoryHost.Name
+
+                if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
+                    KHRExternalMemoryWin32.Name
+                    KHRExternalFenceWin32.Name
+                    KHRExternalSemaphoreWin32.Name
+                else
+                    KHRExternalMemoryFd.Name
+                    KHRExternalFenceFd.Name
+                    KHRExternalSemaphoreFd.Name
+
+                    if RuntimeInformation.IsOSPlatform OSPlatform.Linux then
+                        EXTExternalMemoryDmaBuf.Name
+            ]
+
+    module Layers =
+        let ApiDump             = "VK_LAYER_LUNARG_api_dump"
+        let DeviceLimits        = "VK_LAYER_LUNARG_device_limits"
+        let DrawState           = "VK_LAYER_LUNARG_draw_state"
+        let Image               = "VK_LAYER_LUNARG_image"
+        let MemTracker          = "VK_LAYER_LUNARG_mem_tracker"
+        let ParamChecker        = "VK_LAYER_LUNARG_param_checker"
+        let Screenshot          = "VK_LAYER_LUNARG_screenshot"
+        let SwapChain           = "VK_LAYER_LUNARG_swapchain"
+        let Trace               = "VK_LAYER_LUNARG_vktrace"
+        let Validation          = "VK_LAYER_KHRONOS_validation"
+        let Nsight              = "VK_LAYER_NV_nsight"
+
+type Instance(apiVersion : Version, layers : list<string>, extensions : list<string>, debug : IDebugConfig) as this =
     inherit VulkanObject()
 
     static let availableLayers =
@@ -82,13 +150,31 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
 
         enabledLayers, enabledExtensions
 
-    let extensions = List.distinct extensions
+    let debug = DebugConfig.unbox debug
+
+    let extensions =
+        if debug.DebugReportEnabled || debug.ValidationLayerEnabled then
+            extensions @ Instance.Extensions.Debug
+        else
+            extensions |> List.filter (fun e -> Instance.Extensions.Debug |> List.contains e |> not)
+        |> List.distinct
+
+    let layers =
+        if debug.ValidationLayerEnabled then
+            layers @ [Instance.Layers.Validation]
+        else
+            layers |> List.filter ((<>) Instance.Layers.Validation)
+
     let layers, instanceExtensions = filterLayersAndExtensions layers extensions
 
-    let debugEnabled =
-        instanceExtensions |> List.contains EXTDebugReport.Name &&
-        instanceExtensions |> List.contains EXTDebugUtils.Name
-    
+    let debugReportEnabled =
+        Instance.Extensions.Debug |> List.forall (fun e ->
+            instanceExtensions |> List.contains e
+        )
+
+    let validationEnabled =
+        layers |> List.contains Instance.Layers.Validation
+
     let appName = CStr.malloc "Aardvark"
 
     let mutable instance, apiVersion =
@@ -110,35 +196,49 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
                         version
                     )
 
-                let enabledValidationFeatures =
-                    [|
-                        if ValidationConfig.BestPracticesValidation then
-                            yield VkValidationFeatureEnableEXT.BestPractices
+                let enabledValidationFeatures, disabledValidationFeatures =
+                    match debug.ValidationLayer with
+                    | Some cfg when validationEnabled ->
+                        [|
+                            if cfg.BestPracticesValidation then
+                                 yield VkValidationFeatureEnableEXT.BestPractices
 
-                        if ValidationConfig.SynchronizationValidation then
-                            yield VkValidationFeatureEnableEXT.SynchronizationValidation
+                            if cfg.SynchronizationValidation then
+                                yield VkValidationFeatureEnableEXT.SynchronizationValidation
 
-                        match ValidationConfig.ShaderBasedValidation with
-                        | ValidationConfig.ShaderValidation.GpuAssisted ->
-                            yield VkValidationFeatureEnableEXT.GpuAssisted
+                            match cfg.ShaderBasedValidation with
+                            | ShaderValidation.GpuAssisted ->
+                                yield VkValidationFeatureEnableEXT.GpuAssisted
 
-                        | ValidationConfig.ShaderValidation.DebugPrintf ->
-                            yield VkValidationFeatureEnableEXT.DebugPrintf
+                            | ShaderValidation.DebugPrint ->
+                                yield VkValidationFeatureEnableEXT.DebugPrintf
 
-                        | _ ->
-                            ()
-                    |]
+                            | _ ->
+                                ()
+                        |],
+
+                        [|
+                            if not cfg.ThreadSafetyValidation then
+                                VkValidationFeatureDisableEXT.ThreadSafety
+
+                            if not cfg.ObjectLifetimesValidation then
+                                VkValidationFeatureDisableEXT.ObjectLifetimes
+                        |]
+
+                    | _ ->
+                        [||], [||]
 
                 let! pEnabledValidationFeatures = enabledValidationFeatures
+                let! pDisabledValidationFeatures = disabledValidationFeatures
 
                 let! pValidationFeatures =
                     VkValidationFeaturesEXT(
                         uint32 enabledValidationFeatures.Length, pEnabledValidationFeatures,
-                        0u, NativePtr.zero
+                        uint32 disabledValidationFeatures.Length, pDisabledValidationFeatures
                     )
 
                 let pNext =
-                    if debugEnabled then
+                    if enabledValidationFeatures.Length > 0 || disabledValidationFeatures.Length > 0 then
                         NativePtr.toNativeInt pValidationFeatures
                     else
                         0n
@@ -211,6 +311,9 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
 
     let devicesAndGroups =
         Array.append devices (groups |> Array.map (fun a -> a :> _))
+
+    new (apiVersion : Version, layers : list<string>, extensions : list<string>) =
+        new Instance(apiVersion, layers, extensions, DebugConfig.None)
     
     static member AvailableLayers = availableLayers
     static member GlobalExtensions = globalExtensions
@@ -222,7 +325,8 @@ type Instance(apiVersion : Version, layers : list<string>, extensions : list<str
     member x.EnabledLayers = layers
     member x.EnabledExtensions = instanceExtensions
 
-    member x.DebugEnabled = debugEnabled
+    member x.DebugReportEnabled = debugReportEnabled
+    member x.DebugConfig = debug
 
     member x.Handle = instance
 
@@ -615,80 +719,6 @@ and PhysicalDeviceGroup internal(instance : Instance, devices : PhysicalDevice[]
         let cnt = devices.Length
         sprintf "%d x { name = %s; type = %A; api = %A }" cnt x.Name x.Type x.APIVersion
     
-
-
-            
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module Instance =
-    module Extensions =
-        let Surface                         = KHRSurface.Name
-        let SwapChain                       = KHRSwapchain.Name
-        let Display                         = KHRDisplay.Name
-        let DisplaySwapChain                = KHRDisplaySwapchain.Name
-
-        let AndroidSurface                  = KHRAndroidSurface.Name
-        let WaylandSurface                  = KHRWaylandSurface.Name
-        let Win32Surface                    = KHRWin32Surface.Name
-        let XcbSurface                      = KHRXcbSurface.Name
-        let XlibSurface                     = KHRXlibSurface.Name
-        let GetPhysicalDeviceProperties2    = KHRGetPhysicalDeviceProperties2.Name
-
-        let ShaderSubgroupVote              = EXTShaderSubgroupVote.Name
-        let ShaderSubgroupBallot            = EXTShaderSubgroupBallot.Name
-
-        let Debug = [
-            EXTDebugReport.Name
-            EXTDebugUtils.Name
-            KHRShaderNonSemanticInfo.Name
-        ]
-
-        let Raytracing = [
-                KHRRayTracingPipeline.Name
-                KHRAccelerationStructure.Name
-                KHRBufferDeviceAddress.Name
-                KHRDeferredHostOperations.Name
-                EXTDescriptorIndexing.Name
-                KHRSpirv14.Name
-                KHRShaderFloatControls.Name
-            ]
-
-        let Sharing = [
-                KHRGetPhysicalDeviceProperties2.Name
-                KHRExternalMemoryCapabilities.Name
-                KHRExternalMemory.Name
-                KHRExternalFenceCapabilities.Name
-                KHRExternalFence.Name
-                KHRExternalSemaphoreCapabilities.Name
-                KHRExternalSemaphore.Name
-                EXTExternalMemoryHost.Name
-
-                if RuntimeInformation.IsOSPlatform OSPlatform.Windows then
-                    KHRExternalMemoryWin32.Name
-                    KHRExternalFenceWin32.Name
-                    KHRExternalSemaphoreWin32.Name
-                else
-                    KHRExternalMemoryFd.Name
-                    KHRExternalFenceFd.Name
-                    KHRExternalSemaphoreFd.Name
-
-                    if RuntimeInformation.IsOSPlatform OSPlatform.Linux then
-                        EXTExternalMemoryDmaBuf.Name
-            ]
-
-    module Layers =
-        let ApiDump             = "VK_LAYER_LUNARG_api_dump"
-        let DeviceLimits        = "VK_LAYER_LUNARG_device_limits"
-        let DrawState           = "VK_LAYER_LUNARG_draw_state"
-        let Image               = "VK_LAYER_LUNARG_image"
-        let MemTracker          = "VK_LAYER_LUNARG_mem_tracker"
-        let ParamChecker        = "VK_LAYER_LUNARG_param_checker"
-        let Screenshot          = "VK_LAYER_LUNARG_screenshot"
-        let SwapChain           = "VK_LAYER_LUNARG_swapchain"
-        let Trace               = "VK_LAYER_LUNARG_vktrace"
-        let AssistantLayer      = "VK_LAYER_LUNARG_assistant_layer"
-        let Validation          = "VK_LAYER_KHRONOS_validation"
-        let Nsight              = "VK_LAYER_NV_nsight"
-
 
 
 type CustomDeviceChooser private() =

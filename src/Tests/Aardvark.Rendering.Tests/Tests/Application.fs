@@ -23,7 +23,7 @@ module TestApplication =
         open OpenTK
         open Aardvark.Rendering.GL
 
-        let create (debug : DebugLevel) =
+        let create (debug : IDebugConfig) =
             Config.MajorVersion <- 4
             Config.MinorVersion <- 6
             RuntimeConfig.UseNewRenderTask <- true
@@ -32,7 +32,7 @@ module TestApplication =
             Toolkit.Init(ToolkitOptions(Backend = PlatformBackend.PreferNative)) |> ignore
 
             let runtime = new Runtime(debug)
-            let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create runtime.DebugLevel)
+            let ctx = new Context(runtime, fun () -> ContextHandleOpenTK.create runtime.DebugConfig)
 
             runtime.Initialize(ctx)
 
@@ -48,7 +48,7 @@ module TestApplication =
     module private Vulkan =
         open Aardvark.Rendering.Vulkan
 
-        let create (debug : DebugLevel) =
+        let create (debug : IDebugConfig) =
             let app = new HeadlessVulkanApplication(debug)
             let onExit =
                 { new IDisposable with
@@ -70,7 +70,7 @@ module TestApplication =
                 app.Runtime, onExit
             )
 
-    let create' (debug : DebugLevel) (backend : Backend) =
+    let create' (debug : IDebugConfig) (backend : Backend) =
         IntrospectionProperties.CustomEntryAssembly <- Assembly.GetAssembly(typeof<ISg>)
         Aardvark.Init()
 

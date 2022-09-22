@@ -8,7 +8,7 @@ open System.Windows.Threading
 
 type private WinFormsControl = Aardvark.Application.WinForms.OpenGlRenderControl
 
-type OpenGlRenderControl(runtime : Runtime, debug : DebugLevel, samples : int) as this =
+type OpenGlRenderControl(runtime : Runtime, debug : IDebugConfig, samples : int) as this =
     inherit WindowsFormsHost()
     let ctrl = new WinFormsControl(runtime, debug, samples)
     

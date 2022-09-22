@@ -7,7 +7,7 @@ open Aardvark.Application
 module Config =
     let mutable useSharingControl = false
 
-type OpenGlApplication(forceNvidia : bool, debug : DebugLevel, shaderCachePath : Option<string>) =
+type OpenGlApplication(forceNvidia : bool, debug : IDebugConfig, shaderCachePath : Option<string>) =
     do if forceNvidia then Aardvark.Base.DynamicLinker.tryLoadLibrary "nvapi64.dll" |> ignore
        OpenTK.Toolkit.Init(new OpenTK.ToolkitOptions(Backend=OpenTK.PlatformBackend.PreferNative)) |> ignore
 
@@ -22,9 +22,9 @@ type OpenGlApplication(forceNvidia : bool, debug : DebugLevel, shaderCachePath :
         new OpenGlApplication(forceNvidia, DebugLevel.ofBool debug, shaderCachePath)
 
     new() = new OpenGlApplication(true, false)
-    new(debug : DebugLevel) = new OpenGlApplication(true, debug)
+    new(debug : IDebugConfig) = new OpenGlApplication(true, debug)
     new(debug : bool) = new OpenGlApplication(true, debug)
-    new(forceNvidia, debug : DebugLevel) = new OpenGlApplication(forceNvidia, debug, Context.DefaultShaderCachePath)
+    new(forceNvidia, debug : IDebugConfig) = new OpenGlApplication(forceNvidia, debug, Context.DefaultShaderCachePath)
     new(forceNvidia, debug : bool) = new OpenGlApplication(forceNvidia, debug, Context.DefaultShaderCachePath)
 
     member x.Context = ctx
