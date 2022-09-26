@@ -7,6 +7,7 @@ open OpenTK.Graphics.OpenGL4
 open FSharp.Data.Adaptive
 open FShade
 open Aardvark.Rendering.GL
+open System.Runtime.InteropServices
 
 #nowarn "9"
 
@@ -96,6 +97,118 @@ type Runtime(debug : DebugLevel) =
             new LodRenderer(ctx, x.ResourceManager, preparedState, config, data) :> IPreparedRenderObject
 
     interface IRuntime with
+
+        member x.Copy(src : IFramebuffer, dst : IFramebuffer) =
+            use __ = ctx.ResourceLock
+            let src = src :?> Framebuffer
+            let dst = dst :?> Framebuffer
+            
+            if src.Handle <> dst.Handle then
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, src.Handle)
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, dst.Handle)
+            
+            
+                if dst.Handle = 0 then
+                    let att = src.Signature.ColorAttachments |> Map.tryFindKey (fun k v -> v.Name = DefaultSemantic.Colors)
+                    let mutable flags = ClearBufferMask.None
+                    match att with
+                    | Some colorIndex ->
+                        GL.ReadBuffer(unbox<ReadBufferMode> (int ReadBufferMode.ColorAttachment0 + colorIndex))
+                        GL.DrawBuffer(DrawBufferMode.BackLeft)
+                        flags <- ClearBufferMask.ColorBufferBit
+                    | None -> 
+                        ()
+                        
+                    GL.BlitFramebuffer(
+                        0, 0, src.Size.X, src.Size.Y,
+                        0, 0, dst.Size.X, dst.Size.Y,
+                        flags ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit,
+                        BlitFramebufferFilter.Nearest
+                    )
+                elif src.Handle = 0 then
+                    let att = dst.Signature.ColorAttachments |> Map.tryFindKey (fun k v -> v.Name = DefaultSemantic.Colors)
+                    let mutable flags = ClearBufferMask.None
+                    match att with
+                    | Some colorIndex ->
+                        GL.ReadBuffer(ReadBufferMode.BackLeft)
+                        GL.DrawBuffer(unbox<DrawBufferMode> (int DrawBufferMode.ColorAttachment0 + colorIndex))
+                        flags <- ClearBufferMask.ColorBufferBit
+                    | None -> 
+                        ()
+                        
+                    GL.BlitFramebuffer(
+                        0, 0, src.Size.X, src.Size.Y,
+                        0, 0, dst.Size.X, dst.Size.Y,
+                        flags ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit,
+                        BlitFramebufferFilter.Nearest
+                    )
+                else
+                    let mutable copyDepth =
+                        if Option.isSome src.Signature.DepthStencilAttachment && Option.isSome dst.Signature.DepthStencilAttachment then
+                            ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit
+                        else
+                            ClearBufferMask.None
+
+                    for (dstIndex, dstAtt) in Map.toSeq dst.Signature.ColorAttachments do
+                        let srcIndex = src.Signature.ColorAttachments |> Map.tryFindKey (fun k v -> v.Name = dstAtt.Name)
+                        match srcIndex with
+                        | Some srcIndex ->
+                            GL.ReadBuffer(unbox<ReadBufferMode> (int ReadBufferMode.ColorAttachment0 + srcIndex))
+                            GL.DrawBuffer(unbox<DrawBufferMode> (int DrawBufferMode.ColorAttachment0 + dstIndex))
+                            GL.BlitFramebuffer(
+                                0, 0, src.Size.X, src.Size.Y,
+                                0, 0, dst.Size.X, dst.Size.Y,
+                                ClearBufferMask.ColorBufferBit ||| copyDepth,
+                                BlitFramebufferFilter.Nearest
+                            )
+                            copyDepth <- ClearBufferMask.None
+                        | None ->
+                            ()
+                    if copyDepth <> ClearBufferMask.None then
+                        GL.BlitFramebuffer(
+                            0, 0, src.Size.X, src.Size.Y,
+                            0, 0, dst.Size.X, dst.Size.Y,
+                            copyDepth,
+                            BlitFramebufferFilter.Nearest
+                        )
+                    
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
+                GL.BindFramebuffer(FramebufferTarget.DrawFramebuffer, 0)
+                       
+        member x.ReadPixels(src : IFramebuffer, sem : Symbol, offset : V2i, size : V2i) = 
+            use __ = ctx.ResourceLock
+            let src = src :?> Framebuffer
+            GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, src.Handle)
+            
+            let format = 
+                if src.Handle <> 0 then
+                    let (KeyValue(slot, signature)) = src.Signature.Layout.ColorAttachments |> Seq.find (fun (KeyValue(id, att)) -> att.Name = sem)
+                    GL.ReadBuffer(unbox (int ReadBufferMode.ColorAttachment0 + slot))
+                    signature.Format
+                else
+                    if sem <> DefaultSemantic.Colors then failwith "bad"
+                    GL.ReadBuffer(ReadBufferMode.BackLeft)
+                    TextureFormat.Rgba8
+                
+            GL.BindBuffer(BufferTarget.PixelPackBuffer, 0)
+            GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+            
+
+            let (pfmt, ptype) = TextureFormat.toFormatAndType format
+            let cfmt = TextureFormat.toDownloadFormat format
+            let res = PixImage.Create(cfmt, int64 size.X, int64 size.Y)
+            let gc = GCHandle.Alloc(res.Array, GCHandleType.Pinned)
+            try
+
+                GL.ReadPixels(offset.X, src.Size.Y - size.Y - offset.Y, size.X, size.Y, pfmt, ptype, gc.AddrOfPinnedObject())
+                GL.BindFramebuffer(FramebufferTarget.ReadFramebuffer, 0)
+                
+                res.Transformed(ImageTrafo.MirrorY)
+            finally
+                gc.Free()
+
+
+            
 
         member x.DebugLevel = x.DebugLevel
 

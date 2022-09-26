@@ -465,8 +465,32 @@ type Runtime(device : Device, debug : DebugLevel) as this =
 
         new RaytracingTask(manager, pipeline, commands) :> IRaytracingTask
 
-
+            
     interface IRuntime with
+        member x.Copy(src : IFramebuffer, dst : IFramebuffer) =
+            let src = src :?> Framebuffer
+            let dst = dst :?> Framebuffer
+            device.perform {
+                for (KeyValue(name, srcView)) in src.Attachments do
+                    match dst.Attachments.TryGetValue name with
+                    | (true, dstView) ->
+                        let ap = if name = DefaultSemantic.DepthStencil then TextureAspect.DepthStencil else TextureAspect.Color
+                        let lSrc = srcView.Image.Layout
+                        let lDst = dstView.Image.Layout
+                        do! Command.TransformLayout(srcView.Image, VkImageLayout.TransferSrcOptimal)
+                        do! Command.TransformLayout(dstView.Image, VkImageLayout.TransferDstOptimal)
+                        do! Command.Blit(srcView.Image.[ap, 0, *], VkImageLayout.TransferSrcOptimal, dstView.Image.[ap, 0, *], VkImageLayout.TransferSrcOptimal, VkFilter.Nearest)
+                        do! Command.TransformLayout(srcView.Image, lSrc)
+                        do! Command.TransformLayout(dstView.Image, lDst)
+                    | _ ->
+                        ()
+            }
+            
+        member x.ReadPixels(src : IFramebuffer, sem : Symbol, offset : V2i, size : V2i) =
+            let src = src :?> Framebuffer
+            let att = src.Attachments.[sem].Image :> IBackendTexture
+            x.Download(att, 0, 0, Box2i(offset, offset + size))
+
 
         member x.DebugLevel = debug
 
