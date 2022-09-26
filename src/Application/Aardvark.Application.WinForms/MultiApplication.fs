@@ -335,6 +335,12 @@ and MultiRuntime(runtimes : IRuntime[]) =
                 | _ ->
                     failwith ""
 
+        member x.Copy(_src : IFramebuffer, _dst : IFramebuffer) =
+            failwith ""
+            
+        member x.ReadPixels(_src : IFramebuffer, _sem : Symbol, _offset : V2i, _size : V2i) =
+            failwith ""
+                    
         member x.PrepareSurface(signature, s) = failwith ""
         member x.DeleteSurface(s) = failwith ""
         member x.PrepareRenderObject(fboSignature, rj) =failwith ""
