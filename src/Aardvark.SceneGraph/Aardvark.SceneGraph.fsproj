@@ -24,6 +24,7 @@
     <Compile Include="Semantics\Attributes.fs" />
     <Compile Include="Semantics\Surface.fs" />
     <Compile Include="Semantics\Flags.fs" />
+    <Compile Include="Semantics\Activate.fs" />
     <Compile Include="Semantics\BoundingBoxes.fs" />
     <Compile Include="Semantics\Modes.fs" />
     <Compile Include="Semantics\Uniforms.fs" />
