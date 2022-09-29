@@ -1,3 +1,6 @@
+### 5.2.15
+- Font constructor with System.IO.Stream
+
 ### 5.2.14
 - Framebuffer Copy/ReadPixels 
 
