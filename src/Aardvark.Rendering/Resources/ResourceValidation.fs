@@ -263,7 +263,7 @@ module ResourceValidation =
                      raise <| ArgumentException(message)
                  ) format
 
-        let private validSampleCounts = Set.ofList [ 1; 2; 4; 8; 16; 32; 64 ]
+        let validSampleCounts = Set.ofList [ 1; 2; 4; 8; 16; 32; 64 ]
 
         /// Raises and ArgumentException if the given signature parameters are invalid.
         let validateSignatureParams (colorAttachments : Map<int, AttachmentSignature>)
