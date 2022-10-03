@@ -36,6 +36,7 @@ nuget Unofficial.LibTessDotNet           ~> 2.0.2
 nuget SharpDX.Direct3D9                  ~> 4.0.1
 nuget AssimpNet                          ~> 5.0.0-beta1
 nuget Offler                             ~> 2.0.3
+nuget FSharp.Data                        ~> 4.2.10
 
 nuget Unofficial.OpenTK                  ~> 3.0.19
 nuget Unofficial.OpenTK.GLControl        ~> 3.0.19

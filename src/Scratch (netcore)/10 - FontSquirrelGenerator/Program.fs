@@ -1,5 +1,85 @@
 ﻿open Aardvark.Base
 
+module GoogleFontsGenerator =
+    open FSharp.Data
+    open System
+    open System.Text
+    open System.Text.RegularExpressions
+    open System.IO
+    open System.Net
+    open System.Net.Http
+
+    // response from https://www.googleapis.com/webfonts/v1/webfonts?key=__KEY__
+    [<Literal>]
+    let json = "googlefonts.json"
+
+    
+    type Bla = JsonProvider< json >
+    let j = Bla.Load( json )
+
+    let sb = StringBuilder()
+
+    let mist = 
+        """
+namespace Aardvark.Rendering.Text
+open Aardvark.Base
+
+module GoogleFonts = 
+    open System.IO
+    open System.IO.Compression
+    open System.Net.Http
+
+    let private client = lazy (new HttpClient())
+    let private getBytes (url : string) = client.Value.GetByteArrayAsync(url).Result
+
+    let private cachePath = 
+        let p = System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData)
+        let d = Path.Combine(p, "googlefonts")
+        if not (Directory.Exists d) then Directory.CreateDirectory d |> ignore
+        d
+
+    let private load (family : string) (style : string) (url : string) (fileName: string) : Font =
+        let path = Path.Combine(cachePath, fileName)
+        if File.Exists path then
+            Font.Load(path)
+        else
+            Log.startTimed "loading font %s %s (%s)" family style fileName
+            try
+                let data = getBytes url
+                File.WriteAllBytes(path,data)
+                Font.Load(path)
+            finally
+                Log.stop()
+
+        """
+
+    let idRx = System.Text.RegularExpressions.Regex @"^[a-zA-Z_].*$"
+
+    let build() =
+        sb.AppendLine(mist) |> ignore
+        for f in j.Items do 
+            if not (f.Family.ToLowerInvariant().Contains("ubuntu")) then 
+                let fName = 
+                    let wsRx = Regex @"[ \t\r\n]+"
+                    wsRx.Split(f.Family)
+                    |> Array.map (fun (p : string)-> p.Substring(0,1).ToUpper() + p.Substring(1))
+                    |> String.concat ""
+                sb.AppendLine("    [<AbstractClass; Sealed>]") |> ignore
+                sb.AppendLine(sprintf "    type ``%s`` private() =" fName) |> ignore
+                for (name,path) in f.Files.JsonValue.Properties() do
+                    let filename = Path.GetFileName(System.Uri(path.AsString()).LocalPath)
+                    sb.AppendLine(sprintf "        static let ``_%s`` = lazy (load @\"%s\" @\"%s\" @\"%s\" \"%s\")" name f.Family name (path.AsString()) filename) |> ignore
+                for (name,path) in f.Files.JsonValue.Properties() do
+
+                    let cleanName = name.Substring(0, 1).ToUpper() + name.Substring(1)
+                    let cleanName =
+                        if not (idRx.IsMatch cleanName) then "Weight" + cleanName
+                        else cleanName
+                
+                    sb.AppendLine(sprintf "        static member ``%s`` = ``_%s``.Value" cleanName name) |> ignore
+
+        File.WriteAllText(Path.Combine(__SOURCE_DIRECTORY__, "..", "..", "Aardvark.Rendering.Text", "GoogleFonts.fs"),sb.ToString())
+        printfn "done"
 
 module FontSquirrelGenerator =
 
