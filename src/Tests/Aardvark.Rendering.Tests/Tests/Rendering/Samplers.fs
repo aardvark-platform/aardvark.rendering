@@ -17,23 +17,29 @@ module Samplers =
             [<TexCoord>] tc : V2d
         }
 
-        type Fragment = {
-            [<Color>] c : V4i
-        }
-
-        let private diffuseSampler =
+        let private diffuseIntSampler =
             intSampler2d {
                 texture uniform?DiffuseColorTexture
             }
 
-        let diffuseTexture (v : Vertex) =
+        let private diffuseUIntSampler =
+            uintSampler2d {
+                texture uniform?DiffuseColorTexture
+            }
+
+        let diffuseIntTexture (v : Vertex) =
             fragment {
-                return diffuseSampler.Sample(v.tc)
+                return diffuseIntSampler.Sample v.tc
+            }
+
+        let diffuseUIntTexture (v : Vertex) =
+            fragment {
+                return diffuseUIntSampler.Sample v.tc
             }
 
     module Cases =
 
-        let private sample2DSignedInteger (getPixImage : V2i -> PixImage<'T>) (format : TextureFormat) (samples : int) (runtime : IRuntime) =
+        let private sample2DInteger (getPixImage : V2i -> PixImage<'T>) (format : TextureFormat) (samples : int) (runtime : IRuntime) =
             let size = V2i(256)
 
             use signature =
@@ -50,7 +56,10 @@ module Samplers =
                 Sg.fullScreenQuad
                 |> Sg.diffuseTexture' inputTexture
                 |> Sg.shader {
-                    do! Shader.diffuseTexture
+                    if format.IsSigned then
+                        do! Shader.diffuseIntTexture
+                    else
+                        do! Shader.diffuseUIntTexture
                 }
                 |> Sg.compile runtime signature
 
@@ -67,23 +76,22 @@ module Samplers =
                 buffer.Release()
 
         let sample2Drgba8i (samples : int) (runtime : IRuntime) =
-            runtime |> sample2DSignedInteger PixImage.random8i TextureFormat.Rgba8i 1
+            runtime |> sample2DInteger PixImage.random8i TextureFormat.Rgba8i samples
 
         let sample2Drgba16i (samples : int) (runtime : IRuntime) =
-            runtime |> sample2DSignedInteger PixImage.random16i TextureFormat.Rgba16i 1
+            runtime |> sample2DInteger PixImage.random16i TextureFormat.Rgba16i samples
 
         let sample2Drgba32i (samples : int) (runtime : IRuntime) =
-            runtime |> sample2DSignedInteger PixImage.random32i TextureFormat.Rgba32i 1
+            runtime |> sample2DInteger PixImage.random32i TextureFormat.Rgba32i samples
 
-        // TODO: Use unsigned integer samplers once FShade supports them
         let sample2Drgba8ui (samples : int) (runtime : IRuntime) =
-            runtime |> sample2DSignedInteger PixImage.random8ui TextureFormat.Rgba8ui 1
+            runtime |> sample2DInteger PixImage.random8ui TextureFormat.Rgba8ui samples
 
         let sample2Drgba16ui (samples : int) (runtime : IRuntime) =
-            runtime |> sample2DSignedInteger PixImage.random16ui TextureFormat.Rgba16ui 1
+            runtime |> sample2DInteger PixImage.random16ui TextureFormat.Rgba16ui samples
 
         let sample2Drgba32ui (samples : int) (runtime : IRuntime) =
-            runtime |> sample2DSignedInteger PixImage.random32ui TextureFormat.Rgba32ui 1
+            runtime |> sample2DInteger PixImage.random32ui TextureFormat.Rgba32ui samples
 
     let tests (backend : Backend) =
         [
@@ -95,5 +103,6 @@ module Samplers =
             "2D rgba8ui", Cases.sample2Drgba8ui 1
             "2D rgba16ui", Cases.sample2Drgba16ui 1
             "2D rgba32ui", Cases.sample2Drgba32ui 1
+            "2D rgba32ui multisampled", Cases.sample2Drgba32ui 2
         ]
         |> prepareCases backend "Samplers"

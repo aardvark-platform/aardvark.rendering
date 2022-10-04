@@ -279,6 +279,47 @@ module TextureFormat =
     let isIntegerFormat (format : TextureFormat) =
         integerFormats |> HashSet.contains format
 
+    let private signedFormats =
+        HashSet.ofList [
+            TextureFormat.R16f
+            TextureFormat.R32f
+            TextureFormat.Rg16f
+            TextureFormat.Rg32f
+            TextureFormat.R8i
+            TextureFormat.R16i
+            TextureFormat.R32i
+            TextureFormat.Rg8i
+            TextureFormat.Rg16i
+            TextureFormat.Rg32i
+            TextureFormat.Rgba32f
+            TextureFormat.Rgb32f
+            TextureFormat.Rgba16f
+            TextureFormat.Rgb16f
+            TextureFormat.R11fG11fB10f
+            TextureFormat.Rgba32i
+            TextureFormat.Rgb32i
+            TextureFormat.Rgba16i
+            TextureFormat.Rgb16i
+            TextureFormat.Rgba8i
+            TextureFormat.Rgb8i
+            TextureFormat.R8Snorm
+            TextureFormat.Rg8Snorm
+            TextureFormat.Rgb8Snorm
+            TextureFormat.Rgba8Snorm
+            TextureFormat.R16Snorm
+            TextureFormat.Rg16Snorm
+            TextureFormat.Rgb16Snorm
+            TextureFormat.Rgba16Snorm
+            TextureFormat.DepthComponent32f
+            TextureFormat.CompressedSignedRedRgtc1          // BC4
+            TextureFormat.CompressedSignedRgRgtc2           // BC5
+            TextureFormat.CompressedRgbBptcSignedFloat      // BC6h
+        ]
+
+    /// Returns if the given format stores signed values (i.e. floating-point, signed integer, or signed normalized values)
+    let isSigned (format : TextureFormat) =
+        signedFormats |> HashSet.contains format
+
     let private compressedFormats =
         HashSet.ofList [
             TextureFormat.CompressedRgbS3tcDxt1
@@ -610,6 +651,7 @@ module TextureFormat =
 module TextureFormatExtensions =
     type TextureFormat with
         member x.IsIntegerFormat = TextureFormat.isIntegerFormat x
+        member x.IsSigned = TextureFormat.isSigned x
         member x.IsCompressed = TextureFormat.isCompressed x
         member x.IsFilterable = TextureFormat.isFilterable x
         member x.IsSrgb = TextureFormat.isSrgb x

@@ -17,9 +17,14 @@ module IntegerAttachments =
             [<PrimitiveId>] primId : int
         }
 
-        let primitiveId (v : Vertex) =
+        let primitiveIdSigned (v : Vertex) =
             fragment {
                 return V4i(v.primId)
+            }
+
+        let primitiveIdUnsigned (v : Vertex) =
+            fragment {
+                return V4ui(v.primId)
             }
 
     module Cases =
@@ -36,7 +41,10 @@ module IntegerAttachments =
                 Sg.fullScreenQuad
                 |> Sg.shader {
                     do! DefaultSurfaces.diffuseTexture
-                    do! Shader.primitiveId
+                    if format.IsSigned then
+                        do! Shader.primitiveIdSigned
+                    else
+                        do! Shader.primitiveIdUnsigned
                 }
                 |> Sg.compile runtime signature
 

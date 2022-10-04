@@ -255,17 +255,17 @@ module FShadeInterop =
             TextureFormat.Rg16f,        typeof<V2d>
             TextureFormat.Rg32f,        typeof<V2d>
             TextureFormat.R8i,          typeof<int>
-            TextureFormat.R8ui,         typeof<int>
+            TextureFormat.R8ui,         typeof<uint>
             TextureFormat.R16i,         typeof<int>
-            TextureFormat.R16ui,        typeof<int>
+            TextureFormat.R16ui,        typeof<uint>
             TextureFormat.R32i,         typeof<int>
-            TextureFormat.R32ui,        typeof<int>
+            TextureFormat.R32ui,        typeof<uint>
             TextureFormat.Rg8i,         typeof<V2i>
-            TextureFormat.Rg8ui,        typeof<V2i>
+            TextureFormat.Rg8ui,        typeof<V2ui>
             TextureFormat.Rg16i,        typeof<V2i>
-            TextureFormat.Rg16ui,       typeof<V2i>
+            TextureFormat.Rg16ui,       typeof<V2ui>
             TextureFormat.Rg32i,        typeof<V2i>
-            TextureFormat.Rg32ui,       typeof<V2i>
+            TextureFormat.Rg32ui,       typeof<V2ui>
             TextureFormat.Rgba32f,      typeof<V4d>
             TextureFormat.Rgb32f,       typeof<V3d>
             TextureFormat.Rgba16f,      typeof<V4d>
@@ -274,12 +274,12 @@ module FShadeInterop =
             TextureFormat.Rgb9E5,       typeof<V3d>
             TextureFormat.Srgb8,        typeof<V3d>
             TextureFormat.Srgb8Alpha8,  typeof<V4d>
-            TextureFormat.Rgba32ui,     typeof<V4i>
-            TextureFormat.Rgb32ui,      typeof<V3i>
-            TextureFormat.Rgba16ui,     typeof<V4i>
-            TextureFormat.Rgb16ui,      typeof<V3i>
-            TextureFormat.Rgba8ui,      typeof<V4i>
-            TextureFormat.Rgb8ui,       typeof<V3i>
+            TextureFormat.Rgba32ui,     typeof<V4ui>
+            TextureFormat.Rgb32ui,      typeof<V3ui>
+            TextureFormat.Rgba16ui,     typeof<V4ui>
+            TextureFormat.Rgb16ui,      typeof<V3ui>
+            TextureFormat.Rgba8ui,      typeof<V4ui>
+            TextureFormat.Rgb8ui,       typeof<V3ui>
             TextureFormat.Rgba32i,      typeof<V4i>
             TextureFormat.Rgb32i,       typeof<V3i>
             TextureFormat.Rgba16i,      typeof<V4i>
@@ -294,7 +294,7 @@ module FShadeInterop =
             TextureFormat.Rg16Snorm,    typeof<V2d>
             TextureFormat.Rgb16Snorm,   typeof<V3d>
             TextureFormat.Rgba16Snorm,  typeof<V4d>
-            TextureFormat.Rgb10A2ui,    typeof<V4i>
+            TextureFormat.Rgb10A2ui,    typeof<V4ui>
         ]
 
     [<GLSLIntrinsic("gl_DeviceIndex", "GL_EXT_device_group")>]
