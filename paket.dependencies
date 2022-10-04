@@ -4,7 +4,7 @@ source https://vrvis.myget.org/F/aardvark_public/api/v2
 
 storage: none
 
-nuget FSharp.Core                        >= 5.0.0 lowest_matching: true
+nuget FSharp.Core                        >= 5.0.1 lowest_matching: true
 nuget Microsoft.NETFramework.ReferenceAssemblies >= 1.0.0 lowest_matching: true
 nuget Aardvark.Build                     ~> 1.0.13
 
@@ -51,11 +51,10 @@ source https://api.nuget.org/v3/index.json
 
 storage: none
 
-nuget FSharp.Core                        >= 5.0.0 lowest_matching: true
+nuget FSharp.Core                        >= 5.0.1 lowest_matching: true
 nuget Expecto                            ~> 9.0.4
 nuget Expecto.FsCheck                    ~> 9.0.4
 nuget Expecto.Hopac                      ~> 9.0.4
 nuget BenchmarkDotNet                    ~> 0.13.1
 nuget YoloDev.Expecto.TestSdk            ~> 0.12.8
 nuget Microsoft.NET.Test.Sdk             ~> 16.11.0
-nuget Aardvark.Build                     ~> 1.0.13
