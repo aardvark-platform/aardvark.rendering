@@ -644,70 +644,6 @@ module ``Image Command Extensions`` =
         static member Blit(src : ImageSubresourceLayers, srcLayout : VkImageLayout, dst : ImageSubresourceLayers, dstLayout : VkImageLayout, filter : VkFilter) =
             Command.Blit(src, srcLayout, Box3i(V3i.Zero, src.Size - V3i.III), dst, dstLayout, Box3i(V3i.Zero, dst.Size - V3i.III), filter)
 
-        static member inline ClearColor(img : ImageSubresourceRange, color : ^Color) =
-            Command.ClearColor(img, ClearColor.create color)
-
-        static member ClearColor(img : ImageSubresourceRange, color : ClearColor) =
-            if img.Image.IsNull then
-                Command.Nop
-            else
-                if img.Aspect <> TextureAspect.Color then
-                    failf "cannot clear image with aspect %A using color" img.Aspect
-
-                { new Command() with
-                    member x.Compatible = QueueFlags.Graphics ||| QueueFlags.Compute
-                    member x.Enqueue cmd =
-                        let originalLayout = img.Image.Layout
-
-                        cmd.Enqueue (Command.TransformLayout(img.Image, VkImageLayout.TransferDstOptimal))
-
-                        let clearValue =
-                            if img.Image.Format |> VkFormat.toTextureFormat |> TextureFormat.isIntegerFormat then
-                                VkClearColorValue(int32 = color.Integer)
-                            else
-                                VkClearColorValue(float32 = color.Float)
-
-                        let range = img.VkImageSubresourceRange
-                        clearValue |> pin (fun pClear ->
-                            range |> pin (fun pRange ->
-                                cmd.AppendCommand()
-                                VkRaw.vkCmdClearColorImage(cmd.Handle, img.Image.Handle, VkImageLayout.TransferDstOptimal, pClear, 1u, pRange)
-                            )
-                        )
-                        cmd.Enqueue (Command.TransformLayout(img.Image, originalLayout))
-
-                        [img.Image]
-                }
-
-        static member inline ClearDepthStencil(img : ImageSubresourceRange, depth : ^Depth, stencil : ^Stencil) =
-            Command.ClearDepthStencil(img, ClearDepth.create depth, ClearStencil.create stencil)
-
-        static member ClearDepthStencil(img : ImageSubresourceRange, depth : ClearDepth, stencil : ClearStencil) =
-            if img.Image.IsNull then
-                Command.Nop
-            else
-                if not (img.Aspect.HasFlag(TextureAspect.Depth) || img.Aspect.HasFlag(TextureAspect.Stencil)) then
-                    failf "cannot clear image with aspect %A using depth/stencil" img.Aspect
-
-                { new Command() with
-                    member x.Compatible = QueueFlags.Graphics
-                    member x.Enqueue cmd =
-                        let originalLayout = img.Image.Layout
-                        cmd.Enqueue (Command.TransformLayout(img.Image, VkImageLayout.TransferDstOptimal))
-
-                        let mutable clearValue = VkClearDepthStencilValue(depth.Value, stencil.Value)
-                        let mutable range = img.VkImageSubresourceRange
-                        clearValue |> pin (fun pClear ->
-                            range |> pin (fun pRange ->
-                                cmd.AppendCommand()
-                                VkRaw.vkCmdClearDepthStencilImage(cmd.Handle, img.Image.Handle, VkImageLayout.TransferDstOptimal, pClear, 1u, pRange)
-                            )
-                        )
-                        cmd.Enqueue (Command.TransformLayout(img.Image, originalLayout))
-
-                        [img.Image]
-                }
-
         static member Sync(img : ImageSubresourceRange, layout : VkImageLayout, srcAccess : VkAccessFlags, dstAccess : VkAccessFlags) =
             Command.ImageBarrier(
                 img, layout, layout,
@@ -871,6 +807,81 @@ module ``Image Command Extensions`` =
                 }
             else
                 Command.nop
+
+    // We hide these methods since they use ClearColor, ClearDepth and ClearStencil, which have
+    // implicit conversion operators for better C# interop. They would take precedence over the SRTP variants defined below, resulting in warnings.
+    // We also cannot move the implementation to the SRTP variants directly, since they make use of private functions.
+    module ``Internal Clear Commands`` =
+
+        type Command with
+
+            static member ClearColorImpl(img : ImageSubresourceRange, color : ClearColor) =
+                if img.Image.IsNull then
+                    Command.Nop
+                else
+                    if img.Aspect <> TextureAspect.Color then
+                        failf "cannot clear image with aspect %A using color" img.Aspect
+
+                    { new Command() with
+                        member x.Compatible = QueueFlags.Graphics ||| QueueFlags.Compute
+                        member x.Enqueue cmd =
+                            let originalLayout = img.Image.Layout
+
+                            cmd.Enqueue (Command.TransformLayout(img.Image, VkImageLayout.TransferDstOptimal))
+
+                            let clearValue =
+                                if img.Image.Format |> VkFormat.toTextureFormat |> TextureFormat.isIntegerFormat then
+                                    VkClearColorValue(int32 = color.Integer)
+                                else
+                                    VkClearColorValue(float32 = color.Float)
+
+                            let range = img.VkImageSubresourceRange
+                            clearValue |> pin (fun pClear ->
+                                range |> pin (fun pRange ->
+                                    cmd.AppendCommand()
+                                    VkRaw.vkCmdClearColorImage(cmd.Handle, img.Image.Handle, VkImageLayout.TransferDstOptimal, pClear, 1u, pRange)
+                                )
+                            )
+                            cmd.Enqueue (Command.TransformLayout(img.Image, originalLayout))
+
+                            [img.Image]
+                    }
+
+            static member ClearDepthStencilImpl(img : ImageSubresourceRange, depth : ClearDepth, stencil : ClearStencil) =
+                if img.Image.IsNull then
+                    Command.Nop
+                else
+                    if not (img.Aspect.HasFlag(TextureAspect.Depth) || img.Aspect.HasFlag(TextureAspect.Stencil)) then
+                        failf "cannot clear image with aspect %A using depth/stencil" img.Aspect
+
+                    { new Command() with
+                        member x.Compatible = QueueFlags.Graphics
+                        member x.Enqueue cmd =
+                            let originalLayout = img.Image.Layout
+                            cmd.Enqueue (Command.TransformLayout(img.Image, VkImageLayout.TransferDstOptimal))
+
+                            let mutable clearValue = VkClearDepthStencilValue(depth.Value, stencil.Value)
+                            let mutable range = img.VkImageSubresourceRange
+                            clearValue |> pin (fun pClear ->
+                                range |> pin (fun pRange ->
+                                    cmd.AppendCommand()
+                                    VkRaw.vkCmdClearDepthStencilImage(cmd.Handle, img.Image.Handle, VkImageLayout.TransferDstOptimal, pClear, 1u, pRange)
+                                )
+                            )
+                            cmd.Enqueue (Command.TransformLayout(img.Image, originalLayout))
+
+                            [img.Image]
+                    }
+
+    open ``Internal Clear Commands``
+
+    type Command with
+
+        static member inline ClearColor(img : ImageSubresourceRange, color : ^Color) =
+            Command.ClearColorImpl(img, ClearColor.create color)
+
+        static member inline ClearDepthStencil(img : ImageSubresourceRange, depth : ^Depth, stencil : ^Stencil) =
+            Command.ClearDepthStencilImpl(img, ClearDepth.create depth, ClearStencil.create stencil)
 
 
 [<AutoOpen>]
