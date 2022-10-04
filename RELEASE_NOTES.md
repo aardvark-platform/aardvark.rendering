@@ -30,6 +30,12 @@
 ### 5.3.0-prerelease0001
 - Initial prerelease for 5.3
 
+### 5.2.15
+- Font constructor with System.IO.Stream
+
+### 5.2.14
+- Framebuffer Copy/ReadPixels 
+
 ### 5.2.13
 - switched to aardvark.assembler
 

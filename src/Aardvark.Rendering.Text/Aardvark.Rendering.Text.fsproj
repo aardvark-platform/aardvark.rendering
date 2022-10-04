@@ -22,6 +22,7 @@
     <Compile Include="PathTessellator.fs" />
     <Compile Include="Path.fs" />
     <Compile Include="Font.fs" />
+    <Compile Include="GoogleFonts.fs" />
     <Compile Include="FontSquirrel.fs" />
     <Compile Include="Text.fs" />
     <Compile Include="SceneGraph.fs" />

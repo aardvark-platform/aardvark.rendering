@@ -5,6 +5,7 @@ open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open Aardvark.Base.Ag
 open Aardvark.SceneGraph
+open System
 
 module BlendState =
     let ofScope (scope : Ag.Scope) =
@@ -54,6 +55,14 @@ module RenderObject =
 
         rj.IsActive <- scope.IsActive
         rj.RenderPass <- scope.RenderPass
+
+        if not scope.Activate.IsEmpty then
+            let activate() =
+                let disp = scope.Activate |> List.map (fun a -> a())
+                { new IDisposable with
+                    member x.Dispose() = disp |> List.iter Disposable.dispose }
+
+            rj.Activate <- activate
 
         let attributes =
             { new IAttributeProvider with

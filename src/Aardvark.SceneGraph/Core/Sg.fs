@@ -101,6 +101,13 @@ module Sg =
 
         new(on : aval<bool>, child : ISg) = OnOffNode(on, AVal.constant child)
 
+    type ActivationApplicator(activate : unit -> IDisposable, child : aval<ISg>) =
+        inherit AbstractApplicator(child)
+
+        member x.Activate = activate
+
+        new(activate : unit -> IDisposable, child : ISg) = ActivationApplicator(activate, AVal.constant child)
+
     type PassApplicator(pass : RenderPass, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 

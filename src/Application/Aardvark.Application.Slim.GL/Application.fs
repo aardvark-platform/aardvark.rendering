@@ -231,8 +231,13 @@ module private OpenGL =
 
             let samples = GL.Dispatch.GetFramebufferParameter(FramebufferTarget.DrawFramebuffer, unbox GetFramebufferParameter.Samples)
             GL.Check "could not retrieve framebuffer samples"
-            Some samples
 
+            if samples = 0 then Some 1
+            else
+                if ResourceValidation.Framebuffers.validSampleCounts |> Set.contains samples then
+                    Some samples
+                else
+                    None
         else
             Log.warn "[GL] could not query sample count of default framebuffer."
             None
@@ -319,7 +324,7 @@ module private OpenGL =
                     glfw.WindowHint(WindowHintBool.CocoaRetinaFramebuffer, cfg.physicalSize)
 
                 glfw.WindowHint(WindowHintBool.ScaleToMonitor, true)
-                glfw.WindowHint(WindowHintInt.Samples, cfg.samples)
+                glfw.WindowHint(WindowHintInt.Samples, if cfg.samples = 1 then 0 else cfg.samples)
         }
 
 type OpenGlApplication(forceNvidia : bool, debug : IDebugConfig, shaderCachePath : Option<string>, hideCocoaMenuBar : bool) =
