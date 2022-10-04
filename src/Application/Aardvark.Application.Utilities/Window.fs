@@ -203,8 +203,7 @@ module Utilities =
                     { new IEvent<_,_> with
                         member x.AddHandler(_) = ()
                         member x.RemoveHandler(_) = ()
-                        member x.Subscribe(_) =
-                            { new IDisposable with member x.Dispose() = () }
+                        member x.Subscribe(_) = Disposable.empty
                     }
 
             member x.Run(?preventDisposal) = x.Run(preventDisposal)

@@ -106,7 +106,7 @@ type RenderControl() as this =
                     ctrl.ParentChanged.RemoveHandler parentChange
             }
         else
-            { new IDisposable with member x.Dispose() = () }
+            Disposable.empty
 
     static let getScreenLocation (ctrl : Control) =
         let currentPos() =

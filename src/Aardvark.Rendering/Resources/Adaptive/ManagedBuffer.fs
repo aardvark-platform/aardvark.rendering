@@ -114,7 +114,6 @@ module internal ManagedBufferImplementation =
         inherit AdaptiveBuffer(runtime, 0n, usage, storage)
 
         static let elementSize = sizeof<'T> |> nativeint
-        static let empty = { new IDisposable with member x.Dispose() = () }
 
         let writers = Dict<obj, AbstractWriter>()
         let pending = LockedSet<AbstractWriter>()
@@ -171,13 +170,13 @@ module internal ManagedBufferImplementation =
             let count = range.Size + 1L
 
             if count <= 0L then
-                empty
+                Disposable.empty
             else
                 if view.Buffer.IsConstant then
                     let data = BufferView.download 0 (int count) view
                     let converted : 'T[] = data |> PrimitiveValueConverter.convertArray view.ElementType |> AVal.force
                     x.Set(converted, range)
-                    empty
+                    Disposable.empty
                 else
                     lock writers (fun _ ->
                         let writer =
@@ -194,7 +193,7 @@ module internal ManagedBufferImplementation =
             if value.IsConstant then
                 let converted : 'T = value |> PrimitiveValueConverter.convertValue |> AVal.force
                 x.Set(converted, index)
-                empty
+                Disposable.empty
             else
                 lock writers (fun _ ->
                     let writer =

@@ -454,7 +454,6 @@ module Loader =
         ) fmt
 
     type AsyncLoadASet<'a, 'x, 'b>(config : LoadConfig<'a, 'b>, input : aval<'x>, mapping : 'x -> ISet<'a>) as x =
-        static let noDisposable = { new IDisposable with member x.Dispose() = () }
 
         let resultDeltaLock = obj()
         let mutable dead = HashSet.empty
@@ -524,14 +523,14 @@ module Loader =
             }
 
         let mutable refCount = 0
-        let mutable witness = noDisposable
+        let mutable witness = Disposable.empty
 
         let removeRef () =
             lock x (fun () ->
                 if Interlocked.Decrement(&refCount) = 0 then
                     Log.start "[Loader] stop loading"
                     witness.Dispose()
-                    witness <- noDisposable 
+                    witness <- Disposable.empty
                     Log.stop()
             )
 

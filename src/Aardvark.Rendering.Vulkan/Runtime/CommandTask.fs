@@ -1600,7 +1600,7 @@ module private RuntimeCommands =
         let mutable last = first :> PreparedCommand
 
         let mutable running = false
-        let mutable thread = { new IDisposable with member x.Dispose() = () }
+        let mutable thread = Disposable.empty
 
         let hinig = List<GeometryCommand>()
 

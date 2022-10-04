@@ -443,14 +443,14 @@ type BrowserNodeSem() =
                 | Some mouse ->
                     BrowserIO.installMouse node.Info.focus mvp node.Info.offler node.Info.keyboard mouse
                 | None ->
-                    { new IDisposable with member x.Dispose() = () }
+                    Disposable.empty
 
             let keyboard = 
                 match node.Info.keyboard with
                 | Some keyboard ->
                     BrowserIO.installKeyboard node.Info.focus node.Info.offler keyboard
                 | None ->
-                    { new IDisposable with member x.Dispose() = () }
+                    Disposable.empty
                         
             { new IDisposable with 
                 member x.Dispose() =

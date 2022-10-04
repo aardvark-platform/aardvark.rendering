@@ -16,7 +16,7 @@ type ConcurrentDeltaQueue<'a>() =
     let refCount = Dict<'a, ref<int>>()
     let queue = Queue<'a>()
 
-    let mutable subscription =  { new IDisposable with member x.Dispose() = () }
+    let mutable subscription = Disposable.empty
 
     member x.Subscription
         with get() = subscription

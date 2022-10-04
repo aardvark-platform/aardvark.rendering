@@ -175,7 +175,7 @@ type OpenGlRenderControl(runtime : Runtime, debug : IDebugConfig, samples : int)
     let mutable autoInvalidate = true
     let mutable onPaintRender = true
     let mutable threadStealing : StopStealing =
-        { new StopStealing with member x.StopStealing () = { new IDisposable with member x.Dispose() = () } }
+        { new StopStealing with member x.StopStealing () = Disposable.empty }
 
     let beforeRender = Event<unit>()
     let afterRender = Event<unit>()

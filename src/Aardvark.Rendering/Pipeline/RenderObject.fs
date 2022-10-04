@@ -8,8 +8,7 @@ open Aardvark.Rendering
 
 [<AutoOpen>]
 module private RenderObjectHelpers =
-    let private nopDisposable = { new IDisposable with member x.Dispose() = () }
-    let nopActivate () = nopDisposable
+    let nopActivate () = Disposable.empty
 
 type IRenderObject =
     abstract member Id : int

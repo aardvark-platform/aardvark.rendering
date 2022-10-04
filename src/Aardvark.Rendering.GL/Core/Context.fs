@@ -193,8 +193,6 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
                                 "OpenGL"
                              ])
 
-    static let nopDisposable = { new IDisposable with member x.Dispose() = () }
-
     let resourceContexts = Array.init Config.NumberOfResourceContexts (fun _ -> createContext())
     let resourceContextCount = resourceContexts.Length
 

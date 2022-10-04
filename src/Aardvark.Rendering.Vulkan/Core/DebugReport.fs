@@ -342,7 +342,7 @@ type InstanceExtensions private() =
                     objects         = []
                 }
                 obs.OnCompleted()
-                { new IDisposable with member x.Dispose() = () }
+                Disposable.empty
         }
 
     static let getAdapter (instance : Instance) =
@@ -521,5 +521,5 @@ module ``FSharp Style Debug Extensions`` =
                 res
 
             | _ ->
-                { new IDisposable with member x.Dispose() = () }
+                Disposable.empty
 

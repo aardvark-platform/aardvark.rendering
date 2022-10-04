@@ -730,9 +730,7 @@ module SparseTextureImplemetation =
                     }
                 )
 
-                { new IDisposable with
-                    member __.Dispose() = ()
-                }
+                Disposable.empty
 
             else
                 brickSem.Wait() |> ignore
