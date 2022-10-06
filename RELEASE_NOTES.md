@@ -1,3 +1,6 @@
+### 5.2.16
+- [Application.Slim.GL] Fix issue with sample count for non-multisampled windows
+
 ### 5.2.15
 - Font constructor with System.IO.Stream
 
