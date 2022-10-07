@@ -14,7 +14,8 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 
 using FSharp.Data.Adaptive;
-using CSharp.Data.Adaptive;
+//using CSharp.Data.Adaptive
+using Microsoft.FSharp.Core;
 
 using Aardvark.Base;
 using Aardvark.SceneGraph;
@@ -25,6 +26,17 @@ using Effects = Aardvark.Rendering.Effects;
 
 namespace _01___Hello_Wpf
 {
+    /// <summary>
+    ///  should be needed, and can be normally replaced by FSharp.Data.Adatpive - https://github.com/aardvark-platform/aardvark.rendering/issues/99
+    /// </summary>
+    public static class AValExtensions
+    {
+        public static IAdaptiveValue<R> Map<A,R>(this IAdaptiveValue<A> a, Func<A,R> f)
+        {
+            return AValModule.map<A,R>(FuncConvert.FromFunc<A,R>(f), a);
+        }
+    }
+
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
@@ -60,7 +72,7 @@ namespace _01___Hello_Wpf
             var rotatingTrafo = angle.Map(Trafo3d.RotationZ);
 
             var sg =
-                new[] { cone.FillMode(AdaptiveValue.Constant(FillMode.Line)), cube.Trafo(rotatingTrafo) }
+                new[] { cone.FillMode(AValModule.constant(FillMode.Line)), cube.Trafo(rotatingTrafo) }
                 .ToSg()
                 .WithEffects(new[] { 
                     trafo, 
