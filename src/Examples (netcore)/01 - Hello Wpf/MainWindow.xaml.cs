@@ -27,7 +27,7 @@ using Effects = Aardvark.Rendering.Effects;
 namespace _01___Hello_Wpf
 {
     /// <summary>
-    ///  should be needed, and can be normally replaced by FSharp.Data.Adatpive - https://github.com/aardvark-platform/aardvark.rendering/issues/99
+    ///  should not be needed, and can be normally replaced by FSharp.Data.Adatpive - https://github.com/aardvark-platform/aardvark.rendering/issues/99
     /// </summary>
     public static class AValExtensions
     {
