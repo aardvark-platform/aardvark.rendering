@@ -20,6 +20,7 @@ nuget Aardvark.Base.Runtime              ~> 5.2.13
 nuget Aardvark.Base.Essentials           ~> 5.2.13
 nuget Aardvark.Geometry                  ~> 5.2.13
 nuget Aardvark.Base.Tensors              ~> 5.2.13
+nuget Aardvark.PixImage.DevIL            ~> 5.2.13
 
 nuget Aardvark.Assembler                 ~> 0.0.6
 
@@ -37,6 +38,8 @@ nuget SharpDX.Direct3D9                  ~> 4.0.1
 nuget AssimpNet                          ~> 5.0.0-beta1
 nuget Offler                             ~> 2.0.3
 nuget FSharp.Data                        ~> 4.2.10
+
+nuget Aardvark.PixImage.FreeImage        ~> 5.3.4
 
 nuget Unofficial.OpenTK                  ~> 3.0.21
 nuget Unofficial.OpenTK.GLControl        ~> 3.0.21

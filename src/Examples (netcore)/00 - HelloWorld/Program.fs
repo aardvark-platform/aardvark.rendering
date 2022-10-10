@@ -99,6 +99,9 @@ let main argv =
         // compile the scene graph into a render task
         app.Runtime.CompileRender(win.FramebufferSignature, sg)
 
+    let runtime = app.Runtime |> unbox<Aardvark.Rendering.GL.Runtime>
+    runtime.Context.CreateContext()
+
     // assign the render task to our window...
     win.RenderTask <- renderTask
     win.Run()
