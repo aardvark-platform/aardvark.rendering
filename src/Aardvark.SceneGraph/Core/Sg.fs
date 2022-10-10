@@ -140,6 +140,11 @@ module Sg =
 
         new(activate : unit -> IDisposable, child : ISg) = ActivationApplicator(activate, AVal.constant child)
 
+    // TODO: Caching?
+    type DelayNode(generator : Ag.Scope -> ISg) =
+        interface ISg
+        member x.Generator = generator
+
     type PassApplicator(pass : RenderPass, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 

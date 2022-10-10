@@ -10,6 +10,7 @@ open Aardvark.SceneGraph.Semantics
 open Aardvark.Application
 open FSharp.Data.Adaptive
 open Expecto
+open FShade
 
 module ``SceneGraph Tests`` =
 
@@ -116,9 +117,56 @@ module ``SceneGraph Tests`` =
             sg |> testOnActivation 1 0
         }
 
+    let delayModifySurface =
+        test "Sg.Delay (modify surface)" {
+            use app = TestApplication.create Backend.Vulkan
+            let runtime = app.Runtime
+
+            use signature =
+                runtime.CreateFramebufferSignature [
+                    DefaultSemantic.Colors, TextureFormat.Rgba8
+                ]
+
+            let effectAddBlue =
+                let shader (v : Effects.Vertex) =
+                    fragment {
+                        return v.c + V4d.OOIO
+                    }
+
+                Effect.ofFunction shader
+
+            use task =
+                Sg.delay (fun scope ->
+                    Sg.fullScreenQuad
+                    |> Sg.effect [
+                        match scope.Surface with
+                        | Surface.FShadeSimple effect -> yield effect
+                        | _ -> ()
+
+                        yield effectAddBlue
+                    ]
+                )
+                |> Sg.shader {
+                    do! DefaultSurfaces.constantColor C4f.Red
+                }
+                |> Sg.compile runtime signature
+
+            let size = AVal.constant <| V2i(128)
+            let buffer = task |> RenderTask.renderToColor size
+            buffer.Acquire()
+
+            try
+                let color = buffer.GetValue().Download().AsPixImage<uint8>()
+                color |> PixImage.isColor [| 255uy; 0uy; 255uy; 255uy |]
+
+            finally
+                buffer.Release()
+        }
+
     [<Tests>]
     let tests =
         testList "SceneGraph" [
             checkCompleteness
             onActivationMultiRenderObject
+            delayModifySurface
         ]

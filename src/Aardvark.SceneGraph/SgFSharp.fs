@@ -182,6 +182,10 @@ module SgFSharp =
         let onActivation (f : unit -> IDisposable) (sg : ISg) =
             Sg.ActivationApplicator(f, sg) :> ISg
 
+        /// Generates a scene graph depending on the scope.
+        let delay (generator : Ag.Scope -> ISg) =
+            Sg.DelayNode(generator) :> ISg
+
         // ================================================================================================================
         // Uniforms & Textures
         // ================================================================================================================
