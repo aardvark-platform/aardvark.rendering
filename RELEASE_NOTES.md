@@ -1,3 +1,9 @@
+### 5.2.17
+- Improved error handling of DDS parser
+- [Sg] Added delay
+- [Sg] Added reference counting for onActivation
+- [Application.Slim] Fixed error code printing
+
 ### 5.2.16
 - [Application.Slim.GL] Fix issue with sample count for non-multisampled windows
 
