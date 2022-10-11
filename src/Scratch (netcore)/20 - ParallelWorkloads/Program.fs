@@ -67,9 +67,9 @@ let main argv =
     let runtime = app.Runtime |> unbox<Aardvark.Rendering.GL.Runtime>
 
     let method = Pipes 1
-    let loader = PixImageDevil.Loader
-    let loader = PixImageFreeImage.Loader
-    //let loader = PixImageSharp.Loader
+    //let loader = PixImageDevil.Loader
+    //let loader = PixImageFreeImage.Loader
+    let loader = PixImageSharp.Loader
 
     let cts = new CancellationTokenSource()
 

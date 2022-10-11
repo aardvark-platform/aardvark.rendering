@@ -87,7 +87,6 @@ type Kind = Gpu | Control | Compute | Transfer | IO | ThreadPool
 type PipeState = 
     { finalizers : list<unit->unit>; 
       run : Kind -> (unit -> unit) -> unit
-      status : unit -> unit
     }
 type Pipe<'kind, 'a> = { run : PipeState -> PipeState * 'a }
 
@@ -113,21 +112,6 @@ module Pipe =
         pipeState.run kind run |> ignore
         tcs
 
-    
-    //let enqueue (pipeState : PipeState) (kind : Kind) (f : unit -> 'a) : MVar<ItemResult<'a>> =
-    //    let tcs = new TaskCompletionSource<_>()
-    //    let run () =
-    //        try
-    //            let r = f()
-    //            tcs.SetResult r
-    //        with e -> 
-    //            match e with
-    //            | :? OperationCanceledException as o -> 
-    //                tcs.SetException o
-    //            | _ -> 
-    //                tcs.SetException e
-    //    pipeState.run kind run |> ignore
-    //    tcs.Task
 
     let runTpl (pipeState : PipeState) (f : unit -> 'a) : Task<'a> =
         let tcs = new TaskCompletionSource<_>()
@@ -141,18 +125,8 @@ module Pipe =
                     tcs.SetException o
                 | _ -> 
                     tcs.SetException e
-        pipeState.run Kind.ThreadPool run |> ignore
+        pipeState.run Kind.Control run |> ignore
         tcs.Task
-
-    //let allocHGlobal (size : int) : Pipe<Sync, nativeint> =
-    //    { run = fun state -> 
-    //        let result = ref -1n
-    //        let cleanup () =
-    //            if result.Value > 0 then Marshal.FreeHGlobal result.Value
-    //        let state' = { state with finalizers = cleanup :: state.finalizers }
-    //        result.Value <- Marshal.AllocHGlobal(size)
-    //        state', result.Value
-    //    }
 
     let private handleError (s : PipeState) (r : MVar<ItemResult<'a>>) = 
         match r.Take() with
@@ -188,8 +162,12 @@ module Pipe =
         {
             run = fun s -> 
                 let run () =
+                    let sw = System.Diagnostics.Stopwatch.StartNew()
                     use mem = new MemoryStream(bytes)
-                    PixImage.Load (mem, loader)
+                    let r = PixImage.Load (mem, loader)
+                    sw.Stop()
+                    Console.WriteLine(sw.Elapsed.TotalMilliseconds)
+                    r
                 enqueue s Kind.Compute run  |> handleError s
         }
 
@@ -228,9 +206,10 @@ module Pipe =
             (f r).run s
         }
 
+
+
     type PipeBuilder() = 
         member x.Bind(a, f) = bind f a
-        //member x.Bind(a, f) = bind' f a
         member x.Return v = 
             { run = 
                 fun s -> 
@@ -253,8 +232,8 @@ module Pipe =
             let uploadContext = glRuntime.Context.CreateContext()
         
             let ioWorker = new Worker("io", 1, empty, empty, false)
-            let cpuWorker = new Worker("cpu", 1, empty, empty, false)
-            let control = new Worker("control", 1, empty, empty, false)
+            let cpuWorker = new Worker("cpu", 2, empty, empty, false)
+            let control = new Worker("control", 2, empty, empty, false)
             let gpuTransfer = new Worker("transfer", 1, empty, (fun _ -> glRuntime.Context.RenderingLock(uploadContext)), false)
             let gpu = new Worker("gpu", 1, empty, (fun _ ->  glRuntime.Context.RenderingLock(gpuContext)), false)
 
@@ -263,6 +242,11 @@ module Pipe =
                 let bottlneck = workers |> Seq.maxBy (fun w -> w.Load())
                 Log.line "thread pool threads: %d" ThreadPool.ThreadCount
                 Log.line "bottlneck: %s %s" bottlneck.Name (bottlneck.Status())
+                Log.line "io: %s" (ioWorker.Status())
+                Log.line "cpuWorker: %s" (cpuWorker.Status())
+                Log.line "control: %s" (control.Status())
+                Log.line "gpuTransfer: %s" (gpuTransfer.Status())
+                Log.line "gpu: %s" (gpu.Status())
 
             let reporting = 
                 let r =
@@ -279,16 +263,10 @@ module Pipe =
                         match kind with
                         | Kind.Gpu -> ioWorker.Enqueue f
                         | Kind.ThreadPool -> ThreadPool.QueueUserWorkItem(fun o -> f()) |> ignore
-                        | Kind.Control -> ioWorker.Enqueue f
-                        | Kind.Compute -> ioWorker.Enqueue f
-                        | Kind.Transfer -> ioWorker.Enqueue f
+                        | Kind.Control -> control.Enqueue f
+                        | Kind.Compute -> cpuWorker.Enqueue f
+                        | Kind.Transfer -> gpuTransfer.Enqueue f
                         | Kind.IO -> ioWorker.Enqueue f
-                    status = fun () -> 
-                        Log.line "io: %s" (ioWorker.Status())
-                        Log.line "cpuWorker: %s" (cpuWorker.Status())
-                        Log.line "control: %s" (control.Status())
-                        Log.line "gpuTransfer: %s" (gpuTransfer.Status())
-                        Log.line "gpu: %s" (gpu.Status())
                 }
             s, Task.WhenAll [| ioWorker.StartAsTasks(ct);  cpuWorker.StartAsTasks(ct); gpuTransfer.StartAsTasks(ct); gpu.StartAsTasks(ct); control.StartAsTasks(ct);  |]
             
@@ -303,7 +281,7 @@ module Pipe =
         let l = obj()
         let tasks = 
             elements 
-            |> Array.map (fun e -> 
+            |> Array.Parallel.map (fun e -> 
                 runTpl env (fun () -> 
                     let s,r = e.run env
                     lock l (fun _ -> 
