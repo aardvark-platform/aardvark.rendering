@@ -11,6 +11,15 @@ open Aardvark.Base
 
 module DdsTexture =
 
+    type DdsParseException =
+        inherit Exception
+
+        new () =
+            { inherit Exception() }
+
+        new (message : string) =
+            { inherit Exception(message) }
+
     [<AutoOpen>]
     module private Internals =
 
@@ -243,7 +252,7 @@ module DdsTexture =
                 | DxgiFormat.BC7 | DxgiFormat.BC7Unorm  -> TextureFormat.CompressedRgbaBptcUnorm
                 | DxgiFormat.BC7UnormSrgb               -> TextureFormat.CompressedSrgbAlphaBptcUnorm
                 | fmt ->
-                    failwithf "Unknown compressed DXGI format: %A" fmt
+                    raise <| DdsParseException($"Unknown compressed DXGI format: {fmt}")
 
             let ofFourCC (cc : FourCC) =
                 match string cc with
@@ -258,126 +267,155 @@ module DdsTexture =
                     if Enum.IsDefined(typeof<DxgiFormat>, cc) then
                         cc |> unbox<DxgiFormat> |> ofDxgiFormat
                     else
-                        failwithf "Unexpected four character code \"%A\"" scc
+                        raise <| DdsParseException($"Unexpected four character code \"{scc}\"")
 
     [<AutoOpen>]
-    module BinaryStreamReading =
+    module private BinaryStreamReading =
 
-        let readRaw (sizeInBytes : int) (message : string) (stream : Stream) =
+        let tryReadRaw (sizeInBytes : int) (stream : Stream) =
             let buffer = Array.zeroCreate<uint8> sizeInBytes
 
-            let rec copy (offset : int) (sizeInBytes : int) : unit =
+            let rec copy (offset : int) (sizeInBytes : int) : bool =
                 let n = stream.Read(buffer, offset, sizeInBytes)
 
                 if n < sizeInBytes then
                     if n = 0 then
-                        failwithf "unexpected DDS stream end when reading %s" message
+                        false
+                    else
+                        copy n (sizeInBytes - n)
+                else
+                    true
 
-                    copy n (sizeInBytes - n)
-
-            copy 0 sizeInBytes
-            buffer
-
-        let read<'T> (message : string) (stream : Stream) =
-            let buffer = stream |> readRaw sizeof<'T> message
-
-            let handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
-            try
-                unbox<'T> <| Marshal.PtrToStructure(handle.AddrOfPinnedObject(), typeof<'T>);
-            finally
-                handle.Free();
-
-    let loadCompressedFromStream (stream : Stream) =
-
-        let magic = stream |> read<uint32> "magic number"
-        if magic <> 0x20534444u then
-            failwithf "Unexpected magic number %A" magic
-
-        let header = stream |> read<Header> "header"
-        if int header.Size <> sizeof<Header> then
-            failwithf "Unexpected header size %d" header.Size
-
-        if not header.PixelFormat.IsCompressed then
-            failwithf "Not compressed"
-
-        let header10 =
-            if header.HasExtendedHeader then
-                Some (stream |> read<HeaderDxt10> "extended header")
+            if copy 0 sizeInBytes then
+                Some buffer
             else
                 None
 
-        let dimension =
-            match header10 with
-            | Some h -> h.Dimension
-            | _ -> header.Dimension
+        let tryRead<'T> (stream : Stream) =
+            match stream |> tryReadRaw sizeof<'T> with
+            | Some buffer ->
+                let handle = GCHandle.Alloc(buffer, GCHandleType.Pinned);
+                try
+                    let obj = unbox<'T> <| Marshal.PtrToStructure(handle.AddrOfPinnedObject(), typeof<'T>)
+                    Some obj
+                finally
+                    handle.Free()
 
-        let size =
-            match dimension with
-            | TextureDimension.Texture1D -> V3i(int header.Width, 1, 1)
-            | TextureDimension.Texture3D -> V3i(int header.Width, int header.Height, int header.Depth)
-            | _ -> V3i(int header.Width, int header.Height, 1)
+            | None ->
+                None
 
-        let format =
-            match header10 with
-            | Some h -> h.Format |> TextureFormat.ofDxgiFormat
-            | _ -> header.PixelFormat.FourCC |> TextureFormat.ofFourCC
+        let readRaw (sizeInBytes : int) (message : string) (stream : Stream) =
+            match tryReadRaw sizeInBytes stream with
+            | Some buffer -> buffer
+            | _ -> raise <| DdsParseException(message)
 
-        let levels =
-            if header.Flags.HasFlag(Flags.MipMapCount) || header.Caps.HasFlag(Caps.MipMap) then int header.MipMapCount
-            else 1
+        let read<'T> (message : string) (stream : Stream) =
+            match tryRead<'T> stream with
+            | Some value -> value
+            | _ -> raise <| DdsParseException(message)
 
-        let count =
-            header10 |> Option.map (fun h -> int h.ArraySize) |> Option.defaultValue 1
+    let private tryLoadCompressedFromStreamImpl (stream : Stream) =
+        let magic = stream |> tryRead<uint32>
 
-        let slices =
-            match dimension with
-            | TextureDimension.TextureCube -> count * 6
-            | _ -> count
+        match magic with
+        | Some magic when magic = 0x20534444u ->
 
-        let mutable totalSize = 0n
+            let header = stream |> read<Header> "header"
+            if int header.Size <> sizeof<Header> then
+                raise <| DdsParseException("Unexpected header size %d")
 
-        let metaData =
-            let bytesPerBlock =
-                format.CompressionMode |> CompressionMode.bytesPerBlock
+            if header.PixelFormat.IsCompressed then
+                let header10 =
+                    if header.HasExtendedHeader then
+                        Some (stream |> read<HeaderDxt10> "extended header")
+                    else
+                        None
 
-            Array.init slices (fun layer ->
-                Array.init levels (fun level ->
-                    let size = Fun.MipmapLevelSize(size, level)
-                    let blocks = max 1 ((size + 3) / 4)
-                    let sizeInBytes = nativeint blocks.X * nativeint blocks.Y * nativeint blocks.Z * bytesPerBlock
-                    let offset = totalSize
-                    totalSize <- totalSize + sizeInBytes
+                let dimension =
+                    match header10 with
+                    | Some h -> h.Dimension
+                    | _ -> header.Dimension
 
-                    (size, blocks, nativeint offset, sizeInBytes)
-                )
-            )
+                let size =
+                    match dimension with
+                    | TextureDimension.Texture1D -> V3i(int header.Width, 1, 1)
+                    | TextureDimension.Texture3D -> V3i(int header.Width, int header.Height, int header.Depth)
+                    | _ -> V3i(int header.Width, int header.Height, 1)
 
-        let data = stream |> readRaw (int totalSize) "texture data"
+                let format =
+                    match header10 with
+                    | Some h -> h.Format |> TextureFormat.ofDxgiFormat
+                    | _ -> header.PixelFormat.FourCC |> TextureFormat.ofFourCC
 
-        let layers =
-            Array.init slices (fun layer ->
-                Array.init levels (fun level ->
-                    let size, _, offset, sizeInBytes = metaData.[layer].[level]
+                let levels =
+                    if header.Flags.HasFlag(Flags.MipMapCount) || header.Caps.HasFlag(Caps.MipMap) then int header.MipMapCount
+                    else 1
 
-                    { new INativeTextureData with
-                        member x.Size = size
-                        member x.SizeInBytes = int64 sizeInBytes
-                        member x.Use(f) = pinned data (fun ptr -> f (ptr + offset)) }
-                )
-            )
+                let count =
+                    header10 |> Option.map (fun h -> int h.ArraySize) |> Option.defaultValue 1
 
-        { new INativeTexture with
-            member x.Dimension    = dimension
-            member x.Format       = format
-            member x.MipMapLevels = levels
-            member x.Count        = count
-            member x.WantMipMaps  = levels > 1
-            member x.Item
-                with get(slice, level) = layers.[slice].[level] }
+                let slices =
+                    match dimension with
+                    | TextureDimension.TextureCube -> count * 6
+                    | _ -> count
+
+                let mutable totalSize = 0n
+
+                let metaData =
+                    let bytesPerBlock =
+                        format.CompressionMode |> CompressionMode.bytesPerBlock
+
+                    Array.init slices (fun layer ->
+                        Array.init levels (fun level ->
+                            let size = Fun.MipmapLevelSize(size, level)
+                            let blocks = max 1 ((size + 3) / 4)
+                            let sizeInBytes = nativeint blocks.X * nativeint blocks.Y * nativeint blocks.Z * bytesPerBlock
+                            let offset = totalSize
+                            totalSize <- totalSize + sizeInBytes
+
+                            (size, blocks, nativeint offset, sizeInBytes)
+                        )
+                    )
+
+                let data = stream |> readRaw (int totalSize) "texture data"
+
+                let layers =
+                    Array.init slices (fun layer ->
+                        Array.init levels (fun level ->
+                            let size, _, offset, sizeInBytes = metaData.[layer].[level]
+
+                            { new INativeTextureData with
+                                member x.Size = size
+                                member x.SizeInBytes = int64 sizeInBytes
+                                member x.Use(f) = pinned data (fun ptr -> f (ptr + offset)) }
+                        )
+                    )
+
+                { new INativeTexture with
+                    member x.Dimension    = dimension
+                    member x.Format       = format
+                    member x.MipMapLevels = levels
+                    member x.Count        = count
+                    member x.WantMipMaps  = levels > 1
+                    member x.Item
+                        with get(slice, level) = layers.[slice].[level] }
+                |> Some
+
+            else
+                // Uncompressed DDS loading not implemented
+                None
+        | _ ->
+            None
+
+    let loadCompressedFromStream (stream : Stream) =
+        match tryLoadCompressedFromStreamImpl stream with
+        | Some texture -> texture
+        | _ ->
+            raise <| DdsParseException()
 
     let tryLoadCompressedFromStream (stream : Stream) =
         try
-            Some <| loadCompressedFromStream stream
+            tryLoadCompressedFromStreamImpl stream
         with
         | exn ->
             Report.Line(3, "Failed to load stream as DDS file: {0}", exn.Message)
