@@ -1,20 +1,21 @@
 ﻿namespace Aardvark.Rendering
 
 open Aardvark.Base
+open System.Runtime.InteropServices
 
-type PixTextureCube(data : PixImageCube,  textureParams : TextureParams) =
+type PixTextureCube(data : PixImageCube, textureParams : TextureParams) =
 
     member x.PixImageCube = data
     member x.TextureParams = textureParams
 
-    new(data : PixImageCube, wantMipMaps : bool) =
+    new(data : PixImageCube, [<Optional; DefaultParameterValue(true)>] wantMipMaps : bool) =
         PixTextureCube(data, { TextureParams.empty with wantMipMaps = wantMipMaps })
 
     new(data : PixCube, textureParams : TextureParams) =
         let faces = data.MipMapArray |> Array.map (fun p -> PixImageMipMap(p.MipArray |> Array.map (fun pi -> pi :?> PixImage)))
         PixTextureCube(PixImageCube(faces), textureParams)
 
-    new(data : PixCube, wantMipMaps : bool) =
+    new(data : PixCube, [<Optional; DefaultParameterValue(true)>] wantMipMaps : bool) =
         PixTextureCube(data, { TextureParams.empty with wantMipMaps = wantMipMaps })
 
     override x.GetHashCode() =

@@ -1,13 +1,14 @@
 ﻿namespace Aardvark.Rendering
 
 open Aardvark.Base
+open System.Runtime.InteropServices
 
 type PixTexture3d(data : PixVolume, textureParams : TextureParams) =
 
     member x.PixVolume = data
     member x.TextureParams = textureParams
 
-    new(data : PixVolume, wantMipMaps : bool) =
+    new(data : PixVolume, [<Optional; DefaultParameterValue(true)>] wantMipMaps : bool) =
         PixTexture3d(data, { TextureParams.empty with wantMipMaps = wantMipMaps })
 
     override x.GetHashCode() =

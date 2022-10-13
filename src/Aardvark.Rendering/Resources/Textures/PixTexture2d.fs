@@ -1,19 +1,20 @@
 ﻿namespace Aardvark.Rendering
 
 open Aardvark.Base
+open System.Runtime.InteropServices
 
 type PixTexture2d(data : PixImageMipMap, textureParams : TextureParams) =
 
     member x.PixImageMipMap = data
     member x.TextureParams = textureParams
 
-    new(data : PixImageMipMap, wantMipMaps : bool) =
+    new(data : PixImageMipMap, [<Optional; DefaultParameterValue(true)>] wantMipMaps : bool) =
         PixTexture2d(data, { TextureParams.empty with wantMipMaps = wantMipMaps })
 
     new(data : PixImage, textureParams : TextureParams) =
         PixTexture2d(PixImageMipMap(data), textureParams)
 
-    new(data : PixImage, wantMipMaps : bool) =
+    new(data : PixImage, [<Optional; DefaultParameterValue(true)>] wantMipMaps : bool) =
         PixTexture2d(PixImageMipMap(data), wantMipMaps)
 
     override x.GetHashCode() =
