@@ -262,7 +262,7 @@ module ContextTextureUploadExtensions =
 
         let (|StreamTexture|_|) (t : ITexture) =
             match t with
-            | :? StreamTexture as t -> Some(StreamTexture(t.TextureParams, fun seek -> t.Open seek))
+            | :? StreamTexture as t -> Some(StreamTexture(t.TextureParams, t.PreferredLoader, fun seek -> t.Open seek))
             | _ -> None
 
         let (|PixTextureCube|_|) (t : ITexture) =
@@ -297,7 +297,7 @@ module ContextTextureUploadExtensions =
         static member CreateTexture(this : Context, data : ITexture) =
             using this.ResourceLock (fun _ ->
                 match data with
-                | StreamTexture(info, openStream) ->
+                | StreamTexture(info, loader, openStream) ->
                     use stream = openStream true
                     let initialPos = stream.Position
 
@@ -309,9 +309,8 @@ module ContextTextureUploadExtensions =
                     | Some t -> this.CreateTexture(t)
                     | _ ->
                         stream.Position <- initialPos
-                        let pi = PixImage.Load(stream)
-                        let mm = PixImageMipMap [|pi|]
-                        this.CreateTexture <| PixTexture2d(mm, info)
+                        let pi = PixImage.Load(stream, loader)
+                        this.CreateTexture <| PixTexture2d(pi, info)
 
                 | PixTexture2D(info, data) ->
                     let texture = this |> Texture.createOfFormat2D data.PixFormat data.[0].Size info

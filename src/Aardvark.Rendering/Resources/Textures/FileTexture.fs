@@ -1,18 +1,19 @@
 ﻿namespace Aardvark.Rendering
 
 open System.IO
+open System.Runtime.InteropServices
 open Aardvark.Base
 
-type FileTexture(fileName : string, textureParams : TextureParams) =
-    inherit StreamTexture((fun () -> File.OpenRead(fileName) :> Stream), textureParams)
-
-    do if File.Exists fileName |> not then failwithf "File does not exist: %s" fileName
+type FileTexture(fileName : string, textureParams : TextureParams, [<Optional; DefaultParameterValue(null : IPixLoader)>] loader : IPixLoader) =
+    inherit StreamTexture((fun () -> File.OpenRead(fileName) :> Stream), textureParams, loader)
 
     member x.FileName = fileName
     member x.TextureParams = textureParams
 
-    new(fileName : string, wantMipMaps : bool) =
-        FileTexture(fileName, { TextureParams.empty with wantMipMaps = wantMipMaps })
+    new(fileName : string,
+        [<Optional; DefaultParameterValue(true)>] wantMipMaps : bool,
+        [<Optional; DefaultParameterValue(null : IPixLoader)>] loader : IPixLoader) =
+        FileTexture(fileName, { TextureParams.empty with wantMipMaps = wantMipMaps }, loader)
 
     override x.GetHashCode() =
         HashCode.Combine(fileName.GetHashCode(), textureParams.GetHashCode())

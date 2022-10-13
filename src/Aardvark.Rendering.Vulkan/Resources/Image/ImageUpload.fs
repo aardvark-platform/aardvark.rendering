@@ -299,13 +299,19 @@ module ImageUploadExtensions =
             let buffers = device |> ImageBufferArray.ofPixImageMipMaps info data.MipMapArray
             device |> ofImageBufferArray TextureDimension.TextureCube info.wantMipMaps export buffers
 
-        let ofStream (stream : IO.Stream) (info : TextureParams) (export : bool) (device : Device) =
-            let temp = device |> TensorImage.ofStream stream info.wantSrgb
+        let ofStreamWithLoader (stream : IO.Stream) (loader : IPixLoader) (info : TextureParams) (export : bool) (device : Device) =
+            let temp = device |> TensorImage.ofStreamWithLoader stream loader info.wantSrgb
             device |> ofImageBuffer TextureDimension.Texture2D info.wantMipMaps temp export
 
-        let ofFile (path : string) (info : TextureParams) (export : bool) (device : Device) =
+        let ofStream (stream : IO.Stream) (info : TextureParams) (export : bool) (device : Device) =
+            ofStreamWithLoader stream null info export device
+
+        let ofFileWithLoader (path : string) (loader : IPixLoader) (info : TextureParams) (export : bool) (device : Device) =
             use stream = IO.File.OpenRead(path)
-            ofStream stream info export device
+            ofStreamWithLoader stream loader info export device
+
+        let ofFile (path : string) (info : TextureParams) (export : bool) (device : Device) =
+            ofFileWithLoader path null info export device
 
         let rec ofTexture (texture : ITexture) (properties : ImageProperties) (export : bool) (device : Device) : Image =
             match texture with
@@ -335,7 +341,7 @@ module ImageUploadExtensions =
 
                 | _ ->
                     stream.Position <- initialPos
-                    device |> ofStream stream t.TextureParams export
+                    device |> ofStreamWithLoader stream t.PreferredLoader t.TextureParams export
 
             | :? INativeTexture as nt ->
                 device |> ofNativeTexture nt export
