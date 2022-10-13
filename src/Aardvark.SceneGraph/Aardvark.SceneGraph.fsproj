@@ -31,6 +31,7 @@
     <Compile Include="Semantics\RenderObject.fs" />
     <Compile Include="Semantics\Runtime.fs" />
     <Compile Include="Semantics\Adapter.fs" />
+    <Compile Include="Semantics\Delay.fs" />
     <Compile Include="Semantics\Environment.fs" />
     <Compile Include="Pools\ManagedPool.fs" />
     <Compile Include="Pools\ManagedTracePool.fs" />

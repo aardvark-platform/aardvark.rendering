@@ -176,10 +176,15 @@ module SgFSharp =
         let renderObjectSet (s : #aset<IRenderObject>) = 
             Sg.RenderObjectNode(s) :> ISg
 
-        /// Applies the given activation function to the render objects of the given scene graph.
-        /// An activation function is invoked when a render object is prepared, the resulting IDisposable is disposed when it gets removed.
+        /// Applies the given activation function to the the given scene graph.
+        /// An activation function is invoked when the render objects of the scene graph are prepared.
+        /// The resulting IDisposable is disposed when the render objects are disposed.
         let onActivation (f : unit -> IDisposable) (sg : ISg) =
             Sg.ActivationApplicator(f, sg) :> ISg
+
+        /// Generates a scene graph depending on the scope.
+        let delay (generator : Ag.Scope -> ISg) =
+            Sg.DelayNode(generator) :> ISg
 
         // ================================================================================================================
         // Uniforms & Textures

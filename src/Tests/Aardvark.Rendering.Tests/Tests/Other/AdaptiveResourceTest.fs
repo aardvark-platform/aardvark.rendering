@@ -59,7 +59,7 @@ module ``AdaptiveResource Tests`` =
 
     [<Tests>]
     let tests =
-        testList "AdaptiveResource" [
+        testList "Adaptive.AdaptiveResource" [
             testCase "Cast preserves equality"              Cases.castPreservesEquality
             testCase "Cast preserves resource semantics"    Cases.castPreservesResourceSemantics
         ]

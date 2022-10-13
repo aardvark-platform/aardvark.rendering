@@ -52,7 +52,7 @@ module ``CompactSet Tests`` =
 
     [<Tests>]
     let tests =
-        testList "CompactSet" [
+        testList "Utilities.CompactSet" [
             testCase "Validity"         Cases.validity
             testCase "Remove"           Cases.remove
             testCase "Add and remove"   Cases.addAndRemove

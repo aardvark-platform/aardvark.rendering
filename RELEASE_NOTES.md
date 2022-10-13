@@ -30,6 +30,15 @@
 ### 5.3.0-prerelease0001
 - Initial prerelease for 5.3
 
+### 5.2.17
+- Improved error handling of DDS parser
+- [Sg] Added delay
+- [Sg] Added reference counting for onActivation
+- [Application.Slim] Fixed error code printing
+
+### 5.2.16
+- [Application.Slim.GL] Fix issue with sample count for non-multisampled windows
+
 ### 5.2.15
 - Font constructor with System.IO.Stream
 

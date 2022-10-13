@@ -104,9 +104,46 @@ module Sg =
     type ActivationApplicator(activate : unit -> IDisposable, child : aval<ISg>) =
         inherit AbstractApplicator(child)
 
-        member x.Activate = activate
+        // Use reference counting to prevent callback being invoked for
+        // each individual render object. Prepare might be called concurrently, so
+        // we have to ensure mutual exclusion.
+        let lockObj = obj()
+        let mutable count = 0
+        let mutable handle = null :> IDisposable
+
+        let disposable =
+            { new IDisposable with
+                member x.Dispose() =
+                    lock lockObj (fun _ ->
+                        dec &count
+
+                        if count = 0 then
+                            handle.Dispose()
+                            handle <- null
+
+                        elif count < 0 then
+                            Log.warn "[Sg] ActivationApplicator has negative reference count"
+                    )
+            }
+
+        let activateWrapped() =
+            lock lockObj (fun _ ->
+                if count = 0 then
+                    handle <- activate()
+
+                inc &count
+            )
+
+            disposable
+
+        member x.Activate = activateWrapped
 
         new(activate : unit -> IDisposable, child : ISg) = ActivationApplicator(activate, AVal.constant child)
+
+    // TODO: Caching?
+    type DelayNode(generator : Ag.Scope -> ISg) =
+        interface ISg
+        member x.Generator = generator
 
     type PassApplicator(pass : RenderPass, child : aval<ISg>) =
         inherit AbstractApplicator(child)
