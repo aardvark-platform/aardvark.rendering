@@ -1,3 +1,8 @@
+### 5.3.0-prerelease0005
+- Implemented debug configurations for enabling backend-specific debug features
+- Added validation for color attachment formats when creating framebuffer signatures
+- Added proper support for unsigned integer color attachments
+
 ### 5.3.0-prerelease0004
 - [Vulkan] Implemented RaytracingTask.Update
 - [Vulkan] Implemented CommandTask.PerformUpdate
