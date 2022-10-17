@@ -1,3 +1,6 @@
+### 5.3.0
+- https://github.com/aardvark-platform/aardvark.docs/wiki/Aardvark-Rendering-5.3-changelog
+
 ### 5.3.0-prerelease0005
 - Implemented debug configurations for enabling backend-specific debug features
 - Added validation for color attachment formats when creating framebuffer signatures
