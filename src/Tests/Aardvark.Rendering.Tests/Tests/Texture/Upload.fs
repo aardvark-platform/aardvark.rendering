@@ -30,6 +30,20 @@ module TextureUpload =
         member x.GetLevels(size : int) =
             x.GetLevels(V2i size)
 
+    module private Shader =
+        let diffuseSampler =
+            sampler2d {
+                texture uniform?DiffuseColorTexture
+                filter Filter.MinMagLinear
+                addressU WrapMode.Clamp
+                addressV WrapMode.Clamp
+            }
+
+        let diffuseTextureLod (level : float) (v : Effects.Vertex) =
+            fragment {
+                return diffuseSampler.SampleLevel(v.tc, level)
+            }
+
     module Cases =
 
         module private NativeTexture =
@@ -430,7 +444,7 @@ module TextureUpload =
             finally
                 runtime.DeleteTexture(texture)
 
-        let private texture2DCompressed (expectedFormat : TextureFormat) (pathReference : string) (path : string) (runtime : IRuntime) =
+        let private texture2DCompressed (expectedFormat : TextureFormat) (pathReference : string) (path : string) (level : int) (runtime : IRuntime) =
             let reference = EmbeddedResource.loadPixImage<uint8> pathReference
             let compressed = EmbeddedResource.getTexture TextureParams.mipmappedCompressed path
 
@@ -447,6 +461,9 @@ module TextureUpload =
                 Expect.equal texture.Count 1 "unexpected count"
                 Expect.equal texture.Format expectedFormat "unexpected format"
                 Expect.equal texture.MipMapLevels (Fun.MipmapLevels(reference.Size)) "unexpected mipmap count"
+
+                let levelSize = Fun.MipmapLevelSize(reference.Size, level)
+                let reference = reference |> PixImage.resized levelSize
 
                 match expectedFormat with
                 | TextureFormat.CompressedRgbaS3tcDxt1
@@ -474,7 +491,7 @@ module TextureUpload =
                     Sg.fullScreenQuad
                     |> Sg.diffuseTexture' texture
                     |> Sg.shader {
-                        do! DefaultSurfaces.diffuseTexture
+                        do! Shader.diffuseTextureLod (float level)
                     }
                     |> Sg.compile runtime signature
 
@@ -495,25 +512,40 @@ module TextureUpload =
                 runtime.DeleteTexture(texture)
 
         let texture2DCompressedDDSBC1 (runtime : IRuntime) =
-            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt1 "data/rgba.png" "data/bc1.dds"
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt1 "data/rgba.png" "data/bc1.dds" 2
+
+        let texture2DCompressedDDSBC1MipmapGeneration (runtime : IRuntime) =
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt1 "data/rgba.png" "data/bc1_no_mip.dds" 2
 
         let texture2DCompressedDDSBC2 (runtime : IRuntime) =
-            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt3 "data/rgba.png" "data/bc2.dds"
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt3 "data/rgba.png" "data/bc2.dds" 1
+
+        let texture2DCompressedDDSBC2MipmapGeneration (runtime : IRuntime) =
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt3 "data/rgba.png" "data/bc2_no_mip.dds" 1
 
         let texture2DCompressedDDSBC3 (runtime : IRuntime) =
-            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt5 "data/rgba.png" "data/bc3.dds"
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt5 "data/rgba.png" "data/bc3.dds" 1
+
+        let texture2DCompressedDDSBC3MipmapGeneration (runtime : IRuntime) =
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaS3tcDxt5 "data/rgba.png" "data/bc3_no_mip.dds" 1
 
         let texture2DCompressedDDSBC4u (runtime : IRuntime) =
-            runtime |> texture2DCompressed TextureFormat.CompressedRedRgtc1 "data/rgb.png" "data/bc4.dds"
+            runtime |> texture2DCompressed TextureFormat.CompressedRedRgtc1 "data/rgb.png" "data/bc4.dds" 1
+
+        let texture2DCompressedDDSBC4uMipmapGeneration (runtime : IRuntime) =
+            runtime |> texture2DCompressed TextureFormat.CompressedRedRgtc1 "data/rgb.png" "data/bc4_no_mip.dds" 1
 
         let texture2DCompressedDDSBC5u (runtime : IRuntime) =
-            runtime |> texture2DCompressed TextureFormat.CompressedRgRgtc2 "data/rgb.png" "data/bc5.dds"
+            runtime |> texture2DCompressed TextureFormat.CompressedRgRgtc2 "data/rgb.png" "data/bc5.dds" 1
+
+        let texture2DCompressedDDSBC5uMipmapGeneration (runtime : IRuntime) =
+            runtime |> texture2DCompressed TextureFormat.CompressedRgRgtc2 "data/rgb.png" "data/bc5_no_mip.dds" 1
 
         let texture2DCompressedDDSBC6h (runtime : IRuntime) =
-            runtime |> texture2DCompressed TextureFormat.CompressedRgbBptcUnsignedFloat "data/rgb.png" "data/bc6h.dds"
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbBptcUnsignedFloat "data/rgb.png" "data/bc6h.dds" 1
 
         let texture2DCompressedDDSBC7 (runtime : IRuntime) =
-            runtime |> texture2DCompressed TextureFormat.CompressedRgbaBptcUnorm "data/rgba.png" "data/bc7.dds"
+            runtime |> texture2DCompressed TextureFormat.CompressedRgbaBptcUnorm "data/rgba.png" "data/bc7.dds" 1
 
         let texture2DCompressedSubwindow (runtime : IRuntime) =
             let data = EmbeddedResource.loadPixImage<uint8> "data/spiral.png"
@@ -1028,12 +1060,17 @@ module TextureUpload =
                 "2D multisampled array",                  Cases.texture2DMultisampledArray
                 "2D multisampled array subwindow",        Cases.texture2DMultisampledArraySubwindow
 
-            "2D compressed DDS (BC1)",      Cases.texture2DCompressedDDSBC1
-            "2D compressed DDS (BC2)",      Cases.texture2DCompressedDDSBC2
-            "2D compressed DDS (BC3)",      Cases.texture2DCompressedDDSBC3
-            "2D compressed DDS (BC4u)",     Cases.texture2DCompressedDDSBC4u
-            "2D compressed DDS (BC5u)",     Cases.texture2DCompressedDDSBC5u
-            "2D compressed subwindow",      Cases.texture2DCompressedSubwindow
+            "2D compressed DDS (BC1)",                    Cases.texture2DCompressedDDSBC1
+            "2D compressed DDS (BC1) mipmap generation",  Cases.texture2DCompressedDDSBC1MipmapGeneration
+            "2D compressed DDS (BC2)",                    Cases.texture2DCompressedDDSBC2
+            "2D compressed DDS (BC2) mipmap generation",  Cases.texture2DCompressedDDSBC2MipmapGeneration
+            "2D compressed DDS (BC3)",                    Cases.texture2DCompressedDDSBC3
+            "2D compressed DDS (BC3) mipmap generation",  Cases.texture2DCompressedDDSBC3MipmapGeneration
+            "2D compressed DDS (BC4u)",                   Cases.texture2DCompressedDDSBC4u
+            "2D compressed DDS (BC4u) mipmap generation", Cases.texture2DCompressedDDSBC4uMipmapGeneration
+            "2D compressed DDS (BC5u)",                   Cases.texture2DCompressedDDSBC5u
+            "2D compressed DDS (BC5u) mipmap generation", Cases.texture2DCompressedDDSBC5uMipmapGeneration
+            "2D compressed subwindow",                    Cases.texture2DCompressedSubwindow
 
             // Uploading BC6/7 is possible on both backends, but there is no
             // easy way to flip these, and unfortunately we want to flip all our textures on upload -_-

@@ -314,7 +314,7 @@ module DdsTexture =
             | Some value -> value
             | _ -> raise <| DdsParseException(message)
 
-    let private tryLoadCompressedFromStreamImpl (stream : Stream) =
+    let private tryLoadCompressedFromStreamImpl (wantMipmap : bool) (stream : Stream) =
         let magic = stream |> tryRead<uint32>
 
         match magic with
@@ -396,7 +396,7 @@ module DdsTexture =
                     member x.Format       = format
                     member x.MipMapLevels = levels
                     member x.Count        = count
-                    member x.WantMipMaps  = levels > 1
+                    member x.WantMipMaps  = wantMipmap
                     member x.Item
                         with get(slice, level) = layers.[slice].[level] }
                 |> Some
@@ -407,15 +407,15 @@ module DdsTexture =
         | _ ->
             None
 
-    let loadCompressedFromStream (stream : Stream) =
-        match tryLoadCompressedFromStreamImpl stream with
+    let loadCompressedFromStream (wantMipmap : bool) (stream : Stream) =
+        match tryLoadCompressedFromStreamImpl wantMipmap stream with
         | Some texture -> texture
         | _ ->
             raise <| DdsParseException()
 
-    let tryLoadCompressedFromStream (stream : Stream) =
+    let tryLoadCompressedFromStream (wantMipmap : bool) (stream : Stream) =
         try
-            tryLoadCompressedFromStreamImpl stream
+            tryLoadCompressedFromStreamImpl wantMipmap stream
         with
         | exn ->
             Report.Line(3, "Failed to load stream as DDS file: {0}", exn.Message)

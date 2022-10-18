@@ -20,10 +20,15 @@
   </ItemGroup>
   <ItemGroup>
     <EmbeddedResource Include="data\bc1.dds" />
+    <EmbeddedResource Include="data\bc1_no_mip.dds" />
     <EmbeddedResource Include="data\bc2.dds" />
+    <EmbeddedResource Include="data\bc2_no_mip.dds" />
     <EmbeddedResource Include="data\bc3.dds" />
+    <EmbeddedResource Include="data\bc3_no_mip.dds" />
     <EmbeddedResource Include="data\bc4.dds" />
+    <EmbeddedResource Include="data\bc4_no_mip.dds" />
     <EmbeddedResource Include="data\bc5.dds" />
+    <EmbeddedResource Include="data\bc5_no_mip.dds" />
     <EmbeddedResource Include="data\bc6h.dds" />
     <EmbeddedResource Include="data\bc7.dds" />
     <EmbeddedResource Include="data\rgb.png" />

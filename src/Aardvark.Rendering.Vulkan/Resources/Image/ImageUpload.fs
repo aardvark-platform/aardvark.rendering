@@ -333,7 +333,7 @@ module ImageUploadExtensions =
 
                 // Always try to load compressed data first
                 let compressed =
-                    stream |> DdsTexture.tryLoadCompressedFromStream
+                    stream |> DdsTexture.tryLoadCompressedFromStream t.TextureParams.wantMipMaps
 
                 match compressed with
                 | Some t ->

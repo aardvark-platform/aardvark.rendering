@@ -134,13 +134,25 @@ module PixData =
                 img.Volume.SubVolume(V3i(region.Min, 0), V3i(region.Size, img.ChannelCount))
             )
 
-        let resized (size : V2i) (img : PixImage<uint16>) =
-            let result = PixImage<uint16>(img.Format, size)
+        let resized (size : V2i) (img : PixImage<'T>) =
+            let result = PixImage<'T>(img.Format, size)
 
             for c in 0L .. img.Volume.Size.Z - 1L do
                 let src = img.Volume.SubXYMatrixWindow(c)
                 let dst = result.Volume.SubXYMatrixWindow(c)
-                dst.SetScaledCubic(src)
+
+                if typeof<'T> = typeof<uint8> then
+                    let src = unbox<Matrix<uint8>> src
+                    let dst = unbox<Matrix<uint8>> dst
+                    dst.SetScaledCubic(src)
+
+                elif typeof<'T> = typeof<uint16> then
+                    let src = unbox<Matrix<uint16>> src
+                    let dst = unbox<Matrix<uint16>> dst
+                    dst.SetScaledCubic(src)
+
+                else
+                    failwithf "Unsupported type %A" typeof<'T>
 
             result
 

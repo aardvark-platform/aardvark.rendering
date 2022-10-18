@@ -303,7 +303,7 @@ module ContextTextureUploadExtensions =
 
                     // Always try to load compressed data first
                     let compressed =
-                        stream |> DdsTexture.tryLoadCompressedFromStream
+                        stream |> DdsTexture.tryLoadCompressedFromStream info.wantMipMaps
 
                     match compressed with
                     | Some t -> this.CreateTexture(t)
