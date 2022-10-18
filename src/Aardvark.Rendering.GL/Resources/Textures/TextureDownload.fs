@@ -118,7 +118,7 @@ module internal TextureDownloadImplementation =
             let alignedSize =
                 let size = offset - alignedOffset + size.XY
                 let blocks = mode |> CompressionMode.numberOfBlocks size.XYI
-                min (texture.Size - alignedOffset.XYO) (blocks * blockSize)
+                min (texture.GetSize(level) - alignedOffset.XYO) (blocks * blockSize)
 
             let sizeInBytes = mode |> CompressionMode.sizeInBytes alignedSize
 
