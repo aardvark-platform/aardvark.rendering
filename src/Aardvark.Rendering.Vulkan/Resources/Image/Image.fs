@@ -17,6 +17,19 @@ open Microsoft.FSharp.NativeInterop
 [<AutoOpen>]
 module ``Image Format Extensions`` =
 
+    module internal VkFormat =
+        let supportsMipmapGeneration (device : Device) (format : VkFormat) =
+            let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, format)
+            features.HasFlag (
+                VkFormatFeatureFlags.BlitSrcBit |||
+                VkFormatFeatureFlags.BlitDstBit |||
+                VkFormatFeatureFlags.SampledImageFilterLinearBit
+            )
+
+    module internal TextureFormat =
+        let supportsMipmapGeneration (device : Device) (format : TextureFormat) =
+            format |> VkFormat.ofTextureFormat |> VkFormat.supportsMipmapGeneration device
+
     module VkImageType =
         let ofTextureDimension =
             LookupTable.lookupTable [

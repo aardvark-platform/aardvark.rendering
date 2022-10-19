@@ -152,6 +152,14 @@ module ImageUploadExtensions =
             let ofPixImageMipMaps (info : TextureParams) (pix : PixImageMipMap[]) (device : Device) =
                 let format = PixFormat.toTextureFormat info pix.[0].PixFormat
 
+                let levelCount =
+                    if info.wantMipMaps then Fun.MipmapLevels(pix.[0].[0].Size) else 1
+
+                if format |> TextureFormat.supportsMipmapGeneration device |> not then
+                    for i = 0 to pix.Length - 1 do
+                        if pix.[i].LevelCount < levelCount then
+                            pix.[i] <- PixImageMipMap.Create(pix.[i].[0])
+
                 let levels =
                     pix |> Array.map (fun i -> i.LevelCount) |> Array.min
 
@@ -176,7 +184,7 @@ module ImageUploadExtensions =
 
             let mipMapLevels =
                 if wantMipmap then
-                    if TextureFormat.isFilterable buffers.TextureFormat then
+                    if buffers.TextureFormat |> TextureFormat.supportsMipmapGeneration device then
                         Fun.MipmapLevels(buffers.BaseSize)
                     else
                         uploadLevels
