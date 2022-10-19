@@ -423,23 +423,31 @@ module TextureUpload =
             finally
                 runtime.DeleteTexture(texture)
 
-        let pixTexture2DCompressed (runtime : IRuntime) =
+        let pixTexture2DCompressed (generateMipmap : bool) (runtime : IRuntime) =
             let data = EmbeddedResource.loadPixImage<uint8> "data/spiral.png"
+            let expectedLevels = if generateMipmap then Fun.MipmapLevels(data.Size) else 1
+
+            let levelData = Array.zeroCreate expectedLevels
+            levelData.[0] <- data
+
+            for level = 1 to expectedLevels - 1 do
+                let size = Fun.MipmapLevelSize(data.Size, level)
+                levelData[level] <- levelData[level - 1] |> PixImage.resized size
 
             let texture =
-                let pix = PixTexture2d(data, TextureParams.compressed)
+                let pix = PixTexture2d(data, { TextureParams.compressed with wantMipMaps = generateMipmap })
                 runtime.PrepareTexture pix
 
             try
+                Expect.equal texture.MipMapLevels expectedLevels "unexpected mipmap count"
                 Expect.equal texture.Format TextureFormat.CompressedRgbaS3tcDxt5 "unexpected texture format"
 
-                let output = runtime.Download(texture).AsPixImage<uint8>()
-                Expect.equal output.Size data.Size "image size mismatch"
+                for level = 0 to expectedLevels - 1 do
+                    let output = runtime.Download(texture, level = level).AsPixImage<uint8>()
+                    Expect.equal output.Size levelData.[level].Size "image size mismatch"
 
-                let psnr = PixImage.peakSignalToNoiseRatio V2i.Zero data output
-                let rmse = PixImage.rootMeanSquaredError V2i.Zero data output
-                Expect.isGreaterThan psnr 6.8 "Bad peak-signal-to-noise ratio"
-                Expect.isLessThan rmse 4.2 "Bad root-mean-square error"
+                    let psnr = PixImage.peakSignalToNoiseRatio V2i.Zero levelData.[level] output
+                    Expect.isGreaterThan psnr 10.0 "Bad peak-signal-to-noise ratio"
 
             finally
                 runtime.DeleteTexture(texture)
@@ -1045,14 +1053,15 @@ module TextureUpload =
             "2D NullTexture int",                   Cases.texture2DNullInt
             "2D NullTexture shadow",                Cases.texture2DNullShadow
 
-            "2D PixTexture",                           Cases.pixTexture2D
-            "2D PixTexture BGRA",                      Cases.pixTexture2DBgra
-            "2D PixTexture sRGB",                      Cases.pixTexture2DSrgb
-            "2D PixTexture mipmapped",                 Cases.pixTexture2DMipmapped MipmapInput.Full
-            "2D PixTexture mipmap generation",         Cases.pixTexture2DMipmapped MipmapInput.None
-            "2D PixTexture mipmap partial generation", Cases.pixTexture2DMipmapped MipmapInput.Partial
-            "2D PixTexture as PixVolume",              Cases.pixTexture2DPixVolume
-            "2D PixTexture compressed",                Cases.pixTexture2DCompressed
+            "2D PixTexture",                                Cases.pixTexture2D
+            "2D PixTexture BGRA",                           Cases.pixTexture2DBgra
+            "2D PixTexture sRGB",                           Cases.pixTexture2DSrgb
+            "2D PixTexture mipmapped",                      Cases.pixTexture2DMipmapped MipmapInput.Full
+            "2D PixTexture mipmap generation",              Cases.pixTexture2DMipmapped MipmapInput.None
+            "2D PixTexture mipmap partial generation",      Cases.pixTexture2DMipmapped MipmapInput.Partial
+            "2D PixTexture as PixVolume",                   Cases.pixTexture2DPixVolume
+            "2D PixTexture compressed",                     Cases.pixTexture2DCompressed false
+            "2D PixTexture compressed mipmap generation",   Cases.pixTexture2DCompressed true
 
             if backend <> Backend.Vulkan then // not supported
                 "2D multisampled",                        Cases.texture2DMultisampled
@@ -1061,21 +1070,24 @@ module TextureUpload =
                 "2D multisampled array subwindow",        Cases.texture2DMultisampledArraySubwindow
 
             "2D compressed DDS (BC1)",                    Cases.texture2DCompressedDDSBC1
-            "2D compressed DDS (BC1) mipmap generation",  Cases.texture2DCompressedDDSBC1MipmapGeneration
             "2D compressed DDS (BC2)",                    Cases.texture2DCompressedDDSBC2
-            "2D compressed DDS (BC2) mipmap generation",  Cases.texture2DCompressedDDSBC2MipmapGeneration
             "2D compressed DDS (BC3)",                    Cases.texture2DCompressedDDSBC3
-            "2D compressed DDS (BC3) mipmap generation",  Cases.texture2DCompressedDDSBC3MipmapGeneration
             "2D compressed DDS (BC4u)",                   Cases.texture2DCompressedDDSBC4u
-            "2D compressed DDS (BC4u) mipmap generation", Cases.texture2DCompressedDDSBC4uMipmapGeneration
             "2D compressed DDS (BC5u)",                   Cases.texture2DCompressedDDSBC5u
-            "2D compressed DDS (BC5u) mipmap generation", Cases.texture2DCompressedDDSBC5uMipmapGeneration
             "2D compressed subwindow",                    Cases.texture2DCompressedSubwindow
 
             // Uploading BC6/7 is possible on both backends, but there is no
             // easy way to flip these, and unfortunately we want to flip all our textures on upload -_-
                 //"2D compressed DDS (BC6h)",     Cases.texture2DCompressedDDSBC6h
                 //"2D compressed DDS (BC7)",      Cases.texture2DCompressedDDSBC7
+
+            // Vulkan does not support generation of mipmaps for already compressed textures
+            if backend <> Backend.Vulkan then
+                "2D compressed DDS (BC1) mipmap generation",  Cases.texture2DCompressedDDSBC1MipmapGeneration
+                "2D compressed DDS (BC2) mipmap generation",  Cases.texture2DCompressedDDSBC2MipmapGeneration
+                "2D compressed DDS (BC3) mipmap generation",  Cases.texture2DCompressedDDSBC3MipmapGeneration
+                "2D compressed DDS (BC4u) mipmap generation", Cases.texture2DCompressedDDSBC4uMipmapGeneration
+                "2D compressed DDS (BC5u) mipmap generation", Cases.texture2DCompressedDDSBC5uMipmapGeneration
 
             if backend <> Backend.Vulkan then // not supported (only really used for CEF?)
                 "2D StreamingTexture",      Cases.texture2DStreaming
