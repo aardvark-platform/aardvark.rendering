@@ -308,8 +308,9 @@ module ImageUploadExtensions =
             device |> ofImageBufferArray TextureDimension.TextureCube info.wantMipMaps export buffers
 
         let ofStreamWithLoader (stream : IO.Stream) (loader : IPixLoader) (info : TextureParams) (export : bool) (device : Device) =
-            let temp = device |> TensorImage.ofStreamWithLoader stream loader info.wantSrgb
-            device |> ofImageBuffer TextureDimension.Texture2D info.wantMipMaps temp export
+            let img = PixImage.Load(stream, loader)
+            let pix = PixImageMipMap [| img |]
+            device |> ofPixImageMipMap pix info export
 
         let ofStream (stream : IO.Stream) (info : TextureParams) (export : bool) (device : Device) =
             ofStreamWithLoader stream null info export device

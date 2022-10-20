@@ -423,8 +423,7 @@ module TextureUpload =
             finally
                 runtime.DeleteTexture(texture)
 
-        let pixTexture2DCompressed (generateMipmap : bool) (runtime : IRuntime) =
-            let data = EmbeddedResource.loadPixImage<uint8> "data/spiral.png"
+        let inline private texture2DOnTheFlyCompressed (format : TextureFormat) (data : PixImage<'T>) (texture : ITexture) (generateMipmap : bool) (runtime : IRuntime) =
             let expectedLevels = if generateMipmap then Fun.MipmapLevels(data.Size) else 1
 
             let levelData = Array.zeroCreate expectedLevels
@@ -435,22 +434,34 @@ module TextureUpload =
                 levelData[level] <- levelData[level - 1] |> PixImage.resized size
 
             let texture =
-                let pix = PixTexture2d(data, { TextureParams.compressed with wantMipMaps = generateMipmap })
-                runtime.PrepareTexture pix
+                runtime.PrepareTexture texture
 
             try
                 Expect.equal texture.MipMapLevels expectedLevels "unexpected mipmap count"
-                Expect.equal texture.Format TextureFormat.CompressedRgbaS3tcDxt5 "unexpected texture format"
+                Expect.equal texture.Format format "unexpected texture format"
 
                 for level = 0 to expectedLevels - 1 do
-                    let output = runtime.Download(texture, level = level).AsPixImage<uint8>()
+                    let output = runtime.Download(texture, level = level).AsPixImage<'T>()
                     Expect.equal output.Size levelData.[level].Size "image size mismatch"
 
-                    let psnr = PixImage.peakSignalToNoiseRatio V2i.Zero levelData.[level] output
+                    let psnr = PixImage.peakSignalToNoiseRatio levelData.[level] output
                     Expect.isGreaterThan psnr 10.0 "Bad peak-signal-to-noise ratio"
 
             finally
                 runtime.DeleteTexture(texture)
+
+        let pixTexture2DCompressed (generateMipmap : bool) (runtime : IRuntime) =
+            let data = EmbeddedResource.loadPixImage<uint8> "data/spiral.png"
+            let texture = PixTexture2d(data, { TextureParams.compressed with wantMipMaps = generateMipmap })
+            runtime |> texture2DOnTheFlyCompressed TextureFormat.CompressedRgbaS3tcDxt5 data texture generateMipmap
+
+        let streamTextureCompressed (generateMipmap : bool) (runtime : IRuntime) =
+            let getStream() =
+                EmbeddedResource.get "data/spiral.png"
+
+            let data = PixImage.Load(getStream()).AsPixImage<uint8>()
+            let texture = StreamTexture(getStream, { TextureParams.compressed with wantMipMaps = generateMipmap })
+            runtime |> texture2DOnTheFlyCompressed TextureFormat.CompressedRgbaS3tcDxt5 data texture generateMipmap
 
         let private texture2DCompressed (expectedFormat : TextureFormat) (pathReference : string) (path : string) (level : int) (runtime : IRuntime) =
             let reference = EmbeddedResource.loadPixImage<uint8> pathReference
@@ -510,7 +521,7 @@ module TextureUpload =
                     let result = buffer.GetValue().Download().AsPixImage<byte>()
                     Expect.equal result.Size reference.Size "image size mismatch"
 
-                    let psnr = PixImage.peakSignalToNoiseRatio V2i.Zero reference result
+                    let psnr = PixImage.peakSignalToNoiseRatio reference result
                     Expect.isGreaterThan psnr 30.0 "bad peak signal-to-noise ratio"
 
                 finally
@@ -572,8 +583,8 @@ module TextureUpload =
                 let output = texture.Download(region = region).AsPixImage<uint8>()
                 Expect.equal output.Size region.Size "image size mismatch"
 
-                let psnr = PixImage.peakSignalToNoiseRatio V2i.Zero reference output
-                let rmse = PixImage.rootMeanSquaredError V2i.Zero reference output
+                let psnr = PixImage.peakSignalToNoiseRatio reference output
+                let rmse = PixImage.rootMeanSquaredError reference output
                 Expect.isGreaterThan psnr 6.8 "Bad peak-signal-to-noise ratio"
                 Expect.isLessThan rmse 4.2 "Bad root-mean-square error"
 
@@ -1062,6 +1073,9 @@ module TextureUpload =
             "2D PixTexture as PixVolume",                   Cases.pixTexture2DPixVolume
             "2D PixTexture compressed",                     Cases.pixTexture2DCompressed false
             "2D PixTexture compressed mipmap generation",   Cases.pixTexture2DCompressed true
+
+            "2D StreamTexture compressed",                   Cases.streamTextureCompressed false
+            "2D StreamTexture compressed mipmap generation", Cases.streamTextureCompressed true
 
             if backend <> Backend.Vulkan then // not supported
                 "2D multisampled",                        Cases.texture2DMultisampled

@@ -107,8 +107,8 @@ module TextureCompression =
                     BlockCompression.decode mode V2i.Zero size pCompressed output.Address output.Info
                 )
 
-                let psnr = PixImage.peakSignalToNoiseRatio V2i.Zero reference output
-                let rmse = PixImage.rootMeanSquaredError V2i.Zero reference output
+                let psnr = PixImage.peakSignalToNoiseRatio reference output
+                let rmse = PixImage.rootMeanSquaredError reference output
                 Expect.isGreaterThan psnr targetPsnr "Bad peak-signal-to-noise ratio"
                 Expect.isLessThan rmse targetRsme "Bad root-mean-square error"
 
@@ -178,8 +178,8 @@ module TextureCompression =
                 | _ ->
                     ()
 
-                let psnr = PixImage.peakSignalToNoiseRatio V2i.Zero reference output
-                let rmse = PixImage.rootMeanSquaredError V2i.Zero reference output
+                let psnr = PixImage.peakSignalToNoiseRatio reference output
+                let rmse = PixImage.rootMeanSquaredError reference output
                 Expect.isGreaterThan psnr targetPsnr "Bad peak-signal-to-noise ratio"
                 Expect.isLessThan rmse targetRsme "Bad root-mean-square error"
 

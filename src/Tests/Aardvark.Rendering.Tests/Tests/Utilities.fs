@@ -172,44 +172,8 @@ module PixData =
                     for y in 0 .. pi.Size.Y - 1 do
                         Expect.equal data.[x, y] color.[c] "PixImage data mismatch"
 
-        let inline meanSquaredError (offset : V2i) (input : PixImage<'T>) (output : PixImage<'T>) =
-            let mutable error = 0.0
-
-            for x in 0 .. output.Size.X - 1 do
-                for y in 0 .. output.Size.Y - 1 do
-                    for c in 0 .. output.ChannelCount - 1 do
-                        let inputData = input.GetChannel(int64 c)
-                        let outputData = output.GetChannel(int64 c)
-
-                        let coord = V2i(x, y)
-                        let coordInput = coord - offset
-
-                        let ref =
-                            if Vec.allGreaterOrEqual coordInput V2i.Zero && Vec.allSmaller coordInput input.Size then
-                                inputData.[coordInput]
-                            else
-                                Unchecked.defaultof<'T>
-
-                        let diff = float ref - float outputData.[x, y]
-                        error <- error + (diff * diff)
-
-            error / float (output.Size.X * output.Size.Y * output.ChannelCount)
-
-        let maxValues =
-            LookupTable.lookupTable [
-                typeof<uint8>,   255.0
-                typeof<uint16>,  65535.0
-                typeof<uint32>,  4294967295.0
-                typeof<float32>, 1.0
-                typeof<float>,   1.0
-            ]
-
-        let inline rootMeanSquaredError (offset : V2i) (input : PixImage<'T>) (output : PixImage<'T>) =
-            sqrt (meanSquaredError offset input output)
-
-        let inline peakSignalToNoiseRatio (offset : V2i) (input : PixImage<'T>) (output : PixImage<'T>) =
-            let maxValue = maxValues typeof<'T>
-            20.0 * (log10 maxValue) - 10.0 * log10 (meanSquaredError offset input output)
+        let inline rootMeanSquaredError (input : PixImage<'T>) (output : PixImage<'T>) =
+            sqrt (PixImage.meanSquaredError input output)
 
         let compareWithComparer (comparer : 'T -> 'T -> string -> unit)
                                 (offset : V2i) (input : PixImage<'T>) (output : PixImage<'T>) =
