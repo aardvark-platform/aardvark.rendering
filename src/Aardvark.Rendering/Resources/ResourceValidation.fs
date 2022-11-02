@@ -247,11 +247,12 @@ module ResourceValidation =
                 Utils.failf dimension "image does not have a stencil component"
 
         /// Raises an ArgumentException if the image format does not support mipmap generation.
+        [<Obsolete>]
         let inline validateFormatForMipmapGeneration (texture : ^Texture) =
             let dimension = getDimension texture
             let format = getFormat texture
 
-            if not format.IsFilterable then
+            if false then
                 Utils.failf dimension "cannot generate mipmaps for textures with format %A" format
 
         /// Raises an ArgumentException if the texture is a null texture.

@@ -19,7 +19,7 @@ module ARB_internalformat_query =
             if GL.ARB_internalformat_query then
                 GL.GetInternalformat(target, internalFormat, pname, buffer.Length, buffer)
             else
-                failwith "glGetInternalformat is not available!"
+                failwith "GL_ARB_internalformat_query is not available!"
 
         static member GetInternalformat(target : ImageTarget, internalFormat : SizedInternalFormat, pname : InternalFormatParameter, count : int) =
             let buffer = Array.zeroCreate count
@@ -28,3 +28,28 @@ module ARB_internalformat_query =
 
         static member GetInternalformat(target : ImageTarget, internalFormat : SizedInternalFormat, pname : InternalFormatParameter) =
             GL.Dispatch.GetInternalformat(target, internalFormat, pname, 1) |> Array.head
+
+[<AutoOpen>]
+module ARB_internalformat_query2 =
+
+    type InternalFormatParameter with
+        static member AutoGenerateMipmap = unbox<InternalFormatParameter> 33429
+
+    type MipmapGenerationSupport =
+        | None   = 0
+        | Full   = 33463
+        | Caveat = 33464
+
+    type GL private() =
+
+        static let supported = ExtensionHelpers.isSupported (Version(4,3)) "GL_ARB_internalformat_query2"
+
+        static member ARB_internalformat_query2 = supported
+
+    type GL.Dispatch with
+
+        static member GetInternalformatMipmapGenerationSupport(target : ImageTarget, internalFormat : SizedInternalFormat) =
+            if GL.ARB_internalformat_query2 then
+                GL.Dispatch.GetInternalformat(target, internalFormat, InternalFormatParameter.AutoGenerateMipmap) |> unbox<MipmapGenerationSupport>
+            else
+                failwith "GL_ARB_internalformat_query2 is not available!"

@@ -71,6 +71,8 @@ module internal TextureUploadImplementation =
             )
 
             if generateMipmap then
+                texture.Context.CheckMipmapGenerationSupport texture
+
                 GL.TexParameter(target, TextureParameterName.TextureBaseLevel, level)
                 GL.Check "could not set base mip map level"
 

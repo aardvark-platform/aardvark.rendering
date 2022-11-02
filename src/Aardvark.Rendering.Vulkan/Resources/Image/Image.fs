@@ -18,12 +18,15 @@ open Microsoft.FSharp.NativeInterop
 module ``Image Format Extensions`` =
 
     module internal VkFormat =
+        let supportsLinearFiltering (device : Device) (format : VkFormat) =
+            let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, format)
+            features.HasFlag VkFormatFeatureFlags.SampledImageFilterLinearBit
+
         let supportsMipmapGeneration (device : Device) (format : VkFormat) =
             let features = device.PhysicalDevice.GetFormatFeatures(VkImageTiling.Optimal, format)
             features.HasFlag (
                 VkFormatFeatureFlags.BlitSrcBit |||
-                VkFormatFeatureFlags.BlitDstBit |||
-                VkFormatFeatureFlags.SampledImageFilterLinearBit
+                VkFormatFeatureFlags.BlitDstBit
             )
 
     module internal TextureFormat =
@@ -673,18 +676,24 @@ module ``Image Command Extensions`` =
             )
 
         static member GenerateMipMaps (img : ImageSubresourceRange, [<Optional; DefaultParameterValue(0)>] baseLevel : int) =
-            if img.Image.IsNull then
+            if img.Image.IsNull || baseLevel + 1 >= img.LevelCount then
                 Command.Nop
             else
+                if not <| VkFormat.supportsMipmapGeneration img.Image.Device img.Image.Format then
+                    raise <| ArgumentException($"[Vk] Format {img.Image.Format} does not support mipmap generation.")
+
+                let filter =
+                    if VkFormat.supportsLinearFiltering img.Image.Device img.Image.Format then
+                        VkFilter.Linear
+                    else
+                        Log.warn "[Vk] Format %A does not support linear filtering, using nearest filtering for mipmap generation" img.Image.Format
+                        VkFilter.Nearest
+
                 { new Command() with
                     member x.Compatible = QueueFlags.Graphics
                     member x.Enqueue cmd =
                         let oldLayout = img.Image.Layout
                         cmd.Enqueue <| Command.TransformLayout(img.[baseLevel,*], oldLayout, VkImageLayout.TransferSrcOptimal)
-
-                        let filter =
-                            if img.Aspect = TextureAspect.Color then VkFilter.Linear
-                            else VkFilter.Nearest
 
                         for l = baseLevel + 1 to img.LevelCount - 1 do
                             cmd.Enqueue <| Command.TransformLayout(img.[l,*], oldLayout, VkImageLayout.TransferDstOptimal)

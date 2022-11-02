@@ -706,28 +706,26 @@ type Runtime(debug : IDebugConfig) =
         x.ResolveMultisamples(ms, V2i.Zero, ss, V2i.Zero, 0, ms.Size.XY, trafo)
 
     member x.GenerateMipMaps(t : IBackendTexture) =
-        ResourceValidation.Textures.validateFormatForMipmapGeneration t
-
         match t with
-            | :? Texture as t ->
-                if t.MipMapLevels > 1 then
-                    let target = TextureTarget.ofTexture t
-                    Operators.using ctx.ResourceLock (fun _ ->
-                        GL.BindTexture(target, t.Handle)
-                        GL.Check "could not bind texture"
+        | :? Texture as t ->
+            if t.MipMapLevels > 1 then
+                let target = TextureTarget.ofTexture t
 
+                Operators.using ctx.ResourceLock (fun _ ->
+                    ctx.CheckMipmapGenerationSupport t
 
-                        GL.GenerateMipmap(unbox (int target))
-                        GL.Check "could not generate mipMaps"
+                    GL.BindTexture(target, t.Handle)
+                    GL.Check "could not bind texture"
 
-                        GL.BindTexture(target, 0)
-                        GL.Check "could not unbind texture"
-                    )
-                else
-                    failwith "[GL] cannot generate mipMaps for non-mipmapped texture"
+                    GL.GenerateMipmap(unbox (int target))
+                    GL.Check "could not generate mipMaps"
 
-            | _ ->
-                failwithf "[GL] unsupported texture: %A" t
+                    GL.BindTexture(target, 0)
+                    GL.Check "could not unbind texture"
+                )
+
+        | _ ->
+            failwithf "[GL] unsupported texture: %A" t
 
     member x.DownloadStencil(t : IBackendTexture, target : Matrix<int>, level : int, slice : int, offset : V2i) =
         t |> ResourceValidation.Textures.validateLevel level

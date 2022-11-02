@@ -364,6 +364,7 @@ module TextureFormat =
             TextureFormat.Srgb8Alpha8, TextureFormat.CompressedSrgbAlphaS3tcDxt5
         ]
 
+    [<Obsolete>]
     let isFilterable (fmt : TextureFormat) =
         not (isIntegerFormat fmt || isCompressed fmt)
 
@@ -653,7 +654,6 @@ module TextureFormatExtensions =
         member x.IsIntegerFormat = TextureFormat.isIntegerFormat x
         member x.IsSigned = TextureFormat.isSigned x
         member x.IsCompressed = TextureFormat.isCompressed x
-        member x.IsFilterable = TextureFormat.isFilterable x
         member x.IsSrgb = TextureFormat.isSrgb x
         member x.IsDepth = TextureFormat.isDepth x
         member x.IsStencil = TextureFormat.isStencil x
@@ -665,6 +665,8 @@ module TextureFormatExtensions =
         member x.PixelSizeInBits = TextureFormat.pixelSizeInBits x
         member x.PixelSizeInBytes = TextureFormat.pixelSizeInBytes x
 
+        [<Obsolete>]
+        member x.IsFilterable = not (x.IsIntegerFormat || x.IsCompressed)
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PixFormat =

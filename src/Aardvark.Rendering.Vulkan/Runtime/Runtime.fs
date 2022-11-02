@@ -188,13 +188,13 @@ type Runtime(device : Device) as this =
         img :> IRenderbuffer
 
     member x.GenerateMipMaps(t : IBackendTexture) =
-        ResourceValidation.Textures.validateFormatForMipmapGeneration t
         let img = unbox<Image> t
         let aspect = (img :> IBackendTexture).Format.Aspect
 
-        device.GraphicsFamily.run {
-            do! Command.GenerateMipMaps(img.[aspect])
-        }
+        if img.MipMapLevels > 1 then
+            device.GraphicsFamily.run {
+                do! Command.GenerateMipMaps(img.[aspect])
+            }
 
     member x.ResolveMultisamples(source : IFramebufferOutput, target : IBackendTexture, trafo : ImageTrafo) =
         let src =

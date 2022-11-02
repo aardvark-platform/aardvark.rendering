@@ -117,6 +117,7 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
 
 
         if mipMapLevels > 1 then 
+            ctx.CheckMipmapGenerationSupport(ImageTarget.Texture2D, textureFormat)
             GL.GenerateMipmap(GenerateMipmapTarget.Texture2D)
             GL.Check "could not generate mipmaps"
         GL.BindTexture(TextureTarget.Texture2D, 0)
@@ -519,6 +520,7 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
             GL.Check "could not unbind buffer"
 
             if mipMap then
+                ctx.CheckMipmapGenerationSupport(ImageTarget.Texture2D, textureFormat)
                 GL.GenerateMipmap(GenerateMipmapTarget.Texture2D)
                 GL.Check "could not generate mip map"
 

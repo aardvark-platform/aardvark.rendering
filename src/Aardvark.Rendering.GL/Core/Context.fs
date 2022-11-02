@@ -215,6 +215,8 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
 
     let formatSampleCounts = FastConcurrentDict()
 
+    let mipmapGenerationSupport = FastConcurrentDict()
+
     let sharedMemoryManager = SharedMemoryManager(fun _ -> this.ResourceLock)
 
     /// <summary>
@@ -367,7 +369,7 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
 
 
     /// <summary>
-    /// Returns the number of samples supported by the given format for the given target.
+    /// Returns the number of samples supported by the given target and format.
     /// </summary>
     member internal x.GetFormatSamples(target : ImageTarget, format : TextureFormat) =
         if GL.ARB_internalformat_query then
@@ -381,7 +383,23 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
                 Set.ofArray buffer
             )
         else
+            Log.warn "[GL] Internal format queries not supported, assuming all sample counts are supported"
             Set.ofList [1; 2; 4; 8; 16; 32; 64]
+
+    /// <summary>
+    /// Returns the mipmap generation support for the given target and format.
+    /// </summary>
+    member internal x.GetFormatMipmapGeneration(target : ImageTarget, format : TextureFormat) =
+        if GL.ARB_internalformat_query2 then
+            mipmapGenerationSupport.GetOrCreate((target, format), fun _ ->
+                let support = GL.Dispatch.GetInternalformatMipmapGenerationSupport(target, TextureFormat.toSizedInternalFormat format)
+                GL.Check "could not query mipmap generation support"
+
+                support
+            )
+        else
+            Log.warn "[GL] Internal format queries not supported, assuming mipmap generation is supported"
+            MipmapGenerationSupport.Full
 
     /// <summary>
     /// releases all resources created by the context

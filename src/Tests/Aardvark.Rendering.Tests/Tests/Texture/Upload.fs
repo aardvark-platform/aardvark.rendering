@@ -355,52 +355,67 @@ module TextureUpload =
                 runtime.DeleteTexture texturePreparedRgb
                 runtime.DeleteTexture texturePreparedBgr
 
-        let private uploadAndDownloadPixTexture2D (runtime : IRuntime) (bgra : bool) (size : V2i) (levels : int) (textureParams : TextureParams) =
+        let private uploadAndDownloadPixTexture2D
+            (randomPix : V2i -> PixImage<'T>) (zero : 'T) (expectedFormat : TextureFormat)
+            (runtime : IRuntime) (bgra : bool) (size : V2i) (levels : int) (textureParams : TextureParams) =
+
             let expectedLevels = if textureParams.wantMipMaps then Fun.MipmapLevels(size) else 1
 
             let data =
                 Array.init levels (fun level ->
                     let size = Fun.MipmapLevelSize(size, level)
                     let format = if bgra then Col.Format.BGRA else Col.Format.RGBA
-                    PixImage<uint16>(format, PixImage.random16ui <| V2i size)
+                    PixImage<'T>(format, randomPix <| V2i size)
                 )
 
-            let texture =
+            use texture =
                 let data = data |> Array.map (fun pi -> pi :> PixImage)
                 let pix = PixTexture2d(PixImageMipMap data, textureParams)
                 runtime.PrepareTexture pix
 
-            try
-                Expect.equal texture.MipMapLevels expectedLevels "unexpected number of mipmap levels"
+            Expect.equal texture.Format expectedFormat "unexpected format"
+            Expect.equal texture.MipMapLevels expectedLevels "unexpected number of mipmap levels"
 
-                for level = 0 to expectedLevels - 1 do
-                    let result = runtime.Download(texture, level = level).AsPixImage<uint16>()
-                    Expect.equal result.Size (Fun.MipmapLevelSize(size, level)) "image size mismatch"
-                    if level < levels then
-                        PixImage.compare V2i.Zero data.[level] result
-                    else
-                        let maxValue = result.Array |> unbox<uint16[]> |> Array.max
-                        Expect.isGreaterThan maxValue 0us "image all black"
-
-            finally
-                runtime.DeleteTexture(texture)
+            for level = 0 to expectedLevels - 1 do
+                let result = runtime.Download(texture, level = level).AsPixImage<'T>()
+                Expect.equal result.Size (Fun.MipmapLevelSize(size, level)) "image size mismatch"
+                if level < levels then
+                    PixImage.compare V2i.Zero data.[level] result
+                else
+                    let maxValue = result.Array |> unbox<'T[]> |> Array.max
+                    Expect.isGreaterThan maxValue zero "image all black"
 
         let pixTexture2D (runtime : IRuntime) =
             let size = V2i(256)
-            uploadAndDownloadPixTexture2D runtime false size 1 TextureParams.empty
+            uploadAndDownloadPixTexture2D
+                PixImage.random16ui 0us TextureFormat.Rgba16
+                runtime false size 1 TextureParams.empty
 
         let pixTexture2DBgra (runtime : IRuntime) =
             let size = V2i(256)
-            uploadAndDownloadPixTexture2D runtime true size 1 TextureParams.empty
+            uploadAndDownloadPixTexture2D
+                PixImage.random16ui 0us TextureFormat.Rgba16
+                runtime true size 1 TextureParams.empty
 
         let pixTexture2DSrgb (runtime : IRuntime) =
             let size = V2i(256)
-            uploadAndDownloadPixTexture2D runtime false size 1 TextureParams.srgb
+            uploadAndDownloadPixTexture2D
+                PixImage.random8ui 0uy TextureFormat.Srgb8Alpha8
+                runtime false size 1 TextureParams.srgb
 
         let pixTexture2DMipmapped (mipmapInput : MipmapInput) (runtime : IRuntime) =
             let size = V2i(435, 231)
             let levels = mipmapInput.GetLevels(size)
-            uploadAndDownloadPixTexture2D runtime false size levels TextureParams.mipmapped
+            uploadAndDownloadPixTexture2D
+                PixImage.random16ui 0us TextureFormat.Rgba16
+                runtime false size levels TextureParams.mipmapped
+
+        let pixTexture2DMipmappedInteger (mipmapInput : MipmapInput) (runtime : IRuntime) =
+            let size = V2i(435, 231)
+            let levels = mipmapInput.GetLevels(size)
+            uploadAndDownloadPixTexture2D
+                PixImage.random32ui 0u TextureFormat.Rgba32ui
+                runtime false size levels TextureParams.mipmapped
 
         let pixTexture2DPixVolume (runtime : IRuntime) =
             let size = V2i(256)
@@ -1064,15 +1079,20 @@ module TextureUpload =
             "2D NullTexture int",                   Cases.texture2DNullInt
             "2D NullTexture shadow",                Cases.texture2DNullShadow
 
-            "2D PixTexture",                                Cases.pixTexture2D
-            "2D PixTexture BGRA",                           Cases.pixTexture2DBgra
-            "2D PixTexture sRGB",                           Cases.pixTexture2DSrgb
-            "2D PixTexture mipmapped",                      Cases.pixTexture2DMipmapped MipmapInput.Full
-            "2D PixTexture mipmap generation",              Cases.pixTexture2DMipmapped MipmapInput.None
-            "2D PixTexture mipmap partial generation",      Cases.pixTexture2DMipmapped MipmapInput.Partial
-            "2D PixTexture as PixVolume",                   Cases.pixTexture2DPixVolume
-            "2D PixTexture compressed",                     Cases.pixTexture2DCompressed false
-            "2D PixTexture compressed mipmap generation",   Cases.pixTexture2DCompressed true
+            "2D PixTexture",                                    Cases.pixTexture2D
+            "2D PixTexture BGRA",                               Cases.pixTexture2DBgra
+            "2D PixTexture sRGB",                               Cases.pixTexture2DSrgb
+            "2D PixTexture mipmapped",                          Cases.pixTexture2DMipmapped MipmapInput.Full
+            "2D PixTexture mipmap generation",                  Cases.pixTexture2DMipmapped MipmapInput.None
+            "2D PixTexture mipmap partial generation",          Cases.pixTexture2DMipmapped MipmapInput.Partial
+
+            if backend <> Backend.GL then   // not supported
+                "2D PixTexture mipmap integer generation",          Cases.pixTexture2DMipmappedInteger MipmapInput.None
+                "2D PixTexture mipmap integer partial generation",  Cases.pixTexture2DMipmappedInteger MipmapInput.Partial
+
+            "2D PixTexture as PixVolume",                       Cases.pixTexture2DPixVolume
+            "2D PixTexture compressed",                         Cases.pixTexture2DCompressed false
+            "2D PixTexture compressed mipmap generation",       Cases.pixTexture2DCompressed true
 
             "2D StreamTexture compressed",                   Cases.streamTextureCompressed false
             "2D StreamTexture compressed mipmap generation", Cases.streamTextureCompressed true
