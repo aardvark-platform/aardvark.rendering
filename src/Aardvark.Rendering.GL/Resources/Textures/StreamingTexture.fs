@@ -11,8 +11,8 @@ open Aardvark.Rendering.GL
 type StreamingTextureOld(ctx : Context, mipMap : bool) =
     inherit AVal.AbstractVal<ITexture>()
 
-    let expectedLevels (size : V2i) = 
-        if mipMap then Fun.MipmapLevels(size)
+    let expectedLevels (format : TextureFormat) (size : V2i) = 
+        if mipMap && ctx.IsMipmapGenerationSupported(TextureTarget.Texture2D, format) then Fun.MipmapLevels(size)
         else 1
 
     let mutable pbo = 0
@@ -66,7 +66,7 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
         // update size depenent things
         if currentSize <> size then
             currentSize <- size
-            mipMapLevels <- expectedLevels size
+            mipMapLevels <- expectedLevels textureFormat size
             bufferSize <- size.X * size.Y * channels * channelSize |> nativeint
 
         // create the pbo if necessary
@@ -117,7 +117,6 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
 
 
         if mipMapLevels > 1 then 
-            ctx.CheckMipmapGenerationSupport(ImageTarget.Texture2D, textureFormat)
             GL.GenerateMipmap(GenerateMipmapTarget.Texture2D)
             GL.Check "could not generate mipmaps"
         GL.BindTexture(TextureTarget.Texture2D, 0)
@@ -321,8 +320,8 @@ module private PixelBufferExtensions =
 type StreamingTexture(ctx : Context, mipMap : bool) =
     inherit AVal.AbstractVal<ITexture>()
 
-    let expectedLevels (size : V2i) = 
-        if mipMap then Fun.MipmapLevels(size)
+    let expectedLevels (format : TextureFormat) (size : V2i) = 
+        if mipMap && ctx.IsMipmapGenerationSupported(TextureTarget.Texture2D, format) then Fun.MipmapLevels(size)
         else 1
 
 
@@ -362,7 +361,7 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
         // update size depenent things
         if currentSize <> size then
             currentSize <- size
-            mipMapLevels <- expectedLevels size
+            mipMapLevels <- expectedLevels texture.Format size
             bufferSize <- size.X * size.Y * channels * channelSize |> nativeint
 
         use t = ctx.ResourceLock
@@ -519,8 +518,7 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
             GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
             GL.Check "could not unbind buffer"
 
-            if mipMap then
-                ctx.CheckMipmapGenerationSupport(ImageTarget.Texture2D, textureFormat)
+            if mipMapLevels > 1 then
                 GL.GenerateMipmap(GenerateMipmapTarget.Texture2D)
                 GL.Check "could not generate mip map"
 

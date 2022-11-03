@@ -680,7 +680,7 @@ module ``Image Command Extensions`` =
                 Command.Nop
             else
                 if not <| VkFormat.supportsMipmapGeneration img.Image.Device img.Image.Format then
-                    raise <| ArgumentException($"[Vk] Format {img.Image.Format} does not support mipmap generation.")
+                    raise <| NotSupportedException($"[Vk] Format {img.Image.Format} does not support mipmap generation.")
 
                 let filter =
                     if VkFormat.supportsLinearFiltering img.Image.Device img.Image.Format then

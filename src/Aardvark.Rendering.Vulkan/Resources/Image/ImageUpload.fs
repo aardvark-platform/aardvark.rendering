@@ -184,9 +184,14 @@ module ImageUploadExtensions =
 
             let mipMapLevels =
                 if wantMipmap then
+                    let levels = Fun.MipmapLevels buffers.BaseSize
+
                     if buffers.TextureFormat |> TextureFormat.supportsMipmapGeneration device then
-                        Fun.MipmapLevels(buffers.BaseSize)
+                        levels
                     else
+                        if uploadLevels < levels then
+                            Log.warn "[Vk] Format %A does not support mipmap generation" buffers.TextureFormat
+
                         uploadLevels
                 else
                     1

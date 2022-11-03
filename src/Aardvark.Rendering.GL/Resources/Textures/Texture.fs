@@ -372,26 +372,44 @@ module internal TextureUtilitiesAndExtensions =
 
 [<AutoOpen>]
 module TextureCreationExtensions =
+
+    [<AutoOpen>]
+    module internal MipmapGenerationSupport =
+
+        type Context with
+
+            /// Returns if mipmap generation supported for the given target and format.
+            /// Logs a warning if support is limited or missing.
+            /// Note: A context handle must be current.
+            member x.IsMipmapGenerationSupported(target : TextureTarget, format : TextureFormat) =
+                let support = x.GetFormatMipmapGeneration(unbox<ImageTarget> target, format)
+
+                match support with
+                | MipmapGenerationSupport.Full -> true
+                | MipmapGenerationSupport.Caveat ->
+                    Log.warn "[GL] Format %A has only limited support for mipmap generation" format
+                    true
+                | _ ->
+                    Log.warn "[GL] Format %A does not support mipmap generation" format
+                    false
+
+        type Texture with
+
+            /// Returns if the texture supports mipmap generation.
+            /// Logs a warning if support is limited or missing.
+            /// Note: A context handle must be current.
+            member x.IsMipmapGenerationSupported =
+                let target = TextureTarget.ofTexture x
+                x.Context.IsMipmapGenerationSupported(target, x.Format)
+
+            /// Throws an exception if the texture does not support mipmap generation.
+            /// Logs a warning if support is limited or missing.
+            /// Note: A context handle must be current.
+            member x.CheckMipmapGenerationSupport() =
+                if not <| x.IsMipmapGenerationSupported then
+                    raise <| NotSupportedException($"[GL] Format {x.Format} does not support mipmap generation.")
+
     type Context with
-
-        // ================================================================================================================
-        // Mipmap generation support
-        // ================================================================================================================
-        member internal x.CheckMipmapGenerationSupport(target : ImageTarget, format : TextureFormat) =
-            let support = x.GetFormatMipmapGeneration(target, format)
-
-            match support with
-            | MipmapGenerationSupport.Full -> ()
-
-            | MipmapGenerationSupport.Caveat ->
-                Log.warn "[GL] Format %A has only limited support for mipmap generation" format
-
-            | _ ->
-                raise <| InvalidOperationException($"[GL] Format {format} does not support mipmap generation")
-
-        member internal x.CheckMipmapGenerationSupport(texture : Texture) =
-            let target = TextureTarget.ofTexture texture
-            x.CheckMipmapGenerationSupport(unbox<ImageTarget> target, texture.Format)
 
         // ================================================================================================================
         // CreateTexture

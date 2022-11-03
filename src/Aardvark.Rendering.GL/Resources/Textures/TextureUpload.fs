@@ -71,7 +71,7 @@ module internal TextureUploadImplementation =
             )
 
             if generateMipmap then
-                texture.Context.CheckMipmapGenerationSupport texture
+                assert texture.IsMipmapGenerationSupported
 
                 GL.TexParameter(target, TextureParameterName.TextureBaseLevel, level)
                 GL.Check "could not set base mip map level"
@@ -216,8 +216,11 @@ module internal TextureUploadImplementation =
                 uploadPixImageMipMapInternal texture wantMipmap generateMipMap baseLevel (slice + i) offset data
 
 
-        let uploadPixVolume (texture : Texture) (generateMipmap : bool)
+        let uploadPixVolume (texture : Texture) (wantMipmap : bool)
                             (level : int) (offset : V3i) (volume : PixVolume) =
+            let generateMipmap =
+                wantMipmap && texture.MipMapLevels > 1
+
             volume.Visit
                 { new PixVisitors.PixVolumeVisitor() with
                     member x.VisitUnit(img : PixVolume<'T>) =
@@ -231,8 +234,28 @@ module ContextTextureUploadExtensions =
 
     module private Texture =
 
+        let private create (dimension : TextureDimension) (format : TextureFormat)
+                           (size : V3i) (slices : int) (samples : int) (uploadLevels : int) (wantMipmap : bool) (context : Context) =
+
+            let supportsMipmap() =
+                let target = TextureTarget.ofParameters dimension (slices > 0) (samples > 1)
+                context.IsMipmapGenerationSupported(target, format)
+
+            let levels =
+                if wantMipmap then
+                    let expectedLevels = Fun.MipmapLevels size
+
+                    if uploadLevels < expectedLevels && supportsMipmap() then
+                        expectedLevels
+                    else
+                        uploadLevels
+                else
+                    1
+
+            context.CreateTexture(size, dimension, format, slices, levels, samples)
+
         let private createOfFormat (dimension : TextureDimension) (format : PixFormat)
-                                   (size : V3i) (slices : int) (samples : int) (info : TextureParams) (context : Context) =
+                                   (size : V3i) (slices : int) (samples : int) (uploadLevels : int) (info : TextureParams) (context : Context) =
             let format =
                 let baseFormat = TextureFormat.ofPixFormat format info
                 if info.wantCompressed then
@@ -244,19 +267,22 @@ module ContextTextureUploadExtensions =
                 else
                     baseFormat
 
-            let levels = if info.wantMipMaps then Fun.MipmapLevels(size) else 1
-            context.CreateTexture(size, dimension, format, slices, levels, samples)
+            context |> create dimension format size slices samples uploadLevels info.wantMipMaps
 
-        let createOfFormat2D (format : PixFormat) (size : V2i) (info : TextureParams) (context : Context) =
+        let createOfFormat2D (format : PixFormat) (size : V2i) (uploadLevels : int) (info : TextureParams) (context : Context) =
             let size = V3i(size, 1)
-            context |> createOfFormat TextureDimension.Texture2D format size 0 1 info
+            context |> createOfFormat TextureDimension.Texture2D format size 0 1 uploadLevels info
 
-        let createOfFormat3D (format : PixFormat) (size : V3i) (info : TextureParams) (context : Context) =
-            context |> createOfFormat TextureDimension.Texture3D format size 0 1 info
+        let createOfFormat3D (format : PixFormat) (size : V3i) (uploadLevels : int) (info : TextureParams) (context : Context) =
+            context |> createOfFormat TextureDimension.Texture3D format size 0 1 uploadLevels info
 
-        let createOfFormatCube (format : PixFormat) (size : int) (info : TextureParams) (context : Context) =
+        let createOfFormatCube (format : PixFormat) (size : int) (uploadLevels : int) (info : TextureParams) (context : Context) =
             let size = V3i(size, 1, 1)
-            context |> createOfFormat TextureDimension.TextureCube format size 0 1 info
+            context |> createOfFormat TextureDimension.TextureCube format size 0 1 uploadLevels info
+
+        let createOfNativeTexture (data : INativeTexture) (context : Context) =
+            let slices = if data.Count > 1 then data.Count else 0
+            context |> create data.Dimension data.Format data.[0, 0].Size slices 1 data.MipMapLevels data.WantMipMaps
 
 
     [<AutoOpen>]
@@ -315,18 +341,19 @@ module ContextTextureUploadExtensions =
                         this.CreateTexture <| PixTexture2d(pi, info)
 
                 | PixTexture2D(info, data) ->
-                    let texture = this |> Texture.createOfFormat2D data.PixFormat data.[0].Size info
+                    let texture = this |> Texture.createOfFormat2D data.PixFormat data.[0].Size data.LevelCount info
                     Texture.uploadPixImageMipMap texture info.wantMipMaps 0 0 V2i.Zero data
                     texture
 
                 | PixTextureCube(info, data) ->
                     let img = data.[CubeSide.NegativeX]
-                    let texture = this |> Texture.createOfFormatCube img.PixFormat img.[0].Size.X info
+                    let levels = data.MipMapArray |> Array.map (fun pi -> pi.LevelCount) |> Array.min
+                    let texture = this |> Texture.createOfFormatCube img.PixFormat img.[0].Size.X levels info
                     Texture.uploadPixImageCube texture info.wantMipMaps 0 0 V2i.Zero data
                     texture
 
                 | PixTexture3D(info, data) ->
-                    let texture = this |> Texture.createOfFormat3D data.PixFormat data.Size info
+                    let texture = this |> Texture.createOfFormat3D data.PixFormat data.Size 1 info
                     Texture.uploadPixVolume texture info.wantMipMaps 0 V3i.Zero data
                     texture
 
@@ -340,9 +367,7 @@ module ContextTextureUploadExtensions =
                     this.ImportTexture t
 
                 | :? INativeTexture as data ->
-                    let slices = if data.Count > 1 then data.Count else 0
-                    let levels = if data.WantMipMaps then Fun.MipmapLevels(data.[0, 0].Size) else 1
-                    let texture = this.CreateTexture(data.[0, 0].Size, data.Dimension, data.Format, slices, levels, 1)
+                    let texture = this |> Texture.createOfNativeTexture data
                     Texture.uploadNativeTexture texture 0 0 data
                     texture
 

@@ -712,7 +712,7 @@ type Runtime(debug : IDebugConfig) =
                 let target = TextureTarget.ofTexture t
 
                 Operators.using ctx.ResourceLock (fun _ ->
-                    ctx.CheckMipmapGenerationSupport t
+                    t.CheckMipmapGenerationSupport()
 
                     GL.BindTexture(target, t.Handle)
                     GL.Check "could not bind texture"
