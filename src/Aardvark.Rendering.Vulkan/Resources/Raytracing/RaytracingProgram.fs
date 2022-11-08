@@ -1,8 +1,10 @@
 ﻿namespace Aardvark.Rendering.Vulkan.Raytracing
 
-open System.Runtime.CompilerServices
-
 #nowarn "9"
+
+open System
+open System.IO
+open System.Runtime.CompilerServices
 
 open Aardvark.Base
 open Aardvark.Rendering
@@ -12,20 +14,39 @@ type RaytracingStageInfo =
     { Index  : uint32
       Module : ShaderModule }
 
-type RaytracingProgram(device : Device, effect : FShade.RaytracingEffect,
-                       stages : ShaderGroup<RaytracingStageInfo> list,
-                       pipelineLayout : PipelineLayout) =
+type RaytracingProgram internal (device : Device,
+                                 pipelineLayout : PipelineLayout,
+                                 shaderBindingTableLayout : FShade.ShaderBindingTableLayout,
+                                 effect : FShade.RaytracingEffect,
+                                 stages : ShaderGroup<RaytracingStageInfo> list) =
     inherit CachedResource(device)
 
-    member x.Effect = effect
+    new (device : Device, pipelineLayout : PipelineLayout,
+         shaderBindingTableLayout : FShade.ShaderBindingTableLayout,
+         stages : ShaderGroup<RaytracingStageInfo> list) =
+        new RaytracingProgram(device, pipelineLayout, shaderBindingTableLayout, Unchecked.defaultof<_>, stages)
+
+    [<Obsolete>]
+    new (device : Device, effect : FShade.RaytracingEffect,
+         stages : ShaderGroup<RaytracingStageInfo> list,
+         pipelineLayout : PipelineLayout) =
+        new RaytracingProgram(device, pipelineLayout, effect.ShaderBindingTableLayout, effect, stages)
+
     member x.Groups = stages
+    member x.ShaderBindingTableLayout = shaderBindingTableLayout
+    member x.PipelineLayout = pipelineLayout
+
+    [<Obsolete>]
+    member x.Effect = effect
+
+    [<Obsolete("Use PipelineLayout")>]
     member x.Layout = pipelineLayout
 
     override x.Destroy() =
         stages |> List.iter (
             ShaderGroup.iter (fun _ _ _ s -> s.Module.Dispose())
         )
-        x.Layout.Dispose()
+        pipelineLayout.Dispose()
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RaytracingProgram =
@@ -42,9 +63,19 @@ module RaytracingProgram =
             | _ ->
                 failwithf "Invalid raytracing shader slot (stage = %A, name = %A, ray = %A)" stage name ray
 
-    // TODO: Caching
-    let ofEffect (device : Device) (effect : FShade.RaytracingEffect) =
 
+    let private create (device : Device) (layout : FShade.ShaderBindingTableLayout) (stages : ShaderGroup<RaytracingStageInfo> list) =
+        let shaders =
+            stages
+            |> List.collect ShaderGroup.toList
+            |> List.map (fun i -> i.Module)
+            |> List.toArray
+
+        let pipelineLayout = device.CreatePipelineLayout(shaders, 1, Set.empty)
+
+        new RaytracingProgram(device, pipelineLayout, layout, stages)
+
+    let private compileEffect (device : Device) (effect : FShade.RaytracingEffect) =
         let toGeneralGroups (map : Map<Symbol, FShade.Shader>) =
             map |> Map.toList |> List.map (fun (n, s) ->
                 ShaderGroup.General { Name = Some n; Stage = ShaderStage.ofFShade s.shaderStage; Value = s}
@@ -85,15 +116,136 @@ module RaytracingProgram =
                 { Index = uint32 (index - 1); Module = mdl }
             ))
 
-        let shaders =
-            stages
-            |> List.collect ShaderGroup.toList
-            |> List.map (fun i -> i.Module)
-            |> List.toArray
+        stages |> create device effect.ShaderBindingTableLayout
 
-        let pipelineLayout = device.CreatePipelineLayout(shaders, 1, Set.empty)
 
-        new RaytracingProgram(device, effect, stages, pipelineLayout)
+    module private FileCache =
+
+        module private Pickling =
+
+            [<AutoOpen>]
+            module private Binary =
+
+                type RaytracingStageBinary =
+                    { Index  : uint32
+                      Binary : ShaderModuleBinary }
+
+                type ShaderGroupsBinary =
+                    ShaderGroup<RaytracingStageBinary> list
+
+                type RaytracingProgramBinary =
+                    { Groups : ShaderGroupsBinary
+                      Layout : FShade.ShaderBindingTableLayout }
+
+                module RaytracingStageInfo =
+
+                    let toBinary (info : RaytracingStageInfo) =
+                        { Index  = info.Index
+                          Binary = ShaderModule.toBinary info.Module }
+
+                    let ofBinary (device : Device) (binary : RaytracingStageBinary) =
+                        { Index  = binary.Index
+                          Module = binary.Binary |> ShaderModule.ofBinary device }
+
+                module ShaderGroupsBinary =
+
+                    let ofStageInfos (groups : ShaderGroup<RaytracingStageInfo> list) : ShaderGroupsBinary =
+                        groups |> List.map (
+                            ShaderGroup.map (fun _ _ _ -> RaytracingStageInfo.toBinary)
+                        )
+
+                    let toStageInfos (device : Device) (binary : ShaderGroupsBinary) =
+                        binary |> List.map (
+                            ShaderGroup.map (fun _ _ _ -> RaytracingStageInfo.ofBinary device)
+                        )
+
+                module RaytracingProgram =
+
+                    let toBinary (program : RaytracingProgram) =
+                        { Groups = ShaderGroupsBinary.ofStageInfos program.Groups
+                          Layout = program.ShaderBindingTableLayout }
+
+                    let ofBinary (device : Device) (binary : RaytracingProgramBinary) =
+                        let stages = binary.Groups |> ShaderGroupsBinary.toStageInfos device
+                        stages |> create device binary.Layout
+
+
+            let toByteArray (program : RaytracingProgram) =
+                let binary = RaytracingProgram.toBinary program
+                ShaderProgram.pickler.Pickle binary
+
+            let tryOfByteArray (device : Device) (reference : RaytracingProgram option) (data : byte[]) =
+                try
+                    let binary : RaytracingProgramBinary = ShaderProgram.pickler.UnPickle data
+
+                    reference |> Option.iter (fun program ->
+                        if binary <> RaytracingProgram.toBinary program then
+                            failwith "differs from recompiled reference"
+                    )
+
+                    Some <| RaytracingProgram.ofBinary device binary
+
+                with exn ->
+                    Log.warn "[Vulkan] Failed to unpickle raytracing program: %s" exn.Message
+                    None
+
+
+        let private tryGetCacheFile (device : Device) (id : string) =
+            device.ShaderCachePath |> Option.map (fun prefix ->
+                let hash = ShaderProgram.hashFileName id
+                Path.combine [prefix; hash + ".rtx"]
+            )
+
+        let tryRead (device : Device) (effect : FShade.RaytracingEffect) =
+            tryGetCacheFile device effect.Id
+            |> Option.bind (fun file ->
+                if File.Exists file then
+                    try
+                        let data = File.readAllBytes file
+
+                        let reference =
+                            if device.DebugConfig.VerifyShaderCacheIntegrity then
+                                Some <| compileEffect device effect
+                            else
+                                None
+
+                        try
+                            data |> Pickling.tryOfByteArray device reference
+                        finally
+                            reference |> Option.iter Disposable.dispose
+                    with
+                    | exn ->
+                        Log.warn "[Vulkan] Failed to read from raytracing program file cache: %s" exn.Message
+                        None
+                else
+                    None
+            )
+
+        let write (device : Device) (id : string) (program : RaytracingProgram) =
+            tryGetCacheFile device id
+            |> Option.iter (fun file ->
+                try
+                    let binary = Pickling.toByteArray program
+                    binary |> File.writeAllBytes file
+                with
+                | exn ->
+                    Log.warn "[Vulkan] Failed to write to raytracing program file cache: %s" exn.Message
+            )
+
+
+    let private cache = Symbol.Create "RaytracingProgramCache"
+
+    let ofEffect (device : Device) (effect : FShade.RaytracingEffect) =
+        device.GetCached(cache, effect, fun effect ->
+            match effect |> FileCache.tryRead device with
+            | Some program ->
+                program
+
+            | _ ->
+                let program = effect |> compileEffect device
+                program |> FileCache.write device effect.Id
+                program
+        )
 
 
 [<AbstractClass; Sealed; Extension>]

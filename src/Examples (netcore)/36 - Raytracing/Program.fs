@@ -33,7 +33,6 @@ module Effect =
 
     [<AutoOpen>]
     module private Shaders =
-        do Serializer.Init()
 
         type UniformScope with
             member x.OutputBuffer : Image2d<Formats.rgba32f> = uniform?OutputBuffer

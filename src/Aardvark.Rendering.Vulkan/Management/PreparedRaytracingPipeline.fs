@@ -131,8 +131,8 @@ type DevicePreparedRaytracingPipelineExtensions private() =
             |> UniformProvider.ofMap
 
         let descriptorSetBinding =
-            let sets = this.CreateDescriptorSets(program.Layout, uniforms)
-            this.CreateDescriptorSetBinding(program.Layout, sets)
+            let sets = this.CreateDescriptorSets(program.PipelineLayout, uniforms)
+            this.CreateDescriptorSetBinding(program.PipelineLayout, sets)
 
         resources.Add(descriptorSetBinding)
 

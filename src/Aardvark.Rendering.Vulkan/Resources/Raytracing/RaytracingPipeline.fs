@@ -20,7 +20,7 @@ type RaytracingPipeline(device : Device, handle : VkPipeline, description : Rayt
     member x.Description        = description
     member x.Program            = description.Program
     member x.MaxRecursionDepth  = description.MaxRecursionDepth
-    member x.Layout             = description.Program.Layout
+    member x.Layout             = description.Program.PipelineLayout
 
     override x.Destroy() =
         if x.Handle.IsValid then
@@ -97,7 +97,7 @@ module RaytracingPipeline =
                         uint32 groups.Length, pGroups,
                         maxRecursion,
                         NativePtr.zero, NativePtr.zero, NativePtr.zero,
-                        description.Program.Layout.Handle,
+                        description.Program.PipelineLayout.Handle,
                         basePipeline, 0
                     )
 

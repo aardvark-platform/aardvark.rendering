@@ -181,16 +181,16 @@ module private ShaderBindingTableUtilities =
             { Entries = SingleEntry raygen.Index; Handles = shaderHandles }
 
         let miss (shaderHandles : ShaderHandles) (shaderGroups : GroupEntry[]) (pipeline : RaytracingPipeline) =
-            let lookup = pipeline.Description.Program.Effect.ShaderBindingTableLayout.MissIndices
+            let lookup = pipeline.Description.Program.ShaderBindingTableLayout.MissIndices
             shaderGroups |> Array.filter GroupEntry.isMiss |> withLookup lookup shaderHandles
 
         let callable (shaderHandles : ShaderHandles) (shaderGroups : GroupEntry[]) (pipeline : RaytracingPipeline) =
-            let lookup = pipeline.Description.Program.Effect.ShaderBindingTableLayout.CallableIndices
+            let lookup = pipeline.Description.Program.ShaderBindingTableLayout.CallableIndices
             shaderGroups |> Array.filter GroupEntry.isCallable |> withLookup lookup shaderHandles
 
         let hitGroups (shaderHandles : ShaderHandles) (shaderGroups : GroupEntry[]) (configs : Set<HitConfig>) (pipeline : RaytracingPipeline) =
             let rayOffsets =
-                pipeline.Description.Program.Effect.ShaderBindingTableLayout.RayOffsets
+                pipeline.Description.Program.ShaderBindingTableLayout.RayOffsets
 
             let rayTypes =
                 Map.toList rayOffsets

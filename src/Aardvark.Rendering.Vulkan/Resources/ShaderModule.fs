@@ -25,6 +25,13 @@ type ShaderModule =
             { inherit Resource<_>(device, handle); Slot = slot; Interface = iface; SpirV = spv }
     end
 
+type internal ShaderModuleBinary =
+    {
+        Slot      : FShade.ShaderSlot
+        Interface : FShade.GLSL.GLSLShaderInterface
+        SpirV     : byte[]
+    }
+
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module ShaderModule =
 
@@ -81,6 +88,13 @@ module ShaderModule =
         let result = new ShaderModule(device, handle, slot, info, binary)
         result
 
+    let internal toBinary (shader : ShaderModule) =
+        { Slot      = shader.Slot
+          Interface = shader.Interface
+          SpirV     = shader.SpirV }
+
+    let internal ofBinary (device : Device) (binary : ShaderModuleBinary) =
+        device |> ofBinaryWithInfo binary.Slot binary.Interface binary.SpirV
 
 
 [<AbstractClass; Sealed; Extension>]
