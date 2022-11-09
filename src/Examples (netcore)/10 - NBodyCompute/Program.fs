@@ -120,17 +120,14 @@ open Aardvark.Application
 
 [<EntryPoint>]
 let main argv = 
-    
-    //failwith "REMOVE THIS FAILWITH"
 
-    
     Aardvark.Init()
 
     let win =
         window {
             backend Backend.GL
             display Display.Mono
-            debug false
+            debug true
             samples 8
         }
 

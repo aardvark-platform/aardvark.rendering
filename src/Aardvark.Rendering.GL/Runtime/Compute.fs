@@ -458,16 +458,20 @@ module GLComputeExtensions =
 
     type Context with
 
-        member x.TryCompileKernel (code : string, iface : FShade.GLSL.GLSLProgramInterface, localSize : V3i) =
-            Operators.using x.ResourceLock (fun token ->
-                match x.TryCompileCompute(true, code) with
-                    | Success prog ->
-                        let kernel = new ComputeShader({ prog with Interface = iface }, localSize)
-                        Success kernel
+        member x.TryCompileKernel (id : string, code : string, iface : FShade.GLSL.GLSLProgramInterface, localSize : V3i) =
+            use __ = x.ResourceLock
 
-                    | Error err ->
-                        Error err
-            )
+            match x.TryCompileComputeProgram(id, code, iface) with
+            | Success program ->
+                let kernel = new ComputeShader(program, localSize)
+                Success kernel
+
+            | Error err ->
+                Error err
+
+        [<Obsolete>]
+        member x.TryCompileKernel (code : string, iface : FShade.GLSL.GLSLProgramInterface, localSize : V3i) =
+            x.TryCompileKernel(code, code, iface, localSize)
 
         member x.TryCompileKernel (shader : FShade.ComputeShader) =
             let gl = getGLCompute x
@@ -494,8 +498,6 @@ module GLComputeExtensions =
                 if shader.csLocalSize.AllGreater 0 then shader.csLocalSize
                 else failwith "[GL] compute shader has no local size"
 
-            printfn "%s" glsl.code
-
             let adjust (s : GLSL.GLSLSampler) =
                 let textures =
                     List.init s.samplerCount (fun i -> 
@@ -513,7 +515,7 @@ module GLComputeExtensions =
 
             let iface = { glsl.iface with samplers = glsl.iface.samplers |> MapExt.map (constF adjust) }
             //glsl.iface.samplers
-            x.TryCompileKernel(glsl.code, iface, localSize)
+            x.TryCompileKernel(shader.csId, glsl.code, iface, localSize)
 
         member x.CompileKernel (shader : FShade.ComputeShader) =
             match x.TryCompileKernel shader with

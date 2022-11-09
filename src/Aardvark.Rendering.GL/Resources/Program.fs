@@ -37,12 +37,12 @@ type ActiveUniform = { slot : int; index : int; location : int; name : string; s
                 sprintf "%A %s; // sampler: %A" x.uniformType name sam
             | None ->
                 sprintf "%A %s;" x.uniformType name
-                
+
 type UniformBlock = { name : string; index : int; binding : int; fields : list<ActiveUniform>; size : int; referencedBy : Set<ShaderStage> }
 type ActiveAttribute = { attributeIndex : int; size : int; name : string; semantic : string; attributeType : ActiveAttribType }
 
 type Shader =
-    class 
+    class
         val mutable public Context : Context
         val mutable public Handle : int
         val mutable public Stage : ShaderStage
@@ -50,23 +50,22 @@ type Shader =
         new(ctx : Context, handle : int, stage : ShaderStage, tops) = { Context = ctx; Handle = handle; Stage = stage; SupportedModes = tops}
     end
 
-[<StructuredFormatDisplay("{InterfaceBlock}")>]
 type Program =
     {
-       Context : Context
-       Code : string
-       Handle : int
-       HasTessellation : bool
-       SupportedModes : Option<Set<IndexedGeometryMode>>
-       Interface : FShade.GLSL.GLSLProgramInterface
+        Context : Context
+        Code : string
+        Handle : int
+        HasTessellation : bool
+        SupportedModes : Option<Set<IndexedGeometryMode>>
+        Interface : FShade.GLSL.GLSLProgramInterface
 
-       [<DefaultValue>]
-       mutable _inputs : Option<list<string * Type>>
-       [<DefaultValue>]
-       mutable _outputs : Option<list<string * Type>>
-       [<DefaultValue>]
-       mutable _uniforms : Option<list<string * Type>>
-    } with
+        [<DefaultValue>]
+        mutable _inputs : Option<list<string * Type>>
+        [<DefaultValue>]
+        mutable _outputs : Option<list<string * Type>>
+        [<DefaultValue>]
+        mutable _uniforms : Option<list<string * Type>>
+    }
 
     member x.WritesPointSize =
         FShade.GLSL.GLSLProgramInterface.usesPointSize x.Interface
@@ -96,43 +95,43 @@ module ProgramExtensions =
                 | :? DebugConfig as cfg -> cfg.PrintShaderCode
                 | _ -> false
 
-    module private FShadeBackend = 
+    module private FShadeBackend =
         open FShade.GLSL
 
         let private backendCache = System.Collections.Concurrent.ConcurrentDictionary<Context, Backend>()
 
-        let get (ctx : Context) =   
+        let get (ctx : Context) =
             backendCache.GetOrAdd(ctx, fun ctx ->
                 let mutable enabledGLSLExts = Set.empty
 
-                let bindingMode = 
+                let bindingMode =
                     if ctx.Driver.glsl >= Version(4,3) then BindingMode.PerKind
                     else BindingMode.None
 
                 let conservativeDepth =
                     if ctx.Driver.glsl >= Version(4,2) then true
-                    elif Set.contains "GL_ARB_conservative_depth" ctx.Driver.extensions then 
+                    elif Set.contains "GL_ARB_conservative_depth" ctx.Driver.extensions then
                         enabledGLSLExts <- Set.add "GL_ARB_conservative_depth" enabledGLSLExts
                         true
                     else
                         false
-                    
+
                 let uniformBuffers =
                     if ctx.Driver.version >= Version(3,1) then true
-                    elif Set.contains "GL_ARB_uniform_buffer_object" ctx.Driver.extensions then 
+                    elif Set.contains "GL_ARB_uniform_buffer_object" ctx.Driver.extensions then
                         enabledGLSLExts <- Set.add "GL_ARB_uniform_buffer_object" enabledGLSLExts
                         true
                     else
                         false
 
                 let locations =
-                    ctx.Driver.glsl >= Version(3,3) 
-                    
-                let inout =
-                    ctx.Driver.glsl >= Version(1,3) 
+                    ctx.Driver.glsl >= Version(3,3)
 
-                let cfg = 
-                    { 
+                let inout =
+                    ctx.Driver.glsl >= Version(1,3)
+
+                let cfg =
+                    {
                         version = GLSLVersion(ctx.Driver.glsl.Major, ctx.Driver.glsl.Minor, 0)
                         enabledExtensions = enabledGLSLExts
                         createUniformBuffers = uniformBuffers
@@ -157,13 +156,13 @@ module ProgramExtensions =
 
     let private getShaderType (stage : ShaderStage) =
         match stage with
-            | ShaderStage.Vertex -> ShaderType.VertexShader
-            | ShaderStage.TessControl -> ShaderType.TessControlShader
-            | ShaderStage.TessEval -> ShaderType.TessEvaluationShader
-            | ShaderStage.Geometry -> ShaderType.GeometryShader
-            | ShaderStage.Fragment -> ShaderType.FragmentShader
-            | ShaderStage.Compute -> ShaderType.ComputeShader
-            | _ -> failwithf "unknown shader-stage: %A" stage
+        | ShaderStage.Vertex -> ShaderType.VertexShader
+        | ShaderStage.TessControl -> ShaderType.TessControlShader
+        | ShaderStage.TessEval -> ShaderType.TessEvaluationShader
+        | ShaderStage.Geometry -> ShaderType.GeometryShader
+        | ShaderStage.Fragment -> ShaderType.FragmentShader
+        | ShaderStage.Compute -> ShaderType.ComputeShader
+        | _ -> failwithf "unknown shader-stage: %A" stage
 
     let private versionRx = System.Text.RegularExpressions.Regex @"#version[ \t]+(?<version>.*)"
     let private addPreprocessorDefine (define : string) (code : string) =
@@ -171,15 +170,15 @@ module ProgramExtensions =
         let def = sprintf "#define %s\r\n" define
         let layout = "" //"layout(row_major) uniform;\r\n"
 
-        let newCode = 
+        let newCode =
             versionRx.Replace(code, System.Text.RegularExpressions.MatchEvaluator(fun m ->
                 let v = m.Groups.["version"].Value
                 replaced := true
                 match Int32.TryParse v with
-                    | (true, vers) when vers > 120 ->
-                        sprintf "#version %s\r\n%s%s" v def layout
-                    | _ ->
-                        sprintf "#version %s\r\n%s" v def
+                | (true, vers) when vers > 120 ->
+                    sprintf "#version %s\r\n%s%s" v def layout
+                | _ ->
+                    sprintf "#version %s\r\n%s" v def
             ))
 
         if !replaced then newCode
@@ -190,11 +189,15 @@ module ProgramExtensions =
     let private geometryOutputSuffixes = ["{0}"; "{0}Out"; "{0}Geometry"; "{0}TessControl"; "{0}TessEval"; "Geometry{0}"; "TessControl{0}"; "TessEval{0}"]
 
 
-    module ShaderCompiler = 
+    module ShaderCompiler =
         let tryCompileShader (stage : ShaderStage) (code : string) (entryPoint : string) (x : Context) =
             Operators.using x.ResourceLock (fun _ ->
                 let code = code.Replace(sprintf "%s(" entryPoint, "main(")
-                
+
+                if x.Runtime.PrintShaderCode then
+                    let numberdLines = ShaderCodeReporting.withLineNumbers code
+                    Report.Line("Compiling shader:\n{0}", numberdLines)
+
                 let handle = GL.CreateShader(getShaderType stage)
                 GL.Check "could not create shader"
 
@@ -208,37 +211,36 @@ module ProgramExtensions =
                 GL.Check "could not get shader status"
 
                 let log = GL.GetShaderInfoLog handle
-                
+
                 let topologies =
                     match stage with
-                        | ShaderStage.Geometry ->
-                            
-                            let inRx = System.Text.RegularExpressions.Regex @"layout\((?<top>[a-zA-Z_]+)\)[ \t]*in[ \t]*;"
-                            let m = inRx.Match code
-                            if m.Success then
-                                match m.Groups.["top"].Value with
-                                    | "points" -> 
-                                        [IndexedGeometryMode.PointList] |> Set.ofList |> Some
+                    | ShaderStage.Geometry ->
+                        let inRx = System.Text.RegularExpressions.Regex @"layout\((?<top>[a-zA-Z_]+)\)[ \t]*in[ \t]*;"
+                        let m = inRx.Match code
+                        if m.Success then
+                            match m.Groups.["top"].Value with
+                            | "points" ->
+                                [IndexedGeometryMode.PointList] |> Set.ofList |> Some
 
-                                    | "lines" ->
-                                        [IndexedGeometryMode.LineList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some
+                            | "lines" ->
+                                [IndexedGeometryMode.LineList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some
 
-                                    | "lines_adjacency" ->
-                                        [IndexedGeometryMode.LineAdjacencyList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some
+                            | "lines_adjacency" ->
+                                [IndexedGeometryMode.LineAdjacencyList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some
 
-                                    | "triangles"  ->
-                                        [IndexedGeometryMode.TriangleList; IndexedGeometryMode.TriangleStrip] |> Set.ofList |> Some
-                                    
-                                    | "triangles_adjacency" ->
-                                        [IndexedGeometryMode.TriangleAdjacencyList] |> Set.ofList |> Some
-                                    
-                                    | v ->
-                                       failwithf "unknown geometry shader input topology: %A" v 
-                            else
-                                failwith "could not determine geometry shader input topology"
+                            | "triangles"  ->
+                                [IndexedGeometryMode.TriangleList; IndexedGeometryMode.TriangleStrip] |> Set.ofList |> Some
 
-                        | _ ->
-                            None
+                            | "triangles_adjacency" ->
+                                [IndexedGeometryMode.TriangleAdjacencyList] |> Set.ofList |> Some
+
+                            | v ->
+                                failwithf "unknown geometry shader input topology: %A" v
+                        else
+                            failwith "could not determine geometry shader input topology"
+
+                    | _ ->
+                        None
 
                 if status = 1 then
                     Success(Shader(x, handle, stage, topologies))
@@ -252,12 +254,12 @@ module ProgramExtensions =
             )
 
         let tryCompileCompute (code : string) (x : Context) =
-            use t = x.ResourceLock
+            use __ = x.ResourceLock
             match tryCompileShader ShaderStage.Compute code "main" x with
-                | Success shader ->
-                    Success [shader]
-                | Error err ->
-                    Error err
+            | Success shader ->
+                Success [shader]
+            | Error err ->
+                Error err
 
         let tryCompileShaders (withFragment : bool) (code : string) (x : Context) =
             let vs = code.Contains "#ifdef Vertex"
@@ -275,7 +277,7 @@ module ProgramExtensions =
                     if fs then yield "Fragment", "main", ShaderStage.Fragment
                 ]
 
-            let code = if (code.Contains("layout(location = 0) out vec4 Colors2Out")) then 
+            let code = if (code.Contains("layout(location = 0) out vec4 Colors2Out")) then
                             code.Replace("out vec4 Colors2Out", "out vec4 Colors3Out")
                                 .Replace("out vec4 ColorsOut", "out vec4 Colors2Out")
                                 .Replace("out vec4 Colors3Out", "out vec4 ColorsOut")
@@ -301,48 +303,43 @@ module ProgramExtensions =
                     let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
                     let numberdLines = ShaderCodeReporting.withLineNumbers codeWithDefine
                     Report.Line("Failed to compile shader:\n{0}", numberdLines)
-                    let err = errors |> List.map (fun (stage, e) -> sprintf "%A:\r\n%s" stage (String.indent 1 e)) |> String.concat "\r\n\r\n" 
+                    let err = errors |> List.map (fun (stage, e) -> sprintf "%A:\r\n%s" stage (String.indent 1 e)) |> String.concat "\r\n\r\n"
                     Error err
-            
+
             )
 
         let setFragDataLocations (fboSignature : Map<string, int>) (handle : int) (x : Context) =
             Operators.using x.ResourceLock (fun _ ->
-                fboSignature 
-                    |> Map.toList
-                    |> List.map (fun (name, location) ->
-                        let outputNameAndIndex = 
-                            outputSuffixes |> List.tryPick (fun s ->
-                                let outputName = String.Format(s, name)
-                                let index = GL.GetFragDataIndex(handle, outputName)
-                                GL.Check "could not get FragDataIndex"
-                                if index >= 0 then Some (outputName, index)
-                                else None
-                            )
+                fboSignature
+                |> Map.toList
+                |> List.map (fun (name, location) ->
+                    let outputNameAndIndex =
+                        outputSuffixes |> List.tryPick (fun s ->
+                            let outputName = String.Format(s, name)
+                            let index = GL.GetFragDataIndex(handle, outputName)
+                            GL.Check "could not get FragDataIndex"
+                            if index >= 0 then Some (outputName, index)
+                            else None
+                        )
 
-                            
+                    match outputNameAndIndex with
+                    | Some (outputName, index) ->
+                        GL.BindFragDataLocation(handle, location, name)
+                        GL.Check "could not bind FragData location"
 
-                        match outputNameAndIndex with
-                            | Some (outputName, index) ->
-                                GL.BindFragDataLocation(handle, location, name)
-                                GL.Check "could not bind FragData location"
-
-                                { attributeIndex = location; size = 1; name = outputName; semantic = name; attributeType = ActiveAttribType.FloatVec4 }
-                            | None ->
-                                failwithf "could not get desired program-output: %A" name
-                    )
+                        { attributeIndex = location; size = 1; name = outputName; semantic = name; attributeType = ActiveAttribType.FloatVec4 }
+                    | None ->
+                        failwithf "could not get desired program-output: %A" name
+                )
             )
 
-
-        let tryLinkProgram (expectsRowMajorMatrices : bool) (handle : int) (code : string) (shaders : list<Shader>) (firstTexture : int) (findOutputs : int -> Context -> list<ActiveAttribute>) (x : Context) =
+        let tryLinkProgramNew (handle : int) (code : string) (shaders : list<Shader>) (findOutputs : int -> Context -> list<ActiveAttribute>) (x : Context) =
             GL.LinkProgram(handle)
             GL.Check "could not link program"
 
-         
             let status = GL.GetProgram(handle, GetProgramParameterName.LinkStatus)
             let log = GL.GetProgramInfoLog(handle)
             GL.Check "could not get program log"
-
 
             if status = 1 then
                 let outputs = findOutputs handle x
@@ -360,7 +357,7 @@ module ProgramExtensions =
                     GL.UseProgram(handle)
                     GL.Check "could not bind program"
 
-                    let supported = 
+                    let supported =
                         shaders |> List.tryPick (fun s -> s.SupportedModes)
 
                     try
@@ -384,13 +381,12 @@ module ProgramExtensions =
                                     }
                             }
 
-                        finally 
+                        finally
                             GL.UseProgram(0)
                             GL.Check "could not unbind program"
 
-                        
-                    with 
-                    | e -> 
+                    with
+                    | e ->
                              let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
                              let numberdLines = ShaderCodeReporting.withLineNumbers codeWithDefine
                              Report.Line("Failed to build shader interface of:\n{0}", numberdLines)
@@ -408,6 +404,118 @@ module ProgramExtensions =
                     else log
 
                 Error log
+
+        [<Obsolete>]
+        let tryLinkProgram (expectsRowMajorMatrices : bool) (handle : int) (code : string) (shaders : list<Shader>) (firstTexture : int) (findOutputs : int -> Context -> list<ActiveAttribute>) (x : Context) =
+            tryLinkProgramNew handle code shaders findOutputs x
+
+    module private ProgramCompiler =
+
+        let fixBindings (program : Program) (iface : FShade.GLSL.GLSLProgramInterface) =
+            if program.Context.FShadeBackend.Config.bindingMode = FShade.GLSL.BindingMode.None then
+                let uniformBuffers =
+                    let mutable b = 0
+                    iface.uniformBuffers |> MapExt.map (fun name ub ->
+                        let bi = GL.GetUniformBlockIndex(program.Handle, name)
+                        let binding = b
+                        b <- b + 1
+                        GL.UniformBlockBinding(program.Handle, bi, binding)
+                        { ub with ubBinding = binding }
+                    )
+
+                let samplers =
+                    let mutable b = 0
+                    iface.samplers |> MapExt.map (fun name sam ->
+                        let l = GL.GetUniformLocation(program.Handle, name)
+                        let binding = b
+                        b <- b + 1
+                        GL.ProgramUniform1(program.Handle, l, binding)
+                        { sam with samplerBinding = binding }
+                    )
+
+                let images =
+                    let mutable b = 0
+                    iface.images |> MapExt.map (fun name img ->
+                        let l = GL.GetUniformLocation(program.Handle, name)
+                        let binding = b
+                        b <- b + 1
+                        GL.ProgramUniform1(program.Handle, l, binding)
+                        { img with imageBinding = binding }
+                    )
+
+                let storageBuffers =
+                    let mutable b = 0
+                    iface.storageBuffers |> MapExt.map (fun name sb ->
+                        let bi = GL.GetProgramResourceIndex(program.Handle, ProgramInterface.ShaderStorageBlock, name)
+                        let binding = b
+                        b <- b + 1
+                        GL.ShaderStorageBlockBinding(program.Handle, bi, binding)
+                        { sb with ssbBinding = binding }
+                    )
+
+                { iface with
+                    uniformBuffers = uniformBuffers
+                    samplers = samplers
+                    storageBuffers = storageBuffers
+                    images = images
+                }
+            else
+                iface
+
+        let private tryLink (context : Context) (findOutputs : int -> Context -> ActiveAttribute list) (code : string) (shaders : Shader list) =
+            let handle = GL.CreateProgram()
+            GL.Check "could not create program"
+
+            try
+                for s in shaders do
+                    GL.AttachShader(handle, s.Handle)
+                    GL.Check "could not attach shader to program"
+
+                match context |> ShaderCompiler.tryLinkProgramNew handle code shaders findOutputs with
+                | Success program ->
+                    ResourceCounts.addProgram context
+                    Success program
+
+                | Error err ->
+                    let numberdLines = ShaderCodeReporting.withLineNumbers code
+                    Report.Line("Failed to link shader:\n{0}", numberdLines)
+                    Error err
+            with
+            | exn ->
+                GL.DeleteProgram handle
+                Error exn.Message
+
+        let tryCompileCode (context : Context) (framebufferSignature : Map<string, int>) (code : string) =
+            match context |> ShaderCompiler.tryCompileShaders true code with
+            | Success shaders ->
+                let findOutputs = ShaderCompiler.setFragDataLocations framebufferSignature
+                shaders |> tryLink context findOutputs code
+
+            | Error err ->
+                Error err
+
+        let tryCompile (context : Context) (framebufferSignature : Map<string, int>) (shader : FShade.GLSL.GLSLShader) =
+            match shader.code |> tryCompileCode context framebufferSignature with
+            | Success program ->
+                let iface = fixBindings program shader.iface
+                let program = { program with Interface = iface }
+                Success program
+
+            | Error e ->
+                Error e
+
+        let tryCompileComputeCode (context : Context) (code : string) =
+            match context |> ShaderCompiler.tryCompileCompute code with
+            | Success shaders ->
+                shaders |> tryLink context (fun _ _ -> []) code
+
+            | Error err ->
+                Error err
+
+        let tryCompileCompute (context : Context) (iface : FShade.GLSL.GLSLProgramInterface) (code : string)  =
+            match code |> tryCompileComputeCode context with
+            | Success program -> Success { program with Interface = iface }
+            | res -> res
 
     open FShade.Imperative
     open FShade
@@ -433,373 +541,309 @@ module ProgramExtensions =
             modes       : Option<Set<IndexedGeometryMode>>
         }
 
-        override x.ToString() = x.code // NOTE: x.binary or the complexity if x.iface seems to crash the VS 2019 debugger with the default ToString() implementation
+        override x.ToString() = x.code // NOTE: x.binary or the complexity of x.iface seems to crash the VS 2019 debugger with the default ToString() implementation
+
+    [<AutoOpen>]
+    module private Binary =
+
+        module Program =
+
+            let tryGetBinary (program : Program) =
+                if GL.ARB_get_program_binary then
+                    GL.GetError() |> ignore
+
+                    let mutable length = 0
+                    GL.GetProgram(program.Handle, GetProgramParameterName.ProgramBinaryLength, &length)
+
+                    let err = GL.GetError()
+                    if err <> ErrorCode.NoError then
+                        Log.warn "[GL] Failed to query program binary length: %A" err
+                        None
+                    else
+                        let data : byte[] = Array.zeroCreate length
+                        let mutable format = Unchecked.defaultof<BinaryFormat>
+                        GL.GetProgramBinary(program.Handle, length, &length, &format, data)
+
+                        let err = GL.GetError()
+                        if err <> ErrorCode.NoError then
+                            Log.warn "[GL] Failed to retrieve program binary: %A" err
+                            None
+                        else
+                            Some (format, data)
+                else
+                    Report.Line(4, "[GL] Cannot read shader cache because GL_ARB_get_program_binary is not supported")
+                    None
+
+            let ofShaderCacheEntry (context : Context) (fixBindings : bool) (entry : ShaderCacheEntry) =
+                let program = GL.CreateProgram()
+
+                try
+                    GL.ProgramBinary(program, entry.format, entry.binary, entry.binary.Length)
+                    GL.Check "could not create program from binary"
+
+                    let status = GL.GetProgram(program, GetProgramParameterName.LinkStatus)
+                    if status = 0 then
+                        failf "linking failed"
+
+                    let program =
+                        { Context = context
+                          Code = entry.code
+                          Handle = program
+                          HasTessellation = entry.hasTess
+                          SupportedModes = entry.modes
+                          Interface = entry.iface }
+
+                    let iface =
+                        if fixBindings then
+                            ProgramCompiler.fixBindings program entry.iface
+                        else
+                            entry.iface
+
+                    ResourceCounts.addProgram context
+                    Some { program with Interface = iface }
+
+                with
+                | exn ->
+                    Log.warn "[GL] failed to create shader program from cache entry: %s" exn.Message
+                    GL.DeleteProgram program
+                    None
+
+    module private FileCache =
+        open System.IO
+
+        module private Pickling =
+
+            let tryGetByteArray (program : Program) =
+                program |> Program.tryGetBinary |> Option.map (fun (format, binary) ->
+                    shaderPickler.Pickle {
+                        hasTess = program.HasTessellation
+                        iface   = program.Interface
+                        format  = format
+                        binary  = binary
+                        code    = program.Code
+                        modes   = program.SupportedModes
+                    }
+                )
+
+            let tryOfByteArray (context : Context) (fixBindings : bool) (data : byte[]) =
+                try
+                    let entry : ShaderCacheEntry = shaderPickler.UnPickle data
+                    Program.ofShaderCacheEntry context fixBindings entry
+                with exn ->
+                    Log.warn "[GL] Failed to unpickle shader program: %s" exn.Message
+                    None
+
+        let private tryGetCacheFile (context : Context) (key : CodeCacheKey) =
+            context.ShaderCachePath |> Option.map (fun prefix ->
+                // NOTE: context.Diver represents information obtained by primary context
+                // -> possible that resource context have been created differently
+                // -> use driver information from actual context
+                let driver =
+                    match context.CurrentContextHandle with
+                    | ValueSome handle -> handle.Driver
+                    | _ ->
+                        Log.warn "[GL] No context current, using information of primary context to determine shader cache file name"
+                        context.Driver
+
+                let key =
+                    {
+                        device     = driver.vendor + "_" + driver.renderer + "_" + driver.versionString + "/" + driver.profileMask.ToString()
+                        id         = key.id
+                        outputs    = key.layout.ColorAttachments |> Map.toList |> List.map (fun (id, att) -> string att.Name, (id, att.Format)) |> Map.ofList
+                        layered    = key.layout.PerLayerUniforms
+                        layerCount = key.layout.LayerCount
+                    }
+
+                let hash = shaderPickler.ComputeHash(key).Hash |> System.Guid
+                Path.combine [prefix; string hash + ".bin"]
+            )
+
+        let write (key : CodeCacheKey) (program : Program) =
+            tryGetCacheFile program.Context key
+            |> Option.iter (fun file ->
+                try
+                    let binary = Pickling.tryGetByteArray program
+                    binary |> Option.iter (File.writeAllBytes file)
+                with
+                | exn ->
+                    Log.warn "[GL] Failed to write to shader program file cache: %s" exn.Message
+            )
+
+        let tryRead (context : Context) (fixBindings : bool) (key : CodeCacheKey) =
+            tryGetCacheFile context key
+            |> Option.bind (fun file ->
+                if File.Exists file then
+                    try
+                        let data = File.readAllBytes file
+                        data |> Pickling.tryOfByteArray context fixBindings
+                    with
+                    | exn ->
+                        Log.warn "[GL] Failed to read from shader program file cache: %s" exn.Message
+                        None
+                else
+                    None
+            )
 
     type Aardvark.Rendering.GL.Context with
-
 
         member x.TryCompileShader(stage : Aardvark.Rendering.ShaderStage, code : string, entryPoint : string) =
             x |> ShaderCompiler.tryCompileShader stage code entryPoint
 
-
-        member x.TryCompileCompute(expectsRowMajorMatrices : bool, code : string) =
-            use t = x.ResourceLock
-
-            match x |> ShaderCompiler.tryCompileCompute code with
-                | Success shaders ->
-                    ResourceCounts.addProgram x
-                    let handle = GL.CreateProgram()
-                    GL.Check "could not create program"
-
-                    for s in shaders do
-                        GL.AttachShader(handle, s.Handle)
-                        GL.Check "could not attach shader to program"
-
-                    match x |> ShaderCompiler.tryLinkProgram expectsRowMajorMatrices handle code shaders 0 (fun _ _ -> []) with
-                        | Success program ->
-                            Success program
-                        | Error err ->
-                            Error err
-
-                | Error err ->
-                    Error err
-                    
         member x.TryGetProgramBinary(prog : Program) =
+            use __ = prog.Context.ResourceLock
+            Program.tryGetBinary prog
+
+        member x.TryCompileProgramCode(fboSignature : Map<string, int>, code : string) =
             use __ = x.ResourceLock
+            ProgramCompiler.tryCompileCode x fboSignature code
 
-            if GL.ARB_get_program_binary then
-                GL.GetError() |> ignore
+        member x.CompileProgramCode(fboSignature : Map<string, int>, code : string) =
+            match x.TryCompileProgramCode(fboSignature, code) with
+            | Success p -> p
+            | Error e ->
+                failwithf "[GL] shader compiler returned errors: %s" e
 
-                let mutable length = 0
-                GL.GetProgram(prog.Handle, GetProgramParameterName.ProgramBinaryLength, &length)
-                let err = GL.GetError()
-                if err <> ErrorCode.NoError then 
-                    None
-                else
-                    let data : byte[] = Array.zeroCreate length
-                    let mutable format = Unchecked.defaultof<BinaryFormat>
-                    GL.GetProgramBinary(prog.Handle, length, &length, &format, data)
-                    let err = GL.GetError()
-                    if err <> ErrorCode.NoError then 
-                        None
-                    else
-                        Some (format, data)
-            else
-                None
-
+        [<Obsolete>]
         member x.TryCompileProgramCode(fboSignature : Map<string, int>, expectsRowMajorMatrices : bool, code : string) =
-            Operators.using x.ResourceLock (fun _ ->
-                match x |> ShaderCompiler.tryCompileShaders true code with
-                    | Success shaders ->
-                        let firstTexture = 0
-                        ResourceCounts.addProgram x
-                        let handle = GL.CreateProgram()
-                        GL.Check "could not create program"
+            x.TryCompileProgramCode(fboSignature, code)
 
-                        for s in shaders do
-                            GL.AttachShader(handle, s.Handle)
-                            GL.Check "could not attach shader to program"
-
-                        match x |> ShaderCompiler.tryLinkProgram expectsRowMajorMatrices handle code shaders firstTexture (ShaderCompiler.setFragDataLocations fboSignature) with
-                            | Success program ->
-                                Success program
-                            | Error err ->
-                                let numberdLines = ShaderCodeReporting.withLineNumbers code
-                                Report.Line("Failed to link shader:\n{0}", numberdLines)
-                                Error err
-
-                    
-                    | Error err ->
-                        Error err
-            )
-
+        [<Obsolete>]
         member x.CompileProgramCode(fboSignature : Map<string, int>, expectsRowMajorMatrices : bool, code : string) =
-            match x.TryCompileProgramCode(fboSignature, expectsRowMajorMatrices, code) with
-                | Success p -> p
-                | Error e ->
-                    failwithf "[GL] shader compiler returned errors: %s" e
+            x.CompileProgramCode(fboSignature, code)
 
         member x.Delete(p : Program) =
             p.Dispose()
 
-        member x.TryCompileProgram(id : string, signature : IFramebufferSignature, code : Lazy<GLSL.GLSLShader>) =
-            x.TryCompileProgram(id, signature.Layout, code)
+        member x.TryCompileComputeProgram(id : string, code : string, iface : GLSL.GLSLProgramInterface) =
+            use __ = x.ResourceLock
 
-        member x.TryCompileProgram(id : string, layout : FramebufferLayout, code : Lazy<GLSL.GLSLShader>) : Error<_> =
+            let layout =
+                { Samples = 0
+                  ColorAttachments = Map.empty
+                  DepthStencilAttachment = None
+                  LayerCount = 0
+                  PerLayerUniforms = Set.empty }
 
             let key : CodeCacheKey =
                 { id = id; layout = layout }
 
             x.ShaderCache.GetOrAdd(key, fun key ->
+                match key |> FileCache.tryRead x false with
+                | Some program ->
+                    Success program
 
-                let fixBindings (p : Program) (iface : FShade.GLSL.GLSLProgramInterface) = 
-                    if p.Context.FShadeBackend.Config.bindingMode = FShade.GLSL.BindingMode.None then
-                        let uniformBuffers =
-                            let mutable b = 0
-                            iface.uniformBuffers |> MapExt.map (fun name ub ->
-                                let bi = GL.GetUniformBlockIndex(p.Handle, name)
-                                let binding = b
-                                b <- b + 1
-                                GL.UniformBlockBinding(p.Handle, bi, binding)
-                                { ub with ubBinding = binding }
-                            )
+                | _ ->
+                    match code |> ProgramCompiler.tryCompileCompute x iface with
+                    | Success program ->
+                        program |> FileCache.write key
+                        Success program
 
-                        let samplers =
-                            let mutable b = 0
-                            iface.samplers |> MapExt.map (fun name sam ->
-                                let l = GL.GetUniformLocation(p.Handle, name)
-                                let binding = b
-                                b <- b + 1
-                                GL.ProgramUniform1(p.Handle, l, binding)
-                                { sam with samplerBinding = binding }
-                            )
-                            
-                        let images =
-                            let mutable b = 0
-                            iface.images |> MapExt.map (fun name img ->
-                                let l = GL.GetUniformLocation(p.Handle, name)
-                                let binding = b
-                                b <- b + 1
-                                GL.ProgramUniform1(p.Handle, l, binding)
-                                { img with imageBinding = binding }
-                            )
+                    | res ->
+                        res
+            )
 
-                        let storageBuffers =
-                            let mutable b = 0
-                            iface.storageBuffers |> MapExt.map (fun name sb ->
-                                let bi = GL.GetProgramResourceIndex(p.Handle, ProgramInterface.ShaderStorageBlock, name)
-                                let binding = b
-                                b <- b + 1
-                                GL.ShaderStorageBlockBinding(p.Handle, bi, binding)
-                                { sb with ssbBinding = binding }
-                            )
+        [<Obsolete>]
+        member x.TryCompileCompute(expectsRowMajorMatrices : bool, code : string) =
+            x.TryCompileComputeProgram(code, code, Unchecked.defaultof<_>)
 
+        member x.TryCompileProgram(id : string, signature : IFramebufferSignature, code : Lazy<GLSL.GLSLShader>) =
+            x.TryCompileProgram(id, signature.Layout, code)
 
+        member x.TryCompileProgram(id : string, layout : FramebufferLayout, shader : Lazy<GLSL.GLSLShader>) : Error<_> =
+            let key : CodeCacheKey =
+                { id = id; layout = layout }
 
-                        { iface with 
-                            uniformBuffers = uniformBuffers 
-                            samplers = samplers
-                            storageBuffers = storageBuffers
-                            images = images
-                        }
-                    else
-                        iface
+            x.ShaderCache.GetOrAdd(key, fun key ->
+                match key |> FileCache.tryRead x true with
+                | Some program ->
+                    Success program
 
-                let (file : string, content : Option<ShaderCacheEntry>) =
-                    match x.ShaderCachePath with    
-                        | Some cachePath ->
+                | _ ->
+                    let shader = shader.Value
+                    let outputs = shader.iface.outputs |> List.map (fun p -> p.paramName, p.paramLocation) |> Map.ofList
 
-                            // NOTE: contex.Diver represent information obtained by primary context -> possible that resource context have been created differently -> use driver information from actual context
-                            let driver = match x.CurrentContextHandle with
-                                            | ValueSome ch -> ch.Driver
-                                            | _ -> Log.warn "context not current!!"
-                                                   x.Driver
-                            
-                            let key = 
-                                {   // NOTE: Profile mask can be None, Core or Compatibility, shaders are not necessary compatible between those
-                                    device      = driver.vendor + "_" + driver.renderer + "_" + driver.versionString + "/" + driver.profileMask.ToString() 
-                                    id          = key.id
-                                    outputs     = key.layout.ColorAttachments |> Map.toList |> List.map (fun (id, att) -> string att.Name, (id, att.Format)) |> Map.ofList
-                                    layered     = key.layout.PerLayerUniforms
-                                    layerCount  = key.layout.LayerCount
-                                }
+                    match shader |> ProgramCompiler.tryCompile x outputs with
+                    | Success program ->
+                        program |> FileCache.write key
+                        Success program
 
-                            let hash = shaderPickler.ComputeHash(key).Hash |> System.Guid
-                            let file = System.IO.Path.Combine(cachePath, string hash + ".bin")
-
-                            if System.IO.File.Exists file then
-                                try file, shaderPickler.UnPickle (File.readAllBytes file) |> Some
-                                with _ -> file, None
-                            else
-                                file, None
-                        | _ ->
-                            "", None
-
-                match content with
-                    | Some c ->
-                        
-                        let prog = GL.CreateProgram()
-                        ResourceCounts.addProgram x
-                        GL.ProgramBinary(prog, c.format, c.binary, c.binary.Length)
-                        GL.Check "could not create program from binary"
-                        
-                        let linkStatus = GL.GetProgram(prog, GetProgramParameterName.LinkStatus)
-                        if linkStatus = 0 then // GL_False
-                            let info = GL.GetProgramInfoLog(prog)
-                            GL.DeleteProgram(prog)
-                            Log.warn "Error Loading Program Binary: Format=%A\nInfo: %s" c.format info
-
-                            Log.warn "Fallback: compiling shader from code"
-                            let code = code.Value
-                            let outputs = code.iface.outputs |> List.map (fun p -> p.paramName, p.paramLocation) |> Map.ofList
-                            match x.TryCompileProgramCode(outputs, true, code.code) with
-                            | Success prog ->
-                                let iface = fixBindings prog code.iface
-                                let prog = { prog with Interface = iface }
-                                Success prog
-                            | Error e ->
-                                Error e
-
-                        else
-                            let program = 
-                                {
-                                    Context = x
-                                    Code = c.code
-                                    Handle = prog
-                                    HasTessellation = c.hasTess
-                                    SupportedModes = c.modes
-                                    Interface = c.iface
-                                }
-                                
-                            let iface = fixBindings program c.iface
-                            Success { program with Interface = iface }
-
-                    | _ -> 
-                        let code = code.Value
-                        let outputs = code.iface.outputs |> List.map (fun p -> p.paramName, p.paramLocation) |> Map.ofList
-                        match x.TryCompileProgramCode(outputs, true, code.code) with
-                            | Success prog ->
-                                let iface = fixBindings prog code.iface
-                                let prog = { prog with Interface = iface }
-                                
-                                //for (name, b) in MapExt.toSeq code.iface.uniformBuffers do
-                                //    b.ubBinding
-
-                                match x.ShaderCachePath with    
-                                    | Some cachePath ->
-                                        match x.TryGetProgramBinary prog with
-                                            | Some (format, binary) ->
-                                                let entry =
-                                                    shaderPickler.Pickle {
-                                                        hasTess = prog.HasTessellation
-                                                        iface = code.iface
-                                                        format = format
-                                                        binary = binary
-                                                        code = code.code
-                                                        modes = prog.SupportedModes
-                                                    }
-                                                File.writeAllBytes file entry
-
-                                                #if PICKLERTEST
-                                                let test = shaderPickler.UnPickle (File.readAllBytes file)
-
-                                                Log.line "TEST"
-
-                                                let file = test.iface.samplers |> MapExt.toArray |> Array.choose (fun (x, y) ->
-                                                                if y.samplerTextures |> List.length > 1 then
-                                                                    let sam0 = y.samplerTextures |> List.head |> snd
-                                                                    let samEqual = y.samplerTextures |> List.skip 1 |> List.forall (fun s -> Object.ReferenceEquals(sam0, snd s))
-                                                                    Log.line "ArraySampler Equal=%A (Deserialize)" samEqual
-                                                                    Some samEqual
-                                                                else
-                                                                    None
-                                                            )
-
-                                                let orig = code.iface.samplers |> MapExt.toArray |> Array.choose (fun (x, y)->
-                                                                if y.samplerTextures |> List.length > 1 then
-                                                                    let sam0 = y.samplerTextures |> List.head |> snd
-                                                                    let samEqual = y.samplerTextures |> List.skip 1 |> List.forall (fun s -> Object.ReferenceEquals(sam0, snd s))
-                                                                    Log.line "ArraySampler Equal=%A (Original)" samEqual
-                                                                    Some samEqual
-                                                                else
-                                                                    None
-                                                    )
-
-                                                if orig.Length <> file.Length then
-                                                    failwith "FAILFAIL"
-                                                else
-                                                    let passt = Array.compareWith (fun x y -> if x = y then 0 else 1) orig file
-                                                    if passt <> 0 then
-                                                        Log.warn "No longer same reference equality !!"
-
-                                                #endif
-
-                                                ()
-
-                                            | None ->
-                                                ()
-                                    | _ ->
-                                        ()
-
-                                Success prog
-                            | Error e ->
-                                Error e
+                    | res ->
+                        res
             )
 
         member x.TryCreateProgram(signature : IFramebufferSignature, surface : Surface, topology : IndexedGeometryMode) : Error<GLSL.GLSLProgramInterface * aval<Program>> =
             match surface with
-                | Surface.FShadeSimple effect ->
-                    let key : StaticShaderCacheKey =
-                        {
-                            effect = effect
-                            layout = signature.Layout
-                            topology = topology
-                            deviceCount = signature.Runtime.DeviceCount
-                        }
+            | Surface.FShadeSimple effect ->
+                let key : StaticShaderCacheKey =
+                    {
+                        effect = effect
+                        layout = signature.Layout
+                        topology = topology
+                        deviceCount = signature.Runtime.DeviceCount
+                    }
 
-                    x.ShaderCache.GetOrAdd(key, fun key ->
-                        let glsl = 
-                            lazy (
-                                let module_ = key.layout.Link(key.effect, key.deviceCount, Range1d(-1.0, 1.0), false, key.topology)
-                                ModuleCompiler.compileGLSL x.FShadeBackend module_
-                            )
-
-                        match x.TryCompileProgram(key.effect.Id, key.layout, glsl) with
-                            | Success (prog) ->
-                                Success (prog.Interface, AVal.constant prog)
-                            | Error e ->
-                                Error e
+                x.ShaderCache.GetOrAdd(key, fun key ->
+                    let glsl =
+                        lazy (
+                            let module_ = key.layout.Link(key.effect, key.deviceCount, Range1d(-1.0, 1.0), false, key.topology)
+                            ModuleCompiler.compileGLSL x.FShadeBackend module_
                         )
 
-                | Surface.FShade create ->
-                    x.ShaderCache.GetOrAdd(create, fun _ ->
-                        let (inputLayout,b) = create (signature.EffectConfig(Range1d(-1.0, 1.0), false))
+                    match x.TryCompileProgram(key.effect.Id, key.layout, glsl) with
+                    | Success (prog) ->
+                        Success (prog.Interface, AVal.constant prog)
+                    | Error e ->
+                        Error e
+                )
 
-                        let initial = AVal.force b
-                        let effect = initial.userData |> unbox<Effect>
-                        let layoutHash = shaderPickler.ComputeHash(inputLayout).Hash |> Convert.ToBase64String
+            | Surface.FShade create ->
+                x.ShaderCache.GetOrAdd(create, fun _ ->
+                    let (inputLayout,b) = create (signature.EffectConfig(Range1d(-1.0, 1.0), false))
 
-                        let iface =
-                            match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend initial)) with
-                            | Success prog ->
-                                let iface = prog.Interface
-                                { iface with
-                                    samplers = iface.samplers |> MapExt.map (fun _ sam ->
-                                        match MapExt.tryFind sam.samplerName inputLayout.eTextures with
-                                        | Some infos -> { sam with samplerTextures = infos }
-                                        | None -> sam
-                                    )
-                                }
+                    let initial = AVal.force b
+                    let effect = initial.userData |> unbox<Effect>
+                    let layoutHash = shaderPickler.ComputeHash(inputLayout).Hash |> Convert.ToBase64String
+
+                    let iface =
+                        match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend initial)) with
+                        | Success prog ->
+                            let iface = prog.Interface
+                            { iface with
+                                samplers = iface.samplers |> MapExt.map (fun _ sam ->
+                                    match MapExt.tryFind sam.samplerName inputLayout.eTextures with
+                                    | Some infos -> { sam with samplerTextures = infos }
+                                    | None -> sam
+                                )
+                            }
+                        | Error e ->
+                            failwithf "[GL] shader compiler returned errors: %s" e
+
+                    let changeableProgram =
+                        b |> AVal.map (fun m ->
+                            let effect = m.userData |> unbox<Effect>
+                            match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend m)) with
+                            | Success p -> p
                             | Error e ->
-                                failwithf "[GL] shader compiler returned errors: %s" e
+                                Log.error "[GL] shader compiler returned errors: %A" e
+                                failwithf "[GL] shader compiler returned errors: %A" e
+                        )
 
-                        let changeableProgram =
-                            b |> AVal.map (fun m ->
-                                let effect = m.userData |> unbox<Effect>
-                                match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend m)) with
-                                | Success p -> p
-                                | Error e ->
-                                    Log.error "[GL] shader compiler returned errors: %A" e
-                                    failwithf "[GL] shader compiler returned errors: %A" e
-                            )
+                    Success (iface, changeableProgram)
+                )
 
-                        Success (iface, changeableProgram)
-                    )
+            | Surface.None ->
+                Error "[GL] empty shader"
 
-                | Surface.None ->
-                    Error "[GL] empty shader"
-
-                | Surface.Backend surface ->
-                    match surface with
-                        | :? Program as p -> 
-                            Success (p.Interface, AVal.constant p)
-                        | _ ->
-                            Error (sprintf "[GL] bad surface: %A (hi lui)" surface)
+            | Surface.Backend surface ->
+                match surface with
+                | :? Program as p ->
+                    Success (p.Interface, AVal.constant p)
+                | _ ->
+                    Error (sprintf "[GL] bad surface: %A (hi lui)" surface)
 
         member x.CreateProgram(signature : IFramebufferSignature, surface : Surface, topology : IndexedGeometryMode) : GLSL.GLSLProgramInterface * aval<Program> =
             match x.TryCreateProgram(signature, surface, topology) with
-                | Success t -> t
-                | Error e ->
-                    Log.error "[GL] shader compiler returned errors: %A" e
-                    failwithf "[GL] shader compiler returned errors: %A" e
-                
+            | Success t -> t
+            | Error e ->
+                Log.error "[GL] shader compiler returned errors: %A" e
+                failwithf "[GL] shader compiler returned errors: %A" e
