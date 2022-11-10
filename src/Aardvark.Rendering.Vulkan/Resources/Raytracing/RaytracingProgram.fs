@@ -18,23 +18,26 @@ type RaytracingProgram internal (device : Device,
                                  pipelineLayout : PipelineLayout,
                                  shaderBindingTableLayout : FShade.ShaderBindingTableLayout,
                                  effect : FShade.RaytracingEffect,
-                                 stages : ShaderGroup<RaytracingStageInfo> list) =
+                                 stages : ShaderGroup<RaytracingStageInfo> list,
+                                 glsl : string) =
     inherit CachedResource(device)
 
     new (device : Device, pipelineLayout : PipelineLayout,
          shaderBindingTableLayout : FShade.ShaderBindingTableLayout,
-         stages : ShaderGroup<RaytracingStageInfo> list) =
-        new RaytracingProgram(device, pipelineLayout, shaderBindingTableLayout, Unchecked.defaultof<_>, stages)
+         stages : ShaderGroup<RaytracingStageInfo> list,
+         glsl : string) =
+        new RaytracingProgram(device, pipelineLayout, shaderBindingTableLayout, Unchecked.defaultof<_>, stages, glsl)
 
     [<Obsolete>]
     new (device : Device, effect : FShade.RaytracingEffect,
          stages : ShaderGroup<RaytracingStageInfo> list,
          pipelineLayout : PipelineLayout) =
-        new RaytracingProgram(device, pipelineLayout, effect.ShaderBindingTableLayout, effect, stages)
+        new RaytracingProgram(device, pipelineLayout, effect.ShaderBindingTableLayout, effect, stages, "")
 
     member x.Groups = stages
     member x.ShaderBindingTableLayout = shaderBindingTableLayout
     member x.PipelineLayout = pipelineLayout
+    member x.Glsl = glsl
 
     [<Obsolete>]
     member x.Effect = effect
@@ -64,7 +67,7 @@ module RaytracingProgram =
                 failwithf "Invalid raytracing shader slot (stage = %A, name = %A, ray = %A)" stage name ray
 
 
-    let private create (device : Device) (layout : FShade.ShaderBindingTableLayout) (stages : ShaderGroup<RaytracingStageInfo> list) =
+    let private create (device : Device) (glsl : string) (layout : FShade.ShaderBindingTableLayout) (stages : ShaderGroup<RaytracingStageInfo> list) =
         let shaders =
             stages
             |> List.collect ShaderGroup.toList
@@ -73,7 +76,7 @@ module RaytracingProgram =
 
         let pipelineLayout = device.CreatePipelineLayout(shaders, 1, Set.empty)
 
-        new RaytracingProgram(device, pipelineLayout, layout, stages)
+        new RaytracingProgram(device, pipelineLayout, layout, stages, glsl)
 
     let private compileEffect (device : Device) (effect : FShade.RaytracingEffect) =
         let toGeneralGroups (map : Map<Symbol, FShade.Shader>) =
@@ -116,7 +119,7 @@ module RaytracingProgram =
                 { Index = uint32 (index - 1); Module = mdl }
             ))
 
-        stages |> create device effect.ShaderBindingTableLayout
+        stages |> create device glsl.code effect.ShaderBindingTableLayout
 
 
     module private FileCache =
@@ -135,7 +138,8 @@ module RaytracingProgram =
 
                 type RaytracingProgramBinary =
                     { Groups : ShaderGroupsBinary
-                      Layout : FShade.ShaderBindingTableLayout }
+                      Layout : FShade.ShaderBindingTableLayout
+                      Glsl   : string }
 
                 module RaytracingStageInfo =
 
@@ -163,11 +167,12 @@ module RaytracingProgram =
 
                     let toBinary (program : RaytracingProgram) =
                         { Groups = ShaderGroupsBinary.ofStageInfos program.Groups
-                          Layout = program.ShaderBindingTableLayout }
+                          Layout = program.ShaderBindingTableLayout
+                          Glsl   = program.Glsl }
 
                     let ofBinary (device : Device) (binary : RaytracingProgramBinary) =
                         let stages = binary.Groups |> ShaderGroupsBinary.toStageInfos device
-                        stages |> create device binary.Layout
+                        stages |> create device binary.Glsl binary.Layout
 
 
             let toByteArray (program : RaytracingProgram) =
