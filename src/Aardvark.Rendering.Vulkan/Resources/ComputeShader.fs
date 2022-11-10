@@ -28,10 +28,12 @@ type ComputeShader =
         val public TextureNames : Map<string * int, string>
         val public Samplers : Map<string * int, Sampler>
         val public GroupSize : V3i
-        val public Interface : FShade.GLSL.GLSLShaderInterface
         val public GLSL : Option<string>
 
         member x.Handle = x.handle
+
+        member x.Interface =
+            x.ShaderModule.ProgramInterface.shaders.[ShaderSlot.Compute]
 
         interface IComputeShader with
             member x.Runtime = x.Device.Runtime :> IComputeRuntime
@@ -46,16 +48,16 @@ type ComputeShader =
             x.Layout.Dispose()
             x.ShaderModule.Dispose()
 
-        new(d,s,l,p,tn,sd,gs,glsl) =
-            { inherit CachedResource(d);
-              handle = p;
-              ShaderModule = s;
-              Layout = l;
-              TextureNames = tn;
-              Samplers = sd;
-              GroupSize = gs;
-              Interface = s.Interface;
-              GLSL = glsl }
+        new (device : Device, handle : VkPipeline, shader : ShaderModule, layout : PipelineLayout,
+             textures : Map<string * int, string>, samplers : Map<string * int, Sampler>, groupSize : V3i, glsl : Option<string>) =
+            { inherit CachedResource(device)
+              handle       = handle
+              ShaderModule = shader
+              Layout       = layout
+              TextureNames = textures
+              Samplers     = samplers
+              GroupSize    = groupSize
+              GLSL         = glsl }
     end
 
 type BindingReference =
@@ -939,7 +941,7 @@ module ComputeShader =
         ShaderProgram.pickler.Pickle( 
             (
                 shader.ShaderModule.SpirV,
-                shader.Interface,
+                shader.ShaderModule.ProgramInterface,
                 shader.GroupSize,
                 shader.GLSL
             ) 
@@ -947,7 +949,7 @@ module ComputeShader =
 
     let private tryOfByteArray (data : byte[]) (device : Device) =
         try
-            let (spirv : byte[], iface : FShade.GLSL.GLSLShaderInterface, groupSize : V3i, glsl : Option<string>) = 
+            let (spirv : byte[], iface : FShade.GLSL.GLSLProgramInterface, groupSize : V3i, glsl : Option<string>) = 
                 ShaderProgram.pickler.UnPickle data
              
             let module_ =
@@ -980,8 +982,9 @@ module ComputeShader =
                     |> check "could not create compute pipeline"
 
                 let textureNames =
-                    iface.shaderSamplers |> Seq.collect (fun samName ->
-                        let sam = iface.program.samplers.[samName]
+                    iface.shaders.[ShaderSlot.Compute].shaderSamplers
+                    |> Seq.collect (fun samName ->
+                        let sam = iface.samplers.[samName]
                         sam.samplerTextures |> Seq.mapi (fun i (texName, state) ->
                             (samName, i), texName
                         )
@@ -989,15 +992,16 @@ module ComputeShader =
                     |> Map.ofSeq
 
                 let samplers =
-                    iface.shaderSamplers |> Seq.collect (fun samName ->
-                        let sam = iface.program.samplers.[samName]
+                    iface.shaders.[ShaderSlot.Compute].shaderSamplers
+                    |> Seq.collect (fun samName ->
+                        let sam = iface.samplers.[samName]
                         sam.samplerTextures |> Seq.mapi (fun i (_, state) ->
                             (samName, i), device.CreateSampler state.SamplerState
                         )
                     )
                     |> Map.ofSeq
                 
-                return new ComputeShader(device, module_, layout, !!pHandle, textureNames, samplers, groupSize, glsl)
+                return new ComputeShader(device, !!pHandle, module_, layout, textureNames, samplers, groupSize, glsl)
                     |> LoadResult.Loaded
             }
         with _ ->
@@ -1069,13 +1073,11 @@ module ComputeShader =
             let! pHandle = VkPipeline.Null
             VkRaw.vkCreateComputePipelines(device.Handle, VkPipelineCache.Null, 1u, pPipelineInfo, NativePtr.zero, pHandle)
                 |> check "could not create compute pipeline"
-
                
             let samplers =
-                shader.csSamplerStates |> Map.map (fun _ s -> device.CreateSampler s.SamplerState)
-                
+                shader.csSamplerStates |> Map.map (fun _ s -> device.CreateSampler s.SamplerState)             
 
-            return new ComputeShader(device, sm, layout, !!pHandle, shader.csTextureNames, samplers, shader.csLocalSize, Some glsl.code)
+            return new ComputeShader(device, !!pHandle, sm, layout, shader.csTextureNames, samplers, shader.csLocalSize, Some glsl.code)
         }
 
     let ofFShade (shader : FShade.ComputeShader) (device : Device) =

@@ -281,7 +281,7 @@ module ShaderProgram =
                 | Some binary, log ->
                     let binary = GLSLang.GLSLang.optimizeDefault binary
                     logs.[slot] <- log
-                    slot, binary, iface.shaders.[slot]
+                    slot, binary, iface
                 | None, err ->
                     Log.error "[Vulkan] %A shader compilation failed: %A" slot err
                     failf "%A shader compilation failed: %A" slot err
@@ -548,8 +548,7 @@ module ShaderProgram =
                 data.code
                 |> Map.toArray
                 |> Array.map (fun (slot, arr) ->
-                    let iface = data.iface.shaders.[slot]
-                    device.CreateShaderModule(slot, arr, iface)
+                    device.CreateShaderModule(slot, arr, data.iface)
                 )
 
             Report.Begin(4, "Interface")

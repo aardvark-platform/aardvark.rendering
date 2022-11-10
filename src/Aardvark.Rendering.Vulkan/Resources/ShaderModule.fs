@@ -10,8 +10,11 @@ type ShaderModule =
     class
         inherit Resource<VkShaderModule>
         val public Slot : FShade.ShaderSlot
-        val public Interface : FShade.GLSL.GLSLShaderInterface
+        val public ProgramInterface : FShade.GLSL.GLSLProgramInterface
         val public SpirV : byte[]
+
+        member x.Interface =
+            x.ProgramInterface.shaders[x.Slot]
 
         member x.Stage =
             ShaderStage.ofFShade x.Slot.Stage
@@ -21,14 +24,17 @@ type ShaderModule =
                 VkRaw.vkDestroyShaderModule(x.Device.Handle, x.Handle, NativePtr.zero)
                 x.Handle <- VkShaderModule.Null
 
-        new(device : Device, handle : VkShaderModule, slot, iface, spv) =
-            { inherit Resource<_>(device, handle); Slot = slot; Interface = iface; SpirV = spv }
+        new(device : Device, handle : VkShaderModule, slot : FShade.ShaderSlot, iface : FShade.GLSL.GLSLProgramInterface, spirv : byte[]) =
+            { inherit Resource<_>(device, handle)
+              Slot = slot
+              ProgramInterface = iface
+              SpirV = spirv }
     end
 
 type internal ShaderModuleBinary =
     {
         Slot      : FShade.ShaderSlot
-        Interface : FShade.GLSL.GLSLShaderInterface
+        Interface : FShade.GLSL.GLSLProgramInterface
         SpirV     : byte[]
     }
 
@@ -74,7 +80,7 @@ module ShaderModule =
         | Some binary, _ ->
             let binary = GLSLang.GLSLang.optimizeDefault binary
             let handle = device |> createRaw binary
-            let result = new ShaderModule(device, handle, slot, siface, binary)
+            let result = new ShaderModule(device, handle, slot, info.iface, binary)
             result
         | None, err ->
             Log.error "[Vulkan] %A shader compilation failed: %A" slot err
@@ -83,14 +89,14 @@ module ShaderModule =
     let ofGLSL (slot : FShade.ShaderSlot) (info : FShade.GLSL.GLSLShader) (device : Device) =
         ofGLSLWithTarget GLSLang.Target.SPIRV_1_0 slot info device
 
-    let ofBinaryWithInfo (slot  : FShade.ShaderSlot) (info : FShade.GLSL.GLSLShaderInterface) (binary : byte[]) (device : Device) =
+    let ofBinaryWithInfo (slot : FShade.ShaderSlot) (info : FShade.GLSL.GLSLProgramInterface) (binary : byte[]) (device : Device) =
         let handle = device |> createRaw binary
         let result = new ShaderModule(device, handle, slot, info, binary)
         result
 
     let internal toBinary (shader : ShaderModule) =
         { Slot      = shader.Slot
-          Interface = shader.Interface
+          Interface = shader.ProgramInterface
           SpirV     = shader.SpirV }
 
     let internal ofBinary (device : Device) (binary : ShaderModuleBinary) =
@@ -101,5 +107,5 @@ module ShaderModule =
 type ContextShaderModuleExtensions private() =
 
     [<Extension>]
-    static member inline CreateShaderModule(this : Device, slot : FShade.ShaderSlot, spirv : byte[], info : FShade.GLSL.GLSLShaderInterface) =
+    static member inline CreateShaderModule(this : Device, slot : FShade.ShaderSlot, spirv : byte[], info : FShade.GLSL.GLSLProgramInterface) =
         this |> ShaderModule.ofBinaryWithInfo slot info spirv

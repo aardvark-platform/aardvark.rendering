@@ -106,15 +106,16 @@ module PipelineLayout =
 
         for shader in shaders do
             let flags = VkShaderStageFlags.ofShaderStage shader.Stage 
-            let iface = shader.Interface
+            let iface = shader.ProgramInterface
+            let siface = shader.Interface
 
             match shader.Stage with
-                | ShaderStage.Vertex -> inputs <- iface.shaderInputs
-                | ShaderStage.Fragment -> outputs <- iface.shaderOutputs
+                | ShaderStage.Vertex -> inputs <- siface.shaderInputs
+                | ShaderStage.Fragment -> outputs <- siface.shaderOutputs
                 | _ -> ()
 
-            for block in iface.shaderUniformBuffers do
-                let block = iface.program.uniformBuffers.[block]
+            for block in siface.shaderUniformBuffers do
+                let block = iface.uniformBuffers.[block]
                 setCount <- max setCount (block.ubSet + 1)
                 let key = (block.ubSet, block.ubBinding)
                 let referenced = 
@@ -123,8 +124,8 @@ module PipelineLayout =
                         | _ -> VkShaderStageFlags.None  
                 uniformBlocks.[key] <- (block, referenced ||| flags)
                          
-            for block in iface.shaderStorageBuffers do
-                let block = iface.program.storageBuffers.[block]
+            for block in siface.shaderStorageBuffers do
+                let block = iface.storageBuffers.[block]
                 setCount <- max setCount (block.ssbSet + 1)
                 let key = (block.ssbSet, block.ssbBinding)
                 let referenced = 
@@ -133,8 +134,8 @@ module PipelineLayout =
                         | _ -> VkShaderStageFlags.None  
                 storageBlocks.[key] <- (block, referenced ||| flags)
                                    
-            for tex in iface.shaderSamplers do
-                let tex = iface.program.samplers.[tex]
+            for tex in siface.shaderSamplers do
+                let tex = iface.samplers.[tex]
                 setCount <- max setCount (tex.samplerSet + 1)
                 let key = (tex.samplerSet, tex.samplerBinding)
                 let referenced = 
@@ -144,8 +145,8 @@ module PipelineLayout =
                                     
                 textures.[key] <- (tex, referenced ||| flags)
 
-            for img in iface.shaderImages do
-                let img = iface.program.images.[img]
+            for img in siface.shaderImages do
+                let img = iface.images.[img]
                 setCount <- max setCount (img.imageSet + 1)
                 let key = (img.imageSet, img.imageBinding)
                 let referenced = 
@@ -155,8 +156,8 @@ module PipelineLayout =
                                     
                 images.[key] <- (img, referenced ||| flags)
 
-            for accel in iface.shaderAccelerationStructures do
-                let accel = iface.program.accelerationStructures.[accel]
+            for accel in siface.shaderAccelerationStructures do
+                let accel = iface.accelerationStructures.[accel]
                 setCount <- max setCount (accel.accelSet + 1)
                 let key = (accel.accelSet, accel.accelBinding)
                 let referenced = 
