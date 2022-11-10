@@ -174,20 +174,15 @@ module RaytracingProgram =
                 let binary = RaytracingProgram.toBinary program
                 ShaderProgram.pickler.Pickle binary
 
-            let tryOfByteArray (device : Device) (reference : RaytracingProgram option) (data : byte[]) =
-                try
-                    let binary : RaytracingProgramBinary = ShaderProgram.pickler.UnPickle data
+            let ofByteArray (device : Device) (reference : RaytracingProgram option) (data : byte[]) =
+                let binary : RaytracingProgramBinary = ShaderProgram.pickler.UnPickle data
 
-                    reference |> Option.iter (fun program ->
-                        if binary <> RaytracingProgram.toBinary program then
-                            failwith "differs from recompiled reference"
-                    )
+                reference |> Option.iter (fun program ->
+                    if binary <> RaytracingProgram.toBinary program then
+                        failwith "differs from recompiled reference"
+                )
 
-                    Some <| RaytracingProgram.ofBinary device binary
-
-                with exn ->
-                    Log.warn "[Vulkan] Failed to unpickle raytracing program: %s" exn.Message
-                    None
+                RaytracingProgram.ofBinary device binary
 
 
         let private tryGetCacheFile (device : Device) (id : string) =
@@ -210,12 +205,12 @@ module RaytracingProgram =
                                 None
 
                         try
-                            data |> Pickling.tryOfByteArray device reference
+                            data |> Pickling.ofByteArray device reference |> Some
                         finally
                             reference |> Option.iter Disposable.dispose
                     with
                     | exn ->
-                        Log.warn "[Vulkan] Failed to read from raytracing program file cache: %s" exn.Message
+                        Log.warn "[Vulkan] Failed to read from raytracing program file cache '%s': %s" file exn.Message
                         None
                 else
                     None
@@ -229,7 +224,7 @@ module RaytracingProgram =
                     binary |> File.writeAllBytes file
                 with
                 | exn ->
-                    Log.warn "[Vulkan] Failed to write to raytracing program file cache: %s" exn.Message
+                    Log.warn "[Vulkan] Failed to write to raytracing program file cache '%s': %s" file exn.Message
             )
 
 

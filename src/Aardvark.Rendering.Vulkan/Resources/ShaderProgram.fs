@@ -583,11 +583,12 @@ module ShaderProgram =
                         Report.End(4) |> ignore
                         Some c
                     | None ->
-                        Log.warn "[Vulkan] bad shader cache %s" (Path.GetFileName file)
+                        Log.warn "[Vulkan] bad shader cache '%s'" file
                         Report.End(4) |> ignore
                         None
-            with _ ->
+            with exn ->
                 Report.End(4) |> ignore
+                Log.warn "[Vulkan] Failed to read from shader program file cache '%s': %s" file exn.Message
                 None
         else
             None
@@ -596,8 +597,8 @@ module ShaderProgram =
         try
             let data = toByteArray program
             File.WriteAllBytes(file, data)
-        with _ ->
-            ()
+        with exn ->
+            Log.warn "[Vulkan] Failed to write to shader program file cache '%s': %s" file exn.Message
 
     let ofModule (module_ : FShade.Imperative.Module) (device : Device) =
         device.GetCached(moduleCache, module_, fun module_ ->
