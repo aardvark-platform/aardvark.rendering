@@ -600,13 +600,12 @@ module ProgramExtensions =
                             entry.iface
 
                     ResourceCounts.addProgram context
-                    Some { program with Interface = iface }
+                    { program with Interface = iface }
 
                 with
-                | exn ->
-                    Log.warn "[GL] failed to create shader program from cache entry: %s" exn.Message
+                | _ ->
                     GL.DeleteProgram program
-                    None
+                    reraise()
 
     module private FileCache =
         open System.IO
@@ -625,13 +624,9 @@ module ProgramExtensions =
                     }
                 )
 
-            let tryOfByteArray (context : Context) (fixBindings : bool) (data : byte[]) =
-                try
-                    let entry : ShaderCacheEntry = shaderPickler.UnPickle data
-                    Program.ofShaderCacheEntry context fixBindings entry
-                with exn ->
-                    Log.warn "[GL] Failed to unpickle shader program: %s" exn.Message
-                    None
+            let ofByteArray (context : Context) (fixBindings : bool) (data : byte[]) =
+                let entry : ShaderCacheEntry = shaderPickler.UnPickle data
+                Program.ofShaderCacheEntry context fixBindings entry
 
         let private tryGetCacheFile (context : Context) (key : CodeCacheKey) =
             context.ShaderCachePath |> Option.map (fun prefix ->
@@ -666,7 +661,7 @@ module ProgramExtensions =
                     binary |> Option.iter (File.writeAllBytes file)
                 with
                 | exn ->
-                    Log.warn "[GL] Failed to write to shader program file cache: %s" exn.Message
+                    Log.warn "[GL] Failed to write to shader program file cache '%s': %s" file exn.Message
             )
 
         let tryRead (context : Context) (fixBindings : bool) (key : CodeCacheKey) =
@@ -675,10 +670,10 @@ module ProgramExtensions =
                 if File.Exists file then
                     try
                         let data = File.readAllBytes file
-                        data |> Pickling.tryOfByteArray context fixBindings
+                        Some <| Pickling.ofByteArray context fixBindings data
                     with
                     | exn ->
-                        Log.warn "[GL] Failed to read from shader program file cache: %s" exn.Message
+                        Log.warn "[GL] Failed to read from shader program file cache '%s': %s" file exn.Message
                         None
                 else
                     None
