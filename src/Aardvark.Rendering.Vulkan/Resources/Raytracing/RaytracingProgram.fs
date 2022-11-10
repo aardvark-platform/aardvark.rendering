@@ -14,33 +14,20 @@ type RaytracingStageInfo =
     { Index  : uint32
       Module : ShaderModule }
 
-type RaytracingProgram internal (device : Device,
-                                 pipelineLayout : PipelineLayout,
-                                 shaderBindingTableLayout : FShade.ShaderBindingTableLayout,
-                                 effect : FShade.RaytracingEffect,
-                                 stages : ShaderGroup<RaytracingStageInfo> list,
-                                 glsl : string) =
+type RaytracingProgram (device : Device,
+                        pipelineLayout : PipelineLayout,
+                        shaderBindingTableLayout : FShade.ShaderBindingTableLayout,
+                        stages : ShaderGroup<RaytracingStageInfo> list,
+                        shader : FShade.GLSL.GLSLShader) =
     inherit CachedResource(device)
-
-    new (device : Device, pipelineLayout : PipelineLayout,
-         shaderBindingTableLayout : FShade.ShaderBindingTableLayout,
-         stages : ShaderGroup<RaytracingStageInfo> list,
-         glsl : string) =
-        new RaytracingProgram(device, pipelineLayout, shaderBindingTableLayout, Unchecked.defaultof<_>, stages, glsl)
-
-    [<Obsolete>]
-    new (device : Device, effect : FShade.RaytracingEffect,
-         stages : ShaderGroup<RaytracingStageInfo> list,
-         pipelineLayout : PipelineLayout) =
-        new RaytracingProgram(device, pipelineLayout, effect.ShaderBindingTableLayout, effect, stages, "")
 
     member x.Groups = stages
     member x.ShaderBindingTableLayout = shaderBindingTableLayout
     member x.PipelineLayout = pipelineLayout
-    member x.Glsl = glsl
+    member x.Shader = shader
 
     [<Obsolete>]
-    member x.Effect = effect
+    member x.Glsl = shader.code
 
     [<Obsolete("Use PipelineLayout")>]
     member x.Layout = pipelineLayout
@@ -67,16 +54,16 @@ module RaytracingProgram =
                 failwithf "Invalid raytracing shader slot (stage = %A, name = %A, ray = %A)" stage name ray
 
 
-    let private create (device : Device) (glsl : string) (layout : FShade.ShaderBindingTableLayout) (stages : ShaderGroup<RaytracingStageInfo> list) =
+    let private create (device : Device) (shader : FShade.GLSL.GLSLShader) (layout : FShade.ShaderBindingTableLayout) (stages : ShaderGroup<RaytracingStageInfo> list) =
         let shaders =
             stages
             |> List.collect ShaderGroup.toList
             |> List.map (fun i -> i.Module)
             |> List.toArray
 
-        let pipelineLayout = device.CreatePipelineLayout(shaders, 1, Set.empty)
+        let pipelineLayout = device.CreatePipelineLayout(shader.iface, shaders, 1, Set.empty)
 
-        new RaytracingProgram(device, pipelineLayout, layout, stages, glsl)
+        new RaytracingProgram(device, pipelineLayout, layout, stages, shader)
 
     let private compileEffect (device : Device) (effect : FShade.RaytracingEffect) =
         let toGeneralGroups (map : Map<Symbol, FShade.Shader>) =
@@ -119,7 +106,7 @@ module RaytracingProgram =
                 { Index = uint32 (index - 1); Module = mdl }
             ))
 
-        stages |> create device glsl.code effect.ShaderBindingTableLayout
+        stages |> create device glsl effect.ShaderBindingTableLayout
 
 
     module private FileCache =
@@ -131,25 +118,25 @@ module RaytracingProgram =
 
                 type RaytracingStageBinary =
                     { Index  : uint32
-                      Binary : ShaderModuleBinary }
+                      Binary : byte[] }
 
                 type ShaderGroupsBinary =
                     ShaderGroup<RaytracingStageBinary> list
 
                 type RaytracingProgramBinary =
-                    { Groups : ShaderGroupsBinary
-                      Layout : FShade.ShaderBindingTableLayout
-                      Glsl   : string }
+                    { Shader : FShade.GLSL.GLSLShader
+                      Groups : ShaderGroupsBinary
+                      Layout : FShade.ShaderBindingTableLayout }
 
                 module RaytracingStageInfo =
 
                     let toBinary (info : RaytracingStageInfo) =
                         { Index  = info.Index
-                          Binary = ShaderModule.toBinary info.Module }
+                          Binary = info.Module.SpirV }
 
-                    let ofBinary (device : Device) (binary : RaytracingStageBinary) =
+                    let ofBinary (device : Device) (slot : FShade.ShaderSlot) (binary : RaytracingStageBinary) =
                         { Index  = binary.Index
-                          Module = binary.Binary |> ShaderModule.ofBinary device }
+                          Module = binary.Binary |> ShaderModule.ofBinary device slot }
 
                 module ShaderGroupsBinary =
 
@@ -160,19 +147,22 @@ module RaytracingProgram =
 
                     let toStageInfos (device : Device) (binary : ShaderGroupsBinary) =
                         binary |> List.map (
-                            ShaderGroup.map (fun _ _ _ -> RaytracingStageInfo.ofBinary device)
+                            ShaderGroup.map (fun name rayType stage ->
+                                let slot = stage |> ShaderSlot.ofStage name rayType
+                                RaytracingStageInfo.ofBinary device slot
+                            )
                         )
 
                 module RaytracingProgram =
 
                     let toBinary (program : RaytracingProgram) =
-                        { Groups = ShaderGroupsBinary.ofStageInfos program.Groups
-                          Layout = program.ShaderBindingTableLayout
-                          Glsl   = program.Glsl }
+                        { Shader = program.Shader
+                          Groups = ShaderGroupsBinary.ofStageInfos program.Groups
+                          Layout = program.ShaderBindingTableLayout }
 
                     let ofBinary (device : Device) (binary : RaytracingProgramBinary) =
                         let stages = binary.Groups |> ShaderGroupsBinary.toStageInfos device
-                        stages |> create device binary.Glsl binary.Layout
+                        stages |> create device binary.Shader binary.Layout
 
 
             let toByteArray (program : RaytracingProgram) =

@@ -147,16 +147,16 @@ type ShaderProgram(device : Device, shaders : array<ShaderModule>, layout : Pipe
     let mutable fragInfo = None
 
     do for shader in shaders do
-        let iface = shader.Interface
-        match iface.shaderStage with
-            | FShade.ShaderStage.Geometry -> geometryInfo <- Some <| FShadeAdapter.geometryInfo iface
+        let siface = iface.shaders.[shader.Slot]
+        match siface.shaderStage with
+            | FShade.ShaderStage.Geometry -> geometryInfo <- Some <| FShadeAdapter.geometryInfo siface
             | FShade.ShaderStage.TessControl -> 
-                match shaders |> Array.tryFind (fun (s : ShaderModule) -> s.Interface.shaderStage = FShade.ShaderStage.TessEval) with
+                match shaders |> Array.tryFind (fun (s : ShaderModule) -> s.Slot = FShade.ShaderSlot.TessEval) with
                     | Some eval -> 
-                        tessInfo <- Some <| FShadeAdapter.tessControlInfo iface eval.Interface
+                        tessInfo <- Some <| FShadeAdapter.tessControlInfo siface iface.shaders.[eval.Slot]
                     | None ->
                         ()
-            | FShade.ShaderStage.Fragment-> fragInfo <- Some <| FShadeAdapter.fragmentInfo iface
+            | FShade.ShaderStage.Fragment-> fragInfo <- Some <| FShadeAdapter.fragmentInfo siface
             | _ -> ()
 
     let acceptedTopologies =
@@ -196,7 +196,7 @@ type ShaderProgram(device : Device, shaders : array<ShaderModule>, layout : Pipe
                 VkPipelineShaderStageCreateFlags.None,
                 VkShaderStageFlags.ofShaderStage shader.Stage,
                 shader.Handle,
-                CStr.malloc shader.Interface.shaderEntry,
+                CStr.malloc iface.shaders.[shader.Slot].shaderEntry,
                 NativePtr.zero
             )
         )
@@ -281,7 +281,7 @@ module ShaderProgram =
                 | Some binary, log ->
                     let binary = GLSLang.GLSLang.optimizeDefault binary
                     logs.[slot] <- log
-                    slot, binary, iface
+                    slot, binary
                 | None, err ->
                     Log.error "[Vulkan] %A shader compilation failed: %A" slot err
                     failf "%A shader compilation failed: %A" slot err
@@ -289,14 +289,14 @@ module ShaderProgram =
 
         let shaders =
             binaries
-            |> Array.map (fun (slot, binary, iface) ->
-                device.CreateShaderModule(slot, binary, iface)
+            |> Array.map (fun (slot, binary) ->
+                device.CreateShaderModule(slot, binary)
             )
 
         let layout =
             match layout with
             | Some l -> l.AddReference(); l
-            | None -> device.CreatePipelineLayout(shaders, layers, perLayer)
+            | None -> device.CreatePipelineLayout(iface, shaders, layers, perLayer)
 
         new ShaderProgram(device, shaders, layout, code, iface)
 
@@ -548,7 +548,7 @@ module ShaderProgram =
                 data.code
                 |> Map.toArray
                 |> Array.map (fun (slot, arr) ->
-                    device.CreateShaderModule(slot, arr, data.iface)
+                    device.CreateShaderModule(slot, arr)
                 )
 
             Report.Begin(4, "Interface")
@@ -557,7 +557,7 @@ module ShaderProgram =
                 Report.Line(4, "{0}", line)
             Report.End(4) |> ignore
 
-            let layout = device.CreatePipelineLayout(shaders, data.layers, data.perLayer)
+            let layout = device.CreatePipelineLayout(data.iface, shaders, data.layers, data.perLayer)
 
             let program = new ShaderProgram(device, shaders, layout, data.glsl, data.iface)
             Some program

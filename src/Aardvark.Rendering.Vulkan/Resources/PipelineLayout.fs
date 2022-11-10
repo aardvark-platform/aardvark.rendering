@@ -92,7 +92,7 @@ type PipelineLayout =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PipelineLayout =
 
-    let ofShaders (shaders : array<ShaderModule>) (layers : int) (perLayer : Set<string>) (device : Device) =
+    let ofShaders (iface : FShade.GLSL.GLSLProgramInterface) (shaders : array<ShaderModule>) (layers : int) (perLayer : Set<string>) (device : Device) =
         // figure out which stages reference which uniforms/textures
         let uniformBlocks = Dict.empty
         let textures = Dict.empty
@@ -106,8 +106,7 @@ module PipelineLayout =
 
         for shader in shaders do
             let flags = VkShaderStageFlags.ofShaderStage shader.Stage 
-            let iface = shader.ProgramInterface
-            let siface = shader.Interface
+            let siface = iface.shaders.[shader.Slot]
 
             match shader.Stage with
                 | ShaderStage.Vertex -> inputs <- siface.shaderInputs
@@ -280,8 +279,8 @@ module PipelineLayout =
 [<AbstractClass; Sealed; Extension>]
 type ContextPipelineLayoutExtensions private() =
     [<Extension>]
-    static member inline CreatePipelineLayout(this : Device, shaders : array<ShaderModule>, layers : int, perLayer : Set<string>) =
-        this |> PipelineLayout.ofShaders shaders layers perLayer
+    static member inline CreatePipelineLayout(this : Device, iface : FShade.GLSL.GLSLProgramInterface, shaders : array<ShaderModule>, layers : int, perLayer : Set<string>) =
+        this |> PipelineLayout.ofShaders iface shaders layers perLayer
 
     [<Extension>]
     static member inline CreatePipelineLayout(this : Device, layout : FShade.EffectInputLayout, layers : int, perLayer : Set<string>) =
