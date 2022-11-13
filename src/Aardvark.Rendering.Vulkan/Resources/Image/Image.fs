@@ -1049,15 +1049,11 @@ module Image =
 
             native {
                 let! pNext = 
-                    VkExternalMemoryImageCreateInfo(
-                        if export <> ImageExportMode.None then 
-                            VkExternalMemoryHandleTypeFlags.OpaqueFdBit ||| VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit
-                        else 
-                            VkExternalMemoryHandleTypeFlags.None)
+                    VkExternalMemoryImageCreateInfo(VkExternalMemoryHandleTypeFlags.OpaqueFdBit ||| VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit)
 
                 let! pInfo = 
                     VkImageCreateInfo(
-                        NativePtr.toNativeInt pNext,
+                        (if export <> ImageExportMode.None then NativePtr.toNativeInt pNext else 0n),
                         flags,
                         typ,
                         fmt,

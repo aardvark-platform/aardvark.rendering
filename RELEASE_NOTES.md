@@ -1,3 +1,6 @@
+### 5.3.1
+- Fixed export (sharing) bug on MacOS (pNext chain needs to be empty)
+
 ### 5.3.0
 - https://github.com/aardvark-platform/aardvark.docs/wiki/Aardvark-Rendering-5.3-changelog
 

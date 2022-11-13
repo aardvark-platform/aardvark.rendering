@@ -351,19 +351,14 @@ module Buffer =
 
         if size > 0L then
             let externalMemoryInfo =
-                VkExternalMemoryBufferCreateInfo(
-                    if export then
-                        VkExternalMemoryHandleTypeFlags.OpaqueFdBit ||| VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit
-                    else
-                        VkExternalMemoryHandleTypeFlags.None
-                )
+                VkExternalMemoryBufferCreateInfo(VkExternalMemoryHandleTypeFlags.OpaqueFdBit ||| VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit)
 
             use next = new VkStructChain()
             let pNext = next.Add externalMemoryInfo
 
             let info =
                 VkBufferCreateInfo(
-                    NativePtr.toNativeInt pNext,
+                    (if export then NativePtr.toNativeInt pNext else 0n),
                     VkBufferCreateFlags.None,
                     uint64 size, 
                     flags,
