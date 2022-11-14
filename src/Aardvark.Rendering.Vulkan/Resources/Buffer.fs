@@ -278,122 +278,92 @@ module BufferCommands =
 // =======================================================================
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Buffer =
+
+    let private createInternal (concurrent : bool) (export : bool) (alignment : uint64) (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
+        assert (size > 0L)
+        let device = memory.Device
+
+        let externalMemoryInfo =
+            VkExternalMemoryBufferCreateInfo(
+                VkExternalMemoryHandleTypeFlags.OpaqueFdBit ||| VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit
+            )
+
+        use pExternalMemoryInfo = new VkStructChain()
+        pExternalMemoryInfo.Add externalMemoryInfo |> ignore
+
+        let pNext =
+            if export then
+                if device.IsExtensionEnabled KHRExternalMemory.Name then
+                    pExternalMemoryInfo.Handle
+                else
+                    raise <| NotSupportedException($"[Vulkan] Cannot export buffer memory because {KHRExternalMemory.Name} is not supported.")
+            else
+                0n
+
+        let info =
+            VkBufferCreateInfo(
+                pNext,
+                VkBufferCreateFlags.None,
+                uint64 size, 
+                flags,
+                (if concurrent then device.AllSharingMode else VkSharingMode.Exclusive),
+                (if concurrent then device.AllQueueFamiliesCnt else 0u), 
+                (if concurrent then device.AllQueueFamiliesPtr else NativePtr.zero)
+            )
+
+        let handle =
+            info |> pin (fun pInfo ->
+                temporary (fun pHandle ->
+                    VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
+                        |> check "could not create buffer"
+                    NativePtr.read pHandle
+                )
+            )
+        let reqs =
+            temporary (fun ptr ->   
+                VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, ptr)
+                NativePtr.read ptr
+            )
+
+        if reqs.memoryTypeBits &&& (1u <<< memory.Index) = 0u then
+            failf "cannot create buffer using memory %A" memory
+
+        let alignment = Fun.LeastCommonMultiple(alignment, reqs.alignment)
+        let ptr = memory.Alloc(int64 alignment, int64 reqs.size, export)
+
+        VkRaw.vkBindBufferMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
+            |> check "could not bind buffer-memory"
+
+        if export then
+            new ExportedBuffer(device, handle, ptr, size, flags) :> Buffer
+        else
+            new Buffer(device, handle, ptr, size, flags)
+
+
     let private emptyBuffers = ConcurrentDictionary<DeviceHeap * bool * VkBufferUsageFlags, Buffer>()
 
     let empty (export : bool) (usage : VkBufferUsageFlags) (memory : DeviceHeap) =
         let key = (memory, export, usage)
+
         let buffer =
             emptyBuffers.GetOrAdd(key, fun (memory, export, usage) ->
                 let device = memory.Device
-
-                let externalMemoryInfo =
-                    VkExternalMemoryBufferCreateInfo(
-                        if export then
-                            VkExternalMemoryHandleTypeFlags.OpaqueFdBit ||| VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit
-                        else
-                            VkExternalMemoryHandleTypeFlags.None
-                    )
-
-                use next = new VkStructChain()
-                let pNext = next.Add externalMemoryInfo
-
-                let info =
-                    VkBufferCreateInfo(
-                        NativePtr.toNativeInt pNext,
-                        VkBufferCreateFlags.None,
-                        256UL,
-                        usage,
-                        device.AllSharingMode,
-                        device.AllQueueFamiliesCnt,
-                        device.AllQueueFamiliesPtr
-                    )
-
-                let handle = 
-                    info |> pin (fun pInfo ->
-                        temporary (fun pHandle ->
-                            VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
-                                |> check "could not create empty buffer"
-                            NativePtr.read pHandle
-                        )
-                    )
-
-                let reqs = 
-                    temporary (fun ptr ->
-                        VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, ptr)
-                        NativePtr.read ptr
-                    )
-
-                if reqs.memoryTypeBits &&& (1u <<< memory.Index) = 0u then
-                    failf "cannot create buffer using memory %A" memory
-
-                let mem = memory.Alloc(int64 reqs.alignment, int64 reqs.size, export)
-
-                VkRaw.vkBindBufferMemory(device.Handle, handle, mem.Memory.Handle, uint64 mem.Offset)
-                    |> check "could not bind empty buffer memory"
+                let buffer = memory |> createInternal true export 1UL usage 256L
 
                 device.OnDispose.Add (fun () ->
-                    VkRaw.vkDestroyBuffer(device.Handle, handle, NativePtr.zero)
-                    mem.Dispose()
-                    emptyBuffers.TryRemove(key) |> ignore
+                    emptyBuffers.TryRemove key |> ignore
+                    buffer.Dispose()
                 )
 
-                if export then
-                    new ExportedBuffer(device, handle, mem, 0L, usage) :> Buffer
-                else
-                    new Buffer(device, handle, mem, 0L, usage)
+                buffer
             )
 
         buffer.AddReference()
         buffer
 
     let create' (concurrent : bool) (export : bool) (alignment : uint64) (flags : VkBufferUsageFlags) (size : int64) (memory : DeviceHeap) =
-        let device = memory.Device
-
         if size > 0L then
-            let externalMemoryInfo =
-                VkExternalMemoryBufferCreateInfo(VkExternalMemoryHandleTypeFlags.OpaqueFdBit ||| VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit)
-
-            use next = new VkStructChain()
-            let pNext = next.Add externalMemoryInfo
-
-            let info =
-                VkBufferCreateInfo(
-                    (if export then NativePtr.toNativeInt pNext else 0n),
-                    VkBufferCreateFlags.None,
-                    uint64 size, 
-                    flags,
-                    (if concurrent then device.AllSharingMode else VkSharingMode.Exclusive),
-                    (if concurrent then device.AllQueueFamiliesCnt else 0u), 
-                    (if concurrent then device.AllQueueFamiliesPtr else NativePtr.zero)
-                )
-
-            let handle =
-                info |> pin (fun pInfo ->
-                    temporary (fun pHandle ->
-                        VkRaw.vkCreateBuffer(device.Handle, pInfo, NativePtr.zero, pHandle)
-                            |> check "could not create buffer"
-                        NativePtr.read pHandle
-                    )
-                )
-            let reqs =
-                temporary (fun ptr ->   
-                    VkRaw.vkGetBufferMemoryRequirements(device.Handle, handle, ptr)
-                    NativePtr.read ptr
-                )
-
-            if reqs.memoryTypeBits &&& (1u <<< memory.Index) = 0u then
-                failf "cannot create buffer using memory %A" memory
-
-            let alignment = Fun.LeastCommonMultiple(alignment, reqs.alignment)
-            let ptr = memory.Alloc(int64 alignment, int64 reqs.size, export)
-
-            VkRaw.vkBindBufferMemory(device.Handle, handle, ptr.Memory.Handle, uint64 ptr.Offset)
-                |> check "could not bind buffer-memory"
-
-            if export then
-                new ExportedBuffer(device, handle, ptr, size, flags) :> Buffer
-            else
-                new Buffer(device, handle, ptr, size, flags)
+            memory |> createInternal concurrent export alignment flags size
         else
             memory |> empty export flags
 

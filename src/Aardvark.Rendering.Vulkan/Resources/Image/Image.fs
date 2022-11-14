@@ -1048,12 +1048,23 @@ module Image =
                     max
 
             native {
-                let! pNext = 
-                    VkExternalMemoryImageCreateInfo(VkExternalMemoryHandleTypeFlags.OpaqueFdBit ||| VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit)
+                let! pExternalMemoryInfo = 
+                    VkExternalMemoryImageCreateInfo(
+                        VkExternalMemoryHandleTypeFlags.OpaqueFdBit ||| VkExternalMemoryHandleTypeFlags.OpaqueWin32Bit
+                    )
+
+                let pNext =
+                    if export <> ImageExportMode.None then
+                        if device.IsExtensionEnabled KHRExternalMemory.Name then
+                            NativePtr.toNativeInt pExternalMemoryInfo
+                        else
+                            raise <| NotSupportedException($"[Vulkan] Cannot export image memory because {KHRExternalMemory.Name} is not supported.")
+                    else
+                        0n
 
                 let! pInfo = 
                     VkImageCreateInfo(
-                        (if export <> ImageExportMode.None then NativePtr.toNativeInt pNext else 0n),
+                        pNext,
                         flags,
                         typ,
                         fmt,
