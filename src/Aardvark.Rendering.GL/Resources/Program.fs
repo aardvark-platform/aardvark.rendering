@@ -1,7 +1,5 @@
 ﻿namespace Aardvark.Rendering.GL
 
-//#nowarn "44" //Obsolete warning
-
 open System
 open System.Threading
 open System.Collections.Concurrent
@@ -519,8 +517,9 @@ module ProgramExtensions =
 
     open FShade.Imperative
     open FShade
+    open FShade.GLSL
 
-    let private shaderPickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
+    let private pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
     type private OutputSignature =
         {
@@ -533,15 +532,105 @@ module ProgramExtensions =
 
     type private ShaderCacheEntry =
         {
-            iface       : FShade.GLSL.GLSLProgramInterface
-            format      : BinaryFormat
-            binary      : byte[]
-            code        : string
-            hasTess     : bool
-            modes       : Option<Set<IndexedGeometryMode>>
+            shader  : GLSLShader
+            format  : BinaryFormat
+            binary  : byte[]
+            hasTess : bool
+            modes   : Option<Set<IndexedGeometryMode>>
         }
 
-        override x.ToString() = x.code // NOTE: x.binary or the complexity of x.iface seems to crash the VS 2019 debugger with the default ToString() implementation
+        override x.ToString() = x.shader.code
+
+    module private ShaderCacheEntry =
+        open System.IO
+
+        type BinaryWriter with
+            member inline x.WriteType<'T>(_value : 'T) =
+                x.Write(typeof<'T>.FullName)
+
+        type BinaryReader with
+            member inline x.ReadType<'T>() =
+                let expected = typeof<'T>.FullName
+                let value = x.ReadString()
+
+                if value <> expected then
+                    raise <| InvalidDataException($"Expected value of type {expected} but encountered value of type {value}.")
+
+        let serialize (dst : Stream) (entry : ShaderCacheEntry) =
+            use w = new BinaryWriter(dst, System.Text.Encoding.UTF8, true)
+
+            w.WriteType entry
+
+            GLSLShader.serialize dst entry.shader
+
+            w.WriteType entry.format
+            w.Write (int entry.format)
+
+            w.WriteType entry.binary
+            w.Write entry.binary.Length
+            w.Write entry.binary
+
+            w.WriteType entry.hasTess
+            w.Write entry.hasTess
+
+            w.WriteType entry.modes
+            match entry.modes with
+            | Some modes ->
+                w.Write true
+                w.Write modes.Count
+
+                for m in modes do
+                    w.Write (int m)
+            | _ ->
+                w.Write false
+
+        let deserialize (src : Stream) =
+            use r = new BinaryReader(src, System.Text.Encoding.UTF8, true)
+
+            r.ReadType<ShaderCacheEntry>()
+
+            let shader = GLSLShader.deserialize src
+
+            r.ReadType<BinaryFormat>()
+            let format = r.ReadInt32() |> unbox<BinaryFormat>
+
+            r.ReadType<byte[]>()
+            let binary =
+                let count = r.ReadInt32()
+                r.ReadBytes(count)
+
+            r.ReadType<bool>()
+            let hasTess = r.ReadBoolean()
+
+            r.ReadType<Option<Set<IndexedGeometryMode>>>()
+
+            let modes =
+                if r.ReadBoolean() then
+                    let count = r.ReadInt32()
+
+                    List.init count (fun _ ->
+                        r.ReadInt32() |> unbox<IndexedGeometryMode>
+                    )
+                    |> Set.ofList
+                    |> Some
+                else
+                    None
+
+            { shader  = shader
+              format  = format
+              binary  = binary
+              hasTess = hasTess
+              modes   = modes }
+
+        let pickle (entry : ShaderCacheEntry) =
+            use ms = new MemoryStream()
+            serialize ms entry
+            ms.ToArray()
+
+        let unpickle (data : byte[]) =
+            use ms = new MemoryStream(data)
+            deserialize ms
+
 
     [<AutoOpen>]
     module private Binary =
@@ -587,17 +676,17 @@ module ProgramExtensions =
 
                     let program =
                         { Context = context
-                          Code = entry.code
+                          Code = entry.shader.code
                           Handle = program
                           HasTessellation = entry.hasTess
                           SupportedModes = entry.modes
-                          Interface = entry.iface }
+                          Interface = entry.shader.iface }
 
                     let iface =
                         if fixBindings then
-                            ProgramCompiler.fixBindings program entry.iface
+                            ProgramCompiler.fixBindings program entry.shader.iface
                         else
-                            entry.iface
+                            entry.shader.iface
 
                     ResourceCounts.addProgram context
                     { program with Interface = iface }
@@ -614,18 +703,17 @@ module ProgramExtensions =
 
             let tryGetByteArray (program : Program) =
                 program |> Program.tryGetBinary |> Option.map (fun (format, binary) ->
-                    shaderPickler.Pickle {
+                    ShaderCacheEntry.pickle {
+                        shader  = { code = program.Code; iface = program.Interface }
                         hasTess = program.HasTessellation
-                        iface   = program.Interface
                         format  = format
                         binary  = binary
-                        code    = program.Code
                         modes   = program.SupportedModes
                     }
                 )
 
             let ofByteArray (context : Context) (fixBindings : bool) (data : byte[]) =
-                let entry : ShaderCacheEntry = shaderPickler.UnPickle data
+                let entry = ShaderCacheEntry.unpickle data
                 Program.ofShaderCacheEntry context fixBindings entry
 
         let private tryGetCacheFile (context : Context) (key : CodeCacheKey) =
@@ -649,7 +737,7 @@ module ProgramExtensions =
                         layerCount = key.layout.LayerCount
                     }
 
-                let hash = shaderPickler.ComputeHash(key).Hash |> System.Guid
+                let hash = pickler.ComputeHash(key).Hash |> System.Guid
                 Path.combine [prefix; string hash + ".bin"]
             )
 
@@ -797,7 +885,7 @@ module ProgramExtensions =
 
                     let initial = AVal.force b
                     let effect = initial.userData |> unbox<Effect>
-                    let layoutHash = shaderPickler.ComputeHash(inputLayout).Hash |> Convert.ToBase64String
+                    let layoutHash = pickler.ComputeHash(inputLayout).Hash |> Convert.ToBase64String
 
                     let iface =
                         match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend initial)) with

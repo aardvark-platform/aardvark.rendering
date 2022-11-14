@@ -922,31 +922,92 @@ module private ``Compute Commands`` =
             queries.End()
             
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module ComputeShader =  
+module ComputeShader =
     open System.IO
+    open FShade.GLSL
+
+    type private ComputeProgramData =
+        {
+            shader    : GLSLShader
+            binary    : byte[]
+            groupSize : V3i
+        }
+
+    module private ComputeProgramData =
+        open ShaderProgram.ShaderProgramData
+
+        type BinaryWriter with
+            member inline x.Write(value : V3i) =
+                x.Write value.X
+                x.Write value.Y
+                x.Write value.Z
+
+        type BinaryReader with
+            member inline x.ReadV3i() =
+                V3i(x.ReadInt32(), x.ReadInt32(), x.ReadInt32())
+
+        let serialize (dst : Stream) (data : ComputeProgramData) =
+            use w = new BinaryWriter(dst, System.Text.Encoding.UTF8, true)
+
+            w.WriteType data
+
+            GLSLShader.serialize dst data.shader
+
+            w.WriteType data.binary
+            w.Write data.binary.Length
+            w.Write data.binary
+
+            w.WriteType data.groupSize
+            w.Write data.groupSize
+
+        let deserialize (src : Stream) =
+            use r = new BinaryReader(src, System.Text.Encoding.UTF8, true)
+
+            r.ReadType<ComputeProgramData>()
+
+            let shader = GLSLShader.deserialize src
+
+            r.ReadType<byte[]>()
+
+            let binary =
+                let count = r.ReadInt32()
+                r.ReadBytes count
+
+            r.ReadType<V3i>()
+            let groupSize = r.ReadV3i()
+
+            { shader    = shader
+              binary    = binary
+              groupSize = groupSize }
+
+        let pickle (data : ComputeProgramData) =
+            use ms = new MemoryStream()
+            serialize ms data
+            ms.ToArray()
+
+        let unpickle (data : byte[]) =
+            use ms = new MemoryStream(data)
+            deserialize ms
 
     let private cache = Symbol.Create "ComputeShaderCache" 
 
     let private main = CStr.malloc "main"
 
     let toByteArray (shader : ComputeShader) =
-        ShaderProgram.pickler.Pickle( 
-            (
-                shader.Shader,
-                shader.ShaderModule.SpirV,
-                shader.GroupSize
-            ) 
-        )
+        ComputeProgramData.pickle {
+            shader    = shader.Shader
+            binary    = shader.ShaderModule.SpirV
+            groupSize = shader.GroupSize
+        }
 
     let private ofByteArray (data : byte[]) (device : Device) =
-        let (shader : FShade.GLSL.GLSLShader, spirv : byte[], groupSize : V3i) = 
-            ShaderProgram.pickler.UnPickle data
-             
+        let data = ComputeProgramData.unpickle data 
+
         let module_ =
-            device.CreateShaderModule(FShade.ShaderSlot.Compute, spirv)
+            device.CreateShaderModule(FShade.ShaderSlot.Compute, data.binary)
 
         let layout =
-            device.CreatePipelineLayout(shader.iface, [| module_ |], 1, Set.empty)
+            device.CreatePipelineLayout(data.shader.iface, [| module_ |], 1, Set.empty)
                 
         native {
             let shaderInfo =
@@ -972,9 +1033,9 @@ module ComputeShader =
                 |> check "could not create compute pipeline"
 
             let textureNames =
-                shader.iface.shaders.[ShaderSlot.Compute].shaderSamplers
+                data.shader.iface.shaders.[ShaderSlot.Compute].shaderSamplers
                 |> Seq.collect (fun samName ->
-                    let sam = shader.iface.samplers.[samName]
+                    let sam = data.shader.iface.samplers.[samName]
                     sam.samplerTextures |> Seq.mapi (fun i (texName, state) ->
                         (samName, i), texName
                     )
@@ -982,16 +1043,16 @@ module ComputeShader =
                 |> Map.ofSeq
 
             let samplers =
-                shader.iface.shaders.[ShaderSlot.Compute].shaderSamplers
+                data.shader.iface.shaders.[ShaderSlot.Compute].shaderSamplers
                 |> Seq.collect (fun samName ->
-                    let sam = shader.iface.samplers.[samName]
+                    let sam = data.shader.iface.samplers.[samName]
                     sam.samplerTextures |> Seq.mapi (fun i (_, state) ->
                         (samName, i), device.CreateSampler state.SamplerState
                     )
                 )
                 |> Map.ofSeq
                 
-            return new ComputeShader(device, !!pHandle, module_, layout, textureNames, samplers, groupSize, shader)
+            return new ComputeShader(device, !!pHandle, module_, layout, textureNames, samplers, data.groupSize, data.shader)
         }
 
     let private tryRead (file : string) (device : Device) =
@@ -1060,7 +1121,7 @@ module ComputeShader =
         device.GetCached(cache, shader, fun shader ->
             match device.ShaderCachePath with
                 | Some shaderCachePath ->
-                    let fileName = ShaderProgram.hashFileName (shader.csId, shader.csLocalSize)
+                    let fileName = ShaderProgram.hashFileName shader.csId
                     let file = Path.Combine(shaderCachePath, fileName + ".compute")
 
                     match tryRead file device with

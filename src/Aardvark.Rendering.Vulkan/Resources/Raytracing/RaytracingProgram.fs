@@ -120,12 +120,9 @@ module RaytracingProgram =
                     { Index  : uint32
                       Binary : byte[] }
 
-                type ShaderGroupsBinary =
-                    ShaderGroup<RaytracingStageBinary> list
-
                 type RaytracingProgramBinary =
                     { Shader : FShade.GLSL.GLSLShader
-                      Groups : ShaderGroupsBinary
+                      Groups : ShaderGroup<RaytracingStageBinary> list
                       Layout : FShade.ShaderBindingTableLayout }
 
                 module RaytracingStageInfo =
@@ -138,14 +135,14 @@ module RaytracingProgram =
                         { Index  = binary.Index
                           Module = binary.Binary |> ShaderModule.ofBinary device slot }
 
-                module ShaderGroupsBinary =
+                module ShaderGroups =
 
-                    let ofStageInfos (groups : ShaderGroup<RaytracingStageInfo> list) : ShaderGroupsBinary =
+                    let toBinary (groups : ShaderGroup<RaytracingStageInfo> list) =
                         groups |> List.map (
                             ShaderGroup.map (fun _ _ _ -> RaytracingStageInfo.toBinary)
                         )
 
-                    let toStageInfos (device : Device) (binary : ShaderGroupsBinary) =
+                    let ofBinary (device : Device) (binary : ShaderGroup<RaytracingStageBinary> list) =
                         binary |> List.map (
                             ShaderGroup.map (fun name rayType stage ->
                                 let slot = stage |> ShaderSlot.ofStage name rayType
@@ -153,24 +150,171 @@ module RaytracingProgram =
                             )
                         )
 
+                module RaytracingProgramBinary =
+                    open FShade.GLSL
+                    open ShaderProgram.ShaderProgramData
+
+                    type BinaryWriter with
+                        member inline x.Write(value : RaytracingStageBinary) =
+                            x.Write value.Index
+                            x.Write value.Binary.Length
+                            x.Write value.Binary
+
+                        member inline private x.Write(value : Option<'T>, write : 'T -> unit) =
+                            match value with
+                            | Some sym -> x.Write true; write sym
+                            | None -> x.Write false
+
+                        member inline x.Write(value : Option<Symbol>) =
+                            x.Write(value, x.Write)
+
+                        member inline x.Write(value : Option<RaytracingStageBinary>) =
+                            x.Write(value, x.Write)
+
+                        member inline x.Write(value : ShaderGroup<RaytracingStageBinary>) =
+                            match value with
+                            | ShaderGroup.General g ->
+                                x.Write 0uy
+                                x.Write g.Name
+                                x.Write (uint8 g.Stage)
+                                x.Write g.Value
+
+                            | ShaderGroup.HitGroup g ->
+                                x.Write 1uy
+                                x.Write g.Name
+                                x.Write g.RayType
+                                x.Write g.AnyHit
+                                x.Write g.ClosestHit
+                                x.Write g.Intersection
+
+                        member inline x.Write(value : Map<Symbol, int>) =
+                            x.Write value.Count
+                            value |> Map.iter (fun key value ->
+                                x.Write key
+                                x.Write value
+                            )
+
+                        member inline x.Write(value : FShade.ShaderBindingTableLayout) =
+                            x.Write value.RayOffsets
+                            x.Write value.MissIndices
+                            x.Write value.CallableIndices
+
+                    type BinaryReader with
+                        member inline x.ReadRaytracingStageBinary() =
+                            let index = x.ReadUInt32()
+
+                            let binary =
+                                let count = x.ReadInt32()
+                                x.ReadBytes count
+
+                            { Index = index
+                              Binary = binary }
+
+                        member inline private x.ReadOption(read : unit -> 'T) =
+                            if x.ReadBoolean() then Some <| read()
+                            else None
+
+                        member inline x.ReadSymOption() =
+                            x.ReadOption x.ReadSym
+
+                        member inline x.ReadRaytracingStageBinaryOption() =
+                            x.ReadOption x.ReadRaytracingStageBinary
+
+                        member inline x.ReadShaderGroupBinary() =
+                            match x.ReadByte() with
+                            | 0uy ->
+                                ShaderGroup.General {
+                                    Name  = x.ReadSymOption()
+                                    Stage = x.ReadByte() |> int |> unbox<ShaderStage>
+                                    Value = x.ReadRaytracingStageBinary()
+                                }
+
+                            | 1uy ->
+                                ShaderGroup.HitGroup {
+                                    Name         = x.ReadSym()
+                                    RayType      = x.ReadSym()
+                                    AnyHit       = x.ReadRaytracingStageBinaryOption()
+                                    ClosestHit   = x.ReadRaytracingStageBinaryOption()
+                                    Intersection = x.ReadRaytracingStageBinaryOption()
+                                }
+
+                            | id ->
+                                raise <| InvalidDataException($"{id} is not a valid ShaderGroup identifier.")
+
+                        member inline x.ReadSymIntMap() =
+                            let count = x.ReadInt32()
+
+                            List.init count (fun _ ->
+                                x.ReadSym(), x.ReadInt32()
+                            )
+                            |> Map.ofList
+
+                        member inline x.ReadShaderBindingTableLayout() =
+                            { FShade.RayOffsets      = x.ReadSymIntMap()
+                              FShade.MissIndices     = x.ReadSymIntMap()
+                              FShade.CallableIndices = x.ReadSymIntMap() }
+
+
+                    let serialize (dst : Stream) (data : RaytracingProgramBinary) =
+                        use w = new BinaryWriter(dst, System.Text.Encoding.UTF8, true)
+
+                        w.WriteType data
+
+                        GLSLShader.serialize dst data.Shader
+
+                        w.WriteType data.Groups
+                        w.Write data.Groups.Length
+                        data.Groups |> List.iter w.Write
+
+                        w.WriteType data.Layout
+                        w.Write data.Layout
+
+                    let deserialize (src : Stream) =
+                        use r = new BinaryReader(src, System.Text.Encoding.UTF8, true)
+
+                        r.ReadType<RaytracingProgramBinary>()
+
+                        let shader = GLSLShader.deserialize src
+
+                        r.ReadType<ShaderGroup<RaytracingStageBinary> list>()
+                        let groups =
+                            let count = r.ReadInt32()
+                            List.init count (ignore >> r.ReadShaderGroupBinary)
+
+                        r.ReadType<FShade.ShaderBindingTableLayout>()
+                        let layout = r.ReadShaderBindingTableLayout()
+
+                        { Shader = shader
+                          Groups = groups
+                          Layout = layout }
+
+                    let pickle (data : RaytracingProgramBinary) =
+                        use ms = new MemoryStream()
+                        serialize ms data
+                        ms.ToArray()
+
+                    let unpickle (data : byte[]) =
+                        use ms = new MemoryStream(data)
+                        deserialize ms
+
                 module RaytracingProgram =
 
                     let toBinary (program : RaytracingProgram) =
                         { Shader = program.Shader
-                          Groups = ShaderGroupsBinary.ofStageInfos program.Groups
+                          Groups = ShaderGroups.toBinary program.Groups
                           Layout = program.ShaderBindingTableLayout }
 
                     let ofBinary (device : Device) (binary : RaytracingProgramBinary) =
-                        let stages = binary.Groups |> ShaderGroupsBinary.toStageInfos device
+                        let stages = binary.Groups |> ShaderGroups.ofBinary device
                         stages |> create device binary.Shader binary.Layout
 
 
             let toByteArray (program : RaytracingProgram) =
                 let binary = RaytracingProgram.toBinary program
-                ShaderProgram.pickler.Pickle binary
+                RaytracingProgramBinary.pickle binary
 
             let ofByteArray (device : Device) (reference : RaytracingProgram option) (data : byte[]) =
-                let binary : RaytracingProgramBinary = ShaderProgram.pickler.UnPickle data
+                let binary = RaytracingProgramBinary.unpickle data
 
                 reference |> Option.iter (fun program ->
                     if binary <> RaytracingProgram.toBinary program then
