@@ -14,7 +14,7 @@ using System.Windows.Navigation;
 using System.Windows.Shapes;
 
 using FSharp.Data.Adaptive;
-//using CSharp.Data.Adaptive
+using CSharp.Data.Adaptive;
 using Microsoft.FSharp.Core;
 
 using Aardvark.Base;
@@ -26,17 +26,6 @@ using Effects = Aardvark.Rendering.Effects;
 
 namespace _01___Hello_Wpf
 {
-    /// <summary>
-    ///  should not be needed, and can be normally replaced by FSharp.Data.Adatpive - https://github.com/aardvark-platform/aardvark.rendering/issues/99
-    /// </summary>
-    public static class AValExtensions
-    {
-        public static IAdaptiveValue<R> Map<A,R>(this IAdaptiveValue<A> a, Func<A,R> f)
-        {
-            return AValModule.map<A,R>(FuncConvert.FromFunc<A,R>(f), a);
-        }
-    }
-
     /// <summary>
     /// Interaction logic for MainWindow.xaml
     /// </summary>
