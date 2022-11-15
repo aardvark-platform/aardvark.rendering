@@ -33,7 +33,7 @@ module ARB_internalformat_query =
 module ARB_internalformat_query2 =
 
     type InternalFormatParameter with
-        static member AutoGenerateMipmap = unbox<InternalFormatParameter> 33429
+        static member ManualGenerateMipmap = unbox<InternalFormatParameter> 0x8294
 
     type MipmapGenerationSupport =
         | None   = 0
@@ -50,6 +50,6 @@ module ARB_internalformat_query2 =
 
         static member GetInternalformatMipmapGenerationSupport(target : ImageTarget, internalFormat : SizedInternalFormat) =
             if GL.ARB_internalformat_query2 then
-                GL.Dispatch.GetInternalformat(target, internalFormat, InternalFormatParameter.AutoGenerateMipmap) |> unbox<MipmapGenerationSupport>
+                GL.Dispatch.GetInternalformat(target, internalFormat, InternalFormatParameter.ManualGenerateMipmap) |> unbox<MipmapGenerationSupport>
             else
                 failwith "GL_ARB_internalformat_query2 is not available!"
