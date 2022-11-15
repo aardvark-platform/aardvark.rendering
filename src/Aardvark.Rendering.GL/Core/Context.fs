@@ -374,13 +374,18 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
     member internal x.GetFormatSamples(target : ImageTarget, format : TextureFormat) =
         if GL.ARB_internalformat_query then
             formatSampleCounts.GetOrCreate((target, format), fun _ ->
-                let count = GL.Dispatch.GetInternalformat(target, TextureFormat.toSizedInternalFormat format, InternalFormatParameter.NumSampleCounts)
+                let format = TextureFormat.toSizedInternalFormat format
+
+                let count = GL.Dispatch.GetInternalformat(target, format, InternalFormatParameter.NumSampleCounts)
                 GL.Check "could not query number of sample counts"
 
-                let buffer = GL.Dispatch.GetInternalformat(target, TextureFormat.toSizedInternalFormat format, InternalFormatParameter.Samples, count)
-                GL.Check "could not query sample counts"
+                if count > 0 then
+                    let buffer = GL.Dispatch.GetInternalformat(target, format, InternalFormatParameter.Samples, count)
+                    GL.Check "could not query sample counts"
 
-                Set.ofArray buffer
+                    Set.ofArray buffer
+                else
+                    Set.empty
             )
         else
             Log.warn "[GL] Internal format queries not supported, assuming all sample counts are supported"

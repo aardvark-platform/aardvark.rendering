@@ -52,7 +52,7 @@ type StreamingTextureOld(ctx : Context, mipMap : bool) =
     let swapLock = obj()
 
     let upload (f : PixFormat) (size : V2i) (data : nativeint) =
-        use token = ctx.ResourceLock
+        use __ = ctx.ResourceLock
 
         // update format depenent things
         if f <> currentFormat then
@@ -348,6 +348,8 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
     let mutable iter = 0
 
     let upload (f : PixFormat) (size : V2i) (data : nativeint) =
+        use __ = ctx.ResourceLock
+
         // update format depenent things
         if f <> currentFormat then
             currentFormat <- f
@@ -363,8 +365,6 @@ type StreamingTexture(ctx : Context, mipMap : bool) =
             currentSize <- size
             mipMapLevels <- expectedLevels texture.Format size
             bufferSize <- size.X * size.Y * channels * channelSize |> nativeint
-
-        use t = ctx.ResourceLock
 
         if ping.Sync <> 0n then
             GL.DeleteSync(ping.Sync)
