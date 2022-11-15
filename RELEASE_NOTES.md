@@ -1,3 +1,11 @@
+### 5.3.2
+- [GL] Fixed access violation and other issues related to internal format queries
+- [GL] Implemented shader caches for compute shaders
+- [Vulkan] Implemented shader caches for raytracing shaders
+- Improved error logging when shader cache access fails
+- Reworked shader caches to use FShade-based interface serialization instead of FsPickler
+- Made shader cache directory creation lazy
+
 ### 5.3.1
 - Fixed export (sharing) bug on MacOS (pNext chain needs to be empty)
 
