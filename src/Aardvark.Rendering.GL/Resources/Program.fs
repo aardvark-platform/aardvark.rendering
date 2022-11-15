@@ -746,7 +746,7 @@ module ProgramExtensions =
             |> Option.iter (fun file ->
                 try
                     let binary = Pickling.tryGetByteArray program
-                    binary |> Option.iter (File.writeAllBytes file)
+                    binary |> Option.iter (File.writeAllBytesSafe file)
                 with
                 | exn ->
                     Log.warn "[GL] Failed to write to shader program file cache '%s': %s" file exn.Message

@@ -59,20 +59,10 @@ type HeadlessVulkanApplication(debug : IDebugConfig, instanceExtensions : list<s
     // create a runtime
     let runtime = new Runtime(device)
 
-    do
-        let dir =
-            Path.combine [
-                CachingProperties.CacheDirectory
-                "Shaders"
-                "Vulkan"
-            ]
-        runtime.ShaderCachePath <- Some dir
-
     member x.Dispose() =
         runtime.Dispose()
         device.Dispose()
         instance.Dispose()
-
 
     member x.Instance = instance
     member x.Device = device

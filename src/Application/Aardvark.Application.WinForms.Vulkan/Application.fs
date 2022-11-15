@@ -145,15 +145,6 @@ type VulkanApplication(debug : IDebugConfig, chooseDevice : list<PhysicalDevice>
     // create a runtime
     let runtime = new Runtime(device)
 
-    do
-        let dir =
-            Path.combine [
-                CachingProperties.CacheDirectory
-                "Shaders"
-                "Vulkan"
-            ]
-        runtime.ShaderCachePath <- Some dir
-
     let canCreateRenderControl =
         List.contains Instance.Extensions.SwapChain device.EnabledExtensions
 

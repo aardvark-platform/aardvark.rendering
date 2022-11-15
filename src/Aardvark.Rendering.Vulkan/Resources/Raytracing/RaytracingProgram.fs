@@ -360,7 +360,7 @@ module RaytracingProgram =
             |> Option.iter (fun file ->
                 try
                     let binary = Pickling.toByteArray program
-                    binary |> File.writeAllBytes file
+                    binary |> File.writeAllBytesSafe file
                 with
                 | exn ->
                     Log.warn "[Vulkan] Failed to write to raytracing program file cache '%s': %s" file exn.Message

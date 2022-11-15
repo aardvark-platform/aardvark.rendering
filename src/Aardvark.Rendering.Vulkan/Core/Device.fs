@@ -169,7 +169,12 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
     let transferQueues  = pool.TryTakeExplicit(QueueFlags.Transfer, QueueFlags.Graphics ||| QueueFlags.Compute, 1)
     let onDispose = Event<unit>()
     
-    let mutable shaderCachePath : Option<string> = None
+    let mutable shaderCachePath : Option<string> =
+        Some <| Path.combine [
+            CachingProperties.CacheDirectory
+            "Shaders"
+            "Vulkan"
+        ]
 
     let allIndicesArr = 
         [|
@@ -367,16 +372,7 @@ type Device internal(dev : PhysicalDevice, wantedExtensions : list<string>) as t
 
     member x.ShaderCachePath
         with get() = shaderCachePath
-        and set v = 
-            match v with    
-                | Some path ->
-                    try
-                        if not (System.IO.Directory.Exists path) then System.IO.Directory.CreateDirectory path |> ignore 
-                        shaderCachePath <- Some path
-                    with _ ->
-                        shaderCachePath <- None
-                | None -> 
-                    shaderCachePath <- None
+        and set p = shaderCachePath <- p
 
     member x.UploadMode = uploadMode
 

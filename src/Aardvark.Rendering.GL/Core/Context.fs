@@ -187,11 +187,11 @@ type MemoryUsage() =
 type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this =
 
     static let defaultShaderCachePath = 
-                        Some (Path.combine [
-                                CachingProperties.CacheDirectory
-                                "Shaders"
-                                "OpenGL"
-                             ])
+        Path.combine [
+            CachingProperties.CacheDirectory
+            "Shaders"
+            "OpenGL"
+        ]
 
     let resourceContexts = Array.init Config.NumberOfResourceContexts (fun _ -> createContext())
     let resourceContextCount = resourceContexts.Length
@@ -211,7 +211,7 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
 
     let mutable unpackAlignment = None
 
-    let mutable shaderCachePath : Option<string> = None
+    let mutable shaderCachePath : Option<string> = Some defaultShaderCachePath
 
     let formatSampleCounts = FastConcurrentDict()
 
@@ -228,22 +228,12 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
 
     member internal x.ShaderCache = shaderCache
 
-    static member DefaultShaderCachePath = defaultShaderCachePath
+    // TODO: Why is this an option?
+    static member DefaultShaderCachePath = Some defaultShaderCachePath
 
     member x.ShaderCachePath
         with get() = shaderCachePath
-        and set p = 
-            match p with
-                | Some p ->
-                    try
-                        let info = System.IO.DirectoryInfo p
-                        if not info.Exists then info.Create()
-                        shaderCachePath <- Some p
-                    with err ->
-                        Log.error "[GL] could not create cache folder: %A" p
-                        shaderCachePath <- None
-                | None ->
-                    shaderCachePath <- None
+        and set p = shaderCachePath <- p
 
     member x.MemoryUsage = memoryUsage
 

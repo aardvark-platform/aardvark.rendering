@@ -1069,7 +1069,7 @@ module ComputeShader =
     let private write (file : string) (shader : ComputeShader) =
         try
             let data = toByteArray shader
-            File.WriteAllBytes(file, data)
+            data |> File.writeAllBytesSafe file
         with exn ->
             Log.warn "[Vulkan] Failed to write to shader program file cache '%s': %s" file exn.Message
 
@@ -1136,8 +1136,8 @@ module ComputeShader =
                                 let tmp = Path.GetTempFileName()
                                 let tmpReal = tmp + ".real"
                                 let tmpShould = tmp + ".should"
-                                File.WriteAllBytes(tmpReal, real)
-                                File.WriteAllBytes(tmpShould, should)
+                                File.writeAllBytesSafe tmpReal real
+                                File.writeAllBytesSafe tmpShould should
                                 failf "invalid cache for ComputeShader: real: %s vs. should: %s" tmpReal tmpShould
                         loaded
                     | _ ->
