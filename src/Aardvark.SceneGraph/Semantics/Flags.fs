@@ -23,12 +23,25 @@ module ActiveSemantics =
     type ActiveSemantics() =
 
         let trueConstant = AVal.constant true
+        let falseConstant = AVal.constant false
         let andCache = Caching.BinaryOpCache (AVal.map2 (&&))
 
         let (<&>) (a : aval<bool>) (b : aval<bool>) =
-            if a = trueConstant then b
-            elif b = trueConstant then a
-            else andCache.Invoke a b
+            match a.IsConstant, b.IsConstant with
+            | true, true ->
+                if a.GetValue() && b.GetValue() then trueConstant
+                else falseConstant
+
+            | true, false ->
+                if a.GetValue() then b
+                else falseConstant
+
+            | false, true ->
+                if b.GetValue() then a
+                else falseConstant
+
+            | _ ->
+                andCache.Invoke a b
 
         member x.IsActive(r : Root<ISg>, scope : Ag.Scope) =
             r.Child?IsActive <- trueConstant
