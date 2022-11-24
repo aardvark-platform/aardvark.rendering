@@ -778,3 +778,19 @@ module IndexedGeometryPrimitives =
     let solidTorus = solidTorus
     let wireframeTorus = wireframeTorus
 
+    /// Creates an arrow consisting of a cylinder for the shaft and a cone for the head.
+    let arrow (position : V3d) (axis : V3d)
+              (shaftLength : float) (shaftRadius : float) (shaftColor : C4b)       
+              (headLength : float) (headRadius : float) (headColor : C4b)
+              (tessellation : int) =
+        let shaft = solidCylinder position axis shaftLength shaftRadius shaftRadius tessellation shaftColor
+        let head = solidCone (position + axis * shaftLength) axis headLength (shaftRadius + headRadius) tessellation headColor
+        IndexedGeometry.union head shaft
+
+    /// Creates a coordinate cross consisting of three arrows for the axes and a sphere for the origin.
+    let coordinateCross3d (colorX : C4b) (colorY : C4b) (colorZ : C4b) (colorOrigin : C4b) (tessellation : int) =
+        let xAxis = arrow V3d.Zero V3d.XAxis 0.75 0.05 colorX 0.25 0.045 colorX tessellation
+        let yAxis = arrow V3d.Zero V3d.YAxis 0.75 0.05 colorY 0.25 0.045 colorY tessellation
+        let zAxis = arrow V3d.Zero V3d.ZAxis 0.75 0.05 colorZ 0.25 0.045 colorZ tessellation
+        let center = solidPhiThetaSphere (Sphere3d(V3d.Zero, 0.085)) tessellation colorOrigin
+        [center; xAxis; yAxis; zAxis] |> List.reduce IndexedGeometry.union
