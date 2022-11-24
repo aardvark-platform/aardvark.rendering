@@ -486,12 +486,14 @@ module ShaderProgram =
         if File.Exists file then
             Report.Begin(4, "[Vulkan] loading shader {0}", Path.GetFileName file)
             try
-                let data = File.ReadAllBytes file
-                Some <| ofByteArray data device
-            with exn ->
-                Report.End(4) |> ignore
-                Log.warn "[Vulkan] Failed to read from shader program file cache '%s': %s" file exn.Message
-                None
+                try
+                    let data = File.ReadAllBytes file
+                    Some <| ofByteArray data device
+                with exn ->
+                    Log.warn "[Vulkan] Failed to read from shader program file cache '%s': %s" file exn.Message
+                    None
+            finally
+                Report.End(4) |> ignore             
         else
             None
     
