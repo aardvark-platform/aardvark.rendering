@@ -5,8 +5,19 @@ open Aardvark.Base
 
 module private IndexHelpers =
 
-    let applyIndex (index : Array) (data : Array) =
-        
+    let addOffset (offset : int) (index : Array) : Array =
+        if isNull index then
+            null
+        else
+            match index with
+            | :? array<int32> as x -> x |> Array.map ((+) offset) :> Array
+            | :? array<int16> as x -> x |> Array.map ((+) (int16 offset)) :> Array
+            | :? array<uint32> as x -> x |> Array.map ((+) (uint32 offset)) :> Array
+            | :? array<uint16> as x -> x |> Array.map ((+) (uint16 offset)) :> Array
+            | _ ->
+                raise <| ArgumentException($"Unsupported type {index.GetType()}.")
+
+    let applyIndex (index : Array) (data : Array) =   
         if isNull index || isNull data then
             null
         else
@@ -71,7 +82,28 @@ module private IndexHelpers =
                                 oi <- oi + 3
 
                             res :> Array
-                } 
+                }
+                
+module private ArrayHelpers =
+
+    let concat (a : Array) (b : Array) =
+        if isNull a then b
+        elif isNull b then a
+        else
+            a.Visit (
+                { new ArrayVisitor<Array>() with
+                    member x.Run(a : 'T[]) =
+                        b.Visit (
+                            { new ArrayVisitor<Array>() with
+                                member x.Run(b : 'U[]) =
+                                    if typeof<'T> <> typeof<'U> then
+                                        raise <| ArgumentException($"Array element types must match to be concatenated (got {typeof<'T>} and {typeof<'U>}).")
+                                    else
+                                        Array.concat [a; unbox<'T[]> b]
+                            }
+                        )                    
+                }
+            )
 
 
 type IndexedGeometryMode =
@@ -83,8 +115,6 @@ type IndexedGeometryMode =
     | TriangleAdjacencyList = 5
     | LineAdjacencyList = 6
     | QuadList = 7
-
-
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>] 
 module IndexedGeometryMode =
@@ -129,14 +159,16 @@ type IndexedGeometry =
 
         member x.IsIndexed = not (isNull x.IndexArray)
 
+        member x.VertexCount =
+            if isNull x.IndexedAttributes then 0
+            else
+                match Seq.tryHead x.IndexedAttributes.Values with
+                | Some att -> att.Length
+                | _ -> 0
+
         member x.FaceVertexCount =
             if isNull x.IndexArray then
-                if isNull x.IndexedAttributes then
-                    0
-                else
-                    match Seq.tryHead x.IndexedAttributes.Values with
-                        | Some att -> att.Length
-                        | None -> 0
+                x.VertexCount
             else
                 x.IndexArray.Length
 
@@ -180,22 +212,80 @@ type IndexedGeometry =
              
         member x.ToNonStripped() =
             match x.Mode with
-                | IndexedGeometryMode.LineStrip ->
-                    let x = x.ToIndexed()
-                    x.IndexArray <- IndexHelpers.lineStripToList x.IndexArray
-                    x.Mode <- IndexedGeometryMode.LineList
-                    x
+            | IndexedGeometryMode.LineStrip ->
+                let x = x.ToIndexed()
+                x.IndexArray <- IndexHelpers.lineStripToList x.IndexArray
+                x.Mode <- IndexedGeometryMode.LineList
+                x
 
-                | IndexedGeometryMode.TriangleStrip ->
-                    let x = x.ToIndexed()
-                    x.IndexArray <- IndexHelpers.triangleStripToList x.IndexArray
-                    x.Mode <- IndexedGeometryMode.TriangleList
-                    x
+            | IndexedGeometryMode.TriangleStrip ->
+                let x = x.ToIndexed()
+                x.IndexArray <- IndexHelpers.triangleStripToList x.IndexArray
+                x.Mode <- IndexedGeometryMode.TriangleList
+                x
 
-                | _ ->
-                    x
+            | _ ->
+                x
+
+        member x.Union(y : IndexedGeometry) =
+            if x.Mode <> y.Mode then
+                raise <| ArgumentException("IndexedGeometryMode must match.")
+
+            let acceptedTopologies = [
+                    IndexedGeometryMode.PointList
+                    IndexedGeometryMode.LineList
+                    IndexedGeometryMode.TriangleList
+                    IndexedGeometryMode.QuadList
+                ]
+
+            if not <| List.contains x.Mode acceptedTopologies then
+                raise <| ArgumentException($"IndexedGeometryMode must be one of {acceptedTopologies}.")
+
+            if x.IsIndexed <> y.IsIndexed then
+                let a = if x.IsIndexed then x else y.ToIndexed()
+                let b = if y.IsIndexed then y else x.ToIndexed()
+                a.Union b
+
+            else
+                let indices =
+                    try
+                        y.IndexArray
+                        |> IndexHelpers.addOffset x.VertexCount
+                        |> ArrayHelpers.concat x.IndexArray
+                    with
+                    | exn ->
+                        raise <| ArgumentException($"Invalid indices: {exn.Message}")
+
+                let singleAttributes =
+                    if isNull x.SingleAttributes then y.SingleAttributes
+                    elif isNull y.SingleAttributes then x.SingleAttributes
+                    else SymDict.union [x.SingleAttributes; y.SingleAttributes]
+
+                let indexedAttributes =
+                    if isNull x.IndexedAttributes then y.IndexedAttributes
+                    elif isNull y.IndexedAttributes then x.IndexedAttributes
+                    else
+                        let r = SymDict.empty
+
+                        for KeyValue(sem, a) in x.IndexedAttributes do
+                            match y.IndexedAttributes |> SymDict.tryFind sem with
+                            | Some b ->
+                                try
+                                    r.[sem] <- ArrayHelpers.concat a b
+                                with
+                                | exn ->
+                                    raise <| ArgumentException($"Invalid {sem} attributes: {exn.Message}")
+                            | _ -> ()
+                        
+                        r
+
+                IndexedGeometry (
+                    Mode              = x.Mode,
+                    IndexArray        = indices,
+                    SingleAttributes  = singleAttributes,
+                    IndexedAttributes = indexedAttributes
+                )
           
-
         new() = 
             { Mode = IndexedGeometryMode.TriangleList; 
               IndexArray = null; 
@@ -225,9 +315,11 @@ module IndexedGeometry =
     let inline singleAttributes (g : IndexedGeometry) = g.SingleAttributes
 
     let inline isIndexed (g : IndexedGeometry) = g.IsIndexed
+    let inline vertexCount (g : IndexedGeometry) = g.VertexCount
     let inline faceVertexCount (g : IndexedGeometry) = g.FaceVertexCount
     let inline faceCount (g : IndexedGeometry) = g.FaceCount
     let inline clone (g : IndexedGeometry) = g.Clone()
     let inline toIndexed (g : IndexedGeometry) = g.ToIndexed()
     let inline toNonIndexed (g : IndexedGeometry) = g.ToNonIndexed()
     let inline toNonStripped (g : IndexedGeometry) = g.ToNonStripped()
+    let inline union (a : IndexedGeometry) (b : IndexedGeometry) = a.Union b
