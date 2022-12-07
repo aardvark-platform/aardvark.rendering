@@ -51,17 +51,20 @@ type internal DescriptorPoolBag(device : Device, perPool : int, resourcesPerPool
     member x.RemoveSet (set : DescriptorSet) =
         lock pools (fun () ->
             let pool = set.Pool
-            if pools.Contains pool then
-                if pool.Capacity = perPool then
-                    if partialSet.Remove pool then partial <- List.filter (fun p -> p <> pool) partial
-                    pool.Dispose()
-                    pools.Remove pool |> ignore
-                    Log.line "[Vulkan] using %d descriptor pools" pools.Count
+
+            lock pool (fun _ ->
+                if pools.Contains pool then
+                    if pool.Capacity = perPool then
+                        if partialSet.Remove pool then partial <- List.filter (fun p -> p <> pool) partial
+                        pool.Dispose()
+                        pools.Remove pool |> ignore
+                        Log.line "[Vulkan] using %d descriptor pools" pools.Count
+                    else
+                        if partialSet.Add pool then
+                            partial <- pool :: partial
                 else
-                    if partialSet.Add pool then
-                        partial <- pool :: partial
-            else
-                failf "cannot free non-pooled DescriptorSet using pool"
+                    failf "cannot free non-pooled DescriptorSet using pool"
+            )
          )
 
     override x.Destroy() =
@@ -81,8 +84,8 @@ and DescriptorSet =
             x.poolBag <- Some bag
 
         override x.Destroy() =
-            lock x.Pool (fun () ->
-                if x.Handle.IsValid then
+            if x.Handle.IsValid then
+                lock x.Pool (fun _ ->
                     native {
                         let! pHandle = x.Handle
                         VkRaw.vkFreeDescriptorSets(x.Device.Handle, x.Pool.Handle, 1u, pHandle)
@@ -91,9 +94,9 @@ and DescriptorSet =
 
                     x.Handle <- VkDescriptorSet.Null
                     x.Pool.FreeSet()
+                )
 
-                    x.poolBag |> Option.iter (fun b -> b.RemoveSet(x))
-            )
+                x.poolBag |> Option.iter (fun b -> b.RemoveSet(x))
 
         new(device : Device, pool : DescriptorPool, layout : DescriptorSetLayout, handle : VkDescriptorSet) =
             { inherit Resource<_>(device, handle); Pool = pool; Layout = layout; poolBag = None }

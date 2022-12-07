@@ -19,10 +19,13 @@ type DescriptorPool =
             x.capacity
 
         member x.FreeSet() =
-            Interlocked.Increment(&x.capacity) |> ignore
+            inc &x.capacity
 
         member x.TryAllocateSet() =
-            Interlocked.Change(&x.capacity, fun c -> if c <= 0 then 0, false else c-1, true)
+            if x.capacity <= 0 then false
+            else
+                dec &x.capacity
+                true
 
         override x.Destroy() =
             if x.Handle.IsValid then
