@@ -1,3 +1,9 @@
+### 5.3.3
+- Added union operation for IndexedGeometry
+- Added IndexedGeometry primitives for arrows and coordinate crosses
+- [Sg] Fixed and improved active flag cache
+- [Vulkan] Fixed issue with logging shader cache reads
+
 ### 5.3.2
 - [GL] Fixed access violation and other issues related to internal format queries
 - [GL] Implemented shader caches for compute shaders
@@ -8,6 +14,11 @@
 
 ### 5.3.1
 - Fixed export (sharing) bug on MacOS (pNext chain needs to be empty)
+- Added hardware support validation for mipmap generation
+- [GL] Fixed mipmap generation for compressed file and stream textures
+- [GL] Fixed issue with compressed texture download
+- [Vulkan] Implemented mipmap compressed PixTexture2d upload
+- [Vulkan] Fixed prepare of Stream- / FileTexture with compression
 
 ### 5.3.0
 - https://github.com/aardvark-platform/aardvark.docs/wiki/Aardvark-Rendering-5.3-changelog
