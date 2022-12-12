@@ -341,7 +341,7 @@ module Shader =
             let f = fresnel f0 nv roughness
             let g = schlickBeckmannGAF nv roughness * schlickBeckmannGAF nl roughness
             
-            let lambert = nl
+            let lambert = nl * 3.0
             let dr = V3d.III * occlusion
             
             let diffuseIrradiance = sampleEnvDiffuse vn * occlusion
@@ -575,12 +575,12 @@ module SceneSg =
             )
             
         let specular, diffuse =
-            // FileTexture("/Users/schorsch/Desktop/Forest.png", TextureParams.empty)
+            // FileTexture("/Users/schorsch/Desktop/studio_country_hall_4k.png", TextureParams.empty)
             // |> EnvironmentMap.ofPanorama runtime
-            Skybox.get "miramar_$.png"
+            Skybox.get "chapel_$.png"
             |> AVal.force
             |> EnvironmentMap.prepare runtime
-        
+            
         let specular = specular :> ITexture |> AVal.constant
         let diffuse = diffuse :> ITexture |> AVal.constant
             

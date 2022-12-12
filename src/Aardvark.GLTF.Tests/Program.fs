@@ -40,11 +40,15 @@ let main args =
             let prim = IndexedGeometryPrimitives.solidPhiThetaSphere (Sphere3d(V3d.Zero, 0.3)) 36 C4b.White
             let pos = prim.IndexedAttributes.[DefaultSemantic.Positions] :?> V3f[]
             
+            let idx = prim.IndexArray :?> int[]
+            // for i in 0 .. 3 .. idx.Length - 2 do
+            //     Fun.Swap(&idx.[i], &idx.[i+2])
+            
             {
                 Name            = Some "Sphere"
                 BoundingBox     = Box3d.FromCenterAndSize(V3d.Zero, V3d.III * 0.6)
                 Mode            = IndexedGeometryMode.TriangleList
-                Index           = Some (prim.IndexArray :?> int[])
+                Index           = Some idx
                 Positions       = pos
                 Normals         = Some (pos |> Array.map Vec.normalize)
                 Tangents        = None
@@ -99,6 +103,9 @@ let main args =
             ImageData = HashMap.empty
             RootNode = { Name = None; Trafo = None; Meshes = []; Children = nodes }
         }
+        
+        
+    testScene |> GLTF.save "/Users/schorsch/Desktop/test.glb"
         
     let models = clist (if initialModels.Length > 0 then Array.toList initialModels else [ testScene ])
         

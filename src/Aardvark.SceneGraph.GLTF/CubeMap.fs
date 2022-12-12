@@ -11,18 +11,7 @@ module internal EnvironmentMap =
     [<ReflectedDefinition>]
     module Shader =
         open FShade
-        
-        // r = 1
-        // l = -1
-        // n = 1
-        // M44d(
-        // 1.0,                     0.0,                       0.0,        0.0,
-        // 0.0,                     1.0,                       0.0,        0.0,
-        // 0.0,                     0.0,                       0.0,       -1.0,
-        // 0.0,                     0.0,                      a,  b
-        // )
 
-      
         let skybox =
             samplerCube {
                 texture uniform?Skybox
@@ -77,8 +66,6 @@ module internal EnvironmentMap =
             V4d(v.X ** e, v.Y ** e, v.Z ** e, v.W)
             
         let sampleEnv (worldDir : V3d) (roughness : float) =
-            //let worldDir = uniform.ViewTrafoInv.TransformDir viewDir |> Vec.normalize
-            
             let z = worldDir
             let x =
                 if abs z.Z > 0.999 then Vec.cross z V3d.OIO |> Vec.normalize
@@ -123,25 +110,9 @@ module internal EnvironmentMap =
                    
         let sampleFace (v : Effects.Vertex) =
             fragment {
-                // let dx = V2d(1.0 / (float uniform.ViewportSize.X), 0.0)
-                // let dy = V2d(0.0, 1.0 / (float uniform.ViewportSize.Y))
-                
                 let p00 = v.pos.XY / v.pos.W
-                // let p01 = p00 + dy
-                // let p10 = p00 + dx
-                // let p11 = p00 + dx + dy
-                
                 let s00 = uniform.ViewTrafoInv.TransformDir (V3d(p00, -1.0)) |> Vec.normalize
-                // let s01 = uniform.ViewTrafoInv.TransformDir (V3d(p01, -1.0)) |> Vec.normalize
-                // let s10 = uniform.ViewTrafoInv.TransformDir (V3d(p10, -1.0)) |> Vec.normalize
-                // let s11 = uniform.ViewTrafoInv.TransformDir (V3d(p11, -1.0)) |> Vec.normalize
-                //
-                // let c00 = skybox.SampleLevel(s00, float uniform.SourceLevel)
-                // let c01 = skybox.SampleLevel(s01, float uniform.SourceLevel)
-                // let c10 = skybox.SampleLevel(s10, float uniform.SourceLevel)
-                // let c11 = skybox.SampleLevel(s11, float uniform.SourceLevel)
-                // return (c00 + c01 + c10 + c11) * 0.25
-                
+            
                 let roughness = float (uniform.SourceLevel + 1) / float (uniform.LevelCount - 1)
                 let res = sampleEnv s00 roughness
                 return linearToSrgb (V4d(res, 1.0))
@@ -183,9 +154,17 @@ module internal EnvironmentMap =
             4, CameraView.lookAt V3d.Zero V3d.OOI V3d.ONO
             5, CameraView.lookAt V3d.Zero V3d.OON V3d.ONO
         |]
-    
+  
+    let private random =
+        let img = PixImage<float32>(Col.Format.RGBA, V2i(128, 128))
+        let rand = RandomSystem()
+        img.GetMatrix<C4f>().SetByIndex (fun _ ->
+            rand.UniformV4f().ToC4f()
+        ) |> ignore
+        PixTexture2d(PixImageMipMap [| img :> PixImage |], TextureParams.empty) :> ITexture
+      
     let levelCount = 8
-
+  
     let prepare (runtime : IRuntime) (src : ITexture) =
         let src = runtime.PrepareTexture src
         let diffuse = runtime.CreateTextureCube(src.Size.X, src.Format, src.MipMapLevels)
@@ -200,15 +179,7 @@ module internal EnvironmentMap =
         let sourceLevel = cval 0
         let isDiffuse = cval false
         
-        
-        let random =
-            let img = PixImage<float32>(Col.Format.RGBA, V2i(128, 128))
-            let rand = RandomSystem()
-            img.GetMatrix<C4f>().SetByIndex (fun _ ->
-                rand.UniformV4f().ToC4f()
-            ) |> ignore
-            PixTexture2d(PixImageMipMap [| img :> PixImage |], TextureParams.empty) :> ITexture
-        
+      
         
         let task =
             Sg.fullScreenQuad
@@ -258,7 +229,8 @@ module internal EnvironmentMap =
         
         // for level in 0 .. src.MipMapLevels - 1 do
         //     for face in 0 .. 5 do
-        //     runtime.Download(src, level, face).Save (sprintf "/Users/schorsch/Desktop/textures/f%d_%d.jpg" face level)
+        //         runtime.Download(src, level, face).Save (sprintf "/Users/schorsch/Desktop/textures/f%d_%d.jpg" face level)
+        //         
         src, diffuse
 
     let ofPanorama (runtime : IRuntime) (img : ITexture) =
