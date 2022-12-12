@@ -278,7 +278,9 @@ module private OpenGL =
                 DefaultSemantic.Colors, TextureFormat.Rgba8
                 DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
             ], samples)
+
         let handle = new Aardvark.Rendering.GL.ContextHandle(ctx, info)
+        do handle.Initialize(runtime.DebugConfig, setDefaultStates = true)
 
         { new IWindowSurface with
             override x.Signature = signature
@@ -354,7 +356,6 @@ type OpenGlApplication(forceNvidia : bool, debug : IDebugConfig, shaderCachePath
     let createContext() =
         let w = glfw.CreateWindow windowConfig
         let h = w.Surface.Handle :?> Aardvark.Rendering.GL.ContextHandle
-        h.Initialize(debug)
         glfw.RemoveExistingWindow w
         h
 
