@@ -15,17 +15,12 @@ type RaytracingPipelineDescription = {
 }
 
 type RaytracingPipeline(device : Device, handle : VkPipeline, description : RaytracingPipelineDescription) =
-    inherit Resource<VkPipeline>(device, handle)
+    inherit Pipeline(device, handle)
 
     member x.Description        = description
     member x.Program            = description.Program
     member x.MaxRecursionDepth  = description.MaxRecursionDepth
     member x.Layout             = description.Program.PipelineLayout
-
-    override x.Destroy() =
-        if x.Handle.IsValid then
-            VkRaw.vkDestroyPipeline(x.Device.Handle, x.Handle, NativePtr.zero)
-            x.Handle <- VkPipeline.Null
 
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]

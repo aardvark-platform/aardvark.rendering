@@ -69,7 +69,7 @@ and IResourceCache =
     abstract member Remove : key : list<obj> -> unit
 
 type INativeResourceLocation<'T when 'T : unmanaged> =
-    inherit IResourceLocation<'T>
+    inherit IResourceLocation
     abstract member Pointer : nativeptr<'T>
 
 
@@ -311,6 +311,30 @@ type MutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : list
             match handle with
             | Some(_, h) -> { handle = h; version = version }
             | None -> failwith "[Resource] inconsistent state"
+
+[<AbstractClass>]
+type AbstractResourceLocationWithPointer<'R, 'T when 'R :> Resource<'T> and 'T : equality and 'T : unmanaged>(owner : IResourceCache, key : list<obj>) =
+    inherit AbstractResourceLocation<'R>(owner, key)
+
+    let mutable ptr = NativePtr.zero<'T>
+
+    abstract member Compute : user: IResourceUser * token: AdaptiveToken * renderToken: RenderToken -> ResourceInfo<'R>
+
+    override x.Create() =
+        ptr <- NativePtr.alloc 1
+
+    override x.Destroy() =
+        if not <| NativePtr.isNull ptr then
+            NativePtr.free ptr
+            ptr <- NativePtr.zero
+
+    override x.GetHandle(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
+        let info = x.Compute(user, token, renderToken)
+        info.handle.Handle |> NativePtr.write ptr
+        info
+
+    interface INativeResourceLocation<'T> with
+        member x.Pointer = ptr
 
 [<AbstractClass>]
 type AbstractPointerResource<'T when 'T : unmanaged>(owner : IResourceCache, key : list<obj>) =
@@ -1185,10 +1209,28 @@ module Resources =
                           colorBlendState : INativeResourceLocation<VkPipelineColorBlendStateCreateInfo>,
                           depthStencil : INativeResourceLocation<VkPipelineDepthStencilStateCreateInfo>,
                           multisample : INativeResourceLocation<VkPipelineMultisampleStateCreateInfo>) =
-        inherit AbstractPointerResource<VkPipeline>(owner, key)
+        inherit AbstractResourceLocationWithPointer<Pipeline, VkPipeline>(owner, key)
 
-        static let check str err =
-            if err <> VkResult.Success then failwithf "[Vulkan] %s" str
+        let mutable handle : Option<Pipeline> = None
+        let mutable version = 0
+
+        let device = owner.Device
+
+        let viewportState =
+            let count =
+                if device.AllCount > 1u then
+                    if renderPass.LayerCount > 1 then 1u
+                    else device.AllCount
+                else 1u
+
+            VkPipelineViewportStateCreateInfo(
+                VkPipelineViewportStateCreateFlags.None,
+                uint32 count, NativePtr.zero,
+                uint32 count, NativePtr.zero
+            )
+
+        let dynamicStates =
+            [| VkDynamicState.Viewport; VkDynamicState.Scissor |]
 
         override x.Create() =
             base.Create()
@@ -1201,7 +1243,8 @@ module Resources =
             multisample.Acquire()
 
         override x.Destroy() =
-            base.Destroy()
+            handle |> Option.iter Disposable.dispose
+            handle <- None
             program.Release()
             inputState.Release()
             inputAssembly.Release()
@@ -1209,101 +1252,84 @@ module Resources =
             colorBlendState.Release()
             depthStencil.Release()
             multisample.Release()
+            base.Destroy()
+
+        member private x.CreatePipeline(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
+            let program = program.Update(user, token, renderToken).handle
+
+            native {
+                let! pShaderCreateInfos = program.ShaderCreateInfos
+
+                let! pViewportState = viewportState          
+                let! pDynamicStates = dynamicStates
+
+                let! pTessStateInfo =
+                    VkPipelineTessellationStateCreateInfo(
+                        VkPipelineTessellationStateCreateFlags.None,
+                        uint32 program.TessellationPatchSize
+                    )
+
+                let pTessState =
+                    if program.HasTessellation then pTessStateInfo
+                    else NativePtr.zero
+
+                let! pDynamicStates =
+                    VkPipelineDynamicStateCreateInfo(
+                        VkPipelineDynamicStateCreateFlags.None,
+                        uint32 dynamicStates.Length, pDynamicStates
+                    )
+
+                let inputState = inputState.Update(user, token, renderToken) |> ignore; inputState.Pointer
+                let inputAssembly = inputAssembly.Update(user, token, renderToken) |> ignore; inputAssembly.Pointer
+                let rasterizerState = rasterizerState.Update(user, token, renderToken) |> ignore; rasterizerState.Pointer
+                let depthStencil = depthStencil.Update(user, token, renderToken) |> ignore; depthStencil.Pointer
+                let colorBlendState = colorBlendState.Update(user, token, renderToken) |> ignore; colorBlendState.Pointer
+                let multisample = multisample.Update(user, token, renderToken) |> ignore; multisample.Pointer
+
+                let basePipeline, derivativeFlag =
+                    match handle with
+                    | Some h -> h.Handle, VkPipelineCreateFlags.DerivativeBit
+                    | None -> VkPipeline.Null, VkPipelineCreateFlags.None
+
+                let! pHandle = VkPipeline.Null
+                let! pDesc =
+                    VkGraphicsPipelineCreateInfo(
+                        VkPipelineCreateFlags.AllowDerivativesBit ||| derivativeFlag,
+                        uint32 program.ShaderCreateInfos.Length,
+                        pShaderCreateInfos,
+                        inputState,
+                        inputAssembly,
+                        pTessState,
+                        pViewportState,
+                        rasterizerState,
+                        multisample,
+                        depthStencil,
+                        colorBlendState,
+                        pDynamicStates, //dynamic
+                        program.PipelineLayout.Handle,
+                        renderPass.Handle,
+                        0u,
+                        basePipeline,
+                        -1
+                    )
+
+                VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, pDesc, NativePtr.zero, pHandle)
+                    |> check "could not create pipeline"
+
+                return new Pipeline(device, !!pHandle)
+            }
 
         override x.Compute(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
-            let program = program.Update(user, token, renderToken)
-
-            let prog = program.handle
-            let device = prog.Device
-
-            let pipeline =
-                native {
-                    let! pShaderCreateInfos = prog.ShaderCreateInfos
-
-                    let! pViewportState =
-                        let vp  =
-                            if device.AllCount > 1u then
-                                if renderPass.LayerCount > 1 then 1u
-                                else device.AllCount
-                            else 1u
-                        VkPipelineViewportStateCreateInfo(
-                            VkPipelineViewportStateCreateFlags.None,
-
-                            uint32 vp,
-                            NativePtr.zero,
-
-                            uint32 vp,
-                            NativePtr.zero
-                        )
-
-                    let dynamicStates = [| VkDynamicState.Viewport; VkDynamicState.Scissor |]
-                    let! pDynamicStates = Array.map uint32 dynamicStates
-
-                    let! pTessStateInfo =
-                        VkPipelineTessellationStateCreateInfo(
-                            VkPipelineTessellationStateCreateFlags.None,
-                            uint32 prog.TessellationPatchSize
-                        )
-
-                    let pTessState =
-                        if prog.HasTessellation then pTessStateInfo
-                        else NativePtr.zero
-
-                    let! pDynamicStates =
-                        VkPipelineDynamicStateCreateInfo(
-                            VkPipelineDynamicStateCreateFlags.None,
-
-                            uint32 dynamicStates.Length,
-                            NativePtr.cast pDynamicStates
-                        )
-
-                    // TODO: tessellation input-patch-size
-
-                    let inputState = inputState.Update(user, token, renderToken) |> ignore; inputState.Pointer
-                    let inputAssembly = inputAssembly.Update(user, token, renderToken) |> ignore; inputAssembly.Pointer
-                    let rasterizerState = rasterizerState.Update(user, token, renderToken) |> ignore; rasterizerState.Pointer
-                    let depthStencil = depthStencil.Update(user, token, renderToken) |> ignore; depthStencil.Pointer
-                    let colorBlendState = colorBlendState.Update(user, token, renderToken) |> ignore; colorBlendState.Pointer
-                    let multisample = multisample.Update(user, token, renderToken) |> ignore; multisample.Pointer
-
-                    let basePipeline, derivativeFlag =
-                        if not x.HasHandle then
-                            VkPipeline.Null, VkPipelineCreateFlags.None
-                        else
-                            !!x.Pointer, VkPipelineCreateFlags.DerivativeBit
-
-                    let! pHandle = VkPipeline.Null
-                    let! pDesc =
-                        VkGraphicsPipelineCreateInfo(
-                            VkPipelineCreateFlags.AllowDerivativesBit ||| derivativeFlag,
-                            uint32 prog.ShaderCreateInfos.Length,
-                            pShaderCreateInfos,
-                            inputState,
-                            inputAssembly,
-                            pTessState,
-                            pViewportState,
-                            rasterizerState,
-                            multisample,
-                            depthStencil,
-                            colorBlendState,
-                            pDynamicStates, //dynamic
-                            prog.PipelineLayout.Handle,
-                            renderPass.Handle,
-                            0u,
-                            basePipeline,
-                            -1
-                        )
-
-                    VkRaw.vkCreateGraphicsPipelines(device.Handle, VkPipelineCache.Null, 1u, pDesc, NativePtr.zero, pHandle)
-                        |> check "could not create pipeline"
-
-                    return !!pHandle
-                }
-
-            pipeline
-
-        override x.Free(p : VkPipeline) =
-            VkRaw.vkDestroyPipeline(renderPass.Device.Handle, p, NativePtr.zero)
+            if x.OutOfDate then         
+                let pipeline = x.CreatePipeline(user, token, renderToken)
+                handle |> Option.iter Disposable.dispose
+                handle <- Some pipeline
+                inc &version
+                { handle = pipeline; version = version }
+            else
+                match handle with
+                | Some h -> { handle = h; version = version }
+                | None -> failwith "[Resource] inconsistent state"
 
     type IndirectDrawCallResource(owner : IResourceCache, key : list<obj>, indexed : bool, calls : IResourceLocation<IndirectBuffer>) =
         inherit AbstractPointerResourceWithEquality<DrawCall>(owner, key)

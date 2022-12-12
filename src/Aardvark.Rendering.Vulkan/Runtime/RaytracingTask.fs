@@ -85,16 +85,33 @@ module private ``Trace Command Extensions`` =
 [<AutoOpen>]
 module private RaytracingTaskInternals =
 
-    type private ResourceHandle<'T>(location : IResourceLocation<'T>) =
+    [<AbstractClass>]
+    type private AbstractResourceHandle<'T>() =
         let mutable cache = { version = -1; handle = Unchecked.defaultof<'T> }
 
         member x.Handle = cache.handle
 
+        abstract member UpdateLocation : user: IResourceUser * token: AdaptiveToken * renderToken: RenderToken  -> ResourceInfo<'T>
+
         member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
-            let info = location.Update(IResourceUser.None, token, renderToken)
+            let info = x.UpdateLocation(IResourceUser.None, token, renderToken)
             let changed = info.version <> cache.version
             cache <- info
             changed
+
+    type private ResourceHandle<'T>(location : IResourceLocation<'T>) =
+        inherit AbstractResourceHandle<'T>()
+
+        override x.UpdateLocation(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
+            location.Update(user, token, renderToken)
+
+    type private NativeResourceHandle<'T when 'T : unmanaged>(location : INativeResourceLocation<'T>) =
+        inherit AbstractResourceHandle<'T>()
+
+        override x.UpdateLocation(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
+            let info = location.Update(user, token, renderToken)
+            let handle = NativePtr.read location.Pointer
+            { handle = handle; version = info.version }
 
     type CompiledCommand(manager : ResourceManager, resources : ResourceLocationSet, pipelineState : RaytracingPipelineState, input : aval<RaytracingCommand[]>) =
         inherit AdaptiveObject()
@@ -105,7 +122,7 @@ module private RaytracingTaskInternals =
         let preparedPipeline = manager.PrepareRaytracingPipeline(pipelineState)
 
         let pipeline = ResourceHandle(preparedPipeline.Pipeline)
-        let descriptorSets = ResourceHandle(preparedPipeline.DescriptorSets)
+        let descriptorSets = NativeResourceHandle(preparedPipeline.DescriptorSets)
         let shaderBindingTable = ResourceHandle(preparedPipeline.ShaderBindingTable)
 
         do for r in preparedPipeline.Resources do

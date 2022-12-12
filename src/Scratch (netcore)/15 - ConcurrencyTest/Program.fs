@@ -25,6 +25,7 @@ let main argv =
     let addRemoveTest   = true  // OK
     let textureTest     = true  // OK
     let jitterFrames    = false // OK
+    let updateResources = true
 
     Aardvark.Init()
 
@@ -235,16 +236,6 @@ let main argv =
         let trafo = Trafo3d.Translation(rnd.NextDouble()*10.0,rnd.NextDouble()*10.0,rnd.NextDouble()*10.0)
         addThing trafo
 
-    let threads =
-        [
-            startThread "cameraThread" cameraMovement
-
-            if textureTest then
-                startThread "textureThread" updateTexture
-
-            if addRemoveTest then
-                startThread "addRemoveThread" addThings
-        ]
 
     let sg =
         // create a red box with a simple shader
@@ -258,6 +249,27 @@ let main argv =
         |> Sg.diffuseTexture texture
         |> Sg.viewTrafo viewTrafo
         |> Sg.projTrafo projTrafo
+
+    use otherTask =
+        win.Runtime.CompileRender(signature, sg)
+
+    let updateResources() =
+        Thread.Sleep 2000
+        while running do
+            otherTask.Update()
+
+    let threads =
+        [
+            startThread "cameraThread" cameraMovement
+
+            startThread "resourceUpdateThread" updateResources
+
+            if textureTest then
+                startThread "textureThread" updateTexture
+
+            if addRemoveTest then
+                startThread "addRemoveThread" addThings
+        ]
 
     use task =
         let rnd = System.Random()

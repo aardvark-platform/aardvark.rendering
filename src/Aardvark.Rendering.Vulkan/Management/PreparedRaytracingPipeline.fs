@@ -87,7 +87,7 @@ type PreparedRaytracingPipeline(device         : Device,
                                 resources      : list<IResourceLocation>,
                                 program        : RaytracingProgram,
                                 pipeline       : IResourceLocation<RaytracingPipeline>,
-                                descriptorSets : IResourceLocation<DescriptorSetBinding>,
+                                descriptorSets : INativeResourceLocation<DescriptorSetBinding>,
                                 sbt            : IResourceLocation<ShaderBindingTable>,
                                 hitConfigPool  : IDisposable) =
 
