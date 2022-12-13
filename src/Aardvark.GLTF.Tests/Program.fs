@@ -104,9 +104,6 @@ let main args =
             RootNode = { Name = None; Trafo = None; Meshes = []; Children = nodes }
         }
         
-        
-    testScene |> GLTF.save "/Users/schorsch/Desktop/test.glb"
-        
     let models = clist (if initialModels.Length > 0 then Array.toList initialModels else [ testScene ])
         
     win.DropFiles.Add (fun paths ->
@@ -117,6 +114,9 @@ let main args =
             )
     )
    
+    let sw = System.Diagnostics.Stopwatch.StartNew()
+    let rot =
+        win.Time |> AVal.map (fun _ -> Trafo3d.RotationZ(0.4 * sw.Elapsed.TotalSeconds))
     let centerTrafo1 =
         models |> AList.toAVal |> AVal.map (fun models ->
             let bb = models |> Seq.map (fun m -> m.BoundingBox) |> Box3d
@@ -141,7 +141,7 @@ let main args =
             do! Shader.shade
         }
         //|> Sg.trafo rot
-        |> Sg.viewTrafo view
+        |> Sg.viewTrafo ((rot, view) ||> AVal.map2 (*))
         |> Sg.projTrafo proj
         |> Sg.compile win.Runtime win.FramebufferSignature
     win.RenderTask <- RenderTask.ofList [enableTask; renderTask]
