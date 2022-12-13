@@ -1636,8 +1636,8 @@ type ResourceManager(device : Device) =
     let imageSamplerArrayCache  = ResourceLocationCache<ImageSamplerArray>(device)
     let imageSamplerMapCache    = ConcurrentDictionary<IAdaptiveValue, amap<int, IResourceLocation<ImageSampler>>>()
     let programCache            = ResourceLocationCache<ShaderProgram>(device)
-    let simpleSurfaceCache      = ConcurrentDictionary<obj, ShaderProgram>()
-    let fshadeThingCache        = ConcurrentDictionary<obj, PipelineLayout * aval<FShade.Imperative.Module>>()
+    let simpleSurfaceCache      = ConcurrentDictionary<list<obj>, ShaderProgram>()
+    let dynamicShaderCache      = ConcurrentDictionary<list<obj>, PipelineLayout * aval<FShade.Imperative.Module>>()
 
     let accelerationStructureCache = ResourceLocationCache<Raytracing.AccelerationStructure>(device)
     let raytracingPipelineCache    = ResourceLocationCache<Raytracing.RaytracingPipeline>(device)
@@ -1783,7 +1783,7 @@ type ResourceManager(device : Device) =
         )
 
     member x.CreateShaderProgram(pass : RenderPass, data : ISurface) =
-        let programKey = [pass :> obj; data :> obj] :> obj
+        let programKey = [pass.Layout :> obj; data :> obj]
 
         let program =
             simpleSurfaceCache.GetOrAdd(programKey, fun _ ->
@@ -1826,38 +1826,24 @@ type ResourceManager(device : Device) =
 
     member x.CreateShaderProgram(signature : RenderPass, data : Aardvark.Rendering.Surface, top : IndexedGeometryMode) =
         match data with
-            | Surface.FShadeSimple effect ->
-                x.CreateShaderProgram(signature, effect, top)
-                //let module_ = signature.Link(effect, Range1d(0.0, 1.0), false, top)
-                //let layout = FShade.EffectInputLayout.ofModule module_
-                //let layout = device.CreatePipelineLayout(layout, signature.LayerCount, signature.PerLayerUniforms)
-                //layout, x.CreateShaderProgram(layout, AVal.constant module_)
-            | Surface.FShade(compile) ->
-                let layout, module_ =
-                    fshadeThingCache.GetOrAdd((signature, compile) :> obj, fun _ ->
-                        let outputs =
-                            signature.ColorAttachments
-                            |> Map.toList
-                            |> List.map (fun (idx, att) -> string att.Name, (att.Type, idx))
-                            |> Map.ofList
+        | Surface.FShadeSimple effect ->
+            x.CreateShaderProgram(signature, effect, top)
 
-                        let layout, module_ =
-                            compile {
-                                PipelineInfo.fshadeConfig with
-                                    outputs = outputs
-                            }
-                        let layout = device.CreatePipelineLayout(layout, signature.LayerCount, signature.PerLayerUniforms)
+        | Surface.FShade(compile) ->
+            let layout, module_ =
+                let key = [signature.Layout :> obj; compile :> obj]
 
-                        layout, module_
-                    )
+                dynamicShaderCache.GetOrAdd(key, fun _ ->
+                    raise <| NotImplementedException("Vulkan backend does not support dynamic shaders.")
+                )
 
-                layout, x.CreateShaderProgram(layout, module_)
+            layout, x.CreateShaderProgram(layout, module_)
 
-            | Surface.Backend s ->
-                x.CreateShaderProgram(signature, s)
+        | Surface.Backend s ->
+            x.CreateShaderProgram(signature, s)
 
-            | Surface.None ->
-                failwith "[Vulkan] encountered empty surface"
+        | Surface.None ->
+            failf "encountered empty surface"
 
     member x.CreateStorageBuffer(scope : Ag.Scope, layout : FShade.GLSL.GLSLStorageBuffer, u : IUniformProvider, additional : SymbolDict<IAdaptiveValue>) =
         let value =
@@ -1966,7 +1952,7 @@ type ResourceManager(device : Device) =
             }
 
         colorBlendStateCache.GetOrCreate(
-            [pass :> obj; globalMask :> obj; attachmentMask :> obj; globalBlend :> obj; attachmentBlend :> obj; blendConstant :> obj],
+            [pass.ColorAttachments :> obj; globalMask :> obj; attachmentMask :> obj; globalBlend :> obj; attachmentBlend :> obj; blendConstant :> obj],
             fun cache key ->
                 let writeMasks = getAttachmentStates globalMask attachmentMask
                 let blendModes = getAttachmentStates globalBlend attachmentBlend
@@ -1976,7 +1962,7 @@ type ResourceManager(device : Device) =
 
     member x.CreateMultisampleState(pass : RenderPass, multisample : aval<bool>) =
         multisampleCache.GetOrCreate(
-            [pass :> obj; multisample :> obj],
+            [pass.Samples :> obj; multisample :> obj],
             fun cache key ->
                 new MultisampleStateResource(cache, key, pass.Samples, multisample)
         )
