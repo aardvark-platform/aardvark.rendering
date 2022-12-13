@@ -104,6 +104,8 @@ let main args =
             RootNode = { Name = None; Trafo = None; Meshes = []; Children = nodes }
         }
         
+    // let initialModels = [| GLTF.loadZip "/Users/schorsch/Development/glTF-Sample-Models/2.0/Avocado/glTF/Archive.zip" |]
+    //     
     let models = clist (if initialModels.Length > 0 then Array.toList initialModels else [ testScene ])
         
     win.DropFiles.Add (fun paths ->
