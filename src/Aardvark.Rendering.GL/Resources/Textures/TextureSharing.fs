@@ -64,7 +64,7 @@ type ContextTextureSharingExtensions =
 
             GL.Check "TextureStorageMemXX"
 
-            this.SetDefaultTextureParams(target, texture.MipMapLevels)
+            this.SetDefaultTextureParams(target, texture.Format, texture.MipMapLevels)
 
             ResourceCounts.addTexture this memory.Size
             new SharedTexture(this, handle, texture, sharedMemory)
