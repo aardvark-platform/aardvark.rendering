@@ -43,7 +43,7 @@ nuget Unofficial.OpenTK.GLControl        ~> 3.0.21
 nuget Silk.NET.GLFW                      = 2.15.0
 nuget Silk.NET.Core                      = 2.15.0
 
-nuget SharpZipLib                        ~> 1.2.0
+nuget SharpZipLib                        ~> 1.4.1
 
 group Test
 framework: net6.0
