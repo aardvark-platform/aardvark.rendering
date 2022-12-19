@@ -93,6 +93,50 @@ module Samplers =
         let sample2Drgba32ui (samples : int) (runtime : IRuntime) =
             runtime |> sample2DInteger PixImage.random32ui TextureFormat.Rgba32ui samples
 
+        let sample2DGrayscale (runtime : IRuntime) =
+            let size = V2i(256)
+
+            use signature =
+                runtime.CreateFramebufferSignature([
+                    DefaultSemantic.Colors, TextureFormat.Rgba8
+                ])
+
+            let input = PixImage.random8ui' Col.Format.Gray size
+
+            let reference =
+                let pi = PixImage<uint8>(Col.Format.RGBA, size)
+                let red = input.GetChannel(0L)
+
+                for i = 0 to 2 do
+                    pi.GetChannel(int64 i).Set(red) |> ignore
+                pi.GetChannel(3L).Set(255uy) |> ignore
+
+                pi
+
+            use inputTexture = runtime.CreateTexture2D(size, TextureFormat.R8)
+            inputTexture.Upload input
+
+            use task =
+                Sg.fullScreenQuad
+                |> Sg.diffuseTexture' inputTexture
+                |> Sg.shader {
+                    do! DefaultSurfaces.diffuseTexture
+                }
+                |> Sg.compile runtime signature
+
+            let buffer = task |> RenderTask.renderToColor (AVal.constant size)
+            buffer.Acquire()
+
+            try
+                let output = buffer.GetValue().Download().AsPixImage<uint8>()
+
+                Expect.equal output.Size size "Unexpected texture size"
+                Expect.equal output.ChannelCount 4 "Unexpected channel count"
+                PixImage.compare V2i.Zero reference output
+
+            finally
+                buffer.Release()
+
     let tests (backend : Backend) =
         [
             "2D rgba8i", Cases.sample2Drgba8i 1
@@ -104,5 +148,7 @@ module Samplers =
             "2D rgba16ui", Cases.sample2Drgba16ui 1
             "2D rgba32ui", Cases.sample2Drgba32ui 1
             "2D rgba32ui multisampled", Cases.sample2Drgba32ui 2
+
+            "2D grayscale", Cases.sample2DGrayscale
         ]
         |> prepareCases backend "Samplers"

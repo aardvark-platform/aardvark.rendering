@@ -511,8 +511,9 @@ module TextureUpload =
 
                 | TextureFormat.CompressedRedRgtc1
                 | TextureFormat.CompressedSignedRedRgtc1 ->
-                    reference.GetChannel(Col.Channel.Green).Set(0uy) |> ignore
-                    reference.GetChannel(Col.Channel.Blue).Set(0uy) |> ignore
+                    let red = reference.GetChannel(0L)
+                    reference.GetChannel(Col.Channel.Green).Set(red) |> ignore
+                    reference.GetChannel(Col.Channel.Blue).Set(red) |> ignore
 
                 | TextureFormat.CompressedRgRgtc2
                 | TextureFormat.CompressedSignedRgRgtc2 ->

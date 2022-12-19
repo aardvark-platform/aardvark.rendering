@@ -1461,7 +1461,13 @@ module Resources =
         inherit AbstractImageViewResource(owner, key, image)
 
         override x.CreateImageView(image : Image) =
-            device.CreateInputImageView(image, samplerType, VkComponentMapping.Identity)
+            let mapping =
+                if VkFormat.toColFormat image.Format = Col.Format.Gray then
+                    VkComponentMapping(VkComponentSwizzle.R, VkComponentSwizzle.R, VkComponentSwizzle.R, VkComponentSwizzle.A)
+                else
+                    VkComponentMapping.Identity
+
+            device.CreateInputImageView(image, samplerType, mapping)
 
     type StorageImageViewResource(owner : IResourceCache, key : list<obj>, device : Device,
                                   imageType : FShade.GLSL.GLSLImageType, image : IResourceLocation<Image>) =

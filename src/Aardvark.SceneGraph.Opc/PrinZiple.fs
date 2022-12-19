@@ -11,7 +11,7 @@ open ICSharpCode.SharpZipLib.Zip
 
 module Prinziple = 
   // TODO @thomasortner: check this!!!!
-  ICSharpCode.SharpZipLib.Zip.ZipStrings.CodePage <- 437
+  let private codec = StringCodec.FromCodePage(StringCodec.ZipSpecCodePage)
 
   let private readAllBytes' (reader : BinaryReader) =
 
@@ -54,7 +54,7 @@ module Prinziple =
     match split with
     | Some(zip,entry) ->
       let entryPath = entry.Replace("\\","/")
-      let file = new ZipFile(File.OpenRead(zip))
+      let file = new ZipFile(File.OpenRead(zip), false, stringCodec = codec)
       let e = file.GetEntry(entryPath)
       file.GetInputStream(e)
     | None ->
@@ -62,7 +62,7 @@ module Prinziple =
 
   let loadBytesFromZip zipPath (entryPath:string) =
     let entryPath = entryPath.Replace("\\","/")
-    let file = new ZipFile(File.OpenRead(zipPath))
+    let file = new ZipFile(File.OpenRead(zipPath), false, stringCodec = codec)
     let e = file.GetEntry(entryPath)
     use s = file.GetInputStream(e)    
     use r = new BinaryReader(s)
@@ -70,7 +70,7 @@ module Prinziple =
 
   let loadXmlFromZip zipPath (entryPath : string) =
     let entryPath = entryPath.Replace("\\","/")
-    let file = new ZipFile(File.OpenRead(zipPath))
+    let file = new ZipFile(File.OpenRead(zipPath), false, stringCodec = codec)
     let e = file.GetEntry(entryPath)    
     use s = file.GetInputStream(e)    
     XDocument.Load(s)
@@ -108,7 +108,7 @@ module Prinziple =
     match split with
     | Some(zip,entry) ->
       let entryPath = entry.Replace("\\","/")
-      let file = new ZipFile(File.OpenRead(zip))
+      let file = new ZipFile(File.OpenRead(zip), false, stringCodec = codec)
       let e = file.GetEntry(entryPath)
       e <> Unchecked.defaultof<_>
     | None -> File.Exists path

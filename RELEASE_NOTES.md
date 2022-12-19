@@ -1,3 +1,8 @@
+### 5.3.4
+- Added default component swizzle that duplicates the red channel to the green and blue channels for grayscale formats
+- [Application.Slim.GL] Fixed context initialization 
+- [Vulkan] Fixed deadlock in concurrent descriptor set management
+
 ### 5.3.3
 - Added union operation for IndexedGeometry
 - Added IndexedGeometry primitives for arrows and coordinate crosses

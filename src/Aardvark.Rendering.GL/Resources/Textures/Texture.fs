@@ -525,7 +525,12 @@ module TextureCreationExtensions =
         // AllocateTexture
         // ================================================================================================================
 
-        member internal x.SetDefaultTextureParams(target : TextureTarget, mipMapLevels : int) =
+        member internal x.SetDefaultTextureParams(target : TextureTarget, format : TextureFormat, mipMapLevels : int) =
+            // For gray scale textures, duplicate channel
+            if TextureFormat.toColFormat format = Col.Format.Gray then
+                GL.TexParameter(target, TextureParameterName.TextureSwizzleG, int PixelFormat.Red)
+                GL.TexParameter(target, TextureParameterName.TextureSwizzleB, int PixelFormat.Red)
+
             match target with
             | TextureTarget.Texture2DMultisample
             | TextureTarget.Texture2DMultisampleArray -> ()
@@ -554,14 +559,14 @@ module TextureCreationExtensions =
             create target
 
         member inline private x.AllocateTexture1D(target : TextureTarget, mipMapLevels : int, format : SizedInternalFormat, size : int) =
-            x.SetDefaultTextureParams(target, mipMapLevels)
+            x.SetDefaultTextureParams(target, unbox<TextureFormat> format, mipMapLevels)
 
             x.ValidateAndAllocateTexture(target, size, fun target ->
                 GL.Dispatch.TexStorage1D(unbox target, mipMapLevels, format, size)
             )
 
         member inline private x.AllocateTexture2D(target : TextureTarget, mipMapLevels : int, format : SizedInternalFormat, size : V2i) =
-            x.SetDefaultTextureParams(target, mipMapLevels)
+            x.SetDefaultTextureParams(target, unbox<TextureFormat> format, mipMapLevels)
 
             x.ValidateAndAllocateTexture(target, size, fun target ->
                 GL.Dispatch.TexStorage2D(unbox target, mipMapLevels, format, size.X, size.Y)
@@ -569,12 +574,14 @@ module TextureCreationExtensions =
 
         member inline private x.AllocateTexture2DMultisample(target : TextureTarget, samples : int,
                                                              format : SizedInternalFormat, size : V2i, fixedSampleLocations : bool) =
+            x.SetDefaultTextureParams(target, unbox<TextureFormat> format, 1)
+
             x.ValidateAndAllocateTexture(target, size, fun target ->
                 GL.Dispatch.TexStorage2DMultisample(unbox target, samples, format, size.X, size.Y, fixedSampleLocations)
             )
 
         member inline private x.AllocateTexture3D(target : TextureTarget, mipMapLevels : int, format : SizedInternalFormat, size : V3i) =
-            x.SetDefaultTextureParams(target, mipMapLevels)
+            x.SetDefaultTextureParams(target, unbox<TextureFormat> format, mipMapLevels)
 
             x.ValidateAndAllocateTexture(target, size, fun target ->
                 GL.Dispatch.TexStorage3D(unbox target, mipMapLevels, format, size.X, size.Y, size.Z)
@@ -582,6 +589,8 @@ module TextureCreationExtensions =
 
         member inline private x.AllocateTexture3DMultisample(target : TextureTarget, samples : int,
                                                              format : SizedInternalFormat, size : V3i, fixedSampleLocations : bool) =
+            x.SetDefaultTextureParams(target, unbox<TextureFormat> format, 1)
+
             x.ValidateAndAllocateTexture(target, size, fun target ->
                 GL.Dispatch.TexStorage3DMultisample(unbox target, samples, format, size.X, size.Y, size.Z, fixedSampleLocations)
             )
