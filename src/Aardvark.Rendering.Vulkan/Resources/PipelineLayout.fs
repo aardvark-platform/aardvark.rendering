@@ -1,6 +1,5 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
-open System.Threading
 open System.Runtime.CompilerServices
 open Aardvark.Base
 open Aardvark.Base.Sorting
@@ -91,8 +90,10 @@ type PipelineLayout =
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PipelineLayout =
+    open FShade
 
-    let ofShaders (iface : FShade.GLSL.GLSLProgramInterface) (shaders : array<ShaderModule>) (layers : int) (perLayer : Set<string>) (device : Device) =
+    let ofProgramInterface (inputLayout : Option<EffectInputLayout>) (iface : FShade.GLSL.GLSLProgramInterface) 
+                           (layers : int) (perLayer : Set<string>) (device : Device) =
         // figure out which stages reference which uniforms/textures
         let uniformBlocks = Dict.empty
         let textures = Dict.empty
@@ -101,72 +102,86 @@ module PipelineLayout =
         let accelerationStructures = Dict.empty
         let mutable setCount = 0
 
-        let mutable inputs = []
-        let mutable outputs = []
+        let findStages (name : string) =
+            let stages =
+                match inputLayout with
+                | Some layout ->
+                    let uniform =
+                        layout.Uniforms
+                        |> MapExt.tryFind name
+                        |> Option.defaultWith (fun _ ->
+                            layout.Uniforms |> MapExt.pick (fun _ u ->
+                                if u.Buffer = Some name then Some u
+                                else None
+                            )
+                        )
 
-        for shader in shaders do
-            let flags = VkShaderStageFlags.ofShaderStage shader.Stage 
-            let siface = iface.shaders.[shader.Slot]
+                    (VkShaderStageFlags.None, uniform.Stages)
+                    ||> Set.fold (fun accum stage ->
+                        accum ||| (VkShaderStageFlags.ofShaderStage (ShaderStage.ofFShade stage))
+                    )
 
-            match shader.Stage with
-                | ShaderStage.Vertex -> inputs <- siface.shaderInputs
-                | ShaderStage.Fragment -> outputs <- siface.shaderOutputs
-                | _ -> ()
+                | _ ->
+                    (VkShaderStageFlags.None, iface.shaders.Slots) ||> MapExt.fold (fun accum slot siface ->
+                        let stage = VkShaderStageFlags.ofShaderStage (ShaderStage.ofFShade slot.Stage)
 
-            for block in siface.shaderUniformBuffers do
-                let block = iface.uniformBuffers.[block]
-                setCount <- max setCount (block.ubSet + 1)
-                let key = (block.ubSet, block.ubBinding)
-                let referenced = 
-                    match uniformBlocks.TryGetValue key with
-                        | (true, (_, referencedBy)) -> referencedBy
-                        | _ -> VkShaderStageFlags.None  
-                uniformBlocks.[key] <- (block, referenced ||| flags)
-                         
-            for block in siface.shaderStorageBuffers do
-                let block = iface.storageBuffers.[block]
-                setCount <- max setCount (block.ssbSet + 1)
-                let key = (block.ssbSet, block.ssbBinding)
-                let referenced = 
-                    match storageBlocks.TryGetValue key with
-                        | (true, (_, referencedBy)) -> referencedBy
-                        | _ -> VkShaderStageFlags.None  
-                storageBlocks.[key] <- (block, referenced ||| flags)
-                                   
-            for tex in siface.shaderSamplers do
-                let tex = iface.samplers.[tex]
-                setCount <- max setCount (tex.samplerSet + 1)
-                let key = (tex.samplerSet, tex.samplerBinding)
-                let referenced = 
-                    match textures.TryGetValue key with
-                        | (true, (_, referencedBy)) -> referencedBy
-                        | _ -> VkShaderStageFlags.None
-                                    
-                textures.[key] <- (tex, referenced ||| flags)
+                        let references =
+                            [ siface.shaderUniformBuffers
+                              siface.shaderStorageBuffers
+                              siface.shaderSamplers
+                              siface.shaderImages
+                              siface.shaderAccelerationStructures ]
+                            |> FSharp.Data.Adaptive.HashSet.unionMany
 
-            for img in siface.shaderImages do
-                let img = iface.images.[img]
-                setCount <- max setCount (img.imageSet + 1)
-                let key = (img.imageSet, img.imageBinding)
-                let referenced = 
-                    match images.TryGetValue key with
-                        | (true, (_, referencedBy)) -> referencedBy
-                        | _ -> VkShaderStageFlags.None
-                                    
-                images.[key] <- (img, referenced ||| flags)
+                        if references.Contains name then
+                            accum ||| stage
+                        else
+                            accum
+                    )
 
-            for accel in siface.shaderAccelerationStructures do
-                let accel = iface.accelerationStructures.[accel]
-                setCount <- max setCount (accel.accelSet + 1)
-                let key = (accel.accelSet, accel.accelBinding)
-                let referenced = 
-                    match accelerationStructures.TryGetValue key with
-                    | (true, (_, referencedBy)) -> referencedBy
-                    | _ -> VkShaderStageFlags.None
-                                    
-                accelerationStructures.[key] <- (accel, referenced ||| flags)
-                
-                            
+            if stages = VkShaderStageFlags.None then
+                VkShaderStageFlags.All
+            else
+                stages
+
+        let add (dict : Dict<'K, 'V * VkShaderStageFlags>) (key : 'K) (value : 'V) (flags : VkShaderStageFlags) =
+            let curr =
+                match dict.TryGetValue key with
+                | (true, (_, flags)) -> flags
+                | _ -> VkShaderStageFlags.None
+
+            dict.[key] <- (value, curr ||| flags)
+
+        for (KeyValue(n, b)) in iface.uniformBuffers do
+            setCount <- max setCount (b.ubSet + 1)
+            let key = b.ubSet, b.ubBinding
+            let stages = findStages n
+            (b, stages) ||> add uniformBlocks key
+
+        for (KeyValue(n, b)) in iface.storageBuffers do
+            setCount <- max setCount (b.ssbSet + 1)
+            let key = b.ssbSet, b.ssbBinding
+            let stages = findStages n
+            (b, stages) ||> add storageBlocks key
+
+        for (KeyValue(n, b)) in iface.samplers do
+            setCount <- max setCount (b.samplerSet + 1)
+            let key = b.samplerSet, b.samplerBinding
+            let stages = findStages n
+            (b, stages) ||> add textures key
+
+        for (KeyValue(n, b)) in iface.images do
+            setCount <- max setCount (b.imageSet + 1)
+            let key = b.imageSet, b.imageBinding
+            let stages = findStages n
+            (b, stages) ||> add images key
+
+        for (KeyValue(n, b)) in iface.accelerationStructures do
+            setCount <- max setCount (b.accelSet + 1)
+            let key = b.accelSet, b.accelBinding
+            let stages = findStages n
+            (b, stages) ||> add accelerationStructures key
+ 
         let uniformBlocks = uniformBlocks.Values |> Seq.toList
         let storageBlocks = storageBlocks.Values |> Seq.toList
         let textures = textures.Values |> Seq.toList
@@ -195,7 +210,6 @@ module PipelineLayout =
                     device
 
             sets.[block.ssbSet].Add binding
-            
 
         for (tex, stageFlags) in textures do
             let binding = 
@@ -227,7 +241,6 @@ module PipelineLayout =
 
             sets.[accel.accelSet].Add binding
 
-
         let setLayouts =
             sets |> Array.map (fun l -> 
                 if l.Count = 0 then
@@ -237,7 +250,6 @@ module PipelineLayout =
                     arr.QuickSortAscending(fun v -> v.Binding) |> ignore
                     device |> DescriptorSetLayout.create arr
             )
-
 
         // create a pipeline layout from the given DescriptorSetLayouts
         let handles = setLayouts |> Array.map (fun d -> d.Handle)
@@ -253,35 +265,26 @@ module PipelineLayout =
             let! pHandle = VkPipelineLayout.Null
             VkRaw.vkCreatePipelineLayout(device.Handle, pInfo, NativePtr.zero, pHandle)
                 |> check "could not create PipelineLayout"
-  
-            let info =    
+
+            let info =
                 {
-                    pInputs                 = inputs
-                    pOutputs                = outputs
+                    pInputs                 = iface.inputs
+                    pOutputs                = iface.outputs
                     pUniformBlocks          = List.map fst uniformBlocks
                     pStorageBlocks          = List.map fst storageBlocks
                     pTextures               = List.map fst textures
                     pImages                 = List.map fst images
                     pAccelerationStructures = List.map fst accelerationStructures
                     pEffectLayout           = None
-                }    
-                      
+                }
+
             return new PipelineLayout(device, !!pHandle, setLayouts, info, layers, perLayer)
         }
 
-    open FShade
-    open FShade.Imperative
-
-    let ofEffectInputLayout (layout : EffectInputLayout) (layers : int) (perLayer : Set<string>) (device : Device) : PipelineLayout =
-        
-        failf "not implemented"
-
 [<AbstractClass; Sealed; Extension>]
 type ContextPipelineLayoutExtensions private() =
-    [<Extension>]
-    static member inline CreatePipelineLayout(this : Device, iface : FShade.GLSL.GLSLProgramInterface, shaders : array<ShaderModule>, layers : int, perLayer : Set<string>) =
-        this |> PipelineLayout.ofShaders iface shaders layers perLayer
 
     [<Extension>]
-    static member inline CreatePipelineLayout(this : Device, layout : FShade.EffectInputLayout, layers : int, perLayer : Set<string>) =
-        this |> PipelineLayout.ofEffectInputLayout layout layers perLayer
+    static member inline CreatePipelineLayout(this : Device, iface : FShade.GLSL.GLSLProgramInterface,
+                                              layers : int, perLayer : Set<string>) =
+        this |> PipelineLayout.ofProgramInterface None iface layers perLayer

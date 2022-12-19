@@ -240,11 +240,13 @@ type ShaderProgram(device : Device, shaders : array<ShaderModule>, layout : Pipe
 module ShaderProgram =
     open System.IO
     open FShade.GLSL
+    open FShade
 
     let private versionRx = System.Text.RegularExpressions.Regex @"\#version.*$"
     let private layoutRx = System.Text.RegularExpressions.Regex @"layout[ \t]*\([ \t]*set[ \t]*\=[ \t]*(?<set>[0-9]+),[ \t]*binding[ \t]*\=[ \t]*(?<binding>[0-9]+)[ \t]*\)[ \t\r\n]*uniform[ \t]+(?<name>[_a-zA-Z0-9]+)[ \t\r\n]*\{"
-    
-    let private ofGLSLInteral (layout : Option<PipelineLayout>) (iface : FShade.GLSL.GLSLProgramInterface) (code : string) (layers : int) (perLayer : Set<string>) (device : Device) =
+
+    let private ofGLSLInteral (iface : FShade.GLSL.GLSLProgramInterface) (inputLayout : Option<EffectInputLayout>)
+                              (code : string) (layers : int) (perLayer : Set<string>) (device : Device) =
         let code =
             layoutRx.Replace(code, fun m ->
                 let set = m.Groups.["set"].Value
@@ -288,11 +290,7 @@ module ShaderProgram =
                 device.CreateShaderModule(slot, binary)
             )
 
-        let layout =
-            match layout with
-            | Some l -> l.AddReference(); l
-            | None -> device.CreatePipelineLayout(iface, shaders, layers, perLayer)
-
+        let layout = PipelineLayout.ofProgramInterface inputLayout iface layers perLayer device
         new ShaderProgram(device, shaders, layout, code, iface)
 
 
@@ -308,7 +306,7 @@ module ShaderProgram =
     let private moduleCache = Symbol.Create "moduleCache"
 
     let ofGLSL (code : FShade.GLSL.GLSLShader) (device : Device) =
-        ofGLSLInteral None code.iface code.code 1 Set.empty device
+        ofGLSLInteral code.iface None code.code 1 Set.empty device
 
     let internal pickler = MBrace.FsPickler.FsPickler.CreateBinarySerializer()
 
@@ -321,7 +319,6 @@ module ShaderProgram =
         }
 
     module internal ShaderProgramData =
-        open FShade
 
         type BinaryWriter with
             member inline x.WriteType<'T>(_value : 'T) =
@@ -453,7 +450,7 @@ module ShaderProgram =
             perLayer = program.PipelineLayout.PerLayerUniforms
         }
 
-    let ofByteArray (data : byte[]) (device : Device) =
+    let ofByteArray (inputLayout : Option<EffectInputLayout>) (data : byte[]) (device : Device) =
         let data = ShaderProgramData.unpickle data
 
         let shaders =
@@ -469,12 +466,12 @@ module ShaderProgram =
             Report.Line(4, "{0}", line)
         Report.End(4) |> ignore
 
-        let layout = device.CreatePipelineLayout(data.shader.iface, shaders, data.layers, data.perLayer)
+        let layout = PipelineLayout.ofProgramInterface inputLayout data.shader.iface data.layers data.perLayer device
         new ShaderProgram(device, shaders, layout, data.shader.code, data.shader.iface)
 
-    let tryOfByteArray (data : byte[]) (device : Device) =
+    let tryOfByteArray (inputLayout : Option<EffectInputLayout>) (data : byte[]) (device : Device) =
         try
-            Some <| ofByteArray data device
+            Some <| ofByteArray inputLayout data device
         with _ ->
             None
 
@@ -482,21 +479,21 @@ module ShaderProgram =
         let hash = pickler.ComputeHash value
         hash.Hash |> Guid |> string
 
-    let private tryRead (file : string) (device : Device) : Option<ShaderProgram> =
+    let private tryRead (inputLayout : Option<EffectInputLayout>) (file : string)  (device : Device) : Option<ShaderProgram> =
         if File.Exists file then
             Report.Begin(4, "[Vulkan] loading shader {0}", Path.GetFileName file)
             try
                 try
                     let data = File.ReadAllBytes file
-                    Some <| ofByteArray data device
+                    Some <| ofByteArray inputLayout data device
                 with exn ->
                     Log.warn "[Vulkan] Failed to read from shader program file cache '%s': %s" file exn.Message
                     None
             finally
-                Report.End(4) |> ignore             
+                Report.End(4) |> ignore
         else
             None
-    
+
     let private write (file : string) (program : ShaderProgram) =
         try
             let data = toByteArray program
@@ -505,32 +502,35 @@ module ShaderProgram =
             Log.warn "[Vulkan] Failed to write to shader program file cache '%s': %s" file exn.Message
 
     let ofModule (module_ : FShade.Imperative.Module) (device : Device) =
-        device.GetCached(moduleCache, module_, fun module_ ->
+        let hash = module_.ComputeHash()
+
+        let inputLayout =
+            match module_.userData with
+            | :? (obj * EffectInputLayout) as (_, layout) -> Some layout
+            | _ -> None
+
+        let compile() =
+            let glsl =
+                module_
+                |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
+                |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
+
+            ofGLSLInteral glsl.iface inputLayout glsl.code 1 Set.empty device
+
+        device.GetCached(moduleCache, hash, fun hash ->
             match device.ShaderCachePath with
-                | Some shaderCachePath ->
-                    let fileName = hashFileName module_.hash
+            | Some shaderCachePath ->
+                let fileName = hashFileName hash
 
-                    let cacheFile = Path.Combine(shaderCachePath, fileName + ".module")
-                    match tryRead cacheFile device with
-                        | Some p -> p
-
-                        | None ->
-                            let glsl = 
-                                module_ 
-                                |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
-                                |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
-
-                            let res = ofGLSL glsl device
-                            write cacheFile res
-                            res
+                let cacheFile = Path.Combine(shaderCachePath, fileName + ".module")
+                match tryRead inputLayout cacheFile device with
+                | Some p -> p
                 | None ->
-                    let glsl = 
-                        module_ 
-                        |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
-                        |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
-
-                    ofGLSL glsl device
-
+                    let res = compile()
+                    write cacheFile res
+                    res
+            | None ->
+                compile()
         )
 
     let ofEffect (effect : FShade.Effect) (mode : IndexedGeometryMode) (pass : RenderPass) (device : Device) =
@@ -544,48 +544,38 @@ module ShaderProgram =
 
         device.GetCached(effectCache, key, fun key ->
             match device.ShaderCachePath with
-                | Some shaderCachePath ->
-                    let fileName = 
-                        let colors = key.layout.ColorAttachments |> Map.map (fun _ att -> att.Name.ToString())
-                        let depth = key.layout.DepthStencilAttachment
-                        if key.layout.LayerCount > 1 then
-                            hashFileName (key.effect.Id, key.topology, colors, depth, key.layout.LayerCount, key.layout.PerLayerUniforms)
-                        else
-                            hashFileName (key.effect.Id, colors, depth)
+            | Some shaderCachePath ->
+                let fileName = 
+                    let colors = key.layout.ColorAttachments |> Map.map (fun _ att -> att.Name.ToString())
+                    let depth = key.layout.DepthStencilAttachment
+                    if key.layout.LayerCount > 1 then
+                        hashFileName (key.effect.Id, key.topology, colors, depth, key.layout.LayerCount, key.layout.PerLayerUniforms)
+                    else
+                        hashFileName (key.effect.Id, colors, depth)
 
-                    let cacheFile = Path.Combine(shaderCachePath, fileName + ".effect")
-                    match tryRead cacheFile device with
-                        | Some p ->
-                            if device.DebugConfig.VerifyShaderCacheIntegrity then
-                                let glsl = 
-                                    key.layout.Link(key.effect, key.deviceCount, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, key.topology)
-                                    |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
-                                    |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
+                let cacheFile = Path.Combine(shaderCachePath, fileName + ".effect")
+                match tryRead None cacheFile device with
+                | Some p ->
+                    if device.DebugConfig.VerifyShaderCacheIntegrity then
+                        let glsl = 
+                            key.layout.Link(key.effect, key.deviceCount, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, key.topology)
+                            |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
+                            |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
 
-                                let temp = ofGLSL glsl device
-                                let real = toByteArray p
-                                let should = toByteArray temp
-                                temp.Destroy()
+                        let temp = ofGLSL glsl device
+                        let real = toByteArray p
+                        let should = toByteArray temp
+                        temp.Destroy()
 
-                                if real <> should then
-                                    let tmp = Path.GetTempFileName()
-                                    let tmpReal = tmp + ".real"
-                                    let tmpShould = tmp + ".should"
-                                    File.writeAllBytesSafe tmpReal real
-                                    File.writeAllBytesSafe tmpShould should
-                                    failf "invalid cache for Effect: real: %s vs. should: %s" tmpReal tmpShould
+                        if real <> should then
+                            let tmp = Path.GetTempFileName()
+                            let tmpReal = tmp + ".real"
+                            let tmpShould = tmp + ".should"
+                            File.writeAllBytesSafe tmpReal real
+                            File.writeAllBytesSafe tmpShould should
+                            failf "invalid cache for Effect: real: %s vs. should: %s" tmpReal tmpShould
 
-                            p
-
-                        | None ->
-                            let glsl = 
-                                key.layout.Link(key.effect, key.deviceCount, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, key.topology)
-                                |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
-                                |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
-
-                            let res = ofGLSL glsl device
-                            write cacheFile res
-                            res
+                    p
 
                 | None ->
                     let glsl = 
@@ -593,7 +583,17 @@ module ShaderProgram =
                         |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
                         |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
 
-                    ofGLSL glsl device
+                    let res = ofGLSL glsl device
+                    write cacheFile res
+                    res
+
+            | None ->
+                let glsl = 
+                    key.layout.Link(key.effect, key.deviceCount, PipelineInfo.fshadeConfig.depthRange, PipelineInfo.fshadeConfig.flipHandedness, key.topology)
+                    |> FShade.Imperative.ModuleCompiler.compile PipelineInfo.fshadeBackend
+                    |> FShade.GLSL.Assembler.assemble PipelineInfo.fshadeBackend
+
+                ofGLSL glsl device
         )
 
 

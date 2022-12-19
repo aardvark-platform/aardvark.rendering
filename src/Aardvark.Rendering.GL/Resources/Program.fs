@@ -884,27 +884,17 @@ module ProgramExtensions =
                     let (inputLayout,b) = create (signature.EffectConfig(Range1d(-1.0, 1.0), false))
 
                     let initial = AVal.force b
-                    let effect = initial.userData |> unbox<Effect>
-                    let layoutHash = pickler.ComputeHash(inputLayout).Hash |> Convert.ToBase64String
+                    let layoutHash = inputLayout.ComputeHash()
 
                     let iface =
-                        match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend initial)) with
-                        | Success prog ->
-                            let iface = prog.Interface
-                            { iface with
-                                samplers = iface.samplers |> MapExt.map (fun _ sam ->
-                                    match MapExt.tryFind sam.samplerName inputLayout.eTextures with
-                                    | Some infos -> { sam with samplerTextures = infos }
-                                    | None -> sam
-                                )
-                            }
+                        match x.TryCompileProgram(initial.hash + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend initial)) with
+                        | Success prog -> prog.Interface
                         | Error e ->
                             failwithf "[GL] shader compiler returned errors: %s" e
 
                     let changeableProgram =
                         b |> AVal.map (fun m ->
-                            let effect = m.userData |> unbox<Effect>
-                            match x.TryCompileProgram(effect.Id + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend m)) with
+                            match x.TryCompileProgram(m.hash + layoutHash, signature, lazy (ModuleCompiler.compileGLSL x.FShadeBackend m)) with
                             | Success p -> p
                             | Error e ->
                                 Log.error "[GL] shader compiler returned errors: %A" e

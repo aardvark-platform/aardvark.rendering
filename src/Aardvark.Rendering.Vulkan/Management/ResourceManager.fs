@@ -844,28 +844,18 @@ module Resources =
             | :? IResourceLocation<ImageSampler> as r -> pending.Add r |> ignore
             | _ -> ()
 
-    type ShaderProgramEffectResource(owner : IResourceCache, key : list<obj>, device : Device, layout : PipelineLayout, input : aval<FShade.Imperative.Module>) =
+    type DynamicShaderProgramResource(owner : IResourceCache, key : list<obj>, device : Device, layout : PipelineLayout, input : aval<FShade.Imperative.Module>) =
         inherit ImmutableResourceLocation<FShade.Imperative.Module, ShaderProgram>(
             owner, key,
             input,
             {
-                icreate = fun (e : FShade.Imperative.Module) -> ShaderProgram.ofModule e device
-                idestroy = fun p -> p.Dispose()
+                icreate = fun (e : FShade.Imperative.Module) -> layout.AddReference(); ShaderProgram.ofModule e device
+                idestroy = fun p -> p.Dispose(); layout.Dispose()
                 ieagerDestroy = false
             }
         )
 
-
-    type ShaderProgramResource(owner : IResourceCache, key : list<obj>, device : Device, pass : RenderPass, input : ISurface, top : IndexedGeometryMode) =
-        inherit ImmutableResourceLocation<ISurface, ShaderProgram>(
-            owner, key,
-            AVal.constant input,
-            {
-                icreate = fun (b : ISurface) -> device.CreateShaderProgram(pass, b)
-                idestroy = fun p -> p.Dispose()
-                ieagerDestroy = false
-            }
-        )
+        member x.Layout = layout
 
     type InputAssemblyStateResource(owner : IResourceCache, key : list<obj>, input : IndexedGeometryMode, program : IResourceLocation<ShaderProgram>) =
         inherit AbstractPointerResourceWithEquality<VkPipelineInputAssemblyStateCreateInfo>(owner, key)
@@ -1641,9 +1631,7 @@ type ResourceManager(device : Device) =
     let imageSamplerCache       = ResourceLocationCache<ImageSampler>(device)
     let imageSamplerArrayCache  = ResourceLocationCache<ImageSamplerArray>(device)
     let imageSamplerMapCache    = ConcurrentDictionary<IAdaptiveValue, amap<int, IResourceLocation<ImageSampler>>>()
-    let programCache            = ResourceLocationCache<ShaderProgram>(device)
-    let simpleSurfaceCache      = ConcurrentDictionary<list<obj>, ShaderProgram>()
-    let dynamicShaderCache      = ConcurrentDictionary<list<obj>, PipelineLayout * aval<FShade.Imperative.Module>>()
+    let dynamicProgramCache     = ResourceLocationCache<ShaderProgram>(device)
 
     let accelerationStructureCache = ResourceLocationCache<Raytracing.AccelerationStructure>(device)
     let raytracingPipelineCache    = ResourceLocationCache<Raytracing.RaytracingPipeline>(device)
@@ -1676,7 +1664,7 @@ type ResourceManager(device : Device) =
         samplerStateCache.Clear()
         imageSamplerCache.Clear()
         imageSamplerArrayCache.Clear()
-        programCache.Clear()
+        dynamicProgramCache.Clear()
 
         accelerationStructureCache.Clear()
         raytracingPipelineCache.Clear()
@@ -1789,12 +1777,7 @@ type ResourceManager(device : Device) =
         )
 
     member x.CreateShaderProgram(pass : RenderPass, data : ISurface) =
-        let programKey = [pass.Layout :> obj; data :> obj]
-
-        let program =
-            simpleSurfaceCache.GetOrAdd(programKey, fun _ ->
-                device.CreateShaderProgram(pass, data)
-            )
+        let program = device.CreateShaderProgram(pass, data)
 
         let resource =
             { new UncachedResourceLocation<ShaderProgram>(pass.Device) with
@@ -1807,7 +1790,6 @@ type ResourceManager(device : Device) =
         program.PipelineLayout, resource
 
     member x.CreateShaderProgram(signature : RenderPass, data : FShade.Effect, top : IndexedGeometryMode) =
-
         let program = device.CreateShaderProgram(signature, data, top)
 
         if FShade.EffectDebugger.isAttached then
@@ -1823,30 +1805,36 @@ type ResourceManager(device : Device) =
 
         program.PipelineLayout, resource
 
-    member x.CreateShaderProgram(layout : PipelineLayout, data : aval<FShade.Imperative.Module>) =
-        programCache.GetOrCreate([layout :> obj; data :> obj], fun cache key ->
-            let prog = new ShaderProgramEffectResource(cache, key, device, layout, data)
-            prog.Acquire()
-            prog
-        )
+    member private x.CreateDynamicShaderProgram(pass : RenderPass, compile : FShade.EffectConfig -> FShade.EffectInputLayout * aval<FShade.Imperative.Module>) =
+        dynamicProgramCache.GetOrCreate(
+            [pass.Layout :> obj; compile :> obj],
+            fun cache key ->
+                let effectConfig =
+                    pass.EffectConfig(
+                        PipelineInfo.fshadeConfig.depthRange,
+                        PipelineInfo.fshadeConfig.flipHandedness
+                    )
 
-    member x.CreateShaderProgram(signature : RenderPass, data : Aardvark.Rendering.Surface, top : IndexedGeometryMode) =
+                let _, module_ = compile effectConfig
+                use initialProgram = device.CreateShaderProgram(AVal.force module_)
+
+                let program = new DynamicShaderProgramResource(cache, key, device, initialProgram.PipelineLayout, module_)
+                program.Acquire()
+                program
+        )
+        |> unbox<DynamicShaderProgramResource>
+
+    member x.CreateShaderProgram(pass : RenderPass, data : Aardvark.Rendering.Surface, top : IndexedGeometryMode) =
         match data with
         | Surface.FShadeSimple effect ->
-            x.CreateShaderProgram(signature, effect, top)
+            x.CreateShaderProgram(pass, effect, top)
 
-        | Surface.FShade(compile) ->
-            let layout, module_ =
-                let key = [signature.Layout :> obj; compile :> obj]
+        | Surface.FShade compile ->
+            let program = x.CreateDynamicShaderProgram(pass, compile)
+            program.Layout, program
 
-                dynamicShaderCache.GetOrAdd(key, fun _ ->
-                    raise <| NotImplementedException("Vulkan backend does not support dynamic shaders.")
-                )
-
-            layout, x.CreateShaderProgram(layout, module_)
-
-        | Surface.Backend s ->
-            x.CreateShaderProgram(signature, s)
+        | Surface.Backend surface ->
+            x.CreateShaderProgram(pass, surface)
 
         | Surface.None ->
             failf "encountered empty surface"
@@ -1856,16 +1844,14 @@ type ResourceManager(device : Device) =
             let sem = Symbol.Create layout.ssbName
 
             match Uniforms.tryGetDerivedUniform layout.ssbName u with
-                | Some r -> r
+            | Some r -> r
+            | None ->
+                match u.TryGetUniform(scope, sem) with
+                | Some v -> v
                 | None ->
-                    match u.TryGetUniform(scope, sem) with
-                        | Some v -> v
-                        | None ->
-                            match additional.TryGetValue sem with
-                                | (true, m) -> m
-                                | _ -> failwithf "[Vulkan] could not get storage buffer: %A" layout.ssbName
-
-
+                    match additional.TryGetValue sem with
+                    | (true, m) -> m
+                    | _ -> failwithf "[Vulkan] could not get storage buffer: %A" layout.ssbName
 
         let usage = VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.StorageBufferBit
 

@@ -55,14 +55,7 @@ module RaytracingProgram =
 
 
     let private create (device : Device) (shader : FShade.GLSL.GLSLShader) (layout : FShade.ShaderBindingTableLayout) (stages : ShaderGroup<RaytracingStageInfo> list) =
-        let shaders =
-            stages
-            |> List.collect ShaderGroup.toList
-            |> List.map (fun i -> i.Module)
-            |> List.toArray
-
-        let pipelineLayout = device.CreatePipelineLayout(shader.iface, shaders, 1, Set.empty)
-
+        let pipelineLayout = device.CreatePipelineLayout(shader.iface, 1, Set.empty)
         new RaytracingProgram(device, pipelineLayout, layout, stages, shader)
 
     let private compileEffect (device : Device) (effect : FShade.RaytracingEffect) =

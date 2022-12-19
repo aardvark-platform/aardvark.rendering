@@ -1007,7 +1007,7 @@ module ComputeShader =
             device.CreateShaderModule(FShade.ShaderSlot.Compute, data.binary)
 
         let layout =
-            device.CreatePipelineLayout(data.shader.iface, [| module_ |], 1, Set.empty)
+            device.CreatePipelineLayout(data.shader.iface, 1, Set.empty)
                 
         native {
             let shaderInfo =
@@ -1086,7 +1086,7 @@ module ComputeShader =
         let sm = ShaderModule.ofGLSL FShade.ShaderSlot.Compute glsl device
 
         let layout =
-            device.CreatePipelineLayout(glsl.iface, [| sm |], 1, Set.empty)
+            device.CreatePipelineLayout(glsl.iface, 1, Set.empty)
 
         let shaderInfo =
             VkPipelineShaderStageCreateInfo(
