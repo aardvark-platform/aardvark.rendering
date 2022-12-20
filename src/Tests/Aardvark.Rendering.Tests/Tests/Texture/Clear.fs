@@ -163,7 +163,10 @@ module TextureClear =
                 ]
 
             createAndTestFramebuffer runtime formats (fun fbo textures ->
-                runtime.ClearDepthStencil(fbo, initialDepth, initialStencil)
+                let clearValues =
+                    clear { depth initialDepth; stencil initialStencil }
+
+                clearFramebuffer runtime fbo clearValues
 
                 let clearValues =
                     { ClearValues.empty with

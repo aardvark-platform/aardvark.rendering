@@ -1180,9 +1180,6 @@ module private RuntimeCommands =
             // NOTE that currently all devices clear everything in multi-GPU setups
             let viewport = compiler.viewports.GetValue(token).[0]
 
-            // check if the RenderPass actually has a depth-stencil attachment
-            let hasDepth = Option.isSome compiler.renderPass.DepthStencilAttachment
-
             let values = values.GetValue token
             let depth = values.Depth
             let stencil = values.Stencil
@@ -1191,18 +1188,20 @@ module private RuntimeCommands =
             // create an array containing the depth-clear (if any)
             let depthClears =
                 match compiler.renderPass.DepthStencilAttachment with
-                | Some _ ->
+                | Some format ->
+                    let aspect = VkFormat.toAspect format
+
                     match depth, stencil with
                     | Some d, Some s ->
                         [|
                             VkClearAttachment(
-                                VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit, 
+                                aspect &&& (VkImageAspectFlags.DepthBit ||| VkImageAspectFlags.StencilBit), 
                                 0u,
                                 VkClearValue(depthStencil = VkClearDepthStencilValue(float32 d, uint32 s))
                             )
                         |]
 
-                    | Some d, None ->   
+                    | Some d, None when aspect.HasFlag VkImageAspectFlags.DepthBit ->   
                         [|
                             VkClearAttachment(
                                 VkImageAspectFlags.DepthBit, 
@@ -1210,8 +1209,8 @@ module private RuntimeCommands =
                                 VkClearValue(depthStencil = VkClearDepthStencilValue(float32 d, 0u))
                             )
                         |]
-                             
-                    | None, Some s ->
+
+                    | None, Some s when aspect.HasFlag VkImageAspectFlags.StencilBit->
                         [|
                             VkClearAttachment(
                                 VkImageAspectFlags.StencilBit, 
@@ -1220,7 +1219,7 @@ module private RuntimeCommands =
                             )
                         |]
 
-                    | None, None ->
+                    | _ ->
                         [||]
                 | _ -> 
                     // if the RenderPass does not contain a depth-stencil attachment we can't clear it
@@ -1250,28 +1249,18 @@ module private RuntimeCommands =
 
             // submit the clear to the stream (after resetting it)
             stream.Clear()
-            
 
-            //let clears = Array.append depthClears colorClears
-            //let rects = 
-            //    Array.init clears.Length (fun _ ->
-            //        VkClearRect(
-            //            VkRect2D(VkOffset2D(viewport.Min.X,viewport.Min.Y), VkExtent2D(uint32 (5 + viewport.SizeX) , uint32 (5+ viewport.SizeY))),
-            //            0u,
-            //            uint32 compiler.renderPass.LayerCount
-            //        )
-            //    )
-
-            stream.ClearAttachments(
-                Array.append depthClears colorClears,
-                [|
-                    VkClearRect(
-                        VkRect2D(VkOffset2D(viewport.Min.X,viewport.Min.Y), VkExtent2D(uint32 (1 + viewport.SizeX) , uint32 (1 + viewport.SizeY))),
-                        0u,
-                        uint32 compiler.renderPass.LayerCount
-                    )
-                |]
-            ) |> ignore
+            if colorClears.Length + depthClears.Length > 0 then
+                stream.ClearAttachments(
+                    Array.append depthClears colorClears,
+                    [|
+                        VkClearRect(
+                            VkRect2D(VkOffset2D(viewport.Min.X,viewport.Min.Y), VkExtent2D(uint32 (1 + viewport.SizeX) , uint32 (1 + viewport.SizeY))),
+                            0u,
+                            uint32 compiler.renderPass.LayerCount
+                        )
+                    |]
+                ) |> ignore
 
         override x.Free() =
             ()

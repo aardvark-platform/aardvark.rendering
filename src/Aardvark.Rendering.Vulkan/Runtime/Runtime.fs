@@ -369,7 +369,30 @@ type Runtime(device : Device) as this =
 
     // Clear
     member x.Clear(fbo : IFramebuffer, values : ClearValues) : unit =
-        raise <| NotImplementedException()
+        let fbo = unbox<Framebuffer> fbo
+
+        device.perform {
+            for KeyValue(name, view) in fbo.Attachments do
+                if name = DefaultSemantic.DepthStencil then
+                    let format = VkFormat.toTextureFormat view.Image.Format
+                    let aspect = TextureFormat.toAspect format
+
+                    match values.Depth, values.Stencil with
+                    | Some d, Some s ->
+                        do! Command.ClearDepthStencil(view, TextureAspect.DepthStencil &&& aspect, d, s)
+
+                    | Some d, None when aspect.HasFlag TextureAspect.Depth ->
+                        do! Command.ClearDepthStencil(view, TextureAspect.Depth, d, 0)
+
+                    | None, Some s when aspect.HasFlag TextureAspect.Stencil  ->
+                        do! Command.ClearDepthStencil(view, TextureAspect.Stencil, 0.0, s)
+
+                    | _ -> ()
+                else
+                    match values.Colors.[name] with
+                    | Some color -> do! Command.ClearColor(view, TextureAspect.Color, color)
+                    | _ -> ()
+        }
 
     member x.Clear(texture : IBackendTexture, values : ClearValues) : unit =
         let image = unbox<Image> texture
