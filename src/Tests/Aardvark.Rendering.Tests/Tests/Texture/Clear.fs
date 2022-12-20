@@ -41,6 +41,17 @@ module TextureClear =
             let data = createAndClearColor runtime TextureFormat.Rgba32f <| V4i(-1)
             data.AsPixImage<float32>() |> PixImage.isColor (V4f(-1).ToArray())
 
+        let depth (runtime : IRuntime) =
+            let t = runtime.CreateTexture2D(V2i(256), TextureFormat.DepthComponent32)
+
+            try
+                runtime.ClearDepthStencil(t, 0.5, 3)
+                let depth = t.DownloadDepth()
+
+                depth.Data |> Array.iter (fun x -> Expect.floatClose Accuracy.medium (float x) 0.5 "Depth data mismatch")
+            finally
+                runtime.DeleteTexture(t)
+
         let depthStencil (runtime : IRuntime) =
             let t = runtime.CreateTexture2D(V2i(256), TextureFormat.Depth24Stencil8)
 
@@ -49,6 +60,32 @@ module TextureClear =
                 let depth, stencil = t.DownloadDepth(), t.DownloadStencil()
 
                 depth.Data |> Array.iter (fun x -> Expect.floatClose Accuracy.medium (float x) 0.5 "Depth data mismatch")
+                stencil.Data |> Array.iter (fun x -> Expect.equal x 3 "Stencil data mismatch")
+            finally
+                runtime.DeleteTexture(t)
+
+        let depthStencilOnlyDepth (runtime : IRuntime) =
+            let t = runtime.CreateTexture2D(V2i(256), TextureFormat.Depth24Stencil8)
+
+            try
+                runtime.ClearDepthStencil(t, 1.0, 5)
+                runtime.ClearDepth(t, 0.5)
+                let depth, stencil = t.DownloadDepth(), t.DownloadStencil()
+
+                depth.Data |> Array.iter (fun x -> Expect.floatClose Accuracy.medium (float x) 0.5 "Depth data mismatch")
+                stencil.Data |> Array.iter (fun x -> Expect.equal x 5 "Stencil data mismatch")
+            finally
+                runtime.DeleteTexture(t)
+
+        let depthStencilOnlyStencil (runtime : IRuntime) =
+            let t = runtime.CreateTexture2D(V2i(256), TextureFormat.Depth24Stencil8)
+
+            try
+                runtime.ClearDepthStencil(t, 1.0, 5)
+                runtime.ClearStencil(t, 3)
+                let depth, stencil = t.DownloadDepth(), t.DownloadStencil()
+
+                depth.Data |> Array.iter (fun x -> Expect.floatClose Accuracy.medium (float x) 1.0 "Depth data mismatch")
                 stencil.Data |> Array.iter (fun x -> Expect.equal x 3 "Stencil data mismatch")
             finally
                 runtime.DeleteTexture(t)
@@ -153,13 +190,17 @@ module TextureClear =
 
     let tests (backend : Backend) =
         [
+            "Color rgba8",                  Cases.rgba8
+            "Color rgba32i",                Cases.rgba32i
+            "Color rgba16ui",               Cases.rgba16ui
+            "Color rgba32ui",               Cases.rgba32ui
+            "Color rgba32f",                Cases.rgba32f
+            "Depth",                        Cases.depth
+            "Depth-stencil",                Cases.depthStencil
+            "Depth-stencil (only depth)",   Cases.depthStencilOnlyDepth
+            "Depth-stencil (only stencil)", Cases.depthStencilOnlyStencil
+
             if backend <> Backend.Vulkan then
-                "Color rgba8",                  Cases.rgba8
-                "Color rgba32i",                Cases.rgba32i
-                "Color rgba16ui",               Cases.rgba16ui
-                "Color rgba32ui",               Cases.rgba32ui
-                "Color rgba32f",                Cases.rgba32f
-                "Depth-stencil",                Cases.depthStencil
                 "Framebuffer",                  Cases.framebuffer
 
             "Framebuffer (compiled)",       Cases.framebufferCompileClear

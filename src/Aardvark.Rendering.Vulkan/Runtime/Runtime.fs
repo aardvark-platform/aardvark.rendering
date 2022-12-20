@@ -367,6 +367,40 @@ type Runtime(device : Device) as this =
             do! Command.TransformLayout(dst.Image, dstLayout)
         }
 
+    // Clear
+    member x.Clear(fbo : IFramebuffer, values : ClearValues) : unit =
+        raise <| NotImplementedException()
+
+    member x.Clear(texture : IBackendTexture, values : ClearValues) : unit =
+        let image = unbox<Image> texture
+
+        let command =
+            if texture.Format.HasDepth || texture.Format.HasStencil then
+                let aspect = TextureFormat.toAspect texture.Format
+
+                match values.Depth, values.Stencil with
+                | Some d, Some s ->
+                    Command.ClearDepthStencil(image.[TextureAspect.DepthStencil &&& aspect], d, s)
+
+                | Some d, None when aspect.HasFlag TextureAspect.Depth ->
+                    Command.ClearDepthStencil(image.[TextureAspect.Depth], d, 0)
+
+                | None, Some s when aspect.HasFlag TextureAspect.Stencil  ->
+                    Command.ClearDepthStencil(image.[TextureAspect.Stencil], 0.0, s)
+
+                | _ -> Command.Nop
+            else
+                match values.Colors.[DefaultSemantic.Colors] with
+                | Some color ->
+                    Command.ClearColor(image.[TextureAspect.Color], color)
+
+                | _ -> Command.Nop
+
+        if command <> Command.Nop then
+            device.perform {
+                do! command
+            }
+
     // Queries
     member x.CreateTimeQuery() =
         new TimeQuery(device) :> ITimeQuery
@@ -517,7 +551,6 @@ type Runtime(device : Device) as this =
             x.CreateSparseTexture<'a>(size, levels, slices, dim, format, brickSize, maxMemory)
         member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
 
-
         member x.CreateFramebuffer(signature, bindings) = x.CreateFramebuffer(signature, bindings)
 
         member x.CreateTexture(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int) =
@@ -526,12 +559,9 @@ type Runtime(device : Device) as this =
         member x.CreateTextureArray(size : V3i, dim : TextureDimension, format : TextureFormat, levels : int, samples : int, count : int) =
             x.CreateTextureArray(size, dim, format, levels, samples, count, false)
 
-
         member x.CreateRenderbuffer(size, format, samples) = x.CreateRenderbuffer(size, format, samples)
 
         member x.CreateGeometryPool(types) = new GeometryPoolUtilities.GeometryPool(device, types) :> IGeometryPool
-
-
 
         member x.CreateBuffer(size : nativeint, usage : BufferUsage, storage : BufferStorage) = x.CreateBuffer(size, usage, storage) :> IBackendBuffer
 
@@ -547,12 +577,11 @@ type Runtime(device : Device) as this =
         member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
             x.CopyAsync(src, srcOffset, dst, size)
 
-
         member x.Clear(fbo : IFramebuffer, values : ClearValues) : unit =
-            failwith "not implemented"
+            x.Clear(fbo, values)
 
         member x.Clear(texture : IBackendTexture, values : ClearValues) : unit =
-            failwith "not implemented"
+            x.Clear(texture, values)
 
         member x.CreateTextureView(texture : IBackendTexture, levels : Range1i, slices : Range1i, isArray : bool) : IBackendTexture =
             failwith "not implemented"
