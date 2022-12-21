@@ -428,7 +428,7 @@ type Runtime(device : Device) as this =
     member x.CreateTimeQuery() =
         new TimeQuery(device) :> ITimeQuery
 
-    member x.CreateOcclusionQuery(precise : bool) =
+    member x.CreateOcclusionQuery([<Optional; DefaultParameterValue(true)>] precise : bool) =
         let features = &device.PhysicalDevice.Features.Queries
 
         if features.InheritedQueries then
@@ -436,8 +436,8 @@ type Runtime(device : Device) as this =
         else
             new EmptyOcclusionQuery() :> IOcclusionQuery
 
-    member x.CreatePipelineQuery(statistics : Set<PipelineStatistics>) =
-        let statistics = Set.union statistics x.SupportedPipelineStatistics
+    member x.CreatePipelineQuery(statistics : seq<PipelineStatistics>) =
+        let statistics = Set.union (Set.ofSeq statistics) x.SupportedPipelineStatistics
         if Set.isEmpty statistics then
             new EmptyPipelineQuery() :> IPipelineQuery
         else

@@ -6,7 +6,7 @@ open System.Runtime.InteropServices
 open Aardvark.Base
 
 /// Typed interface for GPU queries.
-type IQuery<'a, 'b> =
+type IQuery<'Parameter, 'Result> =
     inherit IQuery
     inherit IDisposable
 
@@ -15,12 +15,14 @@ type IQuery<'a, 'b> =
 
     /// Tries to retrieve the result of the query without blocking.
     /// If reset is set to true, the query is reset if the result was ready.
-    abstract member TryGetResult : args : 'a * reset : bool -> 'b option
+    abstract member TryGetResult : parameter : 'Parameter *
+                                   [<Optional; DefaultParameterValue(false)>] reset : bool -> 'Result option
 
     /// Retrieves the result of the query.
     /// If the result is not ready, the call blocks until it is.
     /// If reset is set to true, the query is reset.
-    abstract member GetResult : args : 'a * reset : bool -> 'b
+    abstract member GetResult : parameter : 'Parameter *
+                                [<Optional; DefaultParameterValue(false)>] reset : bool -> 'Result
 
 
 /// Query to measure GPU time.
@@ -35,7 +37,7 @@ type IOcclusionQuery =
     /// Indicates whether the results are guaranteed to be precise.
     abstract member IsPrecise : bool
 
-
+[<Struct>]
 type PipelineStatistics =
     | InputAssemblyVertices
     | InputAssemblyPrimitives
@@ -71,7 +73,7 @@ type PipelineStatistics =
 
 /// Interface for queries about GPU pipeline statistics.
 type IPipelineQuery =
-    inherit IQuery<Set<PipelineStatistics>, Map<PipelineStatistics, uint64>>
+    inherit IQuery<seq<PipelineStatistics>, Map<PipelineStatistics, uint64>>
 
     /// The types of statistics supported by this query.
     abstract member Statistics : Set<PipelineStatistics>
@@ -79,17 +81,6 @@ type IPipelineQuery =
 
 [<AbstractClass; Sealed; Extension>]
 type IQueryResultsExtensions private() =
-
-    /// Tries to retrieve the result of the query without blocking.
-    [<Extension>]
-    static member TryGetResult(this : IQuery<'a, 'b>, args : 'a) =
-        this.TryGetResult(args, false)
-
-    /// Retrieves the result of the query.
-    /// If the result is not ready, the call blocks until it is.
-    [<Extension>]
-    static member GetResult(this : IQuery<'a, 'b>, args : 'a) =
-        this.GetResult(args, false)
 
     /// Tries to retrieve the result of the query without blocking.
     /// If reset is set to true, the query is reset if the result was ready.
@@ -116,19 +107,6 @@ type IQueryResultsExtensions private() =
     [<Extension>]
     static member GetResult(this : IPipelineQuery, statistic : PipelineStatistics, [<Optional; DefaultParameterValue(false)>] reset : bool) =
         this.GetResult(Set.singleton statistic, reset) |> Map.find statistic
-
-    /// Tries to retrieve the result of the query without blocking.
-    /// If reset is set to true, the query is reset if the result was ready.
-    [<Extension>]
-    static member TryGetResult(this : IPipelineQuery, statistics : PipelineStatistics seq, [<Optional; DefaultParameterValue(false)>] reset : bool) =
-        this.TryGetResult(Set.ofSeq statistics, reset)
-
-    /// Retrieves the result of the query.
-    /// If the result is not ready, the call blocks until it is.
-    /// If reset is set to true, the query is reset.
-    [<Extension>]
-    static member GetResult(this : IPipelineQuery, statistics : PipelineStatistics seq, [<Optional; DefaultParameterValue(false)>] reset : bool) =
-        this.GetResult(Set.ofSeq statistics, reset)
 
     /// Tries to retrieve the result of the query without blocking.
     /// If reset is set to true, the query is reset if the result was ready.

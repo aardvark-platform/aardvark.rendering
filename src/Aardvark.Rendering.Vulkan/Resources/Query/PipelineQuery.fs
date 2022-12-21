@@ -57,7 +57,7 @@ type PipelineQuery(device : Device, enabledStatistics : Set<PipelineStatistics>)
             Array.map2 (+) sum x
         ) (Array.zeroCreate enabledStatistics.Count)
 
-    let compute (statistics : Set<PipelineStatistics>) (data : uint64[]) =
+    let compute (statistics : seq<PipelineStatistics>) (data : uint64[]) =
         statistics |> Seq.map (fun s ->
             let value =
                 match enabledStatistics |> getFlagIndex s with
@@ -73,10 +73,10 @@ type PipelineQuery(device : Device, enabledStatistics : Set<PipelineStatistics>)
         member x.HasResult() =
             x.TryGetResults(false) |> Option.isSome
 
-        member x.TryGetResult(statistics : Set<PipelineStatistics>, reset : bool) =
+        member x.TryGetResult(statistics : seq<PipelineStatistics>, reset : bool) =
             x.TryGetResults(reset) |> Option.map (sumArrays >> compute statistics)
 
-        member x.GetResult(statistics : Set<PipelineStatistics>, reset : bool) =
+        member x.GetResult(statistics : seq<PipelineStatistics>, reset : bool) =
             x.GetResults(reset) |> sumArrays |> compute statistics
 
         member x.Statistics = enabledStatistics

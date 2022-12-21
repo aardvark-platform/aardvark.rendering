@@ -482,7 +482,7 @@ type Runtime(debug : IDebugConfig) =
             use __ = ctx.ResourceLock
 
             if GL.ARB_pipeline_statistics_query then
-                new PipelineQuery(ctx, statistics) :> IPipelineQuery
+                new PipelineQuery(ctx, Set.ofSeq statistics) :> IPipelineQuery
             else
                 new GeometryQuery(ctx) :> IPipelineQuery
 

@@ -7,7 +7,7 @@ open OpenTK.Graphics.OpenGL4
 type GeometryQuery(ctx : Context) =
     inherit Query(ctx, QueryTarget.PrimitivesGenerated, 1)
 
-    let compute (statistics : Set<PipelineStatistics>) (data : uint64[]) =
+    let compute (statistics : seq<PipelineStatistics>) (data : uint64[]) =
         statistics |> Seq.map (fun s ->
             let value = if s = ClippingInputPrimitives then data.[0] else 0UL
             s, value
@@ -18,10 +18,10 @@ type GeometryQuery(ctx : Context) =
         member x.HasResult() =
             x.TryGetResults(false) |> Option.isSome
 
-        member x.GetResult(statistics : Set<PipelineStatistics>, reset : bool) =
+        member x.GetResult(statistics : seq<PipelineStatistics>, reset : bool) =
             x.GetResults(reset) |> compute statistics
 
-        member x.TryGetResult(statistics : Set<PipelineStatistics>, reset : bool) =
+        member x.TryGetResult(statistics : seq<PipelineStatistics>, reset : bool) =
             x.TryGetResults(reset) |> Option.map (compute statistics)
 
         member x.Statistics =
