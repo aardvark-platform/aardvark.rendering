@@ -41,19 +41,54 @@ module TextureClear =
             let data = createAndClearColor runtime TextureFormat.Rgba32f <| V4i(-1)
             data.AsPixImage<float32>() |> PixImage.isColor (V4f(-1).ToArray())
 
-        let depthStencil (runtime : IRuntime) =
-            let t = runtime.CreateTexture2D(V2i(256), TextureFormat.Depth24Stencil8)
+        let private clearDepthStencilInternal (format : TextureFormat)
+                                              (initialDepth : float) (initialStencil : int)
+                                              (clearDepth : Option<float>) (clearStencil : Option<int>)
+                                              (runtime : IRuntime) =
+            let t = runtime.CreateTexture2D(V2i(256), format)
 
             try
-                runtime.ClearDepthStencil(t, 0.5, 3)
-                let depth, stencil = t.DownloadDepth(), t.DownloadStencil()
+                runtime.ClearDepthStencil(t, initialDepth, initialStencil)
+                clearDepth |> Option.iter (fun d -> runtime.ClearDepth(t, d))
+                clearStencil |> Option.iter (fun s -> runtime.ClearStencil(t, s))
 
-                depth.Data |> Array.iter (fun x -> Expect.floatClose Accuracy.medium (float x) 0.5 "Depth data mismatch")
-                stencil.Data |> Array.iter (fun x -> Expect.equal x 3 "Stencil data mismatch")
+                if format.HasDepth then
+                    let depth = t.DownloadDepth()
+                    let test = clearDepth |> Option.defaultValue initialDepth
+                    depth.Data |> Array.iter (fun x -> Expect.floatClose Accuracy.medium (float x) test "Depth data mismatch")
+
+                if format.HasStencil then
+                    let stencil = t.DownloadStencil()
+                    let test = clearStencil |> Option.defaultValue initialStencil
+                    stencil.Data |> Array.iter (fun x -> Expect.equal x test "Stencil data mismatch")
             finally
                 runtime.DeleteTexture(t)
 
-        let createAndClearFramebuffer (runtime : IRuntime) (clearFramebuffer : IFramebuffer -> ClearValues -> unit) =
+        let depth                   = clearDepthStencilInternal TextureFormat.DepthComponent32f 0.5 3 None None
+        let depthStencil            = clearDepthStencilInternal TextureFormat.Depth24Stencil8 0.5 3 None None
+        let depthStencilOnlyDepth   = clearDepthStencilInternal TextureFormat.Depth24Stencil8 1.0 5 (Some 0.5) None
+        let depthStencilOnlyStencil = clearDepthStencilInternal TextureFormat.Depth24Stencil8 1.0 5 None (Some 3)
+
+        let private createAndTestFramebuffer (runtime : IRuntime) (formats : Map<Symbol, TextureFormat>)
+                                             (test : IFramebuffer -> Map<Symbol, IBackendTexture> -> unit) =
+            let signature =
+                runtime.CreateFramebufferSignature(formats)
+
+            let textures =
+                formats |> Map.map (fun _ fmt -> runtime.CreateTexture2D(V2i(256), fmt))
+
+            let fbo =
+                let attachments = textures |> Map.map (fun _ tex -> tex.GetOutputView())
+                runtime.CreateFramebuffer(signature, attachments)
+
+            try
+                test fbo textures
+            finally
+                fbo.Dispose()
+                signature.Dispose()
+                textures |> Map.iter (fun _ t -> runtime.DeleteTexture t)
+
+        let private clearFramebufferMixed (clearFramebuffer : IRuntime -> IFramebuffer -> ClearValues -> unit) (runtime : IRuntime) =
             let c0 = Sym.ofString "c0"
             let c1 = Sym.ofString "c1"
             let c2 = Sym.ofString "c2"
@@ -70,17 +105,7 @@ module TextureClear =
                     DefaultSemantic.DepthStencil, TextureFormat.Depth24Stencil8
                 ]
 
-            let signature =
-                runtime.CreateFramebufferSignature(formats)
-
-            let textures =
-                formats |> Map.map (fun _ fmt -> runtime.CreateTexture2D(V2i(256), fmt))
-
-            let fbo =
-                let attachments = textures |> Map.map (fun _ tex -> tex.GetOutputView())
-                runtime.CreateFramebuffer(signature, attachments)
-
-            try
+            createAndTestFramebuffer runtime formats (fun fbo textures ->
                 let clear =
                     clear {
                         color C3b.AliceBlue
@@ -91,7 +116,7 @@ module TextureClear =
                         stencil 4
                     }
 
-                clearFramebuffer fbo clear
+                clearFramebuffer runtime fbo clear
 
                 do
                     let c = C3us.Aquamarine |> C4f
@@ -124,26 +149,60 @@ module TextureClear =
                 do
                     let stencil = textures.[DefaultSemantic.DepthStencil].DownloadStencil()
                     stencil.Data |> Array.iter (fun x -> Expect.equal x 4 "Stencil data mismatch")
-
-            finally
-                fbo.Dispose()
-                signature.Dispose()
-                textures |> Map.iter (fun _ t -> runtime.DeleteTexture t)
-
-
-        let framebuffer (runtime : IRuntime) =
-            createAndClearFramebuffer runtime (fun fbo clear ->
-                runtime.Clear(fbo, clear)
             )
 
-        let framebufferCompileClear (runtime : IRuntime) =
-            createAndClearFramebuffer runtime (fun fbo clear ->
+
+        let private clearFramebufferDepthStencilInternal (format : TextureFormat)
+                                                         (initialDepth : float) (initialStencil : int)
+                                                         (clearDepth : Option<float>) (clearStencil : Option<int>)
+                                                         (clearFramebuffer : IRuntime -> IFramebuffer -> ClearValues -> unit)
+                                                         (runtime : IRuntime) =
+            let formats =
+                Map.ofList [
+                    DefaultSemantic.DepthStencil, format
+                ]
+
+            createAndTestFramebuffer runtime formats (fun fbo textures ->
+                let clearValues =
+                    clear { depth initialDepth; stencil initialStencil }
+
+                clearFramebuffer runtime fbo clearValues
+
+                let clearValues =
+                    { ClearValues.empty with
+                        Depth   = clearDepth |> Option.map ClearDepth.create
+                        Stencil = clearStencil |> Option.map ClearStencil.create }
+
+                clearFramebuffer runtime fbo clearValues
+
+                do if format.HasDepth then
+                    let depth = textures.[DefaultSemantic.DepthStencil].DownloadDepth()
+                    let test = clearDepth |> Option.defaultValue initialDepth
+                    depth.Data |> Array.iter (fun x -> Expect.floatClose Accuracy.medium (float x) test "Depth data mismatch")
+
+                do if format.HasStencil then
+                    let stencil = textures.[DefaultSemantic.DepthStencil].DownloadStencil()
+                    let test = clearStencil |> Option.defaultValue initialStencil
+                    stencil.Data |> Array.iter (fun x -> Expect.equal x test "Stencil data mismatch")
+            )
+
+        let clearFramebufferDepth                   = clearFramebufferDepthStencilInternal TextureFormat.DepthComponent32f 0.5 3 None None
+        let clearFramebufferDepthStencil            = clearFramebufferDepthStencilInternal TextureFormat.Depth24Stencil8 0.5 3 None None
+        let clearFramebufferDepthStencilOnlyDepth   = clearFramebufferDepthStencilInternal TextureFormat.Depth24Stencil8 1.0 5 (Some 0.5) None
+        let clearFramebufferDepthStencilOnlyStencil = clearFramebufferDepthStencilInternal TextureFormat.Depth24Stencil8 1.0 5 None (Some 3)
+
+
+        let private framebufferDirectClear (test : (IRuntime -> IFramebuffer -> ClearValues -> unit) -> IRuntime -> unit) =
+            test (fun runtime fbo clear -> runtime.Clear(fbo, clear))
+
+        let private framebufferCompileClear (test : (IRuntime -> IFramebuffer -> ClearValues -> unit) -> IRuntime -> unit) =
+            test (fun runtime fbo clear ->
                 use task = runtime.CompileClear(fbo.Signature, clear)
                 task.Run(RenderToken.Empty, fbo)
             )
 
-        let framebufferRenderCommand (runtime : IRuntime) =
-            createAndClearFramebuffer runtime (fun fbo clear ->
+        let private framebufferRenderCommand (test : (IRuntime -> IFramebuffer -> ClearValues -> unit) -> IRuntime  -> unit) =
+            test (fun runtime fbo clear ->
                 use task =
                     Sg.execute (RenderCommand.Clear clear)
                     |> Sg.compile runtime fbo.Signature
@@ -151,18 +210,56 @@ module TextureClear =
                 task.Run(RenderToken.Empty, fbo)
             )
 
+        let framebufferMixed                                = framebufferDirectClear clearFramebufferMixed
+        let framebufferMixedCompileClear                    = framebufferCompileClear clearFramebufferMixed
+        let framebufferMixedRenderCommand                   = framebufferRenderCommand clearFramebufferMixed
+
+        let framebufferDepth                                = framebufferDirectClear clearFramebufferDepth
+        let framebufferDepthCompileClear                    = framebufferCompileClear clearFramebufferDepth
+        let framebufferDepthRenderCommand                   = framebufferRenderCommand clearFramebufferDepth
+
+        let framebufferDepthStencil                         = framebufferDirectClear clearFramebufferDepthStencil
+        let framebufferDepthStencilCompileClear             = framebufferCompileClear clearFramebufferDepthStencil
+        let framebufferDepthStencilRenderCommand            = framebufferRenderCommand clearFramebufferDepthStencil
+
+        let framebufferDepthStencilOnlyDepth                = framebufferDirectClear clearFramebufferDepthStencilOnlyDepth
+        let framebufferDepthStencilOnlyDepthCompileClear    = framebufferCompileClear clearFramebufferDepthStencilOnlyDepth
+        let framebufferDepthStencilOnlyDepthRenderCommand   = framebufferRenderCommand clearFramebufferDepthStencilOnlyDepth
+
+        let framebufferDepthStencilOnlyStencil              = framebufferDirectClear clearFramebufferDepthStencilOnlyStencil
+        let framebufferDepthStencilOnlyStencilCompileClear  = framebufferCompileClear clearFramebufferDepthStencilOnlyStencil
+        let framebufferDepthStencilOnlyStencilRenderCommand = framebufferRenderCommand clearFramebufferDepthStencilOnlyStencil
+
     let tests (backend : Backend) =
         [
-            if backend <> Backend.Vulkan then
-                "Color rgba8",                  Cases.rgba8
-                "Color rgba32i",                Cases.rgba32i
-                "Color rgba16ui",               Cases.rgba16ui
-                "Color rgba32ui",               Cases.rgba32ui
-                "Color rgba32f",                Cases.rgba32f
-                "Depth-stencil",                Cases.depthStencil
-                "Framebuffer",                  Cases.framebuffer
+            "Color rgba8",                                              Cases.rgba8
+            "Color rgba32i",                                            Cases.rgba32i
+            "Color rgba16ui",                                           Cases.rgba16ui
+            "Color rgba32ui",                                           Cases.rgba32ui
+            "Color rgba32f",                                            Cases.rgba32f
+            "Depth",                                                    Cases.depth
+            "Depth-stencil",                                            Cases.depthStencil
+            "Depth-stencil (only depth)",                               Cases.depthStencilOnlyDepth
+            "Depth-stencil (only stencil)",                             Cases.depthStencilOnlyStencil
 
-            "Framebuffer (compiled)",       Cases.framebufferCompileClear
-            "Framebuffer (render command)", Cases.framebufferRenderCommand
+            "Framebuffer",                                              Cases.framebufferMixed
+            "Framebuffer (compiled)",                                   Cases.framebufferMixedCompileClear
+            "Framebuffer (render command)",                             Cases.framebufferMixedRenderCommand
+
+            "Framebuffer depth",                                        Cases.framebufferDepth
+            "Framebuffer depth (compiled)",                             Cases.framebufferDepthCompileClear
+            "Framebuffer depth (render command)",                       Cases.framebufferDepthRenderCommand
+
+            "Framebuffer depth-stencil",                                Cases.framebufferDepthStencil
+            "Framebuffer depth-stencil (compiled)",                     Cases.framebufferDepthStencilCompileClear
+            "Framebuffer depth-stencil (render command)",               Cases.framebufferDepthStencilRenderCommand
+
+            "Framebuffer depth-stencil (only depth)",                   Cases.framebufferDepthStencilOnlyDepth
+            "Framebuffer depth-stencil (only depth, compiled)",         Cases.framebufferDepthStencilOnlyDepthCompileClear
+            "Framebuffer depth-stencil (only depth, render command)",   Cases.framebufferDepthStencilOnlyDepthRenderCommand
+
+            "Framebuffer depth-stencil (only stencil)",                 Cases.framebufferDepthStencilOnlyStencil
+            "Framebuffer depth-stencil (only stencil, compiled)",       Cases.framebufferDepthStencilOnlyStencilCompileClear
+            "Framebuffer depth-stencil (only stencil, render command)", Cases.framebufferDepthStencilOnlyStencilRenderCommand
         ]
         |> prepareCases backend "Clear"

@@ -214,7 +214,7 @@ module ImageUploadExtensions =
             | UploadMode.Async ->
                 image.Layout <- VkImageLayout.TransferDstOptimal
 
-                device.CopyEngine.EnqueueSafe [
+                device.CopyEngine.RunSynchronously [
                     yield CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
 
                     for slice = 0 to slices - 1 do
