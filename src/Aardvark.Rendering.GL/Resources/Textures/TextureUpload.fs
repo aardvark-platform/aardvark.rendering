@@ -337,7 +337,13 @@ module ContextTextureUploadExtensions =
                     | Some t -> this.CreateTexture(t)
                     | _ ->
                         stream.Position <- initialPos
-                        let pi = PixImage.Load(stream, loader)
+
+                        let pi =
+                            if info.wantMipMaps then
+                                PixImageMipMap.Load(stream, loader)
+                            else
+                                PixImageMipMap [| PixImage.Load(stream, loader) |]
+
                         this.CreateTexture <| PixTexture2d(pi, info)
 
                 | PixTexture2D(info, data) ->

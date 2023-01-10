@@ -9,7 +9,7 @@
         ]
       },
       "aardpack": {
-          "version": "1.0.13",
+          "version": "1.0.18",
           "commands": [
             "aardpack"
           ]
