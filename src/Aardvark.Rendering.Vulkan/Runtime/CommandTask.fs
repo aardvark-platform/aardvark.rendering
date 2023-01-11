@@ -1449,7 +1449,7 @@ module private RuntimeCommands =
             if async then
                 let updateResources = pg.pgResources |> List.filter (fun r -> r.ReferenceCount = 0)
                 for r in pg.pgResources do r.Acquire()
-                for r in updateResources do r.Update(IResourceUser.None, AdaptiveToken.Top, RenderToken.Empty) |> ignore
+                for r in updateResources do r.Update(ResourceUser.None, AdaptiveToken.Top, RenderToken.Empty) |> ignore
             else
                 for r in pg.pgResources do compiler.resources.Add r
                 

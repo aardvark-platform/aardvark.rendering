@@ -44,7 +44,7 @@ type PreparedRenderObject(device         : Device,
         activation.Dispose()
 
     member x.Update(caller : AdaptiveToken, token : RenderToken) =
-        for r in resources do r.Update(IResourceUser.None, caller, token) |> ignore
+        for r in resources do r.Update(ResourceUser.None, caller, token) |> ignore
 
     interface IPreparedRenderObject with
         member x.Id = original.Id
@@ -360,7 +360,7 @@ type DevicePreparedRenderObjectExtensions private() =
             for r in result.Resources do r.Acquire()
 
             // update all "new" resources
-            for r in newResources do r.Update(IResourceUser.None, AdaptiveToken.Top, RenderToken.Empty) |> ignore
+            for r in newResources do r.Update(ResourceUser.None, AdaptiveToken.Top, RenderToken.Empty) |> ignore
 
             // enqueue a callback to the CopyEngine tiggering on completion of
             // all prior commands (possibly including more than the needed ones)
