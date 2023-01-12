@@ -29,7 +29,7 @@ module private ``Pipeline Query Helpers`` =
 type PipelineQuery(ctx : Context, enabledStatistics : Set<PipelineStatistics>) =
     inherit Query(ctx, enabledStatistics |> Set.map base2GLTarget |> QueryType.Multiple)
 
-    let compute (statistics : Set<PipelineStatistics>) (data : uint64[]) =
+    let compute (statistics : seq<PipelineStatistics>) (data : uint64[]) =
         statistics |> Seq.map (fun s ->
             let value =
                 match enabledStatistics |> getFlagIndex s with
@@ -44,10 +44,10 @@ type PipelineQuery(ctx : Context, enabledStatistics : Set<PipelineStatistics>) =
         member x.HasResult() =
             x.TryGetResults(false) |> Option.isSome
 
-        member x.GetResult(statistics : Set<PipelineStatistics>, reset : bool) =
+        member x.GetResult(statistics : seq<PipelineStatistics>, reset : bool) =
             x.GetResults(reset) |> compute statistics
 
-        member x.TryGetResult(statistics : Set<PipelineStatistics>, reset : bool) =
+        member x.TryGetResult(statistics : seq<PipelineStatistics>, reset : bool) =
             x.TryGetResults(reset) |> Option.map (compute statistics)
 
         member x.Statistics =
