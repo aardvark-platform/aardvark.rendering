@@ -214,7 +214,7 @@ module ImageUploadExtensions =
             | UploadMode.Async ->
                 image.Layout <- VkImageLayout.TransferDstOptimal
 
-                device.CopyEngine.EnqueueSafe [
+                device.CopyEngine.RunSynchronously [
                     yield CopyCommand.TransformLayout(imageRange, VkImageLayout.Undefined, VkImageLayout.TransferDstOptimal)
 
                     for slice = 0 to slices - 1 do
@@ -313,8 +313,12 @@ module ImageUploadExtensions =
             device |> ofImageBufferArray TextureDimension.TextureCube info.wantMipMaps export buffers
 
         let ofStreamWithLoader (stream : IO.Stream) (loader : IPixLoader) (info : TextureParams) (export : bool) (device : Device) =
-            let img = PixImage.Load(stream, loader)
-            let pix = PixImageMipMap [| img |]
+            let pix =
+                if info.wantMipMaps then
+                    PixImageMipMap.Load(stream, loader)
+                else
+                    PixImageMipMap [| PixImage.Load(stream, loader) |]
+
             device |> ofPixImageMipMap pix info export
 
         let ofStream (stream : IO.Stream) (info : TextureParams) (export : bool) (device : Device) =

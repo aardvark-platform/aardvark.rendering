@@ -890,6 +890,28 @@ and CopyEngine(family : DeviceQueueFamily) =
         x.Enqueue [CopyCommand.Callback signal]
         wait()
 
+    /// Runs the given commands and waits for them to finish.
+    member x.RunSynchronously(commands : seq<CopyCommand>) =
+        let l = obj()
+        let mutable finished = false
+
+        let signal() =
+            lock l (fun () ->
+                finished <- true
+                Monitor.Pulse l
+            )
+
+        let wait() =
+            lock l (fun () ->
+                while not finished do
+                    Monitor.Wait l |> ignore
+            )
+
+        x.Enqueue(
+            Seq.append commands [CopyCommand.Callback signal]
+        )
+        wait()
+
     member x.WaitTask() =
         let tcs = System.Threading.Tasks.TaskCompletionSource()
         x.Enqueue(CopyCommand.Callback tcs.SetResult)

@@ -91,7 +91,7 @@ module private RaytracingTaskInternals =
         member x.Handle = cache.handle
 
         member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
-            let info = location.Update(IResourceUser.None, token, renderToken)
+            let info = location.Update(ResourceUser.None, token, renderToken)
             let changed = info.version <> cache.version
             cache <- info
             changed

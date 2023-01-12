@@ -76,13 +76,11 @@ type INativeResourceLocation<'T when 'T : unmanaged> =
 [<AutoOpen>]
 module internal ResourceUserExtensions =
 
-    let private noUser =
-        { new IResourceUser with
-            member x.Acquire(_, _) = ()
-            member x.Release(_) = () }
-
-    type IResourceUser with
-        static member None = noUser
+    module ResourceUser =
+        let None =
+            { new IResourceUser with
+                member x.Acquire(_, _) = ()
+                member x.Release(_) = () }
 
     type IAdaptiveValue with
         member x.GetValueUntyped(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
@@ -150,21 +148,21 @@ type AbstractResourceLocation<'T>(owner : IResourceCache, key : list<obj>) =
 
     interface IAdaptiveValue with
         member x.Accept(visitor) = visitor.Visit(x)
-        member x.GetValueUntyped(token) = x.GetValue(IResourceUser.None,token, RenderToken.Empty) :> obj
+        member x.GetValueUntyped(token) = x.GetValue(ResourceUser.None, token, RenderToken.Empty) :> obj
         member x.ContentType = typeof<'T>
 
     interface IAdaptiveValue<'T> with
-        member x.GetValue(token) = x.GetValue(IResourceUser.None, token, RenderToken.Empty)
+        member x.GetValue(token) = x.GetValue(ResourceUser.None, token, RenderToken.Empty)
 
     interface IManagedResource with
         member x.Acquire() = x.Acquire()
         member x.Release() = x.Release()
         member x.ReleaseAll() = x.ReleaseAll()
-        member x.GetValue(token, renderToken) = x.GetValue(IResourceUser.None, token, renderToken) :> obj
+        member x.GetValue(token, renderToken) = x.GetValue(ResourceUser.None, token, renderToken) :> obj
         member x.GetValue(user, token, renderToken) = x.GetValue(user, token, renderToken)
 
     interface IManagedResource<'T> with
-        member x.GetValue(token, renderToken) = x.GetValue(IResourceUser.None, token, renderToken)
+        member x.GetValue(token, renderToken) = x.GetValue(ResourceUser.None, token, renderToken)
         member x.GetValue(user, token, renderToken) = x.GetValue(user, token, renderToken)
 
     interface IResourceLocation with
@@ -515,21 +513,21 @@ module Resources =
                 interface IAdaptiveValue with
                     member x.IsConstant = false
                     member x.ContentType = typeof<DescriptorInfo[]>
-                    member x.GetValueUntyped(t) = x.GetValue(IResourceUser.None, t, RenderToken.Empty) :> obj
+                    member x.GetValueUntyped(t) = x.GetValue(ResourceUser.None, t, RenderToken.Empty) :> obj
                     member x.Accept (v : IAdaptiveValueVisitor<'R>) = v.Visit x
 
                 interface IAdaptiveValue<DescriptorInfo[]> with
-                    member x.GetValue(t) = x.GetValue(IResourceUser.None,t, RenderToken.Empty)
+                    member x.GetValue(t) = x.GetValue(ResourceUser.None,t, RenderToken.Empty)
 
                 interface IManagedResource with
                     member x.Acquire() = x.Acquire()
                     member x.Release() = x.Release()
                     member x.ReleaseAll() = x.ReleaseAll()
-                    member x.GetValue(t, rt) = x.GetValue(IResourceUser.None, t, rt) :> obj
+                    member x.GetValue(t, rt) = x.GetValue(ResourceUser.None, t, rt) :> obj
                     member x.GetValue(u, t, rt) = x.GetValue(u, t, rt) :> obj
 
                 interface IManagedResource<DescriptorInfo[]> with
-                    member x.GetValue(t, rt) = x.GetValue(IResourceUser.None, t, rt)
+                    member x.GetValue(t, rt) = x.GetValue(ResourceUser.None, t, rt)
                     member x.GetValue(u, t, rt) = x.GetValue(u, t, rt)
 
                 interface IAdaptiveDescriptor with

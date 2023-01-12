@@ -79,6 +79,11 @@ module RenderTask =
     let renderToWithClear (target : IAdaptiveResource<IFramebuffer>) (clearValues : ClearValues) (task : IRenderTask) =
         task.RenderTo(target, clearValues)
 
+    /// Runs the given render task using the given framebuffer as output after clearing it according
+    /// to the given adaptive clear values.
+    let renderToWithAdaptiveClear (target : IAdaptiveResource<IFramebuffer>) (clearValues : aval<ClearValues>) (task : IRenderTask) =
+        task.RenderTo(target, clearValues)
+
     /// Runs the given render task using the given framebuffer as output.
     let renderTo (target : IAdaptiveResource<IFramebuffer>) (task : IRenderTask) =
         task.RenderTo target

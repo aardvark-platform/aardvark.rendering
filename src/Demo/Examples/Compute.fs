@@ -287,9 +287,9 @@ module ComputeTest =
 
     type Context with
 
-        member x.TryCompileKernel (code : string, localSize : Option<V3i>) =
+        member x.TryCompileKernel (iface : GLSLProgramInterface, code : string, localSize : Option<V3i>) =
             using x.ResourceLock (fun token ->
-                match x.TryCompileCompute(true, code) with
+                match x.TryCompileComputeProgram(code, code, iface) with
                     | Success prog ->
                         let kernel = Kernel(prog, localSize)
                         Success kernel
@@ -308,7 +308,7 @@ module ComputeTest =
 
             printfn "%s" glsl.code
 
-            x.TryCompileKernel(glsl.code, localSize)
+            x.TryCompileKernel(glsl.iface, glsl.code, localSize)
 
         member x.CompileKernel (f : 'a -> 'b) =
             match x.TryCompileKernel f with
