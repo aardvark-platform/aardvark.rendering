@@ -342,12 +342,15 @@ module TensorImage =
         dst.Write(img, false)
         dst
 
+    [<Obsolete>]
     let ofStreamWithLoader (stream : IO.Stream) (loader : IPixLoader) (srgb : bool) (device : Device) =
         let img = PixImage.Load(stream, loader)
         ofPixImage img srgb device
 
+    [<Obsolete>]
     let ofStream (stream : IO.Stream) (srgb : bool) (device : Device) =
-        ofStreamWithLoader stream null srgb device
+        let img = PixImage.Load(stream)
+        ofPixImage img srgb device
 
 
 [<AbstractClass; Sealed; Extension>]
