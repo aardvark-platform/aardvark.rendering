@@ -14,13 +14,6 @@ type IBufferRuntimeExtensions private() =
 [<AbstractClass; Sealed; Extension>]
 type IBackendBufferExtensions private() =
 
-    // TODO: Add validation for buffer methods in runtime implementations
-    //static let check (b : IBackendBuffer) (off : nativeint) (size : nativeint) =
-    //    if off < 0n then failwithf "[Buffer] invalid offset %A" off
-    //    if size < 0n then failwithf "[Buffer] invalid size %A" size
-    //    let e = off + size
-    //    if e > b.SizeInBytes then failwithf "[Buffer] range out of bounds { offset = %A; size = %A } (size: %A)" off size b.SizeInBytes
-
     ///<summary>Copies data from host memory to a buffer.</summary>
     ///<param name="dst">The buffer to copy data to.</param>
     ///<param name="dstOffset">Offset (in bytes) into the buffer.</param>

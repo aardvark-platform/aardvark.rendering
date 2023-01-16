@@ -540,23 +540,30 @@ type Runtime(debug : IDebugConfig) =
     member x.CreateBuffer(size : nativeint, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
         ctx.CreateBuffer(size, storage)
 
-    member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+    member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, sizeInBytes : nativeint) =
+        dst |> ResourceValidation.Buffers.validateRange dstOffset sizeInBytes
+
         use __ = ctx.ResourceLock
-        GL.Dispatch.NamedBufferSubData(unbox<int> dst.Handle, dstOffset, size, src)
+        GL.Dispatch.NamedBufferSubData(unbox<int> dst.Handle, dstOffset, sizeInBytes, src)
         GL.Check "could not upload buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
 
-    member x.Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
+    member x.Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, sizeInBytes : nativeint) =
+        src |> ResourceValidation.Buffers.validateRange srcOffset sizeInBytes
+
         use __ = ctx.ResourceLock
-        GL.Dispatch.GetNamedBufferSubData(unbox<int> src.Handle, srcOffset, size, dst)
+        GL.Dispatch.GetNamedBufferSubData(unbox<int> src.Handle, srcOffset, sizeInBytes, dst)
         GL.Check "could not download buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
 
-    member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+    member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, sizeInBytes : nativeint) =
+        src |> ResourceValidation.Buffers.validateRange srcOffset sizeInBytes
+        dst |> ResourceValidation.Buffers.validateRange dstOffset sizeInBytes
+
         use __ = ctx.ResourceLock
-        GL.Dispatch.CopyNamedBufferSubData(unbox<int> src.Handle, unbox<int> dst.Handle, srcOffset, dstOffset, size)
+        GL.Dispatch.CopyNamedBufferSubData(unbox<int> src.Handle, unbox<int> dst.Handle, srcOffset, dstOffset, sizeInBytes)
         GL.Check "could not copy buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
