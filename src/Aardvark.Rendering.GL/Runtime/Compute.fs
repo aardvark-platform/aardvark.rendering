@@ -393,12 +393,12 @@ type private GLCompute(ctx : Context) =
                     let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
                     try
                         let ptr = gc.AddrOfPinnedObject() + (nativeint index * elementSize)
-                        ctx.Runtime.Copy(ptr, dst.Buffer, dst.Offset, dst.Size)
+                        ctx.Runtime.Upload(ptr, dst.Buffer, dst.Offset, dst.Size)
                     finally
                         gc.Free()
 
                 | HostMemory.Unmanaged ptr ->
-                    ctx.Runtime.Copy(ptr, dst.Buffer, dst.Offset, dst.Size)
+                    ctx.Runtime.Upload(ptr, dst.Buffer, dst.Offset, dst.Size)
 
             | ComputeCommand.CopyImageCmd(src, srcOffset, dst, dstOffset, size) ->
                 ctx.Runtime.Copy(src, srcOffset, dst, dstOffset, size)

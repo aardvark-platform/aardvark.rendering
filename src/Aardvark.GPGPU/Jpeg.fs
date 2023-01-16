@@ -1495,7 +1495,7 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         let mutable remaining = nativeint byteCount
         let mutable wait = id
         let mutable copySize = min remaining chunkSize
-        runtime.Copy(outputBuffer.Buffer, 0n, ping, copySize)
+        runtime.Download(outputBuffer.Buffer, 0n, ping, copySize)
 
 
 
@@ -1511,7 +1511,7 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
             remaining <- remaining - copySize
             copySize <- min remaining chunkSize
             if copySize > 0n then
-                wait <- runtime.CopyAsync(outputBuffer.Buffer, offset, ping, copySize)
+                wait <- runtime.DownloadAsync(outputBuffer.Buffer, offset, ping, copySize)
             else
                 wait <- id
 

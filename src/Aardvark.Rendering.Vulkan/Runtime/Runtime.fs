@@ -249,15 +249,15 @@ type Runtime(device : Device) as this =
         let memory = if storage = BufferStorage.Device then device.DeviceMemory else device.HostMemory
         memory.CreateBuffer(flags, int64 size, export = export)
 
-    member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+    member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
         let dst = unbox<Buffer> dst
         Buffer.upload src dst dstOffset size
 
-    member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
+    member x.Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
         let src = unbox<Buffer> src
         Buffer.download src srcOffset dst size
 
-    member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
+    member x.DownloadAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
         let src = unbox<Buffer> src
         Buffer.downloadAsync src srcOffset dst size
 
@@ -588,17 +588,17 @@ type Runtime(device : Device) as this =
 
         member x.CreateBuffer(size : nativeint, usage : BufferUsage, storage : BufferStorage) = x.CreateBuffer(size, usage, storage) :> IBackendBuffer
 
-        member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
-            x.Copy(src, dst, dstOffset, size)
+        member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+            x.Upload(src, dst, dstOffset, size)
 
-        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
-            x.Copy(src, srcOffset, dst, size)
+        member x.Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
+            x.Download(src, srcOffset, dst, size)
 
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
             x.Copy(src, srcOffset, dst, dstOffset, size)
 
-        member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
-            x.CopyAsync(src, srcOffset, dst, size)
+        member x.DownloadAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
+            x.DownloadAsync(src, srcOffset, dst, size)
 
         member x.Clear(fbo : IFramebuffer, values : ClearValues) : unit =
             x.Clear(fbo, values)
