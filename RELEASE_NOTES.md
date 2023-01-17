@@ -1,3 +1,6 @@
+### 5.3.5
+- OpcPaths now more robust (images vs Images, patches vs Patches) - https://github.com/pro3d-space/PRo3D/issues/280
+
 ### 5.3.4
 - Added default component swizzle that duplicates the red channel to the green and blue channels for grayscale formats
 - [Application.Slim.GL] Fixed context initialization 
