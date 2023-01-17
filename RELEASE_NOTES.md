@@ -1,3 +1,6 @@
+### 5.3.6
+- Opc: more robust patchhierarchy caching: https://github.com/pro3d-space/PRo3D/issues/283
+
 ### 5.3.5
 - OpcPaths now more robust (images vs Images, patches vs Patches) - https://github.com/pro3d-space/PRo3D/issues/280
 
