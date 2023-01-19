@@ -27,10 +27,24 @@ module EmbeddedResource =
         let openStream = fun () -> get path
         StreamTexture(openStream, textureParams) :> ITexture
 
+module Rnd =
+
+    let rng = RandomSystem(1)
+
+    let uint8 : unit -> _  = rng.UniformUInt >> uint8
+    let int8 : unit -> _   = rng.UniformInt >> int8
+    let uint16 : unit -> _ = rng.UniformUInt >> uint16
+    let int16 : unit -> _  = rng.UniformInt >> int16
+    let uint32 : unit -> _ = rng.UniformUInt
+    let int32 : unit -> _  = rng.UniformInt
+    let uint64 : unit -> _ = rng.UniformULong
+    let int64 : unit -> _  = rng.UniformLong
+    let float32: unit -> _ = rng.UniformFloatClosed
+
+    let c3b() = C3b(uint8(), uint8(), uint8())
+
 [<AutoOpen>]
 module PixData =
-
-    let private rng = RandomSystem(1)
 
     module PixVolume =
 
@@ -40,13 +54,13 @@ module PixData =
                 c.SetByIndex(ignore >> getValue) |> ignore
             pi
 
-        let random8ui' = randomGeneric (rng.UniformUInt >> uint8)
-        let random8i' = randomGeneric (rng.UniformInt >> int8)
-        let random16ui' = randomGeneric (rng.UniformUInt >> uint16)
-        let random16i' = randomGeneric (rng.UniformInt >> int16)
-        let random32ui' = randomGeneric rng.UniformUInt
-        let random32i' = randomGeneric rng.UniformInt
-        let random32f' = randomGeneric rng.UniformFloatClosed
+        let random8ui'  = randomGeneric Rnd.uint8
+        let random8i'   = randomGeneric Rnd.int8
+        let random16ui' = randomGeneric Rnd.uint16
+        let random16i'  = randomGeneric Rnd.int16
+        let random32ui' = randomGeneric Rnd.uint32
+        let random32i'  = randomGeneric Rnd.int32
+        let random32f'  = randomGeneric Rnd.float32
 
         let random8ui   = random8ui' Col.Format.RGBA
         let random8i    = random8i' Col.Format.RGBA
@@ -94,13 +108,13 @@ module PixData =
                 c.SetByIndex(ignore >> getValue) |> ignore
             pi
 
-        let random8ui' = randomGeneric (rng.UniformUInt >> uint8)
-        let random8i' = randomGeneric (rng.UniformInt >> int8)
-        let random16ui' = randomGeneric (rng.UniformUInt >> uint16)
-        let random16i' = randomGeneric (rng.UniformInt >> int16)
-        let random32ui' = randomGeneric rng.UniformUInt
-        let random32i' = randomGeneric rng.UniformInt
-        let random32f' = randomGeneric rng.UniformFloatClosed
+        let random8ui'  = randomGeneric Rnd.uint8
+        let random8i'   = randomGeneric Rnd.int8
+        let random16ui' = randomGeneric Rnd.uint16
+        let random16i'  = randomGeneric Rnd.int16
+        let random32ui' = randomGeneric Rnd.uint32
+        let random32i'  = randomGeneric Rnd.int32
+        let random32f'  = randomGeneric Rnd.float32
 
         let random8ui   = random8ui' Col.Format.RGBA
         let random8i    = random8i' Col.Format.RGBA
@@ -122,7 +136,7 @@ module PixData =
                     match colors |> HashMap.tryFind c with
                     | Some c -> c
                     | _ ->
-                        let color = C4b(rng.UniformInt(256), rng.UniformInt(256), rng.UniformInt(256), 255)
+                        let color = C4b(Rnd.c3b())
                         colors <- colors |> HashMap.add c color
                         color
             ) |> ignore

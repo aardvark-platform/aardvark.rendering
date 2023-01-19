@@ -30,13 +30,11 @@ module TextureCompression =
         member x.Setup() =
             app <- TestApplication.create' DebugLevel.None Backend.GL
 
-            let rng = RandomSystem(1)
-
             let size = V2i x.Size
             image <- PixImage<uint8>(Col.Format.RGBA, size)
 
             for c in image.ChannelArray do
-                c.SetByIndex(ignore >> rng.UniformUInt >> uint8) |> ignore
+                c.SetByIndex(ignore >> Rnd.uint8) |> ignore
 
         [<GlobalCleanup>]
         member x.Cleanup() =
