@@ -245,6 +245,8 @@ type Runtime(device : Device) as this =
                           [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
                           [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage,
                           [<Optional; DefaultParameterValue(false)>] export : bool) =
+        size |> ResourceValidation.Buffers.validateSize
+
         let flags = VkBufferUsageFlags.ofBufferUsage usage
         let memory = if storage = BufferStorage.Device then device.DeviceMemory else device.HostMemory
         memory.CreateBuffer(flags, int64 size, export = export)

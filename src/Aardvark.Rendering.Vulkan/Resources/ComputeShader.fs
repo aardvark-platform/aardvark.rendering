@@ -222,7 +222,7 @@ type InputBinding(shader : ComputeShader, sets : DescriptorSet[], references : M
 
                         | :? IBufferRange as b ->
                             let buffer = b.Buffer |> unbox<Buffer>
-                            buffer, int64 b.Offset, int64 b.Size, None
+                            buffer, int64 b.Offset, int64 b.SizeInBytes, None
 
                         | _ -> 
                             failf "unexpected storage buffer %A" value
@@ -697,14 +697,14 @@ module private ``Compute Commands`` =
                 | ComputeCommand.CopyBufferCmd(src, dst) ->
                     let srcBuffer = src.Buffer |> unbox<Buffer>
                     let dstBuffer = dst.Buffer |> unbox<Buffer>
-                    Command.Copy(srcBuffer, int64 src.Offset, dstBuffer, int64 dst.Offset, min (int64 src.Size) (int64 dst.Size))
+                    Command.Copy(srcBuffer, int64 src.Offset, dstBuffer, int64 dst.Offset, min (int64 src.SizeInBytes) (int64 dst.SizeInBytes))
 
                 | ComputeCommand.DownloadBufferCmd(src, dst) ->
                     let srcBuffer = src.Buffer |> unbox<Buffer>
                     match dst with
                         | HostMemory.Unmanaged dst ->
                             command {
-                                let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 src.Size)
+                                let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 src.SizeInBytes)
                                 try 
                                     do! Command.Copy(srcBuffer, int64 src.Offset, temp, 0L, temp.Size)
                                 finally
@@ -714,7 +714,7 @@ module private ``Compute Commands`` =
                         | HostMemory.Managed(dst, dstOffset) ->
                             let elementSize = dst.GetType().GetElementType() |> Marshal.SizeOf |> nativeint
                             command {
-                                let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 src.Size)
+                                let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferDstBit (int64 src.SizeInBytes)
                                 try 
                                     do! Command.Copy(srcBuffer, int64 src.Offset, temp, 0L, temp.Size)
                                 finally
@@ -731,7 +731,7 @@ module private ``Compute Commands`` =
                             
                 | ComputeCommand.UploadBufferCmd(src, dst) ->
                     command {
-                        let size = int64 dst.Size
+                        let size = int64 dst.SizeInBytes
                         let temp = device.HostMemory |> Buffer.create VkBufferUsageFlags.TransferSrcBit size
                         try
                             temp.Memory.Mapped (fun dst ->
@@ -779,7 +779,7 @@ module private ``Compute Commands`` =
                     Command.Sync(i.[TextureAspect.Color], VkImageLayout.General, VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst)
 
                 | ComputeCommand.SetBufferCmd(b, pattern) ->
-                    Command.SetBuffer(unbox b.Buffer, int64 b.Offset, int64 b.Size, pattern)
+                    Command.SetBuffer(unbox b.Buffer, int64 b.Offset, int64 b.SizeInBytes, pattern)
 
                 | ComputeCommand.ExecuteCmd other ->
                     match other with 
@@ -820,7 +820,7 @@ module private ``Compute Commands`` =
                                 VkBufferCopy(
                                     uint64 src.Offset,
                                     uint64 dst.Offset,
-                                    uint64 (min src.Size dst.Size)   
+                                    uint64 (min src.SizeInBytes dst.SizeInBytes)   
                                 )
                             |]
 
@@ -828,11 +828,11 @@ module private ``Compute Commands`` =
 
                     | ComputeCommand.DownloadBufferCmd(src, dst) ->
                         let srcBuffer = src.Buffer |> unbox<Buffer>
-                        do! CompilerState.download stream srcBuffer src.Offset dst src.Size
+                        do! CompilerState.download stream srcBuffer src.Offset dst src.SizeInBytes
                         
                     | ComputeCommand.UploadBufferCmd(src, dst) ->
                         let dstBuffer = dst.Buffer |> unbox<Buffer>
-                        do! CompilerState.upload stream src dstBuffer dst.Offset dst.Size
+                        do! CompilerState.upload stream src dstBuffer dst.Offset dst.SizeInBytes
 
                     | ComputeCommand.CopyImageCmd(src, srcOffset, dst, dstOffset, size) ->
                         let src = ImageSubresourceLayers.ofFramebufferOutput src
@@ -874,7 +874,7 @@ module private ``Compute Commands`` =
                         stream.ImageBarrier(i.[TextureAspect.Color], VkAccessFlags.ofResourceAccess src, VkAccessFlags.ofResourceAccess dst) |> ignore
 
                     | ComputeCommand.SetBufferCmd(b, value) ->
-                        stream.SetBuffer(unbox b.Buffer, int64 b.Offset, int64 b.Size, value) |> ignore
+                        stream.SetBuffer(unbox b.Buffer, int64 b.Offset, int64 b.SizeInBytes, value) |> ignore
 
                     | ComputeCommand.ExecuteCmd other ->
                         match other with

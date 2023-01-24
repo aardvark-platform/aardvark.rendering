@@ -538,6 +538,7 @@ type Runtime(debug : IDebugConfig) =
             ctx.Copy(src, srcLevel, srcSlices, V3i.Zero, dst, dstLevel, dstSlices, V3i.Zero, size)
 
     member x.CreateBuffer(size : nativeint, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
+        size |> ResourceValidation.Buffers.validateSize
         ctx.CreateBuffer(size, storage)
 
     member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, sizeInBytes : nativeint) =

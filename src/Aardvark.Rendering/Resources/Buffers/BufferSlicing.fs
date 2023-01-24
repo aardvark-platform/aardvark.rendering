@@ -2,220 +2,173 @@
 
 open System
 open System.Runtime.CompilerServices
-open System.Runtime.InteropServices
 open Aardvark.Base
 
-type IBufferRange =
-    abstract member Buffer : IBackendBuffer
-    abstract member Offset : nativeint
-    abstract member Size : nativeint
+module private BufferInternals =
 
-type IBufferVector<'a when 'a : unmanaged> =
-    abstract member Buffer : IBackendBuffer
-    abstract member Origin : int
-    abstract member Delta : int
-    abstract member Count : int
+    let inline byteSize<'T> (count : int) = nativeint count * nativeint sizeof<'T>
 
-type IBufferRange<'a when 'a : unmanaged> =
-    inherit IBufferRange
-    inherit IBufferVector<'a>
-    abstract member Count : int
+    type BufferRange(buffer : IBackendBuffer, offset : nativeint, sizeInBytes : nativeint) =
+        interface IBufferRange with
+            member x.Buffer = buffer
+            member x.Offset = offset
+            member x.SizeInBytes = sizeInBytes
 
-type IBuffer<'a when 'a : unmanaged> =
-    inherit IBuffer
-    inherit IBufferRange<'a>
-    inherit IDisposable
+    type BufferRange<'T when 'T : unmanaged>(buffer : IBackendBuffer, origin : int, count : int) =
+        inherit BufferRange(buffer, byteSize<'T> origin, byteSize<'T> count)
 
+        interface IBufferVector<'T> with
+            member x.Buffer = buffer
+            member x.Origin = origin
+            member x.Delta = 1
+            member x.Count = count
 
-[<AutoOpen>]
-module private RuntimeBufferImplementation =
+        interface IBufferRange<'T> with
+            member x.Buffer = buffer
 
-    type RuntimeBufferVector<'a when 'a : unmanaged>(buffer : IBackendBuffer, origin : int, delta : int, count : int) =
-        interface IBufferVector<'a> with
+    type BufferVector<'T when 'T : unmanaged>(buffer : IBackendBuffer, origin : int, delta : int, count : int) =
+        interface IBufferVector<'T> with
             member x.Buffer = buffer
             member x.Origin = origin
             member x.Delta = delta
             member x.Count = count
 
-    type RuntimeBufferRange<'a when 'a : unmanaged>(buffer : IBackendBuffer, offset : nativeint, count : int) =
+    type Buffer<'T when 'T : unmanaged>(buffer : IBackendBuffer) =
+        inherit BufferRange<'T>(buffer, 0, int (buffer.SizeInBytes / nativeint sizeof<'T>))
 
-        member x.Buffer = buffer
-        member x.Offset = offset
-        member x.Count = count
-
-        interface IBufferVector<'a> with
-            member x.Buffer = buffer
-            member x.Origin = 0
-            member x.Delta = 1
-            member x.Count = count
-
-        interface IBufferRange<'a> with
-            member x.Buffer = buffer
-            member x.Offset = offset
-            member x.Count = count
-            member x.Size = nativeint count * nativeint sizeof<'a>
-
-    type RuntimeBuffer<'a when 'a : unmanaged>(buffer : IBackendBuffer, count : int) =
-        inherit RuntimeBufferRange<'a>(buffer, 0n, count)
-        interface IBuffer<'a> with
+        interface IBuffer<'T> with
             member x.Dispose() = buffer.Dispose()
 
-    let nsa<'a when 'a : unmanaged> = nativeint sizeof<'a>
+
+module private BufferSlicing =
+    open BufferInternals
+
+    let private argumentOutOfRange (message : string) =
+        raise <| ArgumentException(message)
+
+    let inline private checkRange (totalSize : 'T) (start : 'T) (size : 'T) =
+        let zero = LanguagePrimitives.GenericZero<'T>
+        if start < zero then argumentOutOfRange "[Buffer] start of subrange must not be negative."
+        if size < zero then argumentOutOfRange "[Buffer] size of subrange must not be negative."
+
+        if start + size > totalSize then
+            let max = start + size - LanguagePrimitives.GenericOne<'T>
+            argumentOutOfRange $"[Buffer] subrange [{start}, {max}] out of bounds (max size = {totalSize})."
+
+    let range (offset : nativeint) (sizeInBytes : nativeint) (range : IBufferRange) =
+        (offset, sizeInBytes) ||> checkRange range.SizeInBytes
+        BufferRange(range.Buffer, range.Offset + offset, sizeInBytes) :> IBufferRange
+
+    let elements (start : int) (count : int) (range : IBufferRange<'T>) =
+        (start, count) ||> checkRange range.Count
+        BufferRange<'T>(range.Buffer, range.Origin + start, count) :> IBufferRange<_>
+
+    let subvector (start : int) (delta : int) (count : int) (vector : IBufferVector<'T>) =
+        if start < 0 then argumentOutOfRange $"[Buffer] invalid negative offset: {start}"
+        if start > vector.Count then argumentOutOfRange $"[Buffer] offset out of bounds: {start} (count: {vector.Count})"
+
+        if count < 0 then argumentOutOfRange $"[Buffer] invalid negative count: {start}"
+        if start + count > vector.Count then argumentOutOfRange $"[Buffer] range out of bounds: ({start}, {count}) (count: {vector.Count})"
+
+        let origin = vector.Origin + start * vector.Delta
+        let delta = vector.Delta * delta
+
+        let sa = nativeint sizeof<'T>
+        let firstByte = sa * nativeint origin
+        let lastByte = sa * (nativeint origin + nativeint delta * nativeint (count - 1))
+        if firstByte < 0n || firstByte >= vector.Buffer.SizeInBytes then argumentOutOfRange "[Buffer] range out of bounds"
+        if lastByte < 0n || lastByte >= vector.Buffer.SizeInBytes then argumentOutOfRange "[Buffer] range out of bounds"
+
+        let origin = vector.Origin + start * vector.Delta
+        let delta = vector.Delta * delta
+        BufferVector<'T>(vector.Buffer, origin, delta, count) :> IBufferVector<_>
 
 
 [<AbstractClass; Sealed; Extension>]
-type IBufferRuntimeSlicingExtensions private() =
+type BufferSlicingExtensions private() =
 
-    static let checkRange (b : IBufferRange<'a>) (min : int) (max : int) =
-        if min < 0 then failwithf "[BufferRange] invalid offset %A" min
-        if max < min then failwithf "[BufferRange] invalid range [%A, %A]" min max
-        if max >= b.Count then failwithf "[BufferRange] range out of bounds { min = %A; max = %A } (count: %A)" min max b.Count
+    // ================================================================================================================
+    // Subrange of untyped ranges
+    // ================================================================================================================
+
+    ///<summary>Gets a subrange of the given size starting at the given offset.</summary>
+    ///<param name="range">The buffer range to subdivide.</param>
+    ///<param name="offset">Offset (in bytes) at which the subrange starts.</param>
+    ///<param name="sizeInBytes">Size (in bytes) of the subrange.</param>
+    [<Extension>]
+    static member Range(range : IBufferRange, offset : nativeint, sizeInBytes : nativeint) =
+        range |> BufferSlicing.range offset sizeInBytes
+
+    ///<summary>Gets a subrange starting at the given offset.</summary>
+    ///<param name="range">The buffer range to subdivide.</param>
+    ///<param name="offset">Offset (in bytes) at which the subrange starts.</param>
+    [<Extension>]
+    static member Range(range : IBufferRange, offset : nativeint) =
+        if offset > range.SizeInBytes then
+            raise <| ArgumentException($"[Buffer] subrange start {offset} out of bounds (size = {range.SizeInBytes}).")
+
+        range.Range(offset, range.SizeInBytes - offset)
+
+
+    // ================================================================================================================
+    // Subrange of typed ranges
+    // ================================================================================================================
+
+    ///<summary>Gets a subrange of the given count starting at the given index.</summary>
+    ///<param name="range">The buffer range to subdivide.</param>
+    ///<param name="start">Index at which the subrange starts.</param>
+    ///<param name="count">Number of elements in the subrange.</param>
+    [<Extension>]
+    static member Elements(range : IBufferRange<'T>, start : int, count : int) =
+        range |> BufferSlicing.elements start count
+
+    ///<summary>Gets a subrange starting at the given index.</summary>
+    ///<param name="range">The buffer range to subdivide.</param>
+    ///<param name="start">Index at which the subrange starts.</param>
+    [<Extension>]
+    static member Elements(range : IBufferRange<'T>, start : int) =
+        if start > range.Count then
+            raise <| ArgumentException($"[Buffer] subrange start {start} out of bounds (size = {range.Count}).")
+
+        range.Elements(start, range.Count - start)
+
+    ///<summary>Gets a subrange from the start to end index.</summary>
+    ///<param name="range">The buffer range to subdivide.</param>
+    ///<param name="startIndex">Index at which the subrange starts. Default is 0.</param>
+    ///<param name="endIndex">Index at which the subrange ends (inclusive). Default is <paramref name="range"/>.Count - 1.</param>
+    [<Extension>]
+    static member GetSlice(range : IBufferRange<'T>, startIndex : Option<int>, endIndex : Option<int>) =
+        let min = defaultArg startIndex 0
+        let max = defaultArg endIndex (range.Count - 1)
+
+        if min > max then
+            raise <| ArgumentException($"[Buffer] invalid subrange [{startIndex}, {endIndex}].")
+
+        range.Elements(min, 1 + max - min)
+
+
+    // ================================================================================================================
+    // Subvectors of vectors
+    // ================================================================================================================
 
     [<Extension>]
-    static member SubVector(this : IBufferVector<'a>, offset : int, delta : int, count : int) =
-        if offset < 0 then failwithf "[Buffer] invalid negative offset: %A" offset
-        if offset > this.Count then failwithf "[Buffer] offset out of bounds: %A (count: %A)" offset this.Count
-
-        if count < 0 then failwithf "[Buffer] invalid negative count: %A" offset
-        if offset + count > this.Count then failwithf "[Buffer] range out of bounds: (%A, %A) (count: %A)" offset count this.Count
-
-        let origin = this.Origin + offset * this.Delta
-        let delta = this.Delta * delta
-
-        let sa = nativeint sizeof<'a>
-        let firstByte = sa * nativeint origin
-        let lastByte = sa * (nativeint origin + nativeint delta * nativeint (count - 1))
-        if firstByte < 0n || firstByte >= this.Buffer.SizeInBytes then failwithf "[Buffer] range out of bounds"
-        if lastByte < 0n || lastByte >= this.Buffer.SizeInBytes then failwithf "[Buffer] range out of bounds"
-
-        RuntimeBufferVector<'a>(
-            this.Buffer,
-            origin,
-            delta,
-            count
-        ) :> IBufferVector<_>
+    static member SubVector(vector : IBufferVector<'T>, start : int, delta : int, count : int) =
+        vector |> BufferSlicing.subvector start delta count
 
     [<Extension>]
-    static member SubVector(this : IBufferVector<'a>, offset : int, count : int) =
-        IBufferRuntimeSlicingExtensions.SubVector(this, offset, 1, count)
+    static member inline SubVector(vector : IBufferVector<'T>, offset : int, count : int) =
+        vector.SubVector(offset, 1, count)
 
     [<Extension>]
-    static member Skip(this : IBufferVector<'a>, n : int) =
-        let n = min (this.Count - 1) n
-        IBufferRuntimeSlicingExtensions.SubVector(this, n, 1, max 0 (this.Count - n))
+    static member inline Skip(vector : IBufferVector<'T>, count : int) =
+        let count = min (vector.Count - 1) count
+        vector.SubVector(count, 1, max 0 (vector.Count - count))
 
     [<Extension>]
-    static member Take(this : IBufferVector<'a>, n : int) =
-        IBufferRuntimeSlicingExtensions.SubVector(this, 0, 1, n)
+    static member inline Take(vector : IBufferVector<'T>, count : int) =
+        vector.SubVector(0, 1, count)
 
     [<Extension>]
-    static member Strided(this : IBufferVector<'a>, d : int) =
-        let n = 1 + (this.Count - 1) / d
-        IBufferRuntimeSlicingExtensions.SubVector(this, 0, d, n)
-
-
-    [<Extension>]
-    static member Upload(this : IBufferRange, data : nativeint, size : nativeint) =
-        IBackendBufferExtensions.Upload(this.Buffer, this.Offset, data, min this.Size size)
-
-    [<Extension>]
-    static member Download(this : IBufferRange, data : nativeint, size : nativeint) =
-        IBackendBufferExtensions.Download(this.Buffer, this.Offset, data, min this.Size size)
-
-
-    [<Extension>]
-    static member Upload(x : IBufferRange<'a>, src : 'a[], srcIndex : int, dstIndex : int, count : int) =
-        let gc = GCHandle.Alloc(src, GCHandleType.Pinned)
-        try
-            let ptr = gc.AddrOfPinnedObject()
-            IBackendBufferExtensions.Upload(x.Buffer, nativeint dstIndex * nsa<'a>, ptr + nsa<'a> * nativeint srcIndex, nsa<'a> * nativeint count)
-        finally
-            gc.Free()
-
-    [<Extension>]
-    static member Upload(x : IBufferRange<'a>, src : 'a[], dstIndex : int, count : int) = IBufferRuntimeSlicingExtensions.Upload(x, src, 0, dstIndex, count)
-
-    [<Extension>]
-    static member Upload(x : IBufferRange<'a>, src : 'a[], count : int) = IBufferRuntimeSlicingExtensions.Upload(x, src, 0, 0, count)
-
-    [<Extension>]
-    static member Upload(x : IBufferRange<'a>, src : 'a[]) = IBufferRuntimeSlicingExtensions.Upload(x, src, 0, 0, src.Length)
-
-    [<Extension>]
-    static member Download(x : IBufferRange<'a>, srcIndex : int, dst : 'a[], dstIndex : int, count : int) =
-        let gc = GCHandle.Alloc(dst, GCHandleType.Pinned)
-        try
-            let ptr = gc.AddrOfPinnedObject()
-            IBackendBufferExtensions.Download(x.Buffer, x.Offset + nativeint srcIndex * nsa<'a>, ptr + nsa<'a> * nativeint dstIndex, nsa<'a> * nativeint count)
-        finally
-            gc.Free()
-
-    [<Extension>]
-    static member Download(x : IBufferRange<'a>, srcIndex : int, dst : 'a[], count : int) = IBufferRuntimeSlicingExtensions.Download(x, srcIndex, dst, 0, count)
-
-    [<Extension>]
-    static member Download(x : IBufferRange<'a>, dst : 'a[], count : int) = IBufferRuntimeSlicingExtensions.Download(x, 0, dst, 0, count)
-
-    [<Extension>]
-    static member Download(x : IBufferRange<'a>, dst : 'a[]) = IBufferRuntimeSlicingExtensions.Download(x, 0, dst, 0, dst.Length)
-
-    [<Extension>]
-    static member Download(x : IBufferRange<'a>) =
-        let dst = Array.zeroCreate x.Count
-        IBufferRuntimeSlicingExtensions.Download(x, 0, dst, 0, dst.Length)
-        dst
-
-    [<Extension>]
-    static member CopyTo(src : IBufferRange, dst : IBufferRange) =
-        if src.Size <> dst.Size then failwithf "[Buffer] mismatching size in copy: { src = %A; dst = %A }" src.Size dst.Size
-        IBackendBufferExtensions.CopyTo(src.Buffer, src.Offset, dst.Buffer, dst.Offset, src.Size)
-
-    [<Extension>]
-    static member GetSlice(x : IBufferRange<'a>, min : Option<int>, max : Option<int>) =
-        let min = defaultArg min 0
-        let max = defaultArg max (x.Count - 1)
-        checkRange x min max
-        RuntimeBufferRange<'a>(x.Buffer, x.Offset + nativeint min * nsa<'a>, 1 + max - min) :> IBufferRange<_>
-
-    [<Extension>]
-    static member SetSlice(x : IBufferRange<'a>, min : Option<int>, max : Option<int>, data : 'a[]) =
-        let slice = IBufferRuntimeSlicingExtensions.GetSlice(x, min, max)
-        IBufferRuntimeSlicingExtensions.Upload(slice, data, Fun.Min(data.Length, slice.Count))
-
-    [<Extension>]
-    static member SetSlice(x : IBufferRange<'a>, min : Option<int>, max : Option<int>, other : IBufferRange<'a>) =
-        let slice = IBufferRuntimeSlicingExtensions.GetSlice(x, min, max)
-        IBufferRuntimeSlicingExtensions.CopyTo(other, slice)
-
-    [<Extension>]
-    static member SetSlice(x : IBufferRange<'a>, min : Option<int>, max : Option<int>, value : 'a) =
-        let slice = IBufferRuntimeSlicingExtensions.GetSlice(x, min, max)
-        IBufferRuntimeSlicingExtensions.Upload(slice, Array.create slice.Count value)
-
-    [<Extension>]
-    static member CreateBuffer<'a when 'a : unmanaged>(this : IBufferRuntime, count : int) =
-        let buffer = this.CreateBuffer(nsa<'a> * nativeint count)
-        new RuntimeBuffer<'a>(buffer, count) :> IBuffer<'a>
-
-    [<Extension>]
-    static member CreateBuffer<'a when 'a : unmanaged>(this : IBufferRuntime, data : 'a[]) =
-        let buffer = this.CreateBuffer(nsa<'a> * nativeint data.Length)
-        let res = new RuntimeBuffer<'a>(buffer, data.Length) :> IBuffer<'a>
-        IBufferRuntimeSlicingExtensions.Upload(res, data)
-        res
-
-    [<Extension>]
-    static member Coerce<'a when 'a : unmanaged>(this : IBackendBuffer) =
-        new RuntimeBuffer<'a>(this, int (this.SizeInBytes / nativeint sizeof<'a>)) :> IBuffer<'a>
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module BufferRange =
-    let inline upload (data : 'a[]) (range : IBufferRange<'a>) = range.Upload(data)
-    let inline download (range : IBufferRange<'a>) = range.Download()
-    let inline copy (src : IBufferRange) (dst : IBufferRange) = src.CopyTo dst
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module Buffer =
-    let inline create<'a when 'a : unmanaged> (runtime : IBufferRuntime) (count : int) = runtime.CreateBuffer<'a>(count)
-    let inline ofArray<'a when 'a : unmanaged> (runtime : IBufferRuntime) (data : 'a[]) = runtime.CreateBuffer<'a>(data)
-    let inline delete (b : IBuffer<'a>) =  b.Dispose()
+    static member inline Strided(vector : IBufferVector<'T>, delta : int) =
+        let count = 1 + (vector.Count - 1) / delta
+        vector.SubVector(0, delta, count)

@@ -1404,7 +1404,7 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         let numberOfBits : int = bitCountBuffer.[0]
         let byteCount = if numberOfBits % 8 = 0 then numberOfBits / 8 else 1 + numberOfBits / 8
 
-        outputBuffer.Buffer.Coerce<byte>().Download(0, cpuBuffer, 0, byteCount)
+        outputBuffer.CoerceRange<byte>().Download(cpuBuffer, byteCount)
 
         let ms = new System.IO.MemoryStream(byteCount * 2 + header.Length + 2)
 
@@ -1434,9 +1434,8 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
     member x.Download() =
         let numberOfBits : int = bitCountBuffer.[0]
         let byteCount = if numberOfBits % 8 = 0 then numberOfBits / 8 else 1 + numberOfBits / 8
-        
-        outputBuffer.Buffer.Coerce<byte>().Download(0, cpuBuffer, 0, byteCount)
 
+        outputBuffer.CoerceRange<byte>().Download(cpuBuffer, byteCount)
 
         let dstStart = outputData
 

@@ -49,7 +49,8 @@ type BufferUsage =
     /// Equivalent to combination of all other usage flags.
     | All                   = 0xFF
 
-type IBuffer = interface end
+type IBuffer =
+    interface end
 
 type INativeBuffer =
     inherit IBuffer
@@ -60,14 +61,34 @@ type INativeBuffer =
 
 type IBackendBuffer =
     inherit IBuffer
+    inherit IBufferRange
     inherit IDisposable
     abstract member Runtime : IBufferRuntime
     abstract member Handle : obj
-    abstract member SizeInBytes : nativeint
 
 and IExportedBackendBuffer =
     inherit IBackendBuffer
     inherit IExportedResource
+
+and IBufferRange =
+    abstract member Buffer : IBackendBuffer
+    abstract member Offset : nativeint
+    abstract member SizeInBytes : nativeint
+
+and IBufferVector<'T when 'T : unmanaged> =
+    abstract member Buffer : IBackendBuffer
+    abstract member Origin : int
+    abstract member Delta : int
+    abstract member Count : int
+
+and IBufferRange<'T when 'T : unmanaged> =
+    inherit IBufferRange
+    inherit IBufferVector<'T>
+
+and IBuffer<'T when 'T : unmanaged> =
+    inherit IBuffer
+    inherit IBufferRange<'T>
+    inherit IDisposable
 
 and IBufferRuntime =
     ///<summary>
@@ -103,14 +124,6 @@ and IBufferRuntime =
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
     abstract member Download : src : IBackendBuffer * srcOffset : nativeint * dst : nativeint * sizeInBytes : nativeint -> unit
 
-    ///<summary>Copies data from a buffer to another.</summary>
-    ///<param name="src">The buffer to copy data from.</param>
-    ///<param name="srcOffset">Offset (in bytes) into the source buffer.</param>
-    ///<param name="dst">The buffer to copy data to.</param>
-    ///<param name="dstOffset">Offset (in bytes) into the destination buffer.</param>
-    ///<param name="sizeInBytes">Number of bytes to copy.</param>
-    abstract member Copy : src : IBackendBuffer * srcOffset : nativeint * dst : IBackendBuffer * dstOffset : nativeint * sizeInBytes : nativeint -> unit
-
     ///<summary>Asynchronously copies data from a buffer to host memory.</summary>
     ///<param name="src">The buffer to copy data from.</param>
     ///<param name="srcOffset">Offset (in bytes) into the buffer.</param>
@@ -118,3 +131,11 @@ and IBufferRuntime =
     ///<param name="sizeInBytes">Number of bytes to copy.</param>
     ///<returns>A function that blocks until the download is complete.</returns>
     abstract member DownloadAsync : src : IBackendBuffer * srcOffset : nativeint * dst : nativeint * sizeInBytes : nativeint -> (unit -> unit)
+
+    ///<summary>Copies data from a buffer to another.</summary>
+    ///<param name="src">The buffer to copy data from.</param>
+    ///<param name="srcOffset">Offset (in bytes) into the source buffer.</param>
+    ///<param name="dst">The buffer to copy data to.</param>
+    ///<param name="dstOffset">Offset (in bytes) into the destination buffer.</param>
+    ///<param name="sizeInBytes">Number of bytes to copy.</param>
+    abstract member Copy : src : IBackendBuffer * srcOffset : nativeint * dst : IBackendBuffer * dstOffset : nativeint * sizeInBytes : nativeint -> unit
