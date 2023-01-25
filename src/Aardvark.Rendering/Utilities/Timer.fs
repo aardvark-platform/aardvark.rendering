@@ -48,7 +48,7 @@ module MultimediaTimer =
 
             { new IDisposable with
                 member x.Dispose() = 
-                    running := false
+                    running.Value <- false
             }
 
     type Trigger(ms : int) =

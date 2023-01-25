@@ -2,8 +2,6 @@
 
 module Naive =
 
-    open Aardvark.Base
-    
     open Aardvark.Rendering
     open Aardvark.SceneGraph
     open FSharp.Data.Adaptive.Operators
@@ -25,20 +23,16 @@ module Naive =
                 do! DefaultSurfaces.sgColor
             }
 
-        let makeTask sg =
-            let sg =
-                sg |> Sg.viewTrafo scene.viewTrafo |> Sg.projTrafo scene.projTrafo
+        let task =
+            Sg.ofList [ opaque; transparent]
+            |> Sg.viewTrafo scene.viewTrafo
+            |> Sg.projTrafo scene.projTrafo
+            |> Sg.compile runtime framebuffer.signature
 
-            runtime.CompileRender(framebuffer.signature, sg)
-
-        let opaqueTask = makeTask opaque
-        let transparentTask = makeTask transparent
-
-        member x.Task = RenderTask.ofList [opaqueTask; transparentTask]
+        member x.Task = task
 
         member x.Dispose() =
-            opaqueTask.Dispose()
-            transparentTask.Dispose()
+            task.Dispose()
 
         interface ITechnique with
             member x.Name = "Alpha blending (unsorted)"

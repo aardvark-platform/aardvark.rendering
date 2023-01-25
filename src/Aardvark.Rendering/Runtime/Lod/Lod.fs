@@ -387,7 +387,7 @@ module Loader =
 
             member x.Take (ct : CancellationToken) =
                 sem.Wait(ct)
-                let res = !Interlocked.Exchange(&content,Unchecked.defaultof<_>)
+                let res = Interlocked.Exchange(&content,Unchecked.defaultof<_>).Value
                 cnt <- 0
                 res
 
@@ -398,7 +398,7 @@ module Loader =
                 async {
                     let! ct = Async.CancellationToken
                     do! Async.AwaitTask(sem.WaitAsync(ct))
-                    let res = !Interlocked.Exchange(&content,Unchecked.defaultof<_>)
+                    let res = Interlocked.Exchange(&content,Unchecked.defaultof<_>).Value
                     cnt <- 0
                     return res
                 }

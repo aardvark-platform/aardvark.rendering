@@ -72,9 +72,9 @@ module PatchHierarchy =
 
     let load (pickle : QTree<Patch> -> byte[]) (unpickle :  byte[] -> QTree<Patch>) (opcPaths : OpcPaths) =
         let cachefile = opcPaths.PatchHierarchyCache_FileAbsPath
-                
-        if Prinziple.exists cachefile then
-            try
+             
+        try
+            if Prinziple.exists cachefile then
                 Log.startTimed "loading from cache file"
 
                 let readFile = Prinziple.readAllBytes cachefile
@@ -82,10 +82,10 @@ module PatchHierarchy =
                 let r = { opcPaths = opcPaths; tree = readFile |> unpickle }
                 Log.stop()
                 r
-            with e -> 
-                Log.warn "could not parse cache file. recomputing."
+            else
                 loadAndCache opcPaths pickle
-        else
+        with e -> 
+            Log.warn "could not parse cache file. recomputing."
             loadAndCache opcPaths pickle
 
     let getLevelFromResolution (resolution : float) (patchTree : QTree<Patch>) =
