@@ -292,13 +292,13 @@ type Runtime(debug : IDebugConfig) =
         member x.CompileClear(signature, values) = x.CompileClear(signature, values)
 
         member x.CreateBuffer(size : nativeint, _ : BufferUsage, storage : BufferStorage) = x.CreateBuffer(size, storage) :> IBackendBuffer
-        member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = x.Upload(src, dst, dstOffset, size)
-        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) = x.Download(src, srcOffset, dst, size)
+        member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) = x.Upload(src, dst, dstOffset, size)
+        member x.Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) = x.Download(src, srcOffset, dst, size)
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
             x.Copy(src, srcOffset, dst, dstOffset, size)
 
-        member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) : unit -> unit =
-            failwith ""
+        member x.DownloadAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) : unit -> unit =
+            raise <| NotImplementedException()
 
         member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) = x.Copy(src, srcBaseSlice, srcBaseLevel, dst, dstBaseSlice, dstBaseLevel, slices, levels)
         member x.PrepareSurface (signature, s : ISurface) : IBackendSurface = x.PrepareSurface(signature, s)
@@ -538,25 +538,33 @@ type Runtime(debug : IDebugConfig) =
             ctx.Copy(src, srcLevel, srcSlices, V3i.Zero, dst, dstLevel, dstSlices, V3i.Zero, size)
 
     member x.CreateBuffer(size : nativeint, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) =
+        size |> ResourceValidation.Buffers.validateSize
         ctx.CreateBuffer(size, storage)
 
-    member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+    member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, sizeInBytes : nativeint) =
+        dst |> ResourceValidation.Buffers.validateRange dstOffset sizeInBytes
+
         use __ = ctx.ResourceLock
-        GL.Dispatch.NamedBufferSubData(unbox<int> dst.Handle, dstOffset, size, src)
+        GL.Dispatch.NamedBufferSubData(unbox<int> dst.Handle, dstOffset, sizeInBytes, src)
         GL.Check "could not upload buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
 
-    member x.Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
+    member x.Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, sizeInBytes : nativeint) =
+        src |> ResourceValidation.Buffers.validateRange srcOffset sizeInBytes
+
         use __ = ctx.ResourceLock
-        GL.Dispatch.GetNamedBufferSubData(unbox<int> src.Handle, srcOffset, size, dst)
+        GL.Dispatch.GetNamedBufferSubData(unbox<int> src.Handle, srcOffset, sizeInBytes, dst)
         GL.Check "could not download buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()
 
-    member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+    member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, sizeInBytes : nativeint) =
+        src |> ResourceValidation.Buffers.validateRange srcOffset sizeInBytes
+        dst |> ResourceValidation.Buffers.validateRange dstOffset sizeInBytes
+
         use __ = ctx.ResourceLock
-        GL.Dispatch.CopyNamedBufferSubData(unbox<int> src.Handle, unbox<int> dst.Handle, srcOffset, dstOffset, size)
+        GL.Dispatch.CopyNamedBufferSubData(unbox<int> src.Handle, unbox<int> dst.Handle, srcOffset, dstOffset, sizeInBytes)
         GL.Check "could not copy buffer data"
         if RuntimeConfig.SyncUploadsAndFrames then
             GL.Sync()

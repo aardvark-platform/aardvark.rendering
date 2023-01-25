@@ -144,11 +144,7 @@ type ComputeShaderInputBinding(shader : ComputeShader) =
                         inputBuffers.[slot] <- (new Aardvark.Rendering.GL.Buffer(ctx, 0n, 0), 0n, 0n)
                     | :? IBufferRange as range ->
                         let buffer = unbox<GL.Buffer> range.Buffer
-                        inputBuffers.[slot] <- (buffer, range.Offset, range.Size)
-
-                    | :? GL.Buffer as b ->
-                        inputBuffers.[slot] <- (b, 0n, b.SizeInBytes)
-
+                        inputBuffers.[slot] <- (buffer, range.Offset, range.SizeInBytes)
                     | _ ->
                         failwithf "[GL] bad buffer: %A" value
 
@@ -381,7 +377,7 @@ type private GLCompute(ctx : Context) =
                 GL.Check()
                 let srcBuffer = unbox<GL.Buffer> src.Buffer
                 let dstBuffer = unbox<GL.Buffer> dst.Buffer
-                ctx.Copy(srcBuffer, src.Offset, dstBuffer, dst.Offset, src.Size)
+                ctx.Copy(srcBuffer, src.Offset, dstBuffer, dst.Offset, src.SizeInBytes)
                 GL.Sync()
                 GL.Check()
                 ()
@@ -393,12 +389,12 @@ type private GLCompute(ctx : Context) =
                     let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
                     try
                         let ptr = gc.AddrOfPinnedObject() + (nativeint index * elementSize)
-                        ctx.Runtime.Copy(ptr, dst.Buffer, dst.Offset, dst.Size)
+                        ctx.Runtime.Upload(ptr, dst.Buffer, dst.Offset, dst.SizeInBytes)
                     finally
                         gc.Free()
 
                 | HostMemory.Unmanaged ptr ->
-                    ctx.Runtime.Copy(ptr, dst.Buffer, dst.Offset, dst.Size)
+                    ctx.Runtime.Upload(ptr, dst.Buffer, dst.Offset, dst.SizeInBytes)
 
             | ComputeCommand.CopyImageCmd(src, srcOffset, dst, dstOffset, size) ->
                 ctx.Runtime.Copy(src, srcOffset, dst, dstOffset, size)
@@ -406,7 +402,7 @@ type private GLCompute(ctx : Context) =
             | ComputeCommand.SetBufferCmd(dst, value) ->
                 let dstBuffer = unbox<GL.Buffer> dst.Buffer
                 let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
-                GL.Dispatch.ClearNamedBufferSubData(dstBuffer.Handle, PixelInternalFormat.R32ui, dst.Offset, dst.Size, PixelFormat.Red, PixelType.UnsignedInt, gc.AddrOfPinnedObject())
+                GL.Dispatch.ClearNamedBufferSubData(dstBuffer.Handle, PixelInternalFormat.R32ui, dst.Offset, dst.SizeInBytes, PixelFormat.Red, PixelType.UnsignedInt, gc.AddrOfPinnedObject())
                 gc.Free()
                 GL.Sync()
                 GL.Check()
@@ -419,11 +415,11 @@ type private GLCompute(ctx : Context) =
                     | HostMemory.Managed(arr,index) ->
                         let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
                         let es = Marshal.SizeOf (arr.GetType().GetElementType()) |> nativeint
-                        GL.Dispatch.GetNamedBufferSubData(srcBuffer.Handle, src.Offset, src.Size, gc.AddrOfPinnedObject() + es * nativeint index)
+                        GL.Dispatch.GetNamedBufferSubData(srcBuffer.Handle, src.Offset, src.SizeInBytes, gc.AddrOfPinnedObject() + es * nativeint index)
                         gc.Free()
 
                     | HostMemory.Unmanaged ptr ->   
-                        GL.Dispatch.GetNamedBufferSubData(srcBuffer.Handle, src.Offset, src.Size, ptr)
+                        GL.Dispatch.GetNamedBufferSubData(srcBuffer.Handle, src.Offset, src.SizeInBytes, ptr)
             | ComputeCommand.ExecuteCmd other ->
                 other.Run(queries)
     

@@ -52,6 +52,8 @@ type Buffer =
         interface IBackendBuffer with
             member x.Runtime = x.Context.Runtime :> IBufferRuntime
             member x.Handle = x.Handle :> obj
+            member x.Buffer = x
+            member x.Offset = 0n
             member x.SizeInBytes = x.SizeInBytes
             member x.Dispose() = x.Dispose()
 
@@ -160,12 +162,12 @@ module BufferExtensions =
             | :? INativeBuffer as nb ->
                 nb.Use (fun ptr -> x.CreateBuffer(ptr, nb.SizeInBytes, storage))
 
+            | :? IExportedBackendBuffer as b ->
+                x.ImportBuffer b
+
             | :? IBufferRange as bv ->
                 let handle = bv.Buffer
                 x.CreateBuffer(handle, storage)
-
-            | :? IExportedBackendBuffer as b ->
-                x.ImportBuffer b
 
             | _ ->
                 failwith "unsupported buffer-type"

@@ -36,6 +36,8 @@ type Buffer =
         interface IBackendBuffer with
             member x.Runtime = x.Device.Runtime :> IBufferRuntime
             member x.Handle = x.Handle :> obj
+            member x.Buffer = x
+            member x.Offset = 0n
             member x.SizeInBytes = nativeint x.Size // NOTE: return size as specified by user. memory might have larger size as it is an aligned block
 
         new(device : Device, handle, memory, size, usage) =

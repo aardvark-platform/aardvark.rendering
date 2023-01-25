@@ -94,7 +94,7 @@ module ResourceValidation =
 
                 Printf.ksprintf (fun str ->
                     let message = sprintf "[%s] %s" name str
-                    raise <| ArgumentException(message)
+                    raise <| ArgumentException(message + ".")
                 ) format
 
             let fail (dimension : TextureDimension) (msg : string) =
@@ -261,13 +261,34 @@ module ResourceValidation =
             | :? NullTexture -> raise <| ArgumentException("Cannot prepare a NullTexture")
             | _ -> ()
 
+    module Buffers =
+
+        module private Utils =
+            let failf format =
+                Printf.ksprintf (fun str ->
+                     let message = sprintf "[Buffer] %s" str
+                     raise <| ArgumentException(message + ".")
+                 ) format
+
+        /// Raises an ArgumentException if the given range is out of bounds for the given buffer.
+        let validateRange (offset : nativeint) (sizeInBytes : nativeint) (buffer : IBackendBuffer) =
+            if offset < 0n then Utils.failf "offset must not be negative"
+            if sizeInBytes < 0n then Utils.failf "size must not be negative"
+            let e = offset + sizeInBytes
+            if e > buffer.SizeInBytes then
+                Utils.failf "range out of bounds { offset = %A; size = %A } (size: %A)" offset sizeInBytes buffer.SizeInBytes
+
+        /// Raises an ArgumentException if the given size is negative.
+        let validateSize (sizeInBytes : nativeint) =
+            if sizeInBytes < 0n then Utils.failf "size must not be negative"
+
     module Framebuffers =
 
         module private Utils =
             let failf format =
                 Printf.ksprintf (fun str ->
                      let message = sprintf "[Framebuffer] %s" str
-                     raise <| ArgumentException(message)
+                     raise <| ArgumentException(message + ".")
                  ) format
 
         let validSampleCounts = Set.ofList [ 1; 2; 4; 8; 16; 32; 64 ]

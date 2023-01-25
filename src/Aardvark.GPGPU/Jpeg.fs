@@ -1404,7 +1404,7 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         let numberOfBits : int = bitCountBuffer.[0]
         let byteCount = if numberOfBits % 8 = 0 then numberOfBits / 8 else 1 + numberOfBits / 8
 
-        outputBuffer.Buffer.Coerce<byte>().Download(0, cpuBuffer, 0, byteCount)
+        outputBuffer.CoerceRange<byte>().Download(cpuBuffer, byteCount)
 
         let ms = new System.IO.MemoryStream(byteCount * 2 + header.Length + 2)
 
@@ -1434,9 +1434,8 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
     member x.Download() =
         let numberOfBits : int = bitCountBuffer.[0]
         let byteCount = if numberOfBits % 8 = 0 then numberOfBits / 8 else 1 + numberOfBits / 8
-        
-        outputBuffer.Buffer.Coerce<byte>().Download(0, cpuBuffer, 0, byteCount)
 
+        outputBuffer.CoerceRange<byte>().Download(cpuBuffer, byteCount)
 
         let dstStart = outputData
 
@@ -1495,7 +1494,7 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         let mutable remaining = nativeint byteCount
         let mutable wait = id
         let mutable copySize = min remaining chunkSize
-        runtime.Copy(outputBuffer.Buffer, 0n, ping, copySize)
+        runtime.Download(outputBuffer.Buffer, 0n, ping, copySize)
 
 
 
@@ -1511,7 +1510,7 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
             remaining <- remaining - copySize
             copySize <- min remaining chunkSize
             if copySize > 0n then
-                wait <- runtime.CopyAsync(outputBuffer.Buffer, offset, ping, copySize)
+                wait <- runtime.DownloadAsync(outputBuffer.Buffer, offset, ping, copySize)
             else
                 wait <- id
 

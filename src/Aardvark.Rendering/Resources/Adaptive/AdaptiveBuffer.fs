@@ -156,7 +156,7 @@ type AdaptiveBuffer(runtime : IBufferRuntime, sizeInBytes : nativeint,
         lock x (fun _ ->
             assert (offset + sizeInBytes <= x.Size)
             let handle = x.ComputeHandle(false)
-            runtime.Copy(data, handle, offset, sizeInBytes)
+            runtime.Upload(data, handle, offset, sizeInBytes)
         )
 
     override x.Create() =

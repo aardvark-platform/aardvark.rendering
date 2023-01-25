@@ -245,26 +245,37 @@ type Runtime(device : Device) as this =
                           [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,
                           [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage,
                           [<Optional; DefaultParameterValue(false)>] export : bool) =
+        size |> ResourceValidation.Buffers.validateSize
+
         let flags = VkBufferUsageFlags.ofBufferUsage usage
         let memory = if storage = BufferStorage.Device then device.DeviceMemory else device.HostMemory
         memory.CreateBuffer(flags, int64 size, export = export)
 
-    member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+    member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, sizeInBytes : nativeint) =
+        dst |> ResourceValidation.Buffers.validateRange dstOffset sizeInBytes
+
         let dst = unbox<Buffer> dst
-        Buffer.upload src dst dstOffset size
+        Buffer.upload src dst dstOffset sizeInBytes
 
-    member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
+    member x.Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, sizeInBytes : nativeint) =
+        src |> ResourceValidation.Buffers.validateRange srcOffset sizeInBytes
+
         let src = unbox<Buffer> src
-        Buffer.download src srcOffset dst size
+        Buffer.download src srcOffset dst sizeInBytes
 
-    member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
+    member x.DownloadAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, sizeInBytes : nativeint) =
+        src |> ResourceValidation.Buffers.validateRange srcOffset sizeInBytes
+
         let src = unbox<Buffer> src
-        Buffer.downloadAsync src srcOffset dst size
+        Buffer.downloadAsync src srcOffset dst sizeInBytes
 
-    member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+    member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, sizeInBytes : nativeint) =
+        src |> ResourceValidation.Buffers.validateRange srcOffset sizeInBytes
+        dst |> ResourceValidation.Buffers.validateRange dstOffset sizeInBytes
+
         let src = unbox<Buffer> src
         let dst = unbox<Buffer> dst
-        Buffer.copy src srcOffset dst dstOffset size
+        Buffer.copy src srcOffset dst dstOffset sizeInBytes
 
     member x.Copy(src : IBackendTexture, srcBaseSlice : int, srcBaseLevel : int, dst : IBackendTexture, dstBaseSlice : int, dstBaseLevel : int, slices : int, levels : int) =
         src |> ResourceValidation.Textures.validateSlices srcBaseSlice slices
@@ -588,17 +599,17 @@ type Runtime(device : Device) as this =
 
         member x.CreateBuffer(size : nativeint, usage : BufferUsage, storage : BufferStorage) = x.CreateBuffer(size, usage, storage) :> IBackendBuffer
 
-        member x.Copy(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
-            x.Copy(src, dst, dstOffset, size)
+        member x.Upload(src : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
+            x.Upload(src, dst, dstOffset, size)
 
-        member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
-            x.Copy(src, srcOffset, dst, size)
+        member x.Download(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
+            x.Download(src, srcOffset, dst, size)
 
         member x.Copy(src : IBackendBuffer, srcOffset : nativeint, dst : IBackendBuffer, dstOffset : nativeint, size : nativeint) =
             x.Copy(src, srcOffset, dst, dstOffset, size)
 
-        member x.CopyAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
-            x.CopyAsync(src, srcOffset, dst, size)
+        member x.DownloadAsync(src : IBackendBuffer, srcOffset : nativeint, dst : nativeint, size : nativeint) =
+            x.DownloadAsync(src, srcOffset, dst, size)
 
         member x.Clear(fbo : IFramebuffer, values : ClearValues) : unit =
             x.Clear(fbo, values)
