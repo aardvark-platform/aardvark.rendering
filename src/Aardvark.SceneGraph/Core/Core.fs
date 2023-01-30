@@ -21,25 +21,17 @@ type IGroup =
 module Providers =
 
     type SingleUniformHolder(name : Symbol, value : IAdaptiveValue) =
-        
         let value = Some value
 
         interface IUniformProvider with
             member x.TryGetUniform (s,n) = if n = name then value else None
             member x.Dispose() = ()
 
-    type SimpleUniformHolder(values : Map<Symbol, IAdaptiveValue>) =
-        interface IUniformProvider with
-            member x.TryGetUniform (scope,name) = Map.tryFind name values
-            member x.Dispose() = ()
-
-        new (l : list<Symbol * IAdaptiveValue>) = new SimpleUniformHolder(Map.ofList l)
-
     type ScopeDependentUniformHolder(values : Map<Symbol, Scope -> IAdaptiveValue>) =
         let cache = Dictionary<Scope * Symbol, Option<IAdaptiveValue>>()
 
         interface IUniformProvider with
-            member x.Dispose () = cache.Clear()
+            member x.Dispose() = cache.Clear()
             member x.TryGetUniform(scope, name) =
                 match cache.TryGetValue((scope, name)) with
                 | (true, v) -> v
@@ -57,7 +49,7 @@ module Providers =
         let cache = Dictionary<IRuntime * Symbol, Option<IAdaptiveValue>>()
 
         interface IUniformProvider with
-            member x.Dispose () = cache.Clear()
+            member x.Dispose() = cache.Clear()
             member x.TryGetUniform(scope, name) =
                 let runtime : IRuntime = scope?Runtime
 

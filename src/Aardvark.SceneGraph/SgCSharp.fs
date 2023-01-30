@@ -22,13 +22,6 @@ type GeometryExtensions =
     static member ToSg(ig : IndexedGeometry, instanceCount : aval<int>) = instanceCount |> Sg.ofIndexedGeometryInstancedA ig
 
 
-type QuickUniformHolder(values : SymbolDict<IAdaptiveValue>) =
-    interface IUniformProvider with
-        member x.TryGetUniform (scope,name) = let (success, value) = values.TryGetValue(name)
-                                              if success then Some value else None
-        member x.Dispose() = ()
-
-
 [<Extension>]
 [<AbstractClass>]
 [<Sealed>]
@@ -272,7 +265,7 @@ type SceneGraphExtensions =
     static member Uniform(sg : ISg, uniforms : IUniformProvider) : ISg = Sg.UniformApplicator(uniforms, sg) :> ISg
 
     [<Extension>]
-    static member Uniform(sg : ISg, uniforms : SymbolDict<IAdaptiveValue>) : ISg = Sg.UniformApplicator(new QuickUniformHolder(uniforms), sg) :> ISg
+    static member Uniform(sg : ISg, uniforms : SymbolDict<IAdaptiveValue>) : ISg = Sg.UniformApplicator(UniformProvider.ofSymDict uniforms, sg) :> ISg
 
     [<Extension>]
     static member VertexIndices(sg : ISg, indices : BufferView) : ISg = Sg.VertexIndexApplicator(indices, sg) :> ISg

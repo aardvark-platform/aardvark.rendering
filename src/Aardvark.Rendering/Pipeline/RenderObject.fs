@@ -96,19 +96,6 @@ and [<CustomEquality; CustomComparison>] RenderObject =
 [<AutoOpen>]
 module RenderObjectExtensions =
 
-    let private emptyUniforms =
-        { new IUniformProvider with
-            member x.TryGetUniform (_,_) = None
-            member x.Dispose() = ()
-        }
-
-    let private emptyAttributes =
-        { new IAttributeProvider with
-            member x.TryGetAttribute(name : Symbol) = None
-            member x.All = Seq.empty
-            member x.Dispose() = ()
-        }
-
     let private empty =
         { Id = -1
           AttributeScope = Ag.Scope.Root
@@ -122,12 +109,11 @@ module RenderObjectExtensions =
           StencilState = Unchecked.defaultof<_>
           RasterizerState = Unchecked.defaultof<_>
           Indices = None
-          InstanceAttributes = emptyAttributes
-          VertexAttributes = emptyAttributes
-          Uniforms = emptyUniforms
+          InstanceAttributes = AttributeProvider.Empty
+          VertexAttributes = AttributeProvider.Empty
+          Uniforms = UniformProvider.Empty
           Activate = nopActivate
         }
-
 
     type RenderObject with
         static member Empty =

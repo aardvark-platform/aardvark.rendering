@@ -49,12 +49,6 @@ module RenderTask =
             }
 
     module RenderObjects =
-        
-        let private emptyUniforms =
-            { new IUniformProvider with
-                member x.TryGetUniform(scope, name) = None
-                member x.Dispose() = ()
-            }
 
         let private uniformProvider (color : aval<#ITexture>) (depth : aval<#ITexture>) =
             { new IUniformProvider with
@@ -65,14 +59,6 @@ module RenderTask =
 
                 member x.Dispose() =
                     ()
-            }
-
-
-        let private emptyAttributes =
-            { new IAttributeProvider with
-                member x.All = Seq.empty
-                member x.TryGetAttribute name = None
-                member x.Dispose() = ()
             }
 
         let private attributeProvider =
@@ -108,9 +94,9 @@ module RenderTask =
                 StencilState = StencilState.Default
                 RasterizerState = RasterizerState.Default
                 Indices = BufferView(AVal.constant (ArrayBuffer [|0;1;2; 0;2;3|] :> IBuffer), typeof<int>) |> Some
-                InstanceAttributes = emptyAttributes
+                InstanceAttributes = AttributeProvider.Empty
                 VertexAttributes = attributeProvider
-                Uniforms = emptyUniforms
+                Uniforms = UniformProvider.Empty
             }
 
         let create (color : aval<#ITexture>) (depth : aval<#ITexture>) =
