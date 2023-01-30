@@ -87,9 +87,6 @@ module Providers =
                 cache <- None
                 scope <- Ag.Scope.Root
 
-            member x.All =
-                getMap() |> Map.toSeq
-
             member x.TryGetAttribute(s : Symbol) =
                 getMap() |> Map.tryFind s
 
@@ -113,18 +110,9 @@ module Providers =
                             Some v
                         | _ -> 
                             None
-                                
-        member x.All =
-            seq {
-                for k in ig.IndexedAttributes.Keys do
-                    match x.TryGetAttribute(k) with
-                        | Some att -> yield k, att
-                        | _ -> ()
-            }
-             
+
         interface IAttributeProvider with
             member x.TryGetAttribute key = x.TryGetAttribute key
-            member x.All = x.All 
             member x.Dispose() = x.Dispose()
 
 

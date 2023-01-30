@@ -191,7 +191,6 @@ module Sg =
                         elif sem = Path.Attributes.ShapeTrafoR0 then trafoR0 |> Some
                         elif sem = Path.Attributes.ShapeTrafoR1 then trafoR1 |> Some
                         else old.TryGetAttribute sem
-                    member x.All = old.All
                     member x.Dispose() = old.Dispose()
                 }
 
@@ -336,7 +335,6 @@ module Sg =
                         elif sem = Path.Attributes.ShapeTrafoR1 then trafoR1 |> Some
                         elif sem = Path.Attributes.PathColor then colors |> Some
                         else old.TryGetAttribute sem
-                    member x.All = old.All
                     member x.Dispose() = old.Dispose()
                 }
 

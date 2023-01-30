@@ -158,7 +158,6 @@ type private AirAttributeProvider(local : Map<Symbol, BufferView>, inh : IAttrib
                 | Some v -> Some v
                 | None -> inh.TryGetAttribute sem
 
-        member x.All = Seq.empty
         member x.Dispose() = ()
 
 type private AirUniformProvider(local : Map<Symbol, IAdaptiveValue>, trafos : list<aval<Trafo3d>>, inh : IUniformProvider) =

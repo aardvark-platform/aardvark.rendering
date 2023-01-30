@@ -65,16 +65,7 @@ module RenderObject =
             rj.Activate <- activate
 
         let attributes =
-            { new IAttributeProvider with
-                member x.TryGetAttribute(sem) =
-                    match rj.VertexAttributes.TryGetAttribute sem with
-                        | Some att -> Some att
-                        | None -> rj.InstanceAttributes.TryGetAttribute sem
-
-                member x.All = Seq.append rj.VertexAttributes.All rj.InstanceAttributes.All
-
-                member x.Dispose() = ()
-            }
+            AttributeProvider.union rj.VertexAttributes rj.InstanceAttributes
 
         rj.Uniforms <- new Providers.UniformProvider(scope, scope.Uniforms, [attributes])
 
@@ -100,16 +91,7 @@ module PipelineState =
         let instanceAttributes =  new Providers.AttributeProvider(scope, "InstanceAttributes") :> IAttributeProvider
 
         let attributes =
-            { new IAttributeProvider with
-                member x.TryGetAttribute(sem) =
-                    match vertexAttributes.TryGetAttribute sem with
-                        | Some att -> Some att
-                        | None -> instanceAttributes.TryGetAttribute sem
-
-                member x.All = Seq.append vertexAttributes.All instanceAttributes.All
-
-                member x.Dispose() = ()
-            }
+            AttributeProvider.union vertexAttributes instanceAttributes
 
         {
             Mode                = IndexedGeometryMode.PointList

@@ -408,7 +408,6 @@ module Sg =
                 let posView = BufferView(buffer, typeof<V4f>)
                 { new IAttributeProvider with
                     member x.Dispose() = oa.Dispose()
-                    member x.All = oa.All
                     member x.TryGetAttribute(sem : Symbol) =
                         if sem = DefaultSemantic.Positions then Some posView
                         else oa.TryGetAttribute sem

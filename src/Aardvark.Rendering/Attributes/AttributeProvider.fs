@@ -7,54 +7,84 @@ open Aardvark.Base
 type IAttributeProvider =
     inherit IDisposable
     abstract member TryGetAttribute : name : Symbol -> Option<BufferView>
-    abstract member All : seq<Symbol * BufferView>
 
 type AttributeProvider private() =
 
     static let empty =
         { new IAttributeProvider with
             member x.Dispose() = ()
-            member x.All = Seq.empty
             member x.TryGetAttribute _ = None
         }
 
     static member Empty = empty
 
+    static member union (l : IAttributeProvider) (r : IAttributeProvider) =
+        { new IAttributeProvider with
+            member x.Dispose() = l.Dispose(); r.Dispose()
+            member x.TryGetAttribute(name : Symbol) =
+                match l.TryGetAttribute(name) with
+                | Some m -> Some m
+                | None -> r.TryGetAttribute(name)
+        }
+
     static member onDispose (callback : unit -> unit) (a : IAttributeProvider) =
         { new IAttributeProvider with
             member x.Dispose() = callback(); a.Dispose()
-            member x.All = a.All
             member x.TryGetAttribute(name : Symbol) = a.TryGetAttribute name
         }
 
     // Symbol / BufferView
-    static member ofDict (values : SymbolDict<BufferView>) =
+    static member ofSymDict (values : SymbolDict<BufferView>) =
         { new IAttributeProvider with
             member x.Dispose() = ()
-            member x.All = values |> SymDict.toSeq
             member x.TryGetAttribute(name : Symbol) =
                 match values.TryGetValue name with
-                    | (true, v) -> Some v
-                    | _ -> None
+                | (true, v) -> Some v
+                | _ -> None
+        }
+
+    static member ofDict (values : Dict<Symbol, BufferView>) =
+        { new IAttributeProvider with
+            member x.Dispose() = ()
+            member x.TryGetAttribute(name : Symbol) =
+                match values.TryGetValue name with
+                | (true, v) -> Some v
+                | _ -> None
+        }
+
+    static member ofDictionary (values : System.Collections.Generic.Dictionary<Symbol, BufferView>) =
+        { new IAttributeProvider with
+            member x.Dispose() = ()
+            member x.TryGetAttribute(name : Symbol) =
+                match values.TryGetValue name with
+                | (true, v) -> Some v
+                | _ -> None
         }
 
     static member ofMap (values : Map<Symbol, BufferView>) =
         { new IAttributeProvider with
             member x.Dispose() = ()
-            member x.All = values |> Map.toSeq
             member x.TryGetAttribute(name : Symbol) = Map.tryFind name values
         }
 
     static member ofList (values : list<Symbol * BufferView>) =
-        values |> SymDict.ofList |> AttributeProvider.ofDict
+        values |> SymDict.ofList |> AttributeProvider.ofSymDict
 
     static member ofSeq (values : seq<Symbol * BufferView>) =
-        values |> SymDict.ofSeq |> AttributeProvider.ofDict
+        values |> SymDict.ofSeq |> AttributeProvider.ofSymDict
 
 
     // Symbol / Array
-    static member ofDict (values : SymbolDict<Array>) =
-        values |> SymDict.map (fun _ v -> BufferView.ofArray v) |> AttributeProvider.ofDict
+    static member ofSymDict (values : SymbolDict<Array>) =
+        values |> SymDict.map (fun _ v -> BufferView.ofArray v) |> AttributeProvider.ofSymDict
+
+    static member ofDict (values : Dict<Symbol, Array>) =
+        values |> Dict.map (fun _ v -> BufferView.ofArray v) |> AttributeProvider.ofDict
+
+    static member ofDictionary (values : System.Collections.Generic.Dictionary<Symbol, Array>) =
+        let d = SymbolDict<BufferView>()
+        for (KeyValue(k,v)) in values do d.[k] <- BufferView.ofArray v
+        AttributeProvider.ofSymDict d
 
     static member ofMap (values : Map<Symbol, Array>) =
         values |> Map.map (fun _ v -> BufferView.ofArray v) |> AttributeProvider.ofMap
@@ -70,24 +100,24 @@ type AttributeProvider private() =
     static member ofDict (values : Dict<string, BufferView>) =
         let d = SymbolDict<BufferView>()
         for (KeyValue(k,v)) in values do d.[Symbol.Create k] <- v
-        AttributeProvider.ofDict d
+        AttributeProvider.ofSymDict d
 
-    static member ofDict (values : System.Collections.Generic.Dictionary<string, BufferView>) =
+    static member ofDictionary (values : System.Collections.Generic.Dictionary<string, BufferView>) =
         let d = SymbolDict<BufferView>()
         for (KeyValue(k,v)) in values do d.[Symbol.Create k] <- v
-        AttributeProvider.ofDict d
+        AttributeProvider.ofSymDict d
 
     static member ofMap (values : Map<string, BufferView>) =
         let d = SymbolDict<BufferView>()
         for (KeyValue(k,v)) in values do d.[Symbol.Create k] <- v
-        AttributeProvider.ofDict d
+        AttributeProvider.ofSymDict d
 
     static member ofSeq (values : seq<string * BufferView>) =
         let d = SymbolDict<BufferView>()
         for (k,v) in values do d.[Symbol.Create k] <- v
-        AttributeProvider.ofDict d
+        AttributeProvider.ofSymDict d
 
-    static member ofList (values : seq<string * BufferView>) =
+    static member ofList (values : list<string * BufferView>) =
         AttributeProvider.ofSeq values
 
 
@@ -95,26 +125,26 @@ type AttributeProvider private() =
     static member ofDict (values : Dict<string, Array>) =
         let d = SymbolDict<BufferView>()
         for (KeyValue(k,v)) in values do d.[Symbol.Create k] <- BufferView.ofArray v
-        AttributeProvider.ofDict d
+        AttributeProvider.ofSymDict d
 
-    static member ofDict (values : System.Collections.Generic.Dictionary<string, Array>) =
+    static member ofDictionary (values : System.Collections.Generic.Dictionary<string, Array>) =
         let d = SymbolDict<BufferView>()
         for (KeyValue(k,v)) in values do d.[Symbol.Create k] <- BufferView.ofArray v
-        AttributeProvider.ofDict d
+        AttributeProvider.ofSymDict d
 
     static member ofMap (values : Map<string, Array>) =
         let d = SymbolDict<BufferView>()
         for (KeyValue(k,v)) in values do d.[Symbol.Create k] <- BufferView.ofArray v
-        AttributeProvider.ofDict d
+        AttributeProvider.ofSymDict d
 
     static member ofSeq (values : seq<string * Array>) =
         let d = SymbolDict<BufferView>()
         for (k,v) in values do d.[Symbol.Create k] <- BufferView.ofArray v
-        AttributeProvider.ofDict d
+        AttributeProvider.ofSymDict d
 
-    static member ofList (values : seq<string * Array>) =
+    static member ofList (values : list<string * Array>) =
         AttributeProvider.ofSeq values
 
     // special
     static member ofIndexedGeometry (g : IndexedGeometry) =
-        AttributeProvider.ofDict g.IndexedAttributes
+        AttributeProvider.ofSymDict g.IndexedAttributes

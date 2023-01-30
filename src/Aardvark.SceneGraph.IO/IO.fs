@@ -106,7 +106,6 @@ module Loader =
                             | _ -> 
                                 Some (BufferView(SingleValueBuffer(AVal.constant V4f.Zero), typeof<V4f>))
 
-            member x.All = Seq.empty
             member x.Dispose() = ()
 
         static member VertexBoneWeights = VertexBoneWeights
