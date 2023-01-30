@@ -26,6 +26,15 @@ namespace CSharpInteropTest
             runtime.CompileClear(signature, C4b.White);
             runtime.Clear(texture, C3b.White);
 
+            ChangeableValue<IBackendTexture> backendtex = null;
+            ChangeableValue<ITextureSubResource> texsubres = null;
+
+            UniformMap map =
+                UniformMap.Empty
+                .Texture("sd", backendtex)
+                .Texture("sdgfd", texture)
+                .Image("sdsd", texsubres);
+
             runtime.ClearDepth(fbo, 1.0);
 
             var colorsMap =

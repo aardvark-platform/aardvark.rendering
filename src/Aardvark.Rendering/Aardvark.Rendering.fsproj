@@ -87,6 +87,8 @@
     <Compile Include="Geometry\GeometryPool.fs" />
     <Compile Include="Uniforms\UniformWriters.fs" />
     <Compile Include="Uniforms\UniformProvider.fs" />
+    <Compile Include="Uniforms\UniformMap.fs" />
+    <Compile Include="Uniforms\UniformMapCSharp.fs" />
     <Compile Include="Uniforms\Uniforms.fs" />
     <Compile Include="Attributes\AttributeProvider.fs" />
     <Compile Include="Surfaces\Surface.fs" />
