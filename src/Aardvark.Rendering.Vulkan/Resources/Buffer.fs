@@ -453,6 +453,9 @@ module Buffer =
 
     let rec tryUpdate (data : IBuffer) (buffer : Buffer) =
         match data with
+        | :? Buffer as b ->
+            buffer.Handle = b.Handle
+
         | :? ArrayBuffer as ab ->
             let size = ab.Data.LongLength * int64 (Marshal.SizeOf ab.ElementType)
             if size = buffer.Size then
