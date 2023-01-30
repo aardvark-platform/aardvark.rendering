@@ -40,6 +40,6 @@ type RaytracingPipelineState =
     {
         Effect            : FShade.RaytracingEffect
         Scenes            : Map<Symbol, RaytracingSceneDescription>
-        Uniforms          : Map<Symbol, IAdaptiveValue>
+        Uniforms          : IUniformProvider
         MaxRecursionDepth : aval<int>
     }

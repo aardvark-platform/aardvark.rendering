@@ -125,10 +125,10 @@ type DevicePreparedRaytracingPipelineExtensions private() =
             state.Scenes |> Map.map (fun _ s ->
                 this.CreateAccelerationStructure(s.Instances, shaderBindingTable, s.Usage) :> IAdaptiveValue
             )
+            |> UniformProvider.ofMap
 
         let uniforms =
-            Map.union state.Uniforms accelerationStructures
-            |> UniformProvider.ofMap
+            UniformProvider.union state.Uniforms accelerationStructures
 
         let descriptorSetBinding =
             let sets = this.CreateDescriptorSets(program.PipelineLayout, uniforms)

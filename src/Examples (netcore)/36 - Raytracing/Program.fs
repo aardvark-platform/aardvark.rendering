@@ -462,7 +462,7 @@ let main argv =
         )
 
     let uniforms =
-        Map.ofList [
+        UniformProvider.ofList [
             DefaultSemantic.TraceGeometryBuffer, geometryInfos :> IAdaptiveValue
             Sym.ofString "OutputBuffer",         traceTexture |> AdaptiveResource.mapNonAdaptive (fun t -> t :> ITexture) :> IAdaptiveValue
             Sym.ofString "RecursionDepth",       AVal.constant 4 :> IAdaptiveValue
