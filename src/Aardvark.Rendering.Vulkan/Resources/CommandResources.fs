@@ -49,18 +49,20 @@ type DeviceVertexBufferBindingExtensions private() =
 [<AbstractClass; Sealed; Extension>]
 type DeviceDescriptorSetBindingExtensions private() =
     [<Extension>]
-    static member CreateDescriptorSetBinding(device : Device, layout : PipelineLayout, first : int, sets : array<DescriptorSet>) =
-        let value = new DescriptorSetBinding(layout.Handle, first, sets |> Array.map (fun d -> d.Handle))
+    static member CreateDescriptorSetBinding(device : Device,
+                                             bindPoint : VkPipelineBindPoint, layout : PipelineLayout, first : int, sets : array<DescriptorSet>) =
+        let value = new DescriptorSetBinding(bindPoint, layout.Handle, first, sets |> Array.map (fun d -> d.Handle))
         let ptr = NativePtr.alloc 1
         NativePtr.write ptr value
         ptr
 
     [<Extension>]
-    static member UpdateDescriptorSetBinding(device : Device, ptr : nativeptr<DescriptorSetBinding>,  layout : PipelineLayout, first : int, sets : array<DescriptorSet>) =
+    static member UpdateDescriptorSetBinding(device : Device, ptr : nativeptr<DescriptorSetBinding>,
+                                             bindPoint : VkPipelineBindPoint, layout : PipelineLayout, first : int, sets : array<DescriptorSet>) =
         let old = NativePtr.read ptr
         old.Dispose()
 
-        let value = new DescriptorSetBinding(layout.Handle, first, sets |> Array.map (fun d -> d.Handle))
+        let value = new DescriptorSetBinding(bindPoint, layout.Handle, first, sets |> Array.map (fun d -> d.Handle))
         NativePtr.write ptr value
 
     [<Extension>]

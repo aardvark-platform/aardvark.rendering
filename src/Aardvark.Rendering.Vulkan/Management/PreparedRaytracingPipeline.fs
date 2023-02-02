@@ -4,6 +4,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Raytracing
+open Aardvark.Rendering.Vulkan.KHRRayTracingPipeline
 
 open FSharp.Data.Adaptive
 
@@ -132,7 +133,7 @@ type DevicePreparedRaytracingPipelineExtensions private() =
 
         let descriptorSetBinding =
             let sets = this.CreateDescriptorSets(program.PipelineLayout, uniforms)
-            this.CreateDescriptorSetBinding(program.PipelineLayout, sets)
+            this.CreateDescriptorSetBinding(VkPipelineBindPoint.RayTracingKhr, program.PipelineLayout, sets)
 
         resources.Add(descriptorSetBinding)
 

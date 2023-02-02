@@ -7,7 +7,7 @@
 #else
 #include "stdafx.h"
 #include <stdio.h>
-#include <vulkan.h>
+#include <vulkan/vulkan.h>
 #endif
 
 
@@ -43,6 +43,7 @@ typedef struct {
 typedef struct {
 	int FirstIndex;
 	int Count;
+	VkPipelineBindPoint BindPoint;
 	VkPipelineLayout Layout;
 	VkDescriptorSet* Sets;
 } DescriptorSetBinding;
@@ -54,7 +55,6 @@ typedef struct {
 } IndexBufferBinding;
 
 
-DllExport(void) vmBindPipeline(VkCommandBuffer commandBuffer, VkPipeline* pipeline);
 DllExport(void) vmBindDescriptorSets(VkCommandBuffer commandBuffer, DescriptorSetBinding* binding);
 DllExport(void) vmBindIndexBuffer(VkCommandBuffer commandBuffer, IndexBufferBinding* indexBuffer);
 DllExport(void) vmBindVertexBuffers(VkCommandBuffer commandBuffer, VertexBufferBinding* binding);

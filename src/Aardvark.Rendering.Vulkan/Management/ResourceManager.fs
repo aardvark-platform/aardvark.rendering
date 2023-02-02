@@ -1337,7 +1337,8 @@ module Resources =
         override x.Free(b : VertexBufferBinding) =
             b.Dispose()
 
-    type DescriptorSetBindingResource(owner : IResourceCache, key : list<obj>, layout : PipelineLayout, sets : IResourceLocation<DescriptorSet>[]) =
+    type DescriptorSetBindingResource(owner : IResourceCache, key : list<obj>,
+                                      bindPoint : VkPipelineBindPoint, layout : PipelineLayout, sets : IResourceLocation<DescriptorSet>[]) =
         inherit AbstractPointerResource<DescriptorSetBinding>(owner, key)
 
         let mutable setVersions = Array.init sets.Length (fun _ -> -1)
@@ -1361,7 +1362,7 @@ module Resources =
                 match target with
                     | Some t -> t
                     | None ->
-                        let t = new DescriptorSetBinding(layout.Handle, 0, sets.Length)
+                        let t = new DescriptorSetBinding(bindPoint, layout.Handle, 0, sets.Length)
                         target <- Some t
                         t
 
@@ -2029,8 +2030,11 @@ type ResourceManager(device : Device) =
     member x.CreateVertexBufferBinding(buffers : list<IResourceLocation<Buffer> * int64>) =
         bufferBindingCache.GetOrCreate([buffers :> obj], fun cache key -> new BufferBindingResource(cache, key, buffers))
 
-    member x.CreateDescriptorSetBinding(layout : PipelineLayout, bindings : IResourceLocation<DescriptorSet>[]) =
-        descriptorBindingCache.GetOrCreate([layout :> obj; bindings :> obj], fun cache key -> new DescriptorSetBindingResource(cache, key, layout, bindings))
+    member x.CreateDescriptorSetBinding(bindPoint : VkPipelineBindPoint, layout : PipelineLayout, bindings : IResourceLocation<DescriptorSet>[]) =
+        descriptorBindingCache.GetOrCreate(
+            [bindPoint :> obj; layout :> obj; bindings :> obj],
+            fun cache key -> new DescriptorSetBindingResource(cache, key, bindPoint, layout, bindings)
+        )
 
     member x.CreateIndexBufferBinding(binding : IResourceLocation<Buffer>, t : VkIndexType) =
         indexBindingCache.GetOrCreate([binding :> obj; t :> obj], fun cache key -> new IndexBufferBindingResource(cache, key, t, binding))

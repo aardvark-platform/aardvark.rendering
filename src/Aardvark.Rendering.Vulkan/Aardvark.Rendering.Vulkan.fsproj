@@ -79,7 +79,6 @@
     <Compile Include="Management\PreparedRaytracingPipeline.fs" />
     <Compile Include="Runtime\GraphicsCommands.fs" />
     <Compile Include="Runtime\CommandTask.fs" />
-    <Compile Include="Runtime\Compiler.fs" />
     <Compile Include="Runtime\ClearTask.fs" />
     <Compile Include="Runtime\RaytracingTask.fs" />
     <Compile Include="Runtime\Runtime.fs" />

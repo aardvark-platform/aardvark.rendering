@@ -7,7 +7,7 @@
 #else
 #include "stdafx.h"
 #include <stdio.h>
-#include <vulkan.h>
+#include <vulkan/vulkan.h>
 #endif
 
 #include "vkvm.h"
@@ -416,6 +416,7 @@ DEFCMD(Custom,
 
 
 DEFCMD(IndirectBindPipeline,
+	VkPipelineBindPoint PipelineBindPoint;
 	VkPipeline* Pipeline;
 )
 

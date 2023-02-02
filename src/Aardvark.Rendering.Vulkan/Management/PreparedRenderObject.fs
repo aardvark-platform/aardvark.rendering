@@ -312,7 +312,7 @@ type DevicePreparedRenderObjectExtensions private() =
         resources.Add bindings
 
         let descriptorBindings =
-            this.CreateDescriptorSetBinding(programLayout, descriptorSets)
+            this.CreateDescriptorSetBinding(VkPipelineBindPoint.Graphics, programLayout, descriptorSets)
             
         resources.Add(descriptorBindings)
 
