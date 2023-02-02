@@ -4,7 +4,9 @@ module Naive =
 
     open Aardvark.Rendering
     open Aardvark.SceneGraph
-    open FSharp.Data.Adaptive.Operators
+
+    module private RenderPass =
+        let transparent = RenderPass.after "transprentPass" RenderPassOrder.Arbitrary RenderPass.main
 
     type Technique(runtime : IRuntime, framebuffer : FramebufferInfo, scene : Scene) =
 
@@ -17,11 +19,12 @@ module Naive =
 
         let transparent =
             scene.transparent
-            |> Sg.blendMode ~~BlendMode.Blend
+            |> Sg.blendMode' BlendMode.Blend
             |> Sg.shader {
                 do! DefaultSurfaces.trafo
                 do! DefaultSurfaces.sgColor
             }
+            |> Sg.pass RenderPass.transparent
 
         let task =
             Sg.ofList [ opaque; transparent]
