@@ -124,7 +124,7 @@ type ResourceManagerExtensions private() =
                             failf "geometry does not have buffer %A" sem
                 )
 
-        let dsb = this.CreateDescriptorSetBinding(layout, descriptorSets)
+        let dsb = this.CreateDescriptorSetBinding(VkPipelineBindPoint.Graphics, layout, descriptorSets)
         let vbb = this.CreateVertexBufferBinding(vertexBuffers)
 
         let isIndexed, ibo =
@@ -830,7 +830,7 @@ module private RuntimeCommands =
             for o in o.Children do
                 for r in o.Resources do compiler.resources.Add r
 
-                stream.IndirectBindPipeline(o.Pipeline.Pointer) |> ignore
+                stream.IndirectBindPipeline(VkPipelineBindPoint.Graphics, o.Pipeline.Pointer) |> ignore
                 stream.IndirectBindDescriptorSets(o.DescriptorSets.Pointer) |> ignore
 
                 match o.IndexBuffer with
@@ -1488,7 +1488,7 @@ module private RuntimeCommands =
                     preparedPipeline <- Some pipeline
 
                     // adjust the first-command to bind the pipeline
-                    first.IndirectBindPipeline(pipeline.ppPipeline.Pointer) |> ignore
+                    first.IndirectBindPipeline(VkPipelineBindPoint.Graphics, pipeline.ppPipeline.Pointer) |> ignore
 
                     // the main-stream just needs to call the first stream
                     stream.Clear()
@@ -1579,7 +1579,7 @@ module private RuntimeCommands =
             preparedPipeline <- Some pipeline
 
             stream.Clear()
-            stream.IndirectBindPipeline(pipeline.ppPipeline.Pointer) |> ignore
+            stream.IndirectBindPipeline(VkPipelineBindPoint.Graphics, pipeline.ppPipeline.Pointer) |> ignore
 
 
     and LodTreeCommand(compiler : Compiler, surface : Aardvark.Rendering.Surface, state : PipelineState, loader : LodTreeLoader<Geometry>) as this =
@@ -1756,7 +1756,7 @@ module private RuntimeCommands =
 
         let descriptorSet =
             let sets = compiler.manager.CreateDescriptorSets(pipeline.ppLayout, compiler.task.HookProvider state.GlobalUniforms)
-            compiler.manager.CreateDescriptorSetBinding(pipeline.ppLayout, sets)
+            compiler.manager.CreateDescriptorSetBinding(VkPipelineBindPoint.Graphics, pipeline.ppLayout, sets)
 
         let pipelineInfo = pipeline.ppLayout.PipelineInfo
 
@@ -1834,7 +1834,7 @@ module private RuntimeCommands =
                 compiler.resources.Add instanceManager
 
                 // adjust the first-command to bind the pipeline
-                first.IndirectBindPipeline(pipeline.ppPipeline.Pointer) |> ignore
+                first.IndirectBindPipeline(VkPipelineBindPoint.Graphics, pipeline.ppPipeline.Pointer) |> ignore
                 first.IndirectBindDescriptorSets(descriptorSet.Pointer) |> ignore
 
                 // the main-stream just needs to call the first stream

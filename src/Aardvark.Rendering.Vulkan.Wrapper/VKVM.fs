@@ -131,6 +131,7 @@ module IndirectCommands =
         struct
             val mutable public FirstIndex : int
             val mutable public Count : int
+            val mutable public BindPoint : VkPipelineBindPoint
             val mutable public Layout : VkPipelineLayout
             val mutable public Sets : nativeptr<VkDescriptorSet>
 
@@ -146,7 +147,7 @@ module IndirectCommands =
             interface IDisposable with
                 member x.Dispose() = x.Dispose()
 
-            new(layout : VkPipelineLayout, first : int, sets : array<VkDescriptorSet>) =
+            new(bindPoint : VkPipelineBindPoint, layout : VkPipelineLayout, first : int, sets : array<VkDescriptorSet>) =
                 let count = sets.Length
                 let pSets = NativePtr.alloc count
 
@@ -157,16 +158,18 @@ module IndirectCommands =
                 {
                     FirstIndex = first
                     Count = count
+                    BindPoint = bindPoint
                     Layout = layout
                     Sets = pSets
                 }
 
-            new(layout : VkPipelineLayout, first : int, count : int) =
+            new(bindPoint : VkPipelineBindPoint, layout : VkPipelineLayout, first : int, count : int) =
                 let pSets = NativePtr.alloc count
 
                 {
                     FirstIndex = first
                     Count = count
+                    BindPoint = bindPoint
                     Layout = layout
                     Sets = pSets
                 }
@@ -745,6 +748,7 @@ module VKVM =
             struct
                 val mutable public Length : uint32
                 val mutable public OpCode : CommandType  
+                val mutable public PipelineBindPoint : VkPipelineBindPoint
                 val mutable public Pipeline : nativeptr<VkPipeline>
             end
 
@@ -1664,10 +1668,11 @@ module VKVM =
             x.Append(&cmd)
 
 
-        member x.IndirectBindPipeline(pointer : nativeptr<VkPipeline>) =
+        member x.IndirectBindPipeline(bindPoint : VkPipelineBindPoint, pointer : nativeptr<VkPipeline>) =
             let mutable cmd = Unchecked.defaultof<IndirectBindPipelineCommand>
             cmd.Length <- usizeof<IndirectBindPipelineCommand>
             cmd.OpCode <- CommandType.IndirectBindPipeline
+            cmd.PipelineBindPoint <- bindPoint
             cmd.Pipeline <- pointer
             x.Append(&cmd)
 
