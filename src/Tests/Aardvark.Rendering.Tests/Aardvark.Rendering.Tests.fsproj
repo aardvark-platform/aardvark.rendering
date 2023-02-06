@@ -58,6 +58,7 @@
     <Compile Include="Tests\Rendering\IntegerAttachments.fs" />
     <Compile Include="Tests\Rendering\RenderingTests.fs" />
     <Compile Include="Tests\Compute\Images.fs" />
+    <Compile Include="Tests\Compute\MutableInputBinding.fs" />
     <Compile Include="Tests\Compute\ComputeTests.fs" />
     <Compile Include="Tests\Other\SgTest.fs" />
     <Compile Include="Tests\Other\CompactSetTests.fs" />
