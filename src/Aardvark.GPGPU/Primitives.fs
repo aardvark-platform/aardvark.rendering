@@ -1,10 +1,67 @@
 ﻿namespace Aardvark.GPGPU
 
 open Microsoft.FSharp.Quotations
-open System.Collections.Generic
 open FShade.ExprHashExtensions
 open Aardvark.Base
 open Aardvark.Rendering
+open FSharp.Data.Adaptive
+open System
+open System.Collections.Generic
+open System.Runtime.CompilerServices
+
+type IComputePrimitive =
+    inherit IDisposable
+    abstract member Task : IComputeTask
+    abstract member Runtime : IComputeRuntime
+    abstract member RunUnit : renderToken: RenderToken -> unit
+
+type IComputePrimitive<'T> =
+    inherit IComputePrimitive
+    abstract member Run : renderToken: RenderToken -> 'T
+
+[<AutoOpen>]
+module ComputeCommandPrimitiveFSharpExtensions =
+
+    type ComputeCommand with
+        static member Execute(primitive : IComputePrimitive) =
+            ComputeCommand.Execute(primitive.Task)
+
+[<AutoOpen>]
+module private ComputePrimitiveImplementation =
+
+    type ComputePrimitive<'T>(task : IComputeTask) =
+
+        abstract member GetResult : unit -> 'T
+        default x.GetResult() = Unchecked.defaultof<'T>
+
+        abstract member Release : unit -> unit
+        default x.Release() = ()
+
+        member x.Dispose() =
+            task.Dispose()
+            x.Release()
+
+        member x.Run(renderToken : RenderToken) =
+            task.Run(AdaptiveToken.Top, renderToken)
+            x.GetResult()
+
+        interface IComputePrimitive<'T> with
+            member x.Task = task
+            member x.Runtime = task.Runtime
+            member x.Run(renderToken) = x.Run(renderToken)
+            member x.RunUnit(renderToken) = x.Run(renderToken) |> ignore
+            member x.Dispose() = x.Dispose()
+
+[<AbstractClass; Sealed; Extension>]
+type IComputePrimitveExtensions private() =
+
+    [<Extension>]
+    static member RunUnit(primitive : IComputePrimitive) =
+        primitive.RunUnit RenderToken.Empty
+
+    [<Extension>]
+    static member Run(primitive : IComputePrimitive<'T>) =
+        primitive.Run RenderToken.Empty
 
 module private Kernels =
     open FShade 
@@ -615,18 +672,15 @@ type private Map<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : ICompu
 
 
 
-    member x.Compile(input : IBufferVector<'a>, output : IBufferVector<'b>) =
+    member x.Compile(input : IBufferVector<'a>, output : IBufferVector<'b>) : IComputePrimitive<unit> =
         let args, cmd = build input output
-        
-        let prog = runtime.Compile cmd
-        prog.OnDispose(fun () ->
-           args.Dispose()
-        )
-        prog
+        let task = runtime.CompileCompute cmd
+        { new ComputePrimitive<unit>(task) with
+            member x.Release() = args.Dispose() }
 
-    member x.Run(input : IBufferVector<'a>, output : IBufferVector<'b>, queries : IQuery) =
+    member x.Run(input : IBufferVector<'a>, output : IBufferVector<'b>, renderToken : RenderToken) =
         let args, cmd = build input output
-        runtime.Run(cmd, queries)
+        runtime.Run(cmd, renderToken)
         args.Dispose()
 
         
@@ -644,7 +698,7 @@ type private Scan<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Expr<
         runtime.DeleteComputeShader scan
         runtime.DeleteComputeShader  fixup
 
-    let rec build (args : HashSet<IComputeShaderInputBinding>) (input : IBufferVector<'a>) (output : IBufferVector<'a>) =
+    let rec build (args : HashSet<MutableComputeInputBinding>) (input : IBufferVector<'a>) (output : IBufferVector<'a>) =
         let cnt = int input.Count
         if cnt > 1 then
             let args0 = runtime.NewInputBinding(scan)
@@ -698,21 +752,20 @@ type private Scan<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Expr<
         else
             []
         
-    member x.Compile (input : IBufferVector<'a>, output : IBufferVector<'a>) =
-        let args = System.Collections.Generic.HashSet<IComputeShaderInputBinding>()
+    member x.Compile (input : IBufferVector<'a>, output : IBufferVector<'a>) : IComputePrimitive<unit> =
+        let args = System.Collections.Generic.HashSet<MutableComputeInputBinding>()
         let cmd = build args input output
-        let prog = runtime.Compile cmd
+        let task = runtime.CompileCompute cmd
+        { new ComputePrimitive<unit>(task) with
+            member x.Release() =
+                for a in args do a.Dispose()
+                args.Clear()
+        }
         
-        prog.OnDispose(fun () ->
-            for a in args do a.Dispose()
-            args.Clear()
-        )
-        prog
-        
-    member x.Run (input : IBufferVector<'a>, output : IBufferVector<'a>, queries : IQuery) =
-        let args = System.Collections.Generic.HashSet<IComputeShaderInputBinding>()
+    member x.Run (input : IBufferVector<'a>, output : IBufferVector<'a>, renderToken : RenderToken) =
+        let args = System.Collections.Generic.HashSet<MutableComputeInputBinding>()
         let cmd = build args input output
-        runtime.Run(cmd, queries)
+        runtime.Run(cmd, renderToken)
         for a in args do a.Dispose()
         args.Clear()
   
@@ -765,34 +818,31 @@ type private Reduce<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Exp
         else
             let b = input.Buffer.Coerce<'a>()
             [
-                ComputeCommand.Copy(b.[input.Origin .. input.Origin], target)
+                ComputeCommand.Download(b.[input.Origin .. input.Origin], target)
             ]
  
     member x.ReduceShader = reduce
 
-    member x.Run(input : IBufferVector<'a>, queries : IQuery) =
+    member x.Run(input : IBufferVector<'a>, renderToken : RenderToken) =
         let args = System.Collections.Generic.HashSet<System.IDisposable>()
         let target : 'a[] = Array.zeroCreate 1
         let cmd = build args input target
-        runtime.Run(cmd, queries)
+        runtime.Run(cmd, renderToken)
         for a in args do a.Dispose()
         target.[0]
         
-    member x.Compile (input : IBufferVector<'a>) =
+    member x.Compile (input : IBufferVector<'a>) : IComputePrimitive<'a> =
         let args = System.Collections.Generic.HashSet<System.IDisposable>()
         let target : 'a[] = Array.zeroCreate 1
         let cmd = build args input target
-        let prog = runtime.Compile cmd 
+        let task = runtime.CompileCompute cmd 
  
-        { new ComputeProgram<'a>() with
+        { new ComputePrimitive<'a>(task) with
             member x.Release() =
-                prog.Dispose()
                 for a in args do a.Dispose()
                 args.Clear()
-            member x.Run(queries) =
-                prog.Run(queries)
+            member x.GetResult() =
                 target.[0]
-
         }
     
 type private MapReduce<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : IComputeRuntime, reduce : Reduce<'b>, map : Expr<int -> 'a -> 'b>, add : Expr<'b -> 'b -> 'b>) =
@@ -840,7 +890,7 @@ type private MapReduce<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : 
         else
             let b = input.Buffer.Coerce<'b>()
             [
-                ComputeCommand.Copy(b.[input.Origin .. input.Origin], target)
+                ComputeCommand.Download(b.[input.Origin .. input.Origin], target)
             ]
     
     let buildTop (args : HashSet<System.IDisposable>) (input : IBufferVector<'a>) (target : 'b[]) =
@@ -876,29 +926,26 @@ type private MapReduce<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : 
         else
             cmd
 
-    member x.Run(input : IBufferVector<'a>, queries : IQuery) =
+    member x.Run(input : IBufferVector<'a>, renderToken : RenderToken) =
         let args = System.Collections.Generic.HashSet<System.IDisposable>()
         let target : 'b[] = Array.zeroCreate 1
         let cmd = buildTop args input target
-        runtime.Run(cmd, queries)
+        runtime.Run(cmd, renderToken)
         for a in args do a.Dispose()
         target.[0]
         
-    member x.Compile (input : IBufferVector<'a>) =
+    member x.Compile (input : IBufferVector<'a>) : IComputePrimitive<'b> =
         let args = System.Collections.Generic.HashSet<System.IDisposable>()
         let target : 'b[] = Array.zeroCreate 1
         let cmd = buildTop args input target
-        let prog = runtime.Compile cmd 
+        let task = runtime.CompileCompute cmd 
 
-        { new ComputeProgram<'b>() with
+        { new ComputePrimitive<'b>(task) with
             member x.Release() =
-                prog.Dispose()
                 for a in args do a.Dispose()
                 args.Clear()
-            member x.Run(queries) =
-                prog.Run(queries)
+            member x.GetResult() =
                 target.[0]
-
         }
  
 type private MapReduceImage<'b when 'b : unmanaged>(runtime : IComputeRuntime, reduce : Reduce<'b>, map : Expr<V3i -> V4f -> 'b>, add : Expr<'b -> 'b -> 'b>) =
@@ -953,7 +1000,7 @@ type private MapReduceImage<'b when 'b : unmanaged>(runtime : IComputeRuntime, r
         else
             let b = input.Buffer.Coerce<'b>()
             [
-                ComputeCommand.Copy(b.[input.Origin .. input.Origin], target)
+                ComputeCommand.Download(b.[input.Origin .. input.Origin], target)
             ]
     
     let buildTop (args : HashSet<System.IDisposable>) (input : ITextureSubResource) (target : 'b[]) =
@@ -1032,29 +1079,26 @@ type private MapReduceImage<'b when 'b : unmanaged>(runtime : IComputeRuntime, r
         | d ->  
             failwithf "cannot reduce image with dimension: %A" d
 
-    member x.Run(input : ITextureSubResource, queries : IQuery) =
+    member x.Run(input : ITextureSubResource, renderToken : RenderToken) =
         let args = System.Collections.Generic.HashSet<System.IDisposable>()
         let target : 'b[] = Array.zeroCreate 1
         let cmd = buildTop args input target
-        runtime.Run(cmd, queries)
+        runtime.Run(cmd, renderToken)
         for a in args do a.Dispose()
         target.[0]
         
-    member x.Compile (input : ITextureSubResource) =
+    member x.Compile (input : ITextureSubResource) : IComputePrimitive<'b> =
         let args = System.Collections.Generic.HashSet<System.IDisposable>()
         let target : 'b[] = Array.zeroCreate 1
         let cmd = buildTop args input target
-        let prog = runtime.Compile cmd 
+        let task = runtime.CompileCompute cmd 
 
-        { new ComputeProgram<'b>() with
+        { new ComputePrimitive<'b>(task) with
             member x.Release() =
-                prog.Dispose()
                 for a in args do a.Dispose()
                 args.Clear()
-            member x.Run(queries) =
-                prog.Run(queries)
+            member x.GetResult() =
                 target.[0]
-
         }
   
 type private ExpressionCache() =
@@ -1141,7 +1185,7 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
         if fixup2d.IsValueCreated then runtime.DeleteComputeShader fixup2d.Value
 
 
-    let scanBlocks (args : HashSet<IComputeShaderInputBinding>) (imgDim : int) (dim : int) (image : ITextureSubResource) (range : ScanRange) =
+    let scanBlocks (args : HashSet<MutableComputeInputBinding>) (imgDim : int) (dim : int) (image : ITextureSubResource) (range : ScanRange) =
         let scan = scan(imgDim).Value
 
         let input = runtime.NewInputBinding(scan)
@@ -1167,7 +1211,7 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
             ComputeCommand.Dispatch(V3i(ceilDiv range.count Kernels.scanSize, rest.X, rest.Y))
         ]
 
-    let repair (args : HashSet<IComputeShaderInputBinding>) (imgDim : int) (dim : int) (image : ITextureSubResource) (range : ScanRange) =
+    let repair (args : HashSet<MutableComputeInputBinding>) (imgDim : int) (dim : int) (image : ITextureSubResource) (range : ScanRange) =
         let fixup = fixup(imgDim).Value
 
         let innerRange = next range
@@ -1199,7 +1243,7 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
             ComputeCommand.Dispatch(V3i(ceilDiv (range.count - Kernels.scanSize) Kernels.halfScanSize, rest.X, rest.Y))
         ]
 
-    let rec buildDim (args : HashSet<IComputeShaderInputBinding>) (imgDim : int) (dim : int) (image : ITextureSubResource) (range : ScanRange) =
+    let rec buildDim (args : HashSet<MutableComputeInputBinding>) (imgDim : int) (dim : int) (image : ITextureSubResource) (range : ScanRange) =
         
         if range.count <= 1 then
             []
@@ -1217,7 +1261,7 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
 
         
 
-    let rec build (args : HashSet<IComputeShaderInputBinding>) (input : ITextureSubResource) (output : ITextureSubResource) =
+    let rec build (args : HashSet<MutableComputeInputBinding>) (input : ITextureSubResource) (output : ITextureSubResource) =
         let imageDim = 
             match input.Texture.Dimension with
                 | TextureDimension.Texture2D -> 2
@@ -1257,21 +1301,21 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
 
 
         
-    member x.Compile (input : ITextureSubResource, output : ITextureSubResource) =
-        let args = System.Collections.Generic.HashSet<IComputeShaderInputBinding>()
+    member x.Compile (input : ITextureSubResource, output : ITextureSubResource) : IComputePrimitive<unit> =
+        let args = System.Collections.Generic.HashSet<MutableComputeInputBinding>()
         let cmd = build args input output
-        let prog = runtime.Compile cmd
+        let task = runtime.CompileCompute cmd
         
-        prog.OnDispose(fun () ->
-            for a in args do a.Dispose()
-            args.Clear()
-        )
-        prog
+        { new ComputePrimitive<unit>(task) with
+            member x.Release() =
+                for a in args do a.Dispose()
+                args.Clear()
+        }
         
-    member x.Run (input : ITextureSubResource, output : ITextureSubResource, queries : IQuery) =
-        let args = System.Collections.Generic.HashSet<IComputeShaderInputBinding>()
+    member x.Run (input : ITextureSubResource, output : ITextureSubResource, renderToken : RenderToken) =
+        let args = System.Collections.Generic.HashSet<MutableComputeInputBinding>()
         let cmd = build args input output
-        runtime.Run(cmd, queries)
+        runtime.Run(cmd, renderToken)
         for a in args do a.Dispose()
         args.Clear()
   
@@ -1365,70 +1409,70 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
         let s = getSum typeof<'a> |> unbox<Reduce<'a>>
         s.Compile(b)
 
-    // Overloads with queries
-    member x.Scan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>, queries : IQuery) =
+    // Overloads with render token
+    member x.Scan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>, renderToken : RenderToken) =
         let scanner = getScanner add
-        scanner.Run(input, output, queries)
+        scanner.Run(input, output, renderToken)
 
-    member x.Scan(add : Expr<V4d -> V4d -> V4d>, input : ITextureSubResource, output : ITextureSubResource, queries : IQuery) =
+    member x.Scan(add : Expr<V4d -> V4d -> V4d>, input : ITextureSubResource, output : ITextureSubResource, renderToken : RenderToken) =
         let scanner = getImageScanner2d add
-        scanner.Run(input, output, queries)
+        scanner.Run(input, output, renderToken)
 
-    member x.Fold(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, queries : IQuery) =
+    member x.Fold(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, renderToken : RenderToken) =
         let folder = getReducer add
-        folder.Run(input, queries)
+        folder.Run(input, renderToken)
 
-    member x.MapReduce(map : Expr<int -> 'a -> 'b>, add : Expr<'b -> 'b -> 'b>, input : IBufferVector<'a>, queries : IQuery) =
+    member x.MapReduce(map : Expr<int -> 'a -> 'b>, add : Expr<'b -> 'b -> 'b>, input : IBufferVector<'a>, renderToken : RenderToken) =
         let reducer = getMapReducer map add
-        reducer.Run(input, queries)
+        reducer.Run(input, renderToken)
 
-    member x.MapReduce(map : Expr<V3i -> V4f -> 'b>, add : Expr<'b -> 'b -> 'b>, input : ITextureSubResource, queries : IQuery) =
+    member x.MapReduce(map : Expr<V3i -> V4f -> 'b>, add : Expr<'b -> 'b -> 'b>, input : ITextureSubResource, renderToken : RenderToken) =
         let reducer = getImageMapReducer map add
-        reducer.Run(input, queries)
+        reducer.Run(input, renderToken)
 
-    member x.Sum(input : ITextureSubResource, queries : IQuery) =
+    member x.Sum(input : ITextureSubResource, renderToken : RenderToken) =
         if input.Size.AllGreaterOrEqual 1 then
             let reducer = getImageMapReducer <@ fun _ v -> v @> <@ (+) @>
-            reducer.Run(input, queries)
+            reducer.Run(input, renderToken)
         else
             V4f.Zero
 
-    member x.Min(input : ITextureSubResource, queries : IQuery) =
+    member x.Min(input : ITextureSubResource, renderToken : RenderToken) =
         let reducer = getImageMapReducer <@ fun i v -> v @> <@ fun l r -> V4f(min l.X r.X, min l.Y r.Y, min l.Z r.Z, min l.W r.W) @>
-        reducer.Run(input, queries)
+        reducer.Run(input, renderToken)
 
-    member x.Map(map : Expr<int -> 'a -> 'b>, input : IBufferVector<'a>, output : IBufferVector<'b>, queries : IQuery) =
+    member x.Map(map : Expr<int -> 'a -> 'b>, input : IBufferVector<'a>, output : IBufferVector<'b>, renderToken : RenderToken) =
         let mapper = getMapper map
-        mapper.Run(input, output, queries)
+        mapper.Run(input, output, renderToken)
 
-    member x.Sum(b : IBufferVector<'a>, queries : IQuery) : 'a =
+    member x.Sum(b : IBufferVector<'a>, renderToken : RenderToken) : 'a =
         let s = getSum typeof<'a> |> unbox<Reduce<'a>>
-        s.Run(b, queries)
+        s.Run(b, renderToken)
 
-    // Overloads without queries
+    // Overloads without render token
     member x.Scan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>) =
-        x.Scan(add, input, output, Queries.none)
+        x.Scan(add, input, output, RenderToken.Empty)
 
     member x.Scan(add : Expr<V4d -> V4d -> V4d>, input : ITextureSubResource, output : ITextureSubResource) =
-        x.Scan(add, input, output, Queries.none)
+        x.Scan(add, input, output, RenderToken.Empty)
 
     member x.Fold(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>) =
-        x.Fold(add, input, Queries.none)
+        x.Fold(add, input, RenderToken.Empty)
 
     member x.MapReduce(map : Expr<int -> 'a -> 'b>, add : Expr<'b -> 'b -> 'b>, input : IBufferVector<'a>) =
-        x.MapReduce(map, add, input, Queries.none)
+        x.MapReduce(map, add, input, RenderToken.Empty)
 
     member x.MapReduce(map : Expr<V3i -> V4f -> 'b>, add : Expr<'b -> 'b -> 'b>, input : ITextureSubResource) =
-        x.MapReduce(map, add, input, Queries.none)
+        x.MapReduce(map, add, input, RenderToken.Empty)
 
     member x.Sum(input : ITextureSubResource) =
-        x.Sum(input, Queries.none)
+        x.Sum(input, RenderToken.Empty)
 
     member x.Min(input : ITextureSubResource) =
-        x.Min(input, Queries.none)
+        x.Min(input, RenderToken.Empty)
 
     member x.Map(map : Expr<int -> 'a -> 'b>, input : IBufferVector<'a>, output : IBufferVector<'b>) =
-        x.Map(map, input, output, Queries.none)
+        x.Map(map, input, output, RenderToken.Empty)
 
     member x.Sum(b : IBufferVector<'a>) =
-        x.Sum(b, Queries.none)
+        x.Sum(b, RenderToken.Empty)

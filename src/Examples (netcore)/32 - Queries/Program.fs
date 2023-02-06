@@ -5,8 +5,6 @@ This example demonstrates how to use GPU queries to collect various statistics i
  * number of samples that passed fragment tests
  * other pipeline statistics like number of vertex shader invocations
 
-Currently, there is only a low-level API that requires the user to pass queries to Run() calls of render tasks and compute programs.
-
 *)
 
 open Aardvark.Base
@@ -247,11 +245,11 @@ let main argv =
         let scene = sceneSg win
         runtime.CompileRender(win.FramebufferSignature, scene)
 
-    // create a dummy compute program
+    // create a dummy compute task
     let computeShader = runtime.CreateComputeShader Shader.compute
 
-    use computeProgram =
-        runtime.Compile [
+    use computeTask =
+        runtime.CompileCompute [
             ComputeCommand.Bind computeShader
             ComputeCommand.Dispatch 1
         ]
@@ -276,31 +274,34 @@ let main argv =
     use timeQuery =
         runtime.CreateTimeQuery()
 
-    // queries are used by passing them to Run() of a render task or compute program.
+    // queries are used by passing them to Run() of a render or compute task.
     // here we use RenderTask.custom to run the scene task manually.
     use task =
         RenderTask.custom (fun (_, rt, o) ->
             // IRenderTask.Run() takes a single RenderToken with an IQuery member as parameter.
             // in order to pass multiple queries we have to build a Queries struct.
-            let queries =
-                Queries.empty
-                |> Queries.add timeQuery
-                |> Queries.add pipelineQuery
-                |> Queries.add occlusionQuery
+            let rt =
+                let queries =
+                    Queries.empty
+                    |> Queries.add timeQuery
+                    |> Queries.add pipelineQuery
+                    |> Queries.add occlusionQuery
+
+                rt |> RenderToken.withQuery queries
 
             // IQuery.Begin and End are used to denote the scope in which the queries
             // are used. If we are only interested in the statistics of a single render task, these calls can be omitted.
-            queries.Begin()
+            rt.Query.Begin()
 
             // pass the queries to the render task by adding them to the queries in the render token.
             // the input render token may already contain queries (e.g. the window
             // system passes a time query to compute the GPU usage and shows it in the title bar)
-            sceneTask.Run(rt |> RenderToken.withQuery queries, o)
+            sceneTask.Run(rt, o)
 
-            // queries can be passed directly to compute programs.
-            computeProgram.Run(queries)
+            // queries can also be passed to compute tasks via render tokens.
+            computeTask.Run(rt)
 
-            queries.End()
+            rt.Query.End()
         )
 
     // we save the query results in adaptive values and print them

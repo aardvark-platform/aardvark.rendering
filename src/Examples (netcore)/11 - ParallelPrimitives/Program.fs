@@ -68,7 +68,7 @@ let parallelFilter<'a when 'a : unmanaged> (par : ParallelPrimitives) (arr : 'a[
 
         // download the bits (just for showing the values)
         #if DEBUG
-        ComputeCommand.Copy(bits, bitsCPU)
+        ComputeCommand.Download(bits, bitsCPU)
         ComputeCommand.Sync(bits.Buffer,ResourceAccess.TransferRead,ResourceAccess.ShaderRead)
         #endif 
 
@@ -78,11 +78,11 @@ let parallelFilter<'a when 'a : unmanaged> (par : ParallelPrimitives) (arr : 'a[
 
         // download the bits (just for showing the values)
         #if DEBUG
-        ComputeCommand.Copy(bits, bitsumCPU)
+        ComputeCommand.Download(bits, bitsumCPU)
         #endif
 
         // download the last entry from bits (the total number of elements in output)
-        ComputeCommand.Copy(bits.[bits.Count - 1 .. bits.Count - 1], overallCount)
+        ComputeCommand.Download(bits.[bits.Count - 1 .. bits.Count - 1], overallCount)
 
         // resolve (write) all the valid entries to their respective output-index
         ComputeCommand.Bind resolveShader

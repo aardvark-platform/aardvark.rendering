@@ -117,6 +117,8 @@
     <Compile Include="Runtime\Query\MultiQuery.fs" />
     <Compile Include="Runtime\Query\ConcurrentQuery.fs" />
     <Compile Include="Runtime\Compute\Compute.fs" />
+    <Compile Include="Runtime\Compute\ComputeExtensions.fs" />
+    <Compile Include="Runtime\Compute\MutableInputBinding.fs" />
     <Compile Include="Pipeline\Raytracing\TraceGeometry.fs" />
     <Compile Include="Pipeline\Raytracing\AdaptiveTraceGeometry.fs" />
     <Compile Include="Pipeline\Raytracing\TraceInstance.fs" />

@@ -190,7 +190,7 @@ let main argv =
     
     
     let program =
-        runtime.Compile commands
+        runtime.CompileCompute commands
     
     let magic =
         let sw = System.Diagnostics.Stopwatch()

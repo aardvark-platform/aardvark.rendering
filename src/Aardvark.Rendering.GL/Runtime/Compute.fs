@@ -23,184 +23,184 @@ type internal Bound =
     | Buffer  of slot : int * target : BufferTarget
     | Image of slot : int
 
-type ComputeShaderInputBinding(shader : ComputeShader) =
-    let ctx = shader.Context
-    let mutable dirtyBuffers = System.Collections.Generic.HashSet<UniformBuffer>()
-    let mutable references : Map<string, list<ComputeShaderInputReference>>  = Map.empty
+//type ComputeShaderInputBinding(shader : ComputeShader) =
+//    let ctx = shader.Context
+//    let mutable dirtyBuffers = System.Collections.Generic.HashSet<UniformBuffer>()
+//    let mutable references : Map<string, list<ComputeShaderInputReference>>  = Map.empty
 
-    let addReference (name : string) (r : ComputeShaderInputReference) =
-        let names =
-            if name.StartsWith "cs_" then [name; name.Substring 3]
-            else [name]
-        for name in names do
-            let o = Map.tryFind name references |> Option.defaultValue []
-            references <- Map.add name (r :: o) references
+//    let addReference (name : string) (r : ComputeShaderInputReference) =
+//        let names =
+//            if name.StartsWith "cs_" then [name; name.Substring 3]
+//            else [name]
+//        for name in names do
+//            let o = Map.tryFind name references |> Option.defaultValue []
+//            references <- Map.add name (r :: o) references
 
 
-    //let uniformLocations : list<int * UniformLocation> = 
-    //    shader.Uniforms |> List.map (fun l ->
-    //        failwith "[GL] not implemented"
-    //    )
+//    //let uniformLocations : list<int * UniformLocation> = 
+//    //    shader.Uniforms |> List.map (fun l ->
+//    //        failwith "[GL] not implemented"
+//    //    )
 
-    let inputImages =
-        shader.Images |> List.map (fun (b, name, typ) ->
-            addReference name (Image b)
-            b, (Texture.empty, 0, false, 0, typ)
-        ) |> Dictionary.ofList
+//    let inputImages =
+//        shader.Images |> List.map (fun (b, name, typ) ->
+//            addReference name (Image b)
+//            b, (Texture.empty, 0, false, 0, typ)
+//        ) |> Dictionary.ofList
 
-    let inputBuffers =
-        shader.Buffers |> List.map (fun (l,name,t) ->
-            addReference name (ComputeShaderInputReference.StorageBuffer(l, ShaderParameterType.ofGLSLType t))
-            let empty = new GL.Buffer(shader.Context, 0n, 0)
-            l, (empty, 0n, 0n)
-        )
-        |> Dictionary.ofList
+//    let inputBuffers =
+//        shader.Buffers |> List.map (fun (l,name,t) ->
+//            addReference name (ComputeShaderInputReference.StorageBuffer(l, ShaderParameterType.ofGLSLType t))
+//            let empty = new GL.Buffer(shader.Context, 0n, 0)
+//            l, (empty, 0n, 0n)
+//        )
+//        |> Dictionary.ofList
 
-    let inputSamplers =
-        shader.Samplers |> List.map (fun (b, name, sampler) ->
-            let target = TextureTarget.Texture2D //TODO: wrong here //TextureTarget.ofParameters dim isArray isMS
-            addReference name (Texture b)
-            b, (target, Texture.empty, sampler)
-        ) |> Dictionary.ofList
+//    let inputSamplers =
+//        shader.Samplers |> List.map (fun (b, name, sampler) ->
+//            let target = TextureTarget.Texture2D //TODO: wrong here //TextureTarget.ofParameters dim isArray isMS
+//            addReference name (Texture b)
+//            b, (target, Texture.empty, sampler)
+//        ) |> Dictionary.ofList
 
-    let uniformBuffers = 
-        shader.UniformBlocks |> List.map (fun b ->
-            let buffer = ctx.CreateUniformBuffer(nativeint b.ubSize)
+//    let uniformBuffers = 
+//        shader.UniformBlocks |> List.map (fun b ->
+//            let buffer = ctx.CreateUniformBuffer(nativeint b.ubSize)
 
-            for f in b.ubFields do
-                let write (o : obj) =
-                    match o with
-                        | null -> ()
-                        | o ->
-                            let t = o.GetType()
-                            let sem = ShaderParameterWriter.get t (ShaderParameterType.ofGLSLType f.ufType)
-                            sem.WriteUnsafe(buffer.Data + nativeint f.ufOffset, o)
-                            buffer.Dirty <- true
-                            lock dirtyBuffers (fun () -> dirtyBuffers.Add buffer |> ignore)
+//            for f in b.ubFields do
+//                let write (o : obj) =
+//                    match o with
+//                        | null -> ()
+//                        | o ->
+//                            let t = o.GetType()
+//                            let sem = ShaderParameterWriter.get t (ShaderParameterType.ofGLSLType f.ufType)
+//                            sem.WriteUnsafe(buffer.Data + nativeint f.ufOffset, o)
+//                            buffer.Dirty <- true
+//                            lock dirtyBuffers (fun () -> dirtyBuffers.Add buffer |> ignore)
 
-                let name = f.ufName
+//                let name = f.ufName
 
-                let nameFixed =
-                    if name.StartsWith "cs_" then name.Substring(3) else name
+//                let nameFixed =
+//                    if name.StartsWith "cs_" then name.Substring(3) else name
 
-                let ref = ComputeShaderInputReference.Uniform(write)
-                addReference nameFixed ref
+//                let ref = ComputeShaderInputReference.Uniform(write)
+//                addReference nameFixed ref
 
-            b.ubBinding, buffer
-        )
+//            b.ubBinding, buffer
+//        )
 
-    member x.CompileBind(stream : ICommandStream) =
-        for (l, b) in uniformBuffers do
-            ctx.Upload b
-            stream.BindBufferRange(BufferRangeTarget.UniformBuffer, l, b.Handle, 0n, nativeint b.Size)
+//    member x.CompileBind(stream : ICommandStream) =
+//        for (l, b) in uniformBuffers do
+//            ctx.Upload b
+//            stream.BindBufferRange(BufferRangeTarget.UniformBuffer, l, b.Handle, 0n, nativeint b.Size)
         
-        for (KeyValue(slot, (b, o, s))) in inputBuffers do
-            stream.BindBufferRange(BufferRangeTarget.ShaderStorageBuffer, slot, b.Handle, o, s)
+//        for (KeyValue(slot, (b, o, s))) in inputBuffers do
+//            stream.BindBufferRange(BufferRangeTarget.ShaderStorageBuffer, slot, b.Handle, o, s)
             
-        for (KeyValue(l, (tex, level, layered, layer, _))) in inputImages do
-            stream.BindImageTexture(l, tex.Handle, level, layered, layer, TextureAccess.ReadWrite, tex.Format)
+//        for (KeyValue(l, (tex, level, layered, layer, _))) in inputImages do
+//            stream.BindImageTexture(l, tex.Handle, level, layered, layer, TextureAccess.ReadWrite, tex.Format)
             
-        for (KeyValue(l, (target, tex, sampler))) in inputSamplers do
-            stream.SetActiveTexture(int (TextureUnit.Texture0 + unbox l))
-            stream.BindTexture(target, tex.Handle)
-            stream.BindSampler(l, sampler.Handle)
+//        for (KeyValue(l, (target, tex, sampler))) in inputSamplers do
+//            stream.SetActiveTexture(int (TextureUnit.Texture0 + unbox l))
+//            stream.BindTexture(target, tex.Handle)
+//            stream.BindSampler(l, sampler.Handle)
 
-    member internal x.Bind(boundThings : System.Collections.Generic.HashSet<Bound>) =
-        for (l, b) in uniformBuffers do
-            ctx.Upload b
-            GL.BindBufferRange(BufferRangeTarget.UniformBuffer, l, b.Handle, 0n, nativeint b.Size)
-            boundThings.Add(Buffer(l,BufferTarget.UniformBuffer)) |> ignore
-            GL.Check "could not bind uniform buffer"
+//    member internal x.Bind(boundThings : System.Collections.Generic.HashSet<Bound>) =
+//        for (l, b) in uniformBuffers do
+//            ctx.Upload b
+//            GL.BindBufferRange(BufferRangeTarget.UniformBuffer, l, b.Handle, 0n, nativeint b.Size)
+//            boundThings.Add(Buffer(l,BufferTarget.UniformBuffer)) |> ignore
+//            GL.Check "could not bind uniform buffer"
 
-        for (KeyValue(slot, (b, o, s))) in inputBuffers do
-            GL.BindBufferRange(BufferRangeTarget.ShaderStorageBuffer, slot, b.Handle, o, s)
-            boundThings.Add(Buffer(slot,BufferTarget.ShaderStorageBuffer)) |> ignore
-            GL.Check "could not bind storage buffer"
+//        for (KeyValue(slot, (b, o, s))) in inputBuffers do
+//            GL.BindBufferRange(BufferRangeTarget.ShaderStorageBuffer, slot, b.Handle, o, s)
+//            boundThings.Add(Buffer(slot,BufferTarget.ShaderStorageBuffer)) |> ignore
+//            GL.Check "could not bind storage buffer"
 
-        for (KeyValue(l, (tex, level, layered, layer, _))) in inputImages do
-            GL.Dispatch.BindImageTexture(l, tex.Handle, level, layered, layer, TextureAccess.ReadWrite, TextureFormat.toSizedInternalFormat tex.Format)
-            boundThings.Add(Bound.Image l) |> ignore
-            GL.Check "could not bind image texture"
+//        for (KeyValue(l, (tex, level, layered, layer, _))) in inputImages do
+//            GL.Dispatch.BindImageTexture(l, tex.Handle, level, layered, layer, TextureAccess.ReadWrite, TextureFormat.toSizedInternalFormat tex.Format)
+//            boundThings.Add(Bound.Image l) |> ignore
+//            GL.Check "could not bind image texture"
 
-        for (KeyValue(l, (target, tex, sampler))) in inputSamplers do
-            GL.ActiveTexture(TextureUnit.Texture0 + unbox l)
-            GL.BindTexture(target, tex.Handle)
-            GL.Check "could not bind texture"
-            GL.BindSampler(l, sampler.Handle)
-            GL.Check "could not bind sampler"
-            boundThings.Add(Bound.Texture(l,target)) |> ignore
+//        for (KeyValue(l, (target, tex, sampler))) in inputSamplers do
+//            GL.ActiveTexture(TextureUnit.Texture0 + unbox l)
+//            GL.BindTexture(target, tex.Handle)
+//            GL.Check "could not bind texture"
+//            GL.BindSampler(l, sampler.Handle)
+//            GL.Check "could not bind sampler"
+//            boundThings.Add(Bound.Texture(l,target)) |> ignore
 
-    member private x.Write(name : string, value : obj) =
-        match Map.tryFind name references with
-        | Some refs ->
-            for ref in refs do
-                match ref with
-                | Uniform write -> 
-                    write value
+//    member private x.Write(name : string, value : obj) =
+//        match Map.tryFind name references with
+//        | Some refs ->
+//            for ref in refs do
+//                match ref with
+//                | Uniform write -> 
+//                    write value
 
-                | StorageBuffer(slot, _) ->
-                    match value with
-                    | null ->
-                        inputBuffers.[slot] <- (new Aardvark.Rendering.GL.Buffer(ctx, 0n, 0), 0n, 0n)
-                    | :? IBufferRange as range ->
-                        let buffer = unbox<GL.Buffer> range.Buffer
-                        inputBuffers.[slot] <- (buffer, range.Offset, range.SizeInBytes)
-                    | _ ->
-                        failwithf "[GL] bad buffer: %A" value
+//                | StorageBuffer(slot, _) ->
+//                    match value with
+//                    | null ->
+//                        inputBuffers.[slot] <- (new Aardvark.Rendering.GL.Buffer(ctx, 0n, 0), 0n, 0n)
+//                    | :? IBufferRange as range ->
+//                        let buffer = unbox<GL.Buffer> range.Buffer
+//                        inputBuffers.[slot] <- (buffer, range.Offset, range.SizeInBytes)
+//                    | _ ->
+//                        failwithf "[GL] bad buffer: %A" value
 
 
-                | Image slot ->
-                    let (_, _, _, _, typ) = inputImages.[slot]
-                    let expectedFormat = typ.format |> Option.map unbox<TextureFormat>
+//                | Image slot ->
+//                    let (_, _, _, _, typ) = inputImages.[slot]
+//                    let expectedFormat = typ.format |> Option.map unbox<TextureFormat>
 
-                    match value with
-                    | :? ITextureLevel as l ->
-                        let t = l.Texture |> unbox<Texture>
+//                    match value with
+//                    | :? ITextureLevel as l ->
+//                        let t = l.Texture |> unbox<Texture>
 
-                        let isValidFormat =
-                            expectedFormat |> Option.map ((=) t.Format) |> Option.defaultValue true
+//                        let isValidFormat =
+//                            expectedFormat |> Option.map ((=) t.Format) |> Option.defaultValue true
 
-                        if not isValidFormat then
-                            failwithf "[GL] Expected image '%s' with format %A but got %A" name expectedFormat.Value t.Format
+//                        if not isValidFormat then
+//                            failwithf "[GL] Expected image '%s' with format %A but got %A" name expectedFormat.Value t.Format
 
-                        let isLayered = l.Slices.Min <> l.Slices.Max
-                        inputImages.[slot] <- (t, l.Level, isLayered, l.Slices.Min, typ)
-                    | _ ->
-                        failwithf "[GL] bad image texture: %A" value
-                | Texture slot ->
-                    let (target, t, s) = inputSamplers.[slot]
-                    match value with
-                    | :? Texture as t ->
-                        inputSamplers.[slot] <- (target, t, s)
-                    | _ ->
-                        failwithf "[GL] bad texture: %A" value
-            | None ->
-                ()
+//                        let isLayered = l.Slices.Min <> l.Slices.Max
+//                        inputImages.[slot] <- (t, l.Level, isLayered, l.Slices.Min, typ)
+//                    | _ ->
+//                        failwithf "[GL] bad image texture: %A" value
+//                | Texture slot ->
+//                    let (target, t, s) = inputSamplers.[slot]
+//                    match value with
+//                    | :? Texture as t ->
+//                        inputSamplers.[slot] <- (target, t, s)
+//                    | _ ->
+//                        failwithf "[GL] bad texture: %A" value
+//            | None ->
+//                ()
     
-    member x.Dispose() =
-        use __ = ctx.ResourceLock
-        for (_,b) in uniformBuffers do
-            ctx.Delete b
+//    member x.Dispose() =
+//        use __ = ctx.ResourceLock
+//        for (_,b) in uniformBuffers do
+//            ctx.Delete b
 
-    member x.Flush() =
-        use __ = ctx.ResourceLock
-        let dirty = 
-            lock dirtyBuffers (fun () -> 
-                let arr = Aardvark.Base.HashSet.toArray dirtyBuffers
-                dirtyBuffers.Clear()
-                arr
-            )
-        for d in dirty do ctx.Upload d
+//    member x.Flush() =
+//        use __ = ctx.ResourceLock
+//        let dirty = 
+//            lock dirtyBuffers (fun () -> 
+//                let arr = Aardvark.Base.HashSet.toArray dirtyBuffers
+//                dirtyBuffers.Clear()
+//                arr
+//            )
+//        for d in dirty do ctx.Upload d
 
-    member x.Item
-        with set (name : string) (value : obj) = x.Write(name, value)
+//    member x.Item
+//        with set (name : string) (value : obj) = x.Write(name, value)
 
-    interface IComputeShaderInputBinding with
-        member x.Dispose() = x.Dispose()
-        member x.Flush() = x.Flush()
-        member x.Shader = shader :> IComputeShader
-        member x.Item
-            with set (name : string) (value : obj) = x.Write(name, value)
+//    interface IComputeShaderInputBinding with
+//        member x.Dispose() = x.Dispose()
+//        member x.Flush() = x.Flush()
+//        member x.Shader = shader :> IComputeShader
+//        member x.Item
+//            with set (name : string) (value : obj) = x.Write(name, value)
 
 and private ComputeShaderInputReference =
     | Uniform of write : (obj -> unit)
@@ -340,110 +340,110 @@ type private GLCompute(ctx : Context) =
 
 
 
-    member private x.Run(i : ComputeCommand, boundThings : System.Collections.Generic.HashSet<Bound>, queries : IQuery) =
-        match i with
-            | ComputeCommand.BindCmd shader ->
-                let shader = unbox<ComputeShader> shader
-                GL.UseProgram(shader.Handle)
-            | ComputeCommand.SetInputCmd(input) ->
-                let input = unbox<ComputeShaderInputBinding> input
-                input.Bind(boundThings)
-                GL.Sync()
-                GL.Check()
-            | ComputeCommand.DispatchCmd groups ->
-                GL.DispatchCompute(groups.X, groups.Y, groups.Z)
-                GL.Sync()
-                GL.Check()
+    //member private x.Run(i : ComputeCommand, boundThings : System.Collections.Generic.HashSet<Bound>, queries : IQuery) =
+    //    match i with
+    //        | ComputeCommand.BindCmd shader ->
+    //            let shader = unbox<ComputeShader> shader
+    //            GL.UseProgram(shader.Handle)
+    //        | ComputeCommand.SetInputCmd(input) ->
+    //            let input = unbox<ComputeShaderInputBinding> input
+    //            input.Bind(boundThings)
+    //            GL.Sync()
+    //            GL.Check()
+    //        | ComputeCommand.DispatchCmd groups ->
+    //            GL.DispatchCompute(groups.X, groups.Y, groups.Z)
+    //            GL.Sync()
+    //            GL.Check()
 
-            | ComputeCommand.SyncBufferCmd _ -> 
-                GL.MemoryBarrier(MemoryBarrierFlags.BufferUpdateBarrierBit 
-                                 ||| MemoryBarrierFlags.ClientMappedBufferBarrierBit 
-                                 ||| MemoryBarrierFlags.ShaderStorageBarrierBit
-                                 ||| MemoryBarrierFlags.AllBarrierBits)
-                GL.Sync()
-                GL.Check()
+    //        | ComputeCommand.SyncBufferCmd _ -> 
+    //            GL.MemoryBarrier(MemoryBarrierFlags.BufferUpdateBarrierBit 
+    //                             ||| MemoryBarrierFlags.ClientMappedBufferBarrierBit 
+    //                             ||| MemoryBarrierFlags.ShaderStorageBarrierBit
+    //                             ||| MemoryBarrierFlags.AllBarrierBits)
+    //            GL.Sync()
+    //            GL.Check()
 
-             | ComputeCommand.SyncImageCmd _ -> 
-                GL.MemoryBarrier(MemoryBarrierFlags.ShaderImageAccessBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit ||| MemoryBarrierFlags.TextureFetchBarrierBit ||| MemoryBarrierFlags.TextureUpdateBarrierBit ||| MemoryBarrierFlags.AllBarrierBits)
-                GL.Sync()
-                GL.Check()
-            | ComputeCommand.TransformLayoutCmd _ | ComputeCommand.TransformSubLayoutCmd _ ->
-                GL.MemoryBarrier(MemoryBarrierFlags.ShaderImageAccessBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit ||| MemoryBarrierFlags.TextureFetchBarrierBit ||| MemoryBarrierFlags.TextureUpdateBarrierBit ||| MemoryBarrierFlags.BufferUpdateBarrierBit ||| MemoryBarrierFlags.ClientMappedBufferBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit ||| MemoryBarrierFlags.AllBarrierBits)
-                GL.Sync()
-                GL.Check()
+    //         | ComputeCommand.SyncImageCmd _ -> 
+    //            GL.MemoryBarrier(MemoryBarrierFlags.ShaderImageAccessBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit ||| MemoryBarrierFlags.TextureFetchBarrierBit ||| MemoryBarrierFlags.TextureUpdateBarrierBit ||| MemoryBarrierFlags.AllBarrierBits)
+    //            GL.Sync()
+    //            GL.Check()
+    //        | ComputeCommand.TransformLayoutCmd _ | ComputeCommand.TransformSubLayoutCmd _ ->
+    //            GL.MemoryBarrier(MemoryBarrierFlags.ShaderImageAccessBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit ||| MemoryBarrierFlags.TextureFetchBarrierBit ||| MemoryBarrierFlags.TextureUpdateBarrierBit ||| MemoryBarrierFlags.BufferUpdateBarrierBit ||| MemoryBarrierFlags.ClientMappedBufferBarrierBit ||| MemoryBarrierFlags.ShaderStorageBarrierBit ||| MemoryBarrierFlags.AllBarrierBits)
+    //            GL.Sync()
+    //            GL.Check()
 
-            | ComputeCommand.CopyBufferCmd(src, dst) ->
-                GL.Sync()
-                GL.Check()
-                let srcBuffer = unbox<GL.Buffer> src.Buffer
-                let dstBuffer = unbox<GL.Buffer> dst.Buffer
-                ctx.Copy(srcBuffer, src.Offset, dstBuffer, dst.Offset, src.SizeInBytes)
-                GL.Sync()
-                GL.Check()
-                ()
+    //        | ComputeCommand.CopyBufferCmd(src, dst) ->
+    //            GL.Sync()
+    //            GL.Check()
+    //            let srcBuffer = unbox<GL.Buffer> src.Buffer
+    //            let dstBuffer = unbox<GL.Buffer> dst.Buffer
+    //            ctx.Copy(srcBuffer, src.Offset, dstBuffer, dst.Offset, src.SizeInBytes)
+    //            GL.Sync()
+    //            GL.Check()
+    //            ()
 
-            | ComputeCommand.UploadBufferCmd(src, dst) ->
-                match src with
-                | HostMemory.Managed(arr, index) ->
-                    let elementSize = arr.GetType().GetElementType() |> Marshal.SizeOf |> nativeint
-                    let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
-                    try
-                        let ptr = gc.AddrOfPinnedObject() + (nativeint index * elementSize)
-                        ctx.Runtime.Upload(ptr, dst.Buffer, dst.Offset, dst.SizeInBytes)
-                    finally
-                        gc.Free()
+    //        | ComputeCommand.UploadBufferCmd(src, dst) ->
+    //            match src with
+    //            | HostMemory.Managed(arr, index) ->
+    //                let elementSize = arr.GetType().GetElementType() |> Marshal.SizeOf |> nativeint
+    //                let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
+    //                try
+    //                    let ptr = gc.AddrOfPinnedObject() + (nativeint index * elementSize)
+    //                    ctx.Runtime.Upload(ptr, dst.Buffer, dst.Offset, dst.SizeInBytes)
+    //                finally
+    //                    gc.Free()
 
-                | HostMemory.Unmanaged ptr ->
-                    ctx.Runtime.Upload(ptr, dst.Buffer, dst.Offset, dst.SizeInBytes)
+    //            | HostMemory.Unmanaged ptr ->
+    //                ctx.Runtime.Upload(ptr, dst.Buffer, dst.Offset, dst.SizeInBytes)
 
-            | ComputeCommand.CopyImageCmd(src, srcOffset, dst, dstOffset, size) ->
-                ctx.Runtime.Copy(src, srcOffset, dst, dstOffset, size)
+    //        | ComputeCommand.CopyImageCmd(src, srcOffset, dst, dstOffset, size) ->
+    //            ctx.Runtime.Copy(src, srcOffset, dst, dstOffset, size)
 
-            | ComputeCommand.SetBufferCmd(dst, value) ->
-                let dstBuffer = unbox<GL.Buffer> dst.Buffer
-                let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
-                GL.Dispatch.ClearNamedBufferSubData(dstBuffer.Handle, PixelInternalFormat.R32ui, dst.Offset, dst.SizeInBytes, PixelFormat.Red, PixelType.UnsignedInt, gc.AddrOfPinnedObject())
-                gc.Free()
-                GL.Sync()
-                GL.Check()
+    //        | ComputeCommand.SetBufferCmd(dst, value) ->
+    //            let dstBuffer = unbox<GL.Buffer> dst.Buffer
+    //            let gc = GCHandle.Alloc(value, GCHandleType.Pinned)
+    //            GL.Dispatch.ClearNamedBufferSubData(dstBuffer.Handle, PixelInternalFormat.R32ui, dst.Offset, dst.SizeInBytes, PixelFormat.Red, PixelType.UnsignedInt, gc.AddrOfPinnedObject())
+    //            gc.Free()
+    //            GL.Sync()
+    //            GL.Check()
 
-            | ComputeCommand.DownloadBufferCmd(src, dst) ->
-                GL.Sync()
-                GL.Check()
-                let srcBuffer = unbox<GL.Buffer> src.Buffer
-                match dst with
-                    | HostMemory.Managed(arr,index) ->
-                        let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
-                        let es = Marshal.SizeOf (arr.GetType().GetElementType()) |> nativeint
-                        GL.Dispatch.GetNamedBufferSubData(srcBuffer.Handle, src.Offset, src.SizeInBytes, gc.AddrOfPinnedObject() + es * nativeint index)
-                        gc.Free()
+    //        | ComputeCommand.DownloadBufferCmd(src, dst) ->
+    //            GL.Sync()
+    //            GL.Check()
+    //            let srcBuffer = unbox<GL.Buffer> src.Buffer
+    //            match dst with
+    //                | HostMemory.Managed(arr,index) ->
+    //                    let gc = GCHandle.Alloc(arr, GCHandleType.Pinned)
+    //                    let es = Marshal.SizeOf (arr.GetType().GetElementType()) |> nativeint
+    //                    GL.Dispatch.GetNamedBufferSubData(srcBuffer.Handle, src.Offset, src.SizeInBytes, gc.AddrOfPinnedObject() + es * nativeint index)
+    //                    gc.Free()
 
-                    | HostMemory.Unmanaged ptr ->   
-                        GL.Dispatch.GetNamedBufferSubData(srcBuffer.Handle, src.Offset, src.SizeInBytes, ptr)
-            | ComputeCommand.ExecuteCmd other ->
-                other.Run(queries)
+    //                | HostMemory.Unmanaged ptr ->   
+    //                    GL.Dispatch.GetNamedBufferSubData(srcBuffer.Handle, src.Offset, src.SizeInBytes, ptr)
+    //        | ComputeCommand.ExecuteCmd other ->
+    //            other.Run(queries)
     
-    member x.Run(i : list<ComputeCommand>, queries : IQuery) =
-        use __ = ctx.ResourceLock
+    //member x.Run(i : list<ComputeCommand>, queries : IQuery) =
+    //    use __ = ctx.ResourceLock
 
-        queries.Begin()
+    //    queries.Begin()
 
-        let boundThings = System.Collections.Generic.HashSet<_>()
-        for i in i do x.Run(i, boundThings, queries)
-        for b in boundThings do
-            match b with
-                | Bound.Buffer(slot,target) -> 
-                    GL.BindBufferBase(unbox (int target),slot,0)
-                | Bound.Image(slot) -> 
-                    GL.Dispatch.BindImageTexture(slot,0,0,false,0,TextureAccess.ReadWrite,SizedInternalFormat.Rgba8)
-                | Bound.Texture(slot,target) -> 
-                    GL.ActiveTexture(TextureUnit.Texture0 + unbox slot)
-                    GL.BindTexture(target,0)
-                    GL.BindSampler(slot,0)
+    //    let boundThings = System.Collections.Generic.HashSet<_>()
+    //    for i in i do x.Run(i, boundThings, queries)
+    //    for b in boundThings do
+    //        match b with
+    //            | Bound.Buffer(slot,target) -> 
+    //                GL.BindBufferBase(unbox (int target),slot,0)
+    //            | Bound.Image(slot) -> 
+    //                GL.Dispatch.BindImageTexture(slot,0,0,false,0,TextureAccess.ReadWrite,SizedInternalFormat.Rgba8)
+    //            | Bound.Texture(slot,target) -> 
+    //                GL.ActiveTexture(TextureUnit.Texture0 + unbox slot)
+    //                GL.BindTexture(target,0)
+    //                GL.BindSampler(slot,0)
 
-        queries.End()
+    //    queries.End()
 
-        GL.Sync()
+    //    GL.Sync()
 
 [<AutoOpen>]
 module GLComputeExtensions =
@@ -524,6 +524,6 @@ module GLComputeExtensions =
         member x.Delete(k : ComputeShader) =
             k.Dispose()
 
-        member x.Run(i : list<ComputeCommand>, queries : IQuery) =
-            let c = getGLCompute x
-            c.Run(i, queries)
+        //member x.Run(i : list<ComputeCommand>, queries : IQuery) =
+        //    let c = getGLCompute x
+        //    c.Run(i, queries)

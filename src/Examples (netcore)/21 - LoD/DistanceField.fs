@@ -205,7 +205,7 @@ let computeDistanceGPU (pi : PixImage<byte>) =
     ]
 
     let p = 
-        runtime.Compile [
+        runtime.CompileCompute [
                 ComputeCommand.Bind phase1
                 ComputeCommand.SetInput phase1Input
                 ComputeCommand.Dispatch(ceilDiv pi.Size.X 64)

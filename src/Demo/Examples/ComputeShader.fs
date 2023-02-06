@@ -349,7 +349,7 @@ module ComputeShader =
                 ComputeCommand.Dispatch (ceilDiv (int input.Count) 64)
              ]
         let program =
-            runtime.Compile mk
+            runtime.CompileCompute mk
         program.Run()
 
         let bits2 =  bits.Download()
@@ -502,7 +502,7 @@ module ComputeShader =
 
 
         let program =
-            runtime.Compile commands
+            runtime.CompileCompute commands
 
         let magic =
             let sw = System.Diagnostics.Stopwatch()

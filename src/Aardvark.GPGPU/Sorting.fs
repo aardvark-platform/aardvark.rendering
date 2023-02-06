@@ -239,7 +239,7 @@ and BitonicSorterInstance<'a when 'a : unmanaged>(parent : BitonicSorter<'a>, el
     let totalCount = elements * groups
     let tempBuffer = lazy (runtime.CreateBuffer<'a>(totalCount))
     let permBuffer = runtime.CreateBuffer<int>(totalCount)
-    let bindings = System.Collections.Generic.List<IComputeShaderInputBinding>()
+    let bindings = System.Collections.Generic.List<MutableComputeInputBinding>()
 
     let dummy : IBuffer<'a> = runtime.CreateBuffer<'a>(1)
     let mutable currentBuffer : obj = dummy :> obj
@@ -252,7 +252,7 @@ and BitonicSorterInstance<'a when 'a : unmanaged>(parent : BitonicSorter<'a>, el
                 b.Flush()
 
     let prog =
-        parent.Runtime.Compile [
+        parent.Runtime.CompileCompute [
 
             // initialize the permutation-buffer
             let binding = runtime.NewInputBinding parent.InitPerm
@@ -342,7 +342,7 @@ and BitonicSorterInstance<'a when 'a : unmanaged>(parent : BitonicSorter<'a>, el
             yield ComputeCommand.Sync permBuffer.Buffer
         ]
 
-    member x.Run(xs : IBuffer<'a>, perm : IBuffer<int>, queries : IQuery) : unit =
+    member x.Run(xs : IBuffer<'a>, perm : IBuffer<int>, renderToken : RenderToken) : unit =
         if xs.Count <> totalCount || perm.Count <> totalCount then
             failwithf "[BitonicSorter] invalid buffer length: { values: %A, perm: %A, sort: %A }" xs.Count perm.Count totalCount
 
@@ -353,13 +353,13 @@ and BitonicSorterInstance<'a when 'a : unmanaged>(parent : BitonicSorter<'a>, el
                 //ComputeCommand.Copy(xs, tempBuffer)
                 ComputeCommand.Execute prog
                 ComputeCommand.Copy(permBuffer, perm)
-            ], queries)
+            ], renderToken)
         )
 
     member x.Run(xs : IBuffer<'a>, perm : IBuffer<int>) =
-        x.Run(xs, perm, Queries.none)
+        x.Run(xs, perm, RenderToken.Empty)
 
-    member x.Run(xs : 'a[], perm : int[], queries : IQuery) : unit =
+    member x.Run(xs : 'a[], perm : int[], renderToken : RenderToken) : unit =
         if xs.Length <> totalCount  || perm.Length <> totalCount then
             failwithf "[BitonicSorter] invalid buffer length: { values: %A, perm: %A, sort: %A }" xs.Length perm.Length totalCount
 
@@ -368,15 +368,15 @@ and BitonicSorterInstance<'a when 'a : unmanaged>(parent : BitonicSorter<'a>, el
 
         lock x (fun () ->
             runtime.Run([
-                ComputeCommand.Copy(xs, tempBuffer)
+                ComputeCommand.Upload(xs, tempBuffer)
                 ComputeCommand.Sync(tempBuffer.Buffer)
                 ComputeCommand.Execute prog
-                ComputeCommand.Copy(permBuffer, perm)
-            ], queries)
+                ComputeCommand.Download(permBuffer, perm)
+            ], renderToken)
         )
 
     member x.Run(xs : 'a[], perm : int[]) =
-        x.Run(xs, perm, Queries.none)
+        x.Run(xs, perm, RenderToken.Empty)
 
     member x.Dispose() : unit =
         if tempBuffer.IsValueCreated then tempBuffer.Value.Dispose()

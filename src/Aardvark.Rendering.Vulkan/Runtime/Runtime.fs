@@ -32,7 +32,6 @@ type Runtime(device : Device) as this =
 
     member x.Device = device
     member x.ResourceManager = manager
-    member x.ContextLock = device.Token :> IDisposable
 
     member x.CreateStreamingTexture (mipMaps : bool) = failf "not implemented"
 
@@ -528,17 +527,14 @@ type Runtime(device : Device) as this =
 
         member x.MaxLocalSize = device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize
 
-        member x.CreateComputeShader (c : FShade.ComputeShader) =
-            ComputeShader.ofFShade c device :> IComputeShader
+        member x.CreateComputeShader(shader : FShade.ComputeShader) =
+            raise <| NotImplementedException()
 
-        member x.NewInputBinding(c : IComputeShader) =
-            ComputeShader.newInputBinding (unbox c) :> IComputeShaderInputBinding
+        member x.NewInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
+            raise <| NotImplementedException()
 
-        member x.Run (commands : list<ComputeCommand>, queries : IQuery) =
-            ComputeCommand.run commands queries device
-
-        member x.Compile (commands : list<ComputeCommand>) =
-            ComputeCommand.compile commands device
+        member x.CompileCompute (commands : alist<ComputeCommand>) =
+            raise <| NotImplementedException()
 
         member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource,
                                                 source : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) =
@@ -570,7 +566,6 @@ type Runtime(device : Device) as this =
 
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t) = x.GenerateMipMaps(t)
-        member x.ContextLock = x.ContextLock
         member x.CompileRender (signature, set) = x.CompileRender(signature, set)
         member x.CompileClear(signature, values) = x.CompileClear(signature, values)
 

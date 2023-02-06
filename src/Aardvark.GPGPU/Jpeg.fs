@@ -1315,7 +1315,6 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
 
     let updateQuantization (q : Quantization) =
         if q != quality then
-            use __ = runtime.ContextLock
             quality <- q
             dctInput.["Quantization"] <- Quantization.toTable q
             dctInput.Flush()
@@ -1383,11 +1382,11 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
             yield! assembleCommand
 
             let codewordBuffer = codewordBuffer.Buffer.Coerce<int>()
-            yield ComputeCommand.Copy(codewordBuffer.[codewordBuffer.Count - 2 .. codewordBuffer.Count - 1], bitCountBuffer)
+            yield ComputeCommand.Download(codewordBuffer.[codewordBuffer.Count - 2 .. codewordBuffer.Count - 1], bitCountBuffer)
         ]
 
     let overallCommand =
-        runtime.Compile cmds
+        runtime.CompileCompute cmds
 
     member x.Quality
         with get() = quality
@@ -1556,18 +1555,18 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         result
 
 
-    member x.Compress(image : ITextureSubResource, queries : IQuery) =
+    member x.Compress(image : ITextureSubResource, renderToken : RenderToken) =
         assert (image.Size.XY = size)
         dctInput.["InputImage"] <- image.Texture
         dctInput.["ImageLevel"] <- image.Level
         dctInput.Flush()
 
-        overallCommand.Run(queries)
+        overallCommand.Run(FSharp.Data.Adaptive.AdaptiveToken.Top, renderToken)
 
         x.Download()
 
     member x.Compress(image : ITextureSubResource) =
-        x.Compress(image, Queries.none)
+        x.Compress(image, RenderToken.Empty)
 
     member x.Dispose() =
         dctInput.Dispose()

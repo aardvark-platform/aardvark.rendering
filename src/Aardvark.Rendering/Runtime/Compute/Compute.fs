@@ -5,109 +5,63 @@ open FSharp.Data.Adaptive
 open System.Runtime.InteropServices
 open Aardvark.Base
 open Microsoft.FSharp.NativeInterop
-open System.Runtime.CompilerServices
 
 #nowarn "9"
 #nowarn "51"
 
-type IComputeShader =
+type IComputeTask =
+    inherit IDisposable
+    inherit IAdaptiveObject
+    abstract member Runtime : IComputeRuntime
+    abstract member Update : token: AdaptiveToken * renderToken: RenderToken -> unit
+    abstract member Run : token: AdaptiveToken * renderToken: RenderToken -> unit
+
+and IComputeShader =
     inherit IDisposable
     abstract member Runtime : IComputeRuntime
     abstract member LocalSize : V3i
 
-and IComputeShaderInputBinding =
-    inherit IDisposable
+and IComputeInputBinding =
     abstract member Shader : IComputeShader
-    abstract member Item : string -> obj with set
-    abstract member Flush : unit -> unit
 
 and IComputeRuntime =
     inherit IBufferRuntime
     inherit ITextureRuntime
-
-    abstract member ContextLock : IDisposable
-
     abstract member MaxLocalSize : V3i
-    abstract member CreateComputeShader : FShade.ComputeShader -> IComputeShader
-    abstract member NewInputBinding : IComputeShader -> IComputeShaderInputBinding
-    abstract member Run : list<ComputeCommand> * IQuery -> unit
-    abstract member Compile : list<ComputeCommand> -> ComputeProgram<unit>
-
-and [<AbstractClass>]
-    ComputeProgram<'r>() =
-
-    let mutable onDispose : list<unit -> unit> = []
-
-    abstract member Run : IQuery -> 'r
-    abstract member RunUnit : IQuery -> unit
-    abstract member Release : unit -> unit
-
-    member x.Dispose() =
-        x.Release()
-        for d in onDispose do d()
-        onDispose <- []
-
-    member x.OnDispose(f : unit -> unit) = onDispose <- f :: onDispose
-
-    member x.Run() =
-        x.Run Queries.none
-
-    member x.RunUnit() =
-        x.RunUnit Queries.none
-
-    default x.Run(queries : IQuery) = x.RunUnit(queries); Unchecked.defaultof<'r>
-    default x.RunUnit(queries : IQuery) = x.Run(queries) |> ignore
-
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
+    abstract member CreateComputeShader : shader: FShade.ComputeShader -> IComputeShader
+    abstract member NewInputBinding : shader: IComputeShader * inputs: IUniformProvider -> IComputeInputBinding
+    abstract member CompileCompute : commands: alist<ComputeCommand> -> IComputeTask
 
 and [<RequireQualifiedAccess>]
     HostMemory =
-    | Managed of arr : Array * index : int
+    | Managed   of array: Array * index: int
     | Unmanaged of nativeint
 
 and [<RequireQualifiedAccess>]
     ComputeCommand =
-    | BindCmd of shader : IComputeShader
-    | SetInputCmd of inputs : IComputeShaderInputBinding
-    | DispatchCmd of groups : V3i
-    | CopyBufferCmd of src : IBufferRange * dst : IBufferRange
-    | DownloadBufferCmd of src : IBufferRange * dst : HostMemory
-    | UploadBufferCmd of src : HostMemory * dst : IBufferRange
-    | SetBufferCmd of buffer : IBufferRange * pattern : byte[]
-    | SyncBufferCmd of buffer : IBackendBuffer * src : ResourceAccess * dst : ResourceAccess
-    | SyncImageCmd of image : IBackendTexture * src : ResourceAccess * dst : ResourceAccess
-    | TransformLayoutCmd of tex : IBackendTexture * layout : TextureLayout
-    | TransformSubLayoutCmd of tex : ITextureRange * srcLayout : TextureLayout * dstLayout : TextureLayout
-    | ExecuteCmd of ComputeProgram<unit>
+    | BindCmd                 of shader: IComputeShader
+    | SetInputCmd             of input: IComputeInputBinding
+    | DispatchCmd             of groups: V3i
+    | ExecuteCmd              of task: IComputeTask
+    | CopyBufferCmd           of src: IBufferRange * dst: IBufferRange
+    | DownloadBufferCmd       of src: IBufferRange * dst: HostMemory
+    | UploadBufferCmd         of src: HostMemory * dst: IBufferRange
+    | SetBufferCmd            of buffer: IBufferRange * pattern: byte[]
+    | SyncBufferCmd           of buffer: IBackendBuffer * srcAccess: ResourceAccess * dstAccess: ResourceAccess
+    | CopyImageCmd            of src: IFramebufferOutput * srcOffset: V3i * dst: IFramebufferOutput * dstOffset: V3i * size: V3i
+    | TransformLayoutCmd      of image: IBackendTexture * layout: TextureLayout
+    | TransformSubLayoutCmd   of image: ITextureRange * srcLayout: TextureLayout * dstLayout: TextureLayout
+    | SyncImageCmd            of image: IBackendTexture * srcAccess: ResourceAccess * dstAccess: ResourceAccess
 
-    | CopyImageCmd of src : IFramebufferOutput * srcOffset : V3i * dst : IFramebufferOutput * dstOffset : V3i * size : V3i
-
-
-    static member Execute (other : ComputeProgram<unit>) =
-        ComputeCommand.ExecuteCmd other
-
-    static member Sync b = ComputeCommand.SyncBufferCmd(b, ResourceAccess.ShaderWrite, ResourceAccess.ShaderRead)
-
-    static member Sync(b, s, d) = ComputeCommand.SyncBufferCmd(b, s, d)
-
-    static member Sync(i, s, d) = ComputeCommand.SyncImageCmd(i, s, d)
-
-    static member Sync(i) = ComputeCommand.SyncImageCmd(i, ResourceAccess.ShaderWrite, ResourceAccess.ShaderRead)
-
-    static member Zero(b) = ComputeCommand.SetBufferCmd(b, [| 0uy; 0uy; 0uy; 0uy |])
+    // ================================================================================================================
+    // Input & Dispatch
+    // ================================================================================================================
 
     static member Bind(shader : IComputeShader) =
         ComputeCommand.BindCmd shader
 
-    static member SetInput(input : IComputeShaderInputBinding) =
+    static member SetInput(input : IComputeInputBinding) =
         ComputeCommand.SetInputCmd input
-
-    static member TransformLayout(tex : IBackendTexture, layout : TextureLayout) =
-        ComputeCommand.TransformLayoutCmd(tex, layout)
-
-    static member TransformLayout(tex : ITextureRange, srcLayout : TextureLayout, dstLayout : TextureLayout) =
-        ComputeCommand.TransformSubLayoutCmd(tex, srcLayout, dstLayout)
 
     static member Dispatch(groups : V3i) =
         ComputeCommand.DispatchCmd groups
@@ -118,154 +72,98 @@ and [<RequireQualifiedAccess>]
     static member Dispatch(groups : int) =
         ComputeCommand.DispatchCmd (V3i(groups, 1, 1))
 
-    static member Copy(src : IBufferRange, dst : IBufferRange) =
-        ComputeCommand.CopyBufferCmd(src, dst)
+    static member Execute(task : IComputeTask) =
+        ComputeCommand.ExecuteCmd task
 
-    static member Set<'a when 'a : unmanaged>(dst : IBufferRange<'a>, value : 'a) =
-        let arr : byte[] = Array.zeroCreate sizeof<'a>
+    // ================================================================================================================
+    // Buffers
+    // ================================================================================================================
+
+    static member Set<'T when 'T : unmanaged>(dst : IBufferRange<'T>, value : 'T) =
+        let arr : byte[] = Array.zeroCreate sizeof<'T>
         let mutable value = value
         Marshal.Copy(NativePtr.toNativeInt &&value, arr, 0, arr.Length)
         ComputeCommand.SetBufferCmd(dst, arr)
 
-    static member Copy<'a when 'a : unmanaged>(src : IBufferRange<'a>, dst : 'a[], dstIndex : int) =
-        ComputeCommand.DownloadBufferCmd(src, HostMemory.Managed (dst :> Array, dstIndex))
+    static member Zero(buffer : IBufferRange) =
+        ComputeCommand.SetBufferCmd(buffer, [| 0uy; 0uy; 0uy; 0uy |])
 
-    static member Copy<'a when 'a : unmanaged>(src : IBufferRange<'a>, dst : 'a[]) =
-        ComputeCommand.DownloadBufferCmd(src, HostMemory.Managed (dst :> Array, 0))
+    static member Copy(src : IBufferRange, dst : IBufferRange) =
+        ComputeCommand.CopyBufferCmd(src, dst)
 
-    static member Copy<'a when 'a : unmanaged>(src : 'a[], srcIndex : int, dst : IBufferRange<'a>) =
-        ComputeCommand.UploadBufferCmd(HostMemory.Managed (src :> Array, srcIndex), dst)
 
-    static member Copy<'a when 'a : unmanaged>(src : 'a[], dst : IBufferRange<'a>) =
-        ComputeCommand.UploadBufferCmd(HostMemory.Managed (src :> Array, 0), dst)
+    static member Download(src : IBufferRange, dst : nativeint) =
+        ComputeCommand.DownloadBufferCmd(src, HostMemory.Unmanaged dst)
 
-    static member Copy<'a when 'a : unmanaged>(src : IBufferRange<'a>, dst : nativeptr<'a>) =
+    static member Download<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : 'T[], dstIndex : int) =
+        ComputeCommand.DownloadBufferCmd(src, HostMemory.Managed (dst, dstIndex))
+
+    [<Obsolete("Use ComputeCommand.Download() instead.")>]
+    static member Copy<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : 'T[], dstIndex : int) =
+        ComputeCommand.Download(src, dst, dstIndex)
+
+    static member Download<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : 'T[]) =
+        ComputeCommand.DownloadBufferCmd(src, HostMemory.Managed (dst, 0))
+
+    [<Obsolete("Use ComputeCommand.Download() instead.")>]
+    static member Copy<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : 'T[]) =
+        ComputeCommand.Download(src, dst)
+
+    static member Download<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : nativeptr<'T>) =
         ComputeCommand.DownloadBufferCmd(src, HostMemory.Unmanaged (NativePtr.toNativeInt dst))
 
-    static member Copy<'a when 'a : unmanaged>(src : nativeptr<'a>, dst : IBufferRange<'a>) =
+    [<Obsolete("Use ComputeCommand.Download() instead.")>]
+    static member Copy<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : nativeptr<'T>) =
+        ComputeCommand.Download(src, dst)
+
+
+    static member Upload(src : nativeint, dst : IBufferRange) =
+        ComputeCommand.UploadBufferCmd(HostMemory.Unmanaged src, dst)
+
+    static member Upload<'T when 'T : unmanaged>(src : 'T[], srcIndex : int, dst : IBufferRange<'T>) =
+        ComputeCommand.UploadBufferCmd(HostMemory.Managed (src :> Array, srcIndex), dst)
+
+    [<Obsolete("Use ComputeCommand.Upload() instead.")>]
+    static member Copy<'T when 'T : unmanaged>(src : 'T[], srcIndex : int, dst : IBufferRange<'T>) =
+        ComputeCommand.Upload(src, srcIndex, dst)
+
+    static member Upload<'T when 'T : unmanaged>(src : 'T[], dst : IBufferRange<'T>) =
+        ComputeCommand.UploadBufferCmd(HostMemory.Managed (src :> Array, 0), dst)
+
+    [<Obsolete("Use ComputeCommand.Upload() instead.")>]
+    static member Copy<'T when 'T : unmanaged>(src : 'T[], dst : IBufferRange<'T>) =
+        ComputeCommand.Upload(src, dst)
+
+    static member Upload<'T when 'T : unmanaged>(src : nativeptr<'T>, dst : IBufferRange<'T>) =
         ComputeCommand.UploadBufferCmd(HostMemory.Unmanaged (NativePtr.toNativeInt src), dst)
+
+    [<Obsolete("Use ComputeCommand.Upload() instead.")>]
+    static member Copy<'T when 'T : unmanaged>(src : nativeptr<'T>, dst : IBufferRange<'T>) =
+        ComputeCommand.Upload(src, dst)
+
+
+    static member Sync(buffer : IBackendBuffer,
+                       [<Optional; DefaultParameterValue(ResourceAccess.All)>] srcAccess : ResourceAccess,
+                       [<Optional; DefaultParameterValue(ResourceAccess.All)>] dstAccess : ResourceAccess) =
+        ComputeCommand.SyncBufferCmd(buffer, srcAccess, dstAccess)
+
+    // ================================================================================================================
+    // Images
+    // ================================================================================================================
 
     static member Copy(src : ITextureLevel, srcOffset : V3i, dst : ITextureLevel, dstOffset : V3i, size : V3i) =
         ComputeCommand.CopyImageCmd(src, srcOffset, dst, dstOffset, size)
 
+    static member TransformLayout(texture : IBackendTexture, srcLayout : TextureLayout, dstLayout : TextureLayout) =
+        ComputeCommand.TransformSubLayoutCmd(texture.[texture.Format.Aspect, *, *], srcLayout, dstLayout)
 
-[<AbstractClass; Sealed; Extension>]
-type IComputeRuntimeExtensions private() =
+    static member TransformLayout(texture : ITextureRange, srcLayout : TextureLayout, dstLayout : TextureLayout) =
+        ComputeCommand.TransformSubLayoutCmd(texture, srcLayout, dstLayout)
 
-    [<Extension>]
-    static member CreateComputeShader (this : IComputeRuntime, shader : 'a -> 'b) =
-        let sh = FShade.ComputeShader.ofFunction this.MaxLocalSize shader
-        this.CreateComputeShader(sh)
+    static member TransformLayout(texture : IBackendTexture, layout : TextureLayout) =
+        ComputeCommand.TransformLayoutCmd(texture, layout)
 
-    [<Extension>]
-    static member DeleteComputeShader (this : IComputeRuntime, shader : IComputeShader) =
-        shader.Dispose()
-
-    [<Extension>]
-    static member Run (this : IComputeRuntime, commands : list<ComputeCommand>) =
-        this.Run(commands, Queries.none)
-
-    // Invoke overloads with queries
-    [<Extension>]
-    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V3i, input : IComputeShaderInputBinding, queries : IQuery) =
-        this.Run([
-            ComputeCommand.Bind cShader
-            ComputeCommand.SetInput input
-            ComputeCommand.Dispatch groupCount
-        ], queries)
-
-    [<Extension>]
-    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V2i, input : IComputeShaderInputBinding, queries : IQuery) =
-        IComputeRuntimeExtensions.Invoke(this, cShader, V3i(groupCount, 1), input, queries)
-
-    [<Extension>]
-    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : int, input : IComputeShaderInputBinding, queries : IQuery) =
-        IComputeRuntimeExtensions.Invoke(this, cShader, V3i(groupCount, 1, 1), input, queries)
-
-    [<Extension>]
-    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V3i, values : seq<string * obj>, queries : IQuery) =
-        use i = this.NewInputBinding cShader
-        for (name, value) in values do
-            i.[name] <- value
-        i.Flush()
-        IComputeRuntimeExtensions.Invoke(this, cShader, groupCount, i, queries)
-
-    [<Extension>]
-    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V2i, values : seq<string * obj>, queries : IQuery) =
-        IComputeRuntimeExtensions.Invoke(this, cShader, V3i(groupCount, 1), values, queries)
-
-    [<Extension>]
-    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : int, values : seq<string * obj>, queries : IQuery) =
-        IComputeRuntimeExtensions.Invoke(this, cShader, V3i(groupCount, 1, 1), values, queries)
-
-    [<Extension>]
-    static member Invoke (cShader : IComputeShader, groupCount : V3i, input : IComputeShaderInputBinding, queries : IQuery) =
-        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, input, queries)
-
-    [<Extension>]
-    static member Invoke (cShader : IComputeShader, groupCount : V2i, input : IComputeShaderInputBinding, queries : IQuery) =
-        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, input, queries)
-
-    [<Extension>]
-    static member Invoke (cShader : IComputeShader, groupCount : int, input : IComputeShaderInputBinding, queries : IQuery) =
-        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, input, queries)
-
-    [<Extension>]
-    static member Invoke (cShader : IComputeShader, groupCount : V3i, values : seq<string * obj>, queries : IQuery) =
-        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, values, queries)
-
-    [<Extension>]
-    static member Invoke (cShader : IComputeShader, groupCount : V2i, values : seq<string * obj>, queries : IQuery) =
-        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, values, queries)
-
-    [<Extension>]
-    static member Invoke (cShader : IComputeShader, groupCount : int, values : seq<string * obj>, queries : IQuery) =
-        IComputeRuntimeExtensions.Invoke(cShader.Runtime, cShader, groupCount, values, queries)
-
-    // Invoke overloads without queries
-    [<Extension>]
-    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V3i, input : IComputeShaderInputBinding) =
-        this.Invoke(cShader, groupCount, input, Queries.none)
-    [<Extension>]
-    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V2i, input : IComputeShaderInputBinding) =
-        this.Invoke(cShader, groupCount, input, Queries.none)
-
-    [<Extension>]
-    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : int, input : IComputeShaderInputBinding) =
-        this.Invoke(cShader, groupCount, input, Queries.none)
-
-    [<Extension>]
-    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V3i, values : seq<string * obj>) =
-        this.Invoke(cShader, groupCount, values, Queries.none)
-
-    [<Extension>]
-    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : V2i, values : seq<string * obj>) =
-        this.Invoke(cShader, groupCount, values, Queries.none)
-
-    [<Extension>]
-    static member Invoke (this : IComputeRuntime, cShader : IComputeShader, groupCount : int, values : seq<string * obj>) =
-        this.Invoke(cShader, groupCount, values, Queries.none)
-
-    [<Extension>]
-    static member Invoke (cShader : IComputeShader, groupCount : V3i, input : IComputeShaderInputBinding) =
-        cShader.Invoke(groupCount, input, Queries.none)
-
-    [<Extension>]
-    static member Invoke (cShader : IComputeShader, groupCount : V2i, input : IComputeShaderInputBinding) =
-        cShader.Invoke(groupCount, input, Queries.none)
-
-    [<Extension>]
-    static member Invoke (cShader : IComputeShader, groupCount : int, input : IComputeShaderInputBinding) =
-        cShader.Invoke(groupCount, input, Queries.none)
-
-    [<Extension>]
-    static member Invoke (cShader : IComputeShader, groupCount : V3i, values : seq<string * obj>) =
-        cShader.Invoke(groupCount, values, Queries.none)
-
-    [<Extension>]
-    static member Invoke (cShader : IComputeShader, groupCount : V2i, values : seq<string * obj>) =
-        cShader.Invoke(groupCount, values, Queries.none)
-
-    [<Extension>]
-    static member Invoke (cShader : IComputeShader, groupCount : int, values : seq<string * obj>) =
-        cShader.Invoke(groupCount, values, Queries.none)
+    static member Sync(image : IBackendTexture,
+                       [<Optional; DefaultParameterValue(ResourceAccess.All)>] srcAccess : ResourceAccess,
+                       [<Optional; DefaultParameterValue(ResourceAccess.All)>] dstAccess : ResourceAccess) =
+        ComputeCommand.SyncImageCmd(image, srcAccess, dstAccess)

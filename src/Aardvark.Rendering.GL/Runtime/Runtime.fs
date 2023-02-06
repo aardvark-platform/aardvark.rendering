@@ -20,7 +20,7 @@ type Runtime(debug : IDebugConfig) =
 
     let onDispose = Event<unit>()
 
-    let compute = lazy ( new GLCompute(ctx) )
+    //let compute = lazy ( new GLCompute(ctx) )
 
     member x.Context = ctx
 
@@ -287,7 +287,6 @@ type Runtime(debug : IDebugConfig) =
 
         member x.ResolveMultisamples(source, target, trafo) = x.ResolveMultisamples(source, target, trafo)
         member x.GenerateMipMaps(t : IBackendTexture) = x.GenerateMipMaps t
-        member x.ContextLock = ctx.ResourceLock :> IDisposable
         member x.CompileRender (signature, set : aset<IRenderObject>) = x.CompileRender(signature, set)
         member x.CompileClear(signature, values) = x.CompileClear(signature, values)
 
@@ -326,19 +325,29 @@ type Runtime(debug : IDebugConfig) =
         member x.CreateGeometryPool(types : Map<Symbol, Type>) =
             x.CreateGeometryPool(types)
 
+        member x.MaxLocalSize =
+            V3i.Zero
+            //compute.Value.WorkGroupSize
 
-        member x.MaxLocalSize = compute.Value.WorkGroupSize
-        member x.CreateComputeShader (c : FShade.ComputeShader) = ctx.CompileKernel c :> IComputeShader
-        member x.NewInputBinding(c : IComputeShader) = new ComputeShaderInputBinding(unbox c) :> IComputeShaderInputBinding
-        member x.Run (commands : list<ComputeCommand>, queries : IQuery) = ctx.Run(commands, queries)
-        member x.Compile (commands : list<ComputeCommand>) =
-            let x = x :> IComputeRuntime
-            { new ComputeProgram<unit>() with
-                member __.RunUnit(queries) =
-                    x.Run(commands, queries)
-                member x.Release() =
-                    ()
-            }
+        member x.CreateComputeShader (shader : FShade.ComputeShader) =
+            raise <| NotImplementedException()
+            //ctx.CompileKernel c :> IComputeShader
+
+        member x.NewInputBinding(shader : IComputeShader, input : IUniformProvider) =
+            raise <| NotImplementedException()
+            //new ComputeShaderInputBinding(unbox c) :> IComputeShaderInputBinding
+
+        //member x.Run (commands : list<ComputeCommand>, queries : IQuery) = ctx.Run(commands, queries)
+
+        member x.CompileCompute (commands : alist<ComputeCommand>) =
+            raise <| NotImplementedException()
+            //let x = x :> IComputeRuntime
+            //{ new ComputeProgram<unit>() with
+            //    member __.RunUnit(queries) =
+            //        x.Run(commands, queries)
+            //    member x.Release() =
+            //        ()
+            //}
 
         member x.Clear(fbo : IFramebuffer, values : ClearValues) =
             use __ = ctx.ResourceLock
