@@ -447,7 +447,7 @@ type Runtime(device : Device) as this =
             new EmptyOcclusionQuery() :> IOcclusionQuery
 
     member x.CreatePipelineQuery(statistics : seq<PipelineStatistics>) =
-        let statistics = Set.union (Set.ofSeq statistics) x.SupportedPipelineStatistics
+        let statistics = Set.intersect (Set.ofSeq statistics) x.SupportedPipelineStatistics
         if Set.isEmpty statistics then
             new EmptyPipelineQuery() :> IPipelineQuery
         else
