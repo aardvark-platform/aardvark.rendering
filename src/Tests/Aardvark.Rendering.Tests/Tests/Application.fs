@@ -53,14 +53,14 @@ module TestApplication =
             let onExit =
                 { new IDisposable with
                     member x.Dispose() =
+                        app.Dispose()
+
                         let failed, errors =
                             let br = Environment.NewLine + Environment.NewLine
                             let msgs = app.Instance.DebugSummary.ErrorMessages
 
                             msgs.Length > 0,
                             msgs |> String.concat br |> (+) br
-
-                        app.Dispose()
 
                         if failed then
                             failwithf "Vulkan validation triggered errors: %s" errors
@@ -79,7 +79,14 @@ module TestApplication =
         | Backend.Vulkan -> Vulkan.create debug
 
     let create (backend : Backend) =
-        backend |> create' DebugLevel.Normal
+        let config : IDebugConfig =
+            if backend = Backend.Vulkan then
+                { Vulkan.DebugConfig.Normal with
+                    ValidationLayer = Some Vulkan.ValidationLayerConfig.Full }
+            else
+                DebugLevel.Normal
+
+        backend |> create' config
 
     let createUse f backend =
         use app = create backend

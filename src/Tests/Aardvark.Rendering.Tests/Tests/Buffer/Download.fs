@@ -54,7 +54,7 @@ module BufferDownload =
             testDownload totalCount getRandomValue rangeStart rangeCount download
 
         let invalidArgs (runtime : IRuntime) =
-            let buffer = runtime.CreateBuffer<uint8>(128)
+            use buffer = runtime.CreateBuffer<uint8>(128)
             let data = Array.zeroCreate<uint8> 8
 
             Expect.throwsT<ArgumentException> (fun _ -> runtime.CreateBuffer(-1n) |> ignore) "Expected ArgumentException due to negative size on create"

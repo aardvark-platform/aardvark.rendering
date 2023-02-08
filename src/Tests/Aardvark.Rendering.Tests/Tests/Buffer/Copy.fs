@@ -60,8 +60,8 @@ module BufferCopy =
             testCopy totalCount getRandomValue srcStart dstStart rangeCount copy
 
         let invalidArgs (runtime : IRuntime) =
-            let src = runtime.CreateBuffer(128n)
-            let dst = runtime.CreateBuffer(128n)
+            use src = runtime.CreateBuffer(128n)
+            use dst = runtime.CreateBuffer(128n)
 
             Expect.throwsT<ArgumentException> (fun _ -> runtime.CreateBuffer(-1n) |> ignore) "Expected ArgumentException due to negative size on create"
 
