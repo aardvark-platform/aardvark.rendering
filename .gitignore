@@ -6,6 +6,7 @@ bin/Debug
 *.g.fs
 *.swp
 *.userprefs
+**.vcxproj.user
 **/obj
 /packages
 !/packages/*.config

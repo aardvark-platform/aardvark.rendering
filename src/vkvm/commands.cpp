@@ -414,7 +414,11 @@ static void enqueueCommand (CommandState* state, VkCommandBuffer buffer, Command
 		pipe = *get(IndirectBindPipeline, data)->Pipeline;
 		if (state->CurrentPipeline != pipe) {
 			state->CurrentPipeline = pipe;
-			vkCmdBindPipeline(buffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipe);
+			vkCmdBindPipeline(
+				buffer,
+				get(IndirectBindPipeline, data)->PipelineBindPoint,
+				pipe
+			);
 		}
 		break;
 	case CmdIndirectBindDescriptorSets:

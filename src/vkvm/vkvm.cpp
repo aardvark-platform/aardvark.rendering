@@ -6,15 +6,10 @@
 #include <stdio.h>
 
 
-DllExport(void) vmBindPipeline(VkCommandBuffer commandBuffer, VkPipeline* pipeline)
-{
-	vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, *pipeline);
-}
-
 DllExport(void) vmBindDescriptorSets(VkCommandBuffer commandBuffer, DescriptorSetBinding* binding)
 {
 	if (binding->Count == 0)return;
-	vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, binding->Layout, binding->FirstIndex, binding->Count, binding->Sets, 0, nullptr);
+	vkCmdBindDescriptorSets(commandBuffer, binding->BindPoint, binding->Layout, binding->FirstIndex, binding->Count, binding->Sets, 0, nullptr);
 }
 
 DllExport(void) vmBindIndexBuffer(VkCommandBuffer commandBuffer, IndexBufferBinding* indexBuffer)
