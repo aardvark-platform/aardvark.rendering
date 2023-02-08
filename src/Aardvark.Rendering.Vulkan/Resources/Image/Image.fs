@@ -126,6 +126,9 @@ type Image =
             | TextureDimension.TextureCube -> x.Layers / 6
             | _ -> x.Layers
 
+        member x.TextureFormat =
+            VkFormat.toTextureFormat x.Format
+
         interface ITexture with
             member x.WantMipMaps = x.MipMapLevels > 1
 
@@ -134,7 +137,7 @@ type Image =
             member x.Handle = x.Handle :> obj
             member x.Count = x.Count
             member x.Dimension = x.Dimension
-            member x.Format = VkFormat.toTextureFormat x.Format
+            member x.Format = x.TextureFormat
             member x.MipMapLevels = x.MipMapLevels
             member x.Samples = x.Samples
             member x.Size = x.Size
@@ -143,7 +146,7 @@ type Image =
             member x.Runtime = x.Device.Runtime :> ITextureRuntime
             member x.Size = x.Size.XY
             member x.Samples = x.Samples
-            member x.Format = VkFormat.toTextureFormat x.Format
+            member x.Format = x.TextureFormat
             member x.Handle = x.Handle :> obj
 
         interface IDisposable with

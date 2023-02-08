@@ -1402,20 +1402,24 @@ module Resources =
             ()
 
     [<AbstractClass>]
-    type AbstractImageViewResource(owner : IResourceCache, key : list<obj>, image : IResourceLocation<Image>) =
+    type AbstractImageViewResource(owner : IResourceCache, key : list<obj>, image : IResourceLocation<Image>, levels : aval<Range1i>, slices : aval<Range1i>) =
         inherit AbstractResourceLocation<ImageView>(owner, key)
 
         let mutable handle : Option<ImageView> = None
         let mutable version = 0
 
-        abstract member CreateImageView : Image -> ImageView
+        abstract member CreateImageView : image: Image * levels: Range1i * slices: Range1i * mapping: VkComponentMapping -> ImageView
 
         override x.Create() =
             image.Acquire()
+            levels.Acquire()
+            slices.Acquire()
 
         override x.Destroy() =
             handle |> Option.iter Disposable.dispose
             handle <- None
+            slices.Release()
+            levels.Release()
             image.Release()
 
         override x.GetHandle(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
@@ -1423,9 +1427,12 @@ module Resources =
                 let image = image.Update(user, token, renderToken)
                 if image.handle.IsNull then raise <| NullReferenceException("[Vulkan] Image handle of view is null")
 
+                let levels = levels.GetValue(user, token, renderToken)
+                let slices = slices.GetValue(user, token, renderToken)
+
                 let isIdentical =
                     match handle with
-                    | Some h -> h.Image = image.handle
+                    | Some h -> h.Image = image.handle && h.MipLevelRange = levels && h.ArrayRange = slices
                     | None -> false
 
                 if isIdentical then
@@ -1435,7 +1442,13 @@ module Resources =
                     | Some h -> h.Dispose()
                     | None -> ()
 
-                    let h = x.CreateImageView image.handle
+                    let mapping =
+                        if VkFormat.toColFormat image.handle.Format = Col.Format.Gray then
+                            VkComponentMapping(VkComponentSwizzle.R, VkComponentSwizzle.R, VkComponentSwizzle.R, VkComponentSwizzle.A)
+                        else
+                            VkComponentMapping.Identity
+
+                    let h = x.CreateImageView(image.handle, levels, slices, mapping)
                     handle <- Some h
                     inc &version
 
@@ -1446,24 +1459,30 @@ module Resources =
                 | None -> failwith "[Resource] inconsistent state"
 
     type ImageViewResource(owner : IResourceCache, key : list<obj>, device : Device,
-                           samplerType : FShade.GLSL.GLSLSamplerType, image : IResourceLocation<Image>) =
-        inherit AbstractImageViewResource(owner, key, image)
+                           samplerType : FShade.GLSL.GLSLSamplerType, image : IResourceLocation<Image>, levels : aval<Range1i>, slices : aval<Range1i>) =
+        inherit AbstractImageViewResource(owner, key, image, levels, slices)
 
-        override x.CreateImageView(image : Image) =
-            let mapping =
-                if VkFormat.toColFormat image.Format = Col.Format.Gray then
-                    VkComponentMapping(VkComponentSwizzle.R, VkComponentSwizzle.R, VkComponentSwizzle.R, VkComponentSwizzle.A)
-                else
-                    VkComponentMapping.Identity
+        new (owner : IResourceCache, key : list<obj>, device : Device,
+             samplerType : FShade.GLSL.GLSLSamplerType, image : IResourceLocation<Image>) =
+            let levels = image |> AVal.map (fun i -> Range1i(0, i.MipMapLevels - 1))
+            let slices = image |> AVal.map (fun i -> Range1i(0, i.Layers - 1))
+            ImageViewResource(owner, key, device, samplerType, image, levels, slices)
 
-            device.CreateInputImageView(image, samplerType, mapping)
+        override x.CreateImageView(image : Image, levels : Range1i, slices : Range1i, mapping : VkComponentMapping) =
+            device.CreateInputImageView(image, samplerType, levels, slices, mapping)
 
     type StorageImageViewResource(owner : IResourceCache, key : list<obj>, device : Device,
-                                  imageType : FShade.GLSL.GLSLImageType, image : IResourceLocation<Image>) =
-        inherit AbstractImageViewResource(owner, key, image)
+                                  imageType : FShade.GLSL.GLSLImageType, image : IResourceLocation<Image>, levels : aval<Range1i>, slices : aval<Range1i>) =
+        inherit AbstractImageViewResource(owner, key, image, levels, slices)
 
-        override x.CreateImageView(image : Image) =
-            device.CreateStorageView(image, imageType, VkComponentMapping.Identity)
+        new (owner : IResourceCache, key : list<obj>, device : Device,
+             imageType : FShade.GLSL.GLSLImageType, image : IResourceLocation<Image>) =
+            let levels = image |> AVal.map (fun i -> Range1i(0, i.MipMapLevels - 1))
+            let slices = image |> AVal.map (fun i -> Range1i(0, i.Layers - 1))
+            StorageImageViewResource(owner, key, device, imageType, image, levels, slices)
+
+        override x.CreateImageView(image : Image, levels : Range1i, slices : Range1i, mapping : VkComponentMapping) =
+            device.CreateStorageView(image, imageType, levels, slices, mapping)
 
     type IsActiveResource(owner : IResourceCache, key : list<obj>, input : aval<bool>) =
         inherit AbstractPointerResourceWithEquality<int>(owner, key)
@@ -1709,8 +1728,18 @@ type ResourceManager(device : Device) =
     member x.CreateImage(properties : ImageProperties, input : aval<ITexture>) =
         imageCache.GetOrCreate([properties :> obj; input :> obj], fun cache key -> new ImageResource(cache, key, device, properties, input))
 
+    member x.CreateImage(properties : ImageProperties, input : aval<ITextureLevel>) =
+        let input = input |> AdaptiveResource.mapNonAdaptive (fun l -> l.Texture :> ITexture)
+        imageCache.GetOrCreate([properties :> obj; input :> obj], fun cache key -> new ImageResource(cache, key, device, properties, input))
+
     member x.CreateImageView(samplerType : FShade.GLSL.GLSLSamplerType, input : IResourceLocation<Image>) =
         imageViewCache.GetOrCreate([samplerType :> obj; input :> obj], fun cache key -> new ImageViewResource(cache, key, device, samplerType, input))
+
+    member x.CreateImageView(imageType : FShade.GLSL.GLSLImageType, input : IResourceLocation<Image>, levels : aval<Range1i>, slices : aval<Range1i>) =
+        imageViewCache.GetOrCreate(
+            [imageType :> obj; input :> obj; levels :> obj; slices :> obj],
+            fun cache key -> new StorageImageViewResource(cache, key, device, imageType, input, levels, slices)
+        )
 
     member x.CreateImageView(imageType : FShade.GLSL.GLSLImageType, input : IResourceLocation<Image>) =
         imageViewCache.GetOrCreate([imageType :> obj; input :> obj], fun cache key -> new StorageImageViewResource(cache, key, device, imageType, input))

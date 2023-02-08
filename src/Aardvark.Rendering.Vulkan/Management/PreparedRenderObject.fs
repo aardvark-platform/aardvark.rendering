@@ -175,19 +175,27 @@ type DevicePreparedRenderObjectExtensions private() =
 
                             AdaptiveDescriptor.CombinedImageSampler(b.Binding, b.DescriptorCount, sampler) :> IAdaptiveDescriptor |> Some
 
-                    | ImageParameter img ->
-                        let viewSam = 
-                            let textureName = Symbol.Create img.imageName
-                            match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                            | Some (:? aval<ITexture> as tex) ->
-
-                                let tex = this.CreateImage(img.imageType.Properties, tex)
-                                let view = this.CreateImageView(img.imageType, tex)
-
+                    | ImageParameter image ->
+                        let viewSam =
+                            let imageName = Symbol.Create image.imageName
+                            match uniforms.TryGetUniform(Ag.Scope.Root, imageName) with
+                            | Some (:? aval<ITexture> as texture) ->
+                                let img = this.CreateImage(image.imageType.Properties, texture)
+                                let view = this.CreateImageView(image.imageType, img)
                                 view
 
-                            | _ ->
-                                failf "could not find texture: %A" textureName
+                            | Some (:? aval<ITextureLevel> as level) ->
+                                let levels = level |> AVal.mapNonAdaptive (fun l -> l.Levels)
+                                let slices = level |> AVal.mapNonAdaptive (fun l -> l.Slices)
+                                let img = this.CreateImage(image.imageType.Properties, level)
+                                let view = this.CreateImageView(image.imageType, img, levels, slices)
+                                view
+
+                            | Some i ->
+                                failf "invalid type for image %A (%A)" imageName (i.GetType())
+
+                            | None ->
+                                failf "could not find image: %A" imageName
 
                         AdaptiveDescriptor.StorageImage(b.Binding, viewSam) :> IAdaptiveDescriptor |> Some
 

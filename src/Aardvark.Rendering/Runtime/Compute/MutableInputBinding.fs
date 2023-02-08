@@ -70,6 +70,8 @@ type MutableComputeInputBinding internal(shader : IComputeShader) =
             | _ -> None
         )
 
+    member x.Shader = shader
+
     member x.Item
         with set (name : string) (value : obj) =
             lock x (fun _ ->
@@ -103,7 +105,7 @@ type MutableComputeInputBinding internal(shader : IComputeShader) =
         )
 
     interface IComputeInputBinding with
-        member x.Shader = shader
+        member x.Shader = x.Shader
 
     interface IUniformProvider with
         member x.TryGetUniform(_scope, name) = x.TryGetValue(string name)

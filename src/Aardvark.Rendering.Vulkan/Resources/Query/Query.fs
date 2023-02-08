@@ -2,6 +2,7 @@
 
 open System
 open System.Collections.Generic
+open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Rendering
 
@@ -172,14 +173,15 @@ type Query(device : Device, typ : QueryType, queryCount : int) =
 [<AutoOpen>]
 module ``IQuery Extensions`` =
 
-    let rec private unwrap (query : IQuery) =
+    let rec private unwrap (onlyTimeQueries : bool) (query : IQuery) =
         match query with
-        | :? IVulkanQuery as q -> [q]
-        | :? Queries as q -> List.concat <| q.Map unwrap
+        | :? IVulkanQuery as q when (not onlyTimeQueries || q :? ITimeQuery) -> [q]
+        | :? Queries as q -> List.concat <| q.Map (unwrap onlyTimeQueries)
         | _ -> []
 
     type IQuery with
-        member x.ToVulkanQuery() = unwrap x
+        member x.ToVulkanQuery([<Optional; DefaultParameterValue(false)>] onlyTimeQueries : bool) =
+            x |> unwrap onlyTimeQueries
 
 [<AutoOpen>]
 module ``Query Command Extensions`` =

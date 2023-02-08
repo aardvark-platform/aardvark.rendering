@@ -12,7 +12,6 @@ open System.Runtime.CompilerServices
 type IComputePrimitive =
     inherit IDisposable
     abstract member Task : IComputeTask
-    abstract member Runtime : IComputeRuntime
     abstract member RunUnit : renderToken: RenderToken -> unit
 
 type IComputePrimitive<'T> =
@@ -21,6 +20,9 @@ type IComputePrimitive<'T> =
 
 [<AutoOpen>]
 module ComputeCommandPrimitiveFSharpExtensions =
+
+    type IComputePrimitive with
+        member x.Runtime = x.Task.Runtime
 
     type ComputeCommand with
         static member Execute(primitive : IComputePrimitive) =
@@ -47,7 +49,6 @@ module private ComputePrimitiveImplementation =
 
         interface IComputePrimitive<'T> with
             member x.Task = task
-            member x.Runtime = task.Runtime
             member x.Run(renderToken) = x.Run(renderToken)
             member x.RunUnit(renderToken) = x.Run(renderToken) |> ignore
             member x.Dispose() = x.Dispose()

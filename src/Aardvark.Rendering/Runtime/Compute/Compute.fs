@@ -147,6 +147,11 @@ and [<RequireQualifiedAccess>]
                        [<Optional; DefaultParameterValue(ResourceAccess.All)>] dstAccess : ResourceAccess) =
         ComputeCommand.SyncBufferCmd(buffer, srcAccess, dstAccess)
 
+    static member Sync(buffer : IBuffer<'T>,
+                       [<Optional; DefaultParameterValue(ResourceAccess.All)>] srcAccess : ResourceAccess,
+                       [<Optional; DefaultParameterValue(ResourceAccess.All)>] dstAccess : ResourceAccess) =
+        ComputeCommand.SyncBufferCmd(buffer.Buffer, srcAccess, dstAccess)
+
     // ================================================================================================================
     // Images
     // ================================================================================================================

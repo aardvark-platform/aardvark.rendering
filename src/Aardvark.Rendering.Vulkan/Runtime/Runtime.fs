@@ -528,13 +528,14 @@ type Runtime(device : Device) as this =
         member x.MaxLocalSize = device.PhysicalDevice.Limits.Compute.MaxWorkGroupSize
 
         member x.CreateComputeShader(shader : FShade.ComputeShader) =
-            raise <| NotImplementedException()
+            ComputeProgram.ofFShade shader device :> IComputeShader
 
         member x.NewInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
-            raise <| NotImplementedException()
+            let program = unbox<ComputeProgram> shader
+            manager.CreateComputeInputBinding(program, inputs)
 
         member x.CompileCompute (commands : alist<ComputeCommand>) =
-            raise <| NotImplementedException()
+            new ComputeTask(manager, commands) :> IComputeTask
 
         member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource,
                                                 source : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) =
