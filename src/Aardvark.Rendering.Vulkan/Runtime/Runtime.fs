@@ -535,7 +535,7 @@ type Runtime(device : Device) as this =
             manager.CreateComputeInputBinding(program, inputs)
 
         member x.CompileCompute (commands : alist<ComputeCommand>) =
-            new ComputeTask(manager, commands) :> IComputeTask
+            new ComputeTaskInternals.ComputeTask(manager, commands) :> IComputeTask
 
         member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource,
                                                 source : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) =

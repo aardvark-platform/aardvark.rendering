@@ -869,6 +869,9 @@ module VKVM =
                 NativeInt.write ptr data
             )
 
+        member x.Count = count
+        member x.IsEmpty = count = 0u
+
         member x.Prev
             with get() = prev
             and private set p = prev <- p
