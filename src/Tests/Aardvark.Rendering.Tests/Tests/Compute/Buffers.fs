@@ -6,6 +6,8 @@ open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.Application
 open Expecto
+open FSharp.Quotations
+open FSharp.Data.Adaptive
 
 module ComputeBuffers =
 
@@ -21,6 +23,14 @@ module ComputeBuffers =
                     let tmp = data.[i]
                     data.[i] <- data.[j]
                     data.[j] <- tmp
+            }
+
+        let map<'T> (f : Expr<'T -> 'T>) (dataLength : int) (data : 'T[]) =
+            compute {
+                let i = getGlobalId().X
+
+                if i < dataLength then
+                    data.[i] <- (%f) data.[i]
             }
 
     module Cases =
@@ -153,6 +163,59 @@ module ComputeBuffers =
             Expect.throwsT<ArgumentException> (fun _ -> set (buffer.Range(1n, 128n))) "Unexpected behavior for misaligned offset"
             Expect.throwsT<ArgumentException> (fun _ -> set (buffer.Range(0n, 127n))) "Unexpected behavior for misaligned size"
 
+        let adaptiveReverseAndIncrement (runtime : IRuntime) =
+            let src = Array.init 5 (ignore >> Rnd.int32)
+            let dst = Array.zeroCreate<int> src.Length
+            use srcBuffer = runtime.CreateBuffer<int>(src.Length)
+            let commands = clist<ComputeCommand>()
+
+            use task = runtime.CompileCompute commands
+            task.Update()
+
+            use shaderRev = runtime.CreateComputeShader Shader.reverse<int>
+            use shaderIncr = runtime.CreateComputeShader (Shader.map <@ (+) 1 @>)
+
+            transact (fun _ ->
+                let input =
+                    shaderRev.inputBinding {
+                        buffer "data" srcBuffer
+                        value "dataLength" srcBuffer.Count
+                    }
+
+                commands.Value <-
+                    IndexList.ofList [
+                        ComputeCommand.Upload(src, srcBuffer)
+                        ComputeCommand.Bind input.Shader
+                        ComputeCommand.SetInput input
+                        ComputeCommand.Dispatch (src.Length / 2)
+                    ]
+            )
+
+            task.Run()
+
+            let reversed = srcBuffer.Download()
+            Expect.equal reversed (Array.rev src) "Unexpected reversed result"
+
+            transact (fun _ ->
+                let input =
+                    shaderIncr.inputBinding {
+                        buffer "data" srcBuffer
+                        value "dataLength" srcBuffer.Count
+                    }
+
+                commands.Value <-
+                    IndexList.ofList [
+                        ComputeCommand.Bind input.Shader
+                        ComputeCommand.SetInput input
+                        ComputeCommand.Dispatch src.Length
+                        ComputeCommand.Download(srcBuffer, dst)
+                    ]
+            )
+
+            task.Run()
+
+            Expect.equal dst (reversed |> Array.map ((+) 1)) "Unexpected final result"
+
 
     let tests (backend : Backend) =
         [
@@ -161,5 +224,6 @@ module ComputeBuffers =
             "Nested download",                  Cases.nestedDownload
             "Copy",                             Cases.copy
             "Fill",                             Cases.fill
+            "Adaptive reverse & increment",     Cases.adaptiveReverseAndIncrement
         ]
         |> prepareCases backend "Buffers"

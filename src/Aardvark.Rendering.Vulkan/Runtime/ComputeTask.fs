@@ -395,9 +395,9 @@ module internal ComputeTaskInternals =
 
                 | _ -> command
 
-            let remove (index : Index) =
+            let remove (removedInputs : System.Collections.Generic.List<_>) (index : Index) =
                 match inputs.TryRemove(index) with
-                | (true, input) -> resources.Remove input.Binding
+                | (true, input) -> removedInputs.Add input
                 | _ ->
                     match nested.TryRemove(index) with
                     | (true, other) -> other.Outputs.Remove owner |> ignore
@@ -408,23 +408,26 @@ module internal ComputeTaskInternals =
 
             member x.Update(token : AdaptiveToken) =
                 let deltas = reader.GetChanges(token)
+                let removedInputs = System.Collections.Generic.List<ComputeInputBinding>()
 
+                // Process deltas
                 for (index, op) in deltas do
+                    remove removedInputs index
+
                     match op with
                     | Set cmd ->
                         let cmd = cmd |> add index
                         commands <- commands |> IndexList.set index cmd
 
-                    | _ -> ()
-
-                for (index, op) in deltas do
-                    match op with
                     | Remove ->
-                        remove index
                         commands <- commands |> IndexList.remove index
 
-                    | _ -> ()
+                // Delay removing inputs from the resource set
+                // This way nothing will be released if the input just moved in the command list
+                for input in removedInputs do
+                    resources.Remove input.Binding
 
+                // Compile updated command list
                 if deltas.Count > 0 then
                     compiled.Commands |> List.iter (fun c -> c.Dispose())
                     compiled <- ComputeCommand.compile commands
