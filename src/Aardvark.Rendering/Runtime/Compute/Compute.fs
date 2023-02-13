@@ -170,8 +170,25 @@ and [<RequireQualifiedAccess>]
     // Images
     // ================================================================================================================
 
-    static member inline Copy(src : ITextureLevel, srcOffset : V3i, dst : ITextureLevel, dstOffset : V3i, size : V3i) =
+    static member inline Copy(src : IFramebufferOutput, srcOffset : V3i, dst : IFramebufferOutput, dstOffset : V3i, size : V3i) =
         ComputeCommand.CopyImageCmd(src, srcOffset, dst, dstOffset, size)
+
+    static member inline Copy(src : IFramebufferOutput, dst : IFramebufferOutput, size : V3i) =
+        ComputeCommand.CopyImageCmd(src, V3i.Zero, dst, V3i.Zero, size)
+
+    static member inline Copy(src : IFramebufferOutput, srcOffset : V2i, dst : IFramebufferOutput, dstOffset : V2i, size : V2i) =
+        ComputeCommand.CopyImageCmd(src, srcOffset.XYO, dst, dstOffset.XYO, size.XYI)
+
+    static member inline Copy(src : IFramebufferOutput, dst : IFramebufferOutput, size : V2i) =
+        ComputeCommand.CopyImageCmd(src, V3i.Zero, dst, V3i.Zero, size.XYI)
+
+    static member Copy(src : IFramebufferOutput, dst : IFramebufferOutput) =
+        let size =
+            match src with
+            | :? ITextureLevel as level -> level.Size
+            | _ -> src.Size.XYI
+
+        ComputeCommand.CopyImageCmd(src, V3i.Zero, dst, V3i.Zero, size)
 
     static member inline TransformLayout(texture : IBackendTexture, srcLayout : TextureLayout, dstLayout : TextureLayout) =
         ComputeCommand.TransformSubLayoutCmd(texture.[texture.Format.Aspect, *, *], srcLayout, dstLayout)

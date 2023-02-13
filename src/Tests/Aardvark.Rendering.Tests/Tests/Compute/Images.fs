@@ -44,15 +44,15 @@ module ComputeImages =
     module Cases =
         open FShade
 
-        let private genericFlipY<'T when 'T : equality>
-                (createShader : IComputeRuntime -> IComputeShader)
+        let private genericFlipY
+                (shader : 'a -> 'b)
                 (getPixImage : V2i -> PixImage<'T>)
                 (format : TextureFormat) (runtime : IRuntime) =
 
             let size = V2i(256)
             let pix = getPixImage size
 
-            use shader = createShader runtime
+            use shader = runtime.CreateComputeShader shader
 
             use src = runtime.CreateTexture2D(size, format)
             use dst = runtime.CreateTexture2D(size, format)
@@ -74,41 +74,59 @@ module ComputeImages =
             let result = dst.Download().Transformed(ImageTrafo.MirrorY).AsPixImage<'T>()
             PixImage.compare V2i.Zero pix result
 
-        let flipYrgba8 (runtime : IRuntime) =
-            let createShader (runtime : IComputeRuntime) = runtime.CreateComputeShader Shader.flipY<Formats.rgba8>
-            runtime |> genericFlipY createShader PixImage.random8ui TextureFormat.Rgba8
+        let flipYrgba8 = genericFlipY Shader.flipY<Formats.rgba8> PixImage.random8ui TextureFormat.Rgba8
+        let flipYrgba16 = genericFlipY Shader.flipY<Formats.rgba16> PixImage.random16ui TextureFormat.Rgba16
+        let flipYrgba32f = genericFlipY Shader.flipY<Formats.rgba32f> PixImage.random32f TextureFormat.Rgba32f
 
-        let flipYrgba16 (runtime : IRuntime) =
-            let createShader (runtime : IComputeRuntime) = runtime.CreateComputeShader Shader.flipY<Formats.rgba16>
-            runtime |> genericFlipY createShader PixImage.random16ui TextureFormat.Rgba16
+        let flipYrgba8i = genericFlipY Shader.intFlipY<Formats.rgba8i> PixImage.random8i TextureFormat.Rgba8i
+        let flipYrgba16i = genericFlipY Shader.intFlipY<Formats.rgba16i> PixImage.random16i TextureFormat.Rgba16i
+        let flipYrgba32i = genericFlipY Shader.intFlipY<Formats.rgba32i> PixImage.random32i TextureFormat.Rgba32i
 
-        let flipYrgba32f (runtime : IRuntime) =
-            let createShader (runtime : IComputeRuntime) = runtime.CreateComputeShader Shader.flipY<Formats.rgba32f>
-            runtime |> genericFlipY createShader PixImage.random32f TextureFormat.Rgba32f
+        let flipYrgba8ui = genericFlipY Shader.uintFlipY<Formats.rgba8ui> PixImage.random8ui TextureFormat.Rgba8ui
+        let flipYrgba16ui = genericFlipY Shader.uintFlipY<Formats.rgba16ui> PixImage.random16ui TextureFormat.Rgba16ui
+        let flipYrgba32ui = genericFlipY Shader.uintFlipY<Formats.rgba32ui> PixImage.random32ui TextureFormat.Rgba32ui
 
-        let flipYrgba8i (runtime : IRuntime) =
-            let createShader (r : IComputeRuntime) = r.CreateComputeShader Shader.intFlipY<Formats.rgba8i>
-            runtime |> genericFlipY createShader PixImage.random8i TextureFormat.Rgba8i
+        let genericCopy (getPixImage : V2i -> PixImage<'T>)
+                        (format : TextureFormat) (runtime : IRuntime) =
+            let size = V2i(177, 133)
+            let pi = getPixImage size
 
-        let flipYrgba16i (runtime : IRuntime) =
-            let createShader (r : IComputeRuntime) = r.CreateComputeShader Shader.intFlipY<Formats.rgba16i>
-            runtime |> genericFlipY createShader PixImage.random16i TextureFormat.Rgba16i
+            use t1 = runtime.CreateTexture2D(size, format)
+            use t2 = runtime.CreateTexture2D(size, format)
+            use t3 = runtime.CreateTexture2D(size, format)
 
-        let flipYrgba32i (runtime : IRuntime) =
-            let createShader (r : IComputeRuntime) = r.CreateComputeShader Shader.intFlipY<Formats.rgba32i>
-            runtime |> genericFlipY createShader PixImage.random32i TextureFormat.Rgba32i
+            let srcOffset = V2i(23, 13)
+            let dstSize = V2i(101, 93)
+            let dstOffset = V2i(2, 4)
 
-        let flipYrgba8ui  (runtime : IRuntime) =
-            let createShader (runtime : IComputeRuntime) = runtime.CreateComputeShader Shader.uintFlipY<Formats.rgba8ui>
-            runtime |> genericFlipY createShader PixImage.random8ui TextureFormat.Rgba8ui
+            t1.Upload pi
 
-        let flipYrgba16ui  (runtime : IRuntime) =
-            let createShader (runtime : IComputeRuntime) = runtime.CreateComputeShader Shader.uintFlipY<Formats.rgba16ui>
-            runtime |> genericFlipY createShader PixImage.random16ui TextureFormat.Rgba16ui
+            use copy1to2 =
+                runtime.CompileCompute([
+                    ComputeCommand.TransformLayout(t1, TextureLayout.TransferRead)
+                    ComputeCommand.TransformLayout(t2, TextureLayout.TransferWrite)
+                    ComputeCommand.Copy(t1.[TextureAspect.Color, 0], t2.[TextureAspect.Color, 0])
+                ])
 
-        let flipYrgba32ui  (runtime : IRuntime) =
-            let createShader (runtime : IComputeRuntime) = runtime.CreateComputeShader Shader.uintFlipY<Formats.rgba32ui>
-            runtime |> genericFlipY createShader PixImage.random32ui TextureFormat.Rgba32ui
+            use copy2to3 =
+                runtime.CompileCompute([
+                    ComputeCommand.TransformLayout(t2, TextureLayout.TransferRead)
+                    ComputeCommand.TransformLayout(t3, TextureLayout.TransferWrite)
+                    ComputeCommand.Copy(t2.[TextureAspect.Color, 0], srcOffset, t3.[TextureAspect.Color, 0], dstOffset, dstSize)
+                ])
+
+            runtime.Run([
+                ComputeCommand.Execute copy1to2
+                ComputeCommand.Execute copy2to3
+            ])
+
+            let reference = pi.SubImage(srcOffset, dstSize)
+            let result = t3.Download().AsPixImage<'T>().SubImage(dstOffset, dstSize)
+            PixImage.compare V2i.Zero reference result
+
+        let copy2Drgba8   = genericCopy PixImage.random8ui TextureFormat.Rgba8
+        let copy2Drgba16  = genericCopy PixImage.random16ui TextureFormat.Rgba16
+        let copy2Drgba32f = genericCopy PixImage.random32f TextureFormat.Rgba32f
 
 
     let tests (backend : Backend) =
@@ -124,5 +142,9 @@ module ComputeImages =
             "2D flip rgba8ui",  Cases.flipYrgba8ui
             "2D flip rgba16ui", Cases.flipYrgba16ui
             "2D flip rgba32ui", Cases.flipYrgba32ui
+
+            "2D copy rgba8",    Cases.copy2Drgba8
+            "2D copy rgba16",   Cases.copy2Drgba16
+            "2D copy rgba32f",  Cases.copy2Drgba32f
         ]
         |> prepareCases backend "Images"
