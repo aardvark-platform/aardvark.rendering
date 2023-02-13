@@ -46,7 +46,7 @@ and [<RequireQualifiedAccess>]
     | CopyBufferCmd           of src: IBufferRange * dst: IBufferRange
     | DownloadBufferCmd       of src: IBufferRange * dst: HostMemory
     | UploadBufferCmd         of src: HostMemory * dst: IBufferRange
-    | SetBufferCmd            of buffer: IBufferRange * pattern: byte[]
+    | SetBufferCmd            of buffer: IBufferRange * value: uint32
     | SyncBufferCmd           of buffer: IBackendBuffer * srcAccess: ResourceAccess * dstAccess: ResourceAccess
     | CopyImageCmd            of src: IFramebufferOutput * srcOffset: V3i * dst: IFramebufferOutput * dstOffset: V3i * size: V3i
     | TransformLayoutCmd      of image: IBackendTexture * layout: TextureLayout
@@ -79,96 +79,110 @@ and [<RequireQualifiedAccess>]
     // Buffers
     // ================================================================================================================
 
-    static member Set<'T when 'T : unmanaged>(dst : IBufferRange<'T>, value : 'T) =
-        let arr : byte[] = Array.zeroCreate sizeof<'T>
-        let mutable value = value
-        Marshal.Copy(NativePtr.toNativeInt &&value, arr, 0, arr.Length)
-        ComputeCommand.SetBufferCmd(dst, arr)
+    static member Set(buffer : IBufferRange, value : uint32) =
+        if buffer.Offset % 4n <> 0n then raise <| ArgumentException($"Start of buffer range must be a multiple of 4 (is {buffer.Offset}).")
+        if buffer.SizeInBytes % 4n <> 0n then raise <| ArgumentException($"Size of buffer range must be a multiple of 4 (is {buffer.SizeInBytes}).")
+        ComputeCommand.SetBufferCmd(buffer, value)
 
-    static member Zero(buffer : IBufferRange) =
-        ComputeCommand.SetBufferCmd(buffer, [| 0uy; 0uy; 0uy; 0uy |])
+    static member inline Set(buffer : IBufferRange<int32>, value : int32) =
+        ComputeCommand.Set(buffer, uint32 value)
 
-    static member Copy(src : IBufferRange, dst : IBufferRange) =
+    static member inline Set(buffer : IBufferRange<float32>, value : float32) =
+        ComputeCommand.Set(buffer, Fun.FloatToUnsignedBits value)
+
+    static member inline Set(buffer : IBufferRange, pattern : byte[],
+                      [<Optional; DefaultParameterValue(0)>] start : int) =
+        ComputeCommand.Set(buffer, BitConverter.ToUInt32(pattern, start))
+
+    static member inline Zero(buffer : IBufferRange) =
+        ComputeCommand.Set(buffer, 0u)
+
+
+    static member inline Copy(src : IBufferRange, dst : IBufferRange) =
         ComputeCommand.CopyBufferCmd(src, dst)
 
 
-    static member Download(src : IBufferRange, dst : nativeint) =
+    static member inline Download(src : IBufferRange, dst : nativeint) =
         ComputeCommand.DownloadBufferCmd(src, HostMemory.Unmanaged dst)
 
     static member Download<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : 'T[], dstIndex : int) =
+        if dstIndex < 0 then raise <| ArgumentException("Array index must not be negative.")
+        if dstIndex >= dst.Length then raise <| ArgumentException($"Array index {dstIndex} out of bounds (length = {dst.Length}).")
         ComputeCommand.DownloadBufferCmd(src, HostMemory.Managed (dst, dstIndex))
 
     [<Obsolete("Use ComputeCommand.Download() instead.")>]
-    static member Copy<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : 'T[], dstIndex : int) =
+    static member inline Copy<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : 'T[], dstIndex : int) =
         ComputeCommand.Download(src, dst, dstIndex)
 
-    static member Download<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : 'T[]) =
+    static member inline Download<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : 'T[]) =
         ComputeCommand.DownloadBufferCmd(src, HostMemory.Managed (dst, 0))
 
     [<Obsolete("Use ComputeCommand.Download() instead.")>]
-    static member Copy<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : 'T[]) =
+    static member inline Copy<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : 'T[]) =
         ComputeCommand.Download(src, dst)
 
-    static member Download<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : nativeptr<'T>) =
+    static member inline Download<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : nativeptr<'T>) =
         ComputeCommand.DownloadBufferCmd(src, HostMemory.Unmanaged (NativePtr.toNativeInt dst))
 
     [<Obsolete("Use ComputeCommand.Download() instead.")>]
-    static member Copy<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : nativeptr<'T>) =
+    static member inline Copy<'T when 'T : unmanaged>(src : IBufferRange<'T>, dst : nativeptr<'T>) =
         ComputeCommand.Download(src, dst)
 
 
-    static member Upload(src : nativeint, dst : IBufferRange) =
+    static member inline Upload(src : nativeint, dst : IBufferRange) =
         ComputeCommand.UploadBufferCmd(HostMemory.Unmanaged src, dst)
 
     static member Upload<'T when 'T : unmanaged>(src : 'T[], srcIndex : int, dst : IBufferRange<'T>) =
+        if srcIndex < 0 then raise <| ArgumentException("Array index must not be negative.")
+        if srcIndex >= src.Length then raise <| ArgumentException($"Array index {srcIndex} out of bounds (length = {src.Length}).")
         ComputeCommand.UploadBufferCmd(HostMemory.Managed (src :> Array, srcIndex), dst)
 
     [<Obsolete("Use ComputeCommand.Upload() instead.")>]
-    static member Copy<'T when 'T : unmanaged>(src : 'T[], srcIndex : int, dst : IBufferRange<'T>) =
+    static member inline Copy<'T when 'T : unmanaged>(src : 'T[], srcIndex : int, dst : IBufferRange<'T>) =
         ComputeCommand.Upload(src, srcIndex, dst)
 
-    static member Upload<'T when 'T : unmanaged>(src : 'T[], dst : IBufferRange<'T>) =
+    static member inline Upload<'T when 'T : unmanaged>(src : 'T[], dst : IBufferRange<'T>) =
         ComputeCommand.UploadBufferCmd(HostMemory.Managed (src :> Array, 0), dst)
 
     [<Obsolete("Use ComputeCommand.Upload() instead.")>]
-    static member Copy<'T when 'T : unmanaged>(src : 'T[], dst : IBufferRange<'T>) =
+    static member inline Copy<'T when 'T : unmanaged>(src : 'T[], dst : IBufferRange<'T>) =
         ComputeCommand.Upload(src, dst)
 
-    static member Upload<'T when 'T : unmanaged>(src : nativeptr<'T>, dst : IBufferRange<'T>) =
+    static member inline Upload<'T when 'T : unmanaged>(src : nativeptr<'T>, dst : IBufferRange<'T>) =
         ComputeCommand.UploadBufferCmd(HostMemory.Unmanaged (NativePtr.toNativeInt src), dst)
 
     [<Obsolete("Use ComputeCommand.Upload() instead.")>]
-    static member Copy<'T when 'T : unmanaged>(src : nativeptr<'T>, dst : IBufferRange<'T>) =
+    static member inline Copy<'T when 'T : unmanaged>(src : nativeptr<'T>, dst : IBufferRange<'T>) =
         ComputeCommand.Upload(src, dst)
 
 
-    static member Sync(buffer : IBackendBuffer,
-                       [<Optional; DefaultParameterValue(ResourceAccess.All)>] srcAccess : ResourceAccess,
-                       [<Optional; DefaultParameterValue(ResourceAccess.All)>] dstAccess : ResourceAccess) =
+    static member inline Sync(buffer : IBackendBuffer,
+                              [<Optional; DefaultParameterValue(ResourceAccess.All)>] srcAccess : ResourceAccess,
+                              [<Optional; DefaultParameterValue(ResourceAccess.All)>] dstAccess : ResourceAccess) =
         ComputeCommand.SyncBufferCmd(buffer, srcAccess, dstAccess)
 
-    static member Sync(buffer : IBuffer<'T>,
-                       [<Optional; DefaultParameterValue(ResourceAccess.All)>] srcAccess : ResourceAccess,
-                       [<Optional; DefaultParameterValue(ResourceAccess.All)>] dstAccess : ResourceAccess) =
+    static member inline Sync(buffer : IBuffer<'T>,
+                              [<Optional; DefaultParameterValue(ResourceAccess.All)>] srcAccess : ResourceAccess,
+                              [<Optional; DefaultParameterValue(ResourceAccess.All)>] dstAccess : ResourceAccess) =
         ComputeCommand.SyncBufferCmd(buffer.Buffer, srcAccess, dstAccess)
 
     // ================================================================================================================
     // Images
     // ================================================================================================================
 
-    static member Copy(src : ITextureLevel, srcOffset : V3i, dst : ITextureLevel, dstOffset : V3i, size : V3i) =
+    static member inline Copy(src : ITextureLevel, srcOffset : V3i, dst : ITextureLevel, dstOffset : V3i, size : V3i) =
         ComputeCommand.CopyImageCmd(src, srcOffset, dst, dstOffset, size)
 
-    static member TransformLayout(texture : IBackendTexture, srcLayout : TextureLayout, dstLayout : TextureLayout) =
+    static member inline TransformLayout(texture : IBackendTexture, srcLayout : TextureLayout, dstLayout : TextureLayout) =
         ComputeCommand.TransformSubLayoutCmd(texture.[texture.Format.Aspect, *, *], srcLayout, dstLayout)
 
-    static member TransformLayout(texture : ITextureRange, srcLayout : TextureLayout, dstLayout : TextureLayout) =
+    static member inline TransformLayout(texture : ITextureRange, srcLayout : TextureLayout, dstLayout : TextureLayout) =
         ComputeCommand.TransformSubLayoutCmd(texture, srcLayout, dstLayout)
 
-    static member TransformLayout(texture : IBackendTexture, layout : TextureLayout) =
+    static member inline TransformLayout(texture : IBackendTexture, layout : TextureLayout) =
         ComputeCommand.TransformLayoutCmd(texture, layout)
 
-    static member Sync(image : IBackendTexture,
-                       [<Optional; DefaultParameterValue(ResourceAccess.All)>] srcAccess : ResourceAccess,
-                       [<Optional; DefaultParameterValue(ResourceAccess.All)>] dstAccess : ResourceAccess) =
+    static member inline Sync(image : IBackendTexture,
+                              [<Optional; DefaultParameterValue(ResourceAccess.All)>] srcAccess : ResourceAccess,
+                              [<Optional; DefaultParameterValue(ResourceAccess.All)>] dstAccess : ResourceAccess) =
         ComputeCommand.SyncImageCmd(image, srcAccess, dstAccess)

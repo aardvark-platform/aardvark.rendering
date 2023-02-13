@@ -2,7 +2,6 @@
 
 open System
 open Aardvark.Base
-open Aardvark.GPGPU
 open Aardvark.Rendering
 open Aardvark.Rendering.Tests
 open Aardvark.Application
@@ -27,58 +26,30 @@ module ComputeBuffers =
     module Cases =
         open FShade
 
-        [<AbstractClass>]
-        type private Primitive<'T when 'T : unmanaged>(task : IComputeTask) =
-            abstract member Result : 'T[]
-            abstract member Release : unit -> unit
-
-            member x.Dispose() =
-                task.Dispose()
-                x.Release()
-
-            interface IComputePrimitive<'T[]> with
-                member x.Task = task
-                member x.Run(rt) = task.Run(rt); x.Result
-                member x.RunUnit(rt) = task.Run(rt)
-                member x.Dispose() = x.Dispose()
-
-        module private Primitives =
-
-            let reverse (data : 'T[]) (runtime : IRuntime) =
-                let dataBuffer = runtime.CreateBuffer<'T>(data.Length)
-                let result = Array.zeroCreate<'T> data.Length
-
-                let shader = runtime.CreateComputeShader Shader.reverse<'T>
-
-                let input =
-                    shader.inputBinding {
-                        buffer "data" dataBuffer
-                        value "dataLength" data.Length
-                    }
-
-                let task =
-                    runtime.CompileCompute([
-                        ComputeCommand.Upload(data, dataBuffer)
-                        ComputeCommand.Sync(dataBuffer, ResourceAccess.TransferWrite, ResourceAccess.ShaderRead ||| ResourceAccess.ShaderWrite)
-
-                        ComputeCommand.Bind shader
-                        ComputeCommand.SetInput input
-                        ComputeCommand.Dispatch(data.Length / 2)
-
-                        ComputeCommand.Sync(dataBuffer, ResourceAccess.ShaderWrite, ResourceAccess.TransferRead)
-                        ComputeCommand.Download(dataBuffer, result)
-                    ])
-
-                { new Primitive<'T>(task) with
-                    member x.Result = result
-                    member x.Release() =
-                        shader.Dispose()
-                        dataBuffer.Dispose() }
-
         let uploadDownload (runtime : IRuntime) =
             let src = Array.init 5 (ignore >> Rnd.int32)
-            use reverse = runtime |> Primitives.reverse src
-            let dst = reverse.Run()
+            use srcBuffer = runtime.CreateBuffer<int>(src.Length)
+            let dst = Array.zeroCreate<int> src.Length
+
+            use shader = runtime.CreateComputeShader Shader.reverse<int>
+
+            let input =
+                shader.inputBinding {
+                    buffer "data" srcBuffer
+                    value "dataLength" src.Length
+                }
+
+            runtime.Run([
+                ComputeCommand.Upload(src, srcBuffer)
+                ComputeCommand.Sync(srcBuffer, ResourceAccess.TransferWrite, ResourceAccess.ShaderRead ||| ResourceAccess.ShaderWrite)
+
+                ComputeCommand.Bind shader
+                ComputeCommand.SetInput input
+                ComputeCommand.Dispatch(src.Length / 2)
+
+                ComputeCommand.Sync(srcBuffer, ResourceAccess.ShaderWrite, ResourceAccess.TransferRead)
+                ComputeCommand.Download(srcBuffer, dst)
+            ])
 
             Expect.equal dst.Length src.Length "Result array has unexpected length"
             Expect.equal dst (Array.rev src) "Result mismatch"
@@ -166,11 +137,29 @@ module ComputeBuffers =
             for i = 0 to dst.Length - 1 do
                 Expect.equal dst.[i] src.[i] "Result mismatch"
 
+        let fill (runtime : IRuntime) =
+            use buffer = runtime.CreateBuffer<int>(57)
+            let value = 42
+
+            let set (range : IBufferRange) =
+                runtime.Run([
+                    ComputeCommand.Set(range, uint32 value)
+                ])
+
+            set buffer
+            let result = buffer.Download()
+            Expect.equal result (value |> Array.replicate buffer.Count) "Result mismatch"
+
+            Expect.throwsT<ArgumentException> (fun _ -> set (buffer.Range(1n, 128n))) "Unexpected behavior for misaligned offset"
+            Expect.throwsT<ArgumentException> (fun _ -> set (buffer.Range(0n, 127n))) "Unexpected behavior for misaligned size"
+
+
     let tests (backend : Backend) =
         [
             "Up- / download",                   Cases.uploadDownload
             "Up- / download mismatching size",  Cases.uploadDownloadMismatchingSize
             "Nested download",                  Cases.nestedDownload
             "Copy",                             Cases.copy
+            "Fill",                             Cases.fill
         ]
         |> prepareCases backend "Buffers"
