@@ -83,6 +83,26 @@ module ComputeBuffers =
             Expect.equal dst.Length src.Length "Result array has unexpected length"
             Expect.equal dst (Array.rev src) "Result mismatch"
 
+        let uploadDownloadMismatchingSize (runtime : IRuntime) =
+            let src = Array.init 64 (ignore >> Rnd.int32)
+            use bigBuffer = runtime.CreateBuffer<int>(128)
+            use smallBuffer = runtime.CreateBuffer<int>(32)
+            let dstBig = Array.zeroCreate<int> 256
+            let dstSmall = Array.zeroCreate<int> 16
+
+            runtime.Run([
+                ComputeCommand.Upload(src, bigBuffer)
+                ComputeCommand.Upload(src, smallBuffer)
+                ComputeCommand.Download(bigBuffer, dstBig)
+                ComputeCommand.Download(smallBuffer, dstSmall)
+            ])
+
+            for i = 0 to (min src.Length dstBig.Length) - 1 do
+                Expect.equal dstBig.[i] src.[i] "Result mismatch oversized buffer"
+
+            for i = 0 to (min src.Length dstSmall.Length) - 1 do
+                Expect.equal dstSmall.[i] src.[i] "Result mismatch undersized buffer"
+
         let nestedDownload (runtime : IRuntime) =
             let src = Array.init 5 (ignore >> Rnd.int32)
             use srcBuffer = runtime.CreateBuffer<int>(src)
@@ -132,9 +152,25 @@ module ComputeBuffers =
             Expect.equal result1 (Array.rev src) "First result mismatch"
             Expect.equal result2 src "Final result mismatch"
 
+        let copy (runtime : IRuntime) =
+            let src = Array.init 5 (ignore >> Rnd.int32)
+            use srcBuffer = runtime.CreateBuffer<int>(src)
+            use dstBuffer = runtime.CreateBuffer<int>(4)
+            let dst = Array.zeroCreate<int> 4
+
+            runtime.Run([
+                ComputeCommand.Copy(srcBuffer, dstBuffer)
+                ComputeCommand.Download(dstBuffer, dst)
+            ])
+
+            for i = 0 to dst.Length - 1 do
+                Expect.equal dst.[i] src.[i] "Result mismatch"
+
     let tests (backend : Backend) =
         [
-            "Up- / download",  Cases.uploadDownload
-            "Nested download", Cases.nestedDownload
+            "Up- / download",                   Cases.uploadDownload
+            "Up- / download mismatching size",  Cases.uploadDownloadMismatchingSize
+            "Nested download",                  Cases.nestedDownload
+            "Copy",                             Cases.copy
         ]
         |> prepareCases backend "Buffers"

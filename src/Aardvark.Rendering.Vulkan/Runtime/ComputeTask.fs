@@ -10,12 +10,15 @@ open FSharp.Data.Adaptive
 
 module internal ComputeTaskInternals =
 
+    type Array with
+        member x.ElementSize = nativeint (Marshal.SizeOf (x.GetType().GetElementType()))
+
     module private HostMemory =
 
         let pinned (f : nativeint -> 'T) = function
             | HostMemory.Unmanaged ptr -> f ptr
             | HostMemory.Managed (arr, index) ->
-                let offset = nativeint index * nativeint (Marshal.SizeOf (arr.GetType().GetElementType()))
+                let offset = nativeint index * arr.ElementSize
                 pinned arr (fun ptr -> f (ptr + offset))
 
     [<RequireQualifiedAccess>]
@@ -52,13 +55,24 @@ module internal ComputeTaskInternals =
 
         module private CompilerState =
 
-            let inline private checkRange (totalSize : int64) (start : nativeint) (size : nativeint) =
+            let private checkRange (totalSize : int64) (start : nativeint) (size : nativeint) =
                 if start < 0n then raise <| ArgumentException("[Buffer] start of subrange must not be negative.")
                 if size < 0n then raise <| ArgumentException("[Buffer] size of subrange must not be negative.")
 
                 if int64 start + int64 size > totalSize then
                     let max = start + size - 1n
                     raise <| ArgumentException($"[Buffer] subrange [{start}, {max}] out of bounds (max size = {totalSize}).")
+
+            let private getMinSize (sizeInBytes : nativeint) = function
+                | HostMemory.Managed (arr, index) ->
+                    if index < 0 then raise <| ArgumentException("Array index must not be negative.")
+                    if index >= arr.Length then raise <| ArgumentException("Array index out of bounds.")
+
+                    let length = arr.Length - index
+                    let elementSize = arr.ElementSize
+                    min sizeInBytes (nativeint length * elementSize)
+
+                | _ -> sizeInBytes
 
             let empty =
                 { Commands     = []
@@ -85,12 +99,12 @@ module internal ComputeTaskInternals =
 
             let inline downloadBuffer (src : Buffer) (srcOffset : nativeint) (dst : HostMemory) (size : nativeint) =
                 checkRange src.Size srcOffset size
-                let cmd = HostCommand.Download (src, srcOffset, dst, size)
+                let cmd = HostCommand.Download (src, srcOffset, dst, getMinSize size dst)
                 hostCommand cmd
 
             let inline uploadBuffer (src : HostMemory) (dst : Buffer) (dstOffset : nativeint) (size : nativeint) =
                 checkRange dst.Size dstOffset size
-                let cmd = HostCommand.Upload (src, dst, dstOffset, size)
+                let cmd = HostCommand.Upload (src, dst, dstOffset, getMinSize size src)
                 hostCommand cmd
 
             let inline useImage (image : Image) =
