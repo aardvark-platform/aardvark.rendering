@@ -287,6 +287,18 @@ module internal ComputeTaskInternals =
                         do! CompilerState.useImage src.Image
                         do! CompilerState.useImage dst.Image
 
+                        let srcOffset =
+                            if src.Image.IsCubeOr2D then
+                                V3i(srcOffset.X, src.Size.Y - (srcOffset.Y + size.Y), srcOffset.Z)
+                            else
+                                srcOffset
+
+                        let dstOffset =
+                            if dst.Image.IsCubeOr2D then
+                                V3i(dstOffset.X, dst.Size.Y - (dstOffset.Y + size.Y), dstOffset.Z)
+                            else
+                                dstOffset
+
                         let! stream = CompilerState.stream
                         stream.CopyImage(
                             src.Image.Handle, VkImageLayout.TransferSrcOptimal,
