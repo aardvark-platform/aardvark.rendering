@@ -684,6 +684,12 @@ type private Map<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : ICompu
         runtime.Run(cmd, renderToken)
         args.Dispose()
 
+    member x.Dispose() =
+        map.Dispose()
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
         
 
 type private Scan<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Expr<'a -> 'a -> 'a>) =
@@ -773,7 +779,8 @@ type private Scan<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Expr<
     member x.Dispose() =
         release()
 
-    
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 type private Reduce<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Expr<'a -> 'a -> 'a>) =
   
@@ -845,6 +852,12 @@ type private Reduce<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Exp
             member x.GetResult() =
                 target.[0]
         }
+
+    member x.Dispose() =
+        reduce.Dispose()
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
     
 type private MapReduce<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : IComputeRuntime, reduce : Reduce<'b>, map : Expr<int -> 'a -> 'b>, add : Expr<'b -> 'b -> 'b>) =
   
@@ -948,6 +961,12 @@ type private MapReduce<'a, 'b when 'a : unmanaged and 'b : unmanaged>(runtime : 
             member x.GetResult() =
                 target.[0]
         }
+
+    member x.Dispose() =
+        mapReduce.Dispose()
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
  
 type private MapReduceImage<'b when 'b : unmanaged>(runtime : IComputeRuntime, reduce : Reduce<'b>, map : Expr<V3i -> V4f -> 'b>, add : Expr<'b -> 'b -> 'b>) =
   
@@ -1101,22 +1120,37 @@ type private MapReduceImage<'b when 'b : unmanaged>(runtime : IComputeRuntime, r
             member x.GetResult() =
                 target.[0]
         }
+
+    member x.Dispose() =
+        mapReduce2d.Dispose()
+        mapReduce3d.Dispose()
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
   
 type private ExpressionCache() =
     let store = System.Collections.Concurrent.ConcurrentDictionary<list<string>, obj>()
-    
+
     member x.GetOrCreate(e : Expr<'a>, create : Expr<'a> -> 'b) =
         let hash = [ Expr.ComputeHash e ]
         store.GetOrAdd(hash, fun _ ->
             create e :> obj
         ) |> unbox<'b>
 
-
     member x.GetOrCreate(a : Expr<'a>, b : Expr<'b>, create : Expr<'a> -> Expr<'b> -> 'c) =
         let hash = [ Expr.ComputeHash a; Expr.ComputeHash b ]
         store.GetOrAdd(hash, fun _ ->
             create a b :> obj
         ) |> unbox<'c>
+
+    member x.Dispose() =
+        for KeyValue(_, obj) in store do
+            match obj with
+            | :? IDisposable as d -> d.Dispose()
+            | _ -> ()
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 type private Add<'a>() =
     static let addMeth = System.Type.GetType("Microsoft.FSharp.Core.Operators, FSharp.Core").GetMethod("op_Addition")
@@ -1184,6 +1218,9 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
         if scanTexture2d.IsValueCreated then runtime.DeleteComputeShader scanTexture2d.Value
         if scan2d.IsValueCreated then runtime.DeleteComputeShader scan2d.Value
         if fixup2d.IsValueCreated then runtime.DeleteComputeShader fixup2d.Value
+        if scanTexture3d.IsValueCreated then runtime.DeleteComputeShader scanTexture3d.Value
+        if scan3d.IsValueCreated then runtime.DeleteComputeShader scan3d.Value
+        if fixup3d.IsValueCreated then runtime.DeleteComputeShader fixup3d.Value
 
 
     let scanBlocks (args : HashSet<MutableComputeInputBinding>) (imgDim : int) (dim : int) (image : ITextureSubResource) (range : ScanRange) =
@@ -1323,7 +1360,8 @@ type private ScanImage2d(runtime : IComputeRuntime, add : Expr<V4d -> V4d -> V4d
     member x.Dispose() =
         release()
 
-    
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
 
 
 [<AbstractClass>]
@@ -1340,18 +1378,15 @@ type private Existential<'r>() =
         e.Run t
 
 type ParallelPrimitives(runtime : IComputeRuntime) =
-    
+    do FShade.Serializer.Init()
+
     let sumCache = ConcurrentDict<System.Type, obj>(Dict())
 
-    let mapCache = ExpressionCache()
-    let scanCache = ExpressionCache()
-    let reduceCache = ExpressionCache()
-    let mapReduceCache = ExpressionCache()
-    let mapReduceImageCache = ExpressionCache()
-    
-    let scanImage2dCache = ExpressionCache()
-
-
+    let mapCache = new ExpressionCache()
+    let scanCache = new ExpressionCache()
+    let reduceCache = new ExpressionCache()
+    let mapReduceCache = new ExpressionCache()
+    let scanImage2dCache = new ExpressionCache()
 
     let getMapper (map : Expr<int -> 'a -> 'b>) = mapCache.GetOrCreate(map, fun map -> new Map<'a, 'b>(runtime, map))
     let getScanner (add : Expr<'a -> 'a -> 'a>) = scanCache.GetOrCreate(add, fun add -> new Scan<'a>(runtime, add))
@@ -1361,7 +1396,7 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
             let reducer = getReducer add
             new MapReduce<'a, 'b>(runtime, reducer, map, add)
         )
-        
+
     let getImageScanner2d (add : Expr<V4d -> V4d -> V4d>) = scanImage2dCache.GetOrCreate(add, fun add -> new ScanImage2d(runtime, add))
 
     let getImageMapReducer (map : Expr<V3i -> V4f -> 'b>) (add : Expr<'b -> 'b -> 'b>) =
@@ -1385,7 +1420,7 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
     member x.CompileScan(add : Expr<'a -> 'a -> 'a>, input : IBufferVector<'a>, output : IBufferVector<'a>) =
         let scanner = getScanner add
         scanner.Compile(input, output)
-        
+
     member x.CompileScan(add : Expr<V4d -> V4d -> V4d>, input : ITextureSubResource, output : ITextureSubResource) =
         let scanner = getImageScanner2d add
         scanner.Compile(input, output)
@@ -1477,3 +1512,14 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
 
     member x.Sum(b : IBufferVector<'a>) =
         x.Sum(b, RenderToken.Empty)
+
+    member x.Dispose() =
+        sumCache.Clear()
+        mapCache.Dispose()
+        scanCache.Dispose()
+        reduceCache.Dispose()
+        mapReduceCache.Dispose()
+        scanImage2dCache.Dispose()
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
