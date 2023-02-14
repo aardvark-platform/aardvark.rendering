@@ -61,24 +61,6 @@ module internal VkPipelineStageFlags =
     let ofQueueFlags (flags : QueueFlags) =
         flags |> Enum.convertFlags Conversion.ofQueueFlags VkPipelineStageFlags.None
 
-[<AutoOpen>]
-module internal ``Synchronization Extensions`` =
-
-    let private filterStageAndAccess (neutralStage : VkPipelineStageFlags)
-                                     (supported : VkPipelineStageFlags)
-                                     (stage : VkPipelineStageFlags) (access : VkAccessFlags) =
-            let filtered = stage &&& supported
-            if filtered = VkPipelineStageFlags.None then
-                neutralStage, VkAccessFlags.None
-            else
-                filtered, access
-
-    /// Filters stage and access flags with the given supported stages.
-    let filterSrcStageAndAccess = filterStageAndAccess VkPipelineStageFlags.TopOfPipeBit
-
-    /// Filters stage and access flags with the given supported stages.
-    let filterDstStageAndAccess = filterStageAndAccess VkPipelineStageFlags.BottomOfPipeBit
-
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VkAccessFlags =
 
@@ -102,9 +84,102 @@ module VkAccessFlags =
                 ResourceAccess.AccelerationStructureWrite, VkAccessFlags.AccelerationStructureWriteBitKhr
             ]
 
+        let ofStageFlags =
+            Map.ofList [
+                VkPipelineStageFlags.HostBit,                           VkAccessFlags.HostReadBit |||
+                                                                        VkAccessFlags.HostWriteBit
+
+                VkPipelineStageFlags.DrawIndirectBit,                   VkAccessFlags.IndirectCommandReadBit
+
+                VkPipelineStageFlags.VertexInputBit,                    VkAccessFlags.IndexReadBit |||
+                                                                        VkAccessFlags.VertexAttributeReadBit |||
+                                                                        VkAccessFlags.UniformReadBit
+
+                VkPipelineStageFlags.VertexShaderBit,                   VkAccessFlags.UniformReadBit |||
+                                                                        VkAccessFlags.ShaderReadBit |||
+                                                                        VkAccessFlags.ShaderWriteBit
+
+                VkPipelineStageFlags.TessellationControlShaderBit,      VkAccessFlags.UniformReadBit |||
+                                                                        VkAccessFlags.ShaderReadBit |||
+                                                                        VkAccessFlags.ShaderWriteBit
+
+                VkPipelineStageFlags.TessellationEvaluationShaderBit,   VkAccessFlags.UniformReadBit |||
+                                                                        VkAccessFlags.ShaderReadBit |||
+                                                                        VkAccessFlags.ShaderWriteBit
+
+                VkPipelineStageFlags.GeometryShaderBit,                 VkAccessFlags.UniformReadBit |||
+                                                                        VkAccessFlags.ShaderReadBit |||
+                                                                        VkAccessFlags.ShaderWriteBit
+
+                VkPipelineStageFlags.FragmentShaderBit,                 VkAccessFlags.UniformReadBit |||
+                                                                        VkAccessFlags.ShaderReadBit |||
+                                                                        VkAccessFlags.ShaderWriteBit |||
+                                                                        VkAccessFlags.InputAttachmentReadBit
+
+                VkPipelineStageFlags.EarlyFragmentTestsBit,             VkAccessFlags.DepthStencilAttachmentReadBit |||
+                                                                        VkAccessFlags.DepthStencilAttachmentWriteBit
+
+                VkPipelineStageFlags.LateFragmentTestsBit,              VkAccessFlags.DepthStencilAttachmentReadBit |||
+                                                                        VkAccessFlags.DepthStencilAttachmentWriteBit
+
+                VkPipelineStageFlags.ColorAttachmentOutputBit,          VkAccessFlags.ColorAttachmentReadBit |||
+                                                                        VkAccessFlags.ColorAttachmentWriteBit
+
+                VkPipelineStageFlags.ComputeShaderBit,                  VkAccessFlags.UniformReadBit |||
+                                                                        VkAccessFlags.ShaderReadBit |||
+                                                                        VkAccessFlags.ShaderWriteBit
+
+                VkPipelineStageFlags.TransferBit,                       VkAccessFlags.TransferReadBit |||
+                                                                        VkAccessFlags.TransferWriteBit
+
+                VkPipelineStageFlags.AccelerationStructureBuildBitKhr,  VkAccessFlags.ShaderReadBit |||
+                                                                        VkAccessFlags.TransferReadBit |||
+                                                                        VkAccessFlags.TransferWriteBit
+
+                VkPipelineStageFlags.RayTracingShaderBitKhr,            VkAccessFlags.UniformReadBit |||
+                                                                        VkAccessFlags.ShaderReadBit |||
+                                                                        VkAccessFlags.ShaderWriteBit
+            ]
+
+    let Write =
+        VkAccessFlags.ShaderWriteBit |||
+        VkAccessFlags.ColorAttachmentWriteBit |||
+        VkAccessFlags.DepthStencilAttachmentWriteBit |||
+        VkAccessFlags.TransferWriteBit |||
+        VkAccessFlags.HostWriteBit |||
+        VkAccessFlags.MemoryWriteBit |||
+        VkAccessFlags.AccelerationStructureWriteBitKhr
+
     let ofResourceAccess (access : ResourceAccess) =
         access |> Enum.convertFlags Conversion.ofResourceAccess VkAccessFlags.None
 
+    let ofStageFlags (stages : VkPipelineStageFlags) =
+        stages |> Enum.convertFlags Conversion.ofStageFlags (VkAccessFlags.MemoryReadBit ||| VkAccessFlags.MemoryWriteBit)
+
+[<AutoOpen>]
+module internal ``Synchronization Extensions`` =
+
+    let private filterStageAndAccess (neutralStage : VkPipelineStageFlags)
+                                     (supported : VkPipelineStageFlags)
+                                     (stage : VkPipelineStageFlags) (access : VkAccessFlags) =
+        let stage =
+            let filtered = stage &&& supported
+            if filtered = VkPipelineStageFlags.None then
+                neutralStage
+            else
+                filtered
+
+        let supportedAccess = VkAccessFlags.ofStageFlags stage
+        stage, access &&& supportedAccess
+
+    /// Filters source stage and access flags with the given supported stages.
+    let filterSrcStageAndAccess (supported : VkPipelineStageFlags) (stage : VkPipelineStageFlags) (access : VkAccessFlags) =
+        let stage, access = filterStageAndAccess VkPipelineStageFlags.TopOfPipeBit supported stage access
+        stage, access &&& VkAccessFlags.Write
+
+    /// Filters destination stage and access flags with the given supported stages.
+    let filterDstStageAndAccess (supported : VkPipelineStageFlags) (stage : VkPipelineStageFlags) (access : VkAccessFlags) =
+        filterStageAndAccess VkPipelineStageFlags.BottomOfPipeBit supported stage access
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VkImageLayout =
@@ -148,21 +223,6 @@ module VkImageLayout =
     let toDstStageFlags (layout : VkImageLayout) =
         layout |> toStageFlags VkPipelineStageFlags.BottomOfPipeBit
 
-    /// Returns the appropriate source access flags for the given image layout.
-    let toSrcAccessFlags =
-        LookupTable.lookupTable [
-            VkImageLayout.Undefined,                     VkAccessFlags.None
-            VkImageLayout.General,                       VkAccessFlags.MemoryWriteBit
-            VkImageLayout.ColorAttachmentOptimal,        VkAccessFlags.ColorAttachmentWriteBit
-            VkImageLayout.DepthStencilAttachmentOptimal, VkAccessFlags.DepthStencilAttachmentWriteBit
-            VkImageLayout.DepthStencilReadOnlyOptimal,   VkAccessFlags.None
-            VkImageLayout.ShaderReadOnlyOptimal,         VkAccessFlags.None
-            VkImageLayout.TransferSrcOptimal,            VkAccessFlags.None
-            VkImageLayout.TransferDstOptimal,            VkAccessFlags.TransferWriteBit
-            VkImageLayout.Preinitialized,                VkAccessFlags.HostWriteBit
-            VkImageLayout.PresentSrcKhr,                 VkAccessFlags.None
-        ]
-
     /// Returns the appropriate destination access flags for the given image layout.
     let toDstAccessFlags =
         LookupTable.lookupTable [
@@ -181,6 +241,9 @@ module VkImageLayout =
             VkImageLayout.PresentSrcKhr,                 VkAccessFlags.None
         ]
 
+    /// Returns the appropriate source access flags for the given image layout.
+    let toSrcAccessFlags (layout : VkImageLayout) =
+        (toDstAccessFlags layout) &&& VkAccessFlags.Write
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VkBufferUsageFlags =
@@ -219,22 +282,7 @@ module VkBufferUsageFlags =
                                                                                    VkPipelineStageFlags.AccelerationStructureBuildBitKhr
             ]
 
-        let toSrcAccessFlags =
-            Map.ofList [
-                VkBufferUsageFlags.TransferDstBit,                                 VkAccessFlags.TransferWriteBit
-                VkBufferUsageFlags.TransferSrcBit,                                 VkAccessFlags.None
-                VkBufferUsageFlags.IndexBufferBit,                                 VkAccessFlags.None
-                VkBufferUsageFlags.VertexBufferBit,                                VkAccessFlags.None
-                VkBufferUsageFlags.IndirectBufferBit,                              VkAccessFlags.None
-                VkBufferUsageFlags.UniformBufferBit,                               VkAccessFlags.None
-                VkBufferUsageFlags.StorageBufferBit,                               VkAccessFlags.ShaderWriteBit
-                VkBufferUsageFlags.UniformTexelBufferBit,                          VkAccessFlags.None
-                VkBufferUsageFlags.StorageTexelBufferBit,                          VkAccessFlags.ShaderWriteBit
-                VkBufferUsageFlags.AccelerationStructureBuildInputReadOnlyBitKhr,  VkAccessFlags.None
-                VkBufferUsageFlags.AccelerationStructureStorageBitKhr,             VkAccessFlags.AccelerationStructureWriteBitKhr
-            ]
-
-        let toDstAccessFlags =
+        let toAccessFlags =
             Map.ofList [
                 VkBufferUsageFlags.TransferDstBit,                                 VkAccessFlags.TransferWriteBit
                 VkBufferUsageFlags.TransferSrcBit,                                 VkAccessFlags.TransferReadBit
@@ -265,14 +313,13 @@ module VkBufferUsageFlags =
     let ofBufferUsage (usage : BufferUsage) =
         usage |> Enum.convertFlags Conversion.ofBufferUsage VkBufferUsageFlags.None
 
-    /// Returns the appropriate source access flags for the given buffer usage flags.
-    let toSrcAccessFlags (usage : VkBufferUsageFlags) =
-        usage |> Enum.convertFlags Conversion.toSrcAccessFlags VkAccessFlags.None
-
     /// Returns the appropriate destination access flags for the given buffer usage flags.
     let toDstAccessFlags (usage : VkBufferUsageFlags) =
-        usage |> Enum.convertFlags Conversion.toDstAccessFlags VkAccessFlags.None
+        usage |> Enum.convertFlags Conversion.toAccessFlags VkAccessFlags.None
 
+    /// Returns the appropriate source access flags for the given buffer usage flags.
+    let toSrcAccessFlags (usage : VkBufferUsageFlags) =
+        (toDstAccessFlags usage) &&& VkAccessFlags.Write
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VkImageUsageFlags =
