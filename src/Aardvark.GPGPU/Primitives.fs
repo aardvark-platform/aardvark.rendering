@@ -244,7 +244,7 @@ module private Kernels =
 
         }
 
-      
+
     let inputImage2d =
         sampler2d {
             texture uniform?InputTexture
@@ -254,6 +254,8 @@ module private Kernels =
             borderColor (C4f(0.0f, 0.0f, 0.0f, 0.0f))
         }
 
+    let imageScanSize2d = V2i(16, 8)
+
     [<LocalSize(X = 8, Y = 8)>]
     let mapReduceImageKernel2d (map : Expr<V3i -> V4f -> 'b>) (add : Expr<'b -> 'b -> 'b>) (numGroups : V2i) (inputSize : V2i) (outputData : 'b[]) =
         compute {
@@ -262,35 +264,35 @@ module private Kernels =
             let lc = getLocalId().XY
             let gc = getWorkGroupId().XY
             let tid = lc.Y * 8 + lc.X
-            
+
             let group = gc.Y * ggc.X + gc.X
 
-            let ai = gc * V2i(16,8) + lc * V2i(2,1)
+            let ai = gc * imageScanSize2d + lc * V2i(2,1)
             let bi = ai + V2i(1,0)
             let lai = lc.Y * 16 + lc.X * 2
             let lbi = lai + 1
-            
-            let tca = (V2d ai + V2d.Half) / V2d inputSize
-            let tcb = (V2d bi + V2d.Half) / V2d inputSize
 
             let mem : 'b[] = allocateShared 128
 
-            mem.[lai] <- if ai.X < s.X && ai.Y < s.Y then (%map) (V3i(ai, 0)) (V4f (inputImage2d.SampleLevel(tca, 0.0))) else (%map) (V3i(-1,-1,-1)) V4f.Zero
-            mem.[lbi] <- if bi.X < s.X && bi.Y < s.Y then (%map) (V3i(bi, 0)) (V4f (inputImage2d.SampleLevel(tcb, 0.0))) else (%map) (V3i(-1,-1,-1)) V4f.Zero
+            if Vec.allSmaller ai s then mem.[lai] <- (%map) ai.XYO (V4f (inputImage2d.Read(ai, 0)))
+            if Vec.allSmaller bi s then mem.[lbi] <- (%map) bi.XYO (V4f (inputImage2d.Read(bi, 0)))
 
-            
+            let localCount = min imageScanSize2d (s - gc * imageScanSize2d)
+
             barrier()
             let mutable s = 64
             while s > 0 do
                 if tid < s then
-                    mem.[tid] <- (%add) mem.[tid] mem.[tid + s]
+                    let bi = tid + s
+                    let b = V2i(bi % 16, bi / 16)
+                    if Vec.allSmaller b localCount then
+                        mem.[tid] <- (%add) mem.[tid] mem.[bi]
 
                 s <- s >>> 1
                 barrier()
 
             if tid = 0 then
                 outputData.[group] <- mem.[0]
-
         }
  
     let inputImage3d =
@@ -303,6 +305,8 @@ module private Kernels =
             borderColor (C4f(0.0, 0.0, 0.0, 0.0))
         }
 
+    let imageScanSize3d = V3i(8, 4, 2)
+
     [<LocalSize(X = 4, Y = 4, Z = 2)>]
     let mapReduceImageKernel3d (map : Expr<V3i -> V4f -> 'b>) (add : Expr<'b -> 'b -> 'b>) (numGroups : V3i) (inputSize : V3i) (outputData : 'b[]) =
         compute {
@@ -314,25 +318,26 @@ module private Kernels =
             
             let group = gc.Z * (ggc.X * ggc.Y) + gc.Y * ggc.X + gc.X
 
-            let ai = gc * V3i(8,4,2) + lc * V3i(2,1,1)
+            let ai = gc * imageScanSize3d + lc * V3i(2,1,1)
             let bi = ai + V3i(1,0,0)
             let lai = lc.Z * 32 + lc.Y * 8 + lc.X * 2
             let lbi = lai + 1
-            
-            let tca = (V3d ai + V3d.Half) / V3d inputSize
-            let tcb = (V3d bi + V3d.Half) / V3d inputSize
 
-            let mem : 'b[] = allocateShared 128
+            let mem : 'b[] = allocateShared 64
 
-            mem.[lai] <- if ai.X < s.X && ai.Y < s.Y && ai.Z < s.Z then (%map) ai (V4f (inputImage3d.SampleLevel(tca, 0.0))) else (%map) (V3i(-1,-1,-1)) V4f.Zero
-            mem.[lbi] <- if bi.X < s.X && bi.Y < s.Y && bi.Z < s.Z then (%map) bi (V4f (inputImage3d.SampleLevel(tcb, 0.0))) else (%map) (V3i(-1,-1,-1)) V4f.Zero
+            if Vec.allSmaller ai s then mem.[lai] <- (%map) ai (V4f (inputImage3d.Read(ai, 0)))
+            if Vec.allSmaller bi s then mem.[lbi] <- (%map) bi (V4f (inputImage3d.Read(bi, 0)))
 
+            let localCount = min imageScanSize3d (s - gc * imageScanSize3d)
             
             barrier()
-            let mutable s = 64
+            let mutable s = 32
             while s > 0 do
                 if tid < s then
-                    mem.[tid] <- (%add) mem.[tid] mem.[tid + s]
+                    let bi = tid + s
+                    let b = V3i(bi % 8, (bi / 8) % 4, bi / 32)
+                    if Vec.allSmaller b localCount then
+                        mem.[tid] <- (%add) mem.[tid] mem.[bi]
 
                 s <- s >>> 1
                 barrier()
@@ -811,7 +816,7 @@ type private Reduce<'a when 'a : unmanaged>(runtime : IComputeRuntime, add : Exp
                 [
                     ComputeCommand.Bind reduce
                     ComputeCommand.SetInput args0
-                    ComputeCommand.Dispatch(ceilDiv (int input.Count) Kernels.scanSize)
+                    ComputeCommand.Dispatch(groupCount)
                     ComputeCommand.Sync(temp.Buffer)
                 ]
 
@@ -1005,7 +1010,7 @@ type private MapReduceImage<'b when 'b : unmanaged>(runtime : IComputeRuntime, r
                 [
                     ComputeCommand.Bind reduce
                     ComputeCommand.SetInput args0
-                    ComputeCommand.Dispatch(ceilDiv (int input.Count) Kernels.scanSize)
+                    ComputeCommand.Dispatch(groupCount)
                     ComputeCommand.Sync(temp.Buffer)
                 ]
 
@@ -1036,9 +1041,8 @@ type private MapReduceImage<'b when 'b : unmanaged>(runtime : IComputeRuntime, r
             let args0 = runtime.NewInputBinding(mapReduce2d)
             
             let size = input.Size.XY
-            let groupCount = ceilDiv2 size (V2i(16,8))
+            let groupCount = ceilDiv2 size Kernels.imageScanSize2d
             let temp = runtime.CreateBuffer<'b>(groupCount.X * groupCount.Y)
-
 
             args0.["InputTexture"] <- input
             args0.["outputData"] <- temp
@@ -1068,7 +1072,7 @@ type private MapReduceImage<'b when 'b : unmanaged>(runtime : IComputeRuntime, r
             let args0 = runtime.NewInputBinding(mapReduce3d)
             
             let size = input.Size
-            let groupCount = ceilDiv3 size (V3i(8,4,2))
+            let groupCount = ceilDiv3 size Kernels.imageScanSize3d
             let temp = runtime.CreateBuffer<'b>(groupCount.X * groupCount.Y * groupCount.Z)
             
             args0.["InputTexture"] <- input
@@ -1474,7 +1478,7 @@ type ParallelPrimitives(runtime : IComputeRuntime) =
             V4f.Zero
 
     member x.Min(input : ITextureSubResource, renderToken : RenderToken) =
-        let reducer = getImageMapReducer <@ fun i v -> v @> <@ fun l r -> V4f(min l.X r.X, min l.Y r.Y, min l.Z r.Z, min l.W r.W) @>
+        let reducer = getImageMapReducer <@ fun _ v -> v @> <@ min @>
         reducer.Run(input, renderToken)
 
     member x.Map(map : Expr<int -> 'a -> 'b>, input : IBufferVector<'a>, output : IBufferVector<'b>, renderToken : RenderToken) =
