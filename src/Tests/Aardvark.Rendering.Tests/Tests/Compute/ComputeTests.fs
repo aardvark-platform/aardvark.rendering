@@ -9,6 +9,7 @@ module ``Compute Tests`` =
     let private tests = [
         ComputeImages.tests
         ComputeBuffers.tests
+        ComputePrimitives.tests
         MutableInputBinding.tests
     ]
 

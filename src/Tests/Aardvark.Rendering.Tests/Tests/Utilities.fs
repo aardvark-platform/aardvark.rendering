@@ -70,7 +70,8 @@ module PixData =
         let random32i   = random32i' Col.Format.RGBA
         let random32f   = random32f' Col.Format.RGBA
 
-        let compare (offset : V3i) (input : PixVolume<'T>) (output : PixVolume<'T>) =
+        let compareWithComparer (comparer : 'T -> 'T -> string -> unit)
+                                (offset : V3i) (input : PixVolume<'T>) (output : PixVolume<'T>) =
             for x in 0 .. output.Size.X - 1 do
                 for y in 0 .. output.Size.Y - 1 do
                     for z in 0 .. output.Size.Z - 1 do
@@ -90,7 +91,20 @@ module PixData =
                                 let t = if c < 4 then "color" else "alpha"
                                 $"PixVolume {t} data mismatch at [{x}, {y}, {z}]"
 
-                            Expect.equal outputData.[x, y, z] ref message
+                            comparer outputData.[x, y, z] ref message
+
+        let compare (offset : V3i) (input : PixVolume<'T>) (output : PixVolume<'T>) =
+            compareWithComparer Expect.equal offset input output
+
+        let inline compareWithEpsilon (eps : ^T) (offset : V3i) (input : PixVolume< ^T>) (output : PixVolume< ^T>) =
+            let comp a b =
+                let diff = if a > b then a - b else b - a
+                Expect.isLessThanOrEqual diff eps
+            compareWithComparer comp offset input output
+
+        let compare32f (offset : V3i) (accuracy : Accuracy) (input : PixVolume<float32>) (output : PixVolume<float32>) =
+            let comp a b = Expect.floatClose accuracy (float a) (float b)
+            compareWithComparer comp offset input output
 
     module PixImage =
 
@@ -225,6 +239,18 @@ module PixData =
             let comp a b = Expect.floatClose accuracy (float a) (float b)
             compareWithComparer comp offset input output
 
+[<AutoOpen>]
+module ``Expecto Extensions`` =
+
+    module Expect =
+
+        let inline v4dClose (accuracy : Accuracy) (actual : ^T1) (expected : ^T2) (message : string) =
+            let actual = v4d actual
+            let expected = v4d expected
+            Expect.floatClose accuracy actual.X expected.X message
+            Expect.floatClose accuracy actual.Y expected.Y message
+            Expect.floatClose accuracy actual.Z expected.Z message
+            Expect.floatClose accuracy actual.W expected.W message
 
 [<AutoOpen>]
 module ``RenderTo Utilities`` =
