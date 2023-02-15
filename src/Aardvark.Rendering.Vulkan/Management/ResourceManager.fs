@@ -1732,6 +1732,12 @@ type ResourceManager(device : Device) =
         let input = input |> AdaptiveResource.mapNonAdaptive (fun l -> l.Texture :> ITexture)
         imageCache.GetOrCreate([properties :> obj; input :> obj], fun cache key -> new ImageResource(cache, key, device, properties, input))
 
+    member x.CreateImageView(samplerType : FShade.GLSL.GLSLSamplerType, input : IResourceLocation<Image>, levels : aval<Range1i>, slices : aval<Range1i>) =
+        imageViewCache.GetOrCreate(
+            [samplerType :> obj; input :> obj; levels :> obj; slices :> obj],
+            fun cache key -> new ImageViewResource(cache, key, device, samplerType, input, levels, slices)
+        )
+
     member x.CreateImageView(samplerType : FShade.GLSL.GLSLSamplerType, input : IResourceLocation<Image>) =
         imageViewCache.GetOrCreate([samplerType :> obj; input :> obj], fun cache key -> new ImageViewResource(cache, key, device, samplerType, input))
 
@@ -1764,10 +1770,23 @@ type ResourceManager(device : Device) =
             fun cache key -> new ImageSamplerResource(cache, key, view, sampler)
         )
 
+    member x.CreateImageSampler(samplerType : FShade.GLSL.GLSLSamplerType,
+                                level : aval<ITextureLevel>, samplerDesc : aval<SamplerState>) =
+        let levels = level |> AVal.mapNonAdaptive (fun l -> l.Levels)
+        let slices = level |> AVal.mapNonAdaptive (fun l -> l.Slices)
+        let image = x.CreateImage(samplerType.Properties, level)
+        let view = x.CreateImageView(samplerType, image, levels, slices)
+        let sampler = x.CreateSampler(samplerDesc)
+
+        imageSamplerCache.GetOrCreate(
+            [view :> obj; sampler :> obj],
+            fun cache key -> new ImageSamplerResource(cache, key, view, sampler)
+        )
+
     member x.CreateImageSamplerArray(count : int, samplerType : FShade.GLSL.GLSLSamplerType,
                                      textures : aval<array<int * aval<ITexture>>>, samplerDesc : aval<SamplerState>) =
 
-        let empty = x.CreateImageSampler(samplerType, AVal.constant <| NullTexture(), AVal.constant SamplerState.Default)
+        let empty = x.CreateImageSampler(samplerType, AVal.constant (NullTexture() :> ITexture), AVal.constant SamplerState.Default)
 
         let map =
             imageSamplerMapCache.GetOrAdd(textures, fun _ ->
@@ -1781,7 +1800,7 @@ type ResourceManager(device : Device) =
     member x.CreateImageSamplerArray(count : int, samplerType : FShade.GLSL.GLSLSamplerType,
                                      textures : aval<ITexture[]>, samplerDesc : aval<SamplerState>) =
 
-        let empty = x.CreateImageSampler(samplerType, AVal.constant <| NullTexture(), AVal.constant SamplerState.Default)
+        let empty = x.CreateImageSampler(samplerType, AVal.constant (NullTexture() :> ITexture), AVal.constant SamplerState.Default)
 
         let map =
             imageSamplerMapCache.GetOrAdd(textures, fun _ ->

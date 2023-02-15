@@ -155,10 +155,15 @@ type DevicePreparedRenderObjectExtensions private() =
                                             let textureName = Symbol.Create textureName
 
                                             match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                                            | Some (:? aval<ITexture> as tex) ->
-                                                let s = createSamplerState this textureName uniforms samplerState
-                                                let vs = this.CreateImageSampler(sam.samplerType, tex, s)
-                                                Some(i, vs)
+                                            | Some (:? aval<ITexture> as texture) ->
+                                                let desc = createSamplerState this textureName uniforms samplerState
+                                                let sampler = this.CreateImageSampler(sam.samplerType, texture, desc)
+                                                Some(i, sampler)
+
+                                            | Some (:? aval<ITextureLevel> as level) ->
+                                                let desc = createSamplerState this textureName uniforms samplerState
+                                                let sampler = this.CreateImageSampler(sam.samplerType, level, desc)
+                                                Some (i, sampler)
 
                                             | Some t ->
                                                 Log.error "[Vulkan] invalid type for texture %A (%A)" textureName (t.GetType())
@@ -169,7 +174,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                                 None
                                         )
 
-                                    let empty = this.CreateImageSampler(sam.samplerType, AVal.constant <| NullTexture(), AVal.constant SamplerState.Default)
+                                    let empty = this.CreateImageSampler(sam.samplerType, AVal.constant (NullTexture() :> ITexture), AVal.constant SamplerState.Default)
                                     this.CreateImageSamplerArray(sam.samplerCount, empty, list)
                                 )
 
