@@ -79,8 +79,6 @@ module private BufferSlicing =
         if firstByte < 0n || firstByte >= vector.Buffer.SizeInBytes then argumentOutOfRange "[Buffer] range out of bounds"
         if lastByte < 0n || lastByte >= vector.Buffer.SizeInBytes then argumentOutOfRange "[Buffer] range out of bounds"
 
-        let origin = vector.Origin + start * vector.Delta
-        let delta = vector.Delta * delta
         BufferVector<'T>(vector.Buffer, origin, delta, count) :> IBufferVector<_>
 
 
