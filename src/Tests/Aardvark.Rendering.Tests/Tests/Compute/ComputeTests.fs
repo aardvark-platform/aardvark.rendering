@@ -11,6 +11,7 @@ module ``Compute Tests`` =
         ComputeBuffers.tests
         ComputePrimitives.tests
         ComputeSorting.tests
+        ComputeJpeg.tests
         MutableInputBinding.tests
     ]
 
