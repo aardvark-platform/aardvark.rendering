@@ -381,12 +381,13 @@ type RadixSort(runtime : IRuntime) =
         use keyCache2 = runtime.CreateBuffer<'a>(cnt)
         use valueCache = runtime.CreateBuffer<int>(cnt)
         use valueCache2 = runtime.CreateBuffer<int>(cnt)
+        use empty = runtime.CreateBuffer<int>(count = 0)
 
         use dRadixSum = runtime.CreateBuffer<uint32>(RadixSortShaders.TOTALRADIXGROUPS * RadixSortShaders.RADICES)
         use dRadixBlockSum = runtime.CreateBuffer<uint32>(RadixSortShaders.PREFIX_NUM_BLOCKS)
 
         let mutable inputKeys = input
-        let mutable inputValues : IBufferVector<int> = valueCache
+        let mutable inputValues : IBufferVector<int> = Unchecked.defaultof<_>
 
         let mutable outputKeys = keyCache :> IBufferVector<_>
         let mutable outputValues = valueCache :> IBufferVector<_>
@@ -425,7 +426,7 @@ type RadixSort(runtime : IRuntime) =
             radixAddOffsetsAndShuffleInput.["inputKeyStride"] <- inputKeys.Delta
 
             if isNull (inputValues :> obj) then
-                radixAddOffsetsAndShuffleInput.["inputValues"] <- null
+                radixAddOffsetsAndShuffleInput.["inputValues"] <- empty
                 radixAddOffsetsAndShuffleInput.["inputValueOffset"] <- 0
                 radixAddOffsetsAndShuffleInput.["inputValueStride"] <- 1
             else
