@@ -205,11 +205,15 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
 
     let shaderCache = ShaderCache()
 
-    let mutable driverInfo = None
+    let mutable driverInfo : Option<Driver> = None
 
-    let mutable packAlignment = None
+    let mutable packAlignment : Option<int> = None
 
-    let mutable unpackAlignment = None
+    let mutable unpackAlignment : Option<int> = None
+
+    let mutable maxComputeWorkGroupSize : Option<V3i> = None
+
+    let mutable maxComputeWorkGroupInvocations : Option<int> = None
 
     let mutable shaderCachePath : Option<string> = Some defaultShaderCachePath
 
@@ -218,6 +222,15 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
     let mipmapGenerationSupport = FastConcurrentDict()
 
     let sharedMemoryManager = SharedMemoryManager(fun _ -> this.ResourceLock)
+
+    let getOrQuery (var : byref<'T option>) (query : unit -> 'T) =
+        match var with
+        | None ->
+            use __ = this.ResourceLock
+            let value = query()
+            var <- Some value
+            value
+        | Some v -> v
 
     /// <summary>
     /// Creates custom OpenGl context. Usage:
@@ -243,34 +256,29 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
     member x.Runtime = runtime
 
     member x.Driver =
-        match driverInfo with
-            | None ->
-                let v = Driver.readInfo()
-                driverInfo <- Some v
-                v
-            | Some v -> v
+        getOrQuery &driverInfo Driver.readInfo
 
     member x.PackAlignment =
-        match packAlignment with
-        | Some p -> p
-        | None ->
-            let p =
-                using x.ResourceLock (fun _ ->
-                    GL.GetInteger(GetPName.PackAlignment)
-                )
-            packAlignment <- Some p
-            p
+        getOrQuery &packAlignment (fun _ ->
+            GL.GetInteger(GetPName.PackAlignment)
+        )
 
     member x.UnpackAlignment =
-        match unpackAlignment with
-        | Some p -> p
-        | None ->
-            let p =
-                using x.ResourceLock (fun _ ->
-                    GL.GetInteger(GetPName.UnpackAlignment)
-                )
-            unpackAlignment <- Some p
-            p
+        getOrQuery &unpackAlignment (fun _ ->
+            GL.GetInteger(GetPName.UnpackAlignment)
+        )
+
+    member x.MaxComputeWorkGroupSize =
+        getOrQuery &maxComputeWorkGroupSize (fun _ ->
+            let arr = Array.zeroCreate<int> 3
+            GL.GetInteger(GetPName.MaxComputeWorkGroupSize, arr)
+            V3i arr
+        )
+
+    member x.MaxComputeWorkGroupInvocations =
+        getOrQuery &maxComputeWorkGroupInvocations (fun _ ->
+            GL.GetInteger(GetPName.MaxComputeWorkGroupInvocations)
+        )
 
     member internal x.ImportMemoryBlock(external : ExternalMemoryBlock) =
         sharedMemoryManager.Import external

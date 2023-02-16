@@ -1,27 +1,27 @@
 ﻿namespace Aardvark.Rendering.GL
 
-open System
-open System.Security
-open System.Runtime.InteropServices
-open Aardvark.Base
-open OpenTK.Graphics.OpenGL4
-open FSharp.Data.Adaptive
-open FShade
-open Aardvark.Rendering
-open Aardvark.Rendering.ShaderReflection
-open Aardvark.Rendering.GL
+//open System
+//open System.Security
+//open System.Runtime.InteropServices
+//open Aardvark.Base
+//open OpenTK.Graphics.OpenGL4
+//open FSharp.Data.Adaptive
+//open FShade
+//open Aardvark.Rendering
+//open Aardvark.Rendering.ShaderReflection
+//open Aardvark.Rendering.GL
 
-#nowarn "9"
+//#nowarn "9"
 
-open Aardvark.Base.Runtime
+//open Aardvark.Base.Runtime
 
-[<SuppressUnmanagedCodeSecurity>]
-type private DispatchComputeGroupSizeARBDelegate = delegate of uint32 * uint32 * uint32 * uint32 * uint32 * uint32 -> unit
+//[<SuppressUnmanagedCodeSecurity>]
+//type private DispatchComputeGroupSizeARBDelegate = delegate of uint32 * uint32 * uint32 * uint32 * uint32 * uint32 -> unit
 
-type internal Bound =
-    | Texture of slot : int * target : TextureTarget
-    | Buffer  of slot : int * target : BufferTarget
-    | Image of slot : int
+//type internal Bound =
+//    | Texture of slot : int * target : TextureTarget
+//    | Buffer  of slot : int * target : BufferTarget
+//    | Image of slot : int
 
 //type ComputeShaderInputBinding(shader : ComputeShader) =
 //    let ctx = shader.Context
@@ -202,83 +202,83 @@ type internal Bound =
 //        member x.Item
 //            with set (name : string) (value : obj) = x.Write(name, value)
 
-and private ComputeShaderInputReference =
-    | Uniform of write : (obj -> unit)
-    | Image of slot : int
-    | Texture of slot : int
-    | StorageBuffer of slot : int * storageType : ShaderParameterType
+//and private ComputeShaderInputReference =
+//    | Uniform of write : (obj -> unit)
+//    | Image of slot : int
+//    | Texture of slot : int
+//    | StorageBuffer of slot : int * storageType : ShaderParameterType
 
-and ComputeShader(prog : Program, localSize : V3i) =
-    let mutable isDisposed = 0
+//and ComputeShader(prog : Program, localSize : V3i) =
+//    let mutable isDisposed = 0
 
-    let ctx = prog.Context
-    let iface = prog.Interface
+//    let ctx = prog.Context
+//    let iface = prog.Interface
 
-    let bufferTypes =
-        iface.storageBuffers |> MapExt.map (fun _ b -> 
-            b.ssbType
+//    let bufferTypes =
+//        iface.storageBuffers |> MapExt.map (fun _ b -> 
+//            b.ssbType
 
-        )
+//        )
 
-    let buffers =
-        iface.storageBuffers |> MapExt.toList |> List.map (fun (_,b) ->
-            b.ssbBinding, b.ssbName, b.ssbType
-            //match b.Fields with
-            //    | [f] -> 
-            //        match f.Path with
-            //            | ShaderPath.Value name -> b.Index, name, f.Type
-            //            | _ -> failwith "[FShade] found structured storage buffer (not supported atm.)"
-            //    | _ -> 
-            //        failwith "[FShade] found structured storage buffer (not supported atm.)"
-        )
+//    let buffers =
+//        iface.storageBuffers |> MapExt.toList |> List.map (fun (_,b) ->
+//            b.ssbBinding, b.ssbName, b.ssbType
+//            //match b.Fields with
+//            //    | [f] -> 
+//            //        match f.Path with
+//            //            | ShaderPath.Value name -> b.Index, name, f.Type
+//            //            | _ -> failwith "[FShade] found structured storage buffer (not supported atm.)"
+//            //    | _ -> 
+//            //        failwith "[FShade] found structured storage buffer (not supported atm.)"
+//        )
 
-    let images =
-        iface.images |> MapExt.toList |> List.map (fun (_,u) ->
-            u.imageBinding, u.imageName, u.imageType
-            //match u.Type with
-            //    | ShaderParameterType.Image(valueType,dim,isMS,isArray) ->
-            //        match u.Path with
-            //            | ShaderPath.Value name ->
-            //                if name.StartsWith "cs_" then
+//    let images =
+//        iface.images |> MapExt.toList |> List.map (fun (_,u) ->
+//            u.imageBinding, u.imageName, u.imageType
+//            //match u.Type with
+//            //    | ShaderParameterType.Image(valueType,dim,isMS,isArray) ->
+//            //        match u.Path with
+//            //            | ShaderPath.Value name ->
+//            //                if name.StartsWith "cs_" then
                                                     
-            //                    Some (u.Location, u.Binding, name.Substring 3, valueType, dim, isMS, isArray)
-            //                else
-            //                    failwithf "[FShade] found non-primitive image uniform %A" u
-            //            | _ ->
-            //                failwithf "[FShade] found non-primitive image uniform %A" u
+//            //                    Some (u.Location, u.Binding, name.Substring 3, valueType, dim, isMS, isArray)
+//            //                else
+//            //                    failwithf "[FShade] found non-primitive image uniform %A" u
+//            //            | _ ->
+//            //                failwithf "[FShade] found non-primitive image uniform %A" u
                                             
-            //    | _ ->
-            //        None
-        )
+//            //    | _ ->
+//            //        None
+//        )
 
-    let samplers =
-        iface.samplers |> MapExt.toList |> List.map (fun (_,u) ->
-            match u.samplerTextures with
-                | [(name, state)] ->
-                    u.samplerBinding, name, ctx.CreateSampler state.SamplerState
-                | _ ->
-                    failwith "not implemented"
-            //match u.Type with
-            //    | ShaderParameterType.FixedArray(ShaderParameterType.Sampler(valueType,dim,isMS,isArray,isShadow),_,l) ->
-            //        failwith "not implemented"
+//    let samplers =
+//        iface.samplers |> MapExt.toList |> List.map (fun (_,u) ->
+//            match u.samplerTextures with
+//                | [(name, state)] ->
+//                    u.samplerBinding, name, ctx.CreateSampler state.SamplerState
+//                | _ ->
+//                    failwith "not implemented"
+//            //match u.Type with
+//            //    | ShaderParameterType.FixedArray(ShaderParameterType.Sampler(valueType,dim,isMS,isArray,isShadow),_,l) ->
+//            //        failwith "not implemented"
 
-            //    | ShaderParameterType.Sampler(valueType,dim,isMS,isArray,isShadow) ->
-            //        match u.Path with
-            //            | ShaderPath.Value name ->
-            //                match Map.tryFind (name,0) prog.TextureInfo with
-            //                    | Some info ->
-            //                        let sampler = ctx.CreateSampler info.samplerState
-            //                        Some (u.Location, u.Binding, string info.textureName, valueType, dim, isMS, isArray, isShadow, sampler)
+//            //    | ShaderParameterType.Sampler(valueType,dim,isMS,isArray,isShadow) ->
+//            //        match u.Path with
+//            //            | ShaderPath.Value name ->
+//            //                match Map.tryFind (name,0) prog.TextureInfo with
+//            //                    | Some info ->
+//            //                        let sampler = ctx.CreateSampler info.samplerState
+//            //                        Some (u.Location, u.Binding, string info.textureName, valueType, dim, isMS, isArray, isShadow, sampler)
 
-            //                    | _ ->
-            //                        failwithf "[FShade] found non-primitive image uniform %A" u
+//            //                    | _ ->
+//            //                        failwithf "[FShade] found non-primitive image uniform %A" u
                         
-            //            | _ ->
-            //                failwithf "[FShade] found non-primitive image uniform %A" u
+//            //            | _ ->
+//            //                failwithf "[FShade] found non-primitive image uniform %A" u
                                             
-            //    | _ ->
-            //        None
-        )
+//            //    | _ ->
+//            //        None
+//        )
 
     //let uniforms =
     //    iface.Uniforms |> List.choose (fun u ->
@@ -288,56 +288,56 @@ and ComputeShader(prog : Program, localSize : V3i) =
     //            | _ -> Some u
     //    )
 
-    let uniformBlocks = iface.uniformBuffers
+//    let uniformBlocks = iface.uniformBuffers
 
-    member x.Context : Context = ctx
-    member x.Buffers : list<int * string * GLSL.GLSLType>  = buffers
-    member x.Images : list<int * string * GLSL.GLSLImageType> = images
-    member x.Samplers : list<int * string * Sampler> = samplers
-    member x.UniformBlocks : list<GLSL.GLSLUniformBuffer> = MapExt.toList uniformBlocks |> List.map snd
-    member x.Handle = prog.Handle
+//    member x.Context : Context = ctx
+//    member x.Buffers : list<int * string * GLSL.GLSLType>  = buffers
+//    member x.Images : list<int * string * GLSL.GLSLImageType> = images
+//    member x.Samplers : list<int * string * Sampler> = samplers
+//    member x.UniformBlocks : list<GLSL.GLSLUniformBuffer> = MapExt.toList uniformBlocks |> List.map snd
+//    member x.Handle = prog.Handle
 
-    member x.Dispose() =
-        use __ = ctx.ResourceLock
-        for (_,_,s) in samplers do
-            ctx.Delete s
+//    member x.Dispose() =
+//        use __ = ctx.ResourceLock
+//        for (_,_,s) in samplers do
+//            ctx.Delete s
 
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
+//    interface IDisposable with
+//        member x.Dispose() = x.Dispose()
 
-    interface IComputeShader with
-        member x.LocalSize = localSize
-        member x.Runtime = x.Context.Runtime :> IComputeRuntime
-        member x.Interface = iface
+//    interface IComputeShader with
+//        member x.LocalSize = localSize
+//        member x.Runtime = x.Context.Runtime :> IComputeRuntime
+//        member x.Interface = iface
     
-type private GLCompute(ctx : Context) =
-    let mutable workGroupSize = V3i.Zero
-    let mutable workGroupInvocations = 0
-    let mutable hasDynamicCompute = false
-    let mutable glDispatchCompute = Unchecked.defaultof<DispatchComputeGroupSizeARBDelegate>
-    do 
-        use __ = ctx.ResourceLock
-        GL.GetInteger(unbox (int All.MaxComputeWorkGroupSize), 0, &workGroupSize.X)
-        GL.GetInteger(unbox (int All.MaxComputeWorkGroupSize), 1, &workGroupSize.Y)
-        GL.GetInteger(unbox (int All.MaxComputeWorkGroupSize), 2, &workGroupSize.Z)
-        GL.GetInteger(unbox (int All.MaxComputeWorkGroupInvocations), &workGroupInvocations)
+//type private GLCompute(ctx : Context) =
+//    let mutable workGroupSize = V3i.Zero
+//    let mutable workGroupInvocations = 0
+//    let mutable hasDynamicCompute = false
+//    let mutable glDispatchCompute = Unchecked.defaultof<DispatchComputeGroupSizeARBDelegate>
+//    do 
+//        use __ = ctx.ResourceLock
+//        GL.GetInteger(unbox (int All.MaxComputeWorkGroupSize), 0, &workGroupSize.X)
+//        GL.GetInteger(unbox (int All.MaxComputeWorkGroupSize), 1, &workGroupSize.Y)
+//        GL.GetInteger(unbox (int All.MaxComputeWorkGroupSize), 2, &workGroupSize.Z)
+//        GL.GetInteger(unbox (int All.MaxComputeWorkGroupInvocations), &workGroupInvocations)
 
 
-        let c = ctx.CurrentContextHandle.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
-        let ptr = c.GetAddress "glDispatchComputeGroupSizeARB"
-        if ptr <> 0n then
-            hasDynamicCompute <- true
-            glDispatchCompute <-System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer(ptr, typeof<DispatchComputeGroupSizeARBDelegate>) |> unbox<DispatchComputeGroupSizeARBDelegate>
+//        let c = ctx.CurrentContextHandle.Value.Handle |> unbox<OpenTK.Graphics.IGraphicsContextInternal>
+//        let ptr = c.GetAddress "glDispatchComputeGroupSizeARB"
+//        if ptr <> 0n then
+//            hasDynamicCompute <- true
+//            glDispatchCompute <-System.Runtime.InteropServices.Marshal.GetDelegateForFunctionPointer(ptr, typeof<DispatchComputeGroupSizeARBDelegate>) |> unbox<DispatchComputeGroupSizeARBDelegate>
 
-    member x.WorkGroupSize = workGroupSize
-    member x.WorkGroupInvocations = workGroupInvocations
+//    member x.WorkGroupSize = workGroupSize
+//    member x.WorkGroupInvocations = workGroupInvocations
 
-    member x.DispatchCompute(groups : V3i, local : V3i) =
-        if not hasDynamicCompute then failwith "[GL] cannot invoke kernel with variable local-size (GL does not support it)"
-        glDispatchCompute.Invoke(uint32 groups.X, uint32 groups.Y, uint32 groups.Z, uint32 local.X, uint32 local.Y, uint32 local.Z)
+//    member x.DispatchCompute(groups : V3i, local : V3i) =
+//        if not hasDynamicCompute then failwith "[GL] cannot invoke kernel with variable local-size (GL does not support it)"
+//        glDispatchCompute.Invoke(uint32 groups.X, uint32 groups.Y, uint32 groups.Z, uint32 local.X, uint32 local.Y, uint32 local.Z)
             
-    member x.DispatchCompute(groups : V3i) =
-        GL.DispatchCompute(groups.X, groups.Y, groups.Z)
+//    member x.DispatchCompute(groups : V3i) =
+//        GL.DispatchCompute(groups.X, groups.Y, groups.Z)
 
 
 
@@ -446,85 +446,85 @@ type private GLCompute(ctx : Context) =
 
     //    GL.Sync()
 
-[<AutoOpen>]
-module GLComputeExtensions =
-    let private computeInstanceCache = System.Collections.Concurrent.ConcurrentDictionary<Context, GLCompute>()
+//[<AutoOpen>]
+//module GLComputeExtensions =
+//    let private computeInstanceCache = System.Collections.Concurrent.ConcurrentDictionary<Context, GLCompute>()
 
-    let private getGLCompute (ctx : Context) =
-        computeInstanceCache.GetOrAdd(ctx, fun ctx -> GLCompute(ctx))
+//    let private getGLCompute (ctx : Context) =
+//        computeInstanceCache.GetOrAdd(ctx, fun ctx -> GLCompute(ctx))
 
-    type Context with
+//    type Context with
 
-        member x.TryCompileKernel (id : string, code : string, iface : FShade.GLSL.GLSLProgramInterface, localSize : V3i) =
-            use __ = x.ResourceLock
+//        member x.TryCompileKernel (id : string, code : string, iface : FShade.GLSL.GLSLProgramInterface, localSize : V3i) =
+//            use __ = x.ResourceLock
 
-            match x.TryCompileComputeProgram(id, code, iface) with
-            | Success program ->
-                let kernel = new ComputeShader(program, localSize)
-                Success kernel
+//            match x.TryCompileComputeProgram(id, code, iface) with
+//            | Success program ->
+//                let kernel = new ComputeShader(program, localSize)
+//                Success kernel
 
-            | Error err ->
-                Error err
+//            | Error err ->
+//                Error err
 
-        [<Obsolete>]
-        member x.TryCompileKernel (code : string, iface : FShade.GLSL.GLSLProgramInterface, localSize : V3i) =
-            x.TryCompileKernel(code, code, iface, localSize)
+//        [<Obsolete>]
+//        member x.TryCompileKernel (code : string, iface : FShade.GLSL.GLSLProgramInterface, localSize : V3i) =
+//            x.TryCompileKernel(code, code, iface, localSize)
 
-        member x.TryCompileKernel (shader : FShade.ComputeShader) =
-            let gl = getGLCompute x
-            let glsl = 
-                if x.Driver.glsl >= Version(4,3,0) then
-                    shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSL430
-                elif 
-                    x.Driver.extensions |> Set.contains "GL_ARB_compute_shader" && 
-                    x.Driver.extensions |> Set.contains "GL_ARB_shading_language_420pack" && 
-                    x.Driver.glsl >= Version(4,1,0) then 
-                    let be = 
-                        FShade.GLSL.Backend.Create 
-                            { glsl410.Config with 
-                                enabledExtensions = 
-                                    glsl410.Config.enabledExtensions
-                                    |> Set.add "GL_ARB_compute_shader"  
-                                    |> Set.add "GL_ARB_shading_language_420pack" 
-                            }
-                    shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSL be
-                else 
-                    failwithf "[GL] Compute shader not supported: GLSL version = %A" x.Driver.glsl
+//        member x.TryCompileKernel (shader : FShade.ComputeShader) =
+//            let gl = getGLCompute x
+//            let glsl = 
+//                if x.Driver.glsl >= Version(4,3,0) then
+//                    shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSL430
+//                elif 
+//                    x.Driver.extensions |> Set.contains "GL_ARB_compute_shader" && 
+//                    x.Driver.extensions |> Set.contains "GL_ARB_shading_language_420pack" && 
+//                    x.Driver.glsl >= Version(4,1,0) then 
+//                    let be = 
+//                        FShade.GLSL.Backend.Create 
+//                            { glsl410.Config with 
+//                                enabledExtensions = 
+//                                    glsl410.Config.enabledExtensions
+//                                    |> Set.add "GL_ARB_compute_shader"  
+//                                    |> Set.add "GL_ARB_shading_language_420pack" 
+//                            }
+//                    shader |> FShade.ComputeShader.toModule |> ModuleCompiler.compileGLSL be
+//                else 
+//                    failwithf "[GL] Compute shader not supported: GLSL version = %A" x.Driver.glsl
 
-            let localSize = 
-                if shader.csLocalSize.AllGreater 0 then shader.csLocalSize
-                else failwith "[GL] compute shader has no local size"
+//            let localSize = 
+//                if shader.csLocalSize.AllGreater 0 then shader.csLocalSize
+//                else failwith "[GL] compute shader has no local size"
 
-            let adjust (s : GLSL.GLSLSampler) =
-                let textures =
-                    List.init s.samplerCount (fun i -> 
-                        let texName = 
-                            match Map.tryFind (s.samplerName, i) shader.csTextureNames with
-                                | Some ti -> ti
-                                | _ -> s.samplerName
-                        let samplerState =
-                            match Map.tryFind (s.samplerName, i) shader.csSamplerStates with
-                                | Some sam -> sam
-                                | _ -> SamplerState.empty
-                        texName, samplerState
-                    )
-                { s with samplerTextures = textures }
+//            let adjust (s : GLSL.GLSLSampler) =
+//                let textures =
+//                    List.init s.samplerCount (fun i -> 
+//                        let texName = 
+//                            match Map.tryFind (s.samplerName, i) shader.csTextureNames with
+//                                | Some ti -> ti
+//                                | _ -> s.samplerName
+//                        let samplerState =
+//                            match Map.tryFind (s.samplerName, i) shader.csSamplerStates with
+//                                | Some sam -> sam
+//                                | _ -> SamplerState.empty
+//                        texName, samplerState
+//                    )
+//                { s with samplerTextures = textures }
 
-            let iface = { glsl.iface with samplers = glsl.iface.samplers |> MapExt.map (constF adjust) }
-            //glsl.iface.samplers
-            x.TryCompileKernel(shader.csId, glsl.code, iface, localSize)
+//            let iface = { glsl.iface with samplers = glsl.iface.samplers |> MapExt.map (constF adjust) }
+//            //glsl.iface.samplers
+//            x.TryCompileKernel(shader.csId, glsl.code, iface, localSize)
 
-        member x.CompileKernel (shader : FShade.ComputeShader) =
-            match x.TryCompileKernel shader with
-                | Success kernel -> 
-                    kernel
-                | Error err ->
-                    Log.error "%s" err
-                    failwith err
+//        member x.CompileKernel (shader : FShade.ComputeShader) =
+//            match x.TryCompileKernel shader with
+//                | Success kernel -> 
+//                    kernel
+//                | Error err ->
+//                    Log.error "%s" err
+//                    failwith err
     
-        member x.Delete(k : ComputeShader) =
-            k.Dispose()
+//        member x.Delete(k : ComputeShader) =
+//            k.Dispose()
 
-        //member x.Run(i : list<ComputeCommand>, queries : IQuery) =
-        //    let c = getGLCompute x
-        //    c.Run(i, queries)
+//        //member x.Run(i : list<ComputeCommand>, queries : IQuery) =
+//        //    let c = getGLCompute x
+//        //    c.Run(i, queries)

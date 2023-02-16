@@ -38,6 +38,7 @@
     <Compile Include="Core\Extensions\ARB_internalformat_query.fs" />
     <Compile Include="Core\Extensions\ARB_framebuffer_no_attachments.fs" />
     <Compile Include="Core\Extensions\ARB_get_program_binary.fs" />
+    <Compile Include="Core\Extensions\ARB_compute_variable_group_size.fs" />
     <Compile Include="Core\Extensions\EXT_memory_object.fs" />
     <Compile Include="Core\Config.fs" />
     <Compile Include="Core\DebugOutput.fs" />
@@ -70,6 +71,7 @@
     <Compile Include="Resources\SamplerState.fs" />
     <Compile Include="Resources\ShaderReflector.fs" />
     <Compile Include="Resources\Program.fs" />
+    <Compile Include="Resources\ComputeProgram.fs" />
     <Compile Include="Resources\FramebufferSignature.fs" />
     <Compile Include="Resources\Framebuffer.fs" />
     <Compile Include="Resources\Pointers.fs" />

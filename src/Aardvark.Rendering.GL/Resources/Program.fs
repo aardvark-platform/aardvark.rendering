@@ -2,7 +2,6 @@
 
 open System
 open System.Threading
-open System.Collections.Concurrent
 open Aardvark.Base
 open Aardvark.Rendering
 
@@ -10,7 +9,6 @@ open Aardvark.Rendering.ShaderReflection
 open FSharp.Data.Adaptive
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
-open System.Runtime.CompilerServices
 
 [<AutoOpen>]
 module private ShaderProgramCounters =
@@ -22,31 +20,22 @@ module private ShaderProgramCounters =
         let removeProgram (ctx : Context) =
             Interlocked.Decrement(&ctx.MemoryUsage.ShaderProgramCount) |> ignore
 
-
-type ActiveUniform = { slot : int; index : int; location : int; name : string; semantic : string; samplerState : Option<SamplerState>; size : int; uniformType : ActiveUniformType; offset : int; arrayStride : int; isRowMajor : bool } with
-    member x.Interface =
-
-        let name =
-            if x.name = x.semantic then x.name
-            else sprintf "%s : %s" x.name x.semantic
-
-        match x.samplerState with
-            | Some sam ->
-                sprintf "%A %s; // sampler: %A" x.uniformType name sam
-            | None ->
-                sprintf "%A %s;" x.uniformType name
-
-type UniformBlock = { name : string; index : int; binding : int; fields : list<ActiveUniform>; size : int; referencedBy : Set<ShaderStage> }
-type ActiveAttribute = { attributeIndex : int; size : int; name : string; semantic : string; attributeType : ActiveAttribType }
+type ActiveAttribute =
+    {
+        attributeIndex : int
+        size : int
+        name : string
+        semantic : string
+        attributeType : ActiveAttribType
+    }
 
 type Shader =
-    class
-        val mutable public Context : Context
-        val mutable public Handle : int
-        val mutable public Stage : ShaderStage
-        val mutable public SupportedModes : Option<Set<IndexedGeometryMode>>
-        new(ctx : Context, handle : int, stage : ShaderStage, tops) = { Context = ctx; Handle = handle; Stage = stage; SupportedModes = tops}
-    end
+    {
+        Context : Context
+        Handle : int
+        Stage : ShaderStage
+        SupportedModes : Option<Set<IndexedGeometryMode>>
+    }
 
 type Program =
     {
@@ -56,13 +45,6 @@ type Program =
         HasTessellation : bool
         SupportedModes : Option<Set<IndexedGeometryMode>>
         Interface : FShade.GLSL.GLSLProgramInterface
-
-        [<DefaultValue>]
-        mutable _inputs : Option<list<string * Type>>
-        [<DefaultValue>]
-        mutable _outputs : Option<list<string * Type>>
-        [<DefaultValue>]
-        mutable _uniforms : Option<list<string * Type>>
     }
 
     member x.WritesPointSize =
@@ -241,7 +223,12 @@ module ProgramExtensions =
                         None
 
                 if status = 1 then
-                    Success(Shader(x, handle, stage, topologies))
+                    Success {
+                        Context = x
+                        Handle = handle
+                        Stage = stage
+                        SupportedModes = topologies
+                    }
                 else
                     let log =
                         if String.IsNullOrEmpty log then "ERROR: shader did not compile but log was empty"
@@ -331,7 +318,7 @@ module ProgramExtensions =
                 )
             )
 
-        let tryLinkProgramNew (handle : int) (code : string) (shaders : list<Shader>) (findOutputs : int -> Context -> list<ActiveAttribute>) (x : Context) =
+        let tryLinkProgram (handle : int) (code : string) (shaders : list<Shader>) (findOutputs : int -> Context -> list<ActiveAttribute>) (x : Context) =
             GL.LinkProgram(handle)
             GL.Check "could not link program"
 
@@ -403,10 +390,6 @@ module ProgramExtensions =
 
                 Error log
 
-        [<Obsolete>]
-        let tryLinkProgram (expectsRowMajorMatrices : bool) (handle : int) (code : string) (shaders : list<Shader>) (firstTexture : int) (findOutputs : int -> Context -> list<ActiveAttribute>) (x : Context) =
-            tryLinkProgramNew handle code shaders findOutputs x
-
     module private ProgramCompiler =
 
         let fixBindings (program : Program) (iface : FShade.GLSL.GLSLProgramInterface) =
@@ -469,7 +452,7 @@ module ProgramExtensions =
                     GL.AttachShader(handle, s.Handle)
                     GL.Check "could not attach shader to program"
 
-                match context |> ShaderCompiler.tryLinkProgramNew handle code shaders findOutputs with
+                match context |> ShaderCompiler.tryLinkProgram handle code shaders findOutputs with
                 | Success program ->
                     ResourceCounts.addProgram context
                     Success program
@@ -786,14 +769,6 @@ module ProgramExtensions =
             | Error e ->
                 failwithf "[GL] shader compiler returned errors: %s" e
 
-        [<Obsolete>]
-        member x.TryCompileProgramCode(fboSignature : Map<string, int>, expectsRowMajorMatrices : bool, code : string) =
-            x.TryCompileProgramCode(fboSignature, code)
-
-        [<Obsolete>]
-        member x.CompileProgramCode(fboSignature : Map<string, int>, expectsRowMajorMatrices : bool, code : string) =
-            x.CompileProgramCode(fboSignature, code)
-
         member x.Delete(p : Program) =
             p.Dispose()
 
@@ -824,10 +799,6 @@ module ProgramExtensions =
                     | res ->
                         res
             )
-
-        [<Obsolete>]
-        member x.TryCompileCompute(expectsRowMajorMatrices : bool, code : string) =
-            x.TryCompileComputeProgram(code, code, Unchecked.defaultof<_>)
 
         member x.TryCompileProgram(id : string, signature : IFramebufferSignature, code : Lazy<GLSL.GLSLShader>) =
             x.TryCompileProgram(id, signature.Layout, code)

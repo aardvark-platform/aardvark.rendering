@@ -20,8 +20,6 @@ type Runtime(debug : IDebugConfig) =
 
     let onDispose = Event<unit>()
 
-    //let compute = lazy ( new GLCompute(ctx) )
-
     member x.Context = ctx
 
     member x.DebugConfig = debug
@@ -326,12 +324,10 @@ type Runtime(debug : IDebugConfig) =
             x.CreateGeometryPool(types)
 
         member x.MaxLocalSize =
-            V3i.Zero
-            //compute.Value.WorkGroupSize
+            ctx.MaxComputeWorkGroupSize
 
         member x.CreateComputeShader (shader : FShade.ComputeShader) =
-            raise <| NotImplementedException()
-            //ctx.CompileKernel c :> IComputeShader
+            ctx.CompileKernel shader :> IComputeShader
 
         member x.NewInputBinding(shader : IComputeShader, input : IUniformProvider) =
             raise <| NotImplementedException()

@@ -902,7 +902,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
         if a % b = 0 then a / b
         else 1 + a / b
 
-    static let cullingCache = System.Collections.Concurrent.ConcurrentDictionary<Context, ComputeShader>()
+    static let cullingCache = System.Collections.Concurrent.ConcurrentDictionary<Context, ComputeProgram>()
     static let boundCache = System.Collections.Concurrent.ConcurrentDictionary<Context, Program>()
         
     let initialCapacity = Fun.NextPowerOfTwo initialCapacity
@@ -955,7 +955,7 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
                 shader 
             )
         else
-            Unchecked.defaultof<ComputeShader>
+            Unchecked.defaultof<ComputeProgram>
 
     let boxShader =
         if bounds then
@@ -983,11 +983,11 @@ type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : native
 
 
 
-    let infoSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "infos" then Some a else None)
-    let boundSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "bounds" then Some a else None)
-    let activeSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "isActive" then Some a else None)
-    let viewProjSlot = culling.Buffers |> List.pick (fun (a,b,c) -> if b = "viewProjs" then Some a else None)
-    let uniformBlock = culling.UniformBlocks |> List.head
+    let infoSlot = culling.Interface.storageBuffers.["infos"].ssbBinding
+    let boundSlot = culling.Interface.storageBuffers.["bounds"].ssbBinding
+    let activeSlot = culling.Interface.storageBuffers.["isActive"].ssbBinding
+    let viewProjSlot = culling.Interface.storageBuffers.["viewProjs"].ssbBinding
+    let uniformBlock = culling.Interface.uniformBuffers |> MapExt.toList |> List.map snd |> List.head
     let countField = uniformBlock.ubFields |> List.find (fun f -> f.ufName = "cs_count")
              
     let boxBoundSlot = boxShader.Interface.storageBuffers |> Seq.pick (fun (KeyValue(a,b)) -> if a = "Bounds" then Some b.ssbBinding else None)
