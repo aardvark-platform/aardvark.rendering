@@ -206,7 +206,7 @@ module ComputeShader =
         let win = win :> IRenderTarget
         let subscribe (f : unit -> unit) = ()
         
-        let par = ParallelPrimitives(runtime)
+        use par = new ParallelPrimitives(runtime)
 
         let checkerboardPix = 
             let pi = PixVolume<byte>(Col.Format.RGBA, V3i(64,64,64))

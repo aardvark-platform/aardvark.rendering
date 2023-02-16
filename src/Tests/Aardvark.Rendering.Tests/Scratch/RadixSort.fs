@@ -17,7 +17,7 @@ let run() =
     use app = new OpenGlApplication()
 
     let runtime = app.Runtime :> IRuntime
-    let sorter = RadixSort runtime
+    use sorter = new RadixSort(runtime)
 
     let isSorted (test : 'a[]) =
         if test.Length > 0 then

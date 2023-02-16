@@ -386,7 +386,7 @@ type RadixSort(runtime : IRuntime) =
         use dRadixBlockSum = runtime.CreateBuffer<uint32>(RadixSortShaders.PREFIX_NUM_BLOCKS)
 
         let mutable inputKeys = input
-        let mutable inputValues : IBufferVector<int> = Unchecked.defaultof<_>
+        let mutable inputValues : IBufferVector<int> = valueCache
 
         let mutable outputKeys = keyCache :> IBufferVector<_>
         let mutable outputValues = valueCache :> IBufferVector<_>
@@ -602,5 +602,14 @@ type RadixSort(runtime : IRuntime) =
             
     member x.SortInPlace(input : IBufferVector<int>) =
         x.Sort(input, input, RadixSortMode.Int)
+
+    member x.Dispose() =
+        radixSum.Dispose()
+        radixPrefixSum.Dispose()
+        radixAddOffsetsAndShuffle.Dispose()
+        radixAddOffsetsAndShuffleKeysOnly.Dispose()
+
+    interface System.IDisposable with
+        member x.Dispose() = x.Dispose()
 
 

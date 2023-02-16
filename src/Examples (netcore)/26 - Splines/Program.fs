@@ -216,7 +216,7 @@ module Sg =
             cache.GetOrAdd(runtime, fun runtime ->
                 let prepare = runtime.CreateComputeShader SplineShader.prepare
                 let evaluate = runtime.CreateComputeShader SplineShader.evalulate
-                let prim = ParallelPrimitives runtime
+                let prim = new ParallelPrimitives(runtime)
                 prim, prepare, evaluate
             )
 

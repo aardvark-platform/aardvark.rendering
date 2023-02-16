@@ -74,6 +74,9 @@ type MutableComputeInputBinding internal(shader : IComputeShader) =
 
     member x.Item
         with set (name : string) (value : obj) =
+            if isNull value then
+                raise <| ArgumentNullException(nameof value)
+
             lock x (fun _ ->
                 let wrapped = wrapArray value
 
