@@ -10,6 +10,10 @@ open System.Runtime.CompilerServices
 
 module private MutableComputeBindingInternals =
 
+    type IComputeShader with
+        member inline x.IsBuffer(name : string) =
+            x.Interface.storageBuffers |> MapExt.containsKey name
+
     module AVal =
 
         [<AutoOpen>]
@@ -77,9 +81,11 @@ type MutableComputeInputBinding internal(shader : IComputeShader) =
             if isNull value then
                 raise <| ArgumentNullException(nameof value)
 
-            lock x (fun _ ->
-                let wrapped = wrapArray value
+            let wrapped =
+                if shader.IsBuffer name then wrapArray value
+                else value
 
+            lock x (fun _ ->
                 match cvals.TryGetValue name with
                 | (true, cval) ->
                     if not <| cval.ContentType.IsAssignableFrom(wrapped.GetType()) then

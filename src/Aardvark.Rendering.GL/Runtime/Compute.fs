@@ -308,6 +308,7 @@ and ComputeShader(prog : Program, localSize : V3i) =
     interface IComputeShader with
         member x.LocalSize = localSize
         member x.Runtime = x.Context.Runtime :> IComputeRuntime
+        member x.Interface = iface
     
 type private GLCompute(ctx : Context) =
     let mutable workGroupSize = V3i.Zero

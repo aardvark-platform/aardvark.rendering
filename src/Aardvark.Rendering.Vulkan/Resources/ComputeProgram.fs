@@ -24,6 +24,7 @@ type ComputeProgram =
         interface IComputeShader with
             member x.Runtime = x.Device.Runtime
             member x.LocalSize = x.GroupSize
+            member x.Interface = x.Shader.iface
 
         new (device : Device, pipeline : VkPipeline, layout : PipelineLayout, module_ : ShaderModule, groupSize : V3i, shader : GLSLShader) =
             { inherit CachedResource(device)

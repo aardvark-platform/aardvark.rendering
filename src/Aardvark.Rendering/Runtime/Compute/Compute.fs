@@ -20,6 +20,7 @@ and IComputeShader =
     inherit IDisposable
     abstract member Runtime : IComputeRuntime
     abstract member LocalSize : V3i
+    abstract member Interface : FShade.GLSL.GLSLProgramInterface
 
 and IComputeInputBinding =
     abstract member Shader : IComputeShader
