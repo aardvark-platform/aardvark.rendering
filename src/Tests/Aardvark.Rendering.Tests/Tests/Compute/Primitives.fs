@@ -12,18 +12,6 @@ module ComputePrimitives =
     module Cases =
         open FShade
 
-        module private Array =
-
-            let randomInts size =
-                Array.init size (fun _ ->
-                    (Rnd.rng.UniformInt 32000) - 16000
-                )
-
-            let strided (start : int) (count : int) (delta : int) (arr : 'T[]) =
-                [start .. delta .. (start + count - 1)]
-                |> List.map (fun i -> arr.[i])
-                |> Array.ofList
-
         let scan (runtime : IRuntime) =
             use p = new ParallelPrimitives(runtime)
 
@@ -41,8 +29,8 @@ module ComputePrimitives =
             let result = outputBuffer.Download()
 
             let expected =
-                input
-                |> Array.strided start count delta
+                Array.sub input start count
+                |> Array.strided delta
                 |> Array.scan (+) 0
                 |> Array.tail
 
@@ -110,8 +98,8 @@ module ComputePrimitives =
             let result = p.Sum(inputRange)
 
             let expected =
-                input
-                |> Array.strided start count delta
+                Array.sub input start count
+                |> Array.strided delta
                 |> Array.sum
 
             Expect.equal result expected "Result mismatch"
@@ -130,8 +118,8 @@ module ComputePrimitives =
             let result = p.Fold(<@ (*) @>, inputRange)
 
             let expected =
-                input
-                |> Array.strided start count delta
+                Array.sub input start count
+                |> Array.strided delta
                 |> Array.reduce (*)
 
             Expect.equal result expected "Result mismatch"
@@ -154,8 +142,8 @@ module ComputePrimitives =
             let result = p.MapReduce(<@ addByIndex @>, <@ (+) @>, inputRange)
 
             let expected =
-                input
-                |> Array.strided start count delta
+                Array.sub input start count
+                |> Array.strided delta
                 |> Array.mapi addByIndex
                 |> Array.reduce (+)
 

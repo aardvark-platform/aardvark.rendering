@@ -10,6 +10,7 @@ module ``Compute Tests`` =
         ComputeImages.tests
         ComputeBuffers.tests
         ComputePrimitives.tests
+        ComputeSorting.tests
         MutableInputBinding.tests
     ]
 

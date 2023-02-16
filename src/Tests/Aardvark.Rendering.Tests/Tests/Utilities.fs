@@ -43,6 +43,29 @@ module Rnd =
 
     let c3b() = C3b(uint8(), uint8(), uint8())
 
+
+module Array =
+
+    let random gen size =
+        Array.init size (ignore >> gen)
+
+    let randomInts =
+        random (fun _ -> (Rnd.rng.UniformInt 32000) - 16000)
+
+    let randomV4fs =
+        random Rnd.rng.UniformV4f
+
+    let strided (delta : int) (arr : 'T[]) =
+        [0 .. delta .. arr.Length - 1]
+        |> List.map (fun i -> arr.[i])
+        |> Array.ofList
+
+    let subvector (start : int) (delta : int) (count : int) (arr : 'T[]) =
+        let upper = min arr.Length (start + count * delta)
+        [start .. delta .. (upper - 1)]
+        |> List.map (fun i -> arr.[i])
+        |> Array.ofList
+
 [<AutoOpen>]
 module PixData =
 
