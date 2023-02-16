@@ -1366,7 +1366,7 @@ and JpegCompressorInstance internal(parent : JpegCompressor, size : V2i, quality
         [
             ComputeCommand.Sync codewordBuffer.Buffer
             ComputeCommand.Zero outputBuffer
-            
+            ComputeCommand.Sync(outputBuffer, ResourceAccess.TransferWrite, ResourceAccess.ShaderRead ||| ResourceAccess.ShaderWrite)
             ComputeCommand.Bind(parent.AssembleShader)
             ComputeCommand.SetInput assembleInput
             ComputeCommand.Dispatch(int codewordBuffer.Count / 64)
