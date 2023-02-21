@@ -61,8 +61,8 @@ type ICommandStream =
     abstract member Enable : v : nativeptr<int> -> unit
     abstract member Disable : v : nativeptr<int> -> unit
 
-    abstract member BindBuffer : target : int * buffer : int -> unit
-    abstract member BindBuffer : target : int * buffer : nativeptr<int> -> unit
+    abstract member BindBuffer : target : BufferTarget * buffer : int -> unit
+    abstract member BindBuffer : target : BufferTarget * buffer : nativeptr<int> -> unit
     abstract member BindBufferBase : target : BufferRangeTarget * slot : int * b : int -> unit
     abstract member BindBufferBase : target : BufferRangeTarget * slot : int * b : nativeptr<int> -> unit
     abstract member BindBufferRange : target : BufferRangeTarget * slot : int * b : int * offset : nativeint * size : nativeint -> unit
@@ -71,8 +71,28 @@ type ICommandStream =
     abstract member BindBufferRangeFixed : target : BufferRangeTarget * slot : int * b : nativeptr<int> * offset : nativeint * size : nativeint -> unit
 
     abstract member NamedBufferData : buffer : int * size : nativeint * data : nativeint * usage : OpenTK.Graphics.OpenGL4.BufferUsageHint -> unit
-    abstract member NamedBufferSubData : buffer : int * offset : nativeint * size : nativeint * data : nativeint -> unit
 
+    abstract member BufferSubData : target : BufferTarget * offset : nativeint * size : nativeint * data : nativeint -> unit
+    abstract member BufferSubDataPtr : target : BufferTarget * offset : nativeint * size : nativeint * pData: nativeptr<nativeint> -> unit
+    abstract member NamedBufferSubData : buffer : int * offset : nativeint * size : nativeint * data : nativeint -> unit
+    abstract member NamedBufferSubDataPtr : buffer : int * offset : nativeint * size : nativeint * pData: nativeptr<nativeint> -> unit
+
+    abstract member ClearBufferSubData : target : BufferTarget * internalFormat: PixelInternalFormat * offset: nativeint * size: nativeint *
+                                         format: PixelFormat * typ: PixelType * pData: nativeptr<nativeint> -> unit
+
+    abstract member ClearNamedBufferSubData : buffer: int * internalFormat: PixelInternalFormat * offset: nativeint * size: nativeint *
+                                              format: PixelFormat * typ: PixelType * pData: nativeptr<nativeint> -> unit
+
+    abstract member CopyBufferSubData : readTarget: BufferTarget * writeTarget : BufferTarget *
+                                        readOffset: nativeint * writeOffset: nativeint * size: nativeint -> unit
+
+    abstract member CopyNamedBufferSubData : readBuffer: int * writeBuffer: int *
+                                             readOffset: nativeint * writeOffset: nativeint * size: nativeint -> unit
+
+    abstract member GetBufferSubData : target : BufferTarget * offset : nativeint * size : nativeint * data : nativeint -> unit
+    abstract member GetBufferSubDataPtr : target : BufferTarget * offset : nativeint * size : nativeint * pData : nativeptr<nativeint> -> unit
+    abstract member GetNamedBufferSubData : buffer : int * offset : nativeint * size : nativeint * data : nativeint -> unit
+    abstract member GetNamedBufferSubDataPtr : buffer : int * offset : nativeint * size : nativeint * pData : nativeptr<nativeint> -> unit
 
     abstract member SetActiveTexture : slot : int -> unit
     abstract member BindTexture : target : TextureTarget * t : int -> unit
@@ -484,16 +504,16 @@ module GLAssemblerExtensions =
 
 
 
-        member this.BindBuffer(target : int, buffer : int) =
+        member this.BindBuffer(target : BufferTarget, buffer : int) =
             s.BeginCall(2)
             s.PushArg(buffer)
-            s.PushArg(target)
+            s.PushArg(int target)
             s.Call(OpenGl.Pointers.BindBuffer)
 
-        member this.BindBuffer(target : int, buffer : nativeptr<int>) =
+        member this.BindBuffer(target : BufferTarget, buffer : nativeptr<int>) =
             s.BeginCall(2)
             s.PushIntArg(NativePtr.toNativeInt buffer)
-            s.PushArg(target)
+            s.PushArg(int target)
             s.Call(OpenGl.Pointers.BindBuffer)
 
         member this.BindBufferBase(target : BufferRangeTarget, slot : int, b : int) =
@@ -545,6 +565,22 @@ module GLAssemblerExtensions =
             s.PushArg buffer
             s.Call(OpenGl.Pointers.NamedBufferData)
 
+        member this.BufferSubData(target : BufferTarget, offset : nativeint, size : nativeint, data : nativeint) =
+            s.BeginCall(4)
+            s.PushArg data
+            s.PushArg size
+            s.PushArg offset
+            s.PushArg (int target)
+            s.Call(OpenGl.Pointers.BufferSubData)
+
+        member this.BufferSubDataPtr(target : BufferTarget, offset : nativeint, size : nativeint, pData : nativeptr<nativeint>) =
+            s.BeginCall(4)
+            s.PushPtrArg (NativePtr.toNativeInt pData)
+            s.PushArg size
+            s.PushArg offset
+            s.PushArg (int target)
+            s.Call(OpenGl.Pointers.BufferSubData)
+
         member this.NamedBufferSubData(buffer : int, offset : nativeint, size : nativeint, data : nativeint) =
             s.BeginCall(4)
             s.PushArg data
@@ -553,6 +589,89 @@ module GLAssemblerExtensions =
             s.PushArg buffer
             s.Call(OpenGl.Pointers.NamedBufferSubData)
 
+        member this.NamedBufferSubDataPtr(buffer : int, offset : nativeint, size : nativeint, pData : nativeptr<nativeint>) =
+            s.BeginCall(4)
+            s.PushPtrArg (NativePtr.toNativeInt pData)
+            s.PushArg size
+            s.PushArg offset
+            s.PushArg buffer
+            s.Call(OpenGl.Pointers.NamedBufferSubData)
+
+        member this.ClearBufferSubData(target : BufferTarget, internalFormat : PixelInternalFormat, offset : nativeint, size : nativeint,
+                                       format : PixelFormat, typ : PixelType, pData : nativeptr<nativeint>) =
+            s.BeginCall(7)
+            s.PushPtrArg(NativePtr.toNativeInt pData)
+            s.PushArg(int typ)
+            s.PushArg(int format)
+            s.PushArg(size)
+            s.PushArg(offset)
+            s.PushArg(int internalFormat)
+            s.PushArg(int target)
+            s.Call(OpenGl.Pointers.ClearBufferSubData)
+
+        member this.ClearNamedBufferSubData(buffer : int, internalFormat : PixelInternalFormat, offset : nativeint, size : nativeint,
+                                            format : PixelFormat, typ : PixelType, pData : nativeptr<nativeint>) =
+            s.BeginCall(7)
+            s.PushPtrArg(NativePtr.toNativeInt pData)
+            s.PushArg(int typ)
+            s.PushArg(int format)
+            s.PushArg(size)
+            s.PushArg(offset)
+            s.PushArg(int internalFormat)
+            s.PushArg(buffer)
+            s.Call(OpenGl.Pointers.ClearNamedBufferSubData)
+
+        member this.CopyBufferSubData(readTarget : BufferTarget, writeTarget : BufferTarget,
+                                      readOffset : nativeint, writeOffset : nativeint, size : nativeint) =
+            s.BeginCall(5)
+            s.PushArg(size)
+            s.PushArg(writeOffset)
+            s.PushArg(readOffset)
+            s.PushArg(int writeTarget)
+            s.PushArg(int readTarget)
+            s.Call(OpenGl.Pointers.CopyBufferSubData)
+
+        member this.CopyNamedBufferSubData(readBuffer : int, writeBuffer : int,
+                                           readOffset : nativeint, writeOffset : nativeint, size : nativeint) =
+            s.BeginCall(5)
+            s.PushArg(size)
+            s.PushArg(writeOffset)
+            s.PushArg(readOffset)
+            s.PushArg(writeBuffer)
+            s.PushArg(readBuffer)
+            s.Call(OpenGl.Pointers.CopyNamedBufferSubData)
+
+        member this.GetBufferSubData(target : BufferTarget, offset : nativeint, size : nativeint, data : nativeint) =
+            s.BeginCall(4)
+            s.PushArg(data)
+            s.PushArg(size)
+            s.PushArg(offset)
+            s.PushArg(int target)
+            s.Call(OpenGl.Pointers.GetBufferSubData)
+
+        member this.GetBufferSubDataPtr(target : BufferTarget, offset : nativeint, size : nativeint, pData : nativeptr<nativeint>) =
+            s.BeginCall(4)
+            s.PushPtrArg(NativePtr.toNativeInt pData)
+            s.PushArg(size)
+            s.PushArg(offset)
+            s.PushArg(int target)
+            s.Call(OpenGl.Pointers.GetBufferSubData)
+
+        member this.GetNamedBufferSubData(buffer : int, offset : nativeint, size : nativeint, data : nativeint) =
+            s.BeginCall(4)
+            s.PushArg(data)
+            s.PushArg(size)
+            s.PushArg(offset)
+            s.PushArg(buffer)
+            s.Call(OpenGl.Pointers.GetNamedBufferSubData)
+
+        member this.GetNamedBufferSubDataPtr(buffer : int, offset : nativeint, size : nativeint, pData : nativeptr<nativeint>) =
+            s.BeginCall(4)
+            s.PushPtrArg(NativePtr.toNativeInt pData)
+            s.PushArg(size)
+            s.PushArg(offset)
+            s.PushArg(buffer)
+            s.Call(OpenGl.Pointers.GetNamedBufferSubData)
 
         member this.SetActiveTexture(slot : int) =
             s.BeginCall(1)
@@ -833,8 +952,8 @@ module GLAssemblerExtensions =
         interface ICommandStream with
             member this.BeginQuery(target: QueryTarget, query: nativeptr<int>) = this.BeginQuery(target, query)
             member this.BeginQuery(target: QueryTarget, query: int) = this.BeginQuery(target, query)
-            member this.BindBuffer(target: int, buffer: int) = this.BindBuffer(target, buffer)
-            member this.BindBuffer(target: int, buffer: nativeptr<int>) = this.BindBuffer(target, buffer)
+            member this.BindBuffer(target: BufferTarget, buffer: int) = this.BindBuffer(target, buffer)
+            member this.BindBuffer(target: BufferTarget, buffer: nativeptr<int>) = this.BindBuffer(target, buffer)
             member this.BindBufferBase(target: BufferRangeTarget, slot: int, b: int) = this.BindBufferBase(target, slot, b)
             member this.BindBufferBase(target: BufferRangeTarget, slot: int, b: nativeptr<int>) = this.BindBufferBase(target, slot, b)
             member this.BindBufferRange(target: BufferRangeTarget, slot: int, b: int, offset: nativeint, size: nativeint) = this.BindBufferRange(target, slot, b, offset, size)
@@ -847,10 +966,16 @@ module GLAssemblerExtensions =
             member this.BindTexture(target: nativeptr<TextureTarget>, t: nativeptr<int>) = this.BindTexture(target, t)
             member this.BindTexturesAndSamplers(textureBinding: TextureBinding) = this.BindTexturesAndSamplers(textureBinding)
             member this.BindVertexAttributes(ctx: nativeptr<nativeint>, handle: VertexInputBindingHandle) = this.BindVertexAttributes(ctx, handle)
+            member this.BufferSubData(target, offset, size, data) = this.BufferSubData(target, offset, size, data)
+            member this.BufferSubDataPtr(target, offset, size, pData) = this.BufferSubDataPtr(target, offset, size, pData)
             member this.Clear(mask: ClearBufferMask) = this.Clear(mask)
+            member this.ClearBufferSubData(target, internalFormat, offset, size,format, typ, pData) = this.ClearBufferSubData(target, internalFormat, offset, size,format, typ, pData)
+            member this.ClearNamedBufferSubData(buffer, internalFormat, offset, size,format, typ, pData) = this.ClearNamedBufferSubData(buffer, internalFormat, offset, size,format, typ, pData)
             member this.ClearColor(c: nativeptr<C4f>) = this.ClearColor(c)
             member this.ClearDepth(c: nativeptr<float>) = this.ClearDepth(c)
             member this.ClearStencil(c: nativeptr<int>) = this.ClearStencil(c)
+            member this.CopyBufferSubData(readTarget, writeTarget, readOffset, writeOffset, size) = this.CopyBufferSubData(readTarget, writeTarget, readOffset, writeOffset, size)
+            member this.CopyNamedBufferSubData(readBuffer, writeBuffer, readOffset, writeOffset, size) = this.CopyNamedBufferSubData(readBuffer, writeBuffer, readOffset, writeOffset, size)
             member this.DeleteQueries(count: int, queries: nativeptr<int>) = this.DeleteQueries(count, queries)
             member this.Disable(v: int) = this.Disable(v)
             member this.Disable(v: nativeptr<int>) = this.Disable(v)
@@ -866,10 +991,15 @@ module GLAssemblerExtensions =
             member this.GenQueries(count: int, queries: nativeptr<int>) = this.GenQueries(count, queries)
             member this.Get(pname: GetPName, ptr: nativeptr<'a>) = this.Get(pname, ptr)
             member this.Get(pname: GetIndexedPName, index: int, ptr: nativeptr<'a>) = this.Get(pname, index, ptr)
+            member this.GetBufferSubData(target, offset, size, data) = this.GetBufferSubData(target, offset, size, data)
+            member this.GetBufferSubDataPtr(target, offset, size, pData) = this.GetBufferSubDataPtr(target, offset, size, pData)
+            member this.GetNamedBufferSubData(buffer, offset, size, data) = this.GetNamedBufferSubData(buffer, offset, size, data)
+            member this.GetNamedBufferSubDataPtr(buffer, offset, size, pData) = this.GetNamedBufferSubDataPtr(buffer, offset, size, pData)
             member this.GetQueryObject(query: nativeptr<int>, param: GetQueryObjectParam, ptr: nativeptr<'a>) = this.GetQueryObject(query, param, ptr)
             member this.GetQueryObject(query: int, param: GetQueryObjectParam, ptr: nativeptr<'a>) = this.GetQueryObject(query, param, ptr)
             member this.NamedBufferData(buffer: int, size: nativeint, data: nativeint, usage: OpenTK.Graphics.OpenGL4.BufferUsageHint) = this.NamedBufferData(buffer, size, data, usage)
-            member this.NamedBufferSubData(buffer: int, offset: nativeint, size: nativeint, data: nativeint) = this.NamedBufferSubData(buffer, offset, size, data)
+            member this.NamedBufferSubData(buffer, offset, size, data) = this.NamedBufferSubData(buffer, offset, size, data)
+            member this.NamedBufferSubDataPtr(buffer, offset, size, pData) = this.NamedBufferSubDataPtr(buffer, offset, size, pData)
             member this.QueryCounter(target: QueryCounterTarget, id: int) = this.QueryCounter(target, id)
             member this.QueryCounter(target: QueryCounterTarget, id: nativeptr<int>) = this.QueryCounter(target, id)
             member this.SetActiveTexture(slot: int) = this.SetActiveTexture(slot)
@@ -930,6 +1060,8 @@ module GLAssemblerExtensions =
         let afterDel =
             Marshal.PinDelegate(DebugCallbackDelegate(after))
 
+        new (inner : IAssemblerStream) =
+            new DebugCommandStream(AssemblerCommandStream inner)
 
         member x.Append(name : string, [<System.ParamArray>] args : obj[]) =
             let id = commands.Count
@@ -939,8 +1071,8 @@ module GLAssemblerExtensions =
         interface ICommandStream with
             member x.BeginQuery(target: QueryTarget, query: nativeptr<int>) = inner.BeginQuery(target, query); x.Append("BeginQuery", target, query)
             member x.BeginQuery(target: QueryTarget, query: int) = inner.BeginQuery(target, query); x.Append("BeginQuery", target, query)
-            member x.BindBuffer(target: int, buffer: int) = inner.BindBuffer(target, buffer); x.Append("BindBuffer", target, buffer)
-            member x.BindBuffer(target: int, buffer: nativeptr<int>) = inner.BindBuffer(target, buffer); x.Append("BindBuffer", target, buffer)
+            member x.BindBuffer(target: BufferTarget, buffer: int) = inner.BindBuffer(target, buffer); x.Append("BindBuffer", target, buffer)
+            member x.BindBuffer(target: BufferTarget, buffer: nativeptr<int>) = inner.BindBuffer(target, buffer); x.Append("BindBuffer", target, buffer)
             member x.BindBufferBase(target: BufferRangeTarget, slot: int, b: int) = inner.BindBufferBase(target, slot, b); x.Append("BindBufferBase", target, slot, b)
             member x.BindBufferBase(target: BufferRangeTarget, slot: int, b: nativeptr<int>) = inner.BindBufferBase(target, slot, b); x.Append("BindBufferBase", target, slot, b)
             member x.BindBufferRange(target: BufferRangeTarget, slot: int, b: int, offset: nativeint, size: nativeint) = inner.BindBufferRange(target, slot, b, offset, size); x.Append("BindBufferRange", target, slot, b, offset, size)
@@ -953,10 +1085,17 @@ module GLAssemblerExtensions =
             member x.BindTexture(target: nativeptr<TextureTarget>, t: nativeptr<int>) = inner.BindTexture(target, t); x.Append("BindTexture", target, t)
             member x.BindTexturesAndSamplers(textureBinding: TextureBinding) = inner.BindTexturesAndSamplers(textureBinding); x.Append("BindTexturesAndSamplers", textureBinding)
             member x.BindVertexAttributes(ctx: nativeptr<nativeint>, handle: VertexInputBindingHandle) = inner.BindVertexAttributes(ctx, handle); x.Append("BindVertexAttributes", ctx, handle)
+            member x.BufferSubData(target, offset, size, data) = inner.BufferSubData(target, offset, size, data); x.Append("BufferSubData", target, offset, size, data)
+            member x.BufferSubDataPtr(target, offset, size, pData) = inner.BufferSubDataPtr(target, offset, size, pData); x.Append("BufferSubDataPtr", target, offset, size, pData)
             member x.Clear(mask: ClearBufferMask) = inner.Clear(mask); x.Append("Clear", mask)
+            member x.ClearBufferSubData(target, internalFormat, offset, size,format, typ, pData) = inner.ClearBufferSubData(target, internalFormat, offset, size,format, typ, pData); x.Append("ClearBufferSubData", target, internalFormat, offset, size,format, typ, pData)
+            member x.ClearNamedBufferSubData(buffer, internalFormat, offset, size,format, typ, pData) = inner.ClearNamedBufferSubData(buffer, internalFormat, offset, size,format, typ, pData); x.Append("ClearNamedBufferSubData", buffer, internalFormat, offset, size,format, typ, pData)
+
             member x.ClearColor(c: nativeptr<C4f>) = inner.ClearColor(c); x.Append("ClearColor", c)
             member x.ClearDepth(c: nativeptr<float>) = inner.ClearDepth(c); x.Append("ClearDepth", c)
             member x.ClearStencil(c: nativeptr<int>) = inner.ClearStencil(c); x.Append("ClearStencil", c)
+            member x.CopyBufferSubData(readTarget, writeTarget, readOffset, writeOffset, size) = inner.CopyBufferSubData(readTarget, writeTarget, readOffset, writeOffset, size); x.Append("CopyBufferSubData", readTarget, writeTarget, readOffset, writeOffset, size)
+            member x.CopyNamedBufferSubData(readBuffer, writeBuffer, readOffset, writeOffset, size) = inner.CopyNamedBufferSubData(readBuffer, writeBuffer, readOffset, writeOffset, size); x.Append("CopyNamedBufferSubData", readBuffer, writeBuffer, readOffset, writeOffset, size)
             member x.DeleteQueries(count: int, queries: nativeptr<int>) = inner.DeleteQueries(count, queries); x.Append("DeleteQueries", count, queries)
             member x.Disable(v: int) = inner.Disable(v); x.Append("Disable", v)
             member x.Disable(v: nativeptr<int>) = inner.Disable(v); x.Append("Disable", v)
@@ -972,10 +1111,15 @@ module GLAssemblerExtensions =
             member x.GenQueries(count: int, queries: nativeptr<int>) = inner.GenQueries(count, queries); x.Append("GenQueries", count, queries)
             member x.Get(pname: GetPName, ptr: nativeptr<'a>) = inner.Get(pname, ptr); x.Append("Get", pname, ptr)
             member x.Get(pname: GetIndexedPName, index: int, ptr: nativeptr<'a>) = inner.Get(pname, index, ptr); x.Append("Get", pname, index, ptr)
+            member x.GetBufferSubData(target, offset, size, data) = inner.GetBufferSubData(target, offset, size, data); x.Append("GetBufferSubData", target, offset, size, data)
+            member x.GetBufferSubDataPtr(target, offset, size, pData) = inner.GetBufferSubDataPtr(target, offset, size, pData); x.Append("GetBufferSubDataPtr", target, offset, size, pData)
+            member x.GetNamedBufferSubData(buffer, offset, size, data) = inner.GetNamedBufferSubData(buffer, offset, size, data); x.Append("GetNamedBufferSubData", buffer, offset, size, data)
+            member x.GetNamedBufferSubDataPtr(buffer, offset, size, pData) = inner.GetNamedBufferSubDataPtr(buffer, offset, size, pData); x.Append("GetNamedBufferSubDataPtr", buffer, offset, size, pData)
             member x.GetQueryObject(query: nativeptr<int>, param: GetQueryObjectParam, ptr: nativeptr<'a>) = inner.GetQueryObject(query, param, ptr); x.Append("GetQueryObject", query, param, ptr)
             member x.GetQueryObject(query: int, param: GetQueryObjectParam, ptr: nativeptr<'a>) = inner.GetQueryObject(query, param, ptr); x.Append("GetQueryObject", query, param, ptr)
             member x.NamedBufferData(buffer: int, size: nativeint, data: nativeint, usage: OpenTK.Graphics.OpenGL4.BufferUsageHint) = inner.NamedBufferData(buffer, size, data, usage); x.Append("NamedBufferData", buffer, size, data, usage)
-            member x.NamedBufferSubData(buffer: int, offset: nativeint, size: nativeint, data: nativeint) = inner.NamedBufferSubData(buffer, offset, size, data); x.Append("NamedBufferSubData", buffer, offset, size, data)
+            member x.NamedBufferSubData(buffer, offset, size, data) = inner.NamedBufferSubData(buffer, offset, size, data); x.Append("NamedBufferSubData", buffer, offset, size, data); x.Append("NamedBufferSubData", buffer, offset, size, data)
+            member x.NamedBufferSubDataPtr(buffer, offset, size, pData) = inner.NamedBufferSubDataPtr(buffer, offset, size, pData); x.Append("NamedBufferSubDataPtr", buffer, offset, size, pData);
             member x.QueryCounter(target: QueryCounterTarget, id: int) = inner.QueryCounter(target, id); x.Append("QueryCounter", target, id)
             member x.QueryCounter(target: QueryCounterTarget, id: nativeptr<int>) = inner.QueryCounter(target, id); x.Append("QueryCounter", target, id)
             member x.SetActiveTexture(slot: int) = inner.SetActiveTexture(slot); x.Append("SetActiveTexture", slot)
@@ -1150,6 +1294,12 @@ module GLAssemblerExtensions =
             this.Conditional(cond, fun this ->
                 this.Call fptr
             )
+
+module internal CommandStream =
+
+    let create (debug : bool) (asm : IAssemblerStream) : ICommandStream =
+        if debug then DebugCommandStream asm
+        else AssemblerCommandStream asm
 
 type RefRef<'a> =
     class

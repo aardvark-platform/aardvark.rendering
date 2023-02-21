@@ -160,6 +160,9 @@ type DebugConfig =
         /// Only supported if RuntimeConfig.UseNewRenderTask = false.
         DebugRenderTasks : bool
 
+        /// Print OpenGL calls when a compute task is run.
+        DebugComputeTasks : bool
+
         /// Print the GLSL code during compilation (will not show up when cached).
         PrintShaderCode : bool
     }
@@ -169,10 +172,11 @@ type DebugConfig =
 
     /// Disables all debugging functionality.
     static member None =
-        { DebugOutput      = None
-          ErrorFlagCheck   = ErrorFlagCheck.Disabled
-          DebugRenderTasks = false
-          PrintShaderCode  = false }
+        { DebugOutput       = None
+          ErrorFlagCheck    = ErrorFlagCheck.Disabled
+          DebugRenderTasks  = false
+          DebugComputeTasks = false
+          PrintShaderCode   = false }
 
     /// OpenGL errors are logged, debug output reports warnings and errors.
     static member Minimal =
@@ -187,11 +191,12 @@ type DebugConfig =
             ErrorFlagCheck  = ErrorFlagCheck.ThrowOnError
             PrintShaderCode = true }
 
-    /// All messages are reported via debug output, render tasks print their OpenGL calls.
+    /// All messages are reported via debug output, render and compute tasks print their OpenGL calls.
     static member Full =
         { DebugConfig.Normal with
-            DebugOutput      = Some DebugOutputConfig.Full
-            DebugRenderTasks = true }
+            DebugOutput       = Some DebugOutputConfig.Full
+            DebugRenderTasks  = true
+            DebugComputeTasks = true }
 
     interface IDebugConfig
 

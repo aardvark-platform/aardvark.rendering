@@ -10,6 +10,28 @@ open FSharp.Data.Adaptive
 
 module internal ComputeTaskInternals =
 
+    type ComputeInputBinding =
+        {
+            Program : ComputeProgram
+            Binding : INativeResourceLocation<DescriptorSetBinding>
+        }
+
+        interface IComputeInputBinding with
+            member x.Shader = x.Program
+
+    type ResourceManager with
+
+        member x.CreateComputeInputBinding(program : ComputeProgram, inputs : IUniformProvider) =
+            let provider = UniformProvider.computeInputs inputs
+
+            let binding =
+                let sets = x.CreateDescriptorSets(program.PipelineLayout, provider)
+                x.CreateDescriptorSetBinding(VkPipelineBindPoint.Compute, program.PipelineLayout, sets)
+
+            { Program = program
+              Binding = binding }
+
+
     [<RequireQualifiedAccess>]
     type private HostCommand =
        | Execute  of task: IComputeTask

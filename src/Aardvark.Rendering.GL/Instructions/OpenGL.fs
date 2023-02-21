@@ -474,8 +474,20 @@ module OpenGl =
         let GetIndexedInteger64 = getProcAddress "glGetInteger64i_v"
 
         let NamedBufferData = getProcAddress "glNamedBufferData"
+
+        let BufferSubData = getProcAddress "glBufferSubData"
         let NamedBufferSubData = getProcAddress "glNamedBufferSubData"
+
         let MemoryBarrier = getProcAddress "glMemoryBarrier"
+
+        let ClearBufferSubData = getProcAddress "glClearBufferSubData"
+        let ClearNamedBufferSubData = getProcAddress "glClearNamedBufferSubData"
+
+        let CopyBufferSubData = getProcAddress "glCopyBufferSubData"
+        let CopyNamedBufferSubData = getProcAddress "glCopyNamedBufferSubData"
+
+        let GetBufferSubData = getProcAddress "glGetBufferSubData"
+        let GetNamedBufferSubData = getProcAddress "glGetNamedBufferSubData"
 
         /// <summary>
         /// https://www.opengl.org/sdk/docs/man/docbook4/xhtml/glActiveTexture.xml

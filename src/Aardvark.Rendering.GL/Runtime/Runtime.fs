@@ -8,6 +8,7 @@ open FSharp.Data.Adaptive
 open FShade
 open Aardvark.Rendering.GL
 open System.Runtime.InteropServices
+open ComputeTaskInternals
 
 #nowarn "9"
 
@@ -329,21 +330,12 @@ type Runtime(debug : IDebugConfig) =
         member x.CreateComputeShader (shader : FShade.ComputeShader) =
             ctx.CompileKernel shader :> IComputeShader
 
-        member x.NewInputBinding(shader : IComputeShader, input : IUniformProvider) =
-            raise <| NotImplementedException()
-            //new ComputeShaderInputBinding(unbox c) :> IComputeShaderInputBinding
-
-        //member x.Run (commands : list<ComputeCommand>, queries : IQuery) = ctx.Run(commands, queries)
+        member x.NewInputBinding(shader : IComputeShader, inputs : IUniformProvider) =
+            let program = unbox<ComputeProgram> shader
+            ComputeInputBinding(manager, program, inputs) :> IComputeInputBinding
 
         member x.CompileCompute (commands : alist<ComputeCommand>) =
-            raise <| NotImplementedException()
-            //let x = x :> IComputeRuntime
-            //{ new ComputeProgram<unit>() with
-            //    member __.RunUnit(queries) =
-            //        x.Run(commands, queries)
-            //    member x.Release() =
-            //        ()
-            //}
+            new ComputeTask(manager, commands, debug.DebugComputeTasks) :> IComputeTask
 
         member x.Clear(fbo : IFramebuffer, values : ClearValues) =
             use __ = ctx.ResourceLock

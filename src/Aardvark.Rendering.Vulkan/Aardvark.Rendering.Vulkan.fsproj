@@ -76,7 +76,6 @@
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
     <Compile Include="Management\PreparedRaytracingPipeline.fs" />
-    <Compile Include="Management\ComputeInputBinding.fs" />
     <Compile Include="Runtime\GraphicsCommands.fs" />
     <Compile Include="Runtime\CommandTask.fs" />
     <Compile Include="Runtime\ClearTask.fs" />

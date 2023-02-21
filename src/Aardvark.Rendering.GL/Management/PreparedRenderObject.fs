@@ -1092,7 +1092,7 @@ type EpilogCommand(ctx : Context) =
         stream.SetStencilMask(true)
         stream.SetColorMask(true, true, true, true)
         stream.UseProgram(0)
-        stream.BindBuffer(int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
+        stream.BindBuffer(OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
         for i in 0 .. 7 do
             stream.Disable(int OpenTK.Graphics.OpenGL4.EnableCap.ClipDistance0 + i)
         NativeStats(InstructionCount = 13)
@@ -1424,7 +1424,7 @@ module rec Command =
                 stream.SetStencilMask(true)
                 stream.SetColorMask(true, true, true, true)
                 stream.UseProgram(0)
-                stream.BindBuffer(int OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
+                stream.BindBuffer(OpenTK.Graphics.OpenGL4.BufferTarget.DrawIndirectBuffer, 0)
                 for i in 0 .. 7 do
                     stream.Disable(int OpenTK.Graphics.OpenGL4.EnableCap.ClipDistance0 + i)
 

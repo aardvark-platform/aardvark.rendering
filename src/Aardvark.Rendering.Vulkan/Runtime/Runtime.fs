@@ -9,10 +9,9 @@ open Aardvark.Rendering.Raytracing
 open Aardvark.Rendering.Vulkan
 open Aardvark.Rendering.Vulkan.Raytracing
 open FSharp.Data.Adaptive
-open System.Diagnostics
-open System.Collections.Generic
-#nowarn "9"
+open ComputeTaskInternals
 
+#nowarn "9"
 
 type Runtime(device : Device) as this =
     let instance = device.Instance
@@ -535,7 +534,7 @@ type Runtime(device : Device) as this =
             manager.CreateComputeInputBinding(program, inputs)
 
         member x.CompileCompute (commands : alist<ComputeCommand>) =
-            new ComputeTaskInternals.ComputeTask(manager, commands) :> IComputeTask
+            new ComputeTask(manager, commands) :> IComputeTask
 
         member x.Upload<'T when 'T : unmanaged>(texture : ITextureSubResource,
                                                 source : NativeTensor4<'T>, format : Col.Format, offset : V3i, size : V3i) =

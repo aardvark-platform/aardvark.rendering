@@ -115,3 +115,26 @@ module ``InputBinding Builder`` =
 
     type IComputeShader with
         member x.inputBinding = InputBindingBuilder x
+
+[<AutoOpen>]
+module ``UniformProvider Compute Extensions`` =
+
+    type UniformProvider with
+
+        /// Creates a uniform provider for compute inputs that looks up values
+        /// by removing a cs_ prefix in the name, if no value was found for the original name.
+        static member computeInputs (inputs : IUniformProvider) =
+            { new IUniformProvider with
+                member x.Dispose() = inputs.Dispose()
+                member x.TryGetUniform(scope, name) =
+                    match inputs.TryGetUniform(scope, name) with
+                    | None ->
+                        let name = name.ToString()
+                        if name.StartsWith "cs_" then
+                            let sem = Sym.ofString <| name.Substring(3)
+                            inputs.TryGetUniform(scope, sem)
+                        else
+                            None
+
+                    | res -> res
+            }
