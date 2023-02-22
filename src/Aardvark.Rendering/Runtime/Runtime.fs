@@ -58,6 +58,8 @@ and IRuntime =
     abstract member DebugConfig : IDebugConfig
 
     abstract member OnDispose : IEvent<unit>
+
+    [<Obsolete("To be removed.")>]
     abstract member ResourceManager : IResourceManager
 
     abstract member AssembleModule : FShade.Effect * IFramebufferSignature * IndexedGeometryMode -> FShade.Imperative.Module
