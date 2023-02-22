@@ -230,6 +230,7 @@ module PreparedPipelineState =
                         match uniforms.TryGetUniform(scope, texSym) with
                         | Some (:? aval<ITexture> as value) -> x.CreateTexture(value)
                         | Some (:? aval<IBackendTexture> as value) -> x.CreateTexture(value)
+                        | Some (:? aval<ITextureLevel> as value) -> x.CreateTexture(value)
                         | Some u ->
                             Log.error "[GL] invalid texture type: %s %s -> expecting aval<ITexture> or aval<IBackendTexture>" texName (u.GetType().Name)
                             x.CreateTexture(helper.NullTexture)
@@ -303,6 +304,26 @@ module PreparedPipelineState =
 
                         Some struct(slotRange, (ArrayBinding (binding)))
                 )
+
+        member x.CreateImageBindings(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) =
+            iface.images
+            |> Array.map (fun (_, i) ->
+                let binding =
+                    match uniforms.TryGetUniform(scope, Sym.ofString i.imageName) with
+                    | Some (:? aval<ITexture> as texture) ->
+                        x.CreateImageBinding(texture)
+
+                    | Some (:? aval<ITextureLevel> as level) ->
+                        x.CreateImageBinding(level)
+
+                    | Some _ ->
+                        failf "invalid type for image %A (%A)" i.imageName (i.GetType())
+
+                    | _ ->
+                        failf "image uniform \"%s\" not found" i.imageName
+
+                struct (i.imageBinding, binding)
+            )
 
     let ofRenderObject (fboSignature : IFramebufferSignature) (x : ResourceManager) (rj : RenderObject) =
         // use a context token to avoid making context current/uncurrent repeatedly

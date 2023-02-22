@@ -104,6 +104,8 @@ type ICommandStream =
     abstract member BindTexturesAndSamplers  : textureBinding : TextureBinding -> unit
 
     abstract member BindImageTexture : unit : int * texture : int * level : int * layered : bool * layer : int * access : TextureAccess * format : TextureFormat -> unit
+    abstract member BindImageTexture : unit : int * access : TextureAccess * pBinding : nativeptr<ImageBinding> -> unit
+
     abstract member Uniform1fv : location : int * cnt : int * ptr : nativeint -> unit
     abstract member Uniform1iv : location : int * cnt : int * ptr : nativeint -> unit
     abstract member Uniform2fv : location : int * cnt : int * ptr : nativeint -> unit
@@ -741,6 +743,18 @@ module GLAssemblerExtensions =
             s.PushArg(unit)
             s.Call(OpenGl.Pointers.BindImageTexture)
 
+        member this.BindImageTexture(unit : int, access : TextureAccess, pBinding : nativeptr<ImageBinding>) =
+            let ptr = NativePtr.toNativeInt pBinding
+            s.BeginCall(7)
+            s.PushIntArg(ptr + 16n)
+            s.PushArg(int access)
+            s.PushIntArg(ptr + 12n)
+            s.PushIntArg(ptr + 8n)
+            s.PushIntArg(ptr + 4n)
+            s.PushIntArg(ptr)
+            s.PushArg(unit)
+            s.Call(OpenGl.Pointers.BindImageTexture)
+
         member this.Uniform1fv(location : int, cnt : int, ptr : nativeint) =
             s.BeginCall(3)
             s.PushArg(ptr)
@@ -960,6 +974,7 @@ module GLAssemblerExtensions =
             member this.BindBufferRange(target: BufferRangeTarget, slot: int, b: nativeptr<int>, offset: nativeptr<nativeint>, size: nativeptr<nativeint>) = this.BindBufferRange(target, slot, b, offset, size)
             member this.BindBufferRangeFixed(target: BufferRangeTarget, slot: int, b: nativeptr<int>, offset: nativeint, size: nativeint) = this.BindBufferRangeFixed(target, slot, b, offset, size)
             member this.BindImageTexture(unit: int, texture: int, level: int, layered: bool, layer: int, access: TextureAccess, format: TextureFormat) = this.BindImageTexture(unit, texture, level, layered, layer, access, format)
+            member this.BindImageTexture(unit, access, pBinding) = this.BindImageTexture(unit, access, pBinding)
             member this.BindSampler(slot: int, sampler: int) = this.BindSampler(slot, sampler)
             member this.BindSampler(slot: int, sampler: nativeptr<int>) = this.BindSampler(slot, sampler)
             member this.BindTexture(target: TextureTarget, t: int) = this.BindTexture(target, t)
@@ -1079,6 +1094,7 @@ module GLAssemblerExtensions =
             member x.BindBufferRange(target: BufferRangeTarget, slot: int, b: nativeptr<int>, offset: nativeptr<nativeint>, size: nativeptr<nativeint>) = inner.BindBufferRange(target, slot, b, offset, size); x.Append("BindBufferRange", target, slot, b, offset, size)
             member x.BindBufferRangeFixed(target: BufferRangeTarget, slot: int, b: nativeptr<int>, offset: nativeint, size: nativeint) = inner.BindBufferRangeFixed(target, slot, b, offset, size); x.Append("BindBufferRangeFixed", target, slot, b, offset, size)
             member x.BindImageTexture(unit: int, texture: int, level: int, layered: bool, layer: int, access: TextureAccess, format: TextureFormat) = inner.BindImageTexture(unit, texture, level, layered, layer, access, format); x.Append("BindImageTexture", unit, texture, level, layered, layer, access, format)
+            member x.BindImageTexture(unit, access, pBinding) = inner.BindImageTexture(unit, access, pBinding); x.Append("BindImageTexture", unit, access, pBinding)
             member x.BindSampler(slot: int, sampler: int) = inner.BindSampler(slot, sampler); x.Append("BindSampler", slot, sampler)
             member x.BindSampler(slot: int, sampler: nativeptr<int>) = inner.BindSampler(slot, sampler); x.Append("BindSampler", slot, sampler)
             member x.BindTexture(target: TextureTarget, t: int) = inner.BindTexture(target, t); x.Append("BindTexture", target, t)

@@ -28,6 +28,7 @@ module internal ComputeTaskInternals =
         let mutable uniformBuffers = Array.empty
         let mutable storageBuffers = Array.empty
         let mutable textureBindings = Array.empty
+        let mutable imageBindings = Array.empty
         let mutable resources : IResource[] = Array.empty
 
         let provider = UniformProvider.computeInputs inputs
@@ -36,6 +37,7 @@ module internal ComputeTaskInternals =
             uniformBuffers <- manager.CreateUniformBuffers(slots, provider, Ag.Scope.Root)
             storageBuffers <- manager.CreateStorageBuffers(slots, provider, Ag.Scope.Root)
             textureBindings <- manager.CreateTextureBindings(slots, provider, Ag.Scope.Root)
+            imageBindings <- manager.CreateImageBindings(slots, provider, Ag.Scope.Root)
 
             resources <-
                 [|
@@ -46,6 +48,8 @@ module internal ComputeTaskInternals =
                         match tb with
                         | ArrayBinding ta -> yield ta
                         | SingleBinding (tex, sam) -> yield tex; yield sam
+
+                    for struct (_, b) in imageBindings do yield b
                 |]
 
         let destroy() =
@@ -63,6 +67,7 @@ module internal ComputeTaskInternals =
                 uniformBuffers <- Array.empty
                 storageBuffers <- Array.empty
                 textureBindings <- Array.empty
+                imageBindings <- Array.empty
                 resources <- Array.empty
 
             | _ ->
@@ -71,6 +76,7 @@ module internal ComputeTaskInternals =
         member x.UniformBuffers = uniformBuffers
         member x.StorageBuffers = storageBuffers
         member x.TextureBindings = textureBindings
+        member x.ImageBindings = imageBindings
         member x.Resources = resources
 
         member x.Acquire() =
@@ -261,6 +267,9 @@ module internal ComputeTaskInternals =
                                     s.BindSampler(slots.Min, sam)
                                 | ArrayBinding ta ->
                                     s.BindTexturesAndSamplers(ta)
+
+                            for struct (slot, binding) in input.ImageBindings do
+                                s.BindImageTexture(slot, TextureAccess.ReadWrite, binding.Pointer)
                         )
 
                     | ComputeCommand.DispatchCmd groups ->

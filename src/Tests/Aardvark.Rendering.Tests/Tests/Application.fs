@@ -4,6 +4,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.SceneGraph
 open Aardvark.Application
+open OpenTK.Graphics.OpenGL4
 
 open System
 open System.Reflection
@@ -36,11 +37,19 @@ module TestApplication =
 
             runtime.Initialize(ctx)
 
+            let checkForErrors() =
+                use __ = ctx.ResourceLock
+                let err = GL.GetError()
+
+                if err <> ErrorCode.NoError then
+                    failwithf "OpenGL returned error: %A" err
+
             new TestApplication(
                 runtime,
                 { new IDisposable with
                     member x.Dispose() =
                         runtime.Dispose()
+                        checkForErrors()
                         ctx.Dispose()
                 }
             )

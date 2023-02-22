@@ -193,12 +193,23 @@ type TextureBinding =
         samplers : nativeptr<int>
     }
 
+[<Struct>]
+type ImageBinding =
+    {
+        image : int
+        level : int
+        layered : int
+        layer : int
+        format : SizedInternalFormat
+    }
+
 type InterfaceSlots = 
     {
         // interface definition sorted by slot
         samplers : (string * FShade.GLSL.GLSLSampler)[]
         uniformBuffers : (string * FShade.GLSL.GLSLUniformBuffer)[]
         storageBuffers : (string * FShade.GLSL.GLSLStorageBuffer)[]
+        images : (string * FShade.GLSL.GLSLImage)[]
     }
 
 [<AllowNullLiteral>]
@@ -240,6 +251,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let colorCache              = derivedCache (fun m -> m.ColorCache)
     
     let textureBindingCache     = derivedCache (fun m -> m.TextureBindingCache)
+    let imageBindingCache       = derivedCache (fun m -> m.ImageBindingCache)
 
     let uniformBufferManager = UniformBufferManager ctx
 
@@ -290,6 +302,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member private x.FlagCache                : ResourceCache<bool, int>                      = flagCache
     member private x.ColorCache               : ResourceCache<C4f, C4f>                       = colorCache
     member private x.TextureBindingCache      : ResourceCache<TextureBinding, TextureBinding> = textureBindingCache
+    member private x.ImageBindingCache        : ResourceCache<ImageBinding, ImageBinding>     = imageBindingCache
 
     member x.RenderTaskLock = renderTaskInfo
 
@@ -336,8 +349,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 kind = ResourceKind.Buffer
             })
 
-    member x.CreateTexture(data : aval<ITexture>) : IResource<Texture, V2i> =
-        textureCache.GetOrCreate<ITexture>(data, fun () -> {
+    member x.CreateTexture(data : aval<#ITexture>) : IResource<Texture, V2i> =
+        textureCache.GetOrCreate(data, fun () -> {
             create = fun b      -> textureManager.Create b
             update = fun h b    -> textureManager.Update(h, b)
             delete = fun h      -> textureManager.Delete h
@@ -346,15 +359,24 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Texture
         })
 
-    member x.CreateTexture(data : aval<IBackendTexture>) : IResource<Texture, V2i> =
-        textureCache.GetOrCreate<IBackendTexture>(data, fun () -> {
-            create = fun b      -> textureManager.Create b
-            update = fun h b    -> textureManager.Update(h, b)
-            delete = fun h      -> textureManager.Delete h
-            info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
-            view =   fun r      -> V2i(r.Handle, Translations.toGLTarget r.Dimension r.IsArray r.Multisamples)
-            kind = ResourceKind.Texture
-        })
+    // Workaround for some APIs accepting texture levels as sampler input (e.g. GPGPU image reduce).
+    // GL cannot directly bind specific texture levels and ranges to samplers.
+    // We would have to use texture views, which are not guaranteed to be supported (MacOS does not obviously).
+    // Here we just bind the whole texture as usual and do some sanity checks.
+    member x.CreateTexture(data : aval<ITextureLevel>) =
+        let data =
+            data |> AdaptiveResource.mapNonAdaptive (fun l ->
+                if l.Level <> 0 then
+                    failf "cannot bind texture level %d (must be zero)" l.Level
+
+                let wholeRange = Range1i(0, l.Texture.Slices - 1)
+                if l.Slices <> wholeRange then
+                    failf "cannot bind texture range %A (must be %A)" l.Slices wholeRange
+
+                l.Texture
+            )
+
+        x.CreateTexture(data)
 
     member x.CreateIndirectBuffer(indexed : bool, data : aval<IndirectBuffer>) =
         
@@ -439,7 +461,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         ifaceSlotCache.GetOrAdd(iface, (fun iface ->
                 { samplers = iface.samplers |> MapExt.toSeq |> Seq.sortBy (fun (_, sam) -> sam.samplerBinding) |> Seq.toArray
                   uniformBuffers = iface.uniformBuffers |> MapExt.toSeq |> Seq.sortBy (fun (_, ub) -> ub.ubBinding) |> Seq.toArray
-                  storageBuffers = iface.storageBuffers |> MapExt.toSeq |> Seq.sortBy (fun (_, sb) -> sb.ssbBinding) |> Seq.toArray }
+                  storageBuffers = iface.storageBuffers |> MapExt.toSeq |> Seq.sortBy (fun (_, sb) -> sb.ssbBinding) |> Seq.toArray 
+                  images = iface.images |> MapExt.toSeq |> Seq.sortBy (fun (_, img) -> img.Dimension) |> Seq.toArray }
             ))
 
     member x.CreateSurface(signature : IFramebufferSignature, surface : Aardvark.Rendering.Surface, topology : IndexedGeometryMode) =
@@ -642,6 +665,55 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
                 }
         )
+
+    member private x.CreateImageBinding(input : aval<#ITexture>, level : aval<int>, layers : aval<Range1i>) =
+        use textureResource = x.CreateTexture(input)
+
+        imageBindingCache.GetOrCreate(
+            [textureResource :> obj; level :> obj; layers :> obj],
+            fun () ->
+                { new Resource<ImageBinding, ImageBinding>(ResourceKind.Unknown) with
+                    member x.View b = b
+                    member x.GetInfo _ = ResourceInfo.Zero
+                    member x.Create (t, rt, old) =
+                        match old with
+                        | None -> textureResource.AddRef()
+                        | _ -> ()
+
+                        textureResource.Update(t, rt)
+                        let texture = textureResource.Handle.GetValue()
+                        let level = level.GetValue(t, rt)
+                        let layers = layers.GetValue(t, rt)
+                        let format = TextureFormat.toSizedInternalFormat texture.Format
+
+                        let layered =
+                            if layers.Size > 1 then 1
+                            else 0
+
+                        if layered = 1 && layers.Min <> 0 then
+                            failf "cannot bind texture layers starting at %d to image (must be 0 or non-layered binding)" layers.Min
+
+                        { image   = texture.Handle
+                          level   = level
+                          layered = layered
+                          layer   = layers.Min
+                          format  = format }
+
+                    member x.Destroy _ =
+                        textureResource.RemoveRef()
+                }
+        )
+
+    member x.CreateImageBinding(input : aval<ITexture>) =
+        let level = AVal.constant 0
+        let layers = AVal.constant <| Range1i()
+        x.CreateImageBinding(input, level, layers)
+
+    member x.CreateImageBinding(input : aval<ITextureLevel>) =
+        let texture = input |> AdaptiveResource.mapNonAdaptive (fun l -> l.Texture)
+        let level = input |> AVal.mapNonAdaptive (fun l -> l.Level)
+        let layers = input |> AVal.mapNonAdaptive (fun l -> l.Slices)
+        x.CreateImageBinding(texture, level, layers)
 
     member x.CreateVertexInputBinding( bindings : list<int * BufferView * AttributeFrequency * IResource<Buffer, int>>, index : Option<OpenGl.Enums.IndexType * IResource<Buffer, int>>) =
         let createView (self : AdaptiveToken) (index : int, view : BufferView, frequency : AttributeFrequency, buffer : IResource<Buffer>) =
