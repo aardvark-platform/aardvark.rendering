@@ -2,6 +2,7 @@
 
 #nowarn "9"
 
+open System
 open System.Collections.Concurrent
 open Microsoft.FSharp.NativeInterop
 open Aardvark.Base
@@ -174,8 +175,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member x.RenderTaskLock = renderTaskInfo
 
-    new(parent, lock) = ResourceManager(Some parent, parent.Context, lock)
-    new(ctx, lock) = ResourceManager(None, ctx, lock)
+    new(parent, lock) = new ResourceManager(Some parent, parent.Context, lock)
+    new(ctx, lock) = new ResourceManager(None, ctx, lock)
 
     interface IResourceManager with
         member x.CreateSurface(signature, surf) =
@@ -838,5 +839,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-    member x.Release() =
+    member x.Dispose() =
         uniformBufferManager.Dispose()
+
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()

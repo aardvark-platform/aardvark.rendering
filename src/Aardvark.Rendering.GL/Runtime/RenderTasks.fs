@@ -62,7 +62,7 @@ module RenderTasks =
 
         let ctx = manager.Context
         let renderTaskLock = RenderTaskLock()
-        let manager = ResourceManager(manager, Some (signature, renderTaskLock))
+        let manager = new ResourceManager(manager, Some (signature, renderTaskLock))
         let structureChanged = AVal.custom ignore
         let runtimeStats = NativePtr.alloc 1
         let resources = new Aardvark.Rendering.ResourceInputSet()
@@ -114,6 +114,10 @@ module RenderTasks =
         override x.Release() =
             currentContext.Outputs.Clear()
             x.Release2()
+            contextHandle |> NativePtr.free
+            runtimeStats |> NativePtr.free
+            resources.Dispose()
+            manager.Dispose()
 
         override x.PerformUpdate(token, renderToken) =
             lock AbstractRenderTask.ResourcesInUse (fun _ ->
@@ -522,12 +526,7 @@ module RenderTasks =
             for ro in preparedObjectReader.State do
                 ro.Dispose()
 
-            x.Resources.Dispose() // should be 0 after disposing all RenderObjects
             subtasks |> Map.iter (fun _ t -> t.Dispose())
-
-            // UniformBufferManager should have 0 allocated blocks
-            x.ResourceManager.Release()
-
             subtasks <- Map.empty
 
         override x.Use (f : unit -> 'a) =

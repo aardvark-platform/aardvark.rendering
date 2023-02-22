@@ -14,8 +14,8 @@ open ComputeTaskInternals
 
 type Runtime(debug : IDebugConfig) =
 
-    let mutable ctx : Context = Unchecked.defaultof<_>
-    let mutable manager : ResourceManager = Unchecked.defaultof<_>
+    let mutable ctx : Context = null
+    let mutable manager : ResourceManager = null
 
     let debug = DebugConfig.unbox debug
 
@@ -30,7 +30,7 @@ type Runtime(debug : IDebugConfig) =
             Log.warn "Runtime already initialized"
 
         ctx <- context
-        manager <- ResourceManager(context, None)
+        manager <- new ResourceManager(context, None)
 
         GL.CheckErrors <- debug.ErrorFlagCheck
 
@@ -67,6 +67,10 @@ type Runtime(debug : IDebugConfig) =
         )
 
     member x.Dispose() =
+        if manager <> null then
+            manager.Dispose()
+            manager <- null
+
         if ctx <> null then
             onDispose.Trigger()
             ctx.Dispose()
