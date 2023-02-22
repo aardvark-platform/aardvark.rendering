@@ -119,11 +119,11 @@ open Aardvark.Application
         }
 
 [<EntryPoint>]
-let main argv = 
+let main argv =
 
     Aardvark.Init()
 
-    let win =
+    use win =
         window {
             backend Backend.GL
             display Display.Mono
@@ -132,15 +132,15 @@ let main argv =
         }
 
     let runtime = win.Runtime
-    let update = runtime.CreateComputeShader Shaders.updateAcceleration
-    let step = runtime.CreateComputeShader Shaders.step
+    use update = runtime.CreateComputeShader Shaders.updateAcceleration
+    use step = runtime.CreateComputeShader Shaders.step
     
     let rand = RandomSystem()
     let particeCount = 1000
-    let positions = runtime.CreateBuffer<V4f>(Array.init particeCount (fun _ -> V4d(rand.UniformV3dDirection() * 3.0, 1.0) |> V4f))
-    let velocities = runtime.CreateBuffer<V4f>(Array.zeroCreate particeCount)
-    let accelerations = runtime.CreateBuffer<V4f>(Array.zeroCreate particeCount)
-    let masses = runtime.CreateBuffer<float32>(Array.init particeCount (fun _ -> 1.0f))
+    use positions = runtime.CreateBuffer<V4f>(Array.init particeCount (fun _ -> V4d(rand.UniformV3dDirection() * 3.0, 1.0) |> V4f))
+    use velocities = runtime.CreateBuffer<V4f>(Array.zeroCreate particeCount)
+    use accelerations = runtime.CreateBuffer<V4f>(Array.zeroCreate particeCount)
+    use masses = runtime.CreateBuffer<float32>(Array.init particeCount (fun _ -> 1.0f))
     
     positions.Upload([| V4f(-1.0f, 0.5f, 0.0f, 1.0f);  V4f(1.0f, -0.5f, 0.0f, 1.0f); |])
     velocities.Upload([| V4f(0.2f, 0.0f, 0.0f, 1.0f); V4f(-0.2f, 0.0f, 0.0f, 1.0f) |])
@@ -189,7 +189,7 @@ let main argv =
         ]
     
     
-    let program =
+    use program =
         runtime.CompileCompute commands
     
     let magic =
@@ -242,15 +242,6 @@ let main argv =
             }
             |> Sg.uniform "Scale" (AVal.constant 0.05)
             |> Sg.uniform "Magic" magic
-    
-    win.Run(preventDisposal = true)
-    
-    positions.Dispose()
-    accelerations.Dispose()
-    velocities.Dispose()
-    updateInputs.Dispose()
-    stepInputs.Dispose()
-    runtime.DeleteComputeShader update
-    runtime.DeleteComputeShader step
 
+    win.Run(preventDisposal = true)
     0

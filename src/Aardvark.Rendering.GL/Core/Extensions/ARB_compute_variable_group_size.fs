@@ -56,15 +56,16 @@ module ARB_compute_variable_group_size =
             GL.Dispatch.DispatchComputeGroupSize(V3ui numGroups, V3ui groupSize)
 
 
-    let private MaxComputeWorkGroupSize         = unbox<GetPName> All.MaxComputeWorkGroupSize
-    let private MaxComputeVariableGroupSize     = unbox<GetPName> 0x9345
+    let private MaxComputeWorkGroupSize         = unbox<GetIndexedPName> All.MaxComputeWorkGroupSize
+    let private MaxComputeVariableGroupSize     = unbox<GetIndexedPName> 0x9345
 
     let private MaxComputeWorkGroupInvocations      = unbox<GetPName> All.MaxComputeWorkGroupInvocations
     let private MaxComputeVariableGroupInvocations  = unbox<GetPName> 0x9344
 
-    type GetPName with
+    type GetIndexedPName with
         static member MaxComputeWorkGroupSize     = MaxComputeWorkGroupSize
         static member MaxComputeVariableGroupSize = MaxComputeVariableGroupSize
 
+    type GetPName with
         static member MaxComputeWorkGroupInvocations     = MaxComputeWorkGroupInvocations
         static member MaxComputeVariableGroupInvocations = MaxComputeVariableGroupInvocations

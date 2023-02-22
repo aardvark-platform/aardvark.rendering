@@ -270,9 +270,11 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
 
     member x.MaxComputeWorkGroupSize =
         getOrQuery &maxComputeWorkGroupSize (fun _ ->
-            let arr = Array.zeroCreate<int> 3
-            GL.GetInteger(GetPName.MaxComputeWorkGroupSize, arr)
-            V3i arr
+            let mutable res = V3i.Zero
+            GL.GetInteger(GetIndexedPName.MaxComputeWorkGroupSize, 0, &res.X)
+            GL.GetInteger(GetIndexedPName.MaxComputeWorkGroupSize, 1, &res.Y)
+            GL.GetInteger(GetIndexedPName.MaxComputeWorkGroupSize, 2, &res.Z)
+            res
         )
 
     member x.MaxComputeWorkGroupInvocations =
