@@ -306,935 +306,935 @@ module private ContextMappingExtensions =
             let worked = GL.Dispatch.UnmapNamedBuffer(b.Handle)
             if not worked then failwithf "[GL] cannot unmap buffer %d" b.Handle
 
-type InstanceBuffer(ctx : Context, semantics : MapExt<string, GLSLType * Type>, count : int) =
-    let buffers, totalSize =
-        let mutable totalSize = 0L
-        let buffers = 
-            semantics |> MapExt.map (fun sem (glsl, input) ->
-                let elemSize = GLSLType.sizeof glsl
-                let write = UniformWriters.getWriter 0 glsl input
-                totalSize <- totalSize + int64 count * int64 elemSize
+module GeometryPoolData =
+    open Aardvark.Geometry
 
-                let buffer =
-                    if count = 0 then new Aardvark.Rendering.GL.Buffer(ctx, 0n, 0)
-                    else ctx.CreateBuffer(nativeint elemSize * nativeint count)
+    type InstanceBuffer(ctx : Context, semantics : MapExt<string, GLSLType * Type>, count : int) =
+        let buffers, totalSize =
+            let mutable totalSize = 0L
+            let buffers = 
+                semantics |> MapExt.map (fun sem (glsl, input) ->
+                    let elemSize = GLSLType.sizeof glsl
+                    let write = UniformWriters.getWriter 0 glsl input
+                    totalSize <- totalSize + int64 count * int64 elemSize
 
-                buffer, elemSize, write
-            )
-        buffers, totalSize
+                    let buffer =
+                        if count = 0 then new Aardvark.Rendering.GL.Buffer(ctx, 0n, 0)
+                        else ctx.CreateBuffer(nativeint elemSize * nativeint count)
+
+                    buffer, elemSize, write
+                )
+            buffers, totalSize
             
 
 
-    member x.TotalSize = totalSize
-    member x.ElementSize = totalSize / int64 count
-    member x.Context = ctx
-    member x.Data = buffers
-    member x.Buffers = buffers |> MapExt.map (fun _ (b,_,_) -> b)
+        member x.TotalSize = totalSize
+        member x.ElementSize = totalSize / int64 count
+        member x.Context = ctx
+        member x.Data = buffers
+        member x.Buffers = buffers |> MapExt.map (fun _ (b,_,_) -> b)
         
-    member x.Upload(index : int, count : int, data : MapExt<string, Array>) =
-        lock x (fun () ->
-            use __ = ctx.ResourceLock
-            buffers |> MapExt.iter (fun sem (buffer, elemSize, write) ->
-                let offset = nativeint index * nativeint elemSize
-                let size = nativeint count * nativeint elemSize
-                let ptr = ctx.MapBufferRange(buffer, offset, size, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapInvalidateRangeBit ||| BufferAccessMask.MapUnsynchronizedBit)
-                match MapExt.tryFind sem data with
-                    | Some data ->
-                        let mutable ptr = ptr
-                        for i in 0 .. count - 1 do
-                            write.WriteUnsafeValue(data.GetValue i, ptr)
-                            ptr <- ptr + nativeint elemSize
-                    | _ -> 
-                        Marshal.Set(ptr, 0, elemSize)
-                ctx.UnmapBuffer(buffer)
-            )
-        )
-
-    static member Copy(src : InstanceBuffer, srcOffset : int, dst : InstanceBuffer, dstOffset : int, count : int) =
-        // TODO: locking????
-        use __ = src.Context.ResourceLock
-        src.Data |> MapExt.iter (fun sem (srcBuffer, elemSize, _) ->
-            let (dstBuffer,_,_) = dst.Data.[sem]
-            let srcOff = nativeint srcOffset * nativeint elemSize
-            let dstOff = nativeint dstOffset * nativeint elemSize
-            let s = nativeint elemSize * nativeint count
-            GL.Dispatch.CopyNamedBufferSubData(srcBuffer.Handle, dstBuffer.Handle, srcOff, dstOff, s)
-        )
-
-    member x.Dispose() =
-        use __ = ctx.ResourceLock
-        buffers |> MapExt.iter (fun _ (b,_,_) -> if b.SizeInBytes > 0n then ctx.Delete b)
-
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
-
-type VertexBuffer(ctx : Context, semantics : MapExt<string, Type>, count : int) =
-
-    let totalSize, buffers =
-        let mutable totalSize = 0L
-        let buffers = 
-            semantics |> MapExt.map (fun sem typ ->
-                let elemSize = Marshal.SizeOf typ
-                totalSize <- totalSize + int64 elemSize * int64 count
-                let buffer =
-                    if count = 0 then new Aardvark.Rendering.GL.Buffer(ctx, 0n, 0)
-                    else ctx.CreateBuffer(nativeint elemSize * nativeint count)
-                buffer, elemSize, typ
-            )
-        totalSize, buffers
-            
-    member x.ElementSize = totalSize / int64 count
-    member x.TotalSize = totalSize
-    member x.Context = ctx
-    member x.Data = buffers
-    member x.Buffers = buffers |> MapExt.map (fun _ (b,_,t) -> b,t)
-        
-    member x.Write(startIndex : int, data : MapExt<string, Array>) =
-        lock x (fun () ->
-            use __ = ctx.ResourceLock
-            
-            let count = data |> MapExt.toSeq |> Seq.map (fun (_,a) -> a.Length) |> Seq.min
-            buffers |> MapExt.iter (fun sem (buffer, elemSize,_) ->
-                let size = nativeint count * nativeint elemSize
-                if size > 0n then
-                    let offset = nativeint startIndex * nativeint elemSize
+        member x.Upload(index : int, count : int, data : MapExt<string, Array>) =
+            lock x (fun () ->
+                use __ = ctx.ResourceLock
+                buffers |> MapExt.iter (fun sem (buffer, elemSize, write) ->
+                    let offset = nativeint index * nativeint elemSize
+                    let size = nativeint count * nativeint elemSize
                     let ptr = ctx.MapBufferRange(buffer, offset, size, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapInvalidateRangeBit ||| BufferAccessMask.MapUnsynchronizedBit)
-
                     match MapExt.tryFind sem data with
-                        | Some data ->  
-                            let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
-                            try Marshal.Copy(gc.AddrOfPinnedObject(), ptr, size)
-                            finally gc.Free()
+                        | Some data ->
+                            let mutable ptr = ptr
+                            for i in 0 .. count - 1 do
+                                write.WriteUnsafeValue(data.GetValue i, ptr)
+                                ptr <- ptr + nativeint elemSize
                         | _ -> 
-                            Marshal.Set(ptr, 0, size)
+                            Marshal.Set(ptr, 0, elemSize)
                     ctx.UnmapBuffer(buffer)
+                )
             )
-        )
 
-    static member Copy(src : VertexBuffer, srcOffset : int, dst : VertexBuffer, dstOffset : int, count : int) =
-        // TODO: locking???
-        use __ = src.Context.ResourceLock
-        src.Data |> MapExt.iter (fun sem (srcBuffer, elemSize,_) ->
-            let (dstBuffer,_,_) = dst.Data.[sem]
-            let srcOff = nativeint srcOffset * nativeint elemSize
-            let dstOff = nativeint dstOffset * nativeint elemSize
-            let s = nativeint elemSize * nativeint count
-            GL.Dispatch.CopyNamedBufferSubData(srcBuffer.Handle, dstBuffer.Handle, srcOff, dstOff, s)
-        )
+        static member Copy(src : InstanceBuffer, srcOffset : int, dst : InstanceBuffer, dstOffset : int, count : int) =
+            // TODO: locking????
+            use __ = src.Context.ResourceLock
+            src.Data |> MapExt.iter (fun sem (srcBuffer, elemSize, _) ->
+                let (dstBuffer,_,_) = dst.Data.[sem]
+                let srcOff = nativeint srcOffset * nativeint elemSize
+                let dstOff = nativeint dstOffset * nativeint elemSize
+                let s = nativeint elemSize * nativeint count
+                GL.Dispatch.CopyNamedBufferSubData(srcBuffer.Handle, dstBuffer.Handle, srcOff, dstOff, s)
+            )
 
-    member x.Dispose() =
-        use __ = ctx.ResourceLock
-        buffers |> MapExt.iter (fun _ (b,_,_) -> if b.SizeInBytes > 0n then ctx.Delete b)
+        member x.Dispose() =
+            use __ = ctx.ResourceLock
+            buffers |> MapExt.iter (fun _ (b,_,_) -> if b.SizeInBytes > 0n then ctx.Delete b)
 
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
 
-type VertexManager(ctx : Context, semantics : MapExt<string, Type>, chunkSize : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
-    let elementSize =
-        semantics |> MapExt.toSeq |> Seq.sumBy (fun (_,t) -> int64 (Marshal.SizeOf t))
+    type VertexBuffer(ctx : Context, semantics : MapExt<string, Type>, count : int) =
 
-    let mem : Memory<VertexBuffer> =
-        let malloc (size : nativeint) =
-            //Log.warn "alloc VertexBuffer"
-            let res = new VertexBuffer(ctx, semantics, int size)
-            Interlocked.Add(&totalMemory.contents, res.TotalSize) |> ignore
-            res
-
-        let mfree (ptr : VertexBuffer) (size : nativeint) =
-            //Log.warn "free VertexBuffer"
-            Interlocked.Add(&totalMemory.contents, -ptr.TotalSize) |> ignore
-            ptr.Dispose()
-
-        {
-            malloc = malloc
-            mfree = mfree
-            mcopy = fun _ _ _ _ _ -> failwith "cannot copy"
-            mrealloc = fun _ _ _ -> failwith "cannot realloc"
-        }
+        let totalSize, buffers =
+            let mutable totalSize = 0L
+            let buffers = 
+                semantics |> MapExt.map (fun sem typ ->
+                    let elemSize = Marshal.SizeOf typ
+                    totalSize <- totalSize + int64 elemSize * int64 count
+                    let buffer =
+                        if count = 0 then new Aardvark.Rendering.GL.Buffer(ctx, 0n, 0)
+                        else ctx.CreateBuffer(nativeint elemSize * nativeint count)
+                    buffer, elemSize, typ
+                )
+            totalSize, buffers
             
-    let mutable used = 0L
-
-    let addMem (v : int64) =
-        Interlocked.Add(&usedMemory.contents, v) |> ignore
-        Interlocked.Add(&used, v) |> ignore
-            
-
-    let manager = new ChunkedMemoryManager<VertexBuffer>(mem, nativeint chunkSize)
+        member x.ElementSize = totalSize / int64 count
+        member x.TotalSize = totalSize
+        member x.Context = ctx
+        member x.Data = buffers
+        member x.Buffers = buffers |> MapExt.map (fun _ (b,_,t) -> b,t)
         
-    member x.Alloc(count : int) = 
-        addMem (elementSize * int64 count) 
-        manager.Alloc(nativeint count)
+        member x.Write(startIndex : int, data : MapExt<string, Array>) =
+            lock x (fun () ->
+                use __ = ctx.ResourceLock
+            
+                let count = data |> MapExt.toSeq |> Seq.map (fun (_,a) -> a.Length) |> Seq.min
+                buffers |> MapExt.iter (fun sem (buffer, elemSize,_) ->
+                    let size = nativeint count * nativeint elemSize
+                    if size > 0n then
+                        let offset = nativeint startIndex * nativeint elemSize
+                        let ptr = ctx.MapBufferRange(buffer, offset, size, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapInvalidateRangeBit ||| BufferAccessMask.MapUnsynchronizedBit)
 
-    member x.Free(b : Block<VertexBuffer>) = 
-        if not b.IsFree then
-            addMem (elementSize * int64 -b.Size) 
-            manager.Free b
+                        match MapExt.tryFind sem data with
+                            | Some data ->  
+                                let gc = GCHandle.Alloc(data, GCHandleType.Pinned)
+                                try Marshal.Copy(gc.AddrOfPinnedObject(), ptr, size)
+                                finally gc.Free()
+                            | _ -> 
+                                Marshal.Set(ptr, 0, size)
+                        ctx.UnmapBuffer(buffer)
+                )
+            )
 
-    member x.Dispose() = 
-        addMem (-used)
-        manager.Dispose()
+        static member Copy(src : VertexBuffer, srcOffset : int, dst : VertexBuffer, dstOffset : int, count : int) =
+            // TODO: locking???
+            use __ = src.Context.ResourceLock
+            src.Data |> MapExt.iter (fun sem (srcBuffer, elemSize,_) ->
+                let (dstBuffer,_,_) = dst.Data.[sem]
+                let srcOff = nativeint srcOffset * nativeint elemSize
+                let dstOff = nativeint dstOffset * nativeint elemSize
+                let s = nativeint elemSize * nativeint count
+                GL.Dispatch.CopyNamedBufferSubData(srcBuffer.Handle, dstBuffer.Handle, srcOff, dstOff, s)
+            )
 
-    interface IDisposable with 
-        member x.Dispose() = x.Dispose()
+        member x.Dispose() =
+            use __ = ctx.ResourceLock
+            buffers |> MapExt.iter (fun _ (b,_,_) -> if b.SizeInBytes > 0n then ctx.Delete b)
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
+    type internal VertexManager(ctx : Context, semantics : MapExt<string, Type>, chunkSize : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
+        let elementSize =
+            semantics |> MapExt.toSeq |> Seq.sumBy (fun (_,t) -> int64 (Marshal.SizeOf t))
+
+        let mem : Memory<VertexBuffer> =
+            let malloc (size : nativeint) =
+                //Log.warn "alloc VertexBuffer"
+                let res = new VertexBuffer(ctx, semantics, int size)
+                Interlocked.Add(&totalMemory.contents, res.TotalSize) |> ignore
+                res
+
+            let mfree (ptr : VertexBuffer) (size : nativeint) =
+                //Log.warn "free VertexBuffer"
+                Interlocked.Add(&totalMemory.contents, -ptr.TotalSize) |> ignore
+                ptr.Dispose()
+
+            {
+                malloc = malloc
+                mfree = mfree
+                mcopy = fun _ _ _ _ _ -> failwith "cannot copy"
+                mrealloc = fun _ _ _ -> failwith "cannot realloc"
+            }
+            
+        let mutable used = 0L
+
+        let addMem (v : int64) =
+            Interlocked.Add(&usedMemory.contents, v) |> ignore
+            Interlocked.Add(&used, v) |> ignore
+            
+
+        let manager = new ChunkedMemoryManager<VertexBuffer>(mem, nativeint chunkSize)
         
-type InstanceManager(ctx : Context, semantics : MapExt<string, GLSLType * Type>, chunkSize : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
-    let elementSize =
-        semantics |> MapExt.toSeq |> Seq.sumBy (fun (_,(t,_)) -> int64 (GLSLType.sizeof t))
+        member x.Alloc(count : int) = 
+            addMem (elementSize * int64 count) 
+            manager.Alloc(nativeint count)
 
-    let mem : Memory<InstanceBuffer> =
-        let malloc (size : nativeint) =
-            //Log.warn "alloc InstanceBuffer"
-            let res = new InstanceBuffer(ctx, semantics, int size)
-            Interlocked.Add(&totalMemory.contents, res.TotalSize) |> ignore
-            res
+        member x.Free(b : Block<VertexBuffer>) = 
+            if not b.IsFree then
+                addMem (elementSize * int64 -b.Size) 
+                manager.Free b
 
-        let mfree (ptr : InstanceBuffer) (size : nativeint) =
-            //Log.warn "free InstanceBuffer"
-            Interlocked.Add(&totalMemory.contents, -ptr.TotalSize) |> ignore
-            ptr.Dispose()
+        member x.Dispose() = 
+            addMem (-used)
+            manager.Dispose()
 
-        {
-            malloc = malloc
-            mfree = mfree
-            mcopy = fun _ _ _ _ _ -> failwith "cannot copy"
-            mrealloc = fun _ _ _ -> failwith "cannot realloc"
-        }
-
-    let manager = new ChunkedMemoryManager<InstanceBuffer>(mem, nativeint chunkSize)
-    let mutable used = 0L
-
-    let addMem (v : int64) =
-        Interlocked.Add(&usedMemory.contents, v) |> ignore
-        Interlocked.Add(&used, v) |> ignore
-            
-
-    member x.Alloc(count : int) = 
-        addMem (int64 count * elementSize)
-        manager.Alloc(nativeint count)
-
-    member x.Free(b : Block<InstanceBuffer>) = 
-        if not b.IsFree then
-            addMem (int64 -b.Size * elementSize)
-            manager.Free b
-
-    member x.Dispose() = 
-        addMem -used
-        manager.Dispose()
-
-    interface IDisposable with 
-        member x.Dispose() = x.Dispose()
-
-type IndexManager(ctx : Context, chunkSize : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
-
-    let mem : Memory<Buffer> =
-        let malloc (size : nativeint) =
-            let res = ctx.CreateBuffer(size)
-            Interlocked.Add(&totalMemory.contents, int64 res.SizeInBytes) |> ignore
-            res
-
-        let mfree (ptr : Buffer) (size : nativeint) =
-            Interlocked.Add(&totalMemory.contents, -int64 ptr.SizeInBytes) |> ignore
-            ctx.Delete ptr
-
-        {
-            malloc = malloc
-            mfree = mfree
-            mcopy = fun _ _ _ _ _ -> failwith "cannot copy"
-            mrealloc = fun _ _ _ -> failwith "cannot realloc"
-        }
-            
-    let manager = new ChunkedMemoryManager<Buffer>(mem, nativeint (sizeof<int> * chunkSize))
+        interface IDisposable with 
+            member x.Dispose() = x.Dispose()
         
-    let mutable used = 0L
+    type internal InstanceManager(ctx : Context, semantics : MapExt<string, GLSLType * Type>, chunkSize : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
+        let elementSize =
+            semantics |> MapExt.toSeq |> Seq.sumBy (fun (_,(t,_)) -> int64 (GLSLType.sizeof t))
 
-    let addMem (v : int64) =
-        Interlocked.Add(&usedMemory.contents, v) |> ignore
-        Interlocked.Add(&used, v) |> ignore
-            
-    member x.Alloc(t : Type, count : int) = 
-        let size = nativeint (Marshal.SizeOf t) * nativeint count
-        addMem (int64 size)
-        manager.Alloc(size)
+        let mem : Memory<InstanceBuffer> =
+            let malloc (size : nativeint) =
+                //Log.warn "alloc InstanceBuffer"
+                let res = new InstanceBuffer(ctx, semantics, int size)
+                Interlocked.Add(&totalMemory.contents, res.TotalSize) |> ignore
+                res
 
-    member x.Free(b : Block<Buffer>) = 
-        if not b.IsFree then
-            addMem (int64 -b.Size)
-            manager.Free b
+            let mfree (ptr : InstanceBuffer) (size : nativeint) =
+                //Log.warn "free InstanceBuffer"
+                Interlocked.Add(&totalMemory.contents, -ptr.TotalSize) |> ignore
+                ptr.Dispose()
 
-    member x.Dispose() = 
-        addMem -used
-        manager.Dispose()
+            {
+                malloc = malloc
+                mfree = mfree
+                mcopy = fun _ _ _ _ _ -> failwith "cannot copy"
+                mrealloc = fun _ _ _ -> failwith "cannot realloc"
+            }
 
-    interface IDisposable with 
-        member x.Dispose() = x.Dispose()
+        let manager = new ChunkedMemoryManager<InstanceBuffer>(mem, nativeint chunkSize)
+        let mutable used = 0L
 
-open Aardvark.Geometry
-module AtlasTextureUpload = 
-    open OpenTK.Graphics.OpenGL4
-
-    type ITextureFormatVisitor<'r> =
-        abstract member Accept<'a when 'a : unmanaged> : Col.Format * int -> 'r
-
-    type TextureFormat with
-        member x.Visit(v : ITextureFormatVisitor<'r>) =
-            match x with
-            | TextureFormat.Rgb8 -> v.Accept<byte>(Col.Format.RGB, 3)
-            | TextureFormat.Rgb16 -> v.Accept<uint16>(Col.Format.RGB, 3)
-            | TextureFormat.Rgb32f -> v.Accept<float32>(Col.Format.RGB, 3)
-            | TextureFormat.Rgba8 -> v.Accept<byte>(Col.Format.RGBA, 4)
-            | TextureFormat.Rgba16 -> v.Accept<uint16>(Col.Format.RGBA, 4)
-            | TextureFormat.Rgba32f -> v.Accept<float32>(Col.Format.RGBA, 4)
-            | _ -> failwith "not implemented"
-
-
-    type NativeVolume<'a when 'a : unmanaged> with
-        member this.SetSliceX(x : int, value : NativeMatrix<'a>) =
-            ()
-
-
-    let upload (texture : Texture) (bounds : Box2i) (image : INativeTexture) (rotated : bool) =
-
-        if image.Format.IsCompressed then
-            failwith ""
-        else
-            let ctx = texture.Context
-            let levels = min image.MipMapLevels texture.MipMapLevels
-            let mutable offset = bounds.Min
-            let mutable size = V2i.II + bounds.Max - bounds.Min
-            let mutable lastOffset = offset
-            let mutable lastSize = size
+        let addMem (v : int64) =
+            Interlocked.Add(&usedMemory.contents, v) |> ignore
+            Interlocked.Add(&used, v) |> ignore
             
 
-            let fmt, typ = TextureFormat.toFormatAndType image.Format
+        member x.Alloc(count : int) = 
+            addMem (int64 count * elementSize)
+            manager.Alloc(nativeint count)
 
-            let sizeInBytes = nativeint size.X * nativeint size.Y * (nativeint (TextureFormat.pixelSizeInBytes image.Format))
-            let buffer = ctx.CreateBuffer sizeInBytes
+        member x.Free(b : Block<InstanceBuffer>) = 
+            if not b.IsFree then
+                addMem (int64 -b.Size * elementSize)
+                manager.Free b
+
+        member x.Dispose() = 
+            addMem -used
+            manager.Dispose()
+
+        interface IDisposable with 
+            member x.Dispose() = x.Dispose()
+
+    type internal IndexManager(ctx : Context, chunkSize : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
+
+        let mem : Memory<Buffer> =
+            let malloc (size : nativeint) =
+                let res = ctx.CreateBuffer(size)
+                Interlocked.Add(&totalMemory.contents, int64 res.SizeInBytes) |> ignore
+                res
+
+            let mfree (ptr : Buffer) (size : nativeint) =
+                Interlocked.Add(&totalMemory.contents, -int64 ptr.SizeInBytes) |> ignore
+                ctx.Delete ptr
+
+            {
+                malloc = malloc
+                mfree = mfree
+                mcopy = fun _ _ _ _ _ -> failwith "cannot copy"
+                mrealloc = fun _ _ _ -> failwith "cannot realloc"
+            }
+            
+        let manager = new ChunkedMemoryManager<Buffer>(mem, nativeint (sizeof<int> * chunkSize))
+        
+        let mutable used = 0L
+
+        let addMem (v : int64) =
+            Interlocked.Add(&usedMemory.contents, v) |> ignore
+            Interlocked.Add(&used, v) |> ignore
+            
+        member x.Alloc(t : Type, count : int) = 
+            let size = nativeint (Marshal.SizeOf t) * nativeint count
+            addMem (int64 size)
+            manager.Alloc(size)
+
+        member x.Free(b : Block<Buffer>) = 
+            if not b.IsFree then
+                addMem (int64 -b.Size)
+                manager.Free b
+
+        member x.Dispose() = 
+            addMem -used
+            manager.Dispose()
+
+        interface IDisposable with 
+            member x.Dispose() = x.Dispose()
+
+    module private AtlasTextureUpload = 
+
+        type ITextureFormatVisitor<'r> =
+            abstract member Accept<'a when 'a : unmanaged> : Col.Format * int -> 'r
+
+        type TextureFormat with
+            member x.Visit(v : ITextureFormatVisitor<'r>) =
+                match x with
+                | TextureFormat.Rgb8 -> v.Accept<byte>(Col.Format.RGB, 3)
+                | TextureFormat.Rgb16 -> v.Accept<uint16>(Col.Format.RGB, 3)
+                | TextureFormat.Rgb32f -> v.Accept<float32>(Col.Format.RGB, 3)
+                | TextureFormat.Rgba8 -> v.Accept<byte>(Col.Format.RGBA, 4)
+                | TextureFormat.Rgba16 -> v.Accept<uint16>(Col.Format.RGBA, 4)
+                | TextureFormat.Rgba32f -> v.Accept<float32>(Col.Format.RGBA, 4)
+                | _ -> failwith "not implemented"
+
+
+        type NativeVolume<'a when 'a : unmanaged> with
+            member this.SetSliceX(x : int, value : NativeMatrix<'a>) =
+                ()
+
+
+        let upload (texture : Texture) (bounds : Box2i) (image : INativeTexture) (rotated : bool) =
+
+            if image.Format.IsCompressed then
+                failwith ""
+            else
+                let ctx = texture.Context
+                let levels = min image.MipMapLevels texture.MipMapLevels
+                let mutable offset = bounds.Min
+                let mutable size = V2i.II + bounds.Max - bounds.Min
+                let mutable lastOffset = offset
+                let mutable lastSize = size
+            
+
+                let fmt, typ = TextureFormat.toFormatAndType image.Format
+
+                let sizeInBytes = nativeint size.X * nativeint size.Y * (nativeint (TextureFormat.pixelSizeInBytes image.Format))
+                let buffer = ctx.CreateBuffer sizeInBytes
 
             
             
-            for level in 0 .. levels - 1 do
-                let data = image.[0, level]
+                for level in 0 .. levels - 1 do
+                    let data = image.[0, level]
 
-                data.Use (fun srcPtr ->
-                    image.Format.Visit {
-                        new ITextureFormatVisitor<int> with
-                            member x.Accept<'a when 'a : unmanaged>(col : Col.Format, channels : int) =
-                                let sizeInBytes = int64 size.X * int64 size.Y * int64 (TextureFormat.pixelSizeInBytes image.Format)
+                    data.Use (fun srcPtr ->
+                        image.Format.Visit {
+                            new ITextureFormatVisitor<int> with
+                                member x.Accept<'a when 'a : unmanaged>(col : Col.Format, channels : int) =
+                                    let sizeInBytes = int64 size.X * int64 size.Y * int64 (TextureFormat.pixelSizeInBytes image.Format)
 
-                                let dstPtr = GL.Dispatch.MapNamedBufferRange(buffer.Handle, 0n, nativeint sizeInBytes, BufferAccessMask.MapInvalidateRangeBit ||| BufferAccessMask.MapWriteBit)
+                                    let dstPtr = GL.Dispatch.MapNamedBufferRange(buffer.Handle, 0n, nativeint sizeInBytes, BufferAccessMask.MapInvalidateRangeBit ||| BufferAccessMask.MapWriteBit)
 
-                                let src = 
-                                    NativeVolume<'a>(
-                                        NativePtr.ofNativeInt srcPtr, 
-                                        VolumeInfo(
-                                            0L, 
-                                            V3l(data.Size.XY, channels), 
-                                            V3l(int64 channels, int64 data.Size.X * int64 channels, 1L)
+                                    let src = 
+                                        NativeVolume<'a>(
+                                            NativePtr.ofNativeInt srcPtr, 
+                                            VolumeInfo(
+                                                0L, 
+                                                V3l(data.Size.XY, channels), 
+                                                V3l(int64 channels, int64 data.Size.X * int64 channels, 1L)
+                                            )
                                         )
-                                    )
 
-                                let dst = 
-                                    NativeVolume<'a>(
-                                        NativePtr.ofNativeInt dstPtr, 
-                                        VolumeInfo(
-                                            0L, 
-                                            V3l(size.X, size.Y, channels), 
-                                            V3l(int64 channels, int64 channels * int64 size.X, 1L)
+                                    let dst = 
+                                        NativeVolume<'a>(
+                                            NativePtr.ofNativeInt dstPtr, 
+                                            VolumeInfo(
+                                                0L, 
+                                                V3l(size.X, size.Y, channels), 
+                                                V3l(int64 channels, int64 channels * int64 size.X, 1L)
+                                            )
                                         )
-                                    )
 
-                                let dst =
-                                    if rotated then 
-                                        let info = dst.Info
-                                        dst.SubVolume(info.SX - 1L, 0L, 0L, info.SY, info.SX, info.SZ, info.DY, -info.DX, info.DZ)
-                                    else 
-                                        dst
+                                    let dst =
+                                        if rotated then 
+                                            let info = dst.Info
+                                            dst.SubVolume(info.SX - 1L, 0L, 0L, info.SY, info.SX, info.SZ, info.DY, -info.DX, info.DZ)
+                                        else 
+                                            dst
 
-                                let padding = dst.Size.XY - src.Size.XY
-                                let l = padding / 2L
-                                let h = padding - l
+                                    let padding = dst.Size.XY - src.Size.XY
+                                    let l = padding / 2L
+                                    let h = padding - l
 
                                 
 
-                                NativeVolume.copy src (dst.SubVolume(V3l(l.X, l.Y, 0L), src.Size))
+                                    NativeVolume.copy src (dst.SubVolume(V3l(l.X, l.Y, 0L), src.Size))
 
-                                let s = l 
-                                let e = dst.Size.XY - h - V2l.II
+                                    let s = l 
+                                    let e = dst.Size.XY - h - V2l.II
                                     
-                                // fix borders (if any)
-                                if l.X > 0L then
-                                    let p = dst.[s.X.., s.Y .. e.Y, *]
-                                    let fst = NativeVolume<'a>(p.Pointer, VolumeInfo(p.Origin, V3l(s.X, 1L + e.Y - s.Y, p.SZ), V3l(0L, p.DY, p.DZ)))
-                                    NativeVolume.copy fst dst.[.. s.X-1L, s.Y .. e.Y, *]
+                                    // fix borders (if any)
+                                    if l.X > 0L then
+                                        let p = dst.[s.X.., s.Y .. e.Y, *]
+                                        let fst = NativeVolume<'a>(p.Pointer, VolumeInfo(p.Origin, V3l(s.X, 1L + e.Y - s.Y, p.SZ), V3l(0L, p.DY, p.DZ)))
+                                        NativeVolume.copy fst dst.[.. s.X-1L, s.Y .. e.Y, *]
 
-                                if h.X > 0L then
-                                    let p = dst.[e.X.., s.Y .. e.Y, *]
-                                    let lst = NativeVolume<'a>(p.Pointer, VolumeInfo(p.Origin, V3l(h.X, 1L + e.Y - s.Y, p.SZ), V3l(0L, p.DY, p.DZ)))
-                                    NativeVolume.copy lst dst.[e.X+1L .., s.Y .. e.Y, *]
+                                    if h.X > 0L then
+                                        let p = dst.[e.X.., s.Y .. e.Y, *]
+                                        let lst = NativeVolume<'a>(p.Pointer, VolumeInfo(p.Origin, V3l(h.X, 1L + e.Y - s.Y, p.SZ), V3l(0L, p.DY, p.DZ)))
+                                        NativeVolume.copy lst dst.[e.X+1L .., s.Y .. e.Y, *]
 
-                                if l.Y > 0L then    
-                                    let p = dst.[*, s.Y.., *]
-                                    let lst = NativeVolume<'a>(p.Pointer, VolumeInfo(p.Origin, V3l(p.SX, s.Y, p.SZ), V3l(p.DX, 0L, p.DZ)))
-                                    NativeVolume.copy lst dst.[*, ..s.Y-1L,*]
+                                    if l.Y > 0L then    
+                                        let p = dst.[*, s.Y.., *]
+                                        let lst = NativeVolume<'a>(p.Pointer, VolumeInfo(p.Origin, V3l(p.SX, s.Y, p.SZ), V3l(p.DX, 0L, p.DZ)))
+                                        NativeVolume.copy lst dst.[*, ..s.Y-1L,*]
 
-                                if h.Y > 0L then    
-                                    let p = dst.[*, e.Y.., *]
-                                    let lst = NativeVolume<'a>(p.Pointer, VolumeInfo(p.Origin, V3l(p.SX, h.Y, p.SZ), V3l(p.DX, 0L, p.DZ)))
-                                    NativeVolume.copy lst dst.[*, e.Y+1L..,*]
+                                    if h.Y > 0L then    
+                                        let p = dst.[*, e.Y.., *]
+                                        let lst = NativeVolume<'a>(p.Pointer, VolumeInfo(p.Origin, V3l(p.SX, h.Y, p.SZ), V3l(p.DX, 0L, p.DZ)))
+                                        NativeVolume.copy lst dst.[*, e.Y+1L..,*]
 
-                                GL.Dispatch.UnmapNamedBuffer buffer.Handle |> ignore
+                                    GL.Dispatch.UnmapNamedBuffer buffer.Handle |> ignore
 
 
-                                0
-                        }
-                ) |> ignore
+                                    0
+                            }
+                    ) |> ignore
                 
-                GL.BindBuffer(BufferTarget.PixelUnpackBuffer, buffer.Handle)
-                GL.Dispatch.TextureSubImage2D(texture.Handle, TextureTarget.ofTexture texture, level, offset, size, fmt, typ, 0n)
-                GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
+                    GL.BindBuffer(BufferTarget.PixelUnpackBuffer, buffer.Handle)
+                    GL.Dispatch.TextureSubImage2D(texture.Handle, TextureTarget.ofTexture texture, level, offset, size, fmt, typ, 0n)
+                    GL.BindBuffer(BufferTarget.PixelUnpackBuffer, 0)
 
-                lastOffset <- offset
-                lastSize <- size
-                offset <- offset / 2
-                size <- size / 2
+                    lastOffset <- offset
+                    lastSize <- size
+                    offset <- offset / 2
+                    size <- size / 2
 
                 
-            for l in levels .. texture.MipMapLevels-1 do
+                for l in levels .. texture.MipMapLevels-1 do
 
-                ctx.Blit(texture, l-1, 0, Box2i.FromMinAndSize(lastOffset, lastSize), texture, l, 0, Box2i.FromMinAndSize(offset, size), true)
+                    ctx.Blit(texture, l-1, 0, Box2i.FromMinAndSize(lastOffset, lastSize), texture, l, 0, Box2i.FromMinAndSize(offset, size), true)
                 
-                lastOffset <- offset
-                lastSize <- size
-                offset <- offset / 2
-                size <- size / 2
+                    lastOffset <- offset
+                    lastSize <- size
+                    offset <- offset / 2
+                    size <- size / 2
 
                 
 
 
 
             
-            ctx.Delete buffer
+                ctx.Delete buffer
 
-            //if rotated then
-            //    for level in 0 .. levels - 1 do
-            //        let data = image.[0, level]
+                //if rotated then
+                //    for level in 0 .. levels - 1 do
+                //        let data = image.[0, level]
 
-            //        data.Use (fun ptr ->
-            //            let src = NativeMatrix<C4b>(NativePtr.ofNativeInt ptr, MatrixInfo(0L, V2l(data.Size.XY), V2l(1, data.Size.X)))
-            //            let dst = Matrix<C4b>(data.Size.YX)
+                //        data.Use (fun ptr ->
+                //            let src = NativeMatrix<C4b>(NativePtr.ofNativeInt ptr, MatrixInfo(0L, V2l(data.Size.XY), V2l(1, data.Size.X)))
+                //            let dst = Matrix<C4b>(data.Size.YX)
                         
-            //            NativeMatrix.using (dst.Transformed ImageTrafo.Rot90) (fun dst ->
-            //                NativeMatrix.copy src dst
-            //                GL.Dispatch.TextureSubImage2D(texture.Handle, level, offset.X, offset.Y, size.X, size.Y, fmt, typ, NativePtr.toNativeInt dst.Pointer)
-            //            )
-            //        )
+                //            NativeMatrix.using (dst.Transformed ImageTrafo.Rot90) (fun dst ->
+                //                NativeMatrix.copy src dst
+                //                GL.Dispatch.TextureSubImage2D(texture.Handle, level, offset.X, offset.Y, size.X, size.Y, fmt, typ, NativePtr.toNativeInt dst.Pointer)
+                //            )
+                //        )
 
-            //        offset <- offset / 2
-            //        size <- size / 2
-            //else
-            //    for level in 0 .. levels - 1 do
-            //        let data = image.[0, level]
-            //        data.Use (fun ptr ->
-            //            GL.Dispatch.TextureSubImage2D(texture.Handle, level, offset.X, offset.Y, size.X, size.Y, fmt, typ, ptr)
-            //        )
+                //        offset <- offset / 2
+                //        size <- size / 2
+                //else
+                //    for level in 0 .. levels - 1 do
+                //        let data = image.[0, level]
+                //        data.Use (fun ptr ->
+                //            GL.Dispatch.TextureSubImage2D(texture.Handle, level, offset.X, offset.Y, size.X, size.Y, fmt, typ, ptr)
+                //        )
 
-            //        offset <- offset / 2
-            //        size <- size / 2
+                //        offset <- offset / 2
+                //        size <- size / 2
 
-type TextureManager(ctx : Context, semantic : string, format : TextureFormat, samplerState : SamplerState) =
-    static let tileSize = V2i(8192, 8192)
+    type TextureManager(ctx : Context, semantic : string, format : TextureFormat, samplerState : SamplerState) =
+        static let tileSize = V2i(8192, 8192)
 
-    static let levels = 3
-    static let padding = V2i.II * (1 <<< (levels - 1))
+        static let levels = 3
+        static let padding = V2i.II * (1 <<< (levels - 1))
 
-    static let pad (size : V2i) =
-        let size = size + 2 * padding
+        static let pad (size : V2i) =
+            let size = size + 2 * padding
 
-        V2i(
-            (if size.X % padding.X = 0 then size.X else (size.X / padding.X + 1) * padding.X),
-            (if size.Y % padding.Y = 0 then size.Y else (size.Y / padding.Y + 1) * padding.Y)
-        )
-
-
-    let sam = ctx.CreateSampler samplerState
-    let textures = 
-        System.Collections.Generic.Dictionary<Texture, ref<TexturePacking<Guid>>>()
-
-    //let thread = 
-    //    startThread (fun () ->
-    //        while true do
-    //            let l = Console.ReadLine()
-    //            this.SaveAtlas()
-        
-    //    )
-    //let thread2 = 
-    //    startThread (fun () ->
-    //        while true do
-    //            Thread.Sleep 1000
-    //            Log.start "atlas"
-    //            for KeyValue(_, r) in textures do
-    //                Log.line "%.2f%%" (100.0 * r.Value.Occupancy)
-    //            Log.stop()
-        
-    //    )
-    member x.SaveAtlas () =    
-        Log.startTimed "download atlas"
-        use __ = ctx.ResourceLock
-        let path = System.IO.Path.Combine(Environment.GetFolderPath Environment.SpecialFolder.Desktop, "atlas")
-        if not (System.IO.Directory.Exists path) then System.IO.Directory.CreateDirectory path |> ignore
-
-        for i, (KeyValue(t,p)) in Seq.indexed textures do
-            let name = sprintf "tile%03d.png" i
-            let tex = ctx.Download(t) |> unbox<PixImage<byte>>
-            let dst = PixImage<byte>(Col.Format.RGBA, tex.Size)
-            dst.GetMatrix<C4b>().Set C4b.Red |> ignore
-
-            for (_, (b : Box2i)) in p.Value.Used do
-                let b = Box2i(V2i(b.Min.X, dst.Size.Y - 1 - b.Max.Y), V2i(b.Max.X, dst.Size.Y - 1 - b.Min.Y))
-                let src = tex.SubImage(b.Min, V2i.II + b.Max - b.Min)
-                let dst = dst.SubImage(b.Min, V2i.II + b.Max - b.Min)
-                dst.Volume.Set(src.Volume) |> ignore
-            
-            dst.Save(System.IO.Path.Combine(path, name), PixFileFormat.Png)
-            ()
-        Log.stop()
-        
-
-
-    member x.Context : Context = ctx
-    member x.Format = format
-    member x.Sampler = sam
-    member x.Semantic = semantic
-
-    member x.Alloc(size : V2i) : TextureSlot =
-        let slotSize = pad size
-        lock x (fun () ->
-            //Log.line "alloc %A" slotSize
-         
-            let id = Guid.NewGuid()
-            let result = 
-                textures |> Seq.tryPick (fun (KeyValue(t, p)) ->
-                    match p.Value.TryAdd(id, slotSize) with
-                    | Some res ->
-                        p := res
-                        Some (t, id, res.Used.[id])
-                    | None ->
-                        None
-                )
-            match result with
-            | Some (t, id, box) ->
-                let s = V2i.II + box.Max - box.Min
-                new TextureSlot(x, t, id, sam, semantic, box, size, s <> slotSize)
-            | None ->
-                let tex = ctx.CreateTexture2D(tileSize, levels, format, 1)
-
-                GL.ClearTexImage(tex.Handle, 0, PixelFormat.Rgba, PixelType.UnsignedByte, [| 255uy; 255uy;255uy;255uy;|])
-
-                textures.Add(tex, ref (TexturePacking.Empty tex.Size.XY))
-                Log.warn "using %d textures" textures.Count
-                x.Alloc slotSize
-        )
-    member x.Free(slot : TextureSlot) : unit =
-        match textures.TryGetValue slot.Texture with
-        | (true, p) ->
-            //Log.line "free %A" slot.Size
-            let n = p.Value.Remove slot.Id
-            if n.Used.IsEmpty then
-                textures.Remove slot.Texture |> ignore
-                ctx.Delete slot.Texture
-            else
-                p := n
-        | _ ->
-            ()
-
-and TextureSlot(parent : TextureManager, texture : Texture, id : Guid, sampler : Sampler, semantic : string, bounds : Box2i, realSize : V2i, rotated : bool) =
-
-    let realSize =
-        if rotated then realSize.YX
-        else realSize
-
-    let trafo =
-        let s = V2i.II + bounds.Max - bounds.Min
-        let ts = texture.Size.XY
-        let padding = s - realSize
-        let l = padding / 2
-        let trafo = 
-            M33d.Scale(1.0 / V2d ts) *
-            M33d.Translation(V2d bounds.Min + V2d l) *
-            M33d.Scale(V2d realSize)
-                    
-
-        if rotated then
-            V4d(trafo.M02, trafo.M12, -trafo.M00, trafo.M11)
-        else
-            V4d(trafo.M02, trafo.M12, trafo.M00, trafo.M11)
-
-    member x.Size = 
-        let s = V2i.II + bounds.Max - bounds.Min
-        if rotated then s.YX
-        else s
-
-    member x.Texture : Texture = texture
-    member x.Sampler = sampler
-    member x.Bounds = bounds
-    member x.Semantic = semantic
-    member x.Id = id
-
-    member x.TextureTrafo = trafo
-
-    member x.Upload(image : INativeTexture) : unit =
-        AtlasTextureUpload.upload texture bounds image rotated
-       
-    member x.Dispose() =
-        parent.Free x
-
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
-
-
-
-
-type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : nativeptr<int>, signature : IFramebufferSignature, bounds : bool, active : nativeptr<int>, modelViewProjs : nativeptr<int>, indexed : bool, initialCapacity : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
-    static let es = nativeint sizeof<DrawCallInfo>
-    static let bs = nativeint sizeof<CullingShader.CullingInfo>
-
-    static let ceilDiv (a : int) (b : int) =
-        if a % b = 0 then a / b
-        else 1 + a / b
-
-    static let cullingCache = System.Collections.Concurrent.ConcurrentDictionary<Context, ComputeProgram>()
-    static let boundCache = System.Collections.Concurrent.ConcurrentDictionary<Context, Program>()
-        
-    let initialCapacity = Fun.NextPowerOfTwo initialCapacity
-    let adjust (call : DrawCallInfo) =
-        if indexed then
-            let mutable c = call
-            DrawCallInfo.ToggleIndexed(&c)
-            c
-        else
-            let mutable c = call
-            c
-
-    let drawIndices = Dict<DrawCallInfo, int>()
-    let mutable capacity = initialCapacity
-    let mutable mem : nativeptr<DrawCallInfo> = NativePtr.alloc capacity
-    let mutable bmem : nativeptr<CullingShader.CullingInfo> = if bounds then NativePtr.alloc capacity else NativePtr.zero
-
-
-    let mutable buffer = ctx.CreateBuffer (es * nativeint capacity)
-    let mutable bbuffer = if bounds then ctx.CreateBuffer(bs * nativeint capacity) else new Buffer(ctx, 0n, 0)
-
-    let ub = ctx.CreateBuffer(128n)
-
-    let dirty = System.Collections.Generic.HashSet<int>()
-    let mutable count = 0
-    let mutable stride = 20
-
-    let bufferHandles = NativePtr.allocArray [| V3i(buffer.Handle, bbuffer.Handle, count) |]
-    let indirectHandle = NativePtr.allocArray [| IndirectDrawArgs(buffer.Handle, count, stride) |]
-    let computeSize = NativePtr.allocArray [| V3i.Zero |]
-
-    let updatePointers() =
-        NativePtr.write bufferHandles (V3i(buffer.Handle, bbuffer.Handle, count))
-        NativePtr.write indirectHandle (IndirectDrawArgs(buffer.Handle, count, stride))
-        NativePtr.write computeSize (V3i(ceilDiv count 64, 1, 1))
-
-    let oldProgram = NativePtr.allocArray [| 0 |]
-    let oldUB = NativePtr.allocArray [| 0 |]
-    let oldUBOffset = NativePtr.allocArray [| 0n |]
-    let oldUBSize = NativePtr.allocArray [| 0n |]
-
-    do let es = if bounds then es + bs else es
-       Interlocked.Add(&totalMemory.contents, int64 (es * nativeint capacity)) |> ignore
-
-    let culling =
-        if bounds then 
-            cullingCache.GetOrAdd(ctx, fun ctx ->
-                let cs = ComputeShader.ofFunction (V3i(1024, 1024, 1024)) CullingShader.culling
-                let shader = ctx.CompileKernel cs
-                shader 
+            V2i(
+                (if size.X % padding.X = 0 then size.X else (size.X / padding.X + 1) * padding.X),
+                (if size.Y % padding.Y = 0 then size.Y else (size.Y / padding.Y + 1) * padding.Y)
             )
-        else
-            Unchecked.defaultof<ComputeProgram>
-
-    let boxShader =
-        if bounds then
-            boundCache.GetOrAdd(ctx, fun ctx ->
-                let effect =
-                    FShade.Effect.compose [
-                        Effect.ofFunction CullingShader.renderBounds
-                        Effect.ofFunction (DefaultSurfaces.constantColor C4f.Red)
-                    ]
-
-                let shader =
-                    lazy (
-                        let cfg = signature.EffectConfig(Range1d(-1.0, 1.0), false)
-                        effect
-                        |> Effect.toModule cfg
-                        |> ModuleCompiler.compileGLSL ctx.FShadeBackend
-                    )
-
-                match ctx.TryCompileProgram(effect.Id, signature, shader) with
-                | Success v -> v
-                | Error e -> failwith e
-            )
-        else
-            Unchecked.defaultof<Program>
 
 
+        let sam = ctx.CreateSampler samplerState
+        let textures = 
+            System.Collections.Generic.Dictionary<Texture, ref<TexturePacking<Guid>>>()
 
-    let infoSlot = culling.Interface.storageBuffers.["infos"].ssbBinding
-    let boundSlot = culling.Interface.storageBuffers.["bounds"].ssbBinding
-    let activeSlot = culling.Interface.storageBuffers.["isActive"].ssbBinding
-    let viewProjSlot = culling.Interface.storageBuffers.["viewProjs"].ssbBinding
-    let uniformBlock = culling.Interface.uniformBuffers |> MapExt.toList |> List.map snd |> List.head
-    let countField = uniformBlock.ubFields |> List.find (fun f -> f.ufName = "cs_count")
-             
-    let boxBoundSlot = boxShader.Interface.storageBuffers |> Seq.pick (fun (KeyValue(a,b)) -> if a = "Bounds" then Some b.ssbBinding else None)
-    let boxViewProjSlot = boxShader.Interface.storageBuffers |> Seq.pick (fun (KeyValue(a,b)) -> if a = "ViewProjs" then Some b.ssbBinding else None)
-
-    let boxMode = NativePtr.allocArray [| GLBeginMode(int BeginMode.Lines, 2) |]
+        //let thread = 
+        //    startThread (fun () ->
+        //        while true do
+        //            let l = Console.ReadLine()
+        //            this.SaveAtlas()
         
-    let pCall =
-        NativePtr.allocArray [|
-            DrawCallInfo(
-                FaceVertexCount = 24,
-                InstanceCount = 0
-            )
-        |]
-
-    let boxDraw = 
-        NativePtr.allocArray [| new DrawCallInfoList(1, pCall) |]
-
-    let resize (newCount : int) =
-        let newCapacity = max initialCapacity (Fun.NextPowerOfTwo (max 1 newCount))
-        if newCapacity <> capacity then
-            let ess = if bounds then es + bs else es
-            Interlocked.Add(&totalMemory.contents, int64 (ess * (nativeint newCapacity - nativeint capacity))) |> ignore
-            let ob = buffer
-            let obb = bbuffer
-            let om = mem
-            let obm = bmem
-            let nb = ctx.CreateBuffer (es * nativeint newCapacity)
-            let nbb = if bounds then ctx.CreateBuffer (bs * nativeint newCapacity) else new Buffer(ctx, 0n, 0)
-            let nm = NativePtr.alloc newCapacity
-            let nbm = if bounds then NativePtr.alloc newCapacity else NativePtr.zero
-
-            Marshal.Copy(NativePtr.toNativeInt om, NativePtr.toNativeInt nm, nativeint count * nativeint es)
-            if bounds then Marshal.Copy(NativePtr.toNativeInt obm, NativePtr.toNativeInt nbm, nativeint count * nativeint bs)
-
-            mem <- nm
-            bmem <- nbm
-            buffer <- nb
-            bbuffer <- nbb
-            capacity <- newCapacity
-            dirty.Clear()
-            dirty.UnionWith [0..count-1] 
-                
-            NativePtr.free om
-            ctx.Delete ob
-            if bounds then 
-                NativePtr.free obm
-                ctx.Delete obb
+        //    )
+        //let thread2 = 
+        //    startThread (fun () ->
+        //        while true do
+        //            Thread.Sleep 1000
+        //            Log.start "atlas"
+        //            for KeyValue(_, r) in textures do
+        //                Log.line "%.2f%%" (100.0 * r.Value.Occupancy)
+        //            Log.stop()
         
-    member x.Count = count
-
-    member x.Add(call : DrawCallInfo, box : Box3d, cellBounds : Box3d, rootId : int) =
-        if call.FaceVertexCount <= 0 || call.InstanceCount <= 0 then
-            Log.warn "[IndirectBuffer] adding empty DrawCall: %A" call
-            true
-
-        elif drawIndices.ContainsKey call then
-            false
-
-        elif count < capacity then
-            let id = count
-            drawIndices.[call] <- id
-            NativePtr.set mem id (adjust call)
-            if bounds then
-                let bounds =
-                    CullingShader.CullingInfo(
-                        Min = V4f(V3f box.Min, float32 call.InstanceCount),
-                        Max = V4f(V3f box.Max, float32 rootId),
-                        CellMin = V4f(V3f cellBounds.Min, 0.0f),
-                        CellMax = V4f(V3f cellBounds.Max, 0.0f)
-                    )
-                NativePtr.set bmem id bounds
-            count <- count + 1
-            let ess = if bounds then es + bs else es
-            Interlocked.Add(&usedMemory.contents, int64 ess) |> ignore
-            dirty.Add id |> ignore
-                    
-            updatePointers()
-            true
-
-        else
-            resize (count + 1)
-            x.Add(call, box, cellBounds, rootId)
-                 
-    member x.Contains (call : DrawCallInfo) =
-        call.FaceVertexCount <= 0 || 
-        call.InstanceCount <= 0 || 
-        drawIndices.ContainsKey call
-
-    member x.Remove(call : DrawCallInfo) =
-        if call.FaceVertexCount <= 0 || call.InstanceCount <= 0 then
-            Log.warn "[IndirectBuffer] removing empty DrawCall: %A" call
-            true
-        else
-            match drawIndices.TryRemove call with
-            | (true, oid) ->
-                let last = count - 1
-                count <- last
-                let ess = if bounds then es + bs else es
-                Interlocked.Add(&usedMemory.contents, int64 -ess) |> ignore
-
-                if oid <> last then
-                    let lc = NativePtr.get mem last
-                    drawIndices.[lc] <- oid
-                    NativePtr.set mem oid lc
-                    NativePtr.set mem last Unchecked.defaultof<DrawCallInfo>
-                    if bounds then
-                        let lb = NativePtr.get bmem last
-                        NativePtr.set bmem oid lb
-                    dirty.Add oid |> ignore
-                
-                dirty.Remove last |> ignore
-                        
-                resize count
-                updatePointers()
-
-                true
-            | _ ->
-                false
-        
-    member x.Flush() =
-        
-        let toUpload = dirty |> Seq.toArray
-        dirty.Clear()
-
-        let toUpload =
-            toUpload |> Seq.choose (fun r ->
-                if r < 0 then
-                    Log.warn "bad dirty range: %A (count: %A)" r count
-                    None
-                elif r >= count then
-                    Log.warn "bad dirty range: %A (count: %A)" r count
-                    None
-                else
-                    Some r
-            ) |> Seq.toArray
-
-        if toUpload.Length > 0 then
+        //    )
+        member x.SaveAtlas () =    
+            Log.startTimed "download atlas"
             use __ = ctx.ResourceLock
-            let ptr = ctx.MapBufferRange(buffer, 0n, nativeint count * es, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
-            for r in toUpload do
-                let o = nativeint r * es
-                let s = es |> nativeint
-                Marshal.Copy(NativePtr.toNativeInt mem + o, ptr + o, s)
-                GL.Dispatch.FlushMappedNamedBufferRange(buffer.Handle, o, s)
-            ctx.UnmapBuffer(buffer)
+            let path = System.IO.Path.Combine(Environment.GetFolderPath Environment.SpecialFolder.Desktop, "atlas")
+            if not (System.IO.Directory.Exists path) then System.IO.Directory.CreateDirectory path |> ignore
 
+            for i, (KeyValue(t,p)) in Seq.indexed textures do
+                let name = sprintf "tile%03d.png" i
+                let tex = ctx.Download(t) |> unbox<PixImage<byte>>
+                let dst = PixImage<byte>(Col.Format.RGBA, tex.Size)
+                dst.GetMatrix<C4b>().Set C4b.Red |> ignore
+
+                for (_, (b : Box2i)) in p.Value.Used do
+                    let b = Box2i(V2i(b.Min.X, dst.Size.Y - 1 - b.Max.Y), V2i(b.Max.X, dst.Size.Y - 1 - b.Min.Y))
+                    let src = tex.SubImage(b.Min, V2i.II + b.Max - b.Min)
+                    let dst = dst.SubImage(b.Min, V2i.II + b.Max - b.Min)
+                    dst.Volume.Set(src.Volume) |> ignore
+            
+                dst.Save(System.IO.Path.Combine(path, name), PixFileFormat.Png)
+                ()
+            Log.stop()
+        
+
+
+        member x.Context : Context = ctx
+        member x.Format = format
+        member x.Sampler = sam
+        member x.Semantic = semantic
+
+        member x.Alloc(size : V2i) : TextureSlot =
+            let slotSize = pad size
+            lock x (fun () ->
+                //Log.line "alloc %A" slotSize
+         
+                let id = Guid.NewGuid()
+                let result = 
+                    textures |> Seq.tryPick (fun (KeyValue(t, p)) ->
+                        match p.Value.TryAdd(id, slotSize) with
+                        | Some res ->
+                            p := res
+                            Some (t, id, res.Used.[id])
+                        | None ->
+                            None
+                    )
+                match result with
+                | Some (t, id, box) ->
+                    let s = V2i.II + box.Max - box.Min
+                    new TextureSlot(x, t, id, sam, semantic, box, size, s <> slotSize)
+                | None ->
+                    let tex = ctx.CreateTexture2D(tileSize, levels, format, 1)
+
+                    GL.ClearTexImage(tex.Handle, 0, PixelFormat.Rgba, PixelType.UnsignedByte, [| 255uy; 255uy;255uy;255uy;|])
+
+                    textures.Add(tex, ref (TexturePacking.Empty tex.Size.XY))
+                    Log.warn "using %d textures" textures.Count
+                    x.Alloc slotSize
+            )
+        member x.Free(slot : TextureSlot) : unit =
+            match textures.TryGetValue slot.Texture with
+            | (true, p) ->
+                //Log.line "free %A" slot.Size
+                let n = p.Value.Remove slot.Id
+                if n.Used.IsEmpty then
+                    textures.Remove slot.Texture |> ignore
+                    ctx.Delete slot.Texture
+                else
+                    p := n
+            | _ ->
+                ()
+
+    and TextureSlot(parent : TextureManager, texture : Texture, id : Guid, sampler : Sampler, semantic : string, bounds : Box2i, realSize : V2i, rotated : bool) =
+
+        let realSize =
+            if rotated then realSize.YX
+            else realSize
+
+        let trafo =
+            let s = V2i.II + bounds.Max - bounds.Min
+            let ts = texture.Size.XY
+            let padding = s - realSize
+            let l = padding / 2
+            let trafo = 
+                M33d.Scale(1.0 / V2d ts) *
+                M33d.Translation(V2d bounds.Min + V2d l) *
+                M33d.Scale(V2d realSize)
+                    
+
+            if rotated then
+                V4d(trafo.M02, trafo.M12, -trafo.M00, trafo.M11)
+            else
+                V4d(trafo.M02, trafo.M12, trafo.M00, trafo.M11)
+
+        member x.Size = 
+            let s = V2i.II + bounds.Max - bounds.Min
+            if rotated then s.YX
+            else s
+
+        member x.Texture : Texture = texture
+        member x.Sampler = sampler
+        member x.Bounds = bounds
+        member x.Semantic = semantic
+        member x.Id = id
+
+        member x.TextureTrafo = trafo
+
+        member x.Upload(image : INativeTexture) : unit =
+            AtlasTextureUpload.upload texture bounds image rotated
+       
+        member x.Dispose() =
+            parent.Free x
+
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
+    type IndirectBuffer(ctx : Context, alphaToCoverage : bool, renderBounds : nativeptr<int>, signature : IFramebufferSignature, bounds : bool, active : nativeptr<int>, modelViewProjs : nativeptr<int>, indexed : bool, initialCapacity : int, usedMemory : ref<int64>, totalMemory : ref<int64>) =
+        static let es = nativeint sizeof<DrawCallInfo>
+        static let bs = nativeint sizeof<CullingShader.CullingInfo>
+
+        static let ceilDiv (a : int) (b : int) =
+            if a % b = 0 then a / b
+            else 1 + a / b
+
+        static let cullingCache = System.Collections.Concurrent.ConcurrentDictionary<Context, ComputeProgram>()
+        static let boundCache = System.Collections.Concurrent.ConcurrentDictionary<Context, Program>()
+        
+        let initialCapacity = Fun.NextPowerOfTwo initialCapacity
+        let adjust (call : DrawCallInfo) =
+            if indexed then
+                let mutable c = call
+                DrawCallInfo.ToggleIndexed(&c)
+                c
+            else
+                let mutable c = call
+                c
+
+        let drawIndices = Dict<DrawCallInfo, int>()
+        let mutable capacity = initialCapacity
+        let mutable mem : nativeptr<DrawCallInfo> = NativePtr.alloc capacity
+        let mutable bmem : nativeptr<CullingShader.CullingInfo> = if bounds then NativePtr.alloc capacity else NativePtr.zero
+
+
+        let mutable buffer = ctx.CreateBuffer (es * nativeint capacity)
+        let mutable bbuffer = if bounds then ctx.CreateBuffer(bs * nativeint capacity) else new Buffer(ctx, 0n, 0)
+
+        let ub = ctx.CreateBuffer(128n)
+
+        let dirty = System.Collections.Generic.HashSet<int>()
+        let mutable count = 0
+        let mutable stride = 20
+
+        let bufferHandles = NativePtr.allocArray [| V3i(buffer.Handle, bbuffer.Handle, count) |]
+        let indirectHandle = NativePtr.allocArray [| IndirectDrawArgs(buffer.Handle, count, stride) |]
+        let computeSize = NativePtr.allocArray [| V3i.Zero |]
+
+        let updatePointers() =
+            NativePtr.write bufferHandles (V3i(buffer.Handle, bbuffer.Handle, count))
+            NativePtr.write indirectHandle (IndirectDrawArgs(buffer.Handle, count, stride))
+            NativePtr.write computeSize (V3i(ceilDiv count 64, 1, 1))
+
+        let oldProgram = NativePtr.allocArray [| 0 |]
+        let oldUB = NativePtr.allocArray [| 0 |]
+        let oldUBOffset = NativePtr.allocArray [| 0n |]
+        let oldUBSize = NativePtr.allocArray [| 0n |]
+
+        do let es = if bounds then es + bs else es
+           Interlocked.Add(&totalMemory.contents, int64 (es * nativeint capacity)) |> ignore
+
+        let culling =
+            if bounds then 
+                cullingCache.GetOrAdd(ctx, fun ctx ->
+                    let cs = ComputeShader.ofFunction (V3i(1024, 1024, 1024)) CullingShader.culling
+                    let shader = ctx.CompileKernel cs
+                    shader 
+                )
+            else
+                Unchecked.defaultof<ComputeProgram>
+
+        let boxShader =
             if bounds then
-                let bptr = ctx.MapBufferRange(bbuffer, 0n, nativeint count * bs, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
+                boundCache.GetOrAdd(ctx, fun ctx ->
+                    let effect =
+                        FShade.Effect.compose [
+                            Effect.ofFunction CullingShader.renderBounds
+                            Effect.ofFunction (DefaultSurfaces.constantColor C4f.Red)
+                        ]
+
+                    let shader =
+                        lazy (
+                            let cfg = signature.EffectConfig(Range1d(-1.0, 1.0), false)
+                            effect
+                            |> Effect.toModule cfg
+                            |> ModuleCompiler.compileGLSL ctx.FShadeBackend
+                        )
+
+                    match ctx.TryCompileProgram(effect.Id, signature, shader) with
+                    | Success v -> v
+                    | Error e -> failwith e
+                )
+            else
+                Unchecked.defaultof<Program>
+
+
+
+        let infoSlot = culling.Interface.storageBuffers.["infos"].ssbBinding
+        let boundSlot = culling.Interface.storageBuffers.["bounds"].ssbBinding
+        let activeSlot = culling.Interface.storageBuffers.["isActive"].ssbBinding
+        let viewProjSlot = culling.Interface.storageBuffers.["viewProjs"].ssbBinding
+        let uniformBlock = culling.Interface.uniformBuffers |> MapExt.toList |> List.map snd |> List.head
+        let countField = uniformBlock.ubFields |> List.find (fun f -> f.ufName = "cs_count")
+             
+        let boxBoundSlot = boxShader.Interface.storageBuffers |> Seq.pick (fun (KeyValue(a,b)) -> if a = "Bounds" then Some b.ssbBinding else None)
+        let boxViewProjSlot = boxShader.Interface.storageBuffers |> Seq.pick (fun (KeyValue(a,b)) -> if a = "ViewProjs" then Some b.ssbBinding else None)
+
+        let boxMode = NativePtr.allocArray [| GLBeginMode(int BeginMode.Lines, 2) |]
+        
+        let pCall =
+            NativePtr.allocArray [|
+                DrawCallInfo(
+                    FaceVertexCount = 24,
+                    InstanceCount = 0
+                )
+            |]
+
+        let boxDraw = 
+            NativePtr.allocArray [| new DrawCallInfoList(1, pCall) |]
+
+        let resize (newCount : int) =
+            let newCapacity = max initialCapacity (Fun.NextPowerOfTwo (max 1 newCount))
+            if newCapacity <> capacity then
+                let ess = if bounds then es + bs else es
+                Interlocked.Add(&totalMemory.contents, int64 (ess * (nativeint newCapacity - nativeint capacity))) |> ignore
+                let ob = buffer
+                let obb = bbuffer
+                let om = mem
+                let obm = bmem
+                let nb = ctx.CreateBuffer (es * nativeint newCapacity)
+                let nbb = if bounds then ctx.CreateBuffer (bs * nativeint newCapacity) else new Buffer(ctx, 0n, 0)
+                let nm = NativePtr.alloc newCapacity
+                let nbm = if bounds then NativePtr.alloc newCapacity else NativePtr.zero
+
+                Marshal.Copy(NativePtr.toNativeInt om, NativePtr.toNativeInt nm, nativeint count * nativeint es)
+                if bounds then Marshal.Copy(NativePtr.toNativeInt obm, NativePtr.toNativeInt nbm, nativeint count * nativeint bs)
+
+                mem <- nm
+                bmem <- nbm
+                buffer <- nb
+                bbuffer <- nbb
+                capacity <- newCapacity
+                dirty.Clear()
+                dirty.UnionWith [0..count-1] 
+                
+                NativePtr.free om
+                ctx.Delete ob
+                if bounds then 
+                    NativePtr.free obm
+                    ctx.Delete obb
+        
+        member x.Count = count
+
+        member x.Add(call : DrawCallInfo, box : Box3d, cellBounds : Box3d, rootId : int) =
+            if call.FaceVertexCount <= 0 || call.InstanceCount <= 0 then
+                Log.warn "[IndirectBuffer] adding empty DrawCall: %A" call
+                true
+
+            elif drawIndices.ContainsKey call then
+                false
+
+            elif count < capacity then
+                let id = count
+                drawIndices.[call] <- id
+                NativePtr.set mem id (adjust call)
+                if bounds then
+                    let bounds =
+                        CullingShader.CullingInfo(
+                            Min = V4f(V3f box.Min, float32 call.InstanceCount),
+                            Max = V4f(V3f box.Max, float32 rootId),
+                            CellMin = V4f(V3f cellBounds.Min, 0.0f),
+                            CellMax = V4f(V3f cellBounds.Max, 0.0f)
+                        )
+                    NativePtr.set bmem id bounds
+                count <- count + 1
+                let ess = if bounds then es + bs else es
+                Interlocked.Add(&usedMemory.contents, int64 ess) |> ignore
+                dirty.Add id |> ignore
+                    
+                updatePointers()
+                true
+
+            else
+                resize (count + 1)
+                x.Add(call, box, cellBounds, rootId)
+                 
+        member x.Contains (call : DrawCallInfo) =
+            call.FaceVertexCount <= 0 || 
+            call.InstanceCount <= 0 || 
+            drawIndices.ContainsKey call
+
+        member x.Remove(call : DrawCallInfo) =
+            if call.FaceVertexCount <= 0 || call.InstanceCount <= 0 then
+                Log.warn "[IndirectBuffer] removing empty DrawCall: %A" call
+                true
+            else
+                match drawIndices.TryRemove call with
+                | (true, oid) ->
+                    let last = count - 1
+                    count <- last
+                    let ess = if bounds then es + bs else es
+                    Interlocked.Add(&usedMemory.contents, int64 -ess) |> ignore
+
+                    if oid <> last then
+                        let lc = NativePtr.get mem last
+                        drawIndices.[lc] <- oid
+                        NativePtr.set mem oid lc
+                        NativePtr.set mem last Unchecked.defaultof<DrawCallInfo>
+                        if bounds then
+                            let lb = NativePtr.get bmem last
+                            NativePtr.set bmem oid lb
+                        dirty.Add oid |> ignore
+                
+                    dirty.Remove last |> ignore
+                        
+                    resize count
+                    updatePointers()
+
+                    true
+                | _ ->
+                    false
+        
+        member x.Flush() =
+        
+            let toUpload = dirty |> Seq.toArray
+            dirty.Clear()
+
+            let toUpload =
+                toUpload |> Seq.choose (fun r ->
+                    if r < 0 then
+                        Log.warn "bad dirty range: %A (count: %A)" r count
+                        None
+                    elif r >= count then
+                        Log.warn "bad dirty range: %A (count: %A)" r count
+                        None
+                    else
+                        Some r
+                ) |> Seq.toArray
+
+            if toUpload.Length > 0 then
+                use __ = ctx.ResourceLock
+                let ptr = ctx.MapBufferRange(buffer, 0n, nativeint count * es, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
                 for r in toUpload do
-                    let o = nativeint r * bs
-                    let s = bs |> nativeint
-                    Marshal.Copy(NativePtr.toNativeInt bmem + o, bptr + o, s)
-                    GL.Dispatch.FlushMappedNamedBufferRange(bbuffer.Handle, o, s)
-                ctx.UnmapBuffer(bbuffer)
+                    let o = nativeint r * es
+                    let s = es |> nativeint
+                    Marshal.Copy(NativePtr.toNativeInt mem + o, ptr + o, s)
+                    GL.Dispatch.FlushMappedNamedBufferRange(buffer.Handle, o, s)
+                ctx.UnmapBuffer(buffer)
+
+                if bounds then
+                    let bptr = ctx.MapBufferRange(bbuffer, 0n, nativeint count * bs, BufferAccessMask.MapWriteBit ||| BufferAccessMask.MapFlushExplicitBit)
+                    for r in toUpload do
+                        let o = nativeint r * bs
+                        let s = bs |> nativeint
+                        Marshal.Copy(NativePtr.toNativeInt bmem + o, bptr + o, s)
+                        GL.Dispatch.FlushMappedNamedBufferRange(bbuffer.Handle, o, s)
+                    ctx.UnmapBuffer(bbuffer)
 
 
-    member x.Buffer =
-        IndirectBuffer.ofBuffer false sizeof<DrawCallInfo> count buffer
+        member x.Buffer =
+            IndirectBuffer.ofBuffer false sizeof<DrawCallInfo> count buffer
 
-    member x.BoundsBuffer =
-        bbuffer
+        member x.BoundsBuffer =
+            bbuffer
 
        
 
-    member x.CompileRender(s : ICommandStream, before : ICommandStream -> unit, mvp : nativeptr<M44f>, indexType : Option<_>, runtimeStats : nativeptr<_>, isActive : nativeptr<_>, mode : nativeptr<_>) : NativeStats =
+        member x.CompileRender(s : ICommandStream, before : ICommandStream -> unit, mvp : nativeptr<M44f>, indexType : Option<_>, runtimeStats : nativeptr<_>, isActive : nativeptr<_>, mode : nativeptr<_>) : NativeStats =
 
-        let mutable icnt = 0 // counting dynamic
+            let mutable icnt = 0 // counting dynamic
 
-        if bounds then
-            //s.NamedBufferSubData(ub.Handle, nativeint viewProjField.ufOffset, 64n, NativePtr.toNativeInt mvp)
-            s.NamedBufferSubData(ub.Handle, nativeint countField.ufOffset, 4n, NativePtr.toNativeInt bufferHandles + 8n)
+            if bounds then
+                //s.NamedBufferSubData(ub.Handle, nativeint viewProjField.ufOffset, 64n, NativePtr.toNativeInt mvp)
+                s.NamedBufferSubData(ub.Handle, nativeint countField.ufOffset, 4n, NativePtr.toNativeInt bufferHandles + 8n)
 
-            s.Get(GetPName.CurrentProgram, oldProgram)
-            s.Get(GetIndexedPName.UniformBufferBinding, uniformBlock.ubBinding, oldUB)
-            s.Get(GetIndexedPName.UniformBufferStart, uniformBlock.ubBinding, oldUBOffset)
-            s.Get(GetIndexedPName.UniformBufferSize, uniformBlock.ubBinding, oldUBSize)
+                s.Get(GetPName.CurrentProgram, oldProgram)
+                s.Get(GetIndexedPName.UniformBufferBinding, uniformBlock.ubBinding, oldUB)
+                s.Get(GetIndexedPName.UniformBufferStart, uniformBlock.ubBinding, oldUBOffset)
+                s.Get(GetIndexedPName.UniformBufferSize, uniformBlock.ubBinding, oldUBSize)
 
-            s.UseProgram(culling.Handle)
-            s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, infoSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 0n))
-            s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, boundSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 4n))
-            s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, activeSlot, active)
-            s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, viewProjSlot, modelViewProjs)
-            s.BindBufferBase(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, ub.Handle)
-            s.DispatchCompute computeSize
+                s.UseProgram(culling.Handle)
+                s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, infoSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 0n))
+                s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, boundSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 4n))
+                s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, activeSlot, active)
+                s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, viewProjSlot, modelViewProjs)
+                s.BindBufferBase(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, ub.Handle)
+                s.DispatchCompute computeSize
                 
-            s.Conditional(renderBounds, fun s ->
-                let pCnt : nativeptr<int> = NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 8n)
-                let pInstanceCnt : nativeptr<int> = NativePtr.ofNativeInt (NativePtr.toNativeInt pCall + 4n)
-                s.Copy(pCnt, pInstanceCnt)
-                s.UseProgram(boxShader.Handle)
-                s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, boxBoundSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 4n))
-                s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, boxViewProjSlot, modelViewProjs)
-                s.DrawArrays(runtimeStats, isActive, boxMode, boxDraw)
-            )
+                s.Conditional(renderBounds, fun s ->
+                    let pCnt : nativeptr<int> = NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 8n)
+                    let pInstanceCnt : nativeptr<int> = NativePtr.ofNativeInt (NativePtr.toNativeInt pCall + 4n)
+                    s.Copy(pCnt, pInstanceCnt)
+                    s.UseProgram(boxShader.Handle)
+                    s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, boxBoundSlot, NativePtr.ofNativeInt (NativePtr.toNativeInt bufferHandles + 4n))
+                    s.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, boxViewProjSlot, modelViewProjs)
+                    s.DrawArrays(runtimeStats, isActive, boxMode, boxDraw)
+                )
 
-            s.UseProgram(oldProgram)
-            s.BindBufferRange(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, oldUB, oldUBOffset, oldUBSize)
-            s.MemoryBarrier(MemoryBarrierFlags.CommandBarrierBit)
+                s.UseProgram(oldProgram)
+                s.BindBufferRange(BufferRangeTarget.UniformBuffer, uniformBlock.ubBinding, oldUB, oldUBOffset, oldUBSize)
+                s.MemoryBarrier(MemoryBarrierFlags.CommandBarrierBit)
 
             
-        let h = NativePtr.read indirectHandle
-        if h.Count > 0 then
-            before(s)
-            if alphaToCoverage then 
-                s.Enable(int EnableCap.SampleAlphaToCoverage)
-                s.Enable(int EnableCap.SampleAlphaToOne)
+            let h = NativePtr.read indirectHandle
+            if h.Count > 0 then
+                before(s)
+                if alphaToCoverage then 
+                    s.Enable(int EnableCap.SampleAlphaToCoverage)
+                    s.Enable(int EnableCap.SampleAlphaToOne)
 
-            match indexType with
-                | Some indexType ->
-                    s.DrawElementsIndirect(runtimeStats, isActive, mode, int indexType, indirectHandle)
-                | _ -> 
-                    s.DrawArraysIndirect(runtimeStats, isActive, mode, indirectHandle)
+                match indexType with
+                    | Some indexType ->
+                        s.DrawElementsIndirect(runtimeStats, isActive, mode, int indexType, indirectHandle)
+                    | _ -> 
+                        s.DrawArraysIndirect(runtimeStats, isActive, mode, indirectHandle)
             
-            if alphaToCoverage then 
-                s.Disable(int EnableCap.SampleAlphaToCoverage)
-                s.Disable(int EnableCap.SampleAlphaToOne)
-                icnt <- icnt + 4 // enable + disable
-        else
-            Log.warn "empty indirect call"
+                if alphaToCoverage then 
+                    s.Disable(int EnableCap.SampleAlphaToCoverage)
+                    s.Disable(int EnableCap.SampleAlphaToOne)
+                    icnt <- icnt + 4 // enable + disable
+            else
+                Log.warn "empty indirect call"
 
-        NativeStats(InstructionCount = 16 + 5 + icnt) // 16 fixed + 5 conditional + (0 / 2)
+            NativeStats(InstructionCount = 16 + 5 + icnt) // 16 fixed + 5 conditional + (0 / 2)
 
-    member x.Dispose() =
-        let ess = if bounds then es + bs else es
-        Interlocked.Add(&usedMemory.contents, int64 (-ess * nativeint count)) |> ignore
-        Interlocked.Add(&totalMemory.contents, int64 (-ess * nativeint capacity)) |> ignore
-        NativePtr.free mem
-        ctx.Delete buffer
-        if bounds then
-            NativePtr.free bmem
-            ctx.Delete bbuffer
-        capacity <- 0
-        mem <- NativePtr.zero
-        buffer <- new Buffer(ctx, 0n, 0)
-        dirty.Clear()
-        count <- 0
-        NativePtr.free indirectHandle
-        NativePtr.free computeSize
-        NativePtr.free boxMode
-        NativePtr.free pCall
-        NativePtr.free boxDraw
+        member x.Dispose() =
+            let ess = if bounds then es + bs else es
+            Interlocked.Add(&usedMemory.contents, int64 (-ess * nativeint count)) |> ignore
+            Interlocked.Add(&totalMemory.contents, int64 (-ess * nativeint capacity)) |> ignore
+            NativePtr.free mem
+            ctx.Delete buffer
+            if bounds then
+                NativePtr.free bmem
+                ctx.Delete bbuffer
+            capacity <- 0
+            mem <- NativePtr.zero
+            buffer <- new Buffer(ctx, 0n, 0)
+            dirty.Clear()
+            count <- 0
+            NativePtr.free indirectHandle
+            NativePtr.free computeSize
+            NativePtr.free boxMode
+            NativePtr.free pCall
+            NativePtr.free boxDraw
 
-        drawIndices.Clear()
+            drawIndices.Clear()
 
-    interface IDisposable with
-        member x.Dispose() = x.Dispose()
+        interface IDisposable with
+            member x.Dispose() = x.Dispose()
+
+open GeometryPoolData
 
 type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<InstanceBuffer>, vb : Block<VertexBuffer>, ib : Option<Block<Buffer>>, textures : MapExt<int, TextureSlot>) = 
     let fvc =
@@ -1337,7 +1337,6 @@ type PoolSlot (ctx : Context, signature : GeometryPoolSignature, ub : Block<Inst
                     InstanceCount = int ub.Size,
                     FirstInstance = int ub.Offset
                 )
-
 
 type GeometryPool private(ctx : Context) =
     static let instanceChunkSize = 1 <<< 20

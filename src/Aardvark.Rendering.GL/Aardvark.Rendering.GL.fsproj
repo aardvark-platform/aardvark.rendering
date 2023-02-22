@@ -77,7 +77,9 @@
     <Compile Include="Resources\Pointers.fs" />
     <Compile Include="Resources\SparseBuffer.fs" />
     <Compile Include="Resources\MappedBuffer.fs" />
-    <Compile Include="Management\ResourceSharing.fs" />
+    <Compile Include="Management\BufferManager.fs" />
+    <Compile Include="Management\TextureManager.fs" />
+    <Compile Include="Management\UniformBufferManager.fs" />
     <Compile Include="Management\ResourceManager.fs" />
     <Compile Include="Management\AssemblerExtensions.fs" />
     <Compile Include="Management\PreparedRenderObject.fs" />
