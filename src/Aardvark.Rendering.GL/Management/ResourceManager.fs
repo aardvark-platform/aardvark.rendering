@@ -83,10 +83,10 @@ type InterfaceSlots =
     }
 
 [<AllowNullLiteral>]
-type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskInfo : Option<IFramebufferSignature * RenderTaskLock>) =
+type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskLock : Option<RenderTaskLock>) =
 
     let derivedCache (f : ResourceManager -> ResourceCache<'a, 'b>) =
-        ResourceCache<'a, 'b>(Option.map f parent, Option.map snd renderTaskInfo)
+        ResourceCache<'a, 'b>(Option.map f parent, renderTaskLock)
 
     let bufferManager =
         match parent with
@@ -104,7 +104,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let bufferCache             = derivedCache (fun m -> m.BufferCache)
     let textureCache            = derivedCache (fun m -> m.TextureCache)
     let indirectBufferCache     = derivedCache (fun m -> m.IndirectBufferCache)
-    let programHandleCache      = ResourceCache<Program, int>(None, Option.map snd renderTaskInfo)
+    let programHandleCache      = ResourceCache<Program, int>(None, renderTaskLock)
     let samplerCache            = derivedCache (fun m -> m.SamplerCache)
     let vertexInputCache        = derivedCache (fun m -> m.VertexInputCache)
     let uniformLocationCache    = derivedCache (fun m -> m.UniformLocationCache)
@@ -172,8 +172,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member private x.ColorCache               : ResourceCache<C4f, C4f>                       = colorCache
     member private x.TextureBindingCache      : ResourceCache<TextureBinding, TextureBinding> = textureBindingCache
     member private x.ImageBindingCache        : ResourceCache<ImageBinding, ImageBinding>     = imageBindingCache
-
-    member x.RenderTaskLock = renderTaskInfo
 
     new(parent, lock) = new ResourceManager(Some parent, parent.Context, lock)
     new(ctx, lock) = new ResourceManager(None, ctx, lock)

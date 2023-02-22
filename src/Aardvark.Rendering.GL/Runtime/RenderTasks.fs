@@ -62,7 +62,7 @@ module RenderTasks =
 
         let ctx = manager.Context
         let renderTaskLock = RenderTaskLock()
-        let manager = new ResourceManager(manager, Some (signature, renderTaskLock))
+        let manager = new ResourceManager(manager, Some renderTaskLock)
         let structureChanged = AVal.custom ignore
         let runtimeStats = NativePtr.alloc 1
         let resources = new Aardvark.Rendering.ResourceInputSet()
