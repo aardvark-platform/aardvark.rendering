@@ -57,12 +57,12 @@ module RenderTasks =
                 GL.Check "could reset viewport"
 
     [<AbstractClass>]
-    type AbstractOpenGlRenderTask(manager : ResourceManager, signature : IFramebufferSignature, shareTextures : bool, shareBuffers : bool) =
+    type AbstractOpenGlRenderTask(manager : ResourceManager, signature : IFramebufferSignature) =
         inherit AbstractRenderTask()
 
         let ctx = manager.Context
         let renderTaskLock = RenderTaskLock()
-        let manager = ResourceManager(manager, Some (signature, renderTaskLock), shareTextures, shareBuffers)
+        let manager = ResourceManager(manager, Some (signature, renderTaskLock))
         let structureChanged = AVal.custom ignore
         let runtimeStats = NativePtr.alloc 1
         let resources = new Aardvark.Rendering.ResourceInputSet()
@@ -392,8 +392,8 @@ module RenderTasks =
 
 
     
-    type NewRenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, shareTextures : bool, shareBuffers : bool) as this =
-        inherit AbstractOpenGlRenderTask(man, fboSignature, shareTextures, shareBuffers)
+    type NewRenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>) as this =
+        inherit AbstractOpenGlRenderTask(man, fboSignature)
 
         let rec hook (r : IRenderObject) =
             match r with
@@ -430,8 +430,8 @@ module RenderTasks =
                 GL.Sync()
 
 
-    type RenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, shareTextures : bool, shareBuffers : bool, debug : bool) as this =
-        inherit AbstractOpenGlRenderTask(man, fboSignature, shareTextures, shareBuffers)
+    type RenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, debug : bool) as this =
+        inherit AbstractOpenGlRenderTask(man, fboSignature)
         
         let ctx = man.Context
         let inputSet = InputSet(this) 

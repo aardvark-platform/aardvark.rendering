@@ -11,7 +11,7 @@ open Aardvark.Rendering.GL
 open FSharp.Data.Adaptive
 
 module Sharing =
-    
+
     type RefCountedBuffer(ctx, create : unit -> Buffer, destroy : unit -> unit) =
         inherit Buffer(ctx, 0n, 0)
 
@@ -59,11 +59,11 @@ module Sharing =
                 x.Handle <- 0
 
 
-    type BufferManager(ctx : Context, active : bool) =
+    type BufferManager(ctx : Context) =
         let cache = ConcurrentDictionary<IBuffer, RefCountedBuffer>()
 
         let get (b : IBuffer) =
-            cache.GetOrAdd(b, fun v -> 
+            cache.GetOrAdd(b, fun v ->
                 new RefCountedBuffer(
                     ctx,
                     (fun () -> ctx.CreateBuffer b),
@@ -72,48 +72,41 @@ module Sharing =
             )
 
         member x.Create(data : IBuffer) =
-            if active then
-                let shared = get data
-                shared.Acquire()
-                shared :> Buffer
-            else
-                ctx.CreateBuffer data
+            let shared = get data
+            shared.Acquire()
+            shared :> Buffer
 
         member x.Update(b : Buffer, data : IBuffer) : Buffer =
             match b with
-                | :? RefCountedBuffer as b when active ->
-                    
-                    let newShared = get data
-                    if newShared = b then
-                        b :> Buffer
-                    else
-                        newShared.Acquire()
-                        b.Release()
-                        newShared :> Buffer
-                | _ ->
-                    if b.Handle = 0 then
-                        x.Create(data)
-                    else
-                        ctx.Upload(b, data)
-                        b
+            | :? RefCountedBuffer as b  ->
+                let newShared = get data
+                if newShared = b then
+                    b :> Buffer
+                else
+                    newShared.Acquire()
+                    b.Release()
+                    newShared :> Buffer
+            | _ ->
+                if b.Handle = 0 then
+                    x.Create(data)
+                else
+                    ctx.Upload(b, data)
+                    b
 
         member x.Delete(b : Buffer) =
             if b.Handle <> 0 then
-                if active then
-                    match b with
-                        | :? RefCountedBuffer as b -> b.Release()
-                        | _ -> ctx.Delete b
-                else
-                    ctx.Delete b
+                match b with
+                | :? RefCountedBuffer as b -> b.Release()
+                | _ -> ctx.Delete b
 
 
-    type TextureManager(ctx : Context, active : bool) =
+    type TextureManager(ctx : Context) =
         let cache = ConcurrentDictionary<ITexture, RefCountedTexture>()
 
         let nullTex = new Texture(ctx, 0, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L)
 
         let get (b : ITexture) =
-            cache.GetOrAdd(b, fun v -> 
+            cache.GetOrAdd(b, fun v ->
                 new RefCountedTexture(
                     ctx,
                     (fun () -> ctx.CreateTexture b),
@@ -123,38 +116,31 @@ module Sharing =
 
         member x.Create(data : ITexture) =
             match data with
-                | :? NullTexture as t -> nullTex
-                | _ ->
-                    if active then
-                        let shared = get data
-                        shared.Acquire()
-                        shared :> Texture
-                    else
-                        ctx.CreateTexture data
+            | :? NullTexture -> nullTex
+            | _ ->
+                let shared = get data
+                shared.Acquire()
+                shared :> Texture
 
         member x.Update(b : Texture, data : ITexture) : Texture =
             match b with
-                | :? RefCountedTexture as b when active ->
-                    
-                    let newShared = get data
-                    if newShared = b then
-                        b :> Texture
-                    else
-                        newShared.Acquire()
-                        b.Release()
-                        newShared :> Texture
-                | _ ->
-                    if b.Handle <> 0 then
-                        ctx.Delete b
+            | :? RefCountedTexture as b ->
+                let newShared = get data
+                if newShared = b then
+                    b :> Texture
+                else
+                    newShared.Acquire()
+                    b.Release()
+                    newShared :> Texture
+            | _ ->
+                if b.Handle <> 0 then
+                    ctx.Delete b
 
-                    x.Create(data)
+                x.Create(data)
 
         member x.Delete(b : Texture) =
             if b.Handle <> 0 then
-                if active then
-                    match b with
-                        | :? RefCountedTexture as b -> b.Release()
-                        | _ -> ctx.Delete b
-                else
-                    ctx.Delete b
+                match b with
+                | :? RefCountedTexture as b -> b.Release()
+                | _ -> ctx.Delete b
 

@@ -142,6 +142,9 @@ type UniformBufferManager(ctx : Context) =
     member x.Dispose() =
         manager.Dispose()
 
+    interface IDisposable with
+        member x.Dispose() = x.Dispose()
+
 
 type CastResource<'a, 'b when 'a : equality and 'b : equality>(inner : IResource<'a>) =
     inherit AdaptiveObject()
@@ -213,19 +216,23 @@ type InterfaceSlots =
     }
 
 [<AllowNullLiteral>]
-type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskInfo : Option<IFramebufferSignature * RenderTaskLock>, shareTextures : bool, shareBuffers : bool) =
+type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, renderTaskInfo : Option<IFramebufferSignature * RenderTaskLock>) =
 
     let derivedCache (f : ResourceManager -> ResourceCache<'a, 'b>) =
         ResourceCache<'a, 'b>(Option.map f parent, Option.map snd renderTaskInfo)
-    //let derivedCache (f : ResourceManager -> ResourceCache<'a, 'b>) =
-    //    match parent with
-    //    | Some p -> f p
-    //    | None -> ResourceCache<'a, 'b>(None, None)
 
-    let bufferManager           = match parent with | Some p -> p.BufferManager
-                                                    | None -> Sharing.BufferManager(ctx, shareBuffers)
-    let textureManager          = match parent with | Some p -> p.TextureManager
-                                                    | None -> Sharing.TextureManager(ctx, shareTextures)
+    let bufferManager =
+        match parent with
+        | Some p -> p.BufferManager
+        | None -> Sharing.BufferManager(ctx)
+
+    let textureManager =
+        match parent with
+        | Some p -> p.TextureManager
+        | None -> Sharing.TextureManager(ctx)
+
+    let uniformBufferManager =
+        new UniformBufferManager(ctx)
 
     let bufferCache             = derivedCache (fun m -> m.BufferCache)
     let textureCache            = derivedCache (fun m -> m.TextureCache)
@@ -234,7 +241,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let samplerCache            = derivedCache (fun m -> m.SamplerCache)
     let vertexInputCache        = derivedCache (fun m -> m.VertexInputCache)
     let uniformLocationCache    = derivedCache (fun m -> m.UniformLocationCache)
-
     let isActiveCache           = derivedCache (fun m -> m.IsActiveCache)
     let beginModeCache          = derivedCache (fun m -> m.BeginModeCache)
     let drawCallInfoCache       = derivedCache (fun m -> m.DrawCallInfoCache)
@@ -249,11 +255,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let stencilMaskCache        = derivedCache (fun m -> m.StencilMaskCache)
     let flagCache               = derivedCache (fun m -> m.FlagCache)
     let colorCache              = derivedCache (fun m -> m.ColorCache)
-    
     let textureBindingCache     = derivedCache (fun m -> m.TextureBindingCache)
     let imageBindingCache       = derivedCache (fun m -> m.ImageBindingCache)
-
-    let uniformBufferManager = UniformBufferManager ctx
 
     let blendModeConfigCache =
         ConcurrentDictionary<AttachmentConfig<BlendMode>, aval<GLBlendMode[]>>()
@@ -261,9 +264,9 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let colorMaskConfigCache =
         ConcurrentDictionary<AttachmentConfig<ColorMask>, aval<GLColorMask[]>>()
 
-    let hasTessDrawModeCache = 
+    let hasTessDrawModeCache =
         ConcurrentDictionary<IndexedGeometryMode, UnaryCache<aval<Program>, aval<GLBeginMode>>>()
-        
+
     let getTessDrawModeCache (mode : IndexedGeometryMode) =
         hasTessDrawModeCache.GetOrAdd(mode, fun mode ->
             UnaryCache(AVal.map (fun t -> ctx.ToBeginMode(mode, t.HasTessellation)))
@@ -276,7 +279,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     let staticSamplerStateCache = ConcurrentDictionary<FShade.SamplerState, aval<SamplerState>>()
     let dynamicSamplerStateCache = ConcurrentDictionary<Symbol * SamplerState, UnaryCache<aval<(Symbol -> SamplerState -> SamplerState)>, aval<SamplerState>>>()
     let samplerDescriptionCache = ConcurrentDictionary<FShade.SamplerState, SamplerState>() 
-    
+
     member private x.BufferManager = bufferManager
     member private x.TextureManager = textureManager
 
@@ -286,7 +289,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member private x.SamplerCache             : ResourceCache<Sampler, int>                   = samplerCache
     member private x.VertexInputCache         : ResourceCache<VertexInputBindingHandle, int>  = vertexInputCache
     member private x.UniformLocationCache     : ResourceCache<UniformLocation, nativeint>     = uniformLocationCache
-                                                                                      
     member private x.IsActiveCache            : ResourceCache<bool, int>                      = isActiveCache
     member private x.BeginModeCache           : ResourceCache<GLBeginMode, GLBeginMode>       = beginModeCache
     member private x.DrawCallInfoCache        : ResourceCache<DrawCallInfoList, DrawCallInfoList> = drawCallInfoCache
@@ -306,8 +308,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member x.RenderTaskLock = renderTaskInfo
 
-    new(parent, lock, shareTextures, shareBuffers) = ResourceManager(Some parent, parent.Context, lock, shareTextures, shareBuffers)
-    new(ctx, lock, shareTextures, shareBuffers) = ResourceManager(None, ctx, lock, shareTextures, shareBuffers)
+    new(parent, lock) = ResourceManager(Some parent, parent.Context, lock)
+    new(ctx, lock) = ResourceManager(None, ctx, lock)
 
     interface IResourceManager with
         member x.CreateSurface(signature, surf) =
@@ -970,7 +972,5 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Unknown
         })
 
-
-    member x.Release() = 
-        
+    member x.Release() =
         uniformBufferManager.Dispose()

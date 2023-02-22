@@ -91,16 +91,6 @@ module RuntimeConfig =
         not <| RuntimeInformation.IsOSPlatform(OSPlatform.OSX)
 
     /// <summary>
-    /// Determines if buffers are shared between render tasks.
-    /// </summary>
-    let mutable ShareBuffersBetweenTasks = true
-
-    /// <summary>
-    /// Determines if textures are shared between render tasks.
-    /// </summary>
-    let mutable ShareTexturesBetweenTasks = true
-
-    /// <summary>
     /// Determines whether the CPU implementation of block compression should be
     /// used over the implicit encoding provided by OpenGL.
     /// </summary>

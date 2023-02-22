@@ -30,7 +30,7 @@ type Runtime(debug : IDebugConfig) =
             Log.warn "Runtime already initialized"
 
         ctx <- context
-        manager <- ResourceManager(context, None, true, true)
+        manager <- ResourceManager(context, None)
 
         GL.CheckErrors <- debug.ErrorFlagCheck
 
@@ -611,13 +611,11 @@ type Runtime(debug : IDebugConfig) =
 
     member x.CompileRender (signature : IFramebufferSignature, set : aset<IRenderObject>) =
         let set = EffectDebugger.Hook set
-        let shareTextures = RuntimeConfig.ShareTexturesBetweenTasks
-        let shareBuffers = RuntimeConfig.ShareBuffersBetweenTasks
 
         if RuntimeConfig.UseNewRenderTask then
-            new RenderTasks.NewRenderTask(manager, signature, set, shareTextures, shareBuffers) :> IRenderTask
+            new RenderTasks.NewRenderTask(manager, signature, set) :> IRenderTask
         else
-            new RenderTasks.RenderTask(manager, signature, set, shareTextures, shareBuffers, debug.DebugRenderTasks) :> IRenderTask
+            new RenderTasks.RenderTask(manager, signature, set, debug.DebugRenderTasks) :> IRenderTask
 
     member x.PrepareRenderObject(signature : IFramebufferSignature, rj : IRenderObject) : IPreparedRenderObject =
         PreparedCommand.ofRenderObject signature manager rj :> IPreparedRenderObject
