@@ -2,6 +2,7 @@
 
 open System
 open Aardvark.Base
+open System.Runtime.CompilerServices
 
 type RenderPassOrder =
     | Arbitrary = 0
@@ -13,15 +14,16 @@ type RenderPass =
     struct
         val mutable public Name : string
         val mutable public Order : RenderPassOrder
-        val mutable internal SortKey : SimpleOrder.SortKey
+        val internal SortKey : SimpleOrder.SortKey
 
-        internal new(name : string, order : RenderPassOrder, key : SimpleOrder.SortKey) = { Name = name; Order = order; SortKey = key }
+        internal new(name : string, order : RenderPassOrder, key : SimpleOrder.SortKey) =
+            { Name = name; Order = order; SortKey = key }
 
         override x.GetHashCode() = x.SortKey.GetHashCode()
         override x.Equals o =
             match o with
-                | :? RenderPass as o -> x.SortKey = o.SortKey
-                | _ -> false
+            | :? RenderPass as o -> x.SortKey = o.SortKey
+            | _ -> false
 
         override x.ToString() =
             sprintf "RenderPass(%s)" x.Name
@@ -29,9 +31,8 @@ type RenderPass =
         interface IComparable with
             member x.CompareTo o =
                 match o with
-                    | :? RenderPass as o -> compare x.SortKey o.SortKey
-                    | _ -> failwithf "[RenderPass] cannot compare to %A" o
-
+                | :? RenderPass as o -> compare x.SortKey o.SortKey
+                | _ -> failwithf "[RenderPass] cannot compare to %A" o
     end
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -52,3 +53,14 @@ module RenderPass =
     let before (name : string) (order : RenderPassOrder) (pass : RenderPass) =
         let key = mainOrder.Before(pass.SortKey)
         RenderPass(name, order, key)
+
+[<AbstractClass; Sealed; Extension>]
+type RenderPassExtensions private() =
+
+    [<Extension>]
+    static member inline After(pass : RenderPass, name : string, order : RenderPassOrder) =
+        pass |> RenderPass.after name order
+
+    [<Extension>]
+    static member inline Before(pass : RenderPass, name : string, order : RenderPassOrder) =
+        pass |> RenderPass.before name order
