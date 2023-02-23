@@ -322,7 +322,7 @@ and internal ResourceCache<'Handle, 'View when 'View : unmanaged>(parent : Optio
                 resource
             )
 
-    member x.GetOrCreate<'Data>(dataMod : aval<'Data>, creator : unit -> ResourceDescription<'Data, 'Handle, 'View>) =
+    member inline x.GetOrCreate<'Data>(dataMod : aval<'Data>, creator : unit -> ResourceDescription<'Data, 'Handle, 'View>) =
         x.GetOrCreate(dataMod, [], creator)
 
     member x.Count = store.Count

@@ -31,6 +31,7 @@ type UniformBufferManager(ctx : Context) =
 
         let free (buffer : Buffer) (size : nativeint) =
             if buffer.Handle <> 0 then
+                use __ = ctx.ResourceLock
                 GL.DeleteBuffer(buffer.Handle)
                 BufferMemoryUsage.removeUniformBuffer ctx (int64 size)
                 GL.Check "could not free uniform buffer"
