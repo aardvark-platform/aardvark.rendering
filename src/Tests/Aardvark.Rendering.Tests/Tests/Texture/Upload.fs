@@ -135,7 +135,7 @@ module TextureUpload =
 
             use task =
                 Sg.fullScreenQuad
-                |> Sg.diffuseTexture' (NullTexture())
+                |> Sg.diffuseTexture' nullTexture
                 |> shader
                 |> Sg.compile runtime signature
 

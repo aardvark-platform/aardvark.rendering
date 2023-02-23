@@ -358,7 +358,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         let slotCountCache = textureArrayCache.Invoke(texArr)
         slotCountCache.GetOrAdd(slotCount, fun slotCount -> 
                 List.init slotCount (fun i ->
-                        x.CreateTexture(texArr |> AVal.map (fun (t : ITexture[]) -> if i < t.Length then t.[i] else NullTexture() :> _)))
+                        x.CreateTexture(texArr |> AVal.map (fun (t : ITexture[]) -> if i < t.Length then t.[i] else nullTexture)))
             )
 
     member x.CreateSampler (sam : aval<SamplerState>) =

@@ -1,8 +1,17 @@
 ﻿namespace Aardvark.Rendering
 
+open System
 open FSharp.Data.Adaptive
 
-type NullTexture() =
+#nowarn "44"
+
+type NullTexture [<Obsolete("Use nullTexture or NullTexture.Instance instead.")>] () =
+    static let instance = NullTexture() :> ITexture
+    static let instanceConst = AVal.constant instance
+
+    static member Instance = instance
+    static member InstanceConst = instanceConst
+
     override x.GetHashCode() = 0
     override x.Equals o =
         match o with
@@ -14,6 +23,10 @@ type NullTexture() =
 
 [<AutoOpen>]
 module NullResources =
+
+    let nullTexture = NullTexture.Instance
+
+    let nullTextureConst = NullTexture.InstanceConst
 
     let isNullResource (obj : obj) =
         match obj with

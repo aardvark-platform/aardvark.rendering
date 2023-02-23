@@ -451,7 +451,7 @@ module Loader =
                                     sem, { texture = FileTexture(file, { wantCompressed = false; wantMipMaps = true; wantSrgb = false }) :> ITexture; coordIndex = slot.UVIndex }
 
                                 | None ->
-                                    sem, { texture = NullTexture() :> ITexture; coordIndex = slot.UVIndex }
+                                    sem, { texture = nullTexture; coordIndex = slot.UVIndex }
                          )
                       |> Map.ofList
 

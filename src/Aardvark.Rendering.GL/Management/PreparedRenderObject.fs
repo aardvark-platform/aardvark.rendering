@@ -156,10 +156,6 @@ type PreparedPipelineState =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PreparedPipelineState =
 
-    type helper() =
-        static let nullTexture = AVal.constant (NullTexture() :> ITexture)
-        static member NullTexture = nullTexture
-
     type ResourceManager with 
         member x.CreateUniformBuffers(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) = 
             iface.uniformBuffers
@@ -233,10 +229,10 @@ module PreparedPipelineState =
                         | Some (:? aval<ITextureLevel> as value) -> x.CreateTexture(value)
                         | Some u ->
                             Log.error "[GL] invalid texture type: %s %s -> expecting aval<ITexture> or aval<IBackendTexture>" texName (u.GetType().Name)
-                            x.CreateTexture(helper.NullTexture)
+                            x.CreateTexture(nullTextureConst)
                         | None ->
                             Log.error "[GL] texture uniform \"%s\" not found" texName
-                            x.CreateTexture(helper.NullTexture)
+                            x.CreateTexture(nullTextureConst)
 
                     Some struct(Range1i(u.samplerBinding), (SingleBinding (texRes, samRes)))
 

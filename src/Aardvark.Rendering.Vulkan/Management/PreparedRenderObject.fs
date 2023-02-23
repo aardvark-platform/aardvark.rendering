@@ -174,7 +174,7 @@ type DevicePreparedRenderObjectExtensions private() =
                                                 None
                                         )
 
-                                    let empty = this.CreateImageSampler(sam.samplerType, AVal.constant (NullTexture() :> ITexture), AVal.constant SamplerState.Default)
+                                    let empty = this.CreateImageSampler(sam.samplerType, nullTextureConst, AVal.constant SamplerState.Default)
                                     this.CreateImageSamplerArray(sam.samplerCount, empty, list)
                                 )
 

@@ -1068,7 +1068,7 @@ module SgFSharp =
 
     module private ``F# Sg Generic Identifiers Tests`` =
         let working() =
-            let texture = NullTexture()
+            let texture = unbox<NullTexture> nullTexture
             let backendTex : IBackendTexture = failwith ""
             let someFloat = 1.0
             let MyTexture = Sym.ofString "MyTexture"
