@@ -65,7 +65,7 @@ module RenderTasks =
         let manager = new ResourceManager(manager, Some renderTaskLock)
         let structureChanged = AVal.custom ignore
         let runtimeStats = NativePtr.alloc 1
-        let resources = new Aardvark.Rendering.ResourceInputSet()
+        let resources = new ResourceInputSet()
 
         let currentContext = AVal.init Unchecked.defaultof<ContextHandle>
         let contextHandle = NativePtr.alloc 1
@@ -438,8 +438,6 @@ module RenderTasks =
         inherit AbstractOpenGlRenderTask(man, fboSignature)
         
         let ctx = man.Context
-        let inputSet = InputSet(this) 
-        let structuralChange = AVal.init ()
         let deltaWatch = Stopwatch()
         let subTaskResults = List<Lazy<unit>>()     
         
