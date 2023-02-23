@@ -102,31 +102,31 @@ type AdaptiveResource<'T>() =
 type IAdaptiveResourceExtensions() =
 
     [<Extension>]
-    static member GetValue(this : aval<'T>, c : AdaptiveToken, t : RenderToken) =
+    static member inline GetValue(this : aval<'T>, c : AdaptiveToken, t : RenderToken) =
         match this with
         | :? IAdaptiveResource<'T> as x -> x.GetValue(c, t)
         | _ -> this.GetValue(c)
 
     [<Extension>]
-    static member GetValue(this : IAdaptiveValue, c : AdaptiveToken, t : RenderToken) =
+    static member inline GetValue(this : IAdaptiveValue, c : AdaptiveToken, t : RenderToken) =
         match this with
         | :? IAdaptiveResource as x -> x.GetValue(c, t)
         | _ -> this.GetValueUntyped(c)
 
     [<Extension>]
-    static member Acquire(this : IAdaptiveValue) =
+    static member inline Acquire(this : IAdaptiveValue) =
         match this with
         | :? IAdaptiveResource as o -> o.Acquire()
         | _ -> ()
 
     [<Extension>]
-    static member Release(this : IAdaptiveValue) =
+    static member inline Release(this : IAdaptiveValue) =
         match this with
         | :? IAdaptiveResource as o -> o.Release()
         | _ -> ()
 
     [<Extension>]
-    static member ReleaseAll(this : IAdaptiveValue) =
+    static member inline ReleaseAll(this : IAdaptiveValue) =
         match this with
         | :? IAdaptiveResource as o -> o.ReleaseAll()
         | _ -> ()
