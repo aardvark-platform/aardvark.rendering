@@ -42,7 +42,6 @@ type PreparedPipelineState =
         pProgramInterface : GLSLProgramInterface
         pUniformBuffers : (struct (int * IResource<UniformBufferView, int>))[] // sorted list of uniform buffers
         pStorageBuffers : (struct (int * IResource<Buffer, int>))[] // sorted list of storage buffers
-        pUniforms : (struct (int * IResource<UniformLocation, nativeint>))[] // sorted list of uniforms
         pTextureBindings : (struct (Range1i * TextureBindingSlot))[] // sorted list of texture bindings
 
         pBlendColor : IResource<C4f, C4f>
@@ -71,12 +70,9 @@ type PreparedPipelineState =
             yield x.pProgram :> IResource
             for struct (_,b) in x.pUniformBuffers do
                 yield b :> _
-                
+
             for struct (_,b) in x.pStorageBuffers do
                 yield b :> _
-
-            for struct (_,u) in x.pUniforms do
-                yield u :> _
 
             for struct (_, tb) in x.pTextureBindings do
                 match tb with 
@@ -114,7 +110,7 @@ type PreparedPipelineState =
                     // OpenGL already dead
                     ()
                 | Some l -> 
-                    use resourceLock = l
+                    use __ = l
 
                     OpenTK.Graphics.OpenGL4.GL.UnbindAllBuffers()
 
@@ -123,7 +119,6 @@ type PreparedPipelineState =
                         | SingleBinding (tex, sam) -> tex.Dispose(); sam.Dispose()
                         | ArrayBinding ta -> ta.Dispose()
 
-                    x.pUniforms |> Array.iter (fun struct (_, ul) -> ul.Dispose())
                     x.pUniformBuffers |> Array.iter (fun struct (_, ub) -> ub.Dispose())
                     x.pStorageBuffers |> Array.iter (fun struct (_, sb) -> sb.Dispose())
                     x.pProgram.Dispose()
@@ -369,7 +364,6 @@ module PreparedPipelineState =
             pProgramInterface = iface
             pStorageBuffers = storageBuffers
             pUniformBuffers = uniformBuffers
-            pUniforms = Array.empty
             pTextureBindings = textureBindings
 
             pBlendColor = blendColor
@@ -441,7 +435,6 @@ module PreparedPipelineState =
             pProgramInterface = iface
             pStorageBuffers = storageBuffers
             pUniformBuffers = uniformBuffers
-            pUniforms = Array.empty
             pTextureBindings = textureBindings
 
             pBlendColor = blendColor
@@ -559,11 +552,6 @@ module PreparedPipelineStateAssembler =
                     x.BindTexturesAndSamplers(ta) // internally will use 2 OpenGL calls glBindTextures and glBindSamplers
                     icnt <- icnt + 1 
                     
-            // bind all top-level uniforms (if needed)
-            for struct (id, u) in me.pUniforms do
-                x.BindUniformLocation(id, u)
-                icnt <- icnt + 1
-
             NativeStats(InstructionCount = icnt + 17) // 17 fixed instruction 
             
 
@@ -727,23 +715,6 @@ module PreparedPipelineStateAssembler =
                     | ArrayBinding ta ->
                         x.BindTexturesAndSamplers(ta) // internally will use 2 OpenGL calls glBindTextures and glBindSamplers
                         icnt <- icnt + 1 
-
-            // bind all top-level uniforms (if needed)
-            let mutable j = 0
-            for struct (id, u) in me.pUniforms do
-                let mutable i = j
-                let mutable old = None
-                // compare with prev state in parallel / assuming bindings are sorted
-                while i < prev.pUniforms.Length do
-                    let struct (slt, bnd) = prev.pUniforms.[i]
-                    if slt = id then old <- Some bnd
-                    if slt < id then i <- i + 1; j <- j + 1
-                    else i <- Int32.MaxValue // break
-
-                match old with
-                    | Some old when old = u -> ()
-                    | _ -> x.BindUniformLocation(id, u); icnt <- icnt + 1
-                
 
             NativeStats(InstructionCount = icnt)
 
