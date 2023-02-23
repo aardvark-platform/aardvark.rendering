@@ -2,6 +2,7 @@
 
 open System
 open System.Threading
+open System.Collections.Concurrent
 open Aardvark.Base
 open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
@@ -128,14 +129,30 @@ type TextureViewHandle(ctx : Context, handle : int, dimension : TextureDimension
         ResourceCounts.removeTextureView x.Context
         GL.Check "could not delete texture view"
 
+// Used for determining the bind target of null textures
+type TextureProperties =
+    { Dimension      : TextureDimension
+      IsMultisampled : bool
+      IsArray        : bool }
 
 [<AutoOpen>]
 module internal TextureUtilitiesAndExtensions =
 
     module TextureTarget =
-
         let ofTexture (texture : Texture) =
             TextureTarget.ofParameters texture.Dimension texture.IsArray texture.IsMultisampled
+
+    type FShade.GLSL.GLSLSamplerType with
+        member x.Properties =
+            { Dimension      = x.dimension.TextureDimension
+              IsMultisampled = x.isMS
+              IsArray        = x.isArray }
+
+    type FShade.GLSL.GLSLImageType with
+        member x.Properties =
+            { Dimension      = x.dimension.TextureDimension
+              IsMultisampled = x.isMS
+              IsArray        = x.isArray }
 
     [<AutoOpen>]
     module TensorExtensions =
@@ -859,8 +876,14 @@ module TextureCreationExtensions =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module Texture =
 
-    let empty =
-        new Texture(null, 0, TextureDimension.Texture2D, 0, 0, V3i.Zero, None, TextureFormat.Rgba8, 0L)
+    let private emptyStore = ConcurrentDictionary<TextureProperties, Texture>()
+
+    let empty (properties : TextureProperties) =
+        emptyStore.GetOrAdd(properties, fun _ ->
+            let count = if properties.IsArray then Some 1 else None
+            let samples = if properties.IsMultisampled then 2 else 1
+            new Texture(null, 0, properties.Dimension, 1, samples, V3i.Zero, count, TextureFormat.Rgba8, 0L)
+        )
 
     let create1D (c : Context) (size : int) (mipLevels : int) (format : TextureFormat) =
         c.CreateTexture1D(size, mipLevels, format)

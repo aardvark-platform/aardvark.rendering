@@ -36,43 +36,41 @@ type internal RefCountedTexture(ctx, create : unit -> Texture, destroy : unit ->
 type internal TextureManager(ctx : Context) =
     let cache = ConcurrentDictionary<ITexture, RefCountedTexture>()
 
-    let nullTex = new Texture(ctx, 0, TextureDimension.Texture2D, 1, 1, V3i.Zero, None, TextureFormat.Rgba8, 0L)
-
-    let get (b : ITexture) =
-        cache.GetOrAdd(b, fun v ->
+    let get (data : ITexture) =
+        cache.GetOrAdd(data, fun v ->
             new RefCountedTexture(
                 ctx,
-                (fun () -> ctx.CreateTexture b),
-                (fun () -> cache.TryRemove b |> ignore)
+                (fun () -> ctx.CreateTexture(data, Unchecked.defaultof<_>)),
+                (fun () -> cache.TryRemove data |> ignore)
             )
         )
 
-    member x.Create(data : ITexture) =
+    member x.Create(data : ITexture, properties : TextureProperties) =
         match data with
-        | :? NullTexture -> nullTex
+        | :? NullTexture -> ctx.CreateTexture(data, properties)
         | _ ->
             let shared = get data
             shared.Acquire()
             shared :> Texture
 
-    member x.Update(b : Texture, data : ITexture) : Texture =
-        match b with
-        | :? RefCountedTexture as b ->
+    member x.Update(texture : Texture, data : ITexture, properties : TextureProperties) : Texture =
+        match texture with
+        | :? RefCountedTexture as texture ->
             let newShared = get data
-            if newShared = b then
-                b :> Texture
+            if newShared = texture then
+                texture :> Texture
             else
                 newShared.Acquire()
-                b.Release()
+                texture.Release()
                 newShared :> Texture
         | _ ->
-            if b.Handle <> 0 then
-                ctx.Delete b
+            if texture.Handle <> 0 then
+                ctx.Delete texture
 
-            x.Create(data)
+            x.Create(data, properties)
 
-    member x.Delete(b : Texture) =
-        if b.Handle <> 0 then
-            match b with
+    member x.Delete(texture : Texture) =
+        if texture.Handle <> 0 then
+            match texture with
             | :? RefCountedTexture as b -> b.Release()
-            | _ -> ctx.Delete b
+            | _ -> ctx.Delete texture

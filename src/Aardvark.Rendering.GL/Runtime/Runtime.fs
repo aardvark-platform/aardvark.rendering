@@ -590,7 +590,10 @@ type Runtime(debug : IDebugConfig) =
                 samples, layers, perLayerUniforms
             ) :> IFramebufferSignature
 
-    member x.PrepareTexture (t : ITexture) = ctx.CreateTexture t
+    member x.PrepareTexture(texture : ITexture) =
+        ResourceValidation.Textures.validateForPrepare texture
+        ctx.CreateTexture(texture, Unchecked.defaultof<_>)
+
     member x.PrepareBuffer (b : IBuffer, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) = ctx.CreateBuffer(b, storage)
     member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) : IBackendSurface =
         Operators.using ctx.ResourceLock (fun d ->

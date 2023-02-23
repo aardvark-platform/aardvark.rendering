@@ -141,7 +141,10 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     let ifaceSlotCache = ConcurrentDictionary<FShade.GLSL.GLSLProgramInterface, InterfaceSlots>()
 
-    let textureArrayCache = UnaryCache<aval<ITexture[]>, ConcurrentDictionary<int, List<IResource<Texture,V2i>>>>(fun ta -> ConcurrentDictionary<int, List<IResource<Texture,V2i>>>())
+    let textureArrayCache =
+        UnaryCache<aval<ITexture[]>, _>(
+            fun _arr -> ConcurrentDictionary<int * TextureProperties, List<IResource<Texture,V2i>>>()
+        )
 
     let staticSamplerStateCache = ConcurrentDictionary<FShade.SamplerState, aval<SamplerState>>()
     let dynamicSamplerStateCache = ConcurrentDictionary<Symbol * SamplerState, UnaryCache<aval<(Symbol -> SamplerState -> SamplerState)>, aval<SamplerState>>>()
@@ -187,7 +190,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             new CastResource<_, _>(res) :> IResource<_>
 
         member x.CreateTexture (data : aval<ITexture>) =
-            let res = x.CreateTexture(data)
+            let res = x.CreateTexture(data, Unchecked.defaultof<_>)
             new CastResource<_, _>(res) :> IResource<_>
 
 
@@ -218,10 +221,10 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 kind = ResourceKind.Buffer
             })
 
-    member x.CreateTexture(data : aval<#ITexture>) : IResource<Texture, V2i> =
-        textureCache.GetOrCreate(data, fun () -> {
-            create = fun b      -> textureManager.Create b
-            update = fun h b    -> textureManager.Update(h, b)
+    member x.CreateTexture(data : aval<#ITexture>, properties : TextureProperties) : IResource<Texture, V2i> =
+        textureCache.GetOrCreate(data, [properties :> obj], fun () -> {
+            create = fun b      -> textureManager.Create(b, properties)
+            update = fun h b    -> textureManager.Update(h, b, properties)
             delete = fun h      -> textureManager.Delete h
             unwrap = fun _      -> ValueNone
             info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
@@ -233,7 +236,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     // GL cannot directly bind specific texture levels and ranges to samplers.
     // We would have to use texture views, which are not guaranteed to be supported (MacOS does not obviously).
     // Here we just bind the whole texture as usual and do some sanity checks.
-    member x.CreateTexture(data : aval<ITextureLevel>) =
+    member x.CreateTexture(data : aval<ITextureLevel>, properties : TextureProperties) =
         let data =
             data |> AdaptiveResource.mapNonAdaptive (fun l ->
                 if l.Level <> 0 then
@@ -246,7 +249,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 l.Texture
             )
 
-        x.CreateTexture(data)
+        x.CreateTexture(data, properties)
 
     member x.CreateIndirectBuffer(indexed : bool, data : aval<IndirectBuffer>) =
         
@@ -353,13 +356,18 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
         iface, programHandle
 
-    member x.CreateTextureArray (slotCount : int, texArr : aval<ITexture[]>) : List<IResource<Texture, V2i>> =
-        
-        let slotCountCache = textureArrayCache.Invoke(texArr)
-        slotCountCache.GetOrAdd(slotCount, fun slotCount -> 
-                List.init slotCount (fun i ->
-                        x.CreateTexture(texArr |> AVal.map (fun (t : ITexture[]) -> if i < t.Length then t.[i] else nullTexture)))
+    member x.CreateTextureArray(slotCount : int, texArr : aval<ITexture[]>, properties : TextureProperties) : List<IResource<Texture, V2i>> =
+        let innerCache = textureArrayCache.Invoke(texArr)
+        innerCache.GetOrAdd((slotCount, properties), fun _ ->
+            List.init slotCount (fun i ->
+                let texArr =
+                    texArr |> AVal.map (fun t ->
+                        if i < t.Length then t.[i] else nullTexture
+                    )
+
+                x.CreateTexture(texArr, properties)
             )
+        )
 
     member x.CreateSampler (sam : aval<SamplerState>) =
         samplerCache.GetOrCreate<SamplerState>(sam, fun () -> {
@@ -539,8 +547,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 }
         )
 
-    member private x.CreateImageBinding(input : aval<#ITexture>, level : aval<int>, layers : aval<Range1i>) =
-        use textureResource = x.CreateTexture(input)
+    member private x.CreateImageBinding(input : aval<#ITexture>, level : aval<int>, layers : aval<Range1i>, properties : TextureProperties) =
+        use textureResource = x.CreateTexture(input, properties)
 
         imageBindingCache.GetOrCreate(
             [textureResource :> obj; level :> obj; layers :> obj],
@@ -577,16 +585,16 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 }
         )
 
-    member x.CreateImageBinding(input : aval<ITexture>) =
+    member x.CreateImageBinding(input : aval<ITexture>, properties : TextureProperties) =
         let level = AVal.constant 0
         let layers = AVal.constant <| Range1i()
-        x.CreateImageBinding(input, level, layers)
+        x.CreateImageBinding(input, level, layers, properties)
 
-    member x.CreateImageBinding(input : aval<ITextureLevel>) =
+    member x.CreateImageBinding(input : aval<ITextureLevel>, properties : TextureProperties) =
         let texture = input |> AdaptiveResource.mapNonAdaptive (fun l -> l.Texture)
         let level = input |> AVal.mapNonAdaptive (fun l -> l.Level)
         let layers = input |> AVal.mapNonAdaptive (fun l -> l.Slices)
-        x.CreateImageBinding(texture, level, layers)
+        x.CreateImageBinding(texture, level, layers, properties)
 
     member x.CreateVertexInputBinding( bindings : list<int * BufferView * AttributeFrequency * IResource<Buffer, int>>, index : Option<OpenGl.Enums.IndexType * IResource<Buffer, int>>) =
         let createView (self : AdaptiveToken) (index : int, view : BufferView, frequency : AttributeFrequency, buffer : IResource<Buffer>) =

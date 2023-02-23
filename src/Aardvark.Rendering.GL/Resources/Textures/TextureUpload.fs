@@ -322,7 +322,7 @@ module ContextTextureUploadExtensions =
     type ContextTextureUploadExtensions =
 
         [<Extension>]
-        static member CreateTexture(this : Context, data : ITexture) =
+        static member CreateTexture(this : Context, data : ITexture, properties : TextureProperties) =
             using this.ResourceLock (fun _ ->
                 match data with
                 | StreamTexture(info, loader, openStream) ->
@@ -334,7 +334,7 @@ module ContextTextureUploadExtensions =
                         stream |> DdsTexture.tryLoadCompressedFromStream info.wantMipMaps
 
                     match compressed with
-                    | Some t -> this.CreateTexture(t)
+                    | Some t -> this.CreateTexture(t, properties)
                     | _ ->
                         stream.Position <- initialPos
 
@@ -344,7 +344,7 @@ module ContextTextureUploadExtensions =
                             else
                                 PixImageMipMap [| PixImage.Load(stream, loader) |]
 
-                        this.CreateTexture <| PixTexture2d(pi, info)
+                        this.CreateTexture(PixTexture2d(pi, info), properties)
 
                 | PixTexture2D(info, data) ->
                     let texture = this |> Texture.createOfFormat2D data.PixFormat data.[0].Size data.LevelCount info
@@ -364,7 +364,7 @@ module ContextTextureUploadExtensions =
                     texture
 
                 | :? NullTexture ->
-                    Texture.empty
+                    Texture.empty properties
 
                 | :? Texture as o ->
                     o

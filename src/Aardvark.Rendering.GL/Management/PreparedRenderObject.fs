@@ -203,6 +203,8 @@ module PreparedPipelineState =
 
             iface.samplers
             |> Array.choose (fun (_, u) ->
+                let properties = u.samplerType.Properties
+
                 // check if sampler is an array
                 //  -> compose (Texture, SamplerState)[] resource
                 //      * case 1: individual slots
@@ -219,15 +221,15 @@ module PreparedPipelineState =
 
                     let texRes =
                         match uniforms.TryGetUniform(scope, texSym) with
-                        | Some (:? aval<ITexture> as value) -> x.CreateTexture(value)
-                        | Some (:? aval<IBackendTexture> as value) -> x.CreateTexture(value)
-                        | Some (:? aval<ITextureLevel> as value) -> x.CreateTexture(value)
+                        | Some (:? aval<ITexture> as value) -> x.CreateTexture(value, properties)
+                        | Some (:? aval<IBackendTexture> as value) -> x.CreateTexture(value, properties)
+                        | Some (:? aval<ITextureLevel> as value) -> x.CreateTexture(value, properties)
                         | Some u ->
                             Log.error "[GL] invalid texture type: %s %s -> expecting aval<ITexture> or aval<IBackendTexture>" texName (u.GetType().Name)
-                            x.CreateTexture(nullTextureConst)
+                            x.CreateTexture(nullTextureConst, properties)
                         | None ->
                             Log.error "[GL] texture uniform \"%s\" not found" texName
-                            x.CreateTexture(nullTextureConst)
+                            x.CreateTexture(nullTextureConst, properties)
 
                     Some struct(Range1i(u.samplerBinding), (SingleBinding (texRes, samRes)))
 
@@ -246,7 +248,7 @@ module PreparedPipelineState =
                             | Some (:? aval<ITexture[]> as texArr) ->
                                 // create single value (startSlot + count + sam + tex[])
                                 let samRes = createSampler sampler texSym
-                                let texArr = x.CreateTextureArray(u.samplerCount, texArr)
+                                let texArr = x.CreateTextureArray(u.samplerCount, texArr, properties)
                                 let arrayBinding = x.CreateTextureBinding(slotRange, texArr, samRes)
                                 Some arrayBinding
 
@@ -268,8 +270,8 @@ module PreparedPipelineState =
 
                             let texRes =
                                 match uniforms.TryGetUniform(scope, texSym) with
-                                | Some (:? aval<ITexture> as value) -> Some <| x.CreateTexture value
-                                | Some (:? aval<IBackendTexture> as value) -> Some <| x.CreateTexture value
+                                | Some (:? aval<ITexture> as value) -> Some <| x.CreateTexture(value, properties)
+                                | Some (:? aval<IBackendTexture> as value) -> Some <| x.CreateTexture(value, properties)
                                 | Some u ->
                                     Log.error "[GL] invalid texture type: %s %s -> expecting aval<ITexture> or aval<IBackendTexture>" texName (u.GetType().Name)
                                     None
@@ -299,13 +301,15 @@ module PreparedPipelineState =
         member x.CreateImageBindings(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) =
             iface.images
             |> Array.map (fun (_, i) ->
+                let properties = i.imageType.Properties
+
                 let binding =
                     match uniforms.TryGetUniform(scope, Sym.ofString i.imageName) with
                     | Some (:? aval<ITexture> as texture) ->
-                        x.CreateImageBinding(texture)
+                        x.CreateImageBinding(texture, properties)
 
                     | Some (:? aval<ITextureLevel> as level) ->
-                        x.CreateImageBinding(level)
+                        x.CreateImageBinding(level, properties)
 
                     | Some _ ->
                         failf "invalid type for image %A (%A)" i.imageName (i.GetType())
