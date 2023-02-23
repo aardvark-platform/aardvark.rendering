@@ -193,7 +193,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
 
     member x.Context = ctx
-        
+
     member x.CreateBuffer(data : aval<IBuffer>) =
         match data with
         | :? SingleValueBuffer as v ->
@@ -201,6 +201,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 create = fun b      -> new Buffer(ctx, 0n, 0)
                 update = fun h b    -> h
                 delete = fun h      -> ()
+                unwrap = fun _      -> ValueNone
                 info =   fun h      -> ResourceInfo.Zero
                 view =   fun h      -> h.Handle
                 kind = ResourceKind.Buffer
@@ -211,6 +212,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 create = fun b      -> bufferManager.Create b
                 update = fun h b    -> bufferManager.Update(h, b)
                 delete = fun h      -> bufferManager.Delete h
+                unwrap = fun b      -> BufferManager.TryUnwrap b
                 info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
                 view =   fun h      -> h.Handle
                 kind = ResourceKind.Buffer
@@ -221,6 +223,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> textureManager.Create b
             update = fun h b    -> textureManager.Update(h, b)
             delete = fun h      -> textureManager.Delete h
+            unwrap = fun _      -> ValueNone
             info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
             view =   fun r      -> V2i(r.Handle, Translations.toGLTarget r.Dimension r.IsArray r.Multisamples)
             kind = ResourceKind.Texture
@@ -271,13 +274,13 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         indirectBufferCache.GetOrCreate<IndirectBuffer>(data, [indexed :> obj], fun () -> {
             create = fun b ->
                 let (buffer, own) =
-                    match b.Buffer with
-                    | :? Buffer ->
+                    match BufferManager.TryUnwrap b.Buffer with
+                    | ValueSome h ->
                         if b.Indexed <> indexed then
                             if b.Indexed then failwithf "[GL] Expected non-indexed data but indirect buffer contains indexed data."
                             else failwithf "[GL] Expected indexed data but indirect buffer contains non-indexed data."
 
-                        b.Buffer :?> Buffer, false
+                        h, false
 
                     | _ ->
                         let layoutedData = if b.Indexed <> indexed then transformIndirectData b.Buffer else b.Buffer
@@ -290,11 +293,11 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                     failwith "[GL] cannot change Indexed option of IndirectBuffer"
 
                 let buffer =
-                    match b.Buffer with
-                    | :? Buffer ->
+                    match BufferManager.TryUnwrap b.Buffer with
+                    | ValueSome v ->
                         if h.OwnResource then
                             failwith "[GL] cannot change IndirectBuffer type"
-                        b.Buffer :?> Buffer
+                        v
 
                     | _ ->
                         if not h.OwnResource then
@@ -308,6 +311,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                     GLIndirectBuffer(buffer, b.Count, b.Stride, indexed, h.OwnResource)
 
             delete = fun h   -> if h.OwnResource then bufferManager.Delete(h.Buffer)
+            unwrap = fun _   -> ValueNone
             info =   fun h   -> h.Buffer.SizeInBytes |> Mem |> ResourceInfo
             view =   fun h   -> IndirectDrawArgs(h.Buffer.Handle, h.Count, h.Stride)
             kind = ResourceKind.IndirectBuffer
@@ -341,6 +345,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 create = fun b      -> b
                 update = fun h b    -> b
                 delete = fun h      -> ()
+                unwrap = fun _      -> ValueNone
                 info =   fun h      -> ResourceInfo.Zero
                 view =   fun h      -> h.Handle
                 kind = ResourceKind.ShaderProgram
@@ -361,6 +366,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> ctx.CreateSampler b
             update = fun h b    -> ctx.Update(h,b); h
             delete = fun h      -> ctx.Delete h
+            unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view =   fun h      -> h.Handle
             kind = ResourceKind.SamplerState
@@ -676,6 +682,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> b
             update = fun h b    -> b
             delete = fun h      -> ()
+            unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view =   fun h      -> if h then 1 else 0
             kind = ResourceKind.Unknown
@@ -687,6 +694,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> b
             update = fun h b    -> b
             delete = fun h      -> ()
+            unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view = id
             kind = ResourceKind.Unknown
@@ -697,6 +705,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> ctx.CreateDrawCallInfoList(List.toArray b)
             update = fun h b    -> ctx.Update(h,List.toArray b)
             delete = fun h      -> ctx.Delete h
+            unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view = id
             kind = ResourceKind.Unknown
@@ -707,6 +716,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> ctx.ToDepthTest b
             update = fun h b    -> ctx.ToDepthTest b
             delete = fun h      -> ()
+            unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view = id
             kind = ResourceKind.Unknown
@@ -717,6 +727,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> ctx.ToDepthBias b
             update = fun h b    -> ctx.ToDepthBias b
             delete = fun h      -> ()
+            unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view = id
             kind = ResourceKind.Unknown
@@ -727,6 +738,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> ctx.ToCullMode b
             update = fun h b    -> ctx.ToCullMode b
             delete = fun h      -> ()
+            unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view = id
             kind = ResourceKind.Unknown
@@ -737,6 +749,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> ctx.ToFrontFace b
             update = fun h b    -> ctx.ToFrontFace b
             delete = fun h      -> ()
+            unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view = id
             kind = ResourceKind.Unknown
@@ -747,6 +760,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> ctx.ToPolygonMode(b)
             update = fun h b    -> ctx.ToPolygonMode(b)
             delete = fun h      -> ()
+            unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view =  id
             kind = ResourceKind.Unknown
@@ -779,6 +793,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> NativePtr.allocArray b
             update = fun h b    -> h |> NativePtr.setArray b; h
             delete = fun h      -> NativePtr.free h
+            unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view = NativePtr.toNativeInt
             kind = ResourceKind.Unknown
@@ -792,6 +807,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> NativePtr.allocArray b
             update = fun h b    -> h |> NativePtr.setArray b; h
             delete = fun h      -> NativePtr.free h
+            unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view = NativePtr.toNativeInt
             kind = ResourceKind.Unknown
@@ -802,6 +818,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> ctx.ToStencilMode b
             update = fun h b    -> ctx.ToStencilMode b
             delete = fun h      -> ()
+            unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view = id
             kind = ResourceKind.Unknown
@@ -812,6 +829,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> uint32 b
             update = fun h b    -> uint32 b
             delete = fun h      -> ()
+            unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view = id
             kind = ResourceKind.Unknown
@@ -822,6 +840,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> b
             update = fun h b    -> b
             delete = fun h      -> ()
+            unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view =   fun v -> if v then 1 else 0
             kind = ResourceKind.Unknown
@@ -832,6 +851,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             create = fun b      -> b
             update = fun h b    -> b
             delete = fun h      -> ()
+            unwrap = fun _      -> ValueNone
             info =   fun h      -> ResourceInfo.Zero
             view =   id
             kind = ResourceKind.Unknown

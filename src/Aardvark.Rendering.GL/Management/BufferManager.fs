@@ -65,3 +65,9 @@ type internal BufferManager(ctx : Context) =
             match b with
             | :? RefCountedBuffer as b -> b.Release()
             | _ -> ctx.Delete b
+
+    static member TryUnwrap(data : IBuffer) =
+        match data with
+        | :? Buffer as b -> ValueSome b
+        | :? IBufferRange as r -> BufferManager.TryUnwrap r.Buffer
+        | _ -> ValueNone

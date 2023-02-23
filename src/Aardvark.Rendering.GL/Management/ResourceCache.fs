@@ -15,6 +15,7 @@ type internal ResourceDescription<'Data, 'Handle, 'View when 'View : unmanaged> 
         create : 'Data -> 'Handle
         update : 'Handle -> 'Data -> 'Handle
         delete : 'Handle -> unit
+        unwrap : 'Data -> 'Handle voption
         view   : 'Handle -> 'View
         info   : 'Handle -> ResourceInfo
         kind   : ResourceKind
@@ -157,6 +158,15 @@ and internal ResourceCache<'Handle, 'View when 'View : unmanaged>(parent : Optio
     static let handleNonPrimitive =
         not typeof<'Handle>.IsPrimitive && not typeof<'Handle>.IsEnum
 
+    // Try to unwrap a handle from the given data.
+    // If this succeeds, the cache does not have ownership and may NOT dispose of the handle.
+    // For buffers this is a bit more complicated than a simple type check due to the
+    // existence of IBuffer<'T> which is a decorator.
+    static let tryGetHandle (unwrap : 'Data -> 'Handle voption) (data : 'Data) =
+        match data :> obj with
+        | :? 'Handle as handle when handleNonPrimitive -> ValueSome handle
+        | _ -> unwrap data
+
     let acquireLock (data : 'Data) =
         match renderTaskLock, data :> obj with
         | Some rt, (:? ILockedResource as l) -> rt.Add l
@@ -273,8 +283,8 @@ and internal ResourceCache<'Handle, 'View when 'View : unmanaged>(parent : Optio
 
                             match old with
                             | Some old ->
-                                match data :> obj with
-                                | :? 'Handle as handle when handleNonPrimitive ->
+                                match data |> tryGetHandle desc.unwrap with
+                                | ValueSome handle ->
                                     if ownsHandle then desc.delete old
                                     ownsHandle <- false
                                     handle
@@ -289,8 +299,8 @@ and internal ResourceCache<'Handle, 'View when 'View : unmanaged>(parent : Optio
                                         newHandle
 
                             | None ->
-                                match data :> obj with
-                                | :? 'Handle as handle when handleNonPrimitive ->
+                                match data |> tryGetHandle desc.unwrap with
+                                | ValueSome handle ->
                                     ownsHandle <- false
                                     handle
                                 | _ ->
