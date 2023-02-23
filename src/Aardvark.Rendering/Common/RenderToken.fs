@@ -15,15 +15,11 @@ type RenderToken =
         Statistics : Option<FrameStatistics>
     }
 
-    static member Empty =
-        {
-            Query = Queries.empty
-            Statistics = None
-        }
+    static member Empty = RenderTokenEmpty.Empty
 
-    static member Zero =
+    static member inline Zero =
         {
-            Query = Queries.empty
+            Query = Queries.none
             Statistics = Some <| FrameStatistics()
         }
 
@@ -48,6 +44,13 @@ type RenderToken =
 
     member x.AddedRenderObjects     = x.GetStatistic(fun f -> f.AddedRenderObjects)
     member x.RemovedRenderObjects   = x.GetStatistic(fun f -> f.RemovedRenderObjects)
+
+and [<Sealed; AbstractClass>] private RenderTokenEmpty() =
+    static let empty =
+        { Query = Queries.none
+          Statistics = None }
+
+    static member Empty = empty
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RenderToken =
