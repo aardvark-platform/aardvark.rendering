@@ -331,7 +331,7 @@ module ImageUploadExtensions =
         let ofFile (path : string) (info : TextureParams) (export : bool) (device : Device) =
             ofFileWithLoader path null info export device
 
-        let rec ofTexture (texture : ITexture) (properties : ImageProperties) (export : bool) (device : Device) : Image =
+        let rec internal ofTextureInternal (texture : ITexture) (properties : ImageProperties voption) (export : bool) (device : Device) : Image =
             match texture with
             | :? PixTexture2d as t ->
                 device |> ofPixImageMipMap t.PixImageMipMap t.TextureParams export
@@ -340,6 +340,11 @@ module ImageUploadExtensions =
                 device |> ofPixImageCube c.PixImageCube c.TextureParams export
 
             | :? NullTexture ->
+                let properties =
+                    match properties with
+                    | ValueSome p -> p
+                    | _ -> failf "cannot prepare null texture without properties"
+
                 device |> Image.empty properties
 
             | :? PixTexture3d as t ->
@@ -355,7 +360,7 @@ module ImageUploadExtensions =
 
                 match compressed with
                 | Some t ->
-                    device |> ofTexture t properties export
+                    device |> ofTextureInternal t properties export
 
                 | _ ->
                     stream.Position <- initialPos
@@ -365,7 +370,7 @@ module ImageUploadExtensions =
                 device |> ofNativeTexture nt export
 
             | :? ExportedImage as t when export ->
-                device |> ofTexture t properties false
+                device |> ofTextureInternal t properties false
 
             | :? Image as t ->
                 if export then
@@ -375,6 +380,9 @@ module ImageUploadExtensions =
 
             | _ ->
                 failf "unsupported texture-type: %A" texture
+
+        let ofTexture (texture : ITexture) (export : bool) (device : Device) =
+            ofTextureInternal texture ValueNone export device
 
         let uploadLevel (offset : V3i) (size : V3i) (format : Col.Format)
                         (src : NativeTensor4<'T>) (dst : ImageSubresource) (device : Device) =
@@ -394,9 +402,14 @@ module ImageUploadExtensions =
             this |> Image.ofFile file info export
 
         [<Extension>]
-        static member inline CreateImage(this : Device, texture : ITexture, properties : ImageProperties,
+        static member inline internal CreateImage(this : Device, texture : ITexture, properties : ImageProperties,
+                                                  [<Optional; DefaultParameterValue(false)>] export : bool) =
+            this |> Image.ofTextureInternal texture (ValueSome properties) export
+
+        [<Extension>]
+        static member inline CreateImage(this : Device, texture : ITexture,
                                          [<Optional; DefaultParameterValue(false)>] export : bool) =
-            this |> Image.ofTexture texture properties export
+            this |> Image.ofTexture texture export
 
         [<Extension>]
         static member inline UploadLevel(this : Device, dst : ImageSubresource, src : NativeTensor4<'T>,

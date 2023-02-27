@@ -124,7 +124,7 @@ type Runtime(device : Device) as this =
         // These are used to create the right kind of texture for a given sampler.
         // Other texture types could use those properties for validation in the future.
         // Since the PrepareTexture() API does not pass these properties, we do not allow preparing NullTexture
-        device.CreateImage(t, Unchecked.defaultof<_>, export) :> IBackendTexture
+        device.CreateImage(t, export) :> IBackendTexture
 
     member x.PrepareBuffer (data : IBuffer,
                             [<Optional; DefaultParameterValue(BufferUsage.All)>] usage : BufferUsage,

@@ -1168,11 +1168,11 @@ module Image =
 
     /// Returns an uninitialized image with size 8 in each dimension, used as NullTexture counter-part
     let internal empty =
-        let store = ConcurrentDictionary<ImageProperties, Image>()
+        let store = ConcurrentDictionary<Device * ImageProperties, Image>()
 
         fun (properties : ImageProperties) (device : Device) ->
             let image =
-                store.GetOrAdd(properties, fun _ ->
+                store.GetOrAdd((device, properties), fun key ->
                     let size = V3i 8
                     let format = VkFormat.ofTextureFormat properties.Format
                     let samples = if properties.IsMultisampled then 2 else 1
@@ -1183,7 +1183,7 @@ module Image =
                     }
 
                     device.OnDispose.Add(fun _ ->
-                        store.TryRemove properties |> ignore
+                        store.TryRemove key |> ignore
                         image.Dispose()
                     )
 
