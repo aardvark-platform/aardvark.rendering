@@ -2152,6 +2152,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
             inner.Dispose()
             cmd.Dispose()
             pool.Dispose()
+            NativePtr.free stats
         )
 
     override x.FramebufferSignature = Some (renderPass :> _)
@@ -2162,6 +2163,9 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
         use __ = device.Token
         updateCommands token |> ignore
         updateResources token renderToken ignore
+
+        // Make sure that command buffer gets recompiled with updated commands on next render.
+        lastFramebuffer <- None
 
     override x.Use(f : unit -> 'r) =
         f()

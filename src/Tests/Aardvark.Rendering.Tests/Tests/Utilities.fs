@@ -216,7 +216,7 @@ module PixData =
             img.Save(Path.combine [dir; fileName])
 
         let isColor (color : 'T[]) (pi : PixImage<'T>) =
-            for c in 0 .. pi.ChannelCount - 1 do
+            for c in 0 .. (min color.Length pi.ChannelCount) - 1 do
                 let data = pi.GetChannel(int64 c)
 
                 for x in 0 .. pi.Size.X - 1 do

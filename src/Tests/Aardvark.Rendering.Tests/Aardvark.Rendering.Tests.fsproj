@@ -53,6 +53,7 @@
     <Compile Include="Tests\Texture\Download.fs" />
     <Compile Include="Tests\Texture\Compression.fs" />
     <Compile Include="Tests\Texture\TextureTests.fs" />
+    <Compile Include="Tests\Rendering\Tasks.fs" />
     <Compile Include="Tests\Rendering\Signatures.fs" />
     <Compile Include="Tests\Rendering\Samplers.fs" />
     <Compile Include="Tests\Rendering\IntegerAttachments.fs" />
