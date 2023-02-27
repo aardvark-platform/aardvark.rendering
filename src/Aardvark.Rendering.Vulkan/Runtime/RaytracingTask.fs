@@ -156,7 +156,16 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
     let device = manager.Device
 
-    let pool = device.ComputeFamily.CreateCommandPool(CommandPoolFlags.ResetBuffer)
+    // Use graphics queue family if it supports compute (which is guaranteed by Vulkan spec).
+    // Otherwise, we need queue family ownership transfers which are not implemented.
+    // On NVIDIA GPUs we can get away with using a dedicated compute family without any ownership transfers.
+    let family, getDeviceToken =
+        if device.GraphicsFamily.Flags.HasFlag QueueFlags.Compute then
+            device.GraphicsFamily, fun () -> device.Token
+        else
+            device.ComputeFamily, fun () -> device.ComputeToken
+
+    let pool = family.CreateCommandPool(CommandPoolFlags.ResetBuffer)
     let cmd = pool.CreateCommandBuffer(CommandBufferLevel.Primary)
     let inner = pool.CreateCommandBuffer(CommandBufferLevel.Secondary)
 
@@ -164,7 +173,7 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
     let compiled = new CompiledCommand(manager, resources, pipeline, commands)
 
     let updateCommandResources (t : AdaptiveToken) (rt : RenderToken) =
-        use tt = device.Token
+        use tt = getDeviceToken()
 
         resources.Use(t, rt, fun resourcesChanged ->
             let commandChanged =
@@ -194,20 +203,18 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
                 inner.End()
         )
 
-    member x.Update(token : AdaptiveToken, queries : IQuery) =
-        x.EvaluateIfNeeded token () (fun t ->
-            let rt = RenderToken.Empty |> RenderToken.withQuery queries
-            use __ = rt.Use()
-            updateCommandResources t rt
+    member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
+        x.EvaluateIfNeeded token () (fun token ->
+            use __ = renderToken.Use()
+            updateCommandResources token renderToken
         )
 
-    member x.Run(token : AdaptiveToken, queries : IQuery) =
-        x.EvaluateAlways token (fun t ->
-            let rt = RenderToken.Empty |> RenderToken.withQuery queries
-            use __ = rt.Use()
-            updateCommandResources t rt
+    member x.Run(token : AdaptiveToken, renderToken : RenderToken) =
+        x.EvaluateAlways token (fun token ->
+            use __ = renderToken.Use()
+            updateCommandResources token renderToken
 
-            let vulkanQueries = queries.ToVulkanQuery()
+            let vulkanQueries = renderToken.Query.ToVulkanQuery(onlyTimeQueries = true)
             cmd.Begin CommandBufferUsage.OneTimeSubmit
 
             for q in vulkanQueries do
@@ -222,7 +229,7 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
             cmd.End()
 
-            device.ComputeFamily.RunSynchronously(cmd)
+            family.RunSynchronously(cmd)
         )
 
     member x.Dispose() =
@@ -234,8 +241,8 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
         )
 
     interface IRaytracingTask with
-        member x.Update(token, query) = x.Update(token, query)
-        member x.Run(token, query) = x.Run(token, query)
+        member x.Update(t, rt) = x.Update(t, rt)
+        member x.Run(t, rt) = x.Run(t, rt)
 
     interface IDisposable with
         member x.Dispose() = x.Dispose()

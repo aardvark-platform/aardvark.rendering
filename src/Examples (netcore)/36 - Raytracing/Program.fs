@@ -461,26 +461,29 @@ let main argv =
             V3d(Rot2d(t * Constant.PiQuarter) * V2d(8.0, 0.0), 16.0)
         )
 
+    let cameraLocation =
+        cameraView |> AVal.map CameraView.location
+
     let uniforms =
-        UniformProvider.ofList [
-            DefaultSemantic.TraceGeometryBuffer, geometryInfos :> IAdaptiveValue
-            Sym.ofString "OutputBuffer",         traceTexture |> AdaptiveResource.mapNonAdaptive (fun t -> t :> ITexture) :> IAdaptiveValue
-            Sym.ofString "RecursionDepth",       AVal.constant 4 :> IAdaptiveValue
-            Sym.ofString "ViewTrafo",            viewTrafo :> IAdaptiveValue
-            Sym.ofString "ProjTrafo",            projTrafo :> IAdaptiveValue
-            Sym.ofString "CameraLocation",       cameraView |> AVal.map CameraView.location :> IAdaptiveValue
-            Sym.ofString "Positions",            positions :> IAdaptiveValue
-            Sym.ofString "Normals",              normals :> IAdaptiveValue
-            Sym.ofString "Indices",              indices :> IAdaptiveValue
-            Sym.ofString "TextureCoords",        textureCoordinates :> IAdaptiveValue
-            Sym.ofString "ModelMatrices",        modelMatrices :> IAdaptiveValue
-            Sym.ofString "NormalMatrices",       normalMatrices :> IAdaptiveValue
-            Sym.ofString "FaceColors",           faceColors :> IAdaptiveValue
-            Sym.ofString "Colors",               colors :> IAdaptiveValue
-            Sym.ofString "SphereOffsets",        sphereOffsets |> Array.map V4f |> ArrayBuffer :> IBuffer |> AVal.constant :> IAdaptiveValue
-            Sym.ofString "TextureFloor",         DefaultTextures.checkerboard :> IAdaptiveValue
-            Sym.ofString "LightLocation",        lightLocation :> IAdaptiveValue
-        ]
+        uniformMap {
+            buffer  DefaultSemantic.TraceGeometryBuffer geometryInfos
+            texture "OutputBuffer"                      traceTexture
+            value   "RecursionDepth"                    4
+            value   "ViewTrafo"                         viewTrafo
+            value   "ProjTrafo"                         projTrafo
+            value   "CameraLocation"                    cameraLocation
+            buffer  "Positions"                         positions
+            buffer  "Normals"                           normals
+            buffer  "Indices"                           indices
+            buffer  "TextureCoords"                     textureCoordinates
+            buffer  "ModelMatrices"                     modelMatrices
+            buffer  "NormalMatrices"                    normalMatrices
+            buffer  "FaceColors"                        faceColors
+            buffer  "Colors"                            colors
+            buffer  "SphereOffsets"                     (sphereOffsets |> Array.map V4f)
+            texture "TextureFloor"                      DefaultTextures.checkerboard
+            value   "LightLocation"                     lightLocation
+        }
 
     let staticObjects =
         ASet.ofList [model; floor]
@@ -559,7 +562,7 @@ let main argv =
 
     use renderTask =
         RenderTask.custom (fun (t, rt, fbo) ->
-            traceTask.Run(t, rt.Query)
+            traceTask.Run(t, rt)
             fullscreenTask.Run(t, rt, fbo)
         )
 

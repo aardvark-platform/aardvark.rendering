@@ -9,8 +9,8 @@ open System.Runtime.CompilerServices
 type IRaytracingTask =
     inherit IDisposable
     inherit IAdaptiveObject
-    abstract member Update : token: AdaptiveToken * query: IQuery -> unit
-    abstract member Run : token: AdaptiveToken * query: IQuery -> unit
+    abstract member Update : token: AdaptiveToken * renderToken: RenderToken -> unit
+    abstract member Run : token: AdaptiveToken * renderToken: RenderToken -> unit
 
 and IRaytracingRuntime =
     inherit IAccelerationStructureRuntime
@@ -54,19 +54,19 @@ type RaytracingTaskExtensions() =
 
     [<Extension>]
     static member Update(this : IRaytracingTask) =
-        this.Update(AdaptiveToken.Top, Queries.none)
+        this.Update(AdaptiveToken.Top, RenderToken.Empty)
 
     [<Extension>]
     static member Update(this : IRaytracingTask, token : AdaptiveToken) =
-        this.Update(token, Queries.none)
+        this.Update(token, RenderToken.Empty)
 
     [<Extension>]
     static member Run(this : IRaytracingTask) =
-        this.Run(AdaptiveToken.Top, Queries.none)
+        this.Run(AdaptiveToken.Top, RenderToken.Empty)
 
     [<Extension>]
     static member Run(this : IRaytracingTask, token : AdaptiveToken) =
-        this.Run(token, Queries.none)
+        this.Run(token, RenderToken.Empty)
 
 [<Extension>]
 type RaytracingRuntimeExtensions() =
