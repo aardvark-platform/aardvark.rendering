@@ -147,7 +147,6 @@ type DebugConfig =
         ErrorFlagCheck : ErrorFlagCheck
 
         /// Print OpenGL calls when a render task is run.
-        /// Only supported if RuntimeConfig.UseNewRenderTask = false.
         DebugRenderTasks : bool
 
         /// Print OpenGL calls when a compute task is run.

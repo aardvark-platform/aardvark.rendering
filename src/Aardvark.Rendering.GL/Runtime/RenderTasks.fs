@@ -396,7 +396,7 @@ module RenderTasks =
 
 
     
-    type NewRenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>) as this =
+    type NewRenderTask(man : ResourceManager, fboSignature : IFramebufferSignature, objects : aset<IRenderObject>, debug : bool) as this =
         inherit AbstractOpenGlRenderTask(man, fboSignature)
 
         let rec hook (r : IRenderObject) =
@@ -405,7 +405,7 @@ module RenderTasks =
                 | :? MultiRenderObject as o -> MultiRenderObject(o.Children |> List.map hook) :> IRenderObject
                 | _ -> r
 
-        let mainCommand = Command.ofRenderObjects fboSignature this.ResourceManager (ASet.map hook objects)
+        let mainCommand = Command.ofRenderObjects fboSignature this.ResourceManager debug (ASet.map hook objects)
 
         
         override x.Use(action : unit -> 'a) = action()

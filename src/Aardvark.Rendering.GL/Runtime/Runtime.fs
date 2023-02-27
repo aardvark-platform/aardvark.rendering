@@ -620,7 +620,7 @@ type Runtime(debug : IDebugConfig) =
         let set = EffectDebugger.Hook set
 
         if RuntimeConfig.UseNewRenderTask then
-            new RenderTasks.NewRenderTask(manager, signature, set) :> IRenderTask
+            new RenderTasks.NewRenderTask(manager, signature, set, debug.DebugRenderTasks) :> IRenderTask
         else
             new RenderTasks.RenderTask(manager, signature, set, debug.DebugRenderTasks) :> IRenderTask
 

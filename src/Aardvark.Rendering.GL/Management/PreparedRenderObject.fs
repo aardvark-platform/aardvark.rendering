@@ -1257,7 +1257,7 @@ module rec Command =
                 with get() = x.Next
                 and set p = x.Next <- p
 
-    type SingleObjectCommand (dirty : System.Collections.Generic.HashSet<SingleObjectCommand>, signature : IFramebufferSignature, manager : ResourceManager, o : IRenderObject) =
+    type SingleObjectCommand (dirty : System.Collections.Generic.HashSet<SingleObjectCommand>, signature : IFramebufferSignature, manager : ResourceManager, o : IRenderObject, debug : bool) =
         let mutable fragment : option<ProgramFragment> = None
         let mutable o = o
         let mutable prepared = None
@@ -1277,10 +1277,9 @@ module rec Command =
                 | Some cmd -> 
                     cmd
 
-
             let pp = prev |> Option.bind (fun p -> p.PreparedCommand)
-            cmd.Compile(info, AssemblerCommandStream(s), pp) |> ignore
-                
+            let cs = s |> CommandStream.create debug
+            cmd.Compile(info, cs, pp) |> ignore
 
         member private x.PreparedCommand = prepared
         member internal x.Fragment = fragment
@@ -1362,7 +1361,7 @@ module rec Command =
                 with get() = x.Prev
                 and set p = x.Prev <- p
 
-    type ManyObjectsCommand(signature : IFramebufferSignature, manager : ResourceManager, o : aset<IRenderObject>) =
+    type ManyObjectsCommand(signature : IFramebufferSignature, manager : ResourceManager, o : aset<IRenderObject>, debug : bool) =
         inherit Command()
 
         let dirty = System.Collections.Generic.HashSet<SingleObjectCommand>()
@@ -1444,7 +1443,7 @@ module rec Command =
                     let key = key o.Value
                     let ref = 
                         trie.AddOrUpdate(key, fun o ->
-                            let cmd = new SingleObjectCommand(dirty, signature, manager, v)
+                            let cmd = new SingleObjectCommand(dirty, signature, manager, v, debug)
                             // new command needs to be compiled immediately, otherwise fragment pointers cannot be updated
                             cmd.Compile(info, program)
                             cache.[key] <- cmd
@@ -1741,18 +1740,18 @@ module rec Command =
         override x.Free(_) =
             ()
 
-    let rec ofRuntimeCommand (fboSignature : IFramebufferSignature) (x : ResourceManager) (cmd : RuntimeCommand) =
+    let rec ofRuntimeCommand (fboSignature : IFramebufferSignature) (manager : ResourceManager) (debug : bool) (cmd : RuntimeCommand) =
         match cmd with
         | RuntimeCommand.EmptyCmd ->
             NopCommand.Instance
 
         | RuntimeCommand.RenderCmd objects ->
-            ManyObjectsCommand(fboSignature, x, objects) 
+            ManyObjectsCommand(fboSignature, manager, objects, debug)
             :> Command
 
         | RuntimeCommand.OrderedCmd commands ->
             commands 
-            |> AList.map (ofRuntimeCommand fboSignature x)
+            |> AList.map (ofRuntimeCommand fboSignature manager debug)
             |> OrderedCommand
             :> Command
 
@@ -1761,8 +1760,8 @@ module rec Command =
             :> Command
 
         | RuntimeCommand.IfThenElseCmd(cond, ifTrue, ifFalse) ->
-            let ifTrue = ofRuntimeCommand fboSignature x ifTrue
-            let ifFalse = ofRuntimeCommand fboSignature x ifFalse
+            let ifTrue = ofRuntimeCommand fboSignature manager debug ifTrue
+            let ifFalse = ofRuntimeCommand fboSignature manager debug ifFalse
             IfThenElseCommand(cond, ifTrue, ifFalse)
             :> Command
 
@@ -1772,7 +1771,7 @@ module rec Command =
         | RuntimeCommand.LodTreeCmd _ ->
             failwith "not implemented"
 
-    let ofRenderObjects (fboSignature : IFramebufferSignature) (x : ResourceManager) (objects : aset<IRenderObject>) =
+    let ofRenderObjects (fboSignature : IFramebufferSignature) (manager : ResourceManager) (debug : bool) (objects : aset<IRenderObject>) =
         let special = 
             objects 
             |> ASet.choose (function :? CommandRenderObject as o -> Some o.Command | _ -> None)
@@ -1795,15 +1794,15 @@ module rec Command =
             NopCommand.Instance
 
         | struct(ValueSome 0, ValueSome 1) ->
-            special |> AList.force |> Seq.head |> ofRuntimeCommand fboSignature x
+            special |> AList.force |> Seq.head |> ofRuntimeCommand fboSignature manager debug
 
         | struct(ValueSome 0, _) ->
-            RuntimeCommand.OrderedCmd special |> ofRuntimeCommand fboSignature x
+            RuntimeCommand.OrderedCmd special |> ofRuntimeCommand fboSignature manager debug
 
         | struct(_, ValueSome 0) ->
-            RuntimeCommand.RenderCmd simple |> ofRuntimeCommand fboSignature x
+            RuntimeCommand.RenderCmd simple |> ofRuntimeCommand fboSignature manager debug
 
         | _ ->
             AList.append (AList.single (RuntimeCommand.RenderCmd simple)) special
             |> RuntimeCommand.OrderedCmd
-            |> ofRuntimeCommand fboSignature x
+            |> ofRuntimeCommand fboSignature manager debug
