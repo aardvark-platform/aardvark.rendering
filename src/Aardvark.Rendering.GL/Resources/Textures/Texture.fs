@@ -130,7 +130,7 @@ type TextureViewHandle(ctx : Context, handle : int, dimension : TextureDimension
         GL.Check "could not delete texture view"
 
 // Used for determining the bind target of null textures
-type TextureProperties =
+type internal TextureProperties =
     { Dimension      : TextureDimension
       IsMultisampled : bool
       IsArray        : bool }
@@ -878,7 +878,7 @@ module Texture =
 
     let private emptyStore = ConcurrentDictionary<TextureProperties, Texture>()
 
-    let empty (properties : TextureProperties) =
+    let internal empty (properties : TextureProperties) =
         emptyStore.GetOrAdd(properties, fun _ ->
             let count = if properties.IsArray then Some 1 else None
             let samples = if properties.IsMultisampled then 2 else 1

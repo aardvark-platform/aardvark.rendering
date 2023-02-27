@@ -434,8 +434,7 @@ module ComputeTest =
         img.GetChannel(0L).SetByCoord (fun (x : int64) (y : int64) -> float32 x) |> ignore
         let myImg =
             ctx.CreateTexture(
-                PixTexture2d(PixImageMipMap [| img :> PixImage |], false),
-                Unchecked.defaultof<_>
+                PixTexture2d(PixImageMipMap [| img :> PixImage |], false)
             )
 
         kernel.Invoke(

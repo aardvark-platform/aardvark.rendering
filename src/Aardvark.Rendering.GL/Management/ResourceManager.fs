@@ -190,7 +190,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             new CastResource<_, _>(res) :> IResource<_>
 
         member x.CreateTexture (data : aval<ITexture>) =
-            let res = x.CreateTexture(data, Unchecked.defaultof<_>)
+            let res = x.CreateTexture(data, { Dimension = TextureDimension.Texture2D; IsArray = false; IsMultisampled = false })
             new CastResource<_, _>(res) :> IResource<_>
 
 
@@ -221,7 +221,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 kind = ResourceKind.Buffer
             })
 
-    member x.CreateTexture(data : aval<#ITexture>, properties : TextureProperties) : IResource<Texture, V2i> =
+    member private x.CreateTexture(data : aval<#ITexture>, properties : TextureProperties) : IResource<Texture, V2i> =
         textureCache.GetOrCreate(data, [properties :> obj], fun () -> {
             create = fun b      -> textureManager.Create(b, properties)
             update = fun h b    -> textureManager.Update(h, b, properties)
@@ -232,11 +232,14 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.Texture
         })
 
+    member x.CreateTexture(data : aval<#ITexture>, samplerType : FShade.GLSL.GLSLSamplerType) : IResource<Texture, V2i> =
+        x.CreateTexture(data, samplerType.Properties)
+
     // Workaround for some APIs accepting texture levels as sampler input (e.g. GPGPU image reduce).
     // GL cannot directly bind specific texture levels and ranges to samplers.
     // We would have to use texture views, which are not guaranteed to be supported (MacOS does not obviously).
     // Here we just bind the whole texture as usual and do some sanity checks.
-    member x.CreateTexture(data : aval<ITextureLevel>, properties : TextureProperties) =
+    member x.CreateTexture(data : aval<ITextureLevel>, samplerType : FShade.GLSL.GLSLSamplerType) =
         let data =
             data |> AdaptiveResource.mapNonAdaptive (fun l ->
                 if l.Level <> 0 then
@@ -249,7 +252,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 l.Texture
             )
 
-        x.CreateTexture(data, properties)
+        x.CreateTexture(data, samplerType.Properties)
 
     member x.CreateIndirectBuffer(indexed : bool, data : aval<IndirectBuffer>) =
         
@@ -356,8 +359,10 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
         iface, programHandle
 
-    member x.CreateTextureArray(slotCount : int, texArr : aval<ITexture[]>, properties : TextureProperties) : List<IResource<Texture, V2i>> =
+    member x.CreateTextureArray(slotCount : int, texArr : aval<ITexture[]>, samplerType : FShade.GLSL.GLSLSamplerType) : List<IResource<Texture, V2i>> =
         let innerCache = textureArrayCache.Invoke(texArr)
+        let properties = samplerType.Properties
+
         innerCache.GetOrAdd((slotCount, properties), fun _ ->
             List.init slotCount (fun i ->
                 let texArr =
@@ -585,16 +590,16 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 }
         )
 
-    member x.CreateImageBinding(input : aval<ITexture>, properties : TextureProperties) =
+    member x.CreateImageBinding(input : aval<ITexture>, imageType : FShade.GLSL.GLSLImageType) =
         let level = AVal.constant 0
         let layers = AVal.constant <| Range1i()
-        x.CreateImageBinding(input, level, layers, properties)
+        x.CreateImageBinding(input, level, layers, imageType.Properties)
 
-    member x.CreateImageBinding(input : aval<ITextureLevel>, properties : TextureProperties) =
+    member x.CreateImageBinding(input : aval<ITextureLevel>, imageType : FShade.GLSL.GLSLImageType) =
         let texture = input |> AdaptiveResource.mapNonAdaptive (fun l -> l.Texture)
         let level = input |> AVal.mapNonAdaptive (fun l -> l.Level)
         let layers = input |> AVal.mapNonAdaptive (fun l -> l.Slices)
-        x.CreateImageBinding(texture, level, layers, properties)
+        x.CreateImageBinding(texture, level, layers, imageType.Properties)
 
     member x.CreateVertexInputBinding( bindings : list<int * BufferView * AttributeFrequency * IResource<Buffer, int>>, index : Option<OpenGl.Enums.IndexType * IResource<Buffer, int>>) =
         let createView (self : AdaptiveToken) (index : int, view : BufferView, frequency : AttributeFrequency, buffer : IResource<Buffer>) =

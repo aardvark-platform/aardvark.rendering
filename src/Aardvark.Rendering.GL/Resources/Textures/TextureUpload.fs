@@ -322,7 +322,7 @@ module ContextTextureUploadExtensions =
     type ContextTextureUploadExtensions =
 
         [<Extension>]
-        static member CreateTexture(this : Context, data : ITexture, properties : TextureProperties) =
+        static member internal CreateTexture(this : Context, data : ITexture, properties : TextureProperties voption) =
             using this.ResourceLock (fun _ ->
                 match data with
                 | StreamTexture(info, loader, openStream) ->
@@ -364,6 +364,11 @@ module ContextTextureUploadExtensions =
                     texture
 
                 | :? NullTexture ->
+                    let properties =
+                        match properties with
+                        | ValueSome p -> p
+                        | _ -> failf "cannot prepare null texture without properties"
+
                     Texture.empty properties
 
                 | :? Texture as o ->
@@ -378,8 +383,12 @@ module ContextTextureUploadExtensions =
                     texture
 
                 | _ ->
-                    failwith "unsupported texture data"
+                    failf "unsupported texture data"
             )
+
+        [<Extension>]
+        static member CreateTexture(this : Context, data : ITexture) =
+            this.CreateTexture(data, ValueNone)
 
         [<Extension>]
         static member Upload(this : Context, texture : Texture, level : int, slice : int,

@@ -40,14 +40,14 @@ type internal TextureManager(ctx : Context) =
         cache.GetOrAdd(data, fun v ->
             new RefCountedTexture(
                 ctx,
-                (fun () -> ctx.CreateTexture(data, Unchecked.defaultof<_>)),
+                (fun () -> ctx.CreateTexture(data, ValueNone)),
                 (fun () -> cache.TryRemove data |> ignore)
             )
         )
 
     member x.Create(data : ITexture, properties : TextureProperties) =
         match data with
-        | :? NullTexture -> ctx.CreateTexture(data, properties)
+        | :? NullTexture -> ctx.CreateTexture(data, ValueSome properties)
         | _ ->
             let shared = get data
             shared.Acquire()

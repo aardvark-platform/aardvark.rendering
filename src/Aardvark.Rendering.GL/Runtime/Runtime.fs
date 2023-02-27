@@ -592,7 +592,7 @@ type Runtime(debug : IDebugConfig) =
 
     member x.PrepareTexture(texture : ITexture) =
         ResourceValidation.Textures.validateForPrepare texture
-        ctx.CreateTexture(texture, Unchecked.defaultof<_>)
+        ctx.CreateTexture(texture, ValueNone)
 
     member x.PrepareBuffer (b : IBuffer, [<Optional; DefaultParameterValue(BufferStorage.Device)>] storage : BufferStorage) = ctx.CreateBuffer(b, storage)
     member x.PrepareSurface (signature : IFramebufferSignature, s : ISurface) : IBackendSurface =
