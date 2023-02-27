@@ -130,14 +130,14 @@ type IBufferRangeExtensions private() =
     ///<param name="src">The data array to copy from.</param>
     [<Extension>]
     static member inline Upload(dst : IBufferRange<'T>, src : 'T[]) =
-        dst.Upload(src, src.Length)
+        dst.Upload(src, min src.Length dst.Count)
 
     ///<summary>Copies elements from a span to a buffer range.</summary>
     ///<param name="dst">The buffer range to copy data to.</param>
     ///<param name="src">The data span to copy from.</param>
     [<Extension>]
     static member Upload(dst : IBufferRange<'T>, src : Span<'T>) =
-        let count = src.Length
+        let count = min src.Length dst.Count
         SpanPinning.Pin(src, fun pSrc ->
             dst.Upload(pSrc, byteSize<'T> count)
         )
@@ -151,16 +151,6 @@ type IBufferRangeExtensions private() =
     static member inline SetSlice(range : IBufferRange<'T>, startIndex : Option<int>, endIndex : Option<int>, data : 'T[]) =
         let slice = range.GetSlice(startIndex, endIndex)
         slice.Upload(data, 0, 0, min data.Length slice.Count)
-
-    ///<summary>Copies elements from a buffer range to a buffer subrange.</summary>
-    ///<param name="range">The buffer range to upload to.</param>
-    ///<param name="startIndex">Index at which the subrange starts. Default is 0.</param>
-    ///<param name="endIndex">Index at which the subrange ends (inclusive). Default is <paramref name="range"/>.Count - 1.</param>
-    ///<param name="other">The buffer range to copy from.</param>
-    [<Extension>]
-    static member inline SetSlice(range : IBufferRange<'T>, startIndex : Option<int>, endIndex : Option<int>, other : IBufferRange<'T>) =
-        let slice = range.GetSlice(startIndex, endIndex)
-        other.CopyTo(slice)
 
     ///<summary>Sets all elements of a buffer subrange to the given value.</summary>
     ///<param name="range">The buffer range to upload to.</param>
@@ -217,7 +207,7 @@ type IBufferRangeExtensions private() =
     ///<param name="dst">The data array to copy to.</param>
     [<Extension>]
     static member inline Download(src : IBufferRange<'T>, dst : 'T[]) =
-        src.Download(dst, dst.Length)
+        src.Download(dst, min src.Count dst.Length)
 
     ///<summary>Copies elements from a buffer range to an array.</summary>
     ///<param name="src">The buffer range to copy data from.</param>
@@ -232,7 +222,7 @@ type IBufferRangeExtensions private() =
     ///<param name="dst">The data span to copy to.</param>
     [<Extension>]
     static member Download(src : IBufferRange<'T>, dst : Span<'T>) =
-        let count = dst.Length
+        let count = min src.Count dst.Length
         SpanPinning.Pin(dst, fun pDst ->
             src.Download(pDst, byteSize<'T> count)
         )
@@ -290,7 +280,7 @@ type IBufferRangeExtensions private() =
     ///<returns>A function that blocks until the download is complete.</returns>
     [<Extension>]
     static member inline DownloadAsync(src : IBufferRange<'T>, dst : 'T[]) =
-        src.DownloadAsync(dst, dst.Length)
+        src.DownloadAsync(dst, min src.Count dst.Length)
 
     ///<summary>Asynchronously copies elements from a buffer range to an array.</summary>
     ///<param name="src">The buffer range to copy data from.</param>
@@ -307,7 +297,7 @@ type IBufferRangeExtensions private() =
     ///<returns>A function that blocks until the download is complete.</returns>
     [<Extension>]
     static member DownloadAsync(src : IBufferRange<'T>, dst : Span<'T>) =
-        let count = dst.Length
+        let count = min src.Count dst.Length
 
         let wait : Func<unit, unit> =
             SpanPinning.Pin(dst, fun pDst ->
@@ -326,10 +316,18 @@ type IBufferRangeExtensions private() =
     ///<param name="src">The buffer range to copy data from.</param>
     ///<param name="dst">The buffer range to copy data to.</param>
     [<Extension>]
-    static member CopyTo(src : IBufferRange, dst : IBufferRange) =
-        if src.SizeInBytes <> dst.SizeInBytes then
-            raise <| ArgumentException($"[Buffer] mismatching size in copy (src = {src.SizeInBytes}, dst = {dst.SizeInBytes}).")
-        src.Buffer.CopyTo(src.Offset, dst.Buffer, dst.Offset, src.SizeInBytes)
+    static member inline CopyTo(src : IBufferRange, dst : IBufferRange) =
+        src.Buffer.CopyTo(src.Offset, dst.Buffer, dst.Offset, min src.SizeInBytes dst.SizeInBytes)
+
+    ///<summary>Copies elements from a buffer range to a buffer subrange.</summary>
+    ///<param name="range">The buffer range to upload to.</param>
+    ///<param name="startIndex">Index at which the subrange starts. Default is 0.</param>
+    ///<param name="endIndex">Index at which the subrange ends (inclusive). Default is <paramref name="range"/>.Count - 1.</param>
+    ///<param name="other">The buffer range to copy from.</param>
+    [<Extension>]
+    static member inline SetSlice(range : IBufferRange<'T>, startIndex : Option<int>, endIndex : Option<int>, other : IBufferRange<'T>) =
+        let slice = range.GetSlice(startIndex, endIndex)
+        other.CopyTo(slice)
 
 
 [<AbstractClass; Sealed; Extension>]
@@ -337,7 +335,7 @@ type IBufferRuntimeExtensions private() =
 
     /// Deletes a buffer and releases all GPU resources and API handles.
     [<Extension>]
-    static member DeleteBuffer(_this : IBufferRuntime, buffer : IBackendBuffer) =
+    static member inline DeleteBuffer(_this : IBufferRuntime, buffer : IBackendBuffer) =
         buffer.Dispose()
 
     ///<summary>Creates a typed buffer.</summary>
