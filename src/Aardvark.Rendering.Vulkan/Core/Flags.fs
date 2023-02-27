@@ -80,8 +80,10 @@ module VkAccessFlags =
                 ResourceAccess.ColorWrite,                 VkAccessFlags.ColorAttachmentWriteBit
                 ResourceAccess.DepthStencilRead,           VkAccessFlags.DepthStencilAttachmentReadBit
                 ResourceAccess.DepthStencilWrite,          VkAccessFlags.DepthStencilAttachmentWriteBit
-                ResourceAccess.AccelerationStructureRead , VkAccessFlags.AccelerationStructureReadBitKhr
+                ResourceAccess.AccelerationStructureRead,  VkAccessFlags.AccelerationStructureReadBitKhr
                 ResourceAccess.AccelerationStructureWrite, VkAccessFlags.AccelerationStructureWriteBitKhr
+                ResourceAccess.HostRead,                   VkAccessFlags.HostReadBit
+                ResourceAccess.HostWrite,                  VkAccessFlags.HostWriteBit
             ]
 
         let ofStageFlags =
