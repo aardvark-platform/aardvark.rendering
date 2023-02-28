@@ -51,4 +51,4 @@ module RenderPass =
 
     let before (name : string) (order : RenderPassOrder) (pass : RenderPass) =
         let key = mainOrder.Before(pass.SortKey)
-        RenderPass(name, RenderPassOrder.BackToFront, key)
+        RenderPass(name, order, key)

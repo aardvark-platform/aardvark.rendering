@@ -563,9 +563,13 @@ module TextureCopy =
             "1D mipmapped subwindow",           Cases.texture1DMipmappedSubwindow
             "1D array mipmapped",               Cases.texture1DArrayMipmapped
             "1D array mipmapped subwindow",     Cases.texture1DArrayMipmappedSubwindow
-            "1D to 2D",                         Cases.texture1DTo2D
-            "1D to 3D",                         Cases.texture1DTo3D
-            "1D to Cube",                       Cases.texture1DToCube
+
+            // Vulkan only supports 2D to 3D
+            // https://vulkan.lunarg.com/doc/view/1.3.239.0/windows/1.3-extensions/vkspec.html#VUID-vkCmdCopyImage-srcImage-07743
+            if backend <> Backend.Vulkan then
+                "1D to 2D",                         Cases.texture1DTo2D
+                "1D to 3D",                         Cases.texture1DTo3D
+                "1D to Cube",                       Cases.texture1DToCube
 
             "2D array mipmapped",               Cases.texture2DArrayMipmapped
             "2D multisampled",                  Cases.texture2DMultisampled false

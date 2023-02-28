@@ -2,11 +2,11 @@
 
 module Naive =
 
-    open Aardvark.Base
-    
     open Aardvark.Rendering
     open Aardvark.SceneGraph
-    open FSharp.Data.Adaptive.Operators
+
+    module private RenderPass =
+        let transparent = RenderPass.after "transprentPass" RenderPassOrder.Arbitrary RenderPass.main
 
     type Technique(runtime : IRuntime, framebuffer : FramebufferInfo, scene : Scene) =
 
@@ -19,26 +19,23 @@ module Naive =
 
         let transparent =
             scene.transparent
-            |> Sg.blendMode ~~BlendMode.Blend
+            |> Sg.blendMode' BlendMode.Blend
             |> Sg.shader {
                 do! DefaultSurfaces.trafo
                 do! DefaultSurfaces.sgColor
             }
+            |> Sg.pass RenderPass.transparent
 
-        let makeTask sg =
-            let sg =
-                sg |> Sg.viewTrafo scene.viewTrafo |> Sg.projTrafo scene.projTrafo
+        let task =
+            Sg.ofList [ opaque; transparent]
+            |> Sg.viewTrafo scene.viewTrafo
+            |> Sg.projTrafo scene.projTrafo
+            |> Sg.compile runtime framebuffer.signature
 
-            runtime.CompileRender(framebuffer.signature, sg)
-
-        let opaqueTask = makeTask opaque
-        let transparentTask = makeTask transparent
-
-        member x.Task = RenderTask.ofList [opaqueTask; transparentTask]
+        member x.Task = task
 
         member x.Dispose() =
-            opaqueTask.Dispose()
-            transparentTask.Dispose()
+            task.Dispose()
 
         interface ITechnique with
             member x.Name = "Alpha blending (unsorted)"

@@ -71,14 +71,11 @@ module Program =
 
         // uncomment/comment to switch between the backends
         use app = new VulkanApplication(debug = true)
-        //use app = new OpenGlApplication()
+        //use app = new OpenGlApplication(debug = true)
         let runtime = app.Runtime :> IRuntime
-        let samples = 1
 
         // create a game window (better for measuring fps)
-        use win = app.CreateGameWindow(samples = samples)
-
-        // disable incremental rendering
+        use win = app.CreateGameWindow(samples = 8)
         win.RenderAsFastAsPossible <- true
 
         let initialView = CameraView.LookAt(V3d(10.0,10.0,10.0), V3d.Zero, V3d.OOI)
@@ -90,7 +87,6 @@ module Program =
         let framebuffer =
             {
                 size = win.Sizes
-                samples = samples
                 signature = win.FramebufferSignature
             }
 
@@ -144,7 +140,8 @@ module Program =
 
         use task =
             RenderTask.custom (fun (t, rt, desc) ->
-                techniques.[technique.Value].Task.Run(t, rt, desc)
+                let current = technique.GetValue(t)
+                techniques.[current].Task.Run(t, rt, desc)
             )
 
         let puller =

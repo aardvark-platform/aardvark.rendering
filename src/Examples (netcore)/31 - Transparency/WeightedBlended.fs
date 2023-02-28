@@ -1,7 +1,5 @@
 ﻿namespace Transparency
 
-// TODO: Antialiasing is handled kind of sketchy, isn't it?
-
 module WeightedBlended =
 
     open Aardvark.Base
@@ -143,7 +141,7 @@ module WeightedBlended =
     type Technique(runtime : IRuntime, framebuffer : FramebufferInfo, scene : Scene) =
 
         let size = framebuffer.size
-        let samples = framebuffer.samples
+        let samples = framebuffer.signature.Samples
 
         // We create a separate framebuffer so we have access to the depth buffer.
         // Ideally we'd want to use the regular framebuffer directly...
@@ -192,6 +190,12 @@ module WeightedBlended =
                 |> Sg.projTrafo scene.projTrafo
 
             runtime.CompileRender(offscreenPass, sg)
+
+        // The depth buffer is shared between the opaque and transparent task.
+        // We need to add this dependency manually via a marking callback or artifacts will appear when
+        // the depth buffer is updated by the opaque task but the transparent task is
+        // not rerun since there is no adaptive dependency.
+        let __ = opaqueTask.AddMarkingCallback transparentFbo.MarkOutdated
 
         // Renders the transparent scene to the dedicated framebuffer, reusing
         // the depth buffer (for testing only) from the opaque geometry pass.

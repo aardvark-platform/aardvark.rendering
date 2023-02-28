@@ -9,7 +9,6 @@ open FSharp.Data.Adaptive
 type FramebufferInfo =
     {
         size        : aval<V2i>
-        samples     : int
         signature   : IFramebufferSignature
     }
 
