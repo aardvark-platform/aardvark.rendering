@@ -61,6 +61,20 @@ module RenderToken =
 
         { token with Query = queries }
 
+module DisposableHelper =
+    
+    [<Struct>]
+    type QueryUseDisposable =
+
+        val Query : IQuery
+
+        interface IDisposable with
+            member x.Dispose() = x.Query.End()
+
+        new(query : IQuery) =
+            query.Begin()
+            { Query = query }
+
 
 [<AbstractClass; Sealed; Extension>]
 type RenderTokenExtensions private() =
@@ -68,11 +82,8 @@ type RenderTokenExtensions private() =
     /// Begins the queries of the token and returns an IDisposable that
     /// ends the queries when disposed.
     [<Extension>]
-    static member inline Use(this : RenderToken) =
-        this.Query.Begin()
-
-        { new IDisposable with
-            member x.Dispose() = this.Query.End() }
+    static member inline Use(this : RenderToken) : DisposableHelper.QueryUseDisposable =
+        new DisposableHelper.QueryUseDisposable(this.Query)
 
     /// Begins the queries of the token, evaluates the given function, and
     /// finally ends the queries.
