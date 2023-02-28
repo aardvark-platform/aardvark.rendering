@@ -89,42 +89,42 @@ type RenderTokenExtensions private() =
 
     [<Extension>]
     static member InPlaceResourceUpdate(this : RenderToken, kind : ResourceKind) =
-        this.Statistics |> Option.iter (fun stats ->
-            stats.InPlaceResourceUpdate(kind)
-        )
+        match this.Statistics with
+        | Some stats -> stats.InPlaceResourceUpdate(kind)
+        | _ -> ()
 
     [<Extension>]
     static member ReplacedResource(this : RenderToken, kind : ResourceKind) =
-        this.Statistics |> Option.iter (fun stats ->
-            stats.ReplacedResource(kind)
-        )
+        match this.Statistics with
+        | Some stats -> stats.ReplacedResource(kind)
+        | _ -> ()
 
     [<Extension>]
     static member CreatedResource(this : RenderToken, kind : ResourceKind) =
-        this.Statistics |> Option.iter (fun stats ->
-            stats.CreatedResource(kind)
-        )
+        match this.Statistics with
+        | Some stats -> stats.CreatedResource(kind)
+        | _ -> ()
 
     [<Extension>]
     static member AddInstructions(this : RenderToken, total : int, active : int) =
-        this.Statistics |> Option.iter (fun stats ->
-            stats.AddInstructions(total, active)
-        )
+        match this.Statistics with
+        | Some stats -> stats.AddInstructions(total, active)
+        | _ -> ()
 
     [<Extension>]
     static member AddDrawCalls(this : RenderToken, count : int, effective : int) =
-        this.Statistics |> Option.iter (fun stats ->
-            stats.AddDrawCalls(count, effective)
-        )
+        match this.Statistics with
+        | Some stats -> stats.AddDrawCalls(count, effective)
+        | _ -> ()
 
     [<Extension>]
     static member AddSubTask(this : RenderToken, sorting : MicroTime, update : MicroTime) =
-        this.Statistics |> Option.iter (fun stats ->
-            stats.AddSubTask(sorting, update)
-        )
+        match this.Statistics with
+        | Some stats -> stats.AddSubTask(sorting, update)
+        | _ -> ()
 
     [<Extension>]
     static member RenderObjectDeltas(this : RenderToken, added : int, removed : int) =
-        this.Statistics |> Option.iter (fun stats ->
-            stats.RenderObjectDeltas(added, removed)
-        )
+        match this.Statistics with
+        | Some stats -> stats.RenderObjectDeltas(added, removed)
+        | _ -> ()
