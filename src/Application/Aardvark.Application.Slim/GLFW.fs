@@ -731,6 +731,8 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
     let mutable vsync = not enableVSync
     let mutable showFrameTime = true
 
+    let transaction = new Transaction()
+
     do app.AddExistingWindow this
 
     let getWindowState() =
@@ -1027,10 +1029,12 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
         
         let mutable unique = 0
         let update() =
-            transact (fun () ->
+            useTransaction transaction (fun () -> // fun alloc all the time :/
                 let uid = Interlocked.Increment &unique
                 state |> HashMap.map (fun _ v -> v, uid) |> connected.Update
             )
+            transaction.Commit()
+            transaction.Dispose()
 
         let callback =
             glfw.SetJoystickCallback(GlfwCallbacks.JoystickCallback(fun id c ->
@@ -1590,7 +1594,11 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                 renderContinuous || renderTask.OutOfDate || requiresRedraw
             finally 
                 afterRender.Trigger()  
-                transact time.MarkOutdated  
+                useTransaction transaction (fun () ->  // constant closure -> one-time compiled fun :)
+                        time.MarkOutdated()
+                    )
+                transaction.Commit()
+                transaction.Dispose()
 
                 let gpuTime =
                     if measureGpuTime then
