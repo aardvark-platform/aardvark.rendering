@@ -1550,8 +1550,13 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                 requiresRedraw <- false
                 if vsync <> enableVSync then
                     vsync <- enableVSync
+                    let oldCurr = glfw.GetCurrentContext()
+                    if oldCurr <> win then
+                        glfw.MakeContextCurrent(win)
                     if enableVSync then glfw.SwapInterval(1)
                     else glfw.SwapInterval(0)
+                    if oldCurr <> win then
+                        glfw.MakeContextCurrent(oldCurr)
 
                 let queries =
                     if measureGpuTime then
