@@ -98,9 +98,16 @@ open System.Threading.Tasks
 [<AbstractClass; Sealed; Extension>]
 type DevicePreparedRenderObjectExtensions private() =
 
+    static let (|CastUniformResource|_|) (value : IAdaptiveValue option) =
+        match value with
+        | Some value when typeof<'T>.IsAssignableFrom value.ContentType ->
+            Some (AdaptiveResource.cast<'T> value)
+        | _ ->
+            None
+
     static let createSamplerState (this : ResourceManager) (name : Symbol) (uniforms : IUniformProvider) (state : FShade.SamplerState)  =
         match uniforms.TryGetUniform(Ag.Scope.Root, DefaultSemantic.SamplerStateModifier) with
-        | Some(:? aval<Symbol -> SamplerState -> SamplerState> as modifier) ->
+        | Some (:? aval<Symbol -> SamplerState -> SamplerState> as modifier) ->
             this.CreateDynamicSamplerState(name, state.SamplerState, modifier) :> aval<_>
         | _ ->
             AVal.constant state.SamplerState
@@ -108,88 +115,101 @@ type DevicePreparedRenderObjectExtensions private() =
     static let createDescriptorSets (this : ResourceManager) (layout : PipelineLayout) (uniforms : IUniformProvider) =
         layout.DescriptorSetLayouts |> Array.map (fun ds ->
             let descriptors =
-                ds.Bindings |> Array.choose (fun b ->
+                ds.Bindings |> Array.map (fun b ->
                     match b.Parameter with
                     | UniformBlockParameter block ->
-                        let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
-                        AdaptiveDescriptor.UniformBuffer (b.Binding, buffer) :> IAdaptiveDescriptor |> Some
+                        let buffer = this.CreateUniformBuffer(Ag.Scope.Root, block, uniforms)
+                        AdaptiveDescriptor.UniformBuffer (b.Binding, buffer) :> IAdaptiveDescriptor
 
                     | StorageBufferParameter block ->
-                        let buffer = this.CreateStorageBuffer(Ag.Scope.Root, block, uniforms, SymDict.empty)
-                        AdaptiveDescriptor.StorageBuffer (b.Binding, buffer) :> IAdaptiveDescriptor |> Some
+                        let bufferName = Symbol.Create block.ssbName
+
+                        let buffer =
+                            match uniforms.TryGetUniform(Ag.Scope.Root, bufferName) with
+                            | CastUniformResource (buffer : aval<IBuffer>) ->
+                                this.CreateStorageBuffer(buffer)
+
+                            | CastUniformResource (array : aval<Array>) ->
+                                this.CreateStorageBuffer(array)
+
+                            | Some value ->
+                                failf "invalid type '%A' for storage buffer '%A' (expected a subtype of IBuffer or Array)" value.ContentType bufferName
+
+                            | _ ->
+                                failf "could not find storage buffer '%A'" bufferName
+
+                        AdaptiveDescriptor.StorageBuffer (b.Binding, buffer) :> IAdaptiveDescriptor
 
                     | SamplerParameter sam ->
-                        match sam.samplerTextures with
-                        | [] ->
-                            Log.error "[Vulkan] could not get sampler information for: %A" sam
-                            None
+                        let arraySampler =
+                            sam.Array |> Option.bind (fun (textureName, samplerState) ->
+                                let textureName = Symbol.Create textureName
 
-                        | descriptions ->
-                            let arraySampler =
-                                sam.Array |> Option.bind (fun (textureName, samplerState) ->
-                                    let textureName = Symbol.Create textureName
+                                match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                                | Some (:? aval<(int * aval<ITexture>)[]> as tex) ->
+                                    let s = createSamplerState this textureName uniforms samplerState
+                                    let is = this.CreateImageSamplerArray(sam.samplerCount, sam.samplerType, tex, s)
+                                    Some is
 
-                                    match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                                    | Some (:? aval<array<int * aval<ITexture>>> as tex) ->
-                                        let s = createSamplerState this textureName uniforms samplerState
-                                        let is = this.CreateImageSamplerArray(sam.samplerCount, sam.samplerType, tex, s)
-                                        Some is
+                                | Some (:? aval<ITexture[]> as tex) ->
+                                    let s = createSamplerState this textureName uniforms samplerState
+                                    let is = this.CreateImageSamplerArray(sam.samplerCount, sam.samplerType, tex, s)
+                                    Some is
 
-                                    | Some (:? aval<ITexture[]> as tex) ->
-                                        let s = createSamplerState this textureName uniforms samplerState
-                                        let is = this.CreateImageSamplerArray(sam.samplerCount, sam.samplerType, tex, s)
-                                        Some is
+                                | Some t ->
+                                    failf "invalid type '%A' for texture array '%A' (expected ITexture[] or (int * aval<ITexture>)[])" t.ContentType textureName
 
-                                    | Some t ->
-                                        Log.error "[Vulkan] invalid type for sampler array texture %A (%A)" textureName (t.GetType())
-                                        None
+                                | _ ->
+                                    None
+                            )
 
-                                    | _ -> None
-                                )
+                        let sampler =
+                            arraySampler |> Option.defaultWith(fun _ ->
+                                match sam.samplerTextures with
+                                | [] ->
+                                    failf "could not get sampler information for: %A" sam
 
-                            let sampler =
-                                arraySampler |> Option.defaultWith (fun _ ->
+                                | descriptions ->
                                     let list =
                                         descriptions
-                                        |> List.choosei (fun i (textureName, samplerState) ->
+                                        |> List.mapi (fun i (textureName, samplerState) ->
                                             let textureName = Symbol.Create textureName
 
                                             match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
-                                            | Some (:? aval<ITexture> as texture) ->
+                                            | CastUniformResource (texture : aval<ITexture>) ->
                                                 let desc = createSamplerState this textureName uniforms samplerState
                                                 let sampler = this.CreateImageSampler(sam.samplerType, texture, desc)
-                                                Some(i, sampler)
+                                                i, sampler
 
-                                            | Some (:? aval<ITextureLevel> as level) ->
+                                            | CastUniformResource (level : aval<ITextureLevel>) ->
                                                 let desc = createSamplerState this textureName uniforms samplerState
                                                 let sampler = this.CreateImageSampler(sam.samplerType, level, desc)
-                                                Some (i, sampler)
+                                                i, sampler
 
                                             | Some t ->
-                                                Log.error "[Vulkan] invalid type for texture %A (%A)" textureName (t.GetType())
-                                                None
+                                                failf "invalid type '%A' for texture '%A' (expected a subtype of ITexture or ITextureLevel)" t.ContentType textureName
 
                                             | _ ->
-                                                Log.error "[Vulkan] could not find texture: %A" textureName
-                                                None
+                                                failf "could not find texture '%A'" textureName
                                         )
 
                                     let empty = this.CreateImageSampler(sam.samplerType, nullTextureConst, AVal.constant SamplerState.Default)
                                     this.CreateImageSamplerArray(sam.samplerCount, empty, list)
-                                )
+                            )
 
-                            AdaptiveDescriptor.CombinedImageSampler(b.Binding, b.DescriptorCount, sampler) :> IAdaptiveDescriptor |> Some
+                        AdaptiveDescriptor.CombinedImageSampler(b.Binding, b.DescriptorCount, sampler) :> IAdaptiveDescriptor
 
                     | ImageParameter image ->
                         let viewSam =
                             let imageName = Symbol.Create image.imageName
+
                             match uniforms.TryGetUniform(Ag.Scope.Root, imageName) with
-                            | Some (:? aval<ITexture> as texture) ->
+                            | CastUniformResource (texture : aval<ITexture>) ->
                                 let img = this.CreateImage(image.imageType.Properties, texture)
                                 let view = this.CreateImageView(image.imageType, img)
                                 view
 
-                            | Some (:? aval<ITextureLevel> as level) ->
+                            | CastUniformResource (level : aval<ITextureLevel>) ->
                                 let levels = level |> AVal.mapNonAdaptive (fun l -> l.Levels)
                                 let slices = level |> AVal.mapNonAdaptive (fun l -> l.Slices)
                                 let img = this.CreateImage(image.imageType.Properties, level)
@@ -197,25 +217,31 @@ type DevicePreparedRenderObjectExtensions private() =
                                 view
 
                             | Some i ->
-                                failf "invalid type for image %A (%A)" imageName (i.GetType())
+                                failf "invalid type '%A' for storage image '%A' (expected a subtype of ITexture or ITextureLevel)" i.ContentType imageName
 
                             | None ->
-                                failf "could not find image: %A" imageName
+                                failf "could not find storage image '%A'" imageName
 
-                        AdaptiveDescriptor.StorageImage(b.Binding, viewSam) :> IAdaptiveDescriptor |> Some
+                        AdaptiveDescriptor.StorageImage(b.Binding, viewSam) :> IAdaptiveDescriptor
 
                     | AccelerationStructureParameter a ->
                         let accel =
                             let name = Sym.ofString a.accelName
-                            match uniforms.TryGetUniform(Ag.Scope.Root, name) with
-                            | Some (:? IResourceLocation<Raytracing.AccelerationStructure> as accel) -> accel
-                            | _ -> failf "could not find acceleration structure: %A" name
 
-                        AdaptiveDescriptor.AccelerationStructure(a.accelBinding, accel) :> IAdaptiveDescriptor |> Some
+                            match uniforms.TryGetUniform(Ag.Scope.Root, name) with
+                            | Some (:? IResourceLocation<Raytracing.AccelerationStructure> as accel) ->
+                                accel
+
+                            | Some a ->
+                                failf "invalid type '%A' for acceleration structure '%A'" a.ContentType name
+
+                            | _ ->
+                                failf "could not find acceleration structure '%A'" name
+
+                        AdaptiveDescriptor.AccelerationStructure(a.accelBinding, accel) :> IAdaptiveDescriptor
                 )
 
             let res = this.CreateDescriptorSet(ds, descriptors)
-
             res
         )
 
