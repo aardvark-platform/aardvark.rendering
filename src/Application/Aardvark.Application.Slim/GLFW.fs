@@ -728,7 +728,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
     let mutable icon : option<PixImageMipMap> = None
     let mutable lastMousePosition = V2d.Zero
     let mutable enableVSync = enableVSync
-    let mutable vsync = enableVSync
+    let mutable vsync = not enableVSync
     let mutable showFrameTime = true
 
     do app.AddExistingWindow this
