@@ -5,6 +5,7 @@ open System.Runtime.CompilerServices
 open Aardvark.Base
 
 /// Token for gathering and querying statistics about the rendering process.
+/// It is mutable for construction/mutation in C# code
 [<CLIMutable>]
 type RenderToken =
     {
@@ -54,7 +55,21 @@ module RenderToken =
 
     /// Adds the given query to the given render token.
     let withQuery (query : IQuery) (token : RenderToken) : RenderToken =
-        { token with Query = Queries.combine token.Query query }
+        match token.Query with
+        | :? Queries as tq -> 
+            if tq.IsEmpty then // token has no queries
+                match query with // query is empty -> return token unmodified
+                | :? Queries as q when q.IsEmpty -> token
+                | _ -> { token with Query = query } // query not empty -> return token with query
+            else // token has some queries -> combine
+                match query with 
+                | :? Queries as q -> 
+                    if q.IsEmpty then // query is empty -> return token unmodified
+                        token
+                    else
+                        { token with Query = tq |> Queries.addList q.AsList } // combine both lists of queries
+                | _ -> { token with Query = tq |> Queries.add query } // add single query q2 to Queries q1
+        | _ -> { token with Query = Queries.ofList [query; token.Query] }  // combine 2 single queries
 
 module DisposableHelper =
     
