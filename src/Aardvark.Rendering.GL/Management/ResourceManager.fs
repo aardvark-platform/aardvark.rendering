@@ -587,7 +587,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                         Normalized = false; 
                         Stride = view.Stride
                         Offset = view.Offset
-                        Content = Right (value.GetValue self)
+                        Content = Right (value.GetValueUntyped self)
                     } 
 
                 | _ ->

@@ -142,7 +142,22 @@ module PointerContextExtensions =
                                     buffers.Add ptr
 
                         | Right value ->
-                            values.Add(VertexValueBinding(uint32 index, value.X, value.Y, value.Z, value.W))
+                            let mutable binding = VertexValueBinding()
+                            binding.Index <- uint32 index
+
+                            match value with
+                            | :? V4f as f ->
+                                binding.ValueF <- f
+                                binding.IsFloat <- true
+
+                            | :? V4i as i ->
+                                binding.ValueI <- i
+                                binding.IsFloat <- false
+
+                            | _ ->
+                                failf "unexpected type '%A' for vertex value binding" (value.GetType())
+
+                            values.Add binding
                 
                 buffers.ToArray(), values.ToArray()
 

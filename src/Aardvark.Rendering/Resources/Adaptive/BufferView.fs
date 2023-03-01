@@ -93,7 +93,13 @@ module BufferView =
 
         match view.SingleValue with
         | Some value ->
-            value |> AdaptiveResource.map (fun v -> reader.Initialize(v, count))
+            value.Accept (
+                { new IAdaptiveValueVisitor<_> with
+                    member x.Visit(value : aval<'T>) =
+                        value |> AVal.map (fun v -> reader.Initialize(v, count))
+                }
+            )
+
         | _ ->
             view.Buffer |> AdaptiveResource.map (fun b ->
                 match b with

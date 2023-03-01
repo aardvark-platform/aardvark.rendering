@@ -66,7 +66,7 @@ type AttributeDescription =
         /// <summary>
         /// the buffer containing the attribute-data
         /// </summary>        
-        Content : Either<Buffer, V4f>
+        Content : Either<Buffer, obj>
 
     }
 
