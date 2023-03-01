@@ -61,6 +61,9 @@ type Queries(queries : list<IQuery>) =
     /// Returns the queries as an array.
     member x.AsArray = queries |> Array.ofList
 
+    /// Returns true if there are no queries
+    member x.IsEmpty = queries.IsEmpty
+
     interface IQuery with
 
         member x.Reset() = x.Reset()
@@ -89,6 +92,20 @@ module Queries =
     /// Adds a query.
     let add (x : IQuery) (queries : Queries) =
         queries.Add x
+
+    /// Add seq of queries.
+    let addSeq (qu : seq<IQuery>) (queries : Queries) =
+        let mutable qres = queries
+        for qx in qu do
+            qres <- qres.Add qx
+        qres
+
+    /// Add seq of queries
+    let addList (qu : list<IQuery>) (queries : Queries) =
+        let mutable qres = queries
+        for qx in qu do
+            qres <- qres.Add qx
+        qres
 
     /// Resets all queries manually.
     let reset (queries : Queries) =
@@ -121,3 +138,19 @@ module Queries =
     /// Iterates the queries.
     let iter (queries : Queries) (f : IQuery -> unit) =
         queries.ForEach(f)
+
+    /// Combine two queries.
+    let combine (query1 : IQuery) (query2 : IQuery) : IQuery =
+        match query1 with
+        | :? Queries as q1 -> 
+            if q1.IsEmpty then 
+                query2
+            else
+                match query2 with 
+                | :? Queries as q2 -> 
+                    if q2.IsEmpty then
+                        query1
+                    else
+                        q1 |> addList q2.AsList :> IQuery // combine both lists of queries
+                | _ -> q1 |> add query2 :> IQuery // add single query q2 to Queries q1
+        | _ -> ofList [query1; query2] // combine 2 single queries

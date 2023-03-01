@@ -53,13 +53,8 @@ type RenderToken =
 module RenderToken =
 
     /// Adds the given query to the given render token.
-    let withQuery (query : IQuery) (token : RenderToken) =
-        let queries =
-            match token.Query with
-            | :? Queries as q -> q |> Queries.add query
-            | _ -> Queries.ofList [token.Query; query]
-
-        { token with Query = queries }
+    let withQuery (query : IQuery) (token : RenderToken) : RenderToken =
+        { token with Query = Queries.combine token.Query query }
 
 module DisposableHelper =
     
