@@ -48,16 +48,6 @@ type AbstractRenderTask() =
                 provider.Dispose()
         }
 
-    member private x.UseValues (token : AdaptiveToken, output : OutputDescription, f : AdaptiveToken -> 'a) =
-        // simulate transact but with reusing transaction
-        useTransaction transaction (fun () ->
-            currentOutput.Value <- output
-        )
-        transaction.Commit()
-        transaction.Dispose()
-
-        f(token)
-
     member x.HookProvider (uniforms : IUniformProvider) =
         hookProvider uniforms
 
@@ -86,10 +76,16 @@ type AbstractRenderTask() =
             use __ = renderToken.Use()
 
             x.OutOfDate <- true
-            x.UseValues(token, out, fun token ->
-                x.Perform(token, renderToken, out)
-                frameId <- frameId + 1UL
+
+            // perform 'transact' with reusable transaction object
+            useTransaction transaction (fun () -> // fun allow :/
+                currentOutput.Value <- out
             )
+            transaction.Commit()
+            transaction.Dispose()
+
+            x.Perform(token, renderToken, out)
+            frameId <- frameId + 1UL
         )
 
     member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
