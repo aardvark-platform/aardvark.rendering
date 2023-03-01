@@ -78,7 +78,7 @@ type AbstractRenderTask() =
             x.OutOfDate <- true
 
             // perform 'transact' with reusable transaction object
-            useTransaction transaction (fun () -> // fun allow :/
+            useTransaction transaction (fun () -> // fun alloc :/
                 currentOutput.Value <- out
             )
             transaction.Commit()

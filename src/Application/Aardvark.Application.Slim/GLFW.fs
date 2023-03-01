@@ -691,7 +691,10 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
 
         for w in ws do w.IsVisible <- true
 
-        while existingWindows.Count > 0 do
+        let mutable we = existingWindows.GetEnumerator()
+        let mutable wv = visibleWindows.GetEnumerator()
+
+        while we.MoveNext() do // exit when there are no windows
             if wait then glfw.WaitEventsTimeout(0.01)
             else glfw.PollEvents()
 
@@ -700,13 +703,18 @@ type Application(runtime : Aardvark.Rendering.IRuntime, interop : IWindowInterop
                 try action()
                 with _ -> ()
 
-            for e in existingWindows do
-                e.Update()
+            we.Current.Update()
+            while we.MoveNext() do
+                we.Current.Update()
 
             wait <- true
-            for w in visibleWindows do
-                let v = w.Redraw()
+
+            while wv.MoveNext() do
+                let v = wv.Current.Redraw()
                 if v then wait <- false
+
+            we.Reset();
+            wv.Reset();
 
     new(runtime, swap) = Application(runtime, swap, false)
 
@@ -731,7 +739,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
     let mutable vsync = not enableVSync
     let mutable showFrameTime = true
 
-    let transaction = new Transaction()
+    let transaction = new Transaction() // reusable transaction for update and redraw -> looks like they are not used concurrently
 
     do app.AddExistingWindow this
 
@@ -1090,7 +1098,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
     let mutable totalGpuTime = MicroTime.Zero
     let mutable averageFrameTime = MicroTime.Zero
     let mutable averageGpuTime = MicroTime.Zero
-    let mutable measureGpuTime = true
+    let mutable measureGpuTime = false
     let mutable formattedTime = None
 
     let sw = System.Diagnostics.Stopwatch()
@@ -1594,7 +1602,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                 renderContinuous || renderTask.OutOfDate || requiresRedraw
             finally 
                 afterRender.Trigger()  
-                useTransaction transaction (fun () ->  // constant closure -> one-time compiled fun :)
+                useTransaction transaction (fun () ->  // alloc ? 
                         time.MarkOutdated()
                     )
                 transaction.Commit()
