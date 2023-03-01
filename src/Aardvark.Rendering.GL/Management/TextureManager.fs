@@ -34,29 +34,26 @@ type internal RefCountedTexture(ctx, create : unit -> Texture, destroy : unit ->
             x.Handle <- 0
 
 type internal TextureManager(ctx : Context) =
-    let cache = ConcurrentDictionary<ITexture, RefCountedTexture>()
+    let cache = ConcurrentDictionary<ITexture * TextureProperties, RefCountedTexture>()
 
-    let get (data : ITexture) =
-        cache.GetOrAdd(data, fun v ->
+    let get (properties : TextureProperties) (data : ITexture) =
+        cache.GetOrAdd((data, properties), fun key ->
             new RefCountedTexture(
                 ctx,
-                (fun () -> ctx.CreateTexture(data, ValueNone)),
-                (fun () -> cache.TryRemove data |> ignore)
+                (fun () -> ctx.CreateTexture(data, ValueSome properties)),
+                (fun () -> cache.TryRemove key |> ignore)
             )
         )
 
     member x.Create(data : ITexture, properties : TextureProperties) =
-        match data with
-        | :? NullTexture -> ctx.CreateTexture(data, ValueSome properties)
-        | _ ->
-            let shared = get data
-            shared.Acquire()
-            shared :> Texture
+        let shared = data |> get properties
+        shared.Acquire()
+        shared :> Texture
 
     member x.Update(texture : Texture, data : ITexture, properties : TextureProperties) : Texture =
         match texture with
         | :? RefCountedTexture as texture ->
-            let newShared = get data
+            let newShared = data |> get properties
             if newShared = texture then
                 texture :> Texture
             else

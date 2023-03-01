@@ -58,26 +58,22 @@ type UniformBufferManager(ctx : Context) =
     let viewCache = ResourceCache<UniformBufferView, int>(None, None)
     let rw = new ReaderWriterLockSlim()
 
-    member x.CreateUniformBuffer(block : FShade.GLSL.GLSLUniformBuffer, scope : Ag.Scope, u : IUniformProvider, additional : SymbolDict<IAdaptiveValue>) : IResource<UniformBufferView, int> =
+    member x.CreateUniformBuffer(block : FShade.GLSL.GLSLUniformBuffer, scope : Ag.Scope, uniforms : IUniformProvider) : IResource<UniformBufferView, int> =
         let values =
             block.ubFields
             |> List.map (fun f ->
                 let name = f.ufName
 
-                let value = match Uniforms.tryGetDerivedUniform name u with
-                            | Some v -> v
-                            | None ->
-
-                                let sem = Symbol.Create name
-                                match u.TryGetUniform(scope, sem) with
-                                | Some v -> v
-                                | None ->
-                                    match additional.TryGetValue sem with
-                                    | (true, m) -> m
-                                    | _ -> failwithf "[GL] could not get uniform: %A" f
+                let value =
+                    match Uniforms.tryGetDerivedUniform name uniforms with
+                    | Some v -> v
+                    | None ->
+                        match uniforms.TryGetUniform(scope, Symbol.Create name) with
+                        | Some v -> v
+                        | None -> failf "could not find uniform '%s'" name
 
                 if Object.ReferenceEquals(value, null) then
-                    failwithf "[GL] uniform of %A is null" f
+                    failf "uniform '%s' is null" name
 
                 value
             )
