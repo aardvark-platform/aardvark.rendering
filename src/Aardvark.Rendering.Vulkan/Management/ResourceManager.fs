@@ -1901,15 +1901,21 @@ type ResourceManager(device : Device) =
         let values =
             layout.ubFields
             |> List.map (fun (f) ->
-                let sem = Symbol.Create f.ufName
+                let name = f.ufName
 
-                match Uniforms.tryGetDerivedUniform f.ufName uniforms with
-                | Some r -> f, r
-                | None ->
-                    match uniforms.TryGetUniform(scope, sem) with
-                    | Some v -> f, v
+                let field, value =
+                    match Uniforms.tryGetDerivedUniform f.ufName uniforms with
+                    | Some r -> f, r
                     | None ->
-                        failf "could not find uniform '%A'" sem
+                        match uniforms.TryGetUniform(scope, Symbol.Create name) with
+                        | Some v -> f, v
+                        | None ->
+                            failf "could not find uniform '%s'" name
+
+                if Object.ReferenceEquals(value, null) then
+                    failf "uniform '%s' is null" name
+
+                field, value
             )
 
         let writers =

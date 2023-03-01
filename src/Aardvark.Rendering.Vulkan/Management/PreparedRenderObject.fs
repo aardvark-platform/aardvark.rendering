@@ -98,6 +98,13 @@ open System.Threading.Tasks
 [<AbstractClass; Sealed; Extension>]
 type DevicePreparedRenderObjectExtensions private() =
 
+    static let (|NullUniform|_|) (value : IAdaptiveValue option) =
+        match value with
+        | Some value when Object.ReferenceEquals(value, null) ->
+            Some ()
+        | _ ->
+            None
+
     static let (|CastUniformResource|_|) (value : IAdaptiveValue option) =
         match value with
         | Some value when typeof<'T>.IsAssignableFrom value.ContentType ->
@@ -126,6 +133,9 @@ type DevicePreparedRenderObjectExtensions private() =
 
                         let buffer =
                             match uniforms.TryGetUniform(Ag.Scope.Root, bufferName) with
+                            | NullUniform ->
+                                failf "storage buffer '%A' is null" bufferName
+
                             | CastUniformResource (buffer : aval<IBuffer>) ->
                                 this.CreateStorageBuffer(buffer)
 
@@ -146,6 +156,9 @@ type DevicePreparedRenderObjectExtensions private() =
                                 let textureName = Symbol.Create textureName
 
                                 match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                                | NullUniform ->
+                                    failf "texture array '%A' is null" textureName
+
                                 | Some (:? aval<(int * aval<ITexture>)[]> as tex) ->
                                     let s = createSamplerState this textureName uniforms samplerState
                                     let is = this.CreateImageSamplerArray(sam.samplerCount, sam.samplerType, tex, s)
@@ -176,6 +189,9 @@ type DevicePreparedRenderObjectExtensions private() =
                                             let textureName = Symbol.Create textureName
 
                                             match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                                            | NullUniform ->
+                                                failf "texture '%A' is null" textureName
+
                                             | CastUniformResource (texture : aval<ITexture>) ->
                                                 let desc = createSamplerState this textureName uniforms samplerState
                                                 let sampler = this.CreateImageSampler(sam.samplerType, texture, desc)
@@ -204,6 +220,9 @@ type DevicePreparedRenderObjectExtensions private() =
                             let imageName = Symbol.Create image.imageName
 
                             match uniforms.TryGetUniform(Ag.Scope.Root, imageName) with
+                            | NullUniform ->
+                                failf "storage image '%A' is null" imageName
+
                             | CastUniformResource (texture : aval<ITexture>) ->
                                 let img = this.CreateImage(image.imageType.Properties, texture)
                                 let view = this.CreateImageView(image.imageType, img)
@@ -229,6 +248,9 @@ type DevicePreparedRenderObjectExtensions private() =
                             let name = Sym.ofString a.accelName
 
                             match uniforms.TryGetUniform(Ag.Scope.Root, name) with
+                            | NullUniform ->
+                                failf "acceleration structure '%A' is null" name
+
                             | Some (:? IResourceLocation<Raytracing.AccelerationStructure> as accel) ->
                                 accel
 
