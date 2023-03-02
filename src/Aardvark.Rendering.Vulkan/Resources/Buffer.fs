@@ -253,7 +253,7 @@ module BufferCommands =
                 member x.Compatible = QueueFlags.All
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
-                    if value.Length <> 4 then failf "[Vulkan] pattern too long"
+                    if value.Length <> 4 then failf "pattern too long"
                     let v = BitConverter.ToUInt32(value, 0)
                     VkRaw.vkCmdFillBuffer(cmd.Handle, b.Handle, uint64 offset, uint64 size, v)
                     [b]

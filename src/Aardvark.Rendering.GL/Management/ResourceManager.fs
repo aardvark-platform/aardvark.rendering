@@ -56,6 +56,13 @@ type private AttachmentConfig<'a> =
 [<Struct>]
 type TextureBinding =
     {
+        texture : int
+        target : int
+    }
+
+[<Struct>]
+type TextureArrayBinding =
+    {
         offset : int
         count : int
         targets : nativeptr<int>
@@ -143,7 +150,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     let textureArrayCache =
         UnaryCache<aval<ITexture[]>, _>(
-            fun _arr -> ConcurrentDictionary<int * TextureProperties, List<IResource<Texture,V2i>>>()
+            fun _arr -> ConcurrentDictionary<int * TextureProperties, IResource<Texture, TextureBinding>[]>()
         )
 
     let staticSamplerStateCache = ConcurrentDictionary<FShade.SamplerState, aval<SamplerState>>()
@@ -153,28 +160,28 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member private x.BufferManager = bufferManager
     member private x.TextureManager = textureManager
 
-    member private x.BufferCache              : ResourceCache<Buffer, int>                    = bufferCache
-    member private x.TextureCache             : ResourceCache<Texture, V2i>                   = textureCache
-    member private x.IndirectBufferCache      : ResourceCache<GLIndirectBuffer, IndirectDrawArgs> = indirectBufferCache
-    member private x.SamplerCache             : ResourceCache<Sampler, int>                   = samplerCache
-    member private x.VertexInputCache         : ResourceCache<VertexInputBindingHandle, int>  = vertexInputCache
-    member private x.UniformLocationCache     : ResourceCache<UniformLocation, nativeint>     = uniformLocationCache
-    member private x.IsActiveCache            : ResourceCache<bool, int>                      = isActiveCache
-    member private x.BeginModeCache           : ResourceCache<GLBeginMode, GLBeginMode>       = beginModeCache
-    member private x.DrawCallInfoCache        : ResourceCache<DrawCallInfoList, DrawCallInfoList> = drawCallInfoCache
-    member private x.DepthTestCache           : ResourceCache<int, int>                       = depthTestCache
-    member private x.DepthBiasCache           : ResourceCache<DepthBiasInfo, DepthBiasInfo>   = depthBiasCache
-    member private x.CullModeCache            : ResourceCache<int, int>                       = cullModeCache
-    member private x.FrontFaceCache           : ResourceCache<int, int>                       = frontFaceCache
-    member private x.PolygonModeCache         : ResourceCache<int, int>                       = polygonModeCache
-    member private x.BlendModeCache           : ResourceCache<nativeptr<GLBlendMode>, nativeint> = blendModeCache
-    member private x.ColorMaskCache           : ResourceCache<nativeptr<GLColorMask>, nativeint> = colorMaskCache
-    member private x.StencilModeCache         : ResourceCache<GLStencilMode, GLStencilMode>   = stencilModeCache
-    member private x.StencilMaskCache         : ResourceCache<uint32, uint32>                 = stencilMaskCache
-    member private x.FlagCache                : ResourceCache<bool, int>                      = flagCache
-    member private x.ColorCache               : ResourceCache<C4f, C4f>                       = colorCache
-    member private x.TextureBindingCache      : ResourceCache<TextureBinding, TextureBinding> = textureBindingCache
-    member private x.ImageBindingCache        : ResourceCache<ImageBinding, ImageBinding>     = imageBindingCache
+    member private x.BufferCache              : ResourceCache<Buffer, int>                               = bufferCache
+    member private x.TextureCache             : ResourceCache<Texture, TextureBinding>                   = textureCache
+    member private x.IndirectBufferCache      : ResourceCache<GLIndirectBuffer, IndirectDrawArgs>        = indirectBufferCache
+    member private x.SamplerCache             : ResourceCache<Sampler, int>                              = samplerCache
+    member private x.VertexInputCache         : ResourceCache<VertexInputBindingHandle, int>             = vertexInputCache
+    member private x.UniformLocationCache     : ResourceCache<UniformLocation, nativeint>                = uniformLocationCache
+    member private x.IsActiveCache            : ResourceCache<bool, int>                                 = isActiveCache
+    member private x.BeginModeCache           : ResourceCache<GLBeginMode, GLBeginMode>                  = beginModeCache
+    member private x.DrawCallInfoCache        : ResourceCache<DrawCallInfoList, DrawCallInfoList>        = drawCallInfoCache
+    member private x.DepthTestCache           : ResourceCache<int, int>                                  = depthTestCache
+    member private x.DepthBiasCache           : ResourceCache<DepthBiasInfo, DepthBiasInfo>              = depthBiasCache
+    member private x.CullModeCache            : ResourceCache<int, int>                                  = cullModeCache
+    member private x.FrontFaceCache           : ResourceCache<int, int>                                  = frontFaceCache
+    member private x.PolygonModeCache         : ResourceCache<int, int>                                  = polygonModeCache
+    member private x.BlendModeCache           : ResourceCache<nativeptr<GLBlendMode>, nativeint>         = blendModeCache
+    member private x.ColorMaskCache           : ResourceCache<nativeptr<GLColorMask>, nativeint>         = colorMaskCache
+    member private x.StencilModeCache         : ResourceCache<GLStencilMode, GLStencilMode>              = stencilModeCache
+    member private x.StencilMaskCache         : ResourceCache<uint32, uint32>                            = stencilMaskCache
+    member private x.FlagCache                : ResourceCache<bool, int>                                 = flagCache
+    member private x.ColorCache               : ResourceCache<C4f, C4f>                                  = colorCache
+    member private x.TextureBindingCache      : ResourceCache<TextureArrayBinding, TextureArrayBinding>  = textureBindingCache
+    member private x.ImageBindingCache        : ResourceCache<ImageBinding, ImageBinding>                = imageBindingCache
 
     new(parent, lock) = new ResourceManager(Some parent, parent.Context, lock)
     new(ctx, lock) = new ResourceManager(None, ctx, lock)
@@ -197,7 +204,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
     member x.Context = ctx
 
-    member x.CreateBuffer(data : aval<IBuffer>) =
+    member x.CreateBuffer(data : aval<#IBuffer>) =
         match data with
         | :? SingleValueBuffer as v ->
             bufferCache.GetOrCreate(AVal.constant 0, fun () -> {
@@ -211,7 +218,7 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             })
 
         | _ ->
-            bufferCache.GetOrCreate<IBuffer>(data, fun () -> {
+            bufferCache.GetOrCreate<#IBuffer>(data, fun () -> {
                 create = fun b      -> bufferManager.Create b
                 update = fun h b    -> bufferManager.Update(h, b)
                 delete = fun h      -> bufferManager.Delete h
@@ -221,18 +228,22 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                 kind = ResourceKind.Buffer
             })
 
-    member private x.CreateTexture(data : aval<#ITexture>, properties : TextureProperties) : IResource<Texture, V2i> =
+    member x.CreateBuffer(data : aval<Array>) =
+        let buffer = data |> AdaptiveResource.mapNonAdaptive ArrayBuffer
+        x.CreateBuffer(buffer)
+
+    member private x.CreateTexture(data : aval<#ITexture>, properties : TextureProperties) : IResource<Texture, TextureBinding> =
         textureCache.GetOrCreate(data, [properties :> obj], fun () -> {
             create = fun b      -> textureManager.Create(b, properties)
             update = fun h b    -> textureManager.Update(h, b, properties)
             delete = fun h      -> textureManager.Delete h
             unwrap = fun _      -> ValueNone
             info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
-            view =   fun r      -> V2i(r.Handle, Translations.toGLTarget r.Dimension r.IsArray r.Multisamples)
+            view =   fun r      -> { texture = r.Handle; target = Translations.toGLTarget r.Dimension r.IsArray r.Multisamples }
             kind = ResourceKind.Texture
         })
 
-    member x.CreateTexture(data : aval<#ITexture>, samplerType : FShade.GLSL.GLSLSamplerType) : IResource<Texture, V2i> =
+    member x.CreateTexture(data : aval<#ITexture>, samplerType : FShade.GLSL.GLSLSamplerType) : IResource<Texture, TextureBinding> =
         x.CreateTexture(data, samplerType.Properties)
 
     // Workaround for some APIs accepting texture levels as sampler input (e.g. GPGPU image reduce).
@@ -359,18 +370,21 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
 
         iface, programHandle
 
-    member x.CreateTextureArray(slotCount : int, texArr : aval<ITexture[]>, samplerType : FShade.GLSL.GLSLSamplerType) : List<IResource<Texture, V2i>> =
-        let innerCache = textureArrayCache.Invoke(texArr)
+    member x.CreateTextureArray(slotCount : int, textureArray : aval<ITexture[]>, samplerType : FShade.GLSL.GLSLSamplerType) : IResource<Texture, TextureBinding>[] =
+        let innerCache = textureArrayCache.Invoke(textureArray)
         let properties = samplerType.Properties
 
         innerCache.GetOrAdd((slotCount, properties), fun _ ->
-            List.init slotCount (fun i ->
-                let texArr =
-                    texArr |> AVal.map (fun t ->
-                        if i < t.Length then t.[i] else nullTexture
+            Array.init slotCount (fun i ->
+                let arr =
+                    textureArray |> AVal.map (fun t ->
+                        if i < t.Length then
+                            t.[i]
+                        else
+                            nullTexture
                     )
 
-                x.CreateTexture(texArr, properties)
+                x.CreateTexture(arr, properties)
             )
         )
 
@@ -385,170 +399,132 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             kind = ResourceKind.SamplerState
         })
 
-    member x.CreateTextureBinding(slots : Range1i, bindings : List<Option<IResource<Texture, V2i> * IResource<Sampler, int>>>) =
+    member x.CreateTextureBinding(slots : Range1i, bindings : (IResource<Texture, TextureBinding> * IResource<Sampler, int>)[]) =
+        let slotCount = slots.Size + 1
+        if slotCount <= 0 then
+            failf "invalid slot range"
+
+        if bindings.Length < slotCount then
+            failf "not enough bindings"
+
         textureBindingCache.GetOrCreate(
             [slots :> obj; bindings :> obj],
             fun () ->
-                { new Resource<TextureBinding, TextureBinding>(ResourceKind.Unknown) with
-
+                { new Resource<TextureArrayBinding, TextureArrayBinding>(ResourceKind.Unknown) with
                     member x.View a = a
-
                     member x.GetInfo _ = ResourceInfo.Zero
 
-                    member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<TextureBinding>) =
-                        let slotCount = slots.Size + 1
-                        if slotCount <= 0 then
-                            failwith "invalid slot range"
-                            
-                        let bindingHandle = 
+                    member x.Create (token : AdaptiveToken, renderToken : RenderToken, old : Option<TextureArrayBinding>) =
+                        let bindingHandle =
                             match old with
-                                | Some o -> 
-                                    o
-                                | _ ->
+                            | Some o -> o
+                            | _ ->
+                                for (t, s) in bindings do
+                                    t.AddRef()
+                                    s.AddRef()
 
-                                    bindings |> List.iter (fun b ->
-                                        match b with 
-                                        | Some (t, s) ->
-                                            t.AddRef()
-                                            s.AddRef()
-                                        | None -> ()
-                                    )
+                                let offset = slots.Min
+                                let count = slotCount
+                                let targets = NativePtr.alloc slotCount
+                                let samplers = NativePtr.alloc slotCount
+                                let textures = NativePtr.alloc slotCount
 
-                                    let offset = slots.Min
-                                    let count = slotCount
-                                    let targets = NativePtr.alloc slotCount 
-                                    let samplers = NativePtr.alloc slotCount 
-                                    let textures = NativePtr.alloc slotCount 
-                                    {
-                                        offset = offset
-                                        count = count
-                                        targets = targets
-                                        samplers = samplers
-                                        textures = textures
-                                    }                        
-                          
-                        let mutable slotTex = bindings
-                        for i in 0..slotCount-1 do
-                            if slotTex.IsEmpty then
-                                // invalid texture binding count
-                                ()
-                            else
-                                match slotTex.Head with 
-                                | Some (t, s) ->
-                                    t.Update(token, rt) 
-                                    s.Update(token, rt)
+                                {
+                                    offset = offset
+                                    count = count
+                                    targets = targets
+                                    samplers = samplers
+                                    textures = textures
+                                }
 
-                                    let tt = NativePtr.read t.Pointer
-                                    let ss = NativePtr.read s.Pointer
+                        for slot = 0 to slotCount - 1 do
+                            let texture, sampler = bindings.[slot]
+                            texture.Update(token, renderToken)
+                            sampler.Update(token, renderToken)
 
-                                    NativePtr.set bindingHandle.textures i (tt.X)
-                                    NativePtr.set bindingHandle.targets i (tt.Y)
-                                    NativePtr.set bindingHandle.samplers i ss
-                                    
-                                | None -> 
-                                    // write 0 texture handle to slot
-                                    NativePtr.set bindingHandle.textures i 0
-                                    NativePtr.set bindingHandle.targets i (int TextureTarget.Texture2D)
-                                    NativePtr.set bindingHandle.samplers i 0        
-
-                                slotTex <- slotTex.Tail
+                            let tt = NativePtr.read texture.Pointer
+                            let ss = NativePtr.read sampler.Pointer
+                            NativePtr.set bindingHandle.textures slot tt.texture
+                            NativePtr.set bindingHandle.targets slot tt.target
+                            NativePtr.set bindingHandle.samplers slot ss
 
                         bindingHandle
 
-                    member x.Destroy (b : TextureBinding) =
+                    member x.Destroy (b : TextureArrayBinding) =
                         if slots.Size >= 0 then
-                            
                             NativePtr.free b.targets
                             NativePtr.free b.textures
                             NativePtr.free b.samplers
 
-                            bindings |> List.iter (fun b ->
-                                match b with 
-                                | Some (t, s) ->
-                                    t.RemoveRef()
-                                    s.RemoveRef()
-                                | None -> ()
-                            )
-
+                            for t, s in bindings do
+                                t.RemoveRef()
+                                s.RemoveRef()
                 }
         )
 
-    member x.CreateTextureBinding(slots : Range1i, textures : List<IResource<Texture, V2i>>, sampler : IResource<Sampler, int>) =
+    member x.CreateTextureBinding(slots : Range1i, textures : IResource<Texture, TextureBinding>[], sampler : IResource<Sampler, int>) =
+        let slotCount = slots.Size + 1
+        if slotCount <= 0 then
+            failf "invalid slot range"
+
+        if textures.Length < slotCount then
+            failf "not enough bindings"
+
         textureBindingCache.GetOrCreate(
             [slots :> obj; textures :> obj; sampler :> obj],
             fun () ->
-                { new Resource<TextureBinding, TextureBinding>(ResourceKind.Unknown) with
-
+                { new Resource<TextureArrayBinding, TextureArrayBinding>(ResourceKind.Unknown) with
                     member x.View a = a
-
                     member x.GetInfo _ = ResourceInfo.Zero
 
-                    member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<TextureBinding>) =
-
-                        let slotCount = slots.Size + 1
-                        if slotCount <= 0 then
-                            failwith "invalid slot range"
-                            
-                        let bindingHandle = 
+                    member x.Create (token : AdaptiveToken, renderToken : RenderToken, old : Option<TextureArrayBinding>) =
+                        let bindingHandle =
                             match old with
-                                | Some o -> 
-                                    o
-                                | _ ->
+                            | Some o -> o
+                            | _ ->
+                                sampler.AddRef()
 
-                                    sampler.AddRef()
-                                    textures |> List.iter (fun t -> t.AddRef())
+                                for t in textures do
+                                    t.AddRef()
 
-                                    let offset = slots.Min
-                                    let count = slotCount
-                                    let targets = NativePtr.alloc slotCount 
-                                    let samplers = NativePtr.alloc slotCount 
-                                    let textures = NativePtr.alloc slotCount 
-                                    {
-                                        offset = offset
-                                        count = count
-                                        targets = targets
-                                        samplers = samplers
-                                        textures = textures
-                                    }                        
-                          
-                        let mutable slotTex = textures
+                                let offset = slots.Min
+                                let count = slotCount
+                                let targets = NativePtr.alloc slotCount
+                                let samplers = NativePtr.alloc slotCount
+                                let textures = NativePtr.alloc slotCount
 
-                        sampler.Update(token, rt)
+                                {
+                                    offset = offset
+                                    count = count
+                                    targets = targets
+                                    samplers = samplers
+                                    textures = textures
+                                }
+
+                        sampler.Update(token, renderToken)
                         let ss = NativePtr.read sampler.Pointer
 
-                        for i in 0..slotCount-1 do
-                            if slotTex.IsEmpty then
-                                // write 0 texture handle to slot
-                                NativePtr.set bindingHandle.textures i 0
-                                NativePtr.set bindingHandle.targets i (int TextureTarget.Texture2D)
-                                NativePtr.set bindingHandle.samplers i 0        
-                                // invalid texture binding count
-                                ()
-                            else
-                                let t = slotTex.Head
-                                t.Update(token, rt) 
-                                    
-                                let tt = NativePtr.read t.Pointer
+                        for slot = 0 to slotCount - 1 do
+                            let texture = textures.[slot]
+                            texture.Update(token, renderToken)
 
-                                NativePtr.set bindingHandle.textures i (tt.X)
-                                NativePtr.set bindingHandle.targets i (tt.Y)
-                                NativePtr.set bindingHandle.samplers i ss
-
-                                slotTex <- slotTex.Tail
+                            let tt = NativePtr.read texture.Pointer
+                            NativePtr.set bindingHandle.textures slot tt.texture
+                            NativePtr.set bindingHandle.targets slot tt.target
+                            NativePtr.set bindingHandle.samplers slot ss
 
                         bindingHandle
 
-                    member x.Destroy (b : TextureBinding) =
+                    member x.Destroy (b : TextureArrayBinding) =
                         if slots.Size >= 0 then
-                            
                             NativePtr.free b.targets
                             NativePtr.free b.textures
                             NativePtr.free b.samplers
 
                             sampler.RemoveRef()
 
-                            textures |> List.iter (fun t -> t.RemoveRef())
-
+                            for t in textures do
+                                t.RemoveRef()
                 }
         )
 
@@ -684,9 +660,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
             | None ->
                 failwithf "[GL] could not get uniform: %A" uniform
      
-    member x.CreateUniformBuffer(scope : Ag.Scope, layout : FShade.GLSL.GLSLUniformBuffer, u : IUniformProvider) =
-   
-        uniformBufferManager.CreateUniformBuffer(layout, scope, u, SymDict.empty)
+    member x.CreateUniformBuffer(scope : Ag.Scope, layout : FShade.GLSL.GLSLUniformBuffer, uniforms : IUniformProvider) =
+        uniformBufferManager.CreateUniformBuffer(layout, scope, uniforms)
  
  
       

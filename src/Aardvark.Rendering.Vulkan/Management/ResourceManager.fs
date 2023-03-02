@@ -1719,6 +1719,17 @@ type ResourceManager(device : Device) =
     member x.CreateBuffer(input : aval<IBuffer>) =
         x.CreateBuffer(input, VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit)
 
+    member x.CreateStorageBuffer(input : aval<IBuffer>) =
+        x.CreateBuffer(input, VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.StorageBufferBit)
+
+    member x.CreateStorageBuffer(input : aval<Array>) =
+        let usage = VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.StorageBufferBit
+
+        bufferCache.GetOrCreate([input :> obj], fun cache key ->
+            let buffer = input |> AdaptiveResource.map (fun arr -> ArrayBuffer arr :> IBuffer)
+            new BufferResource(cache, key, device, usage, buffer) :> IResourceLocation<Buffer>
+        )
+
     member x.CreateIndexBuffer(input : aval<IBuffer>) =
         x.CreateBuffer(input, VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.IndexBufferBit)
 
@@ -1886,51 +1897,26 @@ type ResourceManager(device : Device) =
         | Surface.None ->
             failf "encountered empty surface"
 
-    member x.CreateStorageBuffer(scope : Ag.Scope, layout : FShade.GLSL.GLSLStorageBuffer, u : IUniformProvider, additional : SymbolDict<IAdaptiveValue>) =
-        let value =
-            let sem = Symbol.Create layout.ssbName
-
-            match Uniforms.tryGetDerivedUniform layout.ssbName u with
-            | Some r -> r
-            | None ->
-                match u.TryGetUniform(scope, sem) with
-                | Some v -> v
-                | None ->
-                    match additional.TryGetValue sem with
-                    | (true, m) -> m
-                    | _ -> failwithf "[Vulkan] could not get storage buffer: %A" layout.ssbName
-
-        let usage = VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.StorageBufferBit
-
-        bufferCache.GetOrCreate([usage :> obj; value :> obj], fun cache key ->
-
-            let buffer =
-                AVal.custom (fun t ->
-                    match value.GetValueUntyped t with
-                    | :? Array as a -> ArrayBuffer(a) :> IBuffer
-                    | :? IBuffer as b -> b
-                    | _ -> failf "invalid storage buffer"
-                )
-            new BufferResource(cache, key, device, usage, buffer)
-        )
-
-    member x.CreateUniformBuffer(scope : Ag.Scope, layout : FShade.GLSL.GLSLUniformBuffer, u : IUniformProvider, additional : SymbolDict<IAdaptiveValue>) =
+    member x.CreateUniformBuffer(scope : Ag.Scope, layout : FShade.GLSL.GLSLUniformBuffer, uniforms : IUniformProvider) =
         let values =
             layout.ubFields
             |> List.map (fun (f) ->
-                let sem = Symbol.Create f.ufName
+                let name = f.ufName
 
-                match Uniforms.tryGetDerivedUniform f.ufName u with
+                let field, value =
+                    match Uniforms.tryGetDerivedUniform f.ufName uniforms with
                     | Some r -> f, r
                     | None ->
-                        match u.TryGetUniform(scope, sem) with
-                            | Some v -> f, v
-                            | None ->
-                                match additional.TryGetValue sem with
-                                    | (true, m) -> f, m
-                                    | _ -> failwithf "[Vulkan] could not get uniform: %A" f
-            )
+                        match uniforms.TryGetUniform(scope, Symbol.Create name) with
+                        | Some v -> f, v
+                        | None ->
+                            failf "could not find uniform '%s'" name
 
+                if Object.ReferenceEquals(value, null) then
+                    failf "uniform '%s' is null" name
+
+                field, value
+            )
 
         let writers =
             values |> List.map (fun (target, m) ->
