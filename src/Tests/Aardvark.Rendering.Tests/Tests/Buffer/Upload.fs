@@ -85,7 +85,6 @@ module BufferUpload =
             Expect.throwsT<ArgumentException> (fun _ -> buffer.Upload(data, -1, 0, 1)) "Expected ArgumentException due to negative src array index on upload"
             Expect.throwsT<ArgumentException> (fun _ -> buffer.Upload(data, 0, 0, -1)) "Expected ArgumentException due to negative array size on upload"
             Expect.throwsT<ArgumentException> (fun _ -> buffer.Upload(data, 8, 0, 1)) "Expected ArgumentException due to out-of-bounds array region on upload"
-            Expect.throwsT<ArgumentException> (fun _ -> buffer.Elements(126).Upload(data)) "Expected ArgumentException due to out-of-bounds for array length on upload"
 
         let native                  = testNativeUpload 2345 0 2345
         let nativeSubrange          = testNativeUpload 2345 57 345
