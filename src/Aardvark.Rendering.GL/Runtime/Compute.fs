@@ -4,10 +4,10 @@ open Aardvark.Base
 open Aardvark.Base.Runtime
 open Aardvark.Base.Monads.State
 open Aardvark.Assembler
+open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering
 open FSharp.Data.Adaptive
 open FSharp.NativeInterop
-open OpenTK.Graphics.OpenGL4
 open System
 open System.Collections.Generic
 open System.Runtime.InteropServices
@@ -107,6 +107,112 @@ module internal ComputeTaskInternals =
 
             member x.Remove(binding : ComputeInputBinding) =
                 for r in binding.Resources do x.Remove r
+
+    module private MemoryBarrierFlags =
+
+        module private Conversion =
+
+            let ofResourceAccess =
+                Map.ofList [
+                    ResourceAccess.VertexAttributeRead, MemoryBarrierFlags.VertexAttribArrayBarrierBit
+
+                    ResourceAccess.IndexRead,           MemoryBarrierFlags.ElementArrayBarrierBit
+
+                    ResourceAccess.UniformRead,         MemoryBarrierFlags.UniformBarrierBit
+
+                    ResourceAccess.ShaderRead,          MemoryBarrierFlags.UniformBarrierBit |||
+                                                        MemoryBarrierFlags.TextureFetchBarrierBit |||
+                                                        MemoryBarrierFlags.ShaderImageAccessBarrierBit |||
+                                                        MemoryBarrierFlags.ShaderStorageBarrierBit |||
+                                                        MemoryBarrierFlags.AtomicCounterBarrierBit
+
+                    ResourceAccess.ShaderWrite,         MemoryBarrierFlags.ShaderImageAccessBarrierBit |||
+                                                        MemoryBarrierFlags.ShaderStorageBarrierBit |||
+                                                        MemoryBarrierFlags.AtomicCounterBarrierBit
+
+                    ResourceAccess.IndirectCommandRead, MemoryBarrierFlags.CommandBarrierBit
+
+                    ResourceAccess.HostRead,            MemoryBarrierFlags.PixelBufferBarrierBit |||
+                                                        MemoryBarrierFlags.ClientMappedBufferBarrierBit |||
+                                                        MemoryBarrierFlags.TextureUpdateBarrierBit |||
+                                                        MemoryBarrierFlags.BufferUpdateBarrierBit
+
+                    ResourceAccess.HostWrite,           MemoryBarrierFlags.PixelBufferBarrierBit |||
+                                                        MemoryBarrierFlags.ClientMappedBufferBarrierBit |||
+                                                        MemoryBarrierFlags.TextureUpdateBarrierBit |||
+                                                        MemoryBarrierFlags.BufferUpdateBarrierBit
+
+                    ResourceAccess.TransferRead,        MemoryBarrierFlags.PixelBufferBarrierBit |||
+                                                        MemoryBarrierFlags.TextureUpdateBarrierBit |||
+                                                        MemoryBarrierFlags.BufferUpdateBarrierBit
+
+                    ResourceAccess.TransferWrite,       MemoryBarrierFlags.PixelBufferBarrierBit |||
+                                                        MemoryBarrierFlags.TextureUpdateBarrierBit |||
+                                                        MemoryBarrierFlags.BufferUpdateBarrierBit
+
+                    ResourceAccess.ColorRead,           MemoryBarrierFlags.FramebufferBarrierBit
+
+                    ResourceAccess.ColorWrite,          MemoryBarrierFlags.FramebufferBarrierBit
+
+                    ResourceAccess.DepthStencilRead,    MemoryBarrierFlags.FramebufferBarrierBit
+
+                    ResourceAccess.DepthStencilWrite,   MemoryBarrierFlags.FramebufferBarrierBit
+                ]
+
+        module private Enum =
+
+            let inline convertFlags< ^T, ^U when ^T : comparison and ^T :> Enum and
+                                                 ^U : (static member (|||) : ^U -> ^U -> ^U)> (lookup : Map< ^T, ^U>) (none : ^U) (value : ^T) =
+                let mutable result = none
+
+                lookup |> Map.iter (fun src dst ->
+                    if value.HasFlag src then result <- result ||| dst
+                )
+
+                result
+
+        type MemoryBarrierFlags with
+            static member None = unbox<MemoryBarrierFlags> 0
+
+        let ofResourceAccess (access : ResourceAccess) =
+            access |> Enum.convertFlags Conversion.ofResourceAccess MemoryBarrierFlags.None
+
+        let ofTextureLayout =
+            LookupTable.lookupTable [
+                TextureLayout.Undefined,        MemoryBarrierFlags.None
+
+                TextureLayout.TransferRead,     MemoryBarrierFlags.PixelBufferBarrierBit |||
+                                                MemoryBarrierFlags.TextureUpdateBarrierBit
+
+                TextureLayout.TransferWrite,    MemoryBarrierFlags.PixelBufferBarrierBit |||
+                                                MemoryBarrierFlags.TextureUpdateBarrierBit
+
+                TextureLayout.ShaderRead,       MemoryBarrierFlags.TextureFetchBarrierBit |||
+                                                MemoryBarrierFlags.ShaderImageAccessBarrierBit |||
+                                                MemoryBarrierFlags.AtomicCounterBarrierBit
+
+                TextureLayout.ShaderWrite,      MemoryBarrierFlags.ShaderImageAccessBarrierBit |||
+                                                MemoryBarrierFlags.AtomicCounterBarrierBit
+
+                TextureLayout.ShaderReadWrite,  MemoryBarrierFlags.TextureFetchBarrierBit |||
+                                                MemoryBarrierFlags.ShaderImageAccessBarrierBit |||
+                                                MemoryBarrierFlags.AtomicCounterBarrierBit
+
+                TextureLayout.ColorAttachment,  MemoryBarrierFlags.FramebufferBarrierBit
+
+                TextureLayout.DepthStencil,     MemoryBarrierFlags.FramebufferBarrierBit
+
+                TextureLayout.DepthStencilRead, MemoryBarrierFlags.FramebufferBarrierBit
+
+                TextureLayout.General,          MemoryBarrierFlags.TextureFetchBarrierBit |||
+                                                MemoryBarrierFlags.TextureUpdateBarrierBit |||
+                                                MemoryBarrierFlags.ShaderImageAccessBarrierBit |||
+                                                MemoryBarrierFlags.AtomicCounterBarrierBit |||
+                                                MemoryBarrierFlags.PixelBufferBarrierBit |||
+                                                MemoryBarrierFlags.FramebufferBarrierBit
+
+                TextureLayout.Present,          MemoryBarrierFlags.AllBarrierBits
+            ]
 
     [<AutoOpen>]
     module private Compiler =
@@ -366,13 +472,18 @@ module internal ComputeTaskInternals =
                             runtime.Copy(src, srcOffset, dst, dstOffset, size)
                         )
 
-                    | ComputeCommand.TransformSubLayoutCmd (_, _, _)
-                    | ComputeCommand.TransformLayoutCmd (_, _)
-                    | ComputeCommand.SyncImageCmd (_, _, _)
-                    | ComputeCommand.SyncBufferCmd (_, _, _) ->
+                    | ComputeCommand.TransformSubLayoutCmd (_, _, layout)
+                    | ComputeCommand.TransformLayoutCmd (_, layout) ->
                         do! CompilerState.assemble (fun _ s ->
-                            // TODO: Use proper barrier bits
-                            s.MemoryBarrier MemoryBarrierFlags.AllBarrierBits
+                            let flags = MemoryBarrierFlags.ofTextureLayout layout
+                            s.MemoryBarrier flags
+                        )
+
+                    | ComputeCommand.SyncImageCmd (_, _, access)
+                    | ComputeCommand.SyncBufferCmd (_, _, access) ->
+                        do! CompilerState.assemble (fun _ s ->
+                            let flags = MemoryBarrierFlags.ofResourceAccess access
+                            s.MemoryBarrier flags
                         )
                 }
 
