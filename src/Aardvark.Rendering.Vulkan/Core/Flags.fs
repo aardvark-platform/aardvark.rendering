@@ -190,7 +190,6 @@ module VkImageLayout =
     let ofTextureLayout =
         LookupTable.lookupTable [
             TextureLayout.Undefined, VkImageLayout.Undefined
-            TextureLayout.Sample, VkImageLayout.ShaderReadOnlyOptimal
             TextureLayout.ShaderRead, VkImageLayout.ShaderReadOnlyOptimal
             TextureLayout.ShaderReadWrite, VkImageLayout.General
             TextureLayout.ShaderWrite, VkImageLayout.General
