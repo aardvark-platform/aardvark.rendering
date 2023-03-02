@@ -53,23 +53,20 @@ type RenderToken =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RenderToken =
 
+    let private (|EmptyQuery|MultiQuery|SingleQuery|) (query : IQuery) = 
+        match query with
+        | :? Queries as tq -> if tq.AsList.IsEmpty then EmptyQuery else MultiQuery tq.AsList
+        | _ -> SingleQuery query
+
     /// Adds the given query to the given render token.
     let withQuery (query : IQuery) (token : RenderToken) : RenderToken =
-        match token.Query with
-        | :? Queries as tq -> 
-            if tq.IsEmpty then // token has no queries
-                match query with // query is empty -> return token unmodified
-                | :? Queries as q when q.IsEmpty -> token
-                | _ -> { token with Query = query } // query not empty -> return token with query
-            else // token has some queries -> combine
-                match query with 
-                | :? Queries as q -> 
-                    if q.IsEmpty then // query is empty -> return token unmodified
-                        token
-                    else
-                        { token with Query = tq |> Queries.addList q.AsList } // combine both lists of queries
-                | _ -> { token with Query = tq |> Queries.add query } // add single query q2 to Queries q1
-        | _ -> { token with Query = Queries.ofList [query; token.Query] }  // combine 2 single queries
+        match (token.Query, query) with
+        | (_, EmptyQuery) -> token
+        | (EmptyQuery, _) -> { token with Query = query } 
+        | (MultiQuery a, SingleQuery b) -> { token with Query = Queries.ofList (b :: a) } 
+        | (SingleQuery a, MultiQuery b) -> { token with Query = Queries.ofList (a :: b) } 
+        | (MultiQuery a, MultiQuery b) -> { token with Query = Queries.ofList (a @ b) }
+        | (SingleQuery a, SingleQuery b) -> { token with Query = Queries.ofList [a; b]  }
 
 module DisposableHelper =
     

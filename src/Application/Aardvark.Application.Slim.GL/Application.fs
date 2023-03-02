@@ -213,7 +213,7 @@ module private OpenGL =
                 GL.ClearDepth(1.0)
                 GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
 
-                let rt = RenderToken.Empty |> RenderToken.withQuery query
+                let rt = { RenderToken.Empty with Query = query}
                 task.Run(AdaptiveToken.Top, rt, output)
 
                 glfw.SwapBuffers(win)
