@@ -347,7 +347,7 @@ type OpenGlApplication(forceNvidia : bool, debug : IDebugConfig, shaderCachePath
             WindowConfig.height = 768
             WindowConfig.resizable = true
             WindowConfig.focus = true
-            WindowConfig.vsync = false
+            WindowConfig.vsync = true
             WindowConfig.opengl = true
             WindowConfig.physicalSize = false
             WindowConfig.transparent = false

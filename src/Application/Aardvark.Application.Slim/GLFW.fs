@@ -1098,7 +1098,7 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
     let mutable totalGpuTime = MicroTime.Zero
     let mutable averageFrameTime = MicroTime.Zero
     let mutable averageGpuTime = MicroTime.Zero
-    let mutable measureGpuTime = false
+    let mutable measureGpuTime = true
     let mutable formattedTime = None
 
     let sw = System.Diagnostics.Stopwatch()
