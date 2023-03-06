@@ -221,7 +221,7 @@ module PixData =
 
                 for x in 0 .. pi.Size.X - 1 do
                     for y in 0 .. pi.Size.Y - 1 do
-                        Expect.equal data.[x, y] color.[c] "PixImage data mismatch"
+                        Expect.equal data.[x, y] color.[c] $"PixImage data mismatch in channel {c} at ({x}, {y})"
 
         let inline rootMeanSquaredError (input : PixImage<'T>) (output : PixImage<'T>) =
             sqrt (PixImage.meanSquaredError input output)
