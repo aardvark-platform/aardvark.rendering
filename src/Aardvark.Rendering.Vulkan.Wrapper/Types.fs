@@ -23,43 +23,6 @@ type uint24 =
         static member op_Explicit(x : uint24) : int32 = x |> uint32 |> int32
     end
 
-[<StructLayout(LayoutKind.Sequential)>]
-type V2ui =
-    struct
-        val mutable public X : uint32
-        val mutable public Y : uint32
-
-        override x.ToString() = sprintf "[%A, %A]" x.X x.Y
-
-        new(x,y) = { X = x; Y = y }
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type V3ui =
-    struct
-        val mutable public X : uint32
-        val mutable public Y : uint32
-        val mutable public Z : uint32
-
-        override x.ToString() = sprintf "[%A, %A, %A]" x.X x.Y x.Z
-
-        new(x,y,z) = { X = x; Y = y; Z = z}
-    end
-
-[<StructLayout(LayoutKind.Sequential)>]
-type V4ui =
-    struct
-        val mutable public X : uint32
-        val mutable public Y : uint32
-        val mutable public Z : uint32
-        val mutable public W : uint32
-
-        override x.ToString() = sprintf "[%A, %A, %A, %A]" x.X x.Y x.Z x.W
-
-        new (x,y,z,w) = { X = x; Y = y; Z = z; W = w }
-    end
-
-
 type DeviceVendor =
     | Unknown = 0
     | Nvidia = 1
@@ -87,54 +50,6 @@ type String256 =
     end
 
 type cstr = nativeptr<byte>
-
-module ``Non Public Vulkan Functions`` =
-    [<System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining )>]
-    let myId x = x
-
-
-module NativePtr =
-    open ``Non Public Vulkan Functions``
-
-    let inline step (offset : int) (ptr : nativeptr<'a>) : nativeptr<'a> =
-        nativeint (sizeof<'a> * offset) + NativePtr.toNativeInt ptr |> NativePtr.ofNativeInt
-
-    let inline cast (n : nativeptr<'a>) : nativeptr<'b> =
-        n |> NativePtr.toNativeInt |> NativePtr.ofNativeInt
-    
-    let inline isNull (ptr : nativeptr<'a>) =
-        ptr |> NativePtr.toNativeInt = 0n
-
-    let malloc<'a when 'a: unmanaged> (size : int) =
-        size * sizeof<'a> |> Marshal.AllocHGlobal |> NativePtr.ofNativeInt<'a>
-
-    let free (ptr : nativeptr<'a>) =
-        ptr |> NativePtr.toNativeInt |> Marshal.FreeHGlobal
-
-    //let inline pushStackArray (elements : seq<'a>) =
-    //    let arr = elements |> Seq.toArray
-    //    let ptr = NativePtr.stackalloc arr.Length
-    //    for i in 0..arr.Length-1 do
-    //        NativePtr.set ptr i arr.[i]
-    //    ptr
-
-    let zero<'a when 'a : unmanaged> : nativeptr<'a> = NativePtr.ofNativeInt 0n
-
-    //let inline stackallocWith size (f : nativeptr<'a> -> 'b) =
-    //    let ptr = NativePtr.stackalloc size
-    //    let r = f ptr
-    //    myId r
-
-    module Operators =
-    
-        let ( &+ ) (ptr : nativeptr<'a>) (count : int) =
-            ptr |> step count
-
-        let ( &- ) (ptr : nativeptr<'a>) (count : int) =
-            ptr |> step (-count)
-
-        let ( !! ) (ptr : nativeptr<'a>) =
-            NativePtr.read ptr
 
 module CStr =
 

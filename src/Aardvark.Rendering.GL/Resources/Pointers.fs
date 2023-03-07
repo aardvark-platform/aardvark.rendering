@@ -14,14 +14,8 @@ open Aardvark.Rendering.GL
 [<AutoOpen>]
 module PointerContextExtensions =
 
-
     [<AutoOpen>]
     module private Helpers =
-
-        type nativeptr<'a when 'a : unmanaged> with
-            member x.Item
-                with inline get (i : int) = NativePtr.get x i
-                and inline set (i : int) (v : 'a) = NativePtr.set x i v
 
         let inline toBeginMode (hasTessellation : bool) (mode : IndexedGeometryMode) =
             if hasTessellation then
@@ -170,7 +164,7 @@ module PointerContextExtensions =
                         pinned value (fun pValue ->
                             let size = uint64 <| Marshal.SizeOf typ
                             let pDst = NativePtr.toNativeInt pBinding
-                            Buffer.MemoryCopy(pValue.ToPointer(), pDst.ToPointer(), 32UL, size)
+                            Buffer.MemoryCopy(pValue, pDst, 32UL, size)
                         )
 
                         values.Add binding

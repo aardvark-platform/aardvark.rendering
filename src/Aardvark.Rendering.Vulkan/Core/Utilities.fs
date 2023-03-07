@@ -114,16 +114,6 @@ module private Utilities =
 
     let native = NativeBuilder()
 
-
-    type nativeptr<'a when 'a : unmanaged> with
-        member x.Value
-            with inline get() = NativePtr.read x
-            and inline set (v : 'a) = NativePtr.write x v
-
-        member x.Item
-            with inline get(i : int) = NativePtr.get x i
-            and inline set (i : int) (v : 'a) = NativePtr.set x i v
-
     let inline (!!) (v : nativeptr<'a>) = NativePtr.read v
     let inline (<!-) (ptr : nativeptr<'a>) (v : 'a) = NativePtr.write ptr v
 

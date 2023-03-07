@@ -114,14 +114,6 @@ module BlockCompression =
 
             index
 
-    [<AutoOpen>]
-    module private NativeUtilities =
-
-        type nativeptr<'a when 'a : unmanaged> with
-            member x.Item
-                with inline get(i : int) = NativePtr.get x i
-                and inline set(i : int) (v : 'a) = NativePtr.set x i v
-
     [<Extension; Sealed>]
     type private VolumeExtensions() =
 
