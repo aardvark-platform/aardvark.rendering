@@ -115,6 +115,15 @@ DllExport(void) vmInit()
 	glVertexAttrib3f = (PFNGLVERTEXATTRIB3FPROC)getProc("glVertexAttrib3f");
 	glVertexAttrib4f = (PFNGLVERTEXATTRIB4FPROC)getProc("glVertexAttrib4f");
 
+	glVertexAttrib4fv = (PFNGLVERTEXATTRIB4FVPROC)getProc("glVertexAttrib4fv");
+	glVertexAttribL4dv = (PFNGLVERTEXATTRIB4DVPROC)getProc("glVertexAttribL4dv");
+	glVertexAttribI4sv = (PFNGLVERTEXATTRIB4SVPROC)getProc("glVertexAttribI4sv");
+	glVertexAttribI4iv = (PFNGLVERTEXATTRIB4IVPROC)getProc("glVertexAttribI4iv");
+	glVertexAttribI4bv = (PFNGLVERTEXATTRIB4BVPROC)getProc("glVertexAttribI4bv");
+	glVertexAttribI4usv = (PFNGLVERTEXATTRIB4USVPROC)getProc("glVertexAttribI4usv");
+	glVertexAttribI4uiv = (PFNGLVERTEXATTRIB4UIVPROC)getProc("glVertexAttribI4uiv");
+	glVertexAttribI4ubv = (PFNGLVERTEXATTRIB4UBVPROC)getProc("glVertexAttribI4ubv");
+
 	glColorMaski = (PFNGLCOLORMASKIPROC)getProc("glColorMaski");
 	glDrawBuffers = (PFNGLDRAWBUFFERSPROC)getProc("glDrawBuffers");
 	glMapBufferRange = (PFNGLMAPBUFFERRANGEPROC)getProc("glMapBufferRange");
@@ -1284,8 +1293,46 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 
 		for (uint32_t i = 0; i < (uint32_t)binding->ValueBindingCount; i++)
 		{
-			auto b = binding->ValueBindings[i];
-			glVertexAttrib4f(b.Index, b.X, b.Y, b.Z, b.W);
+			auto& b = binding->ValueBindings[i];
+
+			switch (b.Type)
+			{
+				case GL_FLOAT:
+					glVertexAttrib4fv(b.Index, (GLfloat*)&b.Value);
+					break;
+
+				case GL_DOUBLE:
+					glVertexAttribL4dv(b.Index, (GLdouble*)&b.Value);
+					break;
+
+				case GL_BYTE:
+					glVertexAttribI4bv(b.Index, (GLbyte*)&b.Value);
+					break;
+
+				case GL_UNSIGNED_BYTE:
+					glVertexAttribI4ubv(b.Index, (GLubyte*)&b.Value);
+					break;
+
+				case GL_SHORT:
+					glVertexAttribI4sv(b.Index, (GLshort*)&b.Value);
+					break;
+
+				case GL_UNSIGNED_SHORT:
+					glVertexAttribI4usv(b.Index, (GLushort*)&b.Value);
+					break;
+
+				case GL_INT:
+					glVertexAttribI4iv(b.Index, (GLint*)&b.Value);
+					break;
+
+				case GL_UNSIGNED_INT:
+					glVertexAttribI4uiv(b.Index, (GLuint*)&b.Value);
+					break;
+
+				default:
+					printf("unknown attribute type: %d\n", (int)b.Type);
+					break;
+			}
 		}
 	}
 

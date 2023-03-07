@@ -51,15 +51,6 @@ module SgFSharp =
                     bufferCache.Add(m, r)
                     r
 
-            let bufferOfValue (f : 'a -> V4f) (m : aval<'a>) =
-                match bufferCache.TryGetValue m with
-                | (true, r) -> r
-                | _ ->
-                    let b = m |> AVal.map f |> SingleValueBuffer
-                    let r = BufferView(b, typeof<V4f>)
-                    bufferCache.Add(m, r)
-                    r
-
             let bufferOfTrafos (m : aval<Trafo3d[]>) =
                 match bufferCache.TryGetValue m with
                 | (true, r) -> r
@@ -720,7 +711,7 @@ module SgFSharp =
         /// The value has to be compatible with V4f.
         let inline vertexBufferValue (name : ^Name) (value : aval< ^Value>) (sg : ISg) =
             let sym = name |> Symbol.convert Symbol.Converters.typed< ^Value>
-            let view = value |> Caching.bufferOfValue v4f
+            let view = BufferView(SingleValueBuffer value, typeof< ^Value>)
             Sg.VertexAttributeApplicator(Map.ofList [sym, view], ~~sg) :> ISg
 
         /// Provides a vertex attribute with the given name by supplying a single value.
@@ -728,7 +719,7 @@ module SgFSharp =
         /// The value has to be compatible with V4f.
         let inline vertexBufferValue' (name : ^Name) (value : ^Value) (sg : ISg) =
             let sym = name |> Symbol.convert Symbol.Converters.typed< ^Value>
-            let view = BufferView(SingleValueBuffer(~~(v4f value)), typeof<V4f>)
+            let view = BufferView(SingleValueBuffer ~~value, typeof< ^Value>)
             Sg.VertexAttributeApplicator(sym, view, sg) :> ISg
 
 
@@ -762,7 +753,7 @@ module SgFSharp =
         /// The value has to be compatible with V4f.
         let inline instanceBufferValue (name : ^Name) (value : aval< ^Value>) (sg : ISg) =
             let sym = name |> Symbol.convert Symbol.Converters.typed< ^Value>
-            let view = value |> Caching.bufferOfValue v4f
+            let view = BufferView(SingleValueBuffer value, typeof< ^Value>)
             Sg.InstanceAttributeApplicator(Map.ofList [sym, view], ~~sg) :> ISg
 
         /// Provides a instance attribute with the given name by supplying a single value.
@@ -770,7 +761,7 @@ module SgFSharp =
         /// The value has to be compatible with V4f.
         let inline instanceBufferValue' (name : ^Name) (value : ^Value) (sg : ISg) =
             let sym = name |> Symbol.convert Symbol.Converters.typed< ^Value>
-            let view = BufferView(SingleValueBuffer(~~(v4f value)), typeof<V4f>)
+            let view = BufferView(SingleValueBuffer ~~value, typeof< ^Value>)
             Sg.InstanceAttributeApplicator(sym, view, sg) :> ISg
 
 

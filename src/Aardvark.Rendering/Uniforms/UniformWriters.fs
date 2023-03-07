@@ -13,14 +13,12 @@ open FShade.GLSL
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module GLSLType =
-    open FShade
-    open FShade.GLSL
-    
+
     let toType =
         LookupTable.lookupTable [
             Bool, typeof<int>
             Void, typeof<unit>
-            
+
             Int(true, 8), typeof<sbyte>
             Int(true, 16), typeof<int16>
             Int(true, 32), typeof<int32>
@@ -39,9 +37,10 @@ module GLSLType =
             Vec(3, Int(true, 32)), typeof<V3i>
             Vec(4, Int(true, 32)), typeof<V4i>
 
-            Vec(3, Int(false, 32)), typeof<C3ui>
-            Vec(4, Int(false, 32)), typeof<C4ui>
-            
+            Vec(2, Int(false, 32)), typeof<V2ui>
+            Vec(3, Int(false, 32)), typeof<V3ui>
+            Vec(4, Int(false, 32)), typeof<V4ui>
+
             Vec(2, Float(32)), typeof<V2f>
             Vec(3, Float(32)), typeof<V3f>
             Vec(4, Float(32)), typeof<V4f>
@@ -67,24 +66,23 @@ module GLSLType =
             Mat(3,3,Float(64)), typeof<M34f>
             Mat(3,4,Float(64)), typeof<M34f>
             Mat(4,4,Float(64)), typeof<M44f>
-            
         ]
-    
+
     let rec sizeof (t : GLSLType) =
         match t with
-            | Bool -> 4
-            | Int(_,b) -> b / 8
-            | Float(64 | 32) -> 4
-            | Float(w) -> w / 4
-            | Vec(d,e) -> d * sizeof e
-            | Mat(r,c,e) -> r * c * sizeof e
-            | Array(len, e, stride) -> len * stride
-            | Struct(_,f,size) -> size
-            | Void -> failwith "[UniformWriter] void does not have a size"
-            | Image _ -> failwith "[UniformWriter] image does not have a size"
-            | Sampler _ -> failwith "[UniformWriter] sampler does not have a size"
-            | DynamicArray _ -> failwith "[UniformWriter] dynamic arrays do not have a size"
-            | Intrinsic _ -> failwith "[UniformWriter] dynamic arrays do not have a size"
+        | Bool -> 4
+        | Int(_,b) -> b / 8
+        | Float(64 | 32) -> 4
+        | Float(w) -> w / 4
+        | Vec(d,e) -> d * sizeof e
+        | Mat(r,c,e) -> r * c * sizeof e
+        | Array(len, e, stride) -> len * stride
+        | Struct(_,f,size) -> size
+        | Void -> failwith "[UniformWriter] void does not have a size"
+        | Image _ -> failwith "[UniformWriter] image does not have a size"
+        | Sampler _ -> failwith "[UniformWriter] sampler does not have a size"
+        | DynamicArray _ -> failwith "[UniformWriter] dynamic arrays do not have a size"
+        | Intrinsic _ -> failwith "[UniformWriter] dynamic arrays do not have a size"
 
 
 

@@ -817,34 +817,37 @@ type PreparedCommand(ctx : Context, renderPass : RenderPass, renderObject : Rend
         member x.Dispose() = x.Dispose()
 
 type PreparedObjectInfo =
-    {   
+    {
         oContext : Context
         oOriginal : RenderObject
         oActivation : IDisposable
         oFramebufferSignature : IFramebufferSignature
         oBeginMode : IResource<GLBeginMode, GLBeginMode>
-        oBuffers : list<int * BufferView * AttributeFrequency * IResource<Buffer, int>>
-        oIndexBuffer : Option<OpenGl.Enums.IndexType * IResource<Buffer, int>>
+        oAttributeBindings : AttributeBinding[]
+        oIndexBinding : IndexBinding option
         oIsActive : IResource<bool, int>
         oDrawCallInfos : IResource<DrawCallInfoList, DrawCallInfoList>
         oIndirectBuffer : Option<IResource<GLIndirectBuffer, IndirectDrawArgs>>
         oVertexInputBinding : IResource<VertexInputBindingHandle, int>  
     }
-    
+
     member x.Dispose() =
-        lock AbstractRenderTask.ResourcesInUse (fun _ -> 
+        lock AbstractRenderTask.ResourcesInUse (fun _ ->
             if x.oIsActive.IsDisposed then failwith "double free"
             x.oBeginMode.Dispose()
 
-            for (_,_,_,b) in x.oBuffers do b.Dispose()
-            match x.oIndexBuffer with
-                | Some (_,b) -> b.Dispose()
-                | _ -> ()
+            for b in x.oAttributeBindings do
+                b.Dispose()
+
+            match x.oIndexBinding with
+            | Some b -> b.Dispose()
+            | _ -> ()
 
             x.oIsActive.Dispose()
+
             match x.oIndirectBuffer with
-                | Some i -> i.Dispose()
-                | None -> x.oDrawCallInfos.Dispose()
+            | Some i -> i.Dispose()
+            | None -> x.oDrawCallInfos.Dispose()
 
             x.oVertexInputBinding.Dispose()
 
@@ -855,109 +858,102 @@ type PreparedObjectInfo =
         seq {
             yield x.oBeginMode :> IResource
 
-            for (_,_,_,b) in x.oBuffers do yield b :>_
-            match x.oIndexBuffer with
-                | Some (_,b) -> yield b :>_
+            for b in x.oAttributeBindings do
+                match b.Content with
+                | AttributeContent.Buffer (b, _, _, _) -> yield b :> _
                 | _ -> ()
 
+            match x.oIndexBinding with
+            | Some b -> yield b.Buffer :>_
+            | _ -> ()
+
             yield x.oIsActive :> _
+
             match x.oIndirectBuffer with
-                | Some i -> yield i :> _
-                | None -> yield x.oDrawCallInfos :> _
+            | Some i -> yield i :> _
+            | None -> yield x.oDrawCallInfos :> _
 
             yield x.oVertexInputBinding :> _
         }
 
 module PreparedObjectInfo =
-    open FShade.GLSL
-
-    let private (|Floaty|_|) (t : GLSLType) =
-        match t with
-            | GLSLType.Float 32 -> Some ()
-            | GLSLType.Float 64 -> Some ()
-            | _ -> None
-        
+    open FShade
 
     let private getExpectedType (t : GLSLType) =
-        match t with
-            | GLSLType.Void -> typeof<unit>
-            | GLSLType.Bool -> typeof<int>
-            | Floaty -> typeof<float32>
-            | GLSLType.Int(true, 32) -> typeof<int>
-            | GLSLType.Int(false, 32) -> typeof<uint32>
-             
-            | GLSLType.Vec(2, Floaty) -> typeof<V2f>
-            | GLSLType.Vec(3, Floaty) -> typeof<V3f>
-            | GLSLType.Vec(4, Floaty) -> typeof<V4f>
-            | GLSLType.Vec(2, Int(true, 32)) -> typeof<V2i>
-            | GLSLType.Vec(3, Int(true, 32)) -> typeof<V3i>
-            | GLSLType.Vec(4, Int(true, 32)) -> typeof<V4i>
-            | GLSLType.Vec(3, Int(false, 32)) -> typeof<C3ui>
-            | GLSLType.Vec(4, Int(false, 32)) -> typeof<C4ui>
+        try
+            GLSLType.toType t
+        with _ ->
+            failf "unexpected vertex type: %A" t
 
+    let private getIndexType =
+        let tryGetIndexType =
+            LookupTable.lookupTable' [
+                typeof<byte>,   OpenGl.Enums.IndexType.UnsignedByte
+                typeof<uint16>, OpenGl.Enums.IndexType.UnsignedShort
+                typeof<uint32>, OpenGl.Enums.IndexType.UnsignedInt
+                typeof<sbyte>,  OpenGl.Enums.IndexType.UnsignedByte
+                typeof<int16>,  OpenGl.Enums.IndexType.UnsignedShort
+                typeof<int32>,  OpenGl.Enums.IndexType.UnsignedInt
+            ]
 
-            | GLSLType.Mat(2,2,Floaty) -> typeof<M22f>
-            | GLSLType.Mat(3,3,Floaty) -> typeof<M33f>
-            | GLSLType.Mat(4,4,Floaty) -> typeof<M44f>
-            | GLSLType.Mat(3,4,Floaty) -> typeof<M34f>
-            | GLSLType.Mat(4,3,Floaty) -> typeof<M34f>
-            | GLSLType.Mat(2,3,Floaty) -> typeof<M23f>
-
-            | _ -> failwithf "[GL] unexpected vertex type: %A" t
+        fun t ->
+            match tryGetIndexType t with
+            | Some it -> it
+            | _ -> failf "unsupported index type '%A'" t
 
 
     let ofRenderObject (fboSignature : IFramebufferSignature) (x : ResourceManager) (iface : GLSLProgramInterface) (program : IResource<Program, int>) (rj : RenderObject) =
 
         // use a context token to avoid making context current/uncurrent repeatedly
-        use token = x.Context.ResourceLock
+        use __ = x.Context.ResourceLock
 
         let activation = rj.Activate()
 
         // create all requested vertex-/instance-inputs
-        let buffers =
+        let attributeBindings =
             iface.inputs
-                |> List.choose (fun v ->
-                     if v.paramLocation >= 0 then
-                        let expected = getExpectedType v.paramType
-                        let sem = v.paramName |> Symbol.Create
-                        match rj.VertexAttributes.TryGetAttribute sem with
-                            | Some value ->
-                                let dep = x.CreateBuffer(value.Buffer)
-                                Some (v.paramLocation, value, AttributeFrequency.PerVertex, dep)
-                            | _  -> 
-                                match rj.InstanceAttributes with
-                                    | null -> failwithf "could not get attribute %A (not found in vertex attributes, and instance attributes is null) for rj: %A" sem rj
-                                    | _ -> 
-                                        match rj.InstanceAttributes.TryGetAttribute sem with
-                                            | Some value ->
-                                                let dep = x.CreateBuffer(value.Buffer)
-                                                Some(v.paramLocation, value, (AttributeFrequency.PerInstances 1), dep)
-                                            | _ -> 
-                                                failwithf "could not get attribute %A" sem
-                        else
-                            None
-                   )
+            |> List.choose (fun v ->
+                if v.paramLocation >= 0 then
+                    let expected = getExpectedType v.paramType
+
+                    let typ, content =
+                        let view, frequency =
+                            match rj.TryGetAttribute(Symbol.Create v.paramName) with
+                            | Some (view, perInstance) ->
+                                view, (if perInstance then AttributeFrequency.PerInstances 1 else AttributeFrequency.PerVertex)
+                            | _ ->
+                                failf "could not get attribute '%s'" v.paramName
+
+                        match view.Buffer with
+                        | :? ISingleValueBuffer as b ->
+                            expected, AttributeContent.Value b.Value
+
+                        | _ ->
+                            let buffer = x.CreateBuffer view.Buffer
+                            view.ElementType, AttributeContent.Buffer (buffer, view.Stride, view.Offset, frequency)
+
+                    Some {
+                        Type    = typ
+                        Index   = v.paramLocation
+                        Content = content
+                    }
+                else
+                    None
+            )
+            |> List.toArray
 
         GL.Check "[Prepare] Buffers"
 
         // create the index buffer (if present)
         let index =
             match rj.Indices with
-                | Some i -> 
-                    let buffer = x.CreateBuffer i.Buffer
-                    let indexType =
-                        let indexType = i.ElementType
-                        if indexType = typeof<byte> then OpenGl.Enums.IndexType.UnsignedByte
-                        elif indexType = typeof<uint16> then OpenGl.Enums.IndexType.UnsignedShort
-                        elif indexType = typeof<uint32> then OpenGl.Enums.IndexType.UnsignedInt
-                        elif indexType = typeof<sbyte> then OpenGl.Enums.IndexType.UnsignedByte
-                        elif indexType = typeof<int16> then OpenGl.Enums.IndexType.UnsignedShort
-                        elif indexType = typeof<int32> then OpenGl.Enums.IndexType.UnsignedInt
-                        else failwithf "unsupported index type: %A"  indexType
-                    Some(indexType, buffer)
+            | Some view ->
+                Some {
+                    IndexType = getIndexType view.ElementType
+                    Buffer    = x.CreateBuffer view.Buffer
+                }
 
-                | None -> None
-
+            | None -> None
 
         GL.Check "[Prepare] Indices"
 
@@ -969,7 +965,7 @@ module PreparedObjectInfo =
 
         // create the VertexArrayObject
         let vibh =
-            x.CreateVertexInputBinding(buffers, index)
+            x.CreateVertexInputBinding(attributeBindings, index)
 
         GL.Check "[Prepare] VAO"
 
@@ -987,8 +983,8 @@ module PreparedObjectInfo =
             oOriginal = rj
             oActivation = activation
             oFramebufferSignature = fboSignature
-            oBuffers = buffers
-            oIndexBuffer = index
+            oAttributeBindings = attributeBindings
+            oIndexBinding = index
             oIndirectBuffer = indirect
             oVertexInputBinding = vibh
             oIsActive = isActive
@@ -1011,19 +1007,19 @@ module PreparedObjectInfoAssembler =
             let beginMode = me.oBeginMode
 
             match me.oIndirectBuffer with
-                | Some indirect ->
-                    match me.oIndexBuffer with
-                        | Some (it,_) ->
-                            x.DrawElementsIndirect(s.runtimeStats, isActive, beginMode, int it, indirect)
-                        | None ->
-                            x.DrawArraysIndirect(s.runtimeStats, isActive, beginMode, indirect)
-
+            | Some indirect ->
+                match me.oIndexBinding with
+                | Some b ->
+                    x.DrawElementsIndirect(s.runtimeStats, isActive, beginMode, int b.IndexType, indirect)
                 | None ->
-                    match me.oIndexBuffer with
-                        | Some (it,_) ->
-                            x.DrawElements(s.runtimeStats, isActive, beginMode, (int it), me.oDrawCallInfos)
-                        | None ->
-                            x.DrawArrays(s.runtimeStats, isActive, beginMode, me.oDrawCallInfos)
+                    x.DrawArraysIndirect(s.runtimeStats, isActive, beginMode, indirect)
+
+            | None ->
+                match me.oIndexBinding with
+                | Some b ->
+                    x.DrawElements(s.runtimeStats, isActive, beginMode, int b.IndexType, me.oDrawCallInfos)
+                | None ->
+                    x.DrawArrays(s.runtimeStats, isActive, beginMode, me.oDrawCallInfos)
 
             NativeStats(InstructionCount = 2)
 
@@ -1041,19 +1037,19 @@ module PreparedObjectInfoAssembler =
             let beginMode = me.oBeginMode
 
             match me.oIndirectBuffer with
-                | Some indirect ->
-                    match me.oIndexBuffer with
-                        | Some (it,_) ->
-                            x.DrawElementsIndirect(s.runtimeStats, isActive, beginMode, int it, indirect)
-                        | None ->
-                            x.DrawArraysIndirect(s.runtimeStats, isActive, beginMode, indirect)
-
+            | Some indirect ->
+                match me.oIndexBinding with
+                | Some b ->
+                    x.DrawElementsIndirect(s.runtimeStats, isActive, beginMode, int b.IndexType, indirect)
                 | None ->
-                    match me.oIndexBuffer with
-                        | Some (it,_) ->
-                            x.DrawElements(s.runtimeStats, isActive, beginMode, (int it), me.oDrawCallInfos)
-                        | None ->
-                            x.DrawArrays(s.runtimeStats, isActive, beginMode, me.oDrawCallInfos)
+                    x.DrawArraysIndirect(s.runtimeStats, isActive, beginMode, indirect)
+
+            | None ->
+                match me.oIndexBinding with
+                | Some b ->
+                    x.DrawElements(s.runtimeStats, isActive, beginMode, int b.IndexType, me.oDrawCallInfos)
+                | None ->
+                    x.DrawArrays(s.runtimeStats, isActive, beginMode, me.oDrawCallInfos)
 
             NativeStats(InstructionCount = icnt + 1)
 

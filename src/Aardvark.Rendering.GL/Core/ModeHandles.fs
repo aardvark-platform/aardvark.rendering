@@ -147,13 +147,18 @@ type VertexBufferBinding =
         new(i,s,d,t,n,st,o,b) = { Index = i; Size = s; Divisor = d; Type = t; Normalized = n; Stride = st; Offset = o; Buffer = b }
     end
 
-[<StructLayout(LayoutKind.Explicit, Size = 24)>]
+[<StructLayout(LayoutKind.Sequential)>]
 type VertexValueBinding =
     struct
-        [<FieldOffset(0)>]  val mutable public Index   : uint32
-        [<FieldOffset(4)>]  val mutable public ValueF  : V4f
-        [<FieldOffset(4)>]  val mutable public ValueI  : V4i
-        [<FieldOffset(20)>] val mutable public IsFloat : bool
+        val private X : uint64
+        val private Y : uint64
+        val private Z : uint64
+        val private W : uint64
+        val public Index : uint32
+        val public Type : VertexAttribType
+
+        new (i, t) =
+            { X = 0UL; Y = 0UL; Z = 0UL; W = 0UL; Index = i; Type = t }
     end
 
 [<StructLayout(LayoutKind.Sequential)>]

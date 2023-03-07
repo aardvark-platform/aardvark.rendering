@@ -1,13 +1,8 @@
 ﻿namespace Aardvark.Rendering.GL
 
 open System
-open System.Threading
-open System.Collections.Concurrent
 open System.Runtime.InteropServices
 open Aardvark.Base
-open OpenTK
-open OpenTK.Platform
-open OpenTK.Graphics
 open OpenTK.Graphics.OpenGL4
 open Aardvark.Rendering.GL
 
@@ -17,7 +12,7 @@ open Aardvark.Rendering.GL
 /// where n is the number of instances to render before
 /// the attribute-index is advanced during rendering
 /// </summary>
-type AttributeFrequency = 
+type AttributeFrequency =
     | PerVertex
     | PerInstances of int
 
@@ -26,14 +21,13 @@ type AttributeFrequency =
 /// DirectX/OpenGl allowing to bind buffers with
 /// a specific format/offset/stride/etc.
 /// </summary>
-[<StructuralEquality; NoComparisonAttribute>]
-type AttributeDescription = 
-    { 
+type AttributeBufferDescription =
+    {
         /// <summary>
         /// specifies the data type contained in the buffer.
         /// common types include: V3f, C4b, float, etc.
         /// </summary>
-        Type : Type; 
+        Type : Type
 
         /// <summary>
         /// specifies the attribute's step frequency.
@@ -52,23 +46,27 @@ type AttributeDescription =
         Normalized : bool
 
         /// <summary>
-        /// specifies a byte-offset between consecutive values 
-        /// in the buffer. This especially means that 0 stands 
+        /// specifies a byte-offset between consecutive values
+        /// in the buffer. This especially means that 0 stands
         /// for thightly packed elements.
         /// </summary>
-        Stride : int; 
-        
+        Stride : int
+
         /// <summary>
         /// specifies offset to be used when binding the buffer.
-        /// </summary>        
-        Offset : int; 
+        /// </summary>
+        Offset : int
 
         /// <summary>
-        /// the buffer containing the attribute-data
-        /// </summary>        
-        Content : Either<Buffer, obj>
-
+        /// the attribute data buffer.
+        /// </summary>
+        Buffer : Buffer
     }
+
+[<RequireQualifiedAccess>]
+type AttributeDescription =
+    | Value  of value: obj
+    | Buffer of description: AttributeBufferDescription
 
 [<AutoOpen>]
 module AttributeDescriptionExtensions =
@@ -77,7 +75,7 @@ module AttributeDescriptionExtensions =
     let private dimensions =
         Dict.ofList [
             typeof<bool>,       1
-            typeof<sbyte>,      1   
+            typeof<sbyte>,      1
             typeof<byte>,       1
             typeof<int16>,      1
             typeof<uint16>,     1
@@ -98,17 +96,16 @@ module AttributeDescriptionExtensions =
             typeof<V4i>,        4
             typeof<V4f>,        4
             typeof<V4d>,        4
-            typeof<M44f>,       16
 
             typeof<C3f>,        3
             typeof<C4f>,        4
             typeof<C4b>,        GL_BGRA
-        ] 
+        ]
 
     let private baseTypes =
         Dict.ofList [
             typeof<bool>,       typeof<bool>
-            typeof<sbyte>,      typeof<sbyte>   
+            typeof<sbyte>,      typeof<sbyte>
             typeof<byte>,       typeof<byte>
             typeof<int16>,      typeof<int16>
             typeof<uint16>,     typeof<uint16>
@@ -135,7 +132,7 @@ module AttributeDescriptionExtensions =
             typeof<C4f>,        typeof<float32>
 
             typeof<M44f>,       typeof<float32>
-        ] 
+        ]
 
     let internal glTypes =
         Dict.ofList [
@@ -152,37 +149,22 @@ module AttributeDescriptionExtensions =
             typeof<M44f>, VertexAttribPointerType.Float
         ]
 
-    // some useful extensions for AttributeDescription
-    type AttributeDescription with
+    // some useful extensions for AttributeBufferDescription
+    type AttributeBufferDescription with
         member x.ElementSize =
             Marshal.SizeOf(x.Type)
 
         member x.Dimension =
             match dimensions.TryGetValue x.Type with
-                | (true,v) -> v
-                | _ -> failwithf "[GL] could not find dimensions for: %A, valid are: %A" x.Type (dimensions |> Seq.toList)
+            | (true, v) -> v
+            | _ -> failf "could not find dimensions for: %A, valid are: %A" x.Type (dimensions |> Seq.toList)
 
         member x.BaseType =
             match baseTypes.TryGetValue x.Type with
-                | (true,v) -> v
-                | _ -> failwithf "[GL] could not find baseTypes for: %A, valid are: %A" x.Type (baseTypes |> Seq.toList)
-
+            | (true, v) -> v
+            | _ -> failf "could not find baseTypes for: %A, valid are: %A" x.Type (baseTypes |> Seq.toList)
 
         member x.VertexAttributeType =
             match glTypes.TryGetValue x.BaseType with
-                | (true,v) -> v
-                |  _ -> failwithf "[GL] could not find glTypes for: %A, valid are: %A" x.BaseType (glTypes |> Seq.toList)
-
-
-//
-//[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-//module AttributeDescription =
-//
-//    let simple (t : Type) (buffer : Buffer) =
-//        { Type = t; Frequency = PerVertex; Normalized = false; Stride = 0; Offset = 0; Buffer = buffer }
-//
-//    let normalized (t : Type) (buffer : Buffer) =
-//        { Type = t; Frequency = PerVertex; Normalized = false; Stride = 0; Offset = 0; Buffer = buffer }
-//
-
-
+            | (true, v) -> v
+            |  _ -> failf "could not find glTypes for: %A, valid are: %A" x.BaseType (glTypes |> Seq.toList)

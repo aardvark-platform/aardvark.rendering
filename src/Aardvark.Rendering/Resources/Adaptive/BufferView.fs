@@ -8,7 +8,7 @@ open Aardvark.Base
 type BufferView(b : aval<IBuffer>, elementType : Type, [<Optional; DefaultParameterValue(0)>] offset : int, [<Optional; DefaultParameterValue(0)>] stride : int) =
     let singleValue =
         match b with
-        | :? SingleValueBuffer as nb -> Some nb.Value
+        | :? ISingleValueBuffer as nb -> Some nb.Value
         | _ -> None
 
     member x.Buffer = b

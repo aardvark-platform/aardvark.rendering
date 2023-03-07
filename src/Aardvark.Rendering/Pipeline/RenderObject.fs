@@ -54,9 +54,20 @@ and [<CustomEquality; CustomComparison>] RenderObject =
         member x.AttributeScope = x.AttributeScope
 
     member x.Path =
-        if System.Object.ReferenceEquals(x.AttributeScope,Ag.Scope.Root)
-        then "EMPTY"
+        if System.Object.ReferenceEquals(x.AttributeScope,Ag.Scope.Root) then "EMPTY"
         else string x.AttributeScope
+
+    /// Tries to retrieve the buffer view of the given attribute and returns if it is and per-instance attribute.
+    member x.TryGetAttribute(name : Symbol) =
+        match x.VertexAttributes.TryGetAttribute name with
+        | Some value -> Some (value, false)
+        | _  ->
+            if x.InstanceAttributes <> null then
+                match x.InstanceAttributes.TryGetAttribute name with
+                | Some value -> Some (value, true)
+                | _ -> None
+            else
+                None
 
     static member Create() =
         { Id = newId()

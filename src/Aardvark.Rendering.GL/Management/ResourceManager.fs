@@ -80,6 +80,36 @@ type ImageBinding =
         format : SizedInternalFormat
     }
 
+[<RequireQualifiedAccess>]
+type AttributeContent =
+    | Value  of value: IAdaptiveValue
+    | Buffer of buffer: IResource<Buffer> * stride: int * offset: int * frequency: AttributeFrequency
+
+    member x.Dispose() =
+        match x with
+        | Buffer (b, _, _, _) -> b.Dispose()
+        | _ -> ()
+
+[<Struct>]
+type AttributeBinding =
+    {
+        Type    : Type
+        Index   : int
+        Content : AttributeContent
+    }
+
+    member x.Dispose() =
+        x.Content.Dispose()
+
+type IndexBinding =
+    {
+        IndexType : OpenGl.Enums.IndexType
+        Buffer    : IResource<Buffer>
+    }
+
+    member x.Dispose() =
+        x.Buffer.Dispose()
+
 type InterfaceSlots = 
     {
         // interface definition sorted by slot
@@ -205,28 +235,15 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
     member x.Context = ctx
 
     member x.CreateBuffer(data : aval<#IBuffer>) =
-        match data with
-        | :? SingleValueBuffer as v ->
-            bufferCache.GetOrCreate(AVal.constant 0, fun () -> {
-                create = fun b      -> new Buffer(ctx, 0n, 0)
-                update = fun h b    -> h
-                delete = fun h      -> ()
-                unwrap = fun _      -> ValueNone
-                info =   fun h      -> ResourceInfo.Zero
-                view =   fun h      -> h.Handle
-                kind = ResourceKind.Buffer
-            })
-
-        | _ ->
-            bufferCache.GetOrCreate<#IBuffer>(data, fun () -> {
-                create = fun b      -> bufferManager.Create b
-                update = fun h b    -> bufferManager.Update(h, b)
-                delete = fun h      -> bufferManager.Delete h
-                unwrap = fun b      -> BufferManager.TryUnwrap b
-                info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
-                view =   fun h      -> h.Handle
-                kind = ResourceKind.Buffer
-            })
+        bufferCache.GetOrCreate<#IBuffer>(data, fun () -> {
+            create = fun b      -> bufferManager.Create b
+            update = fun h b    -> bufferManager.Update(h, b)
+            delete = fun h      -> bufferManager.Delete h
+            unwrap = fun b      -> BufferManager.TryUnwrap b
+            info =   fun h      -> h.SizeInBytes |> Mem |> ResourceInfo
+            view =   fun h      -> h.Handle
+            kind = ResourceKind.Buffer
+        })
 
     member x.CreateBuffer(data : aval<Array>) =
         let buffer = data |> AdaptiveResource.mapNonAdaptive ArrayBuffer
@@ -284,7 +301,6 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                                 ))
                     ArrayBuffer(transformed) :> IBuffer
                 | _ -> failwith "[GL] IndirectBuffer data supposed to be DrawCallInfo[]"
-            | :? SingleValueBuffer as sb -> failwith "TODO"
             | _ -> 
                 buffer
 
@@ -577,48 +593,67 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         let layers = input |> AVal.mapNonAdaptive (fun l -> l.Slices)
         x.CreateImageBinding(texture, level, layers, imageType.Properties)
 
-    member x.CreateVertexInputBinding( bindings : list<int * BufferView * AttributeFrequency * IResource<Buffer, int>>, index : Option<OpenGl.Enums.IndexType * IResource<Buffer, int>>) =
-        let createView (self : AdaptiveToken) (index : int, view : BufferView, frequency : AttributeFrequency, buffer : IResource<Buffer>) =
-            match view.SingleValue with
-                | Some value ->
-                    index, {
-                        Type = view.ElementType
-                        Frequency = frequency
-                        Normalized = false; 
-                        Stride = view.Stride
-                        Offset = view.Offset
-                        Content = Right (value.GetValueUntyped self)
-                    } 
+    member x.CreateVertexInputBinding(bindings : AttributeBinding[], index : IndexBinding option) =
 
-                | _ ->
-                    index, { 
-                        Type = view.ElementType
+        let createAttributeDescription (self : AdaptiveToken) (binding : AttributeBinding) =
+            let description =
+                match binding.Content with
+                | AttributeContent.Value aval ->
+                    let value = aval.GetValueUntyped self
+                    AttributeDescription.Value value
+
+                | AttributeContent.Buffer (buffer, stride, offset, frequency) ->
+                    AttributeDescription.Buffer {
+                        Type = binding.Type
                         Frequency = frequency
-                        Normalized = false; 
-                        Stride = view.Stride
-                        Offset = view.Offset
-                        Content = Left (buffer.Handle.GetValue self)
+                        Normalized = false
+                        Stride = stride
+                        Offset = offset
+                        Buffer = buffer.Handle.GetValue self
                     }
+
+            binding.Index, description
 
         vertexInputCache.GetOrCreate(
             [ bindings :> obj; index :> obj ],
             fun () ->
+                let bindings =
+                    bindings |> Array.map (fun b ->
+                        match b.Content with
+                        | AttributeContent.Value value ->
+                            let conv =
+                                try
+                                    value |> PrimitiveValueConverter.convertValueUntyped b.Type
+                                with
+                                | _ ->
+                                    failf "cannot convert vertex or instance attribute value from '%A' to '%A'" value.ContentType b.Type
+
+                            { b with Content = AttributeContent.Value conv }
+
+                        | _ ->
+                            b
+                    )
+
                 { new Resource<VertexInputBindingHandle, int>(ResourceKind.VertexArrayObject) with
-
                     member x.View a = 0
-
                     member x.GetInfo _ = ResourceInfo.Zero
 
                     member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<VertexInputBindingHandle>) =
-                        let attributes = bindings |> List.map (createView token)
-                        let index = match index with | Some (_,i) -> i.Handle.GetValue token |> Some | _ -> None
+                        let attributes =
+                            bindings |> Array.map (createAttributeDescription token)
+
+                        let index =
+                            match index with
+                            | Some i -> i.Buffer.Handle.GetValue token |> Some
+                            | _ -> None
+
                         match old with
-                            | Some old ->
-                                ctx.Update(old, index, attributes)
-                                old
-                            | None ->
-                                ctx.CreateVertexInputBinding(index, attributes)
-                        
+                        | Some old ->
+                            ctx.Update(old, index, attributes)
+                            old
+                        | None ->
+                            ctx.CreateVertexInputBinding(index, attributes)
+
                     member x.Destroy vao =
                         ctx.Delete vao
                 }

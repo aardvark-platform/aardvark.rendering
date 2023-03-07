@@ -1,64 +1,66 @@
 ﻿namespace Aardvark.Rendering
 
-open Aardvark.Base
 open FSharp.Data.Adaptive
 open FSharp.Data.Adaptive.Operators
 open System
 
-/// Value contained in a SingleValueBuffer.
-[<RequireQualifiedAccess>]
-type internal SingleValue =
-    | Float   of aval<V4f>
-    | Integer of aval<V4i>
+/// Interface for attribute buffers containing a single value that is repeated for all vertices or instances.
+type ISingleValueBuffer =
+    inherit IAdaptiveValue<IBuffer>
+
+    /// The contained value.
+    abstract member Value : IAdaptiveValue
 
 /// Attribute buffer containing a single value that is repeated for all vertices or instances.
-type SingleValueBuffer internal (value : SingleValue) =
-    inherit AVal.AbstractVal<IBuffer>()
+type SingleValueBuffer<'T when 'T : unmanaged>(value : aval<'T>) =
 
-    static let zero = SingleValueBuffer V4f.Zero
+    static let zero = SingleValueBuffer(Unchecked.defaultof<'T>)
 
-    let buffer =
-        match value with
-        | SingleValue.Float f -> f |> AVal.map (Array.singleton >> ArrayBuffer)
-        | SingleValue.Integer i -> i |> AVal.map (Array.singleton >> ArrayBuffer)
+    [<Obsolete("Use SingleValueBuffer<'T>.Zero instead.")>]
+    new() = SingleValueBuffer(~~Unchecked.defaultof<'T>)
 
-    let value : IAdaptiveValue =
-        match value with
-        | SingleValue.Float f -> f
-        | SingleValue.Integer i -> i
+    new(value : 'T) = SingleValueBuffer(~~value)
 
-    member x.Value = value
-
-    new(value : aval<V4f>)     = SingleValueBuffer(SingleValue.Float value)
-    new(value : aval<V3f>)     = SingleValueBuffer(value |> AVal.mapNonAdaptive v4f)
-    new(value : aval<V2f>)     = SingleValueBuffer(value |> AVal.mapNonAdaptive v4f)
-    new(value : aval<float32>) = SingleValueBuffer(value |> AVal.mapNonAdaptive (fun v -> V4f(v)))
-
-    new(value : aval<V4i>)   = SingleValueBuffer(SingleValue.Integer value)
-    new(value : aval<V3i>)   = SingleValueBuffer(value |> AVal.mapNonAdaptive v4i)
-    new(value : aval<V2i>)   = SingleValueBuffer(value |> AVal.mapNonAdaptive v4i)
-    new(value : aval<int32>) = SingleValueBuffer(value |> AVal.mapNonAdaptive (fun v -> V4i(v)))
-
-    new(value : V4f)     = SingleValueBuffer(~~value)
-    new(value : V3f)     = SingleValueBuffer(~~value)
-    new(value : V2f)     = SingleValueBuffer(~~value)
-    new(value : float32) = SingleValueBuffer(~~value)
-
-    new(value : V4i)   = SingleValueBuffer(~~value)
-    new(value : V3i)   = SingleValueBuffer(~~value)
-    new(value : V2i)   = SingleValueBuffer(~~value)
-    new(value : int32) = SingleValueBuffer(~~value)
-
-    [<Obsolete("Use SingleValueBuffer.Zero instead.")>]
-    new() = SingleValueBuffer(V4f.Zero)
-
+    /// Buffer containing zero as value.
     static member Zero = zero
 
-    override x.Compute(token) : IBuffer =
-        buffer.GetValue token
+    /// The contained value.
+    member x.Value = value
+
+    /// Returns the value wrapped in an ArrayBuffer.
+    /// Note: The backend should not rely on this if it is used as vertex or instance attribute, but
+    /// evaluate the adaptive value directly and perform any necessary conversions.
+    member private x.GetValue(token : AdaptiveToken) : IBuffer =
+        ArrayBuffer [| value.GetValue token |]
 
     override x.GetHashCode() = value.GetHashCode()
-    override x.Equals o =
-        match o with
-        | :? SingleValueBuffer as o -> value = o.Value
+    override x.Equals obj =
+        match obj with
+        | :? SingleValueBuffer<'T> as other -> value = other.Value
         | _ -> false
+
+    interface ISingleValueBuffer with
+        member x.Value = value
+        member x.ContentType = typeof<IBuffer>
+        member x.IsConstant = value.IsConstant
+
+        member x.Level
+            with get() = value.Level
+            and set(level) = value.Level <- level
+
+        member x.OutOfDate
+            with get() = value.OutOfDate
+            and set(outOfDate) = value.OutOfDate <- outOfDate
+
+        member x.Tag
+            with get() = value.Tag
+            and set(tag) = value.Tag <- tag
+
+        member x.Outputs = value.Outputs
+        member x.Weak = value.Weak
+        member x.GetValue(t) = x.GetValue(t)
+        member x.GetValueUntyped(t) = x.GetValue(t)
+        member x.Accept(visitor) = value.Accept(visitor)
+        member x.AllInputsProcessed(obj) = value.AllInputsProcessed(obj)
+        member x.InputChanged(t, o) = value.InputChanged(t, o)
+        member x.Mark() = value.Mark()
