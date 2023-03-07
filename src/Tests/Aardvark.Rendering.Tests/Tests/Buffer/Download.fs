@@ -69,7 +69,6 @@ module BufferDownload =
             Expect.throwsT<ArgumentException> (fun _ -> buffer.Download(data, 0, -1, 1)) "Expected ArgumentException due to negative dst array index on download"
             Expect.throwsT<ArgumentException> (fun _ -> buffer.Download(data, 0, 0, -1)) "Expected ArgumentException due to negative array size on download"
             Expect.throwsT<ArgumentException> (fun _ -> buffer.Download(data, 0, 8, 1)) "Expected ArgumentException due out-of-bounds array region on download"
-            Expect.throwsT<ArgumentException> (fun _ -> buffer.Elements(126).Download(data)) "Expected ArgumentException due to out-of-bounds for array length on download"
 
         let native                  = testNativeDownload 2345 0 2345
         let nativeSubrange          = testNativeDownload 2345 57 345

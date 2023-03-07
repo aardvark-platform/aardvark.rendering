@@ -264,13 +264,13 @@ let main argv =
     //Aardvark.Init()
     //CSTest.run()
 
-    let cfg =
-        let job = Job.Default.WithToolchain(InProcess.Emit.InProcessEmitToolchain.Instance)
-        ManualConfig.Create(DefaultConfig.Instance).AddJob(job)
+    //let cfg =
+    //    let job = Job.Default.WithToolchain(InProcess.Emit.InProcessEmitToolchain.Instance)
+    //    ManualConfig.Create(DefaultConfig.Instance).AddJob(job)
 
-    BenchmarkSwitcher.FromAssembly(typeof<Texture.TextureCompression.OnTheFlyCompression>.Assembly).Run(argv, cfg) |> ignore;
+    //BenchmarkSwitcher.FromAssembly(typeof<Texture.TextureCompression.OnTheFlyCompression>.Assembly).Run(argv, cfg) |> ignore;
 
-    exit 0
+    //exit 0
     //``Texture Tests``.runAllTests()
     //testCompile()
 
@@ -278,6 +278,8 @@ let main argv =
 
     //testDownloadSlice()
     //testCopySlice()
+
+    BenchmarkRunner.Run<StatsBench.StatsTest>() |> ignore
 
 
     //testTextureCubeArray()

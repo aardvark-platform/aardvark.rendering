@@ -80,8 +80,10 @@ module VkAccessFlags =
                 ResourceAccess.ColorWrite,                 VkAccessFlags.ColorAttachmentWriteBit
                 ResourceAccess.DepthStencilRead,           VkAccessFlags.DepthStencilAttachmentReadBit
                 ResourceAccess.DepthStencilWrite,          VkAccessFlags.DepthStencilAttachmentWriteBit
-                ResourceAccess.AccelerationStructureRead , VkAccessFlags.AccelerationStructureReadBitKhr
+                ResourceAccess.AccelerationStructureRead,  VkAccessFlags.AccelerationStructureReadBitKhr
                 ResourceAccess.AccelerationStructureWrite, VkAccessFlags.AccelerationStructureWriteBitKhr
+                ResourceAccess.HostRead,                   VkAccessFlags.HostReadBit
+                ResourceAccess.HostWrite,                  VkAccessFlags.HostWriteBit
             ]
 
         let ofStageFlags =
@@ -188,7 +190,6 @@ module VkImageLayout =
     let ofTextureLayout =
         LookupTable.lookupTable [
             TextureLayout.Undefined, VkImageLayout.Undefined
-            TextureLayout.Sample, VkImageLayout.ShaderReadOnlyOptimal
             TextureLayout.ShaderRead, VkImageLayout.ShaderReadOnlyOptimal
             TextureLayout.ShaderReadWrite, VkImageLayout.General
             TextureLayout.ShaderWrite, VkImageLayout.General

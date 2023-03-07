@@ -101,7 +101,7 @@ type ICommandStream =
     abstract member TexParameterf : target : int * name : TextureParameterName * value : float32 -> unit
     abstract member BindSampler  : slot : int * sampler : int -> unit
     abstract member BindSampler  : slot : int * sampler : nativeptr<int> -> unit
-    abstract member BindTexturesAndSamplers  : textureBinding : TextureBinding -> unit
+    abstract member BindTexturesAndSamplers  : textureBinding : TextureArrayBinding -> unit
 
     abstract member BindImageTexture : unit : int * texture : int * level : int * layered : bool * layer : int * access : TextureAccess * format : TextureFormat -> unit
     abstract member BindImageTexture : unit : int * access : TextureAccess * pBinding : nativeptr<ImageBinding> -> unit
@@ -718,7 +718,7 @@ module GLAssemblerExtensions =
             s.PushArg(slot)
             s.Call(OpenGl.Pointers.BindSampler)
 
-        member this.BindTexturesAndSamplers (handle : TextureBinding) =
+        member this.BindTexturesAndSamplers (handle : TextureArrayBinding) =
             s.BeginCall(4)
             s.PushArg(handle.textures |> NativePtr.toNativeInt)
             s.PushArg(handle.targets |> NativePtr.toNativeInt)
@@ -979,7 +979,7 @@ module GLAssemblerExtensions =
             member this.BindSampler(slot: int, sampler: nativeptr<int>) = this.BindSampler(slot, sampler)
             member this.BindTexture(target: TextureTarget, t: int) = this.BindTexture(target, t)
             member this.BindTexture(target: nativeptr<TextureTarget>, t: nativeptr<int>) = this.BindTexture(target, t)
-            member this.BindTexturesAndSamplers(textureBinding: TextureBinding) = this.BindTexturesAndSamplers(textureBinding)
+            member this.BindTexturesAndSamplers(textureBinding: TextureArrayBinding) = this.BindTexturesAndSamplers(textureBinding)
             member this.BindVertexAttributes(ctx: nativeptr<nativeint>, handle: VertexInputBindingHandle) = this.BindVertexAttributes(ctx, handle)
             member this.BufferSubData(target, offset, size, data) = this.BufferSubData(target, offset, size, data)
             member this.BufferSubDataPtr(target, offset, size, pData) = this.BufferSubDataPtr(target, offset, size, pData)
@@ -1099,7 +1099,7 @@ module GLAssemblerExtensions =
             member x.BindSampler(slot: int, sampler: nativeptr<int>) = inner.BindSampler(slot, sampler); x.Append("BindSampler", slot, sampler)
             member x.BindTexture(target: TextureTarget, t: int) = inner.BindTexture(target, t); x.Append("BindTexture", target, t)
             member x.BindTexture(target: nativeptr<TextureTarget>, t: nativeptr<int>) = inner.BindTexture(target, t); x.Append("BindTexture", target, t)
-            member x.BindTexturesAndSamplers(textureBinding: TextureBinding) = inner.BindTexturesAndSamplers(textureBinding); x.Append("BindTexturesAndSamplers", textureBinding)
+            member x.BindTexturesAndSamplers(textureBinding: TextureArrayBinding) = inner.BindTexturesAndSamplers(textureBinding); x.Append("BindTexturesAndSamplers", textureBinding)
             member x.BindVertexAttributes(ctx: nativeptr<nativeint>, handle: VertexInputBindingHandle) = inner.BindVertexAttributes(ctx, handle); x.Append("BindVertexAttributes", ctx, handle)
             member x.BufferSubData(target, offset, size, data) = inner.BufferSubData(target, offset, size, data); x.Append("BufferSubData", target, offset, size, data)
             member x.BufferSubDataPtr(target, offset, size, pData) = inner.BufferSubDataPtr(target, offset, size, pData); x.Append("BufferSubDataPtr", target, offset, size, pData)
@@ -1208,7 +1208,7 @@ module GLAssemblerExtensions =
         member inline x.BindStorageBuffer(slot : int, view : IResource<Buffer, int>) =
             x.BindBufferBase(BufferRangeTarget.ShaderStorageBuffer, slot, view.Pointer)
 
-        member inline x.BindTexture (texture : IResource<Texture, V2i>) =
+        member inline x.BindTexture (texture : IResource<Texture, TextureBinding>) =
             let texturePtr : nativeptr<int> = NativePtr.ofNativeInt (NativePtr.toNativeInt texture.Pointer)
             let targetPtr : nativeptr<TextureTarget> = NativePtr.ofNativeInt (NativePtr.toNativeInt texture.Pointer + 4n)
             x.BindTexture(targetPtr, texturePtr)
@@ -1258,7 +1258,7 @@ module GLAssemblerExtensions =
         member inline x.ClearDepth(c : IResource<float, float>) = x.ClearDepth(c.Pointer)
         member inline x.ClearStencil(c : IResource<int, int>) = x.ClearStencil(c.Pointer)
 
-        member inline x.BindTexturesAndSamplers (textureBinding : IResource<TextureBinding, TextureBinding>) =
+        member inline x.BindTexturesAndSamplers (textureBinding : IResource<TextureArrayBinding, TextureArrayBinding>) =
             let handle = textureBinding.Update(AdaptiveToken.Top, RenderToken.Empty); textureBinding.Handle.GetValue()
             if handle.count > 0 then
                 x.BindTexturesAndSamplers(handle)

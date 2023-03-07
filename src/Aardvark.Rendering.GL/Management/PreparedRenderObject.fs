@@ -14,22 +14,9 @@ open Aardvark.Base.Runtime
 open FShade.GLSL
 open System.Threading
 
-[<AutoOpen>]
-module private Hacky =
-
-    let toBufferCache = 
-        UnaryCache<IAdaptiveValue, aval<IBuffer>>(fun m ->
-            AVal.custom (fun t -> 
-                match m.GetValueUntyped t with
-                    | :? Array as a -> ArrayBuffer(a) :> IBuffer
-                    | :? IBuffer as b -> b
-                    | _ -> failwith "invalid storage buffer content"
-            )
-        )
-
-type TextureBindingSlot = 
-    | ArrayBinding of IResource<TextureBinding, TextureBinding>
-    | SingleBinding of IResource<Texture, V2i> * IResource<Sampler, int>
+type TextureBindingSlot =
+    | ArrayBinding of IResource<TextureArrayBinding, TextureArrayBinding>
+    | SingleBinding of IResource<Texture, TextureBinding> * IResource<Sampler, int>
 
 type PreparedPipelineState =
     {
@@ -151,169 +138,175 @@ type PreparedPipelineState =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module PreparedPipelineState =
 
-    type ResourceManager with 
-        member x.CreateUniformBuffers(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) = 
+    let private (|NullUniform|_|) (value : IAdaptiveValue option) =
+        match value with
+        | Some value when Object.ReferenceEquals(value, null) ->
+            Some ()
+        | _ ->
+            None
+
+    let private (|CastUniformResource|_|) (value : IAdaptiveValue option) =
+        match value with
+        | Some value when typeof<'T>.IsAssignableFrom value.ContentType ->
+            Some (AdaptiveResource.cast<'T> value)
+        | _ ->
+            None
+
+    type ResourceManager with
+        member x.CreateUniformBuffers(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) =
             iface.uniformBuffers
-                |> Array.map (fun (_,block) ->
-                    struct (block.ubBinding, x.CreateUniformBuffer(scope, block, uniforms))
-                   )
-         
-        member x.CreateStorageBuffers(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) = 
-            let mutable res = Array.zeroCreate iface.storageBuffers.Length
-            let mutable oi = 0
+            |> Array.map (fun (_, block) ->
+                struct (block.ubBinding, x.CreateUniformBuffer(scope, block, uniforms))
+            )
 
-            for (_,buf) in iface.storageBuffers do
-                match uniforms.TryGetUniform(scope, Symbol.Create buf.ssbName) with
-                | Some (:? aval<IBuffer> as b) ->
-                    let buffer = x.CreateBuffer(b)
-                    res.[oi] <- struct (buf.ssbBinding, buffer)
-                    oi <- oi + 1
-                | Some m ->
-                    let o = toBufferCache.Invoke(m)
-                    let buffer = x.CreateBuffer(o)
-                    res.[oi] <- struct (buf.ssbBinding, buffer)
-                    oi <- oi + 1
-                | _ ->
-                    // missing storage buffer
-                    ()
+        member x.CreateStorageBuffers(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) =
+            iface.storageBuffers |> Array.map (fun (_, block) ->
+                let bufferName = Sym.ofString block.ssbName
 
-            if oi <> res.Length then Array.Resize(&res, oi)
-            res
+                let buffer =
+                    match uniforms.TryGetUniform(scope, bufferName) with
+                    | NullUniform ->
+                        failf "storage buffer '%A' is null" bufferName
 
+                    | CastUniformResource (buffer : aval<IBuffer>) ->
+                        x.CreateBuffer(buffer)
 
-        member x.CreateTextureBindings(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) = 
+                    | CastUniformResource (array : aval<Array>) ->
+                        x.CreateBuffer(array)
 
+                    | Some value ->
+                        failf "invalid type '%A' for storage buffer '%A' (expected a subtype of IBuffer or Array)" value.ContentType bufferName
+
+                    | _ ->
+                        failf "could not find storage buffer '%A'" bufferName
+
+                struct (block.ssbBinding, buffer)
+            )
+
+        member x.CreateTextureBindings(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) =
             let samplerModifier =
                 match uniforms.TryGetUniform(scope, DefaultSemantic.SamplerStateModifier) with
-                | Some(:? aval<Symbol -> SamplerState -> SamplerState> as mode) ->
+                | Some (:? aval<Symbol -> SamplerState -> SamplerState> as mode) ->
                     Some mode
                 | _ ->
                     None
 
-            let createSampler (sam : FShade.SamplerState) (tex : Symbol) =
+            let createSampler (textureName : Symbol) (samplerState : FShade.SamplerState) =
                 let sampler =
                     match samplerModifier with
                     | Some modifier ->
-                        let samplerState = x.GetSamplerStateDescription(sam)
-                        x.GetDynamicSamplerState(tex, samplerState, modifier)
+                        let samplerState = x.GetSamplerStateDescription(samplerState)
+                        x.GetDynamicSamplerState(textureName, samplerState, modifier)
                     | None ->
-                        x.GetStaticSamplerState(sam)
+                        x.GetStaticSamplerState(samplerState)
 
                 x.CreateSampler(sampler)
 
+            let createTexture (textureName : Symbol) (samplerType : GLSLSamplerType) =
+                match uniforms.TryGetUniform(scope, textureName) with
+                | NullUniform ->
+                    failf "texture '%A' is null" textureName
+
+                | CastUniformResource (texture : aval<ITexture>) ->
+                    x.CreateTexture(texture, samplerType)
+
+                | CastUniformResource (level : aval<ITextureLevel>) ->
+                    x.CreateTexture(level, samplerType)
+
+                | Some t ->
+                    failf "invalid type '%A' for texture '%A' (expected a subtype of ITexture or ITextureLevel)" t.ContentType textureName
+
+                | _ ->
+                    failf "could not find texture '%A'" textureName
+
             iface.samplers
-            |> Array.choose (fun (_, u) ->
-                // check if sampler is an array
-                //  -> compose (Texture, SamplerState)[] resource
-                //      * case 1: individual slots
-                //      * case 2: dependent on aval<ITexture[]> and single SamplerState
-                // otherwise
-                //  -> create singe (Texture, SamplerState) resource
-                if u.samplerCount = 0 || u.samplerTextures |> List.isEmpty then
-                    None
-                elif u.samplerCount = 1 then
-                    let (texName, sam) = u.samplerTextures.Head
-                    let texSym = Symbol.Create texName
+            |> Array.map (fun (_, sam) ->
+                let slotRange = Range1i.FromMinAndSize(sam.samplerBinding, sam.samplerCount - 1)
 
-                    let samRes = createSampler sam texSym
+                // Check if we have a sampler array with a single sampler state
+                // -> Expect a aval<ITexture[]>
+                let arrayBinding =
+                    sam.Array |> Option.bind (fun (textureName, samplerState) ->
+                        let textureName = Symbol.Create textureName
 
-                    let texRes =
-                        match uniforms.TryGetUniform(scope, texSym) with
-                        | Some (:? aval<ITexture> as value) -> x.CreateTexture(value, u.samplerType)
-                        | Some (:? aval<IBackendTexture> as value) -> x.CreateTexture(value, u.samplerType)
-                        | Some (:? aval<ITextureLevel> as value) -> x.CreateTexture(value, u.samplerType)
-                        | Some v ->
-                            Log.error "[GL] invalid texture type: %s %s -> expecting aval<ITexture> or aval<IBackendTexture>" texName (v.GetType().Name)
-                            x.CreateTexture(nullTextureConst, u.samplerType)
-                        | None ->
-                            Log.error "[GL] texture uniform \"%s\" not found" texName
-                            x.CreateTexture(nullTextureConst, u.samplerType)
+                        match uniforms.TryGetUniform(Ag.Scope.Root, textureName) with
+                        | NullUniform ->
+                            failf "texture array '%A' is null" textureName
 
-                    Some struct(Range1i(u.samplerBinding), (SingleBinding (texRes, samRes)))
+                        | Some (:? aval<ITexture[]> as textureArray) ->
+                            let sampler = createSampler textureName samplerState
+                            let textureArray = x.CreateTextureArray(sam.samplerCount, textureArray, sam.samplerType)
+                            let arrayBinding = x.CreateTextureBinding(slotRange, textureArray, sampler)
+                            Some <| ArrayBinding arrayBinding
 
-                else
-                    // FShade allows each slot to be its own unique texture (uniform) and sampler state
-                    // check for special cases:
-                    //  1. all the same sampler state
-                    //  2. texture uniform names of form TextureUniformName<[0..N-1]>
-                    //  && uniform of type ITexture[] is provided
-                    let slotRange = Range1i.FromMinAndSize(u.samplerBinding, u.samplerCount - 1)
+                        | Some t ->
+                            failf "invalid type '%A' for texture array '%A' (expected ITexture[])" t.ContentType textureName
 
-                    let arraySingle =
-                        u.Array |> Option.bind (fun (name, sampler) ->
-                            let texSym = Symbol.Create name
-                            match uniforms.TryGetUniform(scope, texSym) with
-                            | Some (:? aval<ITexture[]> as texArr) ->
-                                // create single value (startSlot + count + sam + tex[])
-                                let samRes = createSampler sampler texSym
-                                let texArr = x.CreateTextureArray(u.samplerCount, texArr, u.samplerType)
-                                let arrayBinding = x.CreateTextureBinding(slotRange, texArr, samRes)
-                                Some arrayBinding
+                        | _ ->
+                            None
+                    )
 
-                            | Some u ->
-                                Log.error "[GL] invalid texture type %s: %s -> expecting aval<ITexture[]>" name (u.GetType().Name)
-                                None
+                let binding =
+                    arrayBinding |> Option.defaultWith (fun _ ->
+                        match sam.samplerTextures with
+                        | [] ->
+                            failf "could not get sampler information for: %A" sam
 
-                            | _ -> // could not find texture array uniform -> try individual
-                                None
-                        )
+                        // Plain single texture with sampler state
+                        | [textureName, samplerState] ->
+                            let textureName = Symbol.Create textureName
+                            let texture = createTexture textureName sam.samplerType
+                            let sampler = createSampler textureName samplerState
+                            SingleBinding (texture, sampler)
 
-                    match arraySingle with
-                    | Some binding ->
-                        Some struct(slotRange, ArrayBinding binding)
-                    | _ ->
-                        // create array texture binding
-                        let textures = u.samplerTextures |> List.mapi (fun i (texName, sam) ->
-                            let texSym = Symbol.Create texName
+                        // Multiple textures with individual sampler states
+                        | descriptions ->
+                            let textures =
+                                descriptions
+                                |> List.map (fun (textureName, samplerState) ->
+                                    let textureName = Symbol.Create textureName
+                                    let texture = createTexture textureName sam.samplerType
+                                    let sampler = createSampler textureName samplerState
+                                    texture, sampler
+                                )
+                                |> List.toArray
 
-                            let texRes =
-                                match uniforms.TryGetUniform(scope, texSym) with
-                                | Some (:? aval<ITexture> as value) -> Some <| x.CreateTexture(value, u.samplerType)
-                                | Some (:? aval<IBackendTexture> as value) -> Some <| x.CreateTexture(value, u.samplerType)
-                                | Some u ->
-                                    Log.error "[GL] invalid texture type: %s %s -> expecting aval<ITexture> or aval<IBackendTexture>" texName (u.GetType().Name)
-                                    None
-                                | None ->
-                                    Log.error "[GL] texture uniform \"%s\" not found" texName
-                                    None
+                            let binding = x.CreateTextureBinding(slotRange, textures)
 
-                            match texRes with
-                            | Some texRes ->
-                                let samRes = createSampler sam texSym
-                                Some (texRes, samRes)
-                            | None -> None
-                        )
+                            // fix texture ref-count
+                            for (t, s) in textures do
+                                t.RemoveRef()
+                                s.RemoveRef()
 
-                        let binding = x.CreateTextureBinding(slotRange, textures)
+                            ArrayBinding binding
+                    )
 
-                        // fix texture ref-count
-                        textures |> List.iter (fun v ->
-                            match v with
-                            | Some (t, s) -> t.RemoveRef(); s.RemoveRef()
-                            | None -> ()
-                        )
-
-                        Some struct(slotRange, (ArrayBinding (binding)))
-                )
+                struct (slotRange, binding)
+            )
 
         member x.CreateImageBindings(iface : InterfaceSlots, uniforms : IUniformProvider, scope : Ag.Scope) =
             iface.images
-            |> Array.map (fun (_, i) ->
+            |> Array.map (fun (_, image) ->
                 let binding =
-                    match uniforms.TryGetUniform(scope, Sym.ofString i.imageName) with
-                    | Some (:? aval<ITexture> as texture) ->
-                        x.CreateImageBinding(texture, i.imageType)
+                    let imageName = Symbol.Create image.imageName
 
-                    | Some (:? aval<ITextureLevel> as level) ->
-                        x.CreateImageBinding(level, i.imageType)
+                    match uniforms.TryGetUniform(scope, imageName) with
+                    | NullUniform ->
+                        failf "storage image '%A' is null" imageName
 
-                    | Some _ ->
-                        failf "invalid type for image %A (%A)" i.imageName (i.GetType())
+                    | CastUniformResource (texture : aval<ITexture>) ->
+                        x.CreateImageBinding(texture, image.imageType)
 
-                    | _ ->
-                        failf "image uniform \"%s\" not found" i.imageName
+                    | CastUniformResource (level : aval<ITextureLevel>) ->
+                        x.CreateImageBinding(level, image.imageType)
 
-                struct (i.imageBinding, binding)
+                    | Some i ->
+                        failf "invalid type '%A' for storage image '%A' (expected a subtype of ITexture or ITextureLevel)" i.ContentType imageName
+
+                    | None ->
+                        failf "could not find storage image '%A'" imageName
+
+                struct (image.imageBinding, binding)
             )
 
     let ofRenderObject (fboSignature : IFramebufferSignature) (x : ResourceManager) (rj : RenderObject) =

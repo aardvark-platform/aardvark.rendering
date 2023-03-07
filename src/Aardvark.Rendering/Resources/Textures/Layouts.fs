@@ -1,15 +1,14 @@
 ﻿namespace Aardvark.Rendering
 
 type TextureLayout =
-    | Undefined                 = 0
-    | Sample                    = 1
-    | TransferRead              = 2
-    | TransferWrite             = 3
-    | ShaderRead                = 4
-    | ShaderWrite               = 5
-    | ShaderReadWrite           = 6
-    | ColorAttachment           = 7
-    | DepthStencil              = 8
-    | DepthStencilRead          = 9
-    | General                   = 10
-    | Present                   = 11
+    | Undefined         = 0
+    | TransferRead      = 1
+    | TransferWrite     = 2
+    | ShaderRead        = 3
+    | ShaderWrite       = 4
+    | ShaderReadWrite   = 5
+    | ColorAttachment   = 6
+    | DepthStencil      = 7
+    | DepthStencilRead  = 8
+    | General           = 9
+    | Present           = 10

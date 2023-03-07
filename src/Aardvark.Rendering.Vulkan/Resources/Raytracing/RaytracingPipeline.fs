@@ -31,8 +31,6 @@ type RaytracingPipeline(device : Device, handle : VkPipeline, description : Rayt
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RaytracingPipeline =
 
-    let private pMain = CStr.malloc "main"
-
     let private getStageIndex (stage : Option<RaytracingStageInfo>) =
         match stage with
         | Some s -> s.Index
@@ -55,6 +53,8 @@ module RaytracingPipeline =
 
         let handle =
             native {
+                let! pMain = "main"
+
                 let! pStages = stages |> Array.map (fun s ->
                     VkPipelineShaderStageCreateInfo(
                         VkPipelineShaderStageCreateFlags.None,
