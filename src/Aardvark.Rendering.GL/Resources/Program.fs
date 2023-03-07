@@ -772,7 +772,11 @@ module ProgramExtensions =
         member x.Delete(p : Program) =
             p.Dispose()
 
+        // [<Obsolete>] ??
         member x.TryCompileComputeProgram(id : string, code : string, iface : GLSL.GLSLProgramInterface) =
+            x.TryCompileComputeProgram(id, lazy(code, iface))
+
+        member x.TryCompileComputeProgram(id : string, codeAndInterface : Lazy<string * GLSL.GLSLProgramInterface>) =
             use __ = x.ResourceLock
 
             let layout =
@@ -791,6 +795,7 @@ module ProgramExtensions =
                     Success program
 
                 | _ ->
+                    let (code, iface) = codeAndInterface.Value
                     match code |> ProgramCompiler.tryCompileCompute x iface with
                     | Success program ->
                         program |> FileCache.write key
