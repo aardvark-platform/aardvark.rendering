@@ -625,8 +625,8 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
                                 try
                                     value |> PrimitiveValueConverter.convertValueUntyped b.Type
                                 with
-                                | _ ->
-                                    failf "cannot convert vertex or instance attribute value from '%A' to '%A'" value.ContentType b.Type
+                                | :? PrimitiveValueConverter.InvalidConversionException as exn ->
+                                    failf "cannot convert vertex or instance attribute value from %A to %A" exn.Source exn.Target
 
                             { b with Content = AttributeContent.Value conv }
 
