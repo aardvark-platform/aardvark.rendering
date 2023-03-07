@@ -19,7 +19,7 @@ module internal PixelFormat =
                 Col.Format.RGBA,      choose PixelFormat.Rgba PixelFormat.RgbaInteger
                 Col.Format.BGRA,      choose PixelFormat.Bgra PixelFormat.RgbaInteger
                 Col.Format.RGBP,      choose PixelFormat.Rgba PixelFormat.RgbaInteger
-                Col.Format.NormalUV,  choose PixelFormat.Rg PixelFormat.RgInteger
+                Col.Format.RG,        choose PixelFormat.Rg PixelFormat.RgInteger
             ]
 
         build false, build true

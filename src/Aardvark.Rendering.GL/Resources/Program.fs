@@ -170,76 +170,76 @@ module ProgramExtensions =
 
 
     module ShaderCompiler =
-        let tryCompileShader (stage : ShaderStage) (code : string) (entryPoint : string) (x : Context) =
-            Operators.using x.ResourceLock (fun _ ->
-                let code = code.Replace(sprintf "%s(" entryPoint, "main(")
+        let private tryCompileShader (stage : ShaderStage) (code : string) (entryPoint : string) (x : Context) =
+            use __ = x.ResourceLock
 
-                if x.Runtime.PrintShaderCode then
-                    let numberdLines = ShaderCodeReporting.withLineNumbers code
-                    Report.Line("Compiling shader:\n{0}", numberdLines)
+            let code = code.Replace(sprintf "%s(" entryPoint, "main(")
 
-                let handle = GL.CreateShader(getShaderType stage)
-                GL.Check "could not create shader"
+            let handle = GL.CreateShader(getShaderType stage)
+            GL.Check "could not create shader"
 
-                GL.ShaderSource(handle, code)
-                GL.Check "could not attach shader source"
+            GL.ShaderSource(handle, code)
+            GL.Check "could not attach shader source"
 
-                GL.CompileShader(handle)
-                GL.Check "could not compile shader"
+            GL.CompileShader(handle)
+            GL.Check "could not compile shader"
 
-                let status = GL.GetShader(handle, ShaderParameter.CompileStatus)
-                GL.Check "could not get shader status"
+            let status = GL.GetShader(handle, ShaderParameter.CompileStatus)
+            GL.Check "could not get shader status"
 
-                let log = GL.GetShaderInfoLog handle
+            let log = GL.GetShaderInfoLog handle
 
-                let topologies =
-                    match stage with
-                    | ShaderStage.Geometry ->
-                        let inRx = System.Text.RegularExpressions.Regex @"layout\((?<top>[a-zA-Z_]+)\)[ \t]*in[ \t]*;"
-                        let m = inRx.Match code
-                        if m.Success then
-                            match m.Groups.["top"].Value with
-                            | "points" ->
-                                [IndexedGeometryMode.PointList] |> Set.ofList |> Some
+            let topologies =
+                match stage with
+                | ShaderStage.Geometry ->
+                    let inRx = System.Text.RegularExpressions.Regex @"layout\((?<top>[a-zA-Z_]+)\)[ \t]*in[ \t]*;"
+                    let m = inRx.Match code
+                    if m.Success then
+                        match m.Groups.["top"].Value with
+                        | "points" ->
+                            [IndexedGeometryMode.PointList] |> Set.ofList |> Some
 
-                            | "lines" ->
-                                [IndexedGeometryMode.LineList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some
+                        | "lines" ->
+                            [IndexedGeometryMode.LineList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some
 
-                            | "lines_adjacency" ->
-                                [IndexedGeometryMode.LineAdjacencyList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some
+                        | "lines_adjacency" ->
+                            [IndexedGeometryMode.LineAdjacencyList; IndexedGeometryMode.LineStrip] |> Set.ofList |> Some
 
-                            | "triangles"  ->
-                                [IndexedGeometryMode.TriangleList; IndexedGeometryMode.TriangleStrip] |> Set.ofList |> Some
+                        | "triangles"  ->
+                            [IndexedGeometryMode.TriangleList; IndexedGeometryMode.TriangleStrip] |> Set.ofList |> Some
 
-                            | "triangles_adjacency" ->
-                                [IndexedGeometryMode.TriangleAdjacencyList] |> Set.ofList |> Some
+                        | "triangles_adjacency" ->
+                            [IndexedGeometryMode.TriangleAdjacencyList] |> Set.ofList |> Some
 
-                            | v ->
-                                failwithf "unknown geometry shader input topology: %A" v
-                        else
-                            failwith "could not determine geometry shader input topology"
+                        | v ->
+                            failwithf "unknown geometry shader input topology: %A" v
+                    else
+                        failwith "could not determine geometry shader input topology"
 
-                    | _ ->
-                        None
+                | _ ->
+                    None
 
-                if status = 1 then
-                    Success {
-                        Context = x
-                        Handle = handle
-                        Stage = stage
-                        SupportedModes = topologies
-                    }
-                else
-                    let log =
-                        if String.IsNullOrEmpty log then "ERROR: shader did not compile but log was empty"
-                        else log
+            if status = 1 then
+                Success {
+                    Context = x
+                    Handle = handle
+                    Stage = stage
+                    SupportedModes = topologies
+                }
+            else
+                let log =
+                    if String.IsNullOrEmpty log then "ERROR: shader did not compile but log was empty"
+                    else log
 
-                    Error log
-
-            )
+                Error log
 
         let tryCompileCompute (code : string) (x : Context) =
             use __ = x.ResourceLock
+
+            if x.Runtime.PrintShaderCode then
+                let numberedLines = ShaderCodeReporting.withLineNumbers code
+                Report.Line("Compiling shader:\n{0}", numberedLines)
+
             match tryCompileShader ShaderStage.Compute code "main" x with
             | Success shader ->
                 Success [shader]
@@ -269,9 +269,8 @@ module ProgramExtensions =
                        else code
 
             if x.Runtime.PrintShaderCode then
-                let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
-                let numberdLines = ShaderCodeReporting.withLineNumbers codeWithDefine
-                Report.Line("Compiling shader:\n{0}", numberdLines)
+                let numberedLines = ShaderCodeReporting.withLineNumbers code
+                Report.Line("Compiling shader:\n{0}", numberedLines)
 
             Operators.using x.ResourceLock (fun _ ->
                 let results =
@@ -286,8 +285,8 @@ module ProgramExtensions =
                     Success shaders
                 else
                     let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
-                    let numberdLines = ShaderCodeReporting.withLineNumbers codeWithDefine
-                    Report.Line("Failed to compile shader:\n{0}", numberdLines)
+                    let numberedLines = ShaderCodeReporting.withLineNumbers codeWithDefine
+                    Report.Line("Failed to compile shader:\n{0}", numberedLines)
                     let err = errors |> List.map (fun (stage, e) -> sprintf "%A:\r\n%s" stage (String.indent 1 e)) |> String.concat "\r\n\r\n"
                     Error err
 
@@ -373,8 +372,8 @@ module ProgramExtensions =
                     with
                     | e ->
                              let codeWithDefine = addPreprocessorDefine "__SHADER_STAGE__" code
-                             let numberdLines = ShaderCodeReporting.withLineNumbers codeWithDefine
-                             Report.Line("Failed to build shader interface of:\n{0}", numberdLines)
+                             let numberedLines = ShaderCodeReporting.withLineNumbers codeWithDefine
+                             Report.Line("Failed to build shader interface of:\n{0}", numberedLines)
                              reraise()
                 else
                     let log =
@@ -458,8 +457,8 @@ module ProgramExtensions =
                     Success program
 
                 | Error err ->
-                    let numberdLines = ShaderCodeReporting.withLineNumbers code
-                    Report.Line("Failed to link shader:\n{0}", numberdLines)
+                    let numberedLines = ShaderCodeReporting.withLineNumbers code
+                    Report.Line("Failed to link shader:\n{0}", numberedLines)
                     Error err
             with
             | exn ->
@@ -751,9 +750,6 @@ module ProgramExtensions =
             )
 
     type Aardvark.Rendering.GL.Context with
-
-        member x.TryCompileShader(stage : Aardvark.Rendering.ShaderStage, code : string, entryPoint : string) =
-            x |> ShaderCompiler.tryCompileShader stage code entryPoint
 
         member x.TryGetProgramBinary(prog : Program) =
             use __ = prog.Context.ResourceLock

@@ -70,8 +70,8 @@ module ``Image Format Extensions`` =
                     match fmt.Format with
                     | Col.Format.BW         -> retry Col.Format.Gray
                     | Col.Format.Alpha      -> retry Col.Format.Gray
-                    | Col.Format.Gray       -> retry Col.Format.NormalUV
-                    | Col.Format.NormalUV   -> retry Col.Format.RGB
+                    | Col.Format.Gray       -> retry Col.Format.RG
+                    | Col.Format.RG         -> retry Col.Format.RGB
                     | Col.Format.GrayAlpha  -> retry Col.Format.RGB
                     | Col.Format.RGB        -> retry Col.Format.RGBA
                     | _ ->

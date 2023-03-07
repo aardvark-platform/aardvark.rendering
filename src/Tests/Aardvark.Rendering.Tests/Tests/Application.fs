@@ -98,5 +98,6 @@ module TestApplication =
         backend |> create' config
 
     let createUse f backend =
-        use app = create backend
+        let app = create backend
         f app.Runtime
+        app.Dispose()

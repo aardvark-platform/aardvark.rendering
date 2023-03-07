@@ -1,8 +1,9 @@
 ﻿namespace Aardvark.Rendering.GL
 
-open System.Runtime.InteropServices
+open Aardvark.Base
 open Aardvark.Rendering
 open OpenTK.Graphics.OpenGL4
+open System.Runtime.InteropServices
 
 #nowarn "9"
 
@@ -149,13 +150,15 @@ type VertexBufferBinding =
 [<StructLayout(LayoutKind.Sequential)>]
 type VertexValueBinding =
     struct
-        val mutable public Index       : uint32 
-        val mutable public X           : float32
-        val mutable public Y           : float32
-        val mutable public Z           : float32
-        val mutable public W           : float32
+        val private X : uint64
+        val private Y : uint64
+        val private Z : uint64
+        val private W : uint64
+        val public Index : uint32
+        val public Type : VertexAttribType
 
-        new(i,x,y,z,w) = { Index = i; X = x; Y = y; Z = z; W = w }
+        new (i, t) =
+            { X = 0UL; Y = 0UL; Z = 0UL; W = 0UL; Index = i; Type = t }
     end
 
 [<StructLayout(LayoutKind.Sequential)>]

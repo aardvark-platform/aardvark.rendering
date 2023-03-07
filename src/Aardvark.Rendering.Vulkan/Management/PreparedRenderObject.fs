@@ -267,6 +267,12 @@ type DevicePreparedRenderObjectExtensions private() =
             res
         )
 
+    static let getExpectedType (t : FShade.GLSL.GLSLType) =
+        try
+            GLSLType.toType t
+        with _ ->
+            failf "unexpected vertex type: %A" t
+
     static let prepareObject (this : ResourceManager) (renderPass : RenderPass) (ro : RenderObject) =
 
         let resources = System.Collections.Generic.List<IResourceLocation>()
@@ -279,35 +285,44 @@ type DevicePreparedRenderObjectExtensions private() =
             // TODO: verify type compatibility
             true
 
-        let bufferViews =
+        let attributeBindings =
             programLayout.PipelineInfo.pInputs
-                |> List.sortBy (fun p -> p.paramLocation)
-                |> List.map (fun p ->
-                    let sem = Symbol.Create p.paramSemantic
-                    let perInstance, view =
-                        match ro.VertexAttributes.TryGetAttribute sem with
-                            | Some att -> false, att
-                            | None ->
-                                match ro.InstanceAttributes.TryGetAttribute sem with
-                                    | Some att -> true, att
-                                    | None -> failf "could not get vertex data for shader input: %A" sem
+            |> List.sortBy (fun p -> p.paramLocation)
+            |> List.map (fun p ->
+                let semantic = Sym.ofString p.paramSemantic
+                let expectedType = getExpectedType p.paramType
 
-                    (sem, p.paramLocation, perInstance, view)
-                )
+                let view, perInstance =
+                    match ro.TryGetAttribute semantic with
+                    | Some attr -> attr
+                    | _ -> failf "could not get attribute '%A'" semantic
 
-        let buffers =
-            bufferViews 
-                |> List.map (fun (name,loc, _, view) ->
-                    let buffer = this.CreateBuffer(view.Buffer)
-                    buffer, int64 view.Offset
-                )
+                let elementType, buffer =
+                    match view.Buffer with
+                    | :? ISingleValueBuffer as buffer ->
+                        expectedType, this.CreateVertexBuffer(expectedType, buffer)
 
+                    | buffer ->
+                        view.ElementType, this.CreateVertexBuffer(buffer)
 
-        let bufferFormats = 
-            bufferViews |> List.map (fun (name,location, perInstance, view) -> name, (perInstance, view)) |> Map.ofSeq
+                {| Semantic    = semantic
+                   Location    = p.paramLocation
+                   PerInstance = perInstance
+                   Buffer      = buffer
+                   Description = VertexInputState.AttributeDescription.create elementType view.IsSingleValue view.Offset |}
+            )
+
+        let attributeBuffers =
+            attributeBindings
+            |> List.map (fun b -> b.Buffer, int64 b.Description.Offset)
+
+        let attributeDescriptions =
+            attributeBindings
+            |> List.map (fun b -> b.Semantic, (b.PerInstance, b.Description))
+            |> Map.ofSeq
 
         let inputAssembly = this.CreateInputAssemblyState(ro.Mode, program)
-        let inputState = this.CreateVertexInputState(programLayout.PipelineInfo, AVal.constant (VertexInputState.create bufferFormats))
+        let inputState = this.CreateVertexInputState(programLayout.PipelineInfo, VertexInputState.ofDescriptions attributeDescriptions)
 
         let rasterizerState =
             this.CreateRasterizerState(
@@ -349,32 +364,32 @@ type DevicePreparedRenderObjectExtensions private() =
         let indexed = Option.isSome ro.Indices
         let indexBufferBinding =
             match ro.Indices with
-                | Some view -> 
-                    let buffer = this.CreateIndexBuffer(view.Buffer)
-                    let res = this.CreateIndexBufferBinding(buffer, VkIndexType.ofType view.ElementType)
-                    resources.Add res
-                    Some res
-                | None -> 
-                    None
-
-            
+            | Some view ->
+                let buffer = this.CreateIndexBuffer(view.Buffer)
+                let res = this.CreateIndexBufferBinding(buffer, VkIndexType.ofType view.ElementType)
+                resources.Add res
+                Some res
+            | None ->
+                None
 
         let calls =
             match ro.DrawCalls with
-                | Direct dir -> 
-                    this.CreateDrawCall(indexed, dir)
-                | Indirect indir -> 
-                    let indirect = this.CreateIndirectBuffer(indexed, indir)
-                    this.CreateDrawCall(indexed, indirect)
+            | Direct dir ->
+                this.CreateDrawCall(indexed, dir)
+            | Indirect indir ->
+                let indirect = this.CreateIndirectBuffer(indexed, indir)
+                this.CreateDrawCall(indexed, indirect)
+
         resources.Add calls
+
         let bindings =
-            this.CreateVertexBufferBinding(buffers)
-            
+            this.CreateVertexBufferBinding(attributeBuffers)
+
         resources.Add bindings
 
         let descriptorBindings =
             this.CreateDescriptorSetBinding(VkPipelineBindPoint.Graphics, programLayout, descriptorSets)
-            
+
         resources.Add(descriptorBindings)
 
         let isActive = this.CreateIsActive ro.IsActive

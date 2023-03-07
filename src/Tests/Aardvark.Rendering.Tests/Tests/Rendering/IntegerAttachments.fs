@@ -40,7 +40,6 @@ module IntegerAttachments =
             use task =
                 Sg.fullScreenQuad
                 |> Sg.shader {
-                    do! DefaultSurfaces.diffuseTexture
                     if format.IsSigned then
                         do! Shader.primitiveIdSigned
                     else

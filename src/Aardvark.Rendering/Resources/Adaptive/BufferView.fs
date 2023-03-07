@@ -8,7 +8,7 @@ open Aardvark.Base
 type BufferView(b : aval<IBuffer>, elementType : Type, [<Optional; DefaultParameterValue(0)>] offset : int, [<Optional; DefaultParameterValue(0)>] stride : int) =
     let singleValue =
         match b with
-        | :? SingleValueBuffer as nb -> Some nb.Value
+        | :? ISingleValueBuffer as nb -> Some nb.Value
         | _ -> None
 
     member x.Buffer = b
@@ -93,7 +93,13 @@ module BufferView =
 
         match view.SingleValue with
         | Some value ->
-            value |> AdaptiveResource.map (fun v -> reader.Initialize(v, count))
+            value.Accept (
+                { new IAdaptiveValueVisitor<_> with
+                    member x.Visit(value : aval<'T>) =
+                        value |> AVal.map (fun v -> reader.Initialize(v, count))
+                }
+            )
+
         | _ ->
             view.Buffer |> AdaptiveResource.map (fun b ->
                 match b with

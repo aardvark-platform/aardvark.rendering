@@ -35,7 +35,7 @@ module NullResources =
 
     let isValidResourceAdaptive (m : IAdaptiveValue) =
         match m with
-        | :? SingleValueBuffer -> AVal.constant false
+        | :? ISingleValueBuffer -> AVal.constant false
         | _ ->
             AVal.custom (fun t ->
                 not <| isNullResource (m.GetValueUntyped t)

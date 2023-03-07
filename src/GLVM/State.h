@@ -88,10 +88,10 @@ typedef struct {
 
 struct VertexAttribValue
 {
-	float 		X;
-	float 		Y;
-	float 		Z;
-	float 		W;
+	double X;
+	double Y;
+	double Z;
+	double W;
 };
 
 typedef struct {
@@ -106,11 +106,9 @@ typedef struct {
 } VertexBufferBinding;
 
 typedef struct {
+	VertexAttribValue   Value;
 	uint32_t			Index;
-	float 				X;
-	float 				Y;
-	float 				Z;
-	float 				W;
+	GLenum				Type;
 } VertexValueBinding;
 
 typedef struct {

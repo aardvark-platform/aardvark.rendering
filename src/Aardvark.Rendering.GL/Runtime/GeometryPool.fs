@@ -1613,9 +1613,9 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                         pProgramInterface.inputs |> List.map (fun param ->
                             match MapExt.tryFind param.paramSemantic ib.Buffers with
                                 | Some ib -> 
-                                    param.paramLocation, {
+                                    param.paramLocation, AttributeDescription.Buffer {
                                         Type = GLSLType.toType param.paramType
-                                        Content = Left ib
+                                        Buffer = ib
                                         Frequency = AttributeFrequency.PerInstances 1
                                         Normalized = false
                                         Stride = GLSLType.sizeof param.paramType
@@ -1626,9 +1626,9 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                                     match MapExt.tryFind param.paramSemantic vb.Buffers with
                                     | Some (vb, typ) ->
                                         let norm = if typ = typeof<C4b> then true else false
-                                        param.paramLocation, {
+                                        param.paramLocation, AttributeDescription.Buffer {
                                             Type = typ
-                                            Content = Left vb
+                                            Buffer = vb
                                             Frequency = AttributeFrequency.PerVertex
                                             Normalized = norm
                                             Stride = Marshal.SizeOf typ
@@ -1636,15 +1636,9 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                                         }
 
                                     | None ->
-                                        param.paramLocation, {
-                                            Type = GLSLType.toType param.paramType
-                                            Content = Right V4f.Zero
-                                            Frequency = AttributeFrequency.PerVertex
-                                            Normalized = false
-                                            Stride = GLSLType.sizeof param.paramType
-                                            Offset = 0
-                                        }
+                                        param.paramLocation, AttributeDescription.Value V4f.Zero
                         )
+                        |> List.toArray
 
                     let bufferBinding = ctx.CreateVertexInputBinding(index, attributes)
                 

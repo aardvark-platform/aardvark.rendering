@@ -45,7 +45,7 @@ type GraphicsMode(format : Col.Format, bits : int, depthBits : int, stencilBits 
                     match format with
                         | Col.Format.Gray -> Col.Format.GrayAlpha
                         | Col.Format.GrayAlpha -> Col.Format.RGBA
-                        | Col.Format.NormalUV -> Col.Format.RGB
+                        | Col.Format.RG -> Col.Format.RGB
                         | Col.Format.BGR -> Col.Format.BGRA
                         | Col.Format.RGB -> Col.Format.RGBA
                         | Col.Format.RGBA -> Col.Format.BGRA

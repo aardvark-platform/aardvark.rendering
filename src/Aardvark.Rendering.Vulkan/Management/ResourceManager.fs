@@ -1669,6 +1669,15 @@ type ResourceManager(device : Device) =
     let indexBindingCache       = NativeResourceLocationCache<IndexBufferBinding>(device)
     let isActiveCache           = NativeResourceLocationCache<int>(device)
 
+    [<Literal>]
+    let IndexBufferUsage = VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.IndexBufferBit
+
+    [<Literal>]
+    let VertexBufferUsage = VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit
+
+    [<Literal>]
+    let StorageBufferUsage = VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.StorageBufferBit
+
     member x.Dispose() =
         bufferCache.Clear()
 
@@ -1707,8 +1716,8 @@ type ResourceManager(device : Device) =
     member x.Device = device
 
     member private x.CreateBuffer(input : aval<IBuffer>, usage : VkBufferUsageFlags) =
-        bufferCache.GetOrCreate([input :> obj], fun cache key ->
-            new BufferResource(cache, key, device, usage, input |> AdaptiveResource.cast) :> IResourceLocation<Buffer>
+        bufferCache.GetOrCreate([input :> obj; usage :> obj], fun cache key ->
+            new BufferResource(cache, key, device, usage, input) :> IResourceLocation<Buffer>
         )
 
     member private x.CreateBuffer(input : aval<IBackendBuffer>) =
@@ -1716,25 +1725,48 @@ type ResourceManager(device : Device) =
             new BufferResource(cache, key, device, VkBufferUsageFlags.None, input |> AdaptiveResource.cast) :> IResourceLocation<Buffer>
         )
 
-    member x.CreateBuffer(input : aval<IBuffer>) =
-        x.CreateBuffer(input, VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.VertexBufferBit)
+    member x.CreateVertexBuffer(expectedType : Type, input : ISingleValueBuffer) =
+        bufferCache.GetOrCreate(
+            [expectedType :> obj; input :> obj],
+            fun cache key ->
+                let converted =
+                    try
+                        input.Value |> PrimitiveValueConverter.convertValueUntyped expectedType
+                    with
+                    | :? PrimitiveValueConverter.InvalidConversionException as exn ->
+                        failf "cannot convert vertex or instance attribute value from %A to %A" exn.Source exn.Target
+
+                let buffer : aval<IBuffer> =
+                    converted.Accept(
+                        { new IAdaptiveValueVisitor<_> with
+                            member x.Visit(value : aval<'T>) =
+                                value |> AVal.map (fun v -> ArrayBuffer [| v |])
+                        }
+                    )
+
+                new BufferResource(cache, key, device, VertexBufferUsage, buffer)
+        )
+
+    member x.CreateVertexBuffer(input : aval<IBuffer>) =
+        x.CreateBuffer(input, VertexBufferUsage)
 
     member x.CreateStorageBuffer(input : aval<IBuffer>) =
-        x.CreateBuffer(input, VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.StorageBufferBit)
+        x.CreateBuffer(input, StorageBufferUsage)
 
     member x.CreateStorageBuffer(input : aval<Array>) =
-        let usage = VkBufferUsageFlags.TransferSrcBit ||| VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.StorageBufferBit
-
         bufferCache.GetOrCreate([input :> obj], fun cache key ->
             let buffer = input |> AdaptiveResource.map (fun arr -> ArrayBuffer arr :> IBuffer)
-            new BufferResource(cache, key, device, usage, buffer) :> IResourceLocation<Buffer>
+            new BufferResource(cache, key, device, StorageBufferUsage, buffer) :> IResourceLocation<Buffer>
         )
 
     member x.CreateIndexBuffer(input : aval<IBuffer>) =
-        x.CreateBuffer(input, VkBufferUsageFlags.TransferDstBit ||| VkBufferUsageFlags.IndexBufferBit)
+        x.CreateBuffer(input, IndexBufferUsage)
 
     member x.CreateIndirectBuffer(indexed : bool, input : aval<Aardvark.Rendering.IndirectBuffer>) =
-        indirectBufferCache.GetOrCreate([indexed :> obj; input :> obj], fun cache key -> new IndirectBufferResource(cache, key, device, indexed, input))
+        indirectBufferCache.GetOrCreate(
+            [indexed :> obj; input :> obj],
+            fun cache key -> new IndirectBufferResource(cache, key, device, indexed, input)
+        )
 
     member x.CreateImage(properties : ImageProperties, input : aval<ITexture>) =
         imageCache.GetOrCreate([properties :> obj; input :> obj], fun cache key -> new ImageResource(cache, key, device, properties, input))
@@ -1932,6 +1964,9 @@ type ResourceManager(device : Device) =
 
     member x.CreateVertexInputState(program : PipelineInfo, mode : aval<Map<Symbol, VertexInputDescription>>) =
         vertexInputCache.GetOrCreate([program :> obj; mode :> obj], fun cache key -> new VertexInputStateResource(cache, key, program, mode))
+
+    member inline x.CreateVertexInputState(program : PipelineInfo, mode : Map<Symbol, VertexInputDescription>) =
+        x.CreateVertexInputState(program, AVal.constant mode)
 
     member x.CreateInputAssemblyState(mode : IndexedGeometryMode, program : IResourceLocation<ShaderProgram>) =
         inputAssemblyCache.GetOrCreate([mode :> obj; program :> obj], fun cache key -> new InputAssemblyStateResource(cache, key, mode, program))

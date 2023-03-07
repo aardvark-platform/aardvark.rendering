@@ -73,25 +73,29 @@
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)..\bin\Debug\</OutDir>
     <IntDir>$(SolutionDir)..\bin\Debug\x86\glvm\</IntDir>
-    <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
+    <CustomBuildAfterTargets>
+    </CustomBuildAfterTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
     <OutDir>$(SolutionDir)..\bin\Debug\</OutDir>
     <IntDir>$(SolutionDir)..\bin\Debug\AMD64\glvm\</IntDir>
-    <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
+    <CustomBuildAfterTargets>
+    </CustomBuildAfterTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\x86\</OutDir>
     <IntDir>$(SolutionDir)..\bin\Release\x86\glvm\</IntDir>
-    <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
+    <CustomBuildAfterTargets>
+    </CustomBuildAfterTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <LinkIncremental>false</LinkIncremental>
     <OutDir>$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\</OutDir>
     <IntDir>$(SolutionDir)..\bin\Release\AMD64\glvm\</IntDir>
-    <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
+    <CustomBuildAfterTargets>
+    </CustomBuildAfterTargets>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -115,9 +119,7 @@
       </Message>
     </PostBuildEvent>
     <CustomBuildStep>
-      <Command>xcopy $(SolutionDir)..\bin\Debug\glvm.* $(SolutionDir)..\bin\Release\ /Y</Command>
-      <Outputs>$(SolutionDir)..\bin\Release\glvm.dll;$(SolutionDir)..\bin\Release\glvm.exp;$(SolutionDir)..\bin\Release\glvm.lib;$(SolutionDir)..\bin\Release\glvm.pdb;%(Outputs)</Outputs>
-      <Message>copying binaries to bin\Release</Message>
+      <Message />
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -140,13 +142,7 @@
       </Message>
     </PostBuildEvent>
     <CustomBuildStep>
-      <Command>xcopy "$(SolutionDir)..\bin\Debug\glvm.*" "$(SolutionDir)..\bin\Release\" /Y
-xcopy "$(SolutionDir)..\bin\Debug\glvm.*" "$(SolutionDir)..\bin\Release\netcoreapp2.0" /Y
-xcopy "$(SolutionDir)..\bin\Debug\glvm.*" "$(SolutionDir)..\bin\Debug\netcoreapp2.0" /Y</Command>
-    </CustomBuildStep>
-    <CustomBuildStep>
-      <Message>copying binaries to bin\Release</Message>
-      <Outputs>$(SolutionDir)..\bin\Release\glvm.dll;$(SolutionDir)..\bin\Release\glvm.exp;$(SolutionDir)..\bin\Release\glvm.lib;$(SolutionDir)..\bin\Release\glvm.pdb;%(Outputs)</Outputs>
+      <Message />
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -174,9 +170,7 @@ xcopy "$(SolutionDir)..\bin\Debug\glvm.*" "$(SolutionDir)..\bin\Debug\netcoreapp
       </Message>
     </PostBuildEvent>
     <CustomBuildStep>
-      <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\x86\*" "$(SolutionDir)..\bin\Debug" /y</Command>
-      <Message>copying binaries to bin\Debug</Message>
-      <Outputs>$(SolutionDir)..\bin\Debug\glvm.dll;$(SolutionDir)..\bin\Debug\glvm.exp;$(SolutionDir)..\bin\Debug\glvm.lib;$(SolutionDir)..\bin\Debug\glvm.pdb;$(SolutionDir)..\bin\Release\glvm.dll;$(SolutionDir)..\bin\Release\glvm.exp;$(SolutionDir)..\bin\Release\glvm.lib;$(SolutionDir)..\bin\Release\glvm.pdb</Outputs>
+      <Message />
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -204,12 +198,7 @@ xcopy "$(SolutionDir)..\bin\Debug\glvm.*" "$(SolutionDir)..\bin\Debug\netcoreapp
       </Message>
     </PostBuildEvent>
     <CustomBuildStep>
-      <Command>xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Debug" /y
-xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Release" /y
-xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Debug\netcoreapp2.0" /y
-xcopy "$(SolutionDir)..\lib\Native\Aardvark.Rendering.GL\windows\AMD64\*" "$(SolutionDir)..\bin\Release\netcoreapp2.0" /y</Command>
-      <Message>copying binaries to bin\Debug</Message>
-      <Outputs>$(SolutionDir)..\bin\Debug\glvm.dll;$(SolutionDir)..\bin\Debug\glvm.exp;$(SolutionDir)..\bin\Debug\glvm.lib;$(SolutionDir)..\bin\Debug\glvm.pdb;$(SolutionDir)..\bin\Release\glvm.dll;$(SolutionDir)..\bin\Release\glvm.exp;$(SolutionDir)..\bin\Release\glvm.lib;$(SolutionDir)..\bin\Release\glvm.pdb</Outputs>
+      <Message />
     </CustomBuildStep>
   </ItemDefinitionGroup>
   <ItemGroup>
