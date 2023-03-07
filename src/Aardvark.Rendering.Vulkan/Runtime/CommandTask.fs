@@ -119,7 +119,7 @@ type ResourceManagerExtensions private() =
                     let sem = Symbol.Create i.paramSemantic 
                     match Map.tryFind sem g.vertexAttributes with
                         | Some b ->
-                            this.CreateBuffer(b), 0L
+                            this.CreateVertexBuffer(b), 0L
                         | None ->
                             failf "geometry does not have buffer %A" sem
                 )

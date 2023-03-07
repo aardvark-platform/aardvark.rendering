@@ -107,285 +107,109 @@ module InputAssemblyState =
 module VertexInputState =
 
     let private toVkFormat =
-        LookupTable.lookupTable [
-            typeof<int8>, VkFormat.R8Sint
-            typeof<uint8>, VkFormat.R8Uint
+        let lookup =
+            LookupTable.lookupTable' [
+                typeof<int8>, VkFormat.R8Sint
+                typeof<uint8>, VkFormat.R8Uint
 
-            typeof<int16>, VkFormat.R16Sint
-            typeof<uint16>, VkFormat.R16Uint
+                typeof<int16>, VkFormat.R16Sint
+                typeof<uint16>, VkFormat.R16Uint
 
-            typeof<int32>, VkFormat.R32Sint
-            typeof<uint32>, VkFormat.R32Uint
+                typeof<int32>, VkFormat.R32Sint
+                typeof<uint32>, VkFormat.R32Uint
 
-            typeof<V2i>, VkFormat.R32g32Sint
-            typeof<V3i>, VkFormat.R32g32b32Sint
-            typeof<V4i>, VkFormat.R32g32b32a32Sint
+                typeof<V2i>, VkFormat.R32g32Sint
+                typeof<V3i>, VkFormat.R32g32b32Sint
+                typeof<V4i>, VkFormat.R32g32b32a32Sint
+
+                typeof<V2ui>, VkFormat.R32g32Uint
+                typeof<V3ui>, VkFormat.R32g32b32Uint
+                typeof<V4ui>, VkFormat.R32g32b32a32Uint
+
+                typeof<float32>, VkFormat.R32Sfloat
+                typeof<V2f>, VkFormat.R32g32Sfloat
+                typeof<V3f>, VkFormat.R32g32b32Sfloat
+                typeof<V4f>, VkFormat.R32g32b32a32Sfloat
+
+                typeof<double>, VkFormat.R64Sfloat
+                typeof<V2d>, VkFormat.R64g64Sfloat
+                typeof<V3d>, VkFormat.R64g64b64Sfloat
+                typeof<V4d>, VkFormat.R64g64b64a64Sfloat
+
+                // TODO: is that really correct here???
+                typeof<C3b>, VkFormat.B8g8r8Unorm
+                typeof<C4b>, VkFormat.B8g8r8a8Unorm
+
+                typeof<C3us>, VkFormat.R16g16b16Unorm
+                typeof<C4us>, VkFormat.R16g16b16a16Unorm
+
+                typeof<C3ui>, VkFormat.R32g32b32Uint
+                typeof<C4ui>, VkFormat.R32g32b32a32Uint
+
+                typeof<C3f>, VkFormat.R32g32b32Sfloat
+                typeof<C4f>, VkFormat.R32g32b32a32Sfloat
+
+                typeof<C3d>, VkFormat.R64g64b64Sfloat
+                typeof<C4d>, VkFormat.R64g64b64a64Sfloat
+            ]
+
+        fun typ ->
+            match lookup typ with
+            | Some fmt -> fmt
+            | _ -> failf "cannot determine appropriate vertex input format for type %A" typ
 
 
-            typeof<float32>, VkFormat.R32Sfloat
-            typeof<V2f>, VkFormat.R32g32Sfloat
-            typeof<V3f>, VkFormat.R32g32b32Sfloat
-            typeof<V4f>, VkFormat.R32g32b32a32Sfloat
+    [<RequireQualifiedAccess>]
+    type AttributeDescription =
+        internal {
+            ElementType   : Type
+            IsSingleValue : bool
+            Offset        : int
+        }
 
-            typeof<double>, VkFormat.R64Sfloat
-            typeof<V2d>, VkFormat.R64g64Sfloat
-            typeof<V3d>, VkFormat.R64g64b64Sfloat
-            typeof<V4d>, VkFormat.R64g64b64a64Sfloat
+    module AttributeDescription =
+        let create (elementType : Type) (isSingleValue : bool) (offset : int) =
+            { AttributeDescription.ElementType   = elementType
+              AttributeDescription.IsSingleValue = isSingleValue
+              AttributeDescription.Offset        = offset }
 
-            // TODO: is that really correct here???
-            typeof<C3b>, VkFormat.B8g8r8Unorm
-            typeof<C4b>, VkFormat.B8g8r8a8Unorm
+    let ofDescriptions (descriptions : Map<Symbol, bool * AttributeDescription>) =
+        descriptions |> Map.map (fun name (perInstance, desc) ->
+            match desc.ElementType with
+            | TypeInfo.Patterns.MatrixOf(s, TypeInfo.Patterns.Float32) ->
+                let rowFormat =
+                    match s.X with
+                    | 2 -> VkFormat.R32g32Sfloat
+                    | 3 -> VkFormat.R32g32b32Sfloat
+                    | _ -> VkFormat.R32g32b32a32Sfloat
 
-            typeof<C3us>, VkFormat.R16g16b16Unorm
-            typeof<C4us>, VkFormat.R16g16b16a16Unorm
+                let rowSize = VkFormat.pixelSizeInBytes rowFormat
+                let totalSize = s.Y * rowSize
+                {
+                    inputFormat = rowFormat
+                    stride = if desc.IsSingleValue then 0 else totalSize
+                    stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
+                    offsets = List.init s.Y (fun r -> desc.Offset + r * rowSize)
+                }
 
-            typeof<C3ui>, VkFormat.R32g32b32Uint
-            typeof<C4ui>, VkFormat.R32g32b32a32Uint
+            | TypeInfo.Patterns.MatrixOf(_, et) ->
+                failf "matrix types with element type %A not supported for vertex inputs" et
 
-            typeof<C3f>, VkFormat.R32g32b32Sfloat
-            typeof<C4f>, VkFormat.R32g32b32a32Sfloat
-
-            typeof<C3d>, VkFormat.R64g64b64Sfloat
-            typeof<C4d>, VkFormat.R64g64b64a64Sfloat
-
-        ]
-
-    let private getFormatSize =
-        LookupTable.lookupTable [
-            //VkFormat.R4g4Unorm, 1
-            //VkFormat.R4g4Uscaled, 1
-            //VkFormat.R4g4b4a4Unorm, 2
-            //VkFormat.R4g4b4a4Uscaled, 2
-            //VkFormat.R5g6b5Unorm, 2
-            //VkFormat.R5g6b5Uscaled, 2
-            //VkFormat.R5g5b5a1Unorm, 2
-            //VkFormat.R5g5b5a1Uscaled, 2
-            VkFormat.R8Unorm, 1
-            VkFormat.R8Snorm, 1
-            VkFormat.R8Uscaled, 1
-            VkFormat.R8Sscaled, 1
-            VkFormat.R8Uint, 1
-            VkFormat.R8Sint, 1
-            VkFormat.R8Srgb, 1
-            VkFormat.R8g8Unorm, 2
-            VkFormat.R8g8Snorm, 2
-            VkFormat.R8g8Uscaled, 2
-            VkFormat.R8g8Sscaled, 2
-            VkFormat.R8g8Uint, 2
-            VkFormat.R8g8Sint, 2
-            VkFormat.R8g8Srgb, 2
-            VkFormat.R8g8b8Unorm, 3
-            VkFormat.R8g8b8Snorm, 3
-            VkFormat.R8g8b8Uscaled, 3
-            VkFormat.R8g8b8Sscaled, 3
-            VkFormat.R8g8b8Uint, 3
-            VkFormat.R8g8b8Sint, 3
-            VkFormat.R8g8b8Srgb, 3
-            VkFormat.R8g8b8a8Unorm, 4
-            VkFormat.R8g8b8a8Snorm, 4
-            VkFormat.R8g8b8a8Uscaled, 4
-            VkFormat.R8g8b8a8Sscaled, 4
-            VkFormat.R8g8b8a8Uint, 4
-            VkFormat.R8g8b8a8Sint, 4
-            VkFormat.R8g8b8a8Srgb, 4
-            //VkFormat.R10g10b10a2Unorm, 4
-            //VkFormat.R10g10b10a2Snorm, 4
-            //VkFormat.R10g10b10a2Uscaled, 4
-            //VkFormat.R10g10b10a2Sscaled, 4
-            //VkFormat.R10g10b10a2Uint, 4
-            //VkFormat.R10g10b10a2Sint, 4
-            VkFormat.R16Unorm, 2
-            VkFormat.R16Snorm, 2
-            VkFormat.R16Uscaled, 2
-            VkFormat.R16Sscaled, 2
-            VkFormat.R16Uint, 2
-            VkFormat.R16Sint, 2
-            VkFormat.R16Sfloat, 2
-            VkFormat.R16g16Unorm, 4
-            VkFormat.R16g16Snorm, 4
-            VkFormat.R16g16Uscaled, 4
-            VkFormat.R16g16Sscaled, 4
-            VkFormat.R16g16Uint, 4
-            VkFormat.R16g16Sint, 4
-            VkFormat.R16g16Sfloat, 4
-            VkFormat.R16g16b16Unorm, 6
-            VkFormat.R16g16b16Snorm, 6
-            VkFormat.R16g16b16Uscaled, 6
-            VkFormat.R16g16b16Sscaled, 6
-            VkFormat.R16g16b16Uint, 6
-            VkFormat.R16g16b16Sint, 6
-            VkFormat.R16g16b16Sfloat, 6
-            VkFormat.R16g16b16a16Unorm, 8
-            VkFormat.R16g16b16a16Snorm, 8
-            VkFormat.R16g16b16a16Uscaled, 8
-            VkFormat.R16g16b16a16Sscaled, 8
-            VkFormat.R16g16b16a16Uint, 8
-            VkFormat.R16g16b16a16Sint, 8
-            VkFormat.R16g16b16a16Sfloat, 8
-            VkFormat.R32Uint, 4
-            VkFormat.R32Sint, 4
-            VkFormat.R32Sfloat, 4
-            VkFormat.R32g32Uint, 8
-            VkFormat.R32g32Sint, 8
-            VkFormat.R32g32Sfloat, 8
-            VkFormat.R32g32b32Uint, 12
-            VkFormat.R32g32b32Sint, 12
-            VkFormat.R32g32b32Sfloat, 12
-            VkFormat.R32g32b32a32Uint, 16
-            VkFormat.R32g32b32a32Sint, 16
-            VkFormat.R32g32b32a32Sfloat, 16
-            VkFormat.R64Sfloat, 8
-            VkFormat.R64g64Sfloat, 16
-            VkFormat.R64g64b64Sfloat, 24
-            VkFormat.R64g64b64a64Sfloat, 32
-            //VkFormat.R11g11b10Ufloat, 4
-            //VkFormat.R9g9b9e5Ufloat, 4
-            VkFormat.D16Unorm, 2
-            VkFormat.X8D24UnormPack32, 4
-            VkFormat.D32Sfloat, 4
-            VkFormat.S8Uint, 1
-            VkFormat.D16UnormS8Uint, 3
-            VkFormat.D24UnormS8Uint, 4
-            VkFormat.D32SfloatS8Uint, 5
-            //VkFormat.Bc1RgbUnorm, failwith "no"
-            //VkFormat.Bc1RgbSrgb, failwith "no"
-            //VkFormat.Bc1RgbaUnorm, failwith "no"
-            //VkFormat.Bc1RgbaSrgb, failwith "no"
-            //VkFormat.Bc2Unorm, failwith "no"
-            //VkFormat.Bc2Srgb, failwith "no"
-            //VkFormat.Bc3Unorm, failwith "no"
-            //VkFormat.Bc3Srgb, failwith "no"
-            //VkFormat.Bc4Unorm, failwith "no"
-            //VkFormat.Bc4Snorm, failwith "no"
-            //VkFormat.Bc5Unorm, failwith "no"
-            //VkFormat.Bc5Snorm, failwith "no"
-            //VkFormat.Bc6hUfloat, failwith "no"
-            //VkFormat.Bc6hSfloat, failwith "no"
-            //VkFormat.Bc7Unorm, failwith "no"
-            //VkFormat.Bc7Srgb, failwith "no"
-            //VkFormat.Etc2R8g8b8Unorm, failwith "no"
-            //VkFormat.Etc2R8g8b8Srgb, failwith "no"
-            //VkFormat.Etc2R8g8b8a1Unorm, failwith "no"
-            //VkFormat.Etc2R8g8b8a1Srgb, failwith "no"
-            //VkFormat.Etc2R8g8b8a8Unorm, failwith "no"
-            //VkFormat.Etc2R8g8b8a8Srgb, failwith "no"
-            //VkFormat.EacR11Unorm, failwith "no"
-            //VkFormat.EacR11Snorm, failwith "no"
-            //VkFormat.EacR11g11Unorm, failwith "no"
-            //VkFormat.EacR11g11Snorm, failwith "no"
-            //VkFormat.Astc44Unorm, failwith "no"
-            //VkFormat.Astc44Srgb, failwith "no"
-            //VkFormat.Astc54Unorm, failwith "no"
-            //VkFormat.Astc54Srgb, failwith "no"
-            //VkFormat.Astc55Unorm, failwith "no"
-            //VkFormat.Astc55Srgb, failwith "no"
-            //VkFormat.Astc65Unorm, failwith "no"
-            //VkFormat.Astc65Srgb, failwith "no"
-            //VkFormat.Astc66Unorm, failwith "no"
-            //VkFormat.Astc66Srgb, failwith "no"
-            //VkFormat.Astc85Unorm, failwith "no"
-            //VkFormat.Astc85Srgb, failwith "no"
-            //VkFormat.Astc86Unorm, failwith "no"
-            //VkFormat.Astc86Srgb, failwith "no"
-            //VkFormat.Astc88Unorm, failwith "no"
-            //VkFormat.Astc88Srgb, failwith "no"
-            //VkFormat.Astc105Unorm, failwith "no"
-            //VkFormat.Astc105Srgb, failwith "no"
-            //VkFormat.Astc106Unorm, failwith "no"
-            //VkFormat.Astc106Srgb, failwith "no"
-            //VkFormat.Astc108Unorm, failwith "no"
-            //VkFormat.Astc108Srgb, failwith "no"
-            //VkFormat.Astc1010Unorm, failwith "no"
-            //VkFormat.Astc1010Srgb, failwith "no"
-            //VkFormat.Astc1210Unorm, failwith "no"
-            //VkFormat.Astc1210Srgb, failwith "no"
-            //VkFormat.Astc1212Unorm, failwith "no"
-            //VkFormat.Astc1212Srgb, failwith "no"
-            //VkFormat.B4g4r4a4Unorm, 2
-            //VkFormat.B5g5r5a1Unorm, 2
-            //VkFormat.B5g6r5Unorm, 2
-            //VkFormat.B5g6r5Uscaled, 2
-            VkFormat.B8g8r8Unorm, 3
-            VkFormat.B8g8r8Snorm, 3
-            VkFormat.B8g8r8Uscaled, 3
-            VkFormat.B8g8r8Sscaled, 3
-            VkFormat.B8g8r8Uint, 3
-            VkFormat.B8g8r8Sint, 3
-            VkFormat.B8g8r8Srgb, 3
-            VkFormat.B8g8r8a8Unorm, 4
-            VkFormat.B8g8r8a8Snorm, 4
-            VkFormat.B8g8r8a8Uscaled, 4
-            VkFormat.B8g8r8a8Sscaled, 4
-            VkFormat.B8g8r8a8Uint, 4
-            VkFormat.B8g8r8a8Sint, 4
-            VkFormat.B8g8r8a8Srgb, 4
-            //VkFormat.B10g10r10a2Unorm, 4
-            //VkFormat.B10g10r10a2Snorm, 4
-            //VkFormat.B10g10r10a2Uscaled, 4
-            //VkFormat.B10g10r10a2Sscaled, 4
-            //VkFormat.B10g10r10a2Uint, 4
-            //VkFormat.B10g10r10a2Sint, 4
-
-        ]
-
-    let create (o : Map<Symbol, bool * Aardvark.Rendering.BufferView>) =
-        o |> Map.map (fun k (perInstance, view) ->
-            match view.ElementType with
-                | TypeInfo.Patterns.MatrixOf(s, et) ->
-                    let rowFormat =
-                        match s.X with
-                            | 2 -> VkFormat.R32g32Sfloat
-                            | 3 -> VkFormat.R32g32b32Sfloat
-                            | _ -> VkFormat.R32g32b32a32Sfloat
-
-                    let rowSize = getFormatSize rowFormat
-                    let totalSize = s.Y * rowSize
-                    { 
-                        inputFormat = rowFormat
-                        stride = if view.IsSingleValue then 0 else totalSize
-                        stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
-                        offsets = List.init s.Y (fun r -> view.Offset + r * rowSize)
-                    }
-
-                | _ -> 
-                    let fmt = toVkFormat view.ElementType
-                    { 
-                        inputFormat = fmt
-                        stride = if view.IsSingleValue then 0 else getFormatSize fmt
-                        stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
-                        offsets = [view.Offset]
-                    }
+            | _ ->
+                let fmt = toVkFormat desc.ElementType
+                {
+                    inputFormat = fmt
+                    stride = if desc.IsSingleValue then 0 else VkFormat.pixelSizeInBytes fmt
+                    stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
+                    offsets = [desc.Offset]
+                }
         )
- 
-    let ofTypes (o : Map<Symbol, bool * Type>) =
-        o |> Map.map (fun k (perInstance, viewType) ->
-            match viewType with
-                | TypeInfo.Patterns.MatrixOf(s, et) ->
-                    let rowFormat =
-                        match s.X with
-                            | 2 -> VkFormat.R32g32Sfloat
-                            | 3 -> VkFormat.R32g32b32Sfloat
-                            | _ -> VkFormat.R32g32b32a32Sfloat
 
-                    let rowSize = getFormatSize rowFormat
-                    let totalSize = s.Y * rowSize
-                    { 
-                        inputFormat = rowFormat
-                        stride = totalSize
-                        stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
-                        offsets = List.init s.Y (fun r -> r * rowSize)
-                    }
+    let ofTypes (types : Map<Symbol, bool * Type>) =
+        types|> Map.map (fun _ (perInstance, typ) ->
+            perInstance, AttributeDescription.create typ false 0
+        ) |> ofDescriptions
 
-                | _ -> 
-                    let fmt = toVkFormat viewType
-                    { 
-                        inputFormat = fmt
-                        stride = getFormatSize fmt
-                        stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
-                        offsets = [0]
-                    }
-        )
- 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RasterizerState =
     let private toVkPolygonMode =
