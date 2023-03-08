@@ -2,4 +2,4 @@
 
 dotnet tool restore
 dotnet paket restore
-dotnet build src/Aardvark.Rendering.NonWindows.sln
+dotnet build src/Aardvark.Rendering.NonWindows.slnf

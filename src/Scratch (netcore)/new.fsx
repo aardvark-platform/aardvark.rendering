@@ -589,7 +589,6 @@ let newExample (name : string) (dir : string) =
             | None -> failwithf "could not find source project in solution: %A" sourceProjectName
 
     addToSolution "Aardvark.Rendering.sln"
-    addToSolution "Aardvark.Rendering.NonWindows.sln"
 
 printfn "enter a name:"
 let name = Console.ReadLine()
