@@ -278,20 +278,12 @@ let main argv =
     // here we use RenderTask.custom to run the scene task manually.
     use task =
         RenderTask.custom (fun (_, rt, o) ->
-            // IRenderTask.Run() takes a single RenderToken with an IQuery member as parameter.
-            // in order to pass multiple queries we have to build a Queries struct.
-            let rt =
-                let queries =
-                    Queries.empty
-                    |> Queries.add timeQuery
-                    |> Queries.add pipelineQuery
-                    |> Queries.add occlusionQuery
-
-                rt |> RenderToken.withQuery queries
+            // IRenderTask.Run() takes a RenderToken as parameter, which includes a list of IQuery objects.
+            let rt = { rt with Queries = [ timeQuery; pipelineQuery; occlusionQuery ] }
 
             // IQuery.Begin and End are used to denote the scope in which the queries
             // are used. If we are only interested in the statistics of a single render task, these calls can be omitted.
-            rt.Query.Begin()
+            rt.Queries.Begin()
 
             // pass the queries to the render task by adding them to the queries in the render token.
             // the input render token may already contain queries (e.g. the window
@@ -301,7 +293,7 @@ let main argv =
             // queries can also be passed to compute tasks via render tokens.
             computeTask.Run(rt)
 
-            rt.Query.End()
+            rt.Queries.End()
         )
 
     // we save the query results in adaptive values and print them

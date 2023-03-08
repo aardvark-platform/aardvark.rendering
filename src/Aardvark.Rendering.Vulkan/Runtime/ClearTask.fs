@@ -29,7 +29,7 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
             let depth = values.Depth
             let stencil = values.Stencil
 
-            let vulkanQueries = renderToken.Query.ToVulkanQuery()
+            let vulkanQueries = renderToken.GetVulkanQueries()
 
             token.enqueue {
                 for q in vulkanQueries do

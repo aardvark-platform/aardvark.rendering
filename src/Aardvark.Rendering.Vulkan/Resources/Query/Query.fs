@@ -171,17 +171,16 @@ type Query(device : Device, typ : QueryType, queryCount : int) =
         member x.Dispose() = x.Dispose()
 
 [<AutoOpen>]
-module ``IQuery Extensions`` =
+module internal ``IQuery Extensions`` =
 
-    let rec private unwrap (onlyTimeQueries : bool) (query : IQuery) =
+    let private tryUnwrap (onlyTimeQueries : bool) (query : IQuery) =
         match query with
-        | :? IVulkanQuery as q when (not onlyTimeQueries || q :? ITimeQuery) -> [q]
-        | :? Queries as q -> List.concat <| q.Map (unwrap onlyTimeQueries)
-        | _ -> []
+        | :? IVulkanQuery as q when (not onlyTimeQueries || q :? ITimeQuery) -> Some q
+        | _ -> None
 
-    type IQuery with
-        member x.ToVulkanQuery([<Optional; DefaultParameterValue(false)>] onlyTimeQueries : bool) =
-            x |> unwrap onlyTimeQueries
+    type RenderToken with
+        member x.GetVulkanQueries([<Optional; DefaultParameterValue(false)>] onlyTimeQueries : bool) =
+            x.Queries |> List.choose (tryUnwrap onlyTimeQueries)
 
 [<AutoOpen>]
 module ``Query Command Extensions`` =

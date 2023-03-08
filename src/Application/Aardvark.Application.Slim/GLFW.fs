@@ -530,7 +530,7 @@ type GlfwGamepad() =
 type ISwapchain =
     inherit System.IDisposable
     abstract Size : V2i
-    abstract Run : IRenderTask * IQuery -> bool
+    abstract Run : IRenderTask * IQuery list -> bool
 
 type IWindowSurface =
     inherit System.IDisposable
@@ -1570,15 +1570,15 @@ and Window(app : Application, win : nativeptr<WindowHandle>, title : string, ena
                     if oldCurr <> win then
                         glfw.MakeContextCurrent(oldCurr)
 
-                let queries =
+                let queries : IQuery list =
                     if measureGpuTime then
                         let query =
                             gpuQuery |> Option.defaultWith app.Runtime.CreateTimeQuery
 
                         gpuQuery <- Some query
-                        query :> IQuery
+                        [ query ]
                     else
-                        Queries.none
+                        []
 
                 beforeRender.Trigger()
 

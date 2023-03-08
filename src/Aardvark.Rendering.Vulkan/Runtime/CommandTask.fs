@@ -2171,7 +2171,7 @@ type CommandTask(manager : ResourceManager, renderPass : RenderPass, command : R
         f()
 
     override x.Perform(token : AdaptiveToken, renderToken : RenderToken, desc : OutputDescription) =
-        let vulkanQueries = renderToken.Query.ToVulkanQuery()
+        let vulkanQueries = renderToken.GetVulkanQueries()
 
         let fbo =
             match desc.framebuffer with

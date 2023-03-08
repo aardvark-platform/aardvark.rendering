@@ -69,10 +69,10 @@ module private Vulkan =
                 { new ISwapchain with
                     override this.Dispose() = 
                         swap.Dispose()
-                    override this.Run(task : IRenderTask, query : IQuery)  = 
+                    override this.Run(task : IRenderTask, queries : IQuery list)  = 
                         swap.RenderFrame (fun fbo ->
                             let output = OutputDescription.ofFramebuffer fbo
-                            let rt = RenderToken.Empty |> RenderToken.withQuery query
+                            let rt = { RenderToken.Empty with Queries = queries }
                             task.Run(AdaptiveToken.Top, rt, output)
                         )
                     override x.Size = size

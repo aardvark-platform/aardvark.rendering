@@ -201,7 +201,7 @@ module private OpenGL =
         { new ISwapchain with
             override this.Dispose() = 
                 ()
-            override this.Run(task : IRenderTask, query : IQuery)  = 
+            override this.Run(task : IRenderTask, queries : IQuery list)  = 
                 use __ = runtime.Context.RenderingLock ctx
 
                 let output = OutputDescription.ofFramebuffer defaultFramebuffer
@@ -213,7 +213,7 @@ module private OpenGL =
                 GL.ClearDepth(1.0)
                 GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
 
-                let rt = { RenderToken.Empty with Query = query}
+                let rt = { RenderToken.Empty with Queries = queries}
                 task.Run(AdaptiveToken.Top, rt, output)
 
                 glfw.SwapBuffers(win)

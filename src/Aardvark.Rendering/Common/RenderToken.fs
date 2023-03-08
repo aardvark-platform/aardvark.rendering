@@ -10,7 +10,7 @@ open Aardvark.Base
 type RenderToken =
     {
         /// User provided GPU queries.
-        Query : IQuery
+        Queries : IQuery list
 
         /// Optional runtime statistics.
         Statistics : Option<FrameStatistics>
@@ -20,7 +20,7 @@ type RenderToken =
 
     static member inline Zero =
         {
-            Query = Queries.none
+            Queries = []
             Statistics = Some <| FrameStatistics()
         }
 
@@ -48,42 +48,25 @@ type RenderToken =
 
 and [<Sealed; AbstractClass>] private RenderTokenEmpty() =
     static let empty =
-        { Query = Queries.none
+        { Queries = []
           Statistics = None }
 
     static member Empty = empty
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module RenderToken =
 
-    let private (|EmptyQuery|MultiQuery|SingleQuery|) (query : IQuery) = 
-        match query with
-        | :? Queries as tq -> if tq.AsList.IsEmpty then EmptyQuery else MultiQuery tq.AsList
-        | _ -> SingleQuery query
+module RenderTokenInternals =
 
-    /// Adds the given query to the given render token.
-    let withQuery (query : IQuery) (token : RenderToken) : RenderToken =
-        match (token.Query, query) with
-        | (_, EmptyQuery) -> token
-        | (EmptyQuery, _) -> { token with Query = query } 
-        | (MultiQuery a, SingleQuery b) -> { token with Query = Queries.ofList (b :: a) } 
-        | (SingleQuery a, MultiQuery b) -> { token with Query = Queries.ofList (a :: b) } 
-        | (MultiQuery a, MultiQuery b) -> { token with Query = Queries.ofList (a @ b) }
-        | (SingleQuery a, SingleQuery b) -> { token with Query = Queries.ofList [a; b]  }
-
-module DisposableHelper =
-    
     [<Struct>]
     type QueryUseDisposable =
-
-        val Query : IQuery
+        val Queries : IQuery list
 
         interface IDisposable with
-            member x.Dispose() = x.Query.End()
+            member x.Dispose() =
+                for q in x.Queries do q.End()
 
-        new(query : IQuery) =
-            query.Begin()
-            { Query = query }
+        new(queries : IQuery list) =
+            for q in queries do q.Begin()
+            { Queries = queries }
 
 
 [<AbstractClass; Sealed; Extension>]
@@ -92,21 +75,8 @@ type RenderTokenExtensions private() =
     /// Begins the queries of the token and returns an IDisposable that
     /// ends the queries when disposed.
     [<Extension>]
-    static member inline Use(this : RenderToken) : DisposableHelper.QueryUseDisposable =
-        new DisposableHelper.QueryUseDisposable(this.Query)
-
-    /// Begins the queries of the token, evaluates the given function, and
-    /// finally ends the queries.
-    [<Extension>]
-    static member inline Use(this : RenderToken, f : unit -> 'T) =
-        this.Query.Begin()
-        let result = f()
-        this.Query.End()
-        result
-
-    [<Extension>]
-    static member WithQuery(this : RenderToken, query : IQuery) =
-        this |> RenderToken.withQuery query
+    static member inline Use(this : RenderToken) : RenderTokenInternals.QueryUseDisposable =
+        new RenderTokenInternals.QueryUseDisposable(this.Queries)
 
     [<Extension>]
     static member InPlaceResourceUpdate(this : RenderToken, kind : ResourceKind) =

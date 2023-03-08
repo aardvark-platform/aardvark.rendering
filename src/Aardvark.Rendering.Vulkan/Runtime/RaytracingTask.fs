@@ -214,7 +214,7 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
             use __ = renderToken.Use()
             updateCommandResources token renderToken
 
-            let vulkanQueries = renderToken.Query.ToVulkanQuery(onlyTimeQueries = true)
+            let vulkanQueries = renderToken.GetVulkanQueries(onlyTimeQueries = true)
             cmd.Begin CommandBufferUsage.OneTimeSubmit
 
             for q in vulkanQueries do

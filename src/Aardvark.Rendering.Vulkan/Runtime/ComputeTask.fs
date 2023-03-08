@@ -506,7 +506,7 @@ module internal ComputeTaskInternals =
             let hasGraphics = family.Flags.HasFlag QueueFlags.Graphics
 
             member x.Run(primary : CommandBuffer, renderToken : RenderToken) =
-                let vulkanQueries = renderToken.Query.ToVulkanQuery(onlyTimeQueries = not hasGraphics)
+                let vulkanQueries = renderToken.GetVulkanQueries(onlyTimeQueries = not hasGraphics)
                 primary.Begin CommandBufferUsage.OneTimeSubmit
 
                 for q in vulkanQueries do
