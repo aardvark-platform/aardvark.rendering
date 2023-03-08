@@ -5,6 +5,7 @@ open System.Runtime.CompilerServices
 open Aardvark.Base
 
 /// Token for gathering and querying statistics about the rendering process.
+/// It is mutable for construction/mutation in C# code
 [<CLIMutable>]
 type RenderToken =
     {
@@ -55,14 +56,20 @@ and [<Sealed; AbstractClass>] private RenderTokenEmpty() =
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RenderToken =
 
-    /// Adds the given query to the given render token.
-    let withQuery (query : IQuery) (token : RenderToken) =
-        let queries =
-            match token.Query with
-            | :? Queries as q -> q |> Queries.add query
-            | _ -> Queries.ofList [token.Query; query]
+    let private (|EmptyQuery|MultiQuery|SingleQuery|) (query : IQuery) = 
+        match query with
+        | :? Queries as tq -> if tq.AsList.IsEmpty then EmptyQuery else MultiQuery tq.AsList
+        | _ -> SingleQuery query
 
-        { token with Query = queries }
+    /// Adds the given query to the given render token.
+    let withQuery (query : IQuery) (token : RenderToken) : RenderToken =
+        match (token.Query, query) with
+        | (_, EmptyQuery) -> token
+        | (EmptyQuery, _) -> { token with Query = query } 
+        | (MultiQuery a, SingleQuery b) -> { token with Query = Queries.ofList (b :: a) } 
+        | (SingleQuery a, MultiQuery b) -> { token with Query = Queries.ofList (a :: b) } 
+        | (MultiQuery a, MultiQuery b) -> { token with Query = Queries.ofList (a @ b) }
+        | (SingleQuery a, SingleQuery b) -> { token with Query = Queries.ofList [a; b]  }
 
 module DisposableHelper =
     

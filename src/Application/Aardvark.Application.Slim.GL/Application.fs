@@ -213,7 +213,7 @@ module private OpenGL =
                 GL.ClearDepth(1.0)
                 GL.Clear(ClearBufferMask.ColorBufferBit ||| ClearBufferMask.DepthBufferBit ||| ClearBufferMask.StencilBufferBit)
 
-                let rt = RenderToken.Empty |> RenderToken.withQuery query
+                let rt = { RenderToken.Empty with Query = query}
                 task.Run(AdaptiveToken.Top, rt, output)
 
                 glfw.SwapBuffers(win)
@@ -347,7 +347,7 @@ type OpenGlApplication(forceNvidia : bool, debug : IDebugConfig, shaderCachePath
             WindowConfig.height = 768
             WindowConfig.resizable = true
             WindowConfig.focus = true
-            WindowConfig.vsync = false
+            WindowConfig.vsync = true
             WindowConfig.opengl = true
             WindowConfig.physicalSize = false
             WindowConfig.transparent = false
