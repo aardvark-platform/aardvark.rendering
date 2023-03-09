@@ -80,26 +80,50 @@ type ImageBinding =
         format : SizedInternalFormat
     }
 
-[<RequireQualifiedAccess>]
-type AttributeContent =
-    | Value  of value: IAdaptiveValue
-    | Buffer of buffer: IResource<Buffer> * stride: int * offset: int * frequency: AttributeFrequency
-
-    member x.Dispose() =
-        match x with
-        | Buffer (b, _, _, _) -> b.Dispose()
-        | _ -> ()
-
-[<Struct>]
-type AttributeBinding =
+type AdaptiveAttributeBuffer =
     {
-        Type    : Type
-        Index   : int
-        Content : AttributeContent
+        Type        : Type
+        Frequency   : AttributeFrequency
+        Normalized  : bool
+        Stride      : int
+        Offset      : int
+        Resource    : IResource<Buffer>
     }
 
-    member x.Dispose() =
-        x.Content.Dispose()
+    member inline x.GetValue(t : AdaptiveToken, rt : RenderToken) =
+        { Type = x.Type
+          Frequency = x.Frequency
+          Normalized = x.Normalized
+          Stride = x.Stride
+          Offset = x.Offset
+          Buffer = x.Resource.Handle.GetValue(t, rt) }
+
+    member inline x.Dispose() =
+        x.Resource.Dispose()
+
+[<RequireQualifiedAccess>]
+type AdaptiveAttribute =
+    | Value  of value: IAdaptiveValue * normalized : bool
+    | Buffer of buffer: AdaptiveAttributeBuffer
+
+    member x.ElementType =
+        match x with
+        | Value (v, _) -> v.ContentType
+        | Buffer b -> b.Type
+
+    member inline x.GetValue(t : AdaptiveToken, rt : RenderToken) =
+        match x with
+        | AdaptiveAttribute.Value (aval, norm) ->
+            let value = aval.GetValueUntyped t
+            Attribute.Value (value, norm)
+
+        | AdaptiveAttribute.Buffer buffer ->
+            Attribute.Buffer <| buffer.GetValue(t, rt)
+
+    member inline x.Dispose() =
+        match x with
+        | Buffer b -> b.Dispose()
+        | _ -> ()
 
 type IndexBinding =
     {
@@ -593,58 +617,21 @@ type ResourceManager private (parent : Option<ResourceManager>, ctx : Context, r
         let layers = input |> AVal.mapNonAdaptive (fun l -> l.Slices)
         x.CreateImageBinding(texture, level, layers, imageType.Properties)
 
-    member x.CreateVertexInputBinding(bindings : AttributeBinding[], index : IndexBinding option) =
-
-        let createAttributeDescription (self : AdaptiveToken) (binding : AttributeBinding) =
-            let description =
-                match binding.Content with
-                | AttributeContent.Value aval ->
-                    let value = aval.GetValueUntyped self
-                    AttributeDescription.Value value
-
-                | AttributeContent.Buffer (buffer, stride, offset, frequency) ->
-                    AttributeDescription.Buffer {
-                        Type = binding.Type
-                        Frequency = frequency
-                        Normalized = false
-                        Stride = stride
-                        Offset = offset
-                        Buffer = buffer.Handle.GetValue self
-                    }
-
-            binding.Index, description
-
+    member x.CreateVertexInputBinding(bindings : (int * AdaptiveAttribute)[], index : IndexBinding option) =
         vertexInputCache.GetOrCreate(
             [ bindings :> obj; index :> obj ],
             fun () ->
-                let bindings =
-                    bindings |> Array.map (fun b ->
-                        match b.Content with
-                        | AttributeContent.Value value ->
-                            let conv =
-                                try
-                                    value |> PrimitiveValueConverter.convertValueUntyped b.Type
-                                with
-                                | :? PrimitiveValueConverter.InvalidConversionException as exn ->
-                                    failf "cannot convert vertex or instance attribute value from %A to %A" exn.Source exn.Target
-
-                            { b with Content = AttributeContent.Value conv }
-
-                        | _ ->
-                            b
-                    )
-
                 { new Resource<VertexInputBindingHandle, int>(ResourceKind.VertexArrayObject) with
                     member x.View a = 0
                     member x.GetInfo _ = ResourceInfo.Zero
 
-                    member x.Create (token : AdaptiveToken, rt : RenderToken, old : Option<VertexInputBindingHandle>) =
+                    member x.Create (t : AdaptiveToken, rt : RenderToken, old : Option<VertexInputBindingHandle>) =
                         let attributes =
-                            bindings |> Array.map (createAttributeDescription token)
+                            bindings |> Array.map (fun (i, a) -> i, a.GetValue(t, rt))
 
                         let index =
                             match index with
-                            | Some i -> i.Buffer.Handle.GetValue token |> Some
+                            | Some i -> i.Buffer.Handle.GetValue(t, rt) |> Some
                             | _ -> None
 
                         match old with

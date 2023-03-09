@@ -154,6 +154,10 @@ type DebugConfig =
 
         /// Print the GLSL code during compilation (will not show up when cached).
         PrintShaderCode : bool
+
+        /// Print a warning when the element type of a provided attribute buffer or value
+        /// is double while the expected element type is not.
+        DoubleAttributePerformanceWarning : bool
     }
 
     member internal x.DebugOutputEnabled =
@@ -161,17 +165,19 @@ type DebugConfig =
 
     /// Disables all debugging functionality.
     static member None =
-        { DebugOutput       = None
-          ErrorFlagCheck    = ErrorFlagCheck.Disabled
-          DebugRenderTasks  = false
-          DebugComputeTasks = false
-          PrintShaderCode   = false }
+        { DebugOutput                       = None
+          ErrorFlagCheck                    = ErrorFlagCheck.Disabled
+          DebugRenderTasks                  = false
+          DebugComputeTasks                 = false
+          PrintShaderCode                   = false
+          DoubleAttributePerformanceWarning = false }
 
     /// OpenGL errors are logged, debug output reports warnings and errors.
     static member Minimal =
         { DebugConfig.None with
-            DebugOutput    = Some DebugOutputConfig.Minimal
-            ErrorFlagCheck = ErrorFlagCheck.PrintError }
+            DebugOutput                       = Some DebugOutputConfig.Minimal
+            ErrorFlagCheck                    = ErrorFlagCheck.PrintError
+            DoubleAttributePerformanceWarning = true }
 
     /// OpenGL errors raise an exception, debug output reports all messages but information, shader code is printed.
     static member Normal =

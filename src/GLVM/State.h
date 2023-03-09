@@ -109,6 +109,7 @@ typedef struct {
 	VertexAttribValue   Value;
 	uint32_t			Index;
 	GLenum				Type;
+	int					Normalized;
 } VertexValueBinding;
 
 typedef struct {

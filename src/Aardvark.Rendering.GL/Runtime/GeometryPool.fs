@@ -1613,7 +1613,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                         pProgramInterface.inputs |> List.map (fun param ->
                             match MapExt.tryFind param.paramSemantic ib.Buffers with
                                 | Some ib -> 
-                                    param.paramLocation, AttributeDescription.Buffer {
+                                    param.paramLocation, Attribute.Buffer {
                                         Type = GLSLType.toType param.paramType
                                         Buffer = ib
                                         Frequency = AttributeFrequency.PerInstances 1
@@ -1626,7 +1626,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                                     match MapExt.tryFind param.paramSemantic vb.Buffers with
                                     | Some (vb, typ) ->
                                         let norm = if typ = typeof<C4b> then true else false
-                                        param.paramLocation, AttributeDescription.Buffer {
+                                        param.paramLocation, Attribute.Buffer {
                                             Type = typ
                                             Buffer = vb
                                             Frequency = AttributeFrequency.PerVertex
@@ -1636,7 +1636,7 @@ type DrawPool(ctx : Context, alphaToCoverage : bool, bounds : bool, renderBounds
                                         }
 
                                     | None ->
-                                        param.paramLocation, AttributeDescription.Value V4f.Zero
+                                        param.paramLocation, Attribute.Value (V4f.Zero, false)
                         )
                         |> List.toArray
 

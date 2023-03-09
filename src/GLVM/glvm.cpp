@@ -116,13 +116,21 @@ DllExport(void) vmInit()
 	glVertexAttrib4f = (PFNGLVERTEXATTRIB4FPROC)getProc("glVertexAttrib4f");
 
 	glVertexAttrib4fv = (PFNGLVERTEXATTRIB4FVPROC)getProc("glVertexAttrib4fv");
-	glVertexAttribL4dv = (PFNGLVERTEXATTRIB4DVPROC)getProc("glVertexAttribL4dv");
-	glVertexAttribI4sv = (PFNGLVERTEXATTRIB4SVPROC)getProc("glVertexAttribI4sv");
-	glVertexAttribI4iv = (PFNGLVERTEXATTRIB4IVPROC)getProc("glVertexAttribI4iv");
-	glVertexAttribI4bv = (PFNGLVERTEXATTRIB4BVPROC)getProc("glVertexAttribI4bv");
-	glVertexAttribI4usv = (PFNGLVERTEXATTRIB4USVPROC)getProc("glVertexAttribI4usv");
-	glVertexAttribI4uiv = (PFNGLVERTEXATTRIB4UIVPROC)getProc("glVertexAttribI4uiv");
-	glVertexAttribI4ubv = (PFNGLVERTEXATTRIB4UBVPROC)getProc("glVertexAttribI4ubv");
+	glVertexAttrib4dv = (PFNGLVERTEXATTRIB4DVPROC)getProc("glVertexAttrib4dv");
+
+	glVertexAttribI4sv = (PFNGLVERTEXATTRIBI4SVPROC)getProc("glVertexAttribI4sv");
+	glVertexAttribI4iv = (PFNGLVERTEXATTRIBI4IVPROC)getProc("glVertexAttribI4iv");
+	glVertexAttribI4bv = (PFNGLVERTEXATTRIBI4BVPROC)getProc("glVertexAttribI4bv");
+	glVertexAttribI4usv = (PFNGLVERTEXATTRIBI4USVPROC)getProc("glVertexAttribI4usv");
+	glVertexAttribI4uiv = (PFNGLVERTEXATTRIBI4UIVPROC)getProc("glVertexAttribI4uiv");
+	glVertexAttribI4ubv = (PFNGLVERTEXATTRIBI4UBVPROC)getProc("glVertexAttribI4ubv");
+
+	glVertexAttrib4Nsv = (PFNGLVERTEXATTRIB4NSVPROC)getProc("glVertexAttrib4Nsv");
+	glVertexAttrib4Niv = (PFNGLVERTEXATTRIB4NIVPROC)getProc("glVertexAttrib4Niv");
+	glVertexAttrib4Nbv = (PFNGLVERTEXATTRIB4NBVPROC)getProc("glVertexAttrib4Nbv");
+	glVertexAttrib4Nusv = (PFNGLVERTEXATTRIB4NUSVPROC)getProc("glVertexAttrib4Nusv");
+	glVertexAttrib4Nuiv = (PFNGLVERTEXATTRIB4NUIVPROC)getProc("glVertexAttrib4Nuiv");
+	glVertexAttrib4Nubv = (PFNGLVERTEXATTRIB4NUBVPROC)getProc("glVertexAttrib4Nubv");
 
 	glColorMaski = (PFNGLCOLORMASKIPROC)getProc("glColorMaski");
 	glDrawBuffers = (PFNGLDRAWBUFFERSPROC)getProc("glDrawBuffers");
@@ -1262,19 +1270,30 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 				glEnableVertexAttribArray(index);
 				glBindBuffer(GL_ARRAY_BUFFER, b->Buffer);
 
-				switch (b->Type) {
-				case GL_BYTE:
-				case GL_UNSIGNED_BYTE:
-				case GL_SHORT:
-				case GL_UNSIGNED_SHORT:
-				case GL_INT:
-				case GL_UNSIGNED_INT:
-					if(b->Size == GL_BGRA) glVertexAttribPointer(index, b->Size, b->Type, b->Normalized, b->Stride, (void*)(size_t)b->Offset);
-					else glVertexAttribIPointer(index, b->Size, b->Type, b->Stride, (void*)(size_t)b->Offset);
-					break;
-				default:
-					glVertexAttribPointer(index, b->Size, b->Type, b->Normalized, b->Stride, (void*)(size_t)b->Offset);
-					break;
+				switch (b->Type)
+				{
+					case GL_FLOAT:
+					case GL_DOUBLE:
+						glVertexAttribPointer(index, b->Size, b->Type, b->Normalized, b->Stride, (void*)(size_t)b->Offset);
+						break;
+
+					case GL_UNSIGNED_BYTE:
+						if (b->Size == GL_BGRA) glVertexAttribPointer(index, b->Size, b->Type, 1, b->Stride, (void*)(size_t)b->Offset);
+						else glVertexAttribIPointer(index, b->Size, b->Type, b->Stride, (void*)(size_t)b->Offset);
+						break;
+
+					case GL_BYTE:
+					case GL_SHORT:
+					case GL_UNSIGNED_SHORT:
+					case GL_INT:
+					case GL_UNSIGNED_INT:
+						if (b->Normalized == 1) glVertexAttribPointer(index, b->Size, b->Type, b->Normalized, b->Stride, (void*)(size_t)b->Offset);
+						else glVertexAttribIPointer(index, b->Size, b->Type, b->Stride, (void*)(size_t)b->Offset);
+						break;
+
+					default:
+						printf("[GLVM] unsupported attribute type: %d\n", (int)b->Type);
+						break;
 
 				}
 				glVertexAttribDivisor(index, (uint32_t)b->Divisor);
@@ -1302,35 +1321,42 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 					break;
 
 				case GL_DOUBLE:
-					glVertexAttribL4dv(b.Index, (GLdouble*)&b.Value);
+					// Note: Even if input is double, we assume that shader wants float (hence no L)
+					glVertexAttrib4dv(b.Index, (GLdouble*)&b.Value);
 					break;
 
 				case GL_BYTE:
-					glVertexAttribI4bv(b.Index, (GLbyte*)&b.Value);
+					if (b.Normalized == 1) glVertexAttrib4Nbv(b.Index, (GLbyte*)&b.Value);
+					else glVertexAttribI4bv(b.Index, (GLbyte*)&b.Value);
 					break;
 
 				case GL_UNSIGNED_BYTE:
-					glVertexAttribI4ubv(b.Index, (GLubyte*)&b.Value);
+					if (b.Normalized == 1) glVertexAttrib4Nubv(b.Index, (GLubyte*)&b.Value);
+					else glVertexAttribI4ubv(b.Index, (GLubyte*)&b.Value);
 					break;
 
 				case GL_SHORT:
-					glVertexAttribI4sv(b.Index, (GLshort*)&b.Value);
+					if (b.Normalized == 1) glVertexAttrib4Nsv(b.Index, (GLshort*)&b.Value);
+					else glVertexAttribI4sv(b.Index, (GLshort*)&b.Value);
 					break;
 
 				case GL_UNSIGNED_SHORT:
-					glVertexAttribI4usv(b.Index, (GLushort*)&b.Value);
+					if (b.Normalized == 1) glVertexAttrib4Nusv(b.Index, (GLushort*)&b.Value);
+					else glVertexAttribI4usv(b.Index, (GLushort*)&b.Value);
 					break;
 
 				case GL_INT:
-					glVertexAttribI4iv(b.Index, (GLint*)&b.Value);
+					if (b.Normalized == 1) glVertexAttrib4Niv(b.Index, (GLint*)&b.Value);
+					else glVertexAttribI4iv(b.Index, (GLint*)&b.Value);
 					break;
 
 				case GL_UNSIGNED_INT:
-					glVertexAttribI4uiv(b.Index, (GLuint*)&b.Value);
+					if (b.Normalized == 1) glVertexAttrib4Nuiv(b.Index, (GLuint*)&b.Value);
+					else glVertexAttribI4uiv(b.Index, (GLuint*)&b.Value);
 					break;
 
 				default:
-					printf("unknown attribute type: %d\n", (int)b.Type);
+					printf("[GLVM] unsupported attribute type: %d\n", (int)b.Type);
 					break;
 			}
 		}

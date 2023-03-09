@@ -11,6 +11,15 @@ module AdaptivePrimitiveValueConverterExtensions =
 
     module PrimitiveValueConverter =
 
+        let rec private (|InvalidConversion|_|) (e : exn) =
+            match e with
+            | :? PrimitiveValueConverter.InvalidConversionException as e -> Some e
+            | _ ->
+                match e.InnerException with
+                | null -> None
+                | InvalidConversion e -> Some e
+                | _ -> None
+
         type private IAdaptiveConverter =
             abstract member ConvertUntyped : IAdaptiveValue -> IAdaptiveValue
 
@@ -47,24 +56,33 @@ module AdaptivePrimitiveValueConverterExtensions =
             if inputElementType = typeof<'T> then
                 array |> AdaptiveResource.mapNonAdaptive unbox
             else
-                let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputElementType; typeof<'T> |]
-                let converter : IAdaptiveConverter<'T> = tconv |> getStaticField "Instance"
-                converter.Convert(array)
+                try
+                    let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputElementType; typeof<'T> |]
+                    let converter : IAdaptiveConverter<'T> = tconv |> getStaticField "Instance"
+                    converter.Convert(array)
+                with
+                | InvalidConversion exn -> raise exn
 
         let convertValueUntyped (outputType : Type) (value : IAdaptiveValue) =
             let inputType = value.ContentType
             if inputType = outputType then
                 value
             else
-                let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputType; outputType |]
-                let converter : IAdaptiveConverter = tconv |> getStaticField "Instance"
-                converter.ConvertUntyped(value)
+                try
+                    let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputType; outputType |]
+                    let converter : IAdaptiveConverter = tconv |> getStaticField "Instance"
+                    converter.ConvertUntyped(value)
+                with
+                | InvalidConversion exn -> raise exn
 
         let convertValue (value : IAdaptiveValue) : aval<'T> =
             let inputType = value.ContentType
             if inputType = typeof<'T> then
                 unbox value
             else
-                let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputType; typeof<'T> |]
-                let converter : IAdaptiveConverter<'T> = tconv |> getStaticField "Instance"
-                converter.Convert(value)
+                try
+                    let tconv = typedefof<AdaptiveConverter<_,_>>.MakeGenericType [| inputType; typeof<'T> |]
+                    let converter : IAdaptiveConverter<'T> = tconv |> getStaticField "Instance"
+                    converter.Convert(value)
+                with
+                | InvalidConversion exn -> raise exn

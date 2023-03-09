@@ -156,9 +156,10 @@ type VertexValueBinding =
         val private W : uint64
         val public Index : uint32
         val public Type : VertexAttribType
+        val public Normalized : int
 
-        new (i, t) =
-            { X = 0UL; Y = 0UL; Z = 0UL; W = 0UL; Index = i; Type = t }
+        new (i, t, n) =
+            { X = 0UL; Y = 0UL; Z = 0UL; W = 0UL; Index = i; Type = t; Normalized = if n then 1 else 0 }
     end
 
 [<StructLayout(LayoutKind.Sequential)>]

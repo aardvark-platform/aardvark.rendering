@@ -823,7 +823,7 @@ type PreparedObjectInfo =
         oActivation : IDisposable
         oFramebufferSignature : IFramebufferSignature
         oBeginMode : IResource<GLBeginMode, GLBeginMode>
-        oAttributeBindings : AttributeBinding[]
+        oAttributeBuffers : IResource<Buffer>[]
         oIndexBinding : IndexBinding option
         oIsActive : IResource<bool, int>
         oDrawCallInfos : IResource<DrawCallInfoList, DrawCallInfoList>
@@ -836,7 +836,7 @@ type PreparedObjectInfo =
             if x.oIsActive.IsDisposed then failwith "double free"
             x.oBeginMode.Dispose()
 
-            for b in x.oAttributeBindings do
+            for b in x.oAttributeBuffers do
                 b.Dispose()
 
             match x.oIndexBinding with
@@ -858,10 +858,8 @@ type PreparedObjectInfo =
         seq {
             yield x.oBeginMode :> IResource
 
-            for b in x.oAttributeBindings do
-                match b.Content with
-                | AttributeContent.Buffer (b, _, _, _) -> yield b :> _
-                | _ -> ()
+            for b in x.oAttributeBuffers do
+                yield b :> _
 
             match x.oIndexBinding with
             | Some b -> yield b.Buffer :>_
@@ -878,31 +876,53 @@ type PreparedObjectInfo =
 
 module PreparedObjectInfo =
     open FShade
+    open TypeInfo
 
-    let private getExpectedType (t : GLSLType) =
-        try
-            GLSLType.toType t
-        with _ ->
-            failf "unexpected vertex type: %A" t
+    [<AutoOpen>]
+    module private Utilities =
 
-    let private getIndexType =
-        let tryGetIndexType =
-            LookupTable.lookupTable' [
-                typeof<byte>,   OpenGl.Enums.IndexType.UnsignedByte
-                typeof<uint16>, OpenGl.Enums.IndexType.UnsignedShort
-                typeof<uint32>, OpenGl.Enums.IndexType.UnsignedInt
-                typeof<sbyte>,  OpenGl.Enums.IndexType.UnsignedByte
-                typeof<int16>,  OpenGl.Enums.IndexType.UnsignedShort
-                typeof<int32>,  OpenGl.Enums.IndexType.UnsignedInt
-            ]
+        let (|AttributeType|_|) (t : Type) =
+            match t with
+            | ColorOf(_, t) | VectorOf(_, t) | MatrixOf(_, t) -> Some t
+            | Num -> Some t
+            | _ -> None
 
-        fun t ->
-            match tryGetIndexType t with
-            | Some it -> it
-            | _ -> failf "unsupported index type '%A'" t
+        let getExpectedType (t : GLSLType) =
+            try
+                GLSLType.toType t
+            with _ ->
+                failf "unexpected vertex type: %A" t
 
+        let getIndexType =
+            let tryGetIndexType =
+                LookupTable.lookupTable' [
+                    typeof<byte>,   OpenGl.Enums.IndexType.UnsignedByte
+                    typeof<uint16>, OpenGl.Enums.IndexType.UnsignedShort
+                    typeof<uint32>, OpenGl.Enums.IndexType.UnsignedInt
+                    typeof<sbyte>,  OpenGl.Enums.IndexType.UnsignedByte
+                    typeof<int16>,  OpenGl.Enums.IndexType.UnsignedShort
+                    typeof<int32>,  OpenGl.Enums.IndexType.UnsignedInt
+                ]
 
-    let ofRenderObject (fboSignature : IFramebufferSignature) (x : ResourceManager) (iface : GLSLProgramInterface) (program : IResource<Program, int>) (rj : RenderObject) =
+            fun t ->
+                match tryGetIndexType t with
+                | Some it -> it
+                | _ -> failf "unsupported index type '%A'" t
+
+        let validateDoubleAttribute (name : string) (expected : Type) (input : Type) =
+            match input, expected with
+            | AttributeType Float64, AttributeType te when te <> typeof<float> ->
+                Log.warn "[GL] attribute '%s' expects %A elements but %A elements were provided. Using double-based attribute types may result in degraded performance." name expected input
+            | _ ->
+                ()
+
+    let ofRenderObject (fboSignature : IFramebufferSignature) (x : ResourceManager)
+                       (iface : GLSLProgramInterface) (program : IResource<Program, int>) (rj : RenderObject) =
+
+        let printDoubleAttributeWarning =
+            match x.Context.Runtime.DebugConfig with
+            | :? DebugConfig as cfg -> cfg.DoubleAttributePerformanceWarning
+            | _ -> false
 
         // use a context token to avoid making context current/uncurrent repeatedly
         use __ = x.Context.ResourceLock
@@ -914,9 +934,9 @@ module PreparedObjectInfo =
             iface.inputs
             |> List.choose (fun v ->
                 if v.paramLocation >= 0 then
-                    let expected = getExpectedType v.paramType
+                    let expectedType = getExpectedType v.paramType
 
-                    let typ, content =
+                    let attribute =
                         let view, frequency =
                             match rj.TryGetAttribute(Symbol.Create v.paramName) with
                             | Some (view, perInstance) ->
@@ -924,23 +944,47 @@ module PreparedObjectInfo =
                             | _ ->
                                 failf "could not get attribute '%s'" v.paramName
 
+                        // Check if we got double data even though we don't need it
+                        if printDoubleAttributeWarning then
+                            (expectedType, view.ElementType) ||> validateDoubleAttribute v.paramName
+
+                        // Treat color types as normalized if accessed as floating point
+                        let normalized =
+                            match view.ElementType, expectedType with
+                            | ColorOf(_, _), AttributeType (Float32 | Float64) -> true
+                            | _ -> false
+
                         match view.Buffer with
                         | :? ISingleValueBuffer as b ->
-                            expected, AttributeContent.Value b.Value
+                            AdaptiveAttribute.Value (b.Value, normalized)
 
                         | _ ->
-                            let buffer = x.CreateBuffer view.Buffer
-                            view.ElementType, AttributeContent.Buffer (buffer, view.Stride, view.Offset, frequency)
+                            let resource = x.CreateBuffer view.Buffer
 
-                    Some {
-                        Type    = typ
-                        Index   = v.paramLocation
-                        Content = content
-                    }
+                            let buffer = {
+                                Type = view.ElementType
+                                Frequency = frequency
+                                Normalized = normalized
+                                Stride = view.Stride
+                                Offset = view.Offset
+                                Resource = resource
+                            }
+
+                            AdaptiveAttribute.Buffer buffer
+
+
+                    Some (v.paramLocation, attribute)
                 else
                     None
             )
             |> List.toArray
+
+        let attributeBuffers =
+            attributeBindings |> Array.choose (fun (_, attr) ->
+                match attr with
+                | AdaptiveAttribute.Buffer b -> Some b.Resource
+                | _ -> None
+            )
 
         GL.Check "[Prepare] Buffers"
 
@@ -983,7 +1027,7 @@ module PreparedObjectInfo =
             oOriginal = rj
             oActivation = activation
             oFramebufferSignature = fboSignature
-            oAttributeBindings = attributeBindings
+            oAttributeBuffers = attributeBuffers
             oIndexBinding = index
             oIndirectBuffer = indirect
             oVertexInputBinding = vibh
