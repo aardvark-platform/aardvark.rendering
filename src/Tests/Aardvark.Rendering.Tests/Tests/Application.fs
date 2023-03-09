@@ -93,7 +93,9 @@ module TestApplication =
                 { Vulkan.DebugConfig.Normal with
                     ValidationLayer = Some Vulkan.ValidationLayerConfig.Full }
             else
-                DebugLevel.Normal
+                { GL.DebugConfig.Normal with
+                    DebugRenderTasks = true
+                    DebugComputeTasks = true }
 
         backend |> create' config
 

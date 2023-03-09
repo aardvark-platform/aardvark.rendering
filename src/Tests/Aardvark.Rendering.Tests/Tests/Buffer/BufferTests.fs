@@ -11,7 +11,7 @@ module ``Buffer Tests`` =
             BufferCopy.tests
             BufferUpload.tests
             BufferDownload.tests
-            SingleValueBuffer.tests
+            AttributeBuffer.tests
         ]
 
     [<Tests>]

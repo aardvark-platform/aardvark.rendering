@@ -215,13 +215,25 @@ module PixData =
             Directory.CreateDirectory(dir) |> ignore
             img.Save(Path.combine [dir; fileName])
 
-        let isColor (color : 'T[]) (pi : PixImage<'T>) =
+        let isColorWithComparer (comparer : 'T -> 'T -> string -> unit)
+                                (color : 'T[]) (pi : PixImage<'T>) =
             for c in 0 .. (min color.Length pi.ChannelCount) - 1 do
                 let data = pi.GetChannel(int64 c)
 
                 for x in 0 .. pi.Size.X - 1 do
                     for y in 0 .. pi.Size.Y - 1 do
-                        Expect.equal data.[x, y] color.[c] $"PixImage data mismatch in channel {c} at ({x}, {y})"
+                        comparer data.[x, y] color.[c] $"PixImage data mismatch in channel {c} at ({x}, {y})"
+
+        let isColor (color : 'T[]) (pi : PixImage<'T>) =
+            isColorWithComparer Expect.equal color pi
+
+        let isColor32f (accuracy : Accuracy) (color : float32[]) (pi : PixImage<float32>) =
+            let comp a b = Expect.floatClose accuracy (float a) (float b)
+            isColorWithComparer comp color pi
+
+        let isColor64f (accuracy : Accuracy) (color : float[]) (pi : PixImage<float>) =
+            let comp a b = Expect.floatClose accuracy a b
+            isColorWithComparer comp color pi
 
         let inline rootMeanSquaredError (input : PixImage<'T>) (output : PixImage<'T>) =
             sqrt (PixImage.meanSquaredError input output)
