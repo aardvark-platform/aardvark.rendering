@@ -1240,7 +1240,6 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 	{
 		glBindVertexArray(0);
 	}
-
 	else
 	{
 		auto currentContext = *contextHandle;
@@ -1265,38 +1264,34 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 
 			for (uint32_t i = 0; i < (uint32_t)binding->BufferBindingCount; i++)
 			{
-				auto b = binding->BufferBindings + i;
-				auto index = b->Index;
-				glEnableVertexAttribArray(index);
-				glBindBuffer(GL_ARRAY_BUFFER, b->Buffer);
+				const auto& b = binding->BufferBindings[i];
 
-				switch (b->Type)
+				glEnableVertexAttribArray(b.Index);
+				glBindBuffer(GL_ARRAY_BUFFER, b.Buffer);
+
+				switch (b.Type)
 				{
 					case GL_FLOAT:
 					case GL_DOUBLE:
-						glVertexAttribPointer(index, b->Size, b->Type, b->Normalized, b->Stride, (void*)(size_t)b->Offset);
-						break;
-
-					case GL_UNSIGNED_BYTE:
-						if (b->Size == GL_BGRA) glVertexAttribPointer(index, b->Size, b->Type, 1, b->Stride, (void*)(size_t)b->Offset);
-						else glVertexAttribIPointer(index, b->Size, b->Type, b->Stride, (void*)(size_t)b->Offset);
+						glVertexAttribPointer(b.Index, b.Size, b.Type, b.Normalized, b.Stride, (void*)(size_t)b.Offset);
 						break;
 
 					case GL_BYTE:
+					case GL_UNSIGNED_BYTE:
 					case GL_SHORT:
 					case GL_UNSIGNED_SHORT:
 					case GL_INT:
 					case GL_UNSIGNED_INT:
-						if (b->Normalized == 1) glVertexAttribPointer(index, b->Size, b->Type, b->Normalized, b->Stride, (void*)(size_t)b->Offset);
-						else glVertexAttribIPointer(index, b->Size, b->Type, b->Stride, (void*)(size_t)b->Offset);
+						if (b.Normalized == 1) glVertexAttribPointer(b.Index, b.Size, b.Type, 1, b.Stride, (void*)(size_t)b.Offset);
+						else glVertexAttribIPointer(b.Index, b.Size, b.Type, b.Stride, (void*)(size_t)b.Offset);
 						break;
 
 					default:
-						printf("[GLVM] unsupported attribute type: %d\n", (int)b->Type);
+						printf("[GLVM] unsupported attribute type: %d\n", (int)b.Type);
 						break;
 
 				}
-				glVertexAttribDivisor(index, (uint32_t)b->Divisor);
+				glVertexAttribDivisor(b.Index, (uint32_t)b.Divisor);
 			}
 
 			glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, binding->IndexBuffer);
@@ -1304,7 +1299,6 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 			binding->VAOContext = currentContext;
 			binding->VAO = vao;
 		}
-
 		else
 		{
 			glBindVertexArray((uint32_t)binding->VAO);
@@ -1312,7 +1306,7 @@ DllExport(void) hglBindVertexAttributes(void** contextHandle, VertexInputBinding
 
 		for (uint32_t i = 0; i < (uint32_t)binding->ValueBindingCount; i++)
 		{
-			auto& b = binding->ValueBindings[i];
+			const auto& b = binding->ValueBindings[i];
 
 			switch (b.Type)
 			{
