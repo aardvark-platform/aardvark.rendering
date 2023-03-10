@@ -104,111 +104,47 @@ module InputAssemblyState =
                 failwithf "Unknown indexed geometry mode %A" mode
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+module internal VertexInputDescription =
+
+    let create (perInstance : bool) (singleValue : bool) (offset : int) (stride : int) (rows : int) (format : VkFormat) =
+        let rowSize = VkFormat.pixelSizeInBytes format
+        let totalSize = rows * rowSize
+
+        let stride =
+            if singleValue then 0
+            elif stride = 0 then totalSize
+            else stride
+
+        { inputFormat = format
+          stride      = stride
+          stepRate    = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
+          offsets     = List.init rows (fun r -> offset + r * rowSize) }
+
+[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VertexInputState =
+    open TypeInfo
 
-    let private toVkFormat =
-        let lookup =
-            LookupTable.lookupTable' [
-                typeof<int8>, VkFormat.R8Sint
-                typeof<uint8>, VkFormat.R8Uint
-
-                typeof<int16>, VkFormat.R16Sint
-                typeof<uint16>, VkFormat.R16Uint
-
-                typeof<int32>, VkFormat.R32Sint
-                typeof<uint32>, VkFormat.R32Uint
-
-                typeof<V2i>, VkFormat.R32g32Sint
-                typeof<V3i>, VkFormat.R32g32b32Sint
-                typeof<V4i>, VkFormat.R32g32b32a32Sint
-
-                typeof<V2ui>, VkFormat.R32g32Uint
-                typeof<V3ui>, VkFormat.R32g32b32Uint
-                typeof<V4ui>, VkFormat.R32g32b32a32Uint
-
-                typeof<float32>, VkFormat.R32Sfloat
-                typeof<V2f>, VkFormat.R32g32Sfloat
-                typeof<V3f>, VkFormat.R32g32b32Sfloat
-                typeof<V4f>, VkFormat.R32g32b32a32Sfloat
-
-                typeof<double>, VkFormat.R64Sfloat
-                typeof<V2d>, VkFormat.R64g64Sfloat
-                typeof<V3d>, VkFormat.R64g64b64Sfloat
-                typeof<V4d>, VkFormat.R64g64b64a64Sfloat
-
-                // TODO: is that really correct here???
-                typeof<C3b>, VkFormat.B8g8r8Unorm
-                typeof<C4b>, VkFormat.B8g8r8a8Unorm
-
-                typeof<C3us>, VkFormat.R16g16b16Unorm
-                typeof<C4us>, VkFormat.R16g16b16a16Unorm
-
-                typeof<C3ui>, VkFormat.R32g32b32Uint
-                typeof<C4ui>, VkFormat.R32g32b32a32Uint
-
-                typeof<C3f>, VkFormat.R32g32b32Sfloat
-                typeof<C4f>, VkFormat.R32g32b32a32Sfloat
-
-                typeof<C3d>, VkFormat.R64g64b64Sfloat
-                typeof<C4d>, VkFormat.R64g64b64a64Sfloat
-            ]
-
-        fun typ ->
-            match lookup typ with
-            | Some fmt -> fmt
-            | _ -> failf "cannot determine appropriate vertex input format for type %A" typ
-
-
-    [<RequireQualifiedAccess>]
-    type AttributeDescription =
-        internal {
-            ElementType   : Type
-            IsSingleValue : bool
-            Offset        : int
-        }
-
-    module AttributeDescription =
-        let create (elementType : Type) (isSingleValue : bool) (offset : int) =
-            { AttributeDescription.ElementType   = elementType
-              AttributeDescription.IsSingleValue = isSingleValue
-              AttributeDescription.Offset        = offset }
-
-    let ofDescriptions (descriptions : Map<Symbol, bool * AttributeDescription>) =
-        descriptions |> Map.map (fun name (perInstance, desc) ->
-            match desc.ElementType with
-            | TypeInfo.Patterns.MatrixOf(s, TypeInfo.Patterns.Float32) ->
-                let rowFormat =
-                    match s.X with
-                    | 2 -> VkFormat.R32g32Sfloat
-                    | 3 -> VkFormat.R32g32b32Sfloat
-                    | _ -> VkFormat.R32g32b32a32Sfloat
-
-                let rowSize = VkFormat.pixelSizeInBytes rowFormat
-                let totalSize = s.Y * rowSize
-                {
-                    inputFormat = rowFormat
-                    stride = if desc.IsSingleValue then 0 else totalSize
-                    stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
-                    offsets = List.init s.Y (fun r -> desc.Offset + r * rowSize)
-                }
-
-            | TypeInfo.Patterns.MatrixOf(_, et) ->
-                failf "matrix types with element type %A not supported for vertex inputs" et
-
-            | _ ->
-                let fmt = toVkFormat desc.ElementType
-                {
-                    inputFormat = fmt
-                    stride = if desc.IsSingleValue then 0 else VkFormat.pixelSizeInBytes fmt
-                    stepRate = if perInstance then VkVertexInputRate.Instance else VkVertexInputRate.Vertex
-                    offsets = [desc.Offset]
-                }
-        )
-
+    // Note: The expected type is not enough to determine the appropriate format.
+    // E.g. if V3f is expected, we might need a float32 format if the input is also float32
+    // but we might also need an normalized format if the input is a color like C3b.
+    // Here we just have to assume that input type = expected type.
+    // Similarly, we have to determine the stride here which must be set to 0 for
+    // single value buffers. Here, we just assume that the input a regular buffer.
     let ofTypes (types : Map<Symbol, bool * Type>) =
-        types|> Map.map (fun _ (perInstance, typ) ->
-            perInstance, AttributeDescription.create typ false 0
-        ) |> ofDescriptions
+        types |> Map.map (fun name (perInstance, typ) ->
+            let format =
+                VkFormat.tryGetAttributeFormat typ typ
+                |> Option.defaultWith (fun _ ->
+                    failf "cannot determine appropriate format for attribute '%A' (expected type = %A)" name typ
+                )
+
+            let rows =
+                match typ with
+                | MatrixOf(s, _) -> s.Y
+                | _ -> 1
+
+            VertexInputDescription.create perInstance false 0 0 rows format
+        )
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module RasterizerState =

@@ -347,6 +347,16 @@ module AttributeBuffer =
                         if backend = Backend.GL && name = "uint8 from C4b" && not singleValue then
                             ()
 
+                        // Vulkan does not support converting double to float on-the-fly.
+                        // Not really a good idea anyway :)
+                        elif backend = Backend.Vulkan && name = "V3f from V3d" then
+                            ()
+
+                        // Vulkan does not have normalized 32bit formats (e.g. there is no VK_FORMAT_R32G32B32_UNORM)
+                        // See: https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VkFormat.html
+                        elif backend = Backend.Vulkan && name = "V3f from C3ui normalized" then
+                            ()
+
                         else
                             yield (desc + " " + name), case perInstance singleValue
         ]

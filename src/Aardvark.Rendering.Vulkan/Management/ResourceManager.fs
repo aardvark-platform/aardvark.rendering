@@ -1725,28 +1725,6 @@ type ResourceManager(device : Device) =
             new BufferResource(cache, key, device, VkBufferUsageFlags.None, input |> AdaptiveResource.cast) :> IResourceLocation<Buffer>
         )
 
-    member x.CreateVertexBuffer(expectedType : Type, input : ISingleValueBuffer) =
-        bufferCache.GetOrCreate(
-            [expectedType :> obj; input :> obj],
-            fun cache key ->
-                let converted =
-                    try
-                        input.Value |> PrimitiveValueConverter.convertValueUntyped expectedType
-                    with
-                    | :? PrimitiveValueConverter.InvalidConversionException as exn ->
-                        failf "cannot convert vertex or instance attribute value from %A to %A" exn.Source exn.Target
-
-                let buffer : aval<IBuffer> =
-                    converted.Accept(
-                        { new IAdaptiveValueVisitor<_> with
-                            member x.Visit(value : aval<'T>) =
-                                value |> AVal.map (fun v -> ArrayBuffer [| v |])
-                        }
-                    )
-
-                new BufferResource(cache, key, device, VertexBufferUsage, buffer)
-        )
-
     member x.CreateVertexBuffer(input : aval<IBuffer>) =
         x.CreateBuffer(input, VertexBufferUsage)
 

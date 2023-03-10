@@ -1,7 +1,10 @@
 ﻿namespace Aardvark.Rendering.Vulkan
 
+open System
+open System.Runtime.InteropServices
 open Aardvark.Base
 open Aardvark.Rendering
+open TypeInfo
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
 module VkFormat =
@@ -1253,3 +1256,109 @@ module VkFormat =
 
     let ofPixFormat (fmt : PixFormat) (t : TextureParams) =
         TextureFormat.ofPixFormat fmt t |> ofTextureFormat
+
+    let private tryOfBaseType =
+        let same value _arg = value
+        let bgr x y flag = if flag then x else y
+
+        let lookup =
+            LookupTable.lookupTable' [
+                (typeof<float16>, 1), same VkFormat.R16Sfloat
+                (typeof<float16>, 2), same VkFormat.R16g16Sfloat
+                (typeof<float16>, 3), same VkFormat.R16g16b16Sfloat
+                (typeof<float16>, 4), same VkFormat.R16g16b16a16Sfloat
+
+                (typeof<float32>, 1), same VkFormat.R32Sfloat
+                (typeof<float32>, 2), same VkFormat.R32g32Sfloat
+                (typeof<float32>, 3), same VkFormat.R32g32b32Sfloat
+                (typeof<float32>, 4), same VkFormat.R32g32b32a32Sfloat
+
+                (typeof<float>, 1),   same VkFormat.R64Sfloat
+                (typeof<float>, 2),   same VkFormat.R64g64Sfloat
+                (typeof<float>, 3),   same VkFormat.R64g64b64Sfloat
+                (typeof<float>, 4),   same VkFormat.R64g64b64a64Sfloat
+
+                (typeof<int8>, 1),    same VkFormat.R8Sint
+                (typeof<int8>, 2),    same VkFormat.R8g8Sint
+                (typeof<int8>, 3),    same VkFormat.R8g8b8Sint
+                (typeof<int8>, 4),    same VkFormat.R8g8b8a8Sint
+
+                (typeof<uint8>, 1),   same VkFormat.R8Uint
+                (typeof<uint8>, 2),   same VkFormat.R8g8Uint
+                (typeof<uint8>, 3),   bgr  VkFormat.B8g8r8Uint VkFormat.R8g8b8Uint      // C3b and C4b have BGR layout
+                (typeof<uint8>, 4),   bgr  VkFormat.B8g8r8a8Uint VkFormat.R8g8b8a8Uint
+
+                (typeof<int16>, 1),   same VkFormat.R16Sint
+                (typeof<int16>, 2),   same VkFormat.R16g16Sint
+                (typeof<int16>, 3),   same VkFormat.R16g16b16Sint
+                (typeof<int16>, 4),   same VkFormat.R16g16b16a16Sint
+
+                (typeof<uint16>, 1),  same VkFormat.R16Uint
+                (typeof<uint16>, 2),  same VkFormat.R16g16Uint
+                (typeof<uint16>, 3),  same VkFormat.R16g16b16Uint
+                (typeof<uint16>, 4),  same VkFormat.R16g16b16a16Uint
+
+                (typeof<int32>, 1),   same VkFormat.R32Sint
+                (typeof<int32>, 2),   same VkFormat.R32g32Sint
+                (typeof<int32>, 3),   same VkFormat.R32g32b32Sint
+                (typeof<int32>, 4),   same VkFormat.R32g32b32a32Sint
+
+                (typeof<uint32>, 1),  same VkFormat.R32Uint
+                (typeof<uint32>, 2),  same VkFormat.R32g32Uint
+                (typeof<uint32>, 3),  same VkFormat.R32g32b32Uint
+                (typeof<uint32>, 4),  same VkFormat.R32g32b32a32Uint
+            ]
+
+        let normLookup =
+            LookupTable.lookupTable' [
+                VkFormat.R8Sint,           VkFormat.R8Snorm
+                VkFormat.R8g8Sint,         VkFormat.R8g8Snorm
+                VkFormat.R8g8b8Sint,       VkFormat.R8g8b8Snorm
+                VkFormat.R8g8b8a8Sint,     VkFormat.R8g8b8a8Snorm
+
+                VkFormat.R8Uint,           VkFormat.R8Unorm
+                VkFormat.R8g8Uint,         VkFormat.R8g8Unorm
+                VkFormat.R8g8b8Uint,       VkFormat.R8g8b8Unorm
+                VkFormat.B8g8r8Uint,       VkFormat.B8g8r8Unorm
+                VkFormat.R8g8b8a8Uint,     VkFormat.R8g8b8a8Unorm
+                VkFormat.B8g8r8a8Uint,     VkFormat.B8g8r8a8Unorm
+
+                VkFormat.R16Sint,          VkFormat.R16Snorm
+                VkFormat.R16g16Sint,       VkFormat.R16g16Snorm
+                VkFormat.R16g16b16Sint,    VkFormat.R16g16b16Snorm
+                VkFormat.R16g16b16a16Sint, VkFormat.R16g16b16a16Snorm
+
+                VkFormat.R16Uint,          VkFormat.R16Unorm
+                VkFormat.R16g16Uint,       VkFormat.R16g16Unorm
+                VkFormat.R16g16b16Uint,    VkFormat.R16g16b16Unorm
+                VkFormat.R16g16b16a16Uint, VkFormat.R16g16b16a16Unorm
+            ]
+
+        fun (bgr : bool) (normalized : bool) (dimension : int) (baseType : Type) ->
+            lookup (baseType, dimension)
+            |> Option.bind (fun f ->
+                f bgr |> if normalized then normLookup else Some
+            )
+
+    let private (|Attribute|_|) (t : Type) =
+        match t with
+        | ColorOf(d, t) | VectorOf(d, t) -> Some (d, t)
+        | MatrixOf(s, t) -> Some (s.X, t)
+        | Num -> Some (1, t)
+        | _ -> None
+
+    let inline private isBgr (t : Type) =
+        match t with
+        | ColorOf(_, Byte) -> true
+        | _ -> false
+
+    let tryGetAttributeFormat (expectedType : Type) (inputType : Type) =
+        match inputType, expectedType with
+        | ColorOf(dim, (Integral as bt)), Attribute(_, (Float32 | Float64)) ->
+            bt |> tryOfBaseType (isBgr inputType) true dim
+
+        | Attribute(dim, btIn), Attribute(_, btEx) when Marshal.SizeOf btIn = Marshal.SizeOf btEx ->
+            btEx |> tryOfBaseType (isBgr inputType) false dim
+
+        | _ ->
+            None

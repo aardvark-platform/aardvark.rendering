@@ -57,7 +57,7 @@ type ResourceManagerExtensions private() =
             |> Map.ofList
 
         let inputState =
-            this.CreateVertexInputState(layout.PipelineInfo, AVal.constant (VertexInputState.ofTypes inputs))
+            this.CreateVertexInputState(layout.PipelineInfo, VertexInputState.ofTypes inputs)
 
         let inputAssembly =
             this.CreateInputAssemblyState(state.Mode, program)

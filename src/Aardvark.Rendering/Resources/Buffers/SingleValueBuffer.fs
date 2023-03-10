@@ -28,8 +28,6 @@ type SingleValueBuffer<'T when 'T : unmanaged>(value : aval<'T>) =
     member x.Value = value
 
     /// Returns the value wrapped in an ArrayBuffer.
-    /// Note: The backend should not rely on this if it is used as vertex or instance attribute, but
-    /// evaluate the adaptive value directly and perform any necessary conversions.
     member private x.GetValue(token : AdaptiveToken) : IBuffer =
         ArrayBuffer [| value.GetValue token |]
 

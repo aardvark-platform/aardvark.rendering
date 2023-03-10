@@ -6,6 +6,7 @@ open Aardvark.Base
 open Aardvark.Rendering
 open Aardvark.Rendering.Vulkan
 open FSharp.Data.Adaptive
+open TypeInfo
 
 #nowarn "9"
 // #nowarn "51"
@@ -281,10 +282,6 @@ type DevicePreparedRenderObjectExtensions private() =
 
         let descriptorSets = createDescriptorSets this programLayout ro.Uniforms
 
-        let isCompatible (shaderType : FShade.GLSL.GLSLType) (dataType : Type) =
-            // TODO: verify type compatibility
-            true
-
         let attributeBindings =
             programLayout.PipelineInfo.pInputs
             |> List.sortBy (fun p -> p.paramLocation)
@@ -297,32 +294,42 @@ type DevicePreparedRenderObjectExtensions private() =
                     | Some attr -> attr
                     | _ -> failf "could not get attribute '%A'" semantic
 
-                let elementType, buffer =
-                    match view.Buffer with
-                    | :? ISingleValueBuffer as buffer ->
-                        expectedType, this.CreateVertexBuffer(expectedType, buffer)
+                let buffer = this.CreateVertexBuffer view.Buffer
 
-                    | buffer ->
-                        view.ElementType, this.CreateVertexBuffer(buffer)
+                let stride =
+                    if view.IsSingleValue then 0
+                    else view.Stride
+
+                let rows =
+                    match view.ElementType with
+                    | MatrixOf(s, _) -> s.Y
+                    | _ -> 1
+
+                let format =
+                    VkFormat.tryGetAttributeFormat expectedType view.ElementType
+                    |> Option.defaultWith (fun _ ->
+                        failf "cannot use %A elements for attribute '%A' expecting %A elements" view.ElementType semantic expectedType
+                    )
+
+                let formatFeatures = this.Device.PhysicalDevice.GetBufferFormatFeatures format
+                if not <| formatFeatures.HasFlag VkFormatFeatureFlags.VertexBufferBit then
+                    failf "format %A for attribute '%A' is not supported" format semantic
+
+                let inputDescription =
+                    VertexInputDescription.create perInstance view.IsSingleValue view.Offset stride rows format
 
                 {| Semantic    = semantic
-                   Location    = p.paramLocation
-                   PerInstance = perInstance
-                   Buffer      = buffer
-                   Description = VertexInputState.AttributeDescription.create elementType view.IsSingleValue view.Offset |}
+                   Buffer      = (buffer, int64 view.Offset)
+                   Description = inputDescription |}
             )
-
-        let attributeBuffers =
-            attributeBindings
-            |> List.map (fun b -> b.Buffer, int64 b.Description.Offset)
 
         let attributeDescriptions =
             attributeBindings
-            |> List.map (fun b -> b.Semantic, (b.PerInstance, b.Description))
+            |> List.map (fun b -> b.Semantic, b.Description)
             |> Map.ofSeq
 
         let inputAssembly = this.CreateInputAssemblyState(ro.Mode, program)
-        let inputState = this.CreateVertexInputState(programLayout.PipelineInfo, VertexInputState.ofDescriptions attributeDescriptions)
+        let inputState = this.CreateVertexInputState(programLayout.PipelineInfo, attributeDescriptions)
 
         let rasterizerState =
             this.CreateRasterizerState(
@@ -383,7 +390,7 @@ type DevicePreparedRenderObjectExtensions private() =
         resources.Add calls
 
         let bindings =
-            this.CreateVertexBufferBinding(attributeBuffers)
+            this.CreateVertexBufferBinding(attributeBindings |> List.map (fun b -> b.Buffer))
 
         resources.Add bindings
 
