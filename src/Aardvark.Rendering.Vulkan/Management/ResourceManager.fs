@@ -1928,14 +1928,22 @@ type ResourceManager(device : Device) =
                 field, value
             )
 
-        let writers =
-            values |> List.map (fun (target, m) ->
-                let tSource = m.ContentType
-                m, UniformWriters.getWriter target.ufOffset target.ufType tSource
-            )
+        let key = (layout :> obj) :: (values |> List.map (snd >> box))
+        uniformBufferCache.GetOrCreate(key, fun cache key ->
+            let writers =
+                values |> List.map (fun (target, m) ->
+                    let writer =
+                        try
+                            m.ContentType |> UniformWriters.getWriter target.ufOffset target.ufType
+                        with
+                        | :? PrimitiveValueConverter.InvalidConversionException as exn ->
+                            failf "cannot convert uniform '%s' from %A to %A" target.ufName exn.Source exn.Target
 
-        let key = (layout :> obj) :: (values |> List.map (fun (_,v) -> v :> obj))
-        uniformBufferCache.GetOrCreate(key, fun cache key -> UniformBufferResource(cache, key, device, layout, writers))
+                    m, writer
+                )
+
+            UniformBufferResource(cache, key, device, layout, writers)
+        )
 
     member x.CreateDescriptorSet(layout : DescriptorSetLayout, bindings : IAdaptiveDescriptor[]) =
         descriptorSetCache.GetOrCreate([layout :> obj; bindings :> obj], fun cache key -> new DescriptorSetResource(cache, key, layout, bindings))

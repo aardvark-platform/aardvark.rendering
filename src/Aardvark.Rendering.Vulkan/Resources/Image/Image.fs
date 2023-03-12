@@ -44,12 +44,18 @@ module ``Image Format Extensions`` =
 
     module VkIndexType =
         let ofType =
-            LookupTable.lookupTable [
-                typeof<int16>, VkIndexType.Uint16
-                typeof<uint16>, VkIndexType.Uint16
-                typeof<int32>, VkIndexType.Uint32
-                typeof<uint32>, VkIndexType.Uint32
-            ]
+            let lookup =
+                LookupTable.lookupTable' [
+                    typeof<int16>, VkIndexType.Uint16
+                    typeof<uint16>, VkIndexType.Uint16
+                    typeof<int32>, VkIndexType.Uint32
+                    typeof<uint32>, VkIndexType.Uint32
+                ]
+
+            fun (t : Type) ->
+                match lookup t with
+                | Some it -> it
+                | _ -> failf "unsupported index type '%A'" t
 
     type Device with
 

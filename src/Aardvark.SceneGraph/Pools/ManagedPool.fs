@@ -141,6 +141,13 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
                 indexBufferUsage : BufferUsage, indexBufferStorage : BufferStorage,
                 vertexBufferUsage : BufferUsage, vertexBufferStorage : Symbol -> BufferStorage,
                 instanceBufferUsage : BufferUsage, instanceBufferStorage : Symbol -> BufferStorage) =
+
+    static let failf fmt =
+        Printf.kprintf (fun str ->
+            Log.error "[ManagedPool] %s" str
+            failwith ("[ManagedPool] " + str)
+        ) fmt
+
     static let zero : byte[] = Array.zeroCreate 4096
 
     let indexManager = LayoutManager<Option<BufferView> * int>()
@@ -255,16 +262,30 @@ and ManagedPool(runtime : IRuntime, signature : GeometrySignature,
                 for (k,_) in vertexBufferTypes do
                     let target = vertexBuffers.[k]
                     match Map.tryFind k geometry.VertexAttributes with
-                    | Some v -> target.Add(v, vertexRange) |> ds.Add
-                    | None -> target.Set(zero, vertexRange)
+                    | Some v ->
+                        try
+                            target.Add(v, vertexRange) |> ds.Add
+                        with
+                        | :? PrimitiveValueConverter.InvalidConversionException as exn ->
+                            failf "cannot convert vertex attribute '%A' from %A to %A" k exn.Source exn.Target
+
+                    | None ->
+                        target.Set(zero, vertexRange)
 
                 let instancePtr = instanceManager.Alloc(geometry.InstanceAttributes, 1)
                 let instanceIndex = int instancePtr.Offset
                 for (k,_) in uniformTypes do
                     let target = instanceBuffers.[k]
                     match Map.tryFind k geometry.InstanceAttributes with
-                    | Some v -> target.Add(v, instanceIndex) |> ds.Add
-                    | None -> target.Set(zero, Range1l(int64 instanceIndex, int64 instanceIndex))
+                    | Some v ->
+                        try
+                            target.Add(v, instanceIndex) |> ds.Add
+                        with
+                        | :? PrimitiveValueConverter.InvalidConversionException as exn ->
+                            failf "cannot convert instance attribute '%A' from %A to %A" k exn.Source exn.Target
+
+                    | None ->
+                        target.Set(zero, Range1l(int64 instanceIndex, int64 instanceIndex))
 
                 let isNew, indexPtr = indexManager.TryAlloc((geometry.Indices, fvc), fvc)
                 let indexRange = Range1l(int64 indexPtr.Offset, int64 indexPtr.Offset + int64 fvc - 1L)

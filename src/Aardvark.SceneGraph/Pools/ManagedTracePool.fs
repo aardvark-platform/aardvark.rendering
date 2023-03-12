@@ -538,6 +538,12 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                      instanceAttributeBufferStorage : Symbol -> BufferStorage,
                      geometryBufferStorage : BufferStorage) =
 
+    static let failf fmt =
+        Printf.kprintf (fun str ->
+            Log.error "[ManagedTracePool] %s" str
+            failwith ("[ManagedTracePool] " + str)
+        ) fmt
+
     static let zero : byte[] = ManagedPool.Zero
 
     let indexType = signature.IndexType.Type
@@ -648,7 +654,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
 
     member x.Add(obj : TraceObject) =
         if obj.Geometry.Count = 0 then
-            failwithf "[ManagedTracePool] Trace object does not contain any geometry"
+            failf "trace object does not contain any geometry"
 
         lock x (fun _ ->
             let ds = List()
@@ -673,8 +679,15 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                     for KeyValue(k, _) in geometryAttributeTypes do
                         let target = geometryAttributeBuffers.[k]
                         match geometryAttributes |> Map.tryFind k with
-                        | Some v -> target.Add(v, geometryAttributeIndex) |> ds.Add
-                        | None -> target.Set(zero, Range1l.FromMinAndSize(int64 geometryAttributeIndex, 0L))
+                        | Some v ->
+                            try
+                                target.Add(v, geometryAttributeIndex) |> ds.Add
+                            with
+                            | :? PrimitiveValueConverter.InvalidConversionException as exn ->
+                                failf "cannot convert geometry attribute '%A' from %A to %A" k exn.Source exn.Target
+
+                        | None ->
+                            target.Set(zero, Range1l.FromMinAndSize(int64 geometryAttributeIndex, 0L))
 
                     gptrs.Add(geometryAttributePtr)
                     int32 geometryAttributePtr.Offset
@@ -687,8 +700,15 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
             for KeyValue(k, _) in instanceAttributeTypes do
                 let target = instanceAttributeBuffers.[k]
                 match instanceAttributes |> Map.tryFind k with
-                | Some v -> target.Add(v, instanceAttributeIndex) |> ds.Add
-                | None -> target.Set(zero, Range1l.FromMinAndSize(int64 instanceAttributeIndex, 0L))
+                | Some v ->
+                    try
+                        target.Add(v, instanceAttributeIndex) |> ds.Add
+                    with
+                    | :? PrimitiveValueConverter.InvalidConversionException as exn ->
+                        failf "cannot convert instance attribute '%A' from %A to %A" k exn.Source exn.Target
+
+                | None ->
+                    target.Set(zero, Range1l.FromMinAndSize(int64 instanceAttributeIndex, 0L))
 
             // Geometry data
             let geometryIndex, geometryPtr =
@@ -705,8 +725,15 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                             for KeyValue(k, _) in signature.VertexAttributeTypes do
                                 let target = vertexBuffers.[k]
                                 match Map.tryFind k vertexAttributes with
-                                | Some v -> target.Add(v, vertexRange) |> ds.Add
-                                | None -> target.Set(zero, vertexRange)
+                                | Some v ->
+                                    try
+                                        target.Add(v, vertexRange) |> ds.Add
+                                    with
+                                    | :? PrimitiveValueConverter.InvalidConversionException as exn ->
+                                        failf "cannot convert vertex attribute '%A' from %A to %A" k exn.Source exn.Target
+
+                                | None ->
+                                    target.Set(zero, vertexRange)
 
                             vptrs.Add(vertexPtr)
                             int32 vertexPtr.Offset
@@ -741,8 +768,15 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
                             for KeyValue(k, _) in signature.FaceAttributeTypes do
                                 let target = faceAttributeBuffers.[k]
                                 match Map.tryFind k faceAttributes with
-                                | Some v -> target.Add(v, faceAttributeRange) |> ds.Add
-                                | None -> target.Set(zero, faceAttributeRange)
+                                | Some v ->
+                                    try
+                                        target.Add(v, faceAttributeRange) |> ds.Add
+                                    with
+                                    | :? PrimitiveValueConverter.InvalidConversionException as exn ->
+                                        failf "cannot convert face attribute '%A' from %A to %A" k exn.Source exn.Target
+
+                                | None ->
+                                    target.Set(zero, faceAttributeRange)
 
                             fptrs.Add(faceAttributePtr)
                             int32 faceAttributePtr.Offset
@@ -825,7 +859,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
     member x.GetVertexAttribute(semantic : Symbol) =
         match x.TryGetVertexAttribute semantic with
         | Some attr -> attr
-        | None _ -> failwithf "[ManagedTracePool] could not find vertex attribute %A" semantic
+        | None _ -> failf "could not find vertex attribute '%A'" semantic
 
     member x.TryGetFaceAttribute(semantic : Symbol) =
         faceAttributeBuffers |> Map.tryFind semantic
@@ -834,7 +868,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
     member x.GetFaceAttribute(semantic : Symbol) =
         match x.TryGetFaceAttribute semantic with
         | Some attr -> attr
-        | None _ -> failwithf "[ManagedTracePool] could not find face attribute %A" semantic
+        | None _ -> failf "could not find face attribute '%A'" semantic
 
     member x.TryGetGeometryAttribute(semantic : Symbol) =
         geometryAttributeBuffers |> Map.tryFind semantic
@@ -843,7 +877,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
     member x.GetGeometryAttribute(semantic : Symbol) =
         match x.TryGetGeometryAttribute semantic with
         | Some attr -> attr
-        | None _ -> failwithf "[ManagedTracePool] could not find geometry attribute %A" semantic
+        | None _ -> failf "could not find geometry attribute '%A'" semantic
 
     member x.TryGetInstanceAttribute(semantic : Symbol) =
         instanceAttributeBuffers |> Map.tryFind semantic
@@ -852,7 +886,7 @@ and ManagedTracePool(runtime : IRuntime, signature : TraceObjectSignature,
     member x.GetInstanceAttribute(semantic : Symbol) =
         match x.TryGetInstanceAttribute semantic with
         | Some attr -> attr
-        | None _ -> failwithf "[ManagedTracePool] could not find instance attribute %A" semantic
+        | None _ -> failf "could not find instance attribute '%A'" semantic
 
     member x.Dispose() =
         lock x (fun _ ->

@@ -46,15 +46,6 @@ type UniformBufferManager(ctx : Context) =
 
     let manager = new Management.ChunkedMemoryManager<_>(bufferMemory, 1n <<< 20)
 
-    //let buffer =
-    //    // TODO: better implementation for uniform buffers (see https://github.com/aardvark-platform/aardvark.rendering/issues/32)
-    //    use __ = ctx.ResourceLock
-    //    let handle = GL.GenBuffer()
-    //    GL.Check "could not create buffer"
-    //    new FakeSparseBuffer(ctx, handle, id, id) :> SparseBuffer
-
-    //let manager = MemoryManager.createNop()
-
     let viewCache = ResourceCache<UniformBufferView, int>(None, None)
     let rw = new ReaderWriterLockSlim()
 
@@ -85,7 +76,18 @@ type UniformBufferManager(ctx : Context) =
         viewCache.GetOrCreate(
             key,
             fun () ->
-                let writers = List.map2 (fun (f : FShade.GLSL.GLSLUniformBufferField) v -> nativeint f.ufOffset, ShaderParameterWriter.adaptive v (ShaderParameterType.ofGLSLType f.ufType)) block.ubFields values
+                let writers =
+                    (block.ubFields, values) ||> List.map2 (fun f v ->
+                        let writer =
+                            try
+                                let typ = ShaderParameterType.ofGLSLType f.ufType
+                                typ |> ShaderParameterWriter.adaptive v
+                            with
+                            | :? PrimitiveValueConverter.InvalidConversionException as exn ->
+                                failf "cannot convert uniform '%s' from %A to %A" f.ufName exn.Source exn.Target
+
+                        nativeint f.ufOffset, writer
+                    )
 
                 let mutable block = Unchecked.defaultof<_>
                 let mutable store = 0n
