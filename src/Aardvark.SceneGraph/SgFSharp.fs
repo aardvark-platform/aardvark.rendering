@@ -185,12 +185,20 @@ module SgFSharp =
         /// The name can be a string, Symbol, or TypedSymbol.
         let inline uniform (name : ^Name) (value : aval<'Value>) (sg : ISg) =
             let sym = name |> Symbol.convert Symbol.Converters.typed<'Value>
-            Sg.UniformApplicator(sym, value :> IAdaptiveValue, sg) :> ISg
+            Sg.UniformApplicator(sym, value, sg) :> ISg
 
         /// Sets the uniform with the given name to the given value.
         /// The name can be a string, Symbol, or TypedSymbol.
-        let inline uniform' (name : ^Name) (value : 'Value) =
-            uniform name ~~value
+        let inline uniform' (name : ^Name) (value : 'Value) (sg : ISg) =
+            let sym = name |> Symbol.convert Symbol.Converters.typed<'Value>
+
+            let value : IAdaptiveValue =
+                if typeof<IAdaptiveValue>.IsAssignableFrom typeof<'Value> then
+                    unbox value
+                else
+                    ~~value
+
+            Sg.UniformApplicator(sym, value, sg) :> ISg
 
 
         let inline private textureAux< ^Conv, ^Name, 'Texture when 'Texture :> ITexture and (^Conv or ^Name) : (static member GetSymbol : ^Name -> Symbol)>
