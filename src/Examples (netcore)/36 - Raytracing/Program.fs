@@ -377,13 +377,12 @@ let main argv =
                 InstanceAttribute.NormalMatrix, AVal.constant normalMatrix :> IAdaptiveValue
             ]
 
-        traceObject {
-            indexedGeometry (scene.meshes.[0].geometry, trafo, GeometryFlags.Opaque)
-            instanceAttributes instanceAttr
-            faceAttribute FaceAttribute.Colors colors
-            hitGroup HitGroup.Model
-            culling (CullMode.Enabled WindingOrder.Clockwise)
-        }
+        scene.meshes.[0].geometry
+        |> TraceObject.ofIndexedGeometry GeometryFlags.Opaque trafo
+        |> TraceObject.instanceAttributes instanceAttr
+        |> TraceObject.faceAttribute (FaceAttribute.Colors, colors)
+        |> TraceObject.hitGroup HitGroup.Model
+        |> TraceObject.frontFace WindingOrder.Clockwise
 
     let floor =
         let positions = [| V3f(-0.5f, -0.5f, 0.0f); V3f(-0.5f, 0.5f, 0.0f); V3f(0.5f, -0.5f, 0.0f); V3f(0.5f, 0.5f, 0.0f); |]
@@ -410,12 +409,11 @@ let main argv =
         let geom =
             IndexedGeometry(IndexedGeometryMode.TriangleStrip, indices, vertexAttr, SymDict.empty)
 
-        traceObject {
-            indexedGeometry (geom, trafo, GeometryFlags.Opaque)
-            instanceAttributes instanceAttr
-            hitGroup HitGroup.Floor
-            culling (CullMode.Enabled WindingOrder.CounterClockwise)
-        }
+        geom
+        |> TraceObject.ofIndexedGeometry GeometryFlags.Opaque trafo
+        |> TraceObject.instanceAttributes instanceAttr
+        |> TraceObject.hitGroup HitGroup.Floor
+        |> TraceObject.frontFace WindingOrder.CounterClockwise
 
     let sphereOffsets =
         let o1 = V3d(0.0, 0.0, 0.5)
@@ -525,13 +523,11 @@ let main argv =
                     Trafo3d.RotationEuler(t * rotation) * Trafo3d.Translation(position)
                 )
 
-            traceObject {
-                geometry aabbs
-                geometryAttribute GeometryAttribute.Colors colors
-                hitGroups (HitGroup.Sphere |> List.replicate 6)
-                transform trafo
-                mask 0x80
-            }
+            TraceObject.ofGeometry aabbs
+            |> TraceObject.geometryAttribute (GeometryAttribute.Colors, colors)
+            |> TraceObject.hitGroups (HitGroup.Sphere |> List.replicate 6)
+            |> TraceObject.transform trafo
+            |> TraceObject.mask 0x80
 
     let scene =
         ASet.union staticObjects sphereObjects

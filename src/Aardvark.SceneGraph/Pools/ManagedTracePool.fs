@@ -106,8 +106,9 @@ type TraceObject =
         /// The transformation of the instance.
         Transform    : aval<Trafo3d>
 
-        /// The cull mode of the instance. Only has an effect if TraceRay() is called with one of the cull flags.
-        Culling      : aval<CullMode>
+        /// The winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the instance.
+        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        FrontFace    : aval<WindingOrder option>
 
         /// Optionally overrides flags set in the geometry.
         GeometryMode : aval<GeometryMode>
@@ -118,26 +119,36 @@ type TraceObject =
 
 [<AutoOpen>]
 module TraceObjectFSharp =
+    open FSharp.Data.Adaptive.Operators
 
-    [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-    module TraceObject =
+    // TODO: Remove once this is moved to base
+    module TraceObjectUtilities =
 
-        // TODO: Remove once this is moved to base
-        module Utilities =
-
-            [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-            module Map =
-                let mapKeys (mapping : 'T -> 'U) (map : Map<'T, 'V>) =
+        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+        module Map =
+            let mapKeys (mapping : 'T -> 'U) (map : Map<'T, 'V>) =
+                if typeof<'T> <> typeof<'U> then
                     map |> Map.toList |> List.map (fun (k, v) -> mapping k, v) |> Map.ofList
+                else
+                    unbox map
 
-            [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-            module List =
-                let updateByIndex (index : int) (mapping : 'T -> 'T) (list : 'T list) =
-                    list |> List.mapi (fun i v -> if i <> index then v else mapping v)
+        [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
+        module List =
+            let updateByIndex (index : int) (mapping : 'T -> 'T) (list : 'T list) =
+                list |> List.mapi (fun i v -> if i <> index then v else mapping v)
 
-        open Utilities
+        let inline (~~~) (value : 'T) : IAdaptiveValue =
+            if typeof<IAdaptiveValue>.IsAssignableFrom typeof<'T> then
+                unbox value
+            else
+                ~~value
 
-        let ofAdaptiveGeometry (geometry : AdaptiveTraceGeometry) =
+    open TraceObjectUtilities
+
+    type TraceObject with
+
+        /// Creates an empty trace object from the given adaptive trace geometry.
+        static member inline ofAdaptiveGeometry (geometry : AdaptiveTraceGeometry) =
             { Geometry           = geometry
               Usage              = AccelerationStructureUsage.Static
               VertexAttributes   = Map.empty |> List.replicate geometry.Count
@@ -146,335 +157,236 @@ module TraceObjectFSharp =
               InstanceAttributes = Map.empty
               HitGroups          = AVal.constant []
               Transform          = AVal.constant Trafo3d.Identity
-              Culling            = AVal.constant CullMode.Disabled
+              FrontFace          = AVal.constant None
               GeometryMode       = AVal.constant GeometryMode.Default
               Mask               = AVal.constant VisibilityMask.All }
 
-        let ofGeometry (geometry : TraceGeometry) =
-            geometry |> AdaptiveTraceGeometry.constant |> ofAdaptiveGeometry
+        /// Creates an empty trace object from the given trace geometry.
+        static member inline ofGeometry (geometry : TraceGeometry) =
+            geometry |> AdaptiveTraceGeometry.constant |> TraceObject.ofAdaptiveGeometry
 
-
-        let usage (usage : AccelerationStructureUsage) (obj : TraceObject) =
+        /// Applies the usage mode for the given trace object.
+        static member inline usage (usage : AccelerationStructureUsage) (obj : TraceObject) =
             { obj with Usage = usage }
 
-
-        let inline vertexAttributes (attributes : Map< ^Name, BufferView> seq) (obj : TraceObject) =
+        /// Sets vertex attributes for the given trace object.
+        /// The names can be string or Symbol.
+        static member inline vertexAttributes (attributes : Map< ^Name, BufferView> seq) =
             let conv = Symbol.convert Symbol.Converters.untyped
             let attributes = attributes |> Seq.toList |> List.map (Map.mapKeys conv)
-            { obj with VertexAttributes = attributes }
+            fun (obj : TraceObject) -> { obj with VertexAttributes = attributes }
 
-        let inline vertexAttribute (name : ^Name) (values : seq<BufferView>) (obj : TraceObject) =
+        /// Sets vertex attributes for the given trace object with a single geometry.
+        /// The names can be string or Symbol.
+        static member inline vertexAttributes (attributes : Map< ^Name, BufferView>) =
+            TraceObject.vertexAttributes [attributes]
+
+        /// Sets a vertex attribute for the given trace object.
+        /// The name can be a string or Symbol.
+        static member inline vertexAttribute (name : ^Name, values : seq<BufferView>) =
             let sym = name |> Symbol.convert Symbol.Converters.untyped
             let values = Array.ofSeq values
 
-            (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
-                { inst with VertexAttributes = inst.VertexAttributes |> List.updateByIndex geometry (Map.add sym value)}
-            )
+            fun (obj : TraceObject) ->
+                (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
+                    { inst with VertexAttributes = inst.VertexAttributes |> List.updateByIndex geometry (Map.add sym value)}
+                )
 
+        /// Sets a vertex attribute for the given trace object with a single geometry.
+        /// The name can be a string or Symbol.
+        static member inline vertexAttribute (name : ^Name, values : BufferView) =
+            TraceObject.vertexAttribute (name, [values])
 
-        let inline faceAttributes (attributes : Map< ^Name, BufferView> seq) (obj : TraceObject) =
+        /// Sets face attributes for the given trace object.
+        /// The names can be string or Symbol.
+        static member inline faceAttributes (attributes : Map< ^Name, BufferView> seq) =
             let conv = Symbol.convert Symbol.Converters.untyped
             let attributes = attributes |> Seq.toList |> List.map (Map.mapKeys conv)
-            { obj with FaceAttributes = attributes }
+            fun (obj : TraceObject) -> { obj with FaceAttributes = attributes }
 
-        let inline faceAttribute (name : ^Name) (values : seq<BufferView>) (obj : TraceObject) =
+        /// Sets face attributes for the given trace object with a single geometry.
+        /// The names can be string or Symbol.
+        static member inline faceAttributes (attributes : Map< ^Name, BufferView>) =
+            TraceObject.faceAttributes [attributes]
+
+        /// Sets a face attribute for the given trace object.
+        /// The name can be a string or Symbol.
+        static member inline faceAttribute (name : ^Name, values : seq<BufferView>) =
             let sym = name |> Symbol.convert Symbol.Converters.untyped
             let values = Array.ofSeq values
 
-            (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
-                { inst with FaceAttributes = inst.FaceAttributes |> List.updateByIndex geometry (Map.add sym value)}
-            )
+            fun (obj : TraceObject) ->
+                (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
+                    { inst with FaceAttributes = inst.FaceAttributes |> List.updateByIndex geometry (Map.add sym value)}
+                )
 
+        /// Sets a face attribute for the given trace object with a single geometry.
+        /// The name can be a string or Symbol.
+        static member inline faceAttribute (name : ^Name, values : BufferView) =
+            TraceObject.faceAttribute (name, [values])
 
-        let inline geometryAttributes (attributes : Map< ^Name, IAdaptiveValue> seq) (obj : TraceObject) =
+        /// Sets geometry attributes for the given trace object.
+        /// The names can be string or Symbol.
+        static member inline geometryAttributes (attributes : Map< ^Name, IAdaptiveValue> seq) (obj : TraceObject) =
             let conv = Symbol.convert Symbol.Converters.untyped
             let attributes = attributes |> Seq.toList |> List.map (Map.mapKeys conv)
             { obj with GeometryAttributes = attributes }
 
-        let inline geometryAttribute (name : ^Name) (values : seq<IAdaptiveValue>) (obj : TraceObject) =
-            let sym = name |> Symbol.convert Symbol.Converters.untyped
+        /// Sets a geometry attribute for the given trace object.
+        /// The name can be a string or Symbol, or TypedSymbol<'T>.
+        static member inline geometryAttribute (name : ^Name, values : aval<'T> seq) =
+            let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
             let values = Array.ofSeq values
 
-            (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
-                { inst with GeometryAttributes = inst.GeometryAttributes |> List.updateByIndex geometry (Map.add sym value)}
-            )
+            fun (obj : TraceObject) ->
+                (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
+                    { inst with GeometryAttributes = inst.GeometryAttributes |> List.updateByIndex geometry (Map.add sym value)}
+                )
 
-        let inline geometryAttribute' (name : ^Name) (values : seq<'T>) (obj : TraceObject) =
-            let values = values |> Array.ofSeq |> Array.map (fun x -> AVal.constant x :> IAdaptiveValue)
-            obj |> geometryAttribute name values
+        /// Sets a geometry attribute for the given trace object.
+        /// The name can be a string or Symbol, or TypedSymbol<'T>.
+        static member inline geometryAttribute (name : ^Name, values : seq<'T>) =
+            let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
+            let values = values |> Array.ofSeq |> Array.map (~~~)
 
+            fun (obj : TraceObject) ->
+                (obj, Array.indexed values) ||> Array.fold (fun inst (geometry, value) ->
+                    { inst with GeometryAttributes = inst.GeometryAttributes |> List.updateByIndex geometry (Map.add sym value)}
+                )
 
-        let inline instanceAttributes (attributes : Map< ^Name, IAdaptiveValue>) (obj : TraceObject) =
+        /// Sets instance attributes for the given trace object.
+        /// The names can be string or Symbol.
+        static member inline instanceAttributes (attributes : Map< ^Name, IAdaptiveValue>) (obj : TraceObject) =
             let conv = Symbol.convert Symbol.Converters.untyped
             let attributes = attributes |> Map.toList |> List.map (fun (k, v) -> conv k, v) |> Map.ofList
             { obj with InstanceAttributes = attributes }
 
-        let inline instanceAttribute (name : ^Name) (value : IAdaptiveValue) (obj : TraceObject) =
-            let sym = name |> Symbol.convert Symbol.Converters.untyped
-            { obj with InstanceAttributes = obj.InstanceAttributes |> Map.add sym value }
-
-        let inline instanceAttribute' (name : ^Name) (value : 'T) (obj : TraceObject) =
+        /// Sets an instance attribute for the given trace object.
+        /// The name can be a string or Symbol, or TypedSymbol<'T>.
+        static member inline instanceAttribute (name : ^Name, value : aval<'T>) =
             let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
-            let value = AVal.constant value :> IAdaptiveValue
-            { obj with InstanceAttributes = obj.InstanceAttributes |> Map.add sym value }
+            fun (obj : TraceObject) -> { obj with InstanceAttributes = obj.InstanceAttributes |> Map.add sym value }
 
+        /// Sets an instance attribute for the given trace object.
+        /// The name can be a string or Symbol, or TypedSymbol<'T>.
+        static member inline instanceAttribute (name : ^Name, value : 'T) =
+            let sym = name |> Symbol.convert Symbol.Converters.typed<'T>
+            fun (obj : TraceObject) -> { obj with InstanceAttributes = obj.InstanceAttributes |> Map.add sym ~~~value }
 
-        let hitGroups (hitConfig : aval<HitConfig>) (obj : TraceObject) =
-            { obj with HitGroups = hitConfig }
+        /// Sets the hit groups for the given trace object.
+        static member inline hitGroups (hitConfig : aval<HitConfig>) =
+            fun (obj : TraceObject) -> { obj with HitGroups = hitConfig }
 
-        let hitGroups' (hitConfig : HitConfig) (obj : TraceObject) =
-            obj |> hitGroups (AVal.constant hitConfig)
+        /// Sets the hit groups for the given trace object.
+        static member inline hitGroups (hitConfig : HitConfig) =
+            TraceObject.hitGroups ~~hitConfig
 
-        let hitGroup (group : aval<Symbol>) (obj : TraceObject) =
+        /// Sets the hit group for the given trace object with a single geometry.
+        static member inline hitGroup (group : aval<Symbol>) =
             let groups = group |> AVal.map List.singleton
-            obj  |> hitGroups groups
-
-        let hitGroup' (group : Symbol) (obj : TraceObject) =
-            obj |> hitGroups' [group]
-
-
-        let transform (trafo : aval<Trafo3d>) (obj : TraceObject) =
-            { obj with Transform = trafo }
-
-        let transform' (trafo : Trafo3d) (obj : TraceObject) =
-            obj |> transform (AVal.constant trafo)
-
-
-        let culling (mode : aval<CullMode>) (obj : TraceObject) =
-            { obj with Culling = mode }
-
-        let culling' (mode : CullMode) (obj : TraceObject) =
-            obj |> culling (AVal.constant mode)
-
-
-        let geometryMode (mode : aval<GeometryMode>) (obj : TraceObject) =
-            { obj with GeometryMode = mode }
-
-        let geometryMode' (mode : GeometryMode) (obj : TraceObject) =
-            obj |> geometryMode (AVal.constant mode)
-
-
-        let mask (value : aval<VisibilityMask>) (obj : TraceObject) =
-            { obj with Mask = value }
-
-        let mask' (value : VisibilityMask) (obj : TraceObject) =
-            obj |> mask (AVal.constant value)
-
-
-        let ofIndexedGeometry (flags : aval<GeometryFlags>) (trafo : aval<Trafo3d>) (geometry : IndexedGeometry) =
-            let g = geometry.ToNonStripped()
-
-            let attributes =
-                g.IndexedAttributes |> SymDict.toMap |> Map.map (fun _ -> BufferView.ofArray)
-
-            let ag =
-                TriangleMesh.ofIndexedGeometry g
-                |> AdaptiveTriangleMesh.constant
-                |> AdaptiveTriangleMesh.transform trafo
-                |> AdaptiveTriangleMesh.flags flags
-                |> AdaptiveTraceGeometry.ofTriangleMesh
-
-            ofAdaptiveGeometry ag
-            |> vertexAttributes [| attributes |]
-
-        let ofIndexedGeometry' (flags : GeometryFlags) (trafo : Trafo3d) (geometry : IndexedGeometry) =
-            geometry |> ofIndexedGeometry (AVal.constant flags) (AVal.constant trafo)
-
-
-[<AutoOpen>]
-module TraceObjectBuilder =
-    open FSharp.Data.Adaptive.Operators
-
-    type GeometryMustBeSpecified = GeometryMustBeSpecified
-
-    type TraceObjectBuilder() =
-        member x.Yield(_) = GeometryMustBeSpecified
-
-        [<CustomOperation("geometry")>]
-        member x.Geometry(_ : GeometryMustBeSpecified, geometry : TraceGeometry) =
-            TraceObject.ofGeometry geometry
-
-        member x.Geometry(_ : GeometryMustBeSpecified, geometry : AdaptiveTraceGeometry) =
-            TraceObject.ofAdaptiveGeometry geometry
-
-        [<CustomOperation("indexedGeometry")>]
-        member x.IndexedGeometry(_ : GeometryMustBeSpecified, geometry : IndexedGeometry) =
-            TraceObject.ofIndexedGeometry' GeometryFlags.None Trafo3d.Identity geometry
-
-        member x.IndexedGeometry(_ : GeometryMustBeSpecified, (geometry : IndexedGeometry, trafo : Trafo3d)) =
-            TraceObject.ofIndexedGeometry' GeometryFlags.None trafo geometry
-
-        member x.IndexedGeometry(_ : GeometryMustBeSpecified, (geometry : IndexedGeometry, trafo : Trafo3d, flags : GeometryFlags)) =
-            TraceObject.ofIndexedGeometry' flags trafo geometry
-
-        member x.IndexedGeometry(_ : GeometryMustBeSpecified, (geometry : IndexedGeometry, trafo : aval<Trafo3d>)) =
-            TraceObject.ofIndexedGeometry ~~GeometryFlags.None trafo geometry
-
-        member x.IndexedGeometry(_ : GeometryMustBeSpecified, (geometry : IndexedGeometry, trafo : aval<Trafo3d>, flags : aval<GeometryFlags>)) =
-            TraceObject.ofIndexedGeometry flags trafo geometry
-
-        [<CustomOperation("vertexAttributes")>]
-        member x.VertexAttributes(o : TraceObject, attr : Map<Symbol, BufferView> seq) =
-            o |> TraceObject.vertexAttributes attr
-
-        member x.VertexAttributes(o : TraceObject, attr : Map<string, BufferView> seq) =
-            o |> TraceObject.vertexAttributes attr
-
-        member x.VertexAttributes(o : TraceObject, attr : Map<Symbol, BufferView>) =
-            o |> TraceObject.vertexAttributes [attr]
-
-        member x.VertexAttributes(o : TraceObject, attr : Map<string, BufferView>) =
-            o |> TraceObject.vertexAttributes [attr]
-
-        [<CustomOperation("vertexAttribute")>]
-        member x.VertexAttribute(o : TraceObject, name : Symbol, values : seq<BufferView>) =
-            o |> TraceObject.vertexAttribute name values
-
-        member x.VertexAttribute(o : TraceObject, name : string, values : seq<BufferView>) =
-            o |> TraceObject.vertexAttribute name values
-
-        member x.VertexAttribute(o : TraceObject, name : Symbol, values : BufferView) =
-            o |> TraceObject.vertexAttribute name [values]
-
-        member x.VertexAttribute(o : TraceObject, name : string, values : BufferView) =
-            o |> TraceObject.vertexAttribute name [values]
-
-        [<CustomOperation("faceAttributes")>]
-        member x.FaceAttributes(o : TraceObject, attr : Map<Symbol, BufferView> seq) =
-            o |> TraceObject.faceAttributes attr
-
-        member x.FaceAttributes(o : TraceObject, attr : Map<string, BufferView> seq) =
-            o |> TraceObject.faceAttributes attr
-
-        member x.FaceAttributes(o : TraceObject, attr : Map<Symbol, BufferView>) =
-            o |> TraceObject.faceAttributes [attr]
-
-        member x.FaceAttributes(o : TraceObject, attr : Map<string, BufferView>) =
-            o |> TraceObject.faceAttributes [attr]
-
-        [<CustomOperation("faceAttribute")>]
-        member x.FaceAttribute(o : TraceObject, name : Symbol, values : seq<BufferView>) =
-            o |> TraceObject.faceAttribute name values
-
-        member x.FaceAttribute(o : TraceObject, name : string, values : seq<BufferView>) =
-            o |> TraceObject.faceAttribute name values
-
-        member x.FaceAttribute(o : TraceObject, name : Symbol, values : BufferView) =
-            o |> TraceObject.faceAttribute name [values]
-
-        member x.FaceAttribute(o : TraceObject, name : string, values : BufferView) =
-            o |> TraceObject.faceAttribute name [values]
-
-        [<CustomOperation("geometryAttributes")>]
-        member x.GeometryAttributes(o : TraceObject, attr : Map<Symbol, IAdaptiveValue> seq) =
-            o |> TraceObject.geometryAttributes attr
-
-        member x.GeometryAttributes(o : TraceObject, attr : Map<string, IAdaptiveValue> seq) =
-            o |> TraceObject.geometryAttributes attr
-
-        [<CustomOperation("geometryAttribute")>]
-        member x.GeometryAttribute(o : TraceObject, name : Symbol, values : seq<IAdaptiveValue>) =
-            o |> TraceObject.geometryAttribute name values
-
-        member x.GeometryAttribute(o : TraceObject, name : string, values : seq<IAdaptiveValue>) =
-            o |> TraceObject.geometryAttribute name values
-
-        member x.GeometryAttribute(o : TraceObject, name : Symbol, values : seq<'T>) =
-            o |> TraceObject.geometryAttribute' name values
-
-        member x.GeometryAttribute(o : TraceObject, name : string, values : seq<'T>) =
-            o |> TraceObject.geometryAttribute' name values
-
-        [<CustomOperation("instanceAttributes")>]
-        member x.InstanceAttributes(o : TraceObject, attr : Map<Symbol, IAdaptiveValue>) =
-            o |> TraceObject.instanceAttributes attr
-
-        member x.InstanceAttributes(o : TraceObject, attr : Map<string, IAdaptiveValue>) =
-            o |> TraceObject.instanceAttributes attr
-
-        [<CustomOperation("instanceAttribute")>]
-        member x.InstanceAttribute(o : TraceObject, name : Symbol, value : IAdaptiveValue) =
-            o |> TraceObject.instanceAttribute name value
-
-        member x.InstanceAttribute(o : TraceObject, name : string, value : IAdaptiveValue) =
-            o |> TraceObject.instanceAttribute name value
-
-        member x.InstanceAttribute(o : TraceObject, name : Symbol, value : 'T) =
-            o |> TraceObject.instanceAttribute' name value
-
-        member x.InstanceAttribute(o : TraceObject, name : string, value : 'T) =
-            o |> TraceObject.instanceAttribute' name value
-
-        [<CustomOperation("hitGroups")>]
-        member x.HitGroups(o : TraceObject, g : aval<HitConfig>) =
-            o |> TraceObject.hitGroups g
-
-        member x.HitGroups(o : TraceObject, g : HitConfig) =
-            o |> TraceObject.hitGroups' g
-
-        [<CustomOperation("hitGroup")>]
-        member x.HitGroup(o : TraceObject, g : aval<Symbol>) =
-            o |> TraceObject.hitGroup g
-
-        member x.HitGroup(o : TraceObject, g : Symbol) =
-            o |> TraceObject.hitGroup' g
-
-        [<CustomOperation("transform")>]
-        member x.Transform(o : TraceObject, t : aval<Trafo3d>) =
-            o |> TraceObject.transform t
-
-        member x.Transform(o : TraceObject, t : Trafo3d) =
-            o |> TraceObject.transform' t
-
-        [<CustomOperation("culling")>]
-        member x.Culling(o : TraceObject, m : aval<CullMode>) =
-            o |> TraceObject.culling m
-
-        member x.Culling(o : TraceObject, m : CullMode) =
-            o |> TraceObject.culling' m
-
-        [<CustomOperation("geometryMode")>]
-        member x.GeometryMode(o : TraceObject, m : aval<GeometryMode>) =
-            o |> TraceObject.geometryMode m
-
-        member x.GeometryMode(o : TraceObject, m : GeometryMode) =
-            o |> TraceObject.geometryMode' m
-
-        [<CustomOperation("mask")>]
-        member x.Mask(o : TraceObject, m : aval<VisibilityMask>) =
-            o |> TraceObject.mask m
-
-        member x.Mask(o : TraceObject, m : aval<int8>) =
-            o |> TraceObject.mask (m |> AVal.mapNonAdaptive VisibilityMask)
-
-        member x.Mask(o : TraceObject, m : aval<uint8>) =
-            o |> TraceObject.mask (m |> AVal.mapNonAdaptive VisibilityMask)
-
-        member x.Mask(o : TraceObject, m : aval<int32>) =
-            o |> TraceObject.mask (m |> AVal.mapNonAdaptive VisibilityMask)
-
-        member x.Mask(o : TraceObject, m : aval<uint32>) =
-            o |> TraceObject.mask (m |> AVal.mapNonAdaptive VisibilityMask)
-
-        member x.Mask(o : TraceObject, m : VisibilityMask) =
-            o |> TraceObject.mask' m
-
-        member x.Mask(o : TraceObject, m : int8) =
-            o |> TraceObject.mask' (VisibilityMask m)
-
-        member x.Mask(o : TraceObject, m : uint8) =
-            o |> TraceObject.mask' (VisibilityMask m)
-
-        member x.Mask(o : TraceObject, m : int32) =
-            o |> TraceObject.mask' (VisibilityMask m)
-
-        member x.Mask(o : TraceObject, m : uint32) =
-            o |> TraceObject.mask' (VisibilityMask m)
-
-        member x.Run(h : TraceObject) =
-            h
-
-    let traceObject = TraceObjectBuilder()
+            TraceObject.hitGroups groups
+
+        /// Sets the hit group for the given trace object with a single geometry.
+        static member inline hitGroup (group : Symbol) =
+            TraceObject.hitGroups [group]
+
+        /// Sets the transform for the given trace object.
+        static member inline transform (trafo : aval<Trafo3d>) =
+            fun (obj : TraceObject) -> { obj with Transform = trafo }
+
+        /// Sets the transform for the given trace object.
+        static member inline transform (trafo : Trafo3d) =
+            TraceObject.transform ~~trafo
+
+        /// Sets the winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the given trace object.
+        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        static member inline frontFace (front : aval<WindingOrder option>) =
+            fun (obj : TraceObject) -> { obj with FrontFace = front }
+
+        /// Sets the winding order of triangles considered to be front-facing for the given trace object.
+        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        static member inline frontFace (front : aval<WindingOrder>) =
+            TraceObject.frontFace (front |> AVal.mapNonAdaptive Some)
+
+        /// Sets the winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the given trace object.
+        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        static member inline frontFace (front : WindingOrder option) =
+            TraceObject.frontFace ~~front
+
+        /// Sets the winding order of triangles considered to be front-facing for the given trace object.
+        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        static member inline frontFace (front : WindingOrder) =
+            TraceObject.frontFace (Some front)
+
+        /// Sets the geometry mode for the given trace object.
+        static member inline geometryMode (mode : aval<GeometryMode>) =
+            fun (obj : TraceObject) -> { obj with GeometryMode = mode }
+
+        /// Sets the geometry mode for the given trace object.
+        static member inline geometryMode (mode : GeometryMode) =
+            TraceObject.geometryMode ~~mode
+
+        /// Sets the visibility mask for the given trace object.
+        static member inline mask (value : aval<VisibilityMask>) =
+            fun (obj : TraceObject) -> { obj with Mask = value }
+
+        /// Sets the visibility mask for the given trace object.
+        static member inline mask (value : aval<uint8>) =
+            TraceObject.mask (value |> AVal.mapNonAdaptive VisibilityMask)
+
+        /// Sets the visibility mask for the given trace object.
+        static member inline mask (value : aval<int8>) =
+            TraceObject.mask (value |> AVal.mapNonAdaptive VisibilityMask)
+
+        /// Sets the visibility mask for the given trace object.
+        static member inline mask (value : aval<uint32>) =
+            TraceObject.mask (value |> AVal.mapNonAdaptive VisibilityMask)
+
+        /// Sets the visibility mask for the given trace object.
+        static member inline mask (value : aval<int32>) =
+            TraceObject.mask (value |> AVal.mapNonAdaptive VisibilityMask)
+
+        /// Sets the visibility mask for the given trace object.
+        static member inline mask (value : VisibilityMask) =
+            TraceObject.mask (AVal.constant value)
+
+        /// Sets the visibility mask for the given trace object.
+        static member inline mask (value : uint8) =
+            TraceObject.mask (VisibilityMask value)
+
+        /// Sets the visibility mask for the given trace object.
+        static member inline mask (value : int8) =
+            TraceObject.mask (VisibilityMask value)
+
+        /// Sets the visibility mask for the given trace object.
+        static member inline mask (value : uint32) =
+            TraceObject.mask (VisibilityMask value)
+
+        /// Sets the visibility mask for the given trace object.
+        static member inline mask (value : int32) =
+            TraceObject.mask (VisibilityMask value)
+
+        /// Creates a trace object from the given indexed geometry.
+        static member ofIndexedGeometry (flags : aval<GeometryFlags>) =
+            fun (trafo : aval<Trafo3d>) (geometry : IndexedGeometry) ->
+                let g = geometry.ToNonStripped()
+
+                let attributes =
+                    g.IndexedAttributes |> SymDict.toMap |> Map.map (fun _ -> BufferView.ofArray)
+
+                let ag =
+                    TriangleMesh.ofIndexedGeometry g
+                    |> AdaptiveTriangleMesh.constant
+                    |> AdaptiveTriangleMesh.transform trafo
+                    |> AdaptiveTriangleMesh.flags flags
+                    |> AdaptiveTraceGeometry.ofTriangleMesh
+
+                TraceObject.ofAdaptiveGeometry ag
+                |> TraceObject.vertexAttributes [| attributes |]
+
+        /// Creates a trace object from the given indexed geometry.
+        static member inline ofIndexedGeometry (flags : GeometryFlags) =
+            fun (trafo : Trafo3d) -> TraceObject.ofIndexedGeometry ~~flags ~~trafo
 
 
 [<AutoOpen>]
@@ -525,7 +437,7 @@ and ManagedTraceObject internal(index : int, geometry : aval<IAccelerationStruct
         member x.Geometry     = geometry
         member x.HitGroups    = obj.HitGroups
         member x.Transform    = obj.Transform
-        member x.Culling      = obj.Culling
+        member x.FrontFace    = obj.FrontFace
         member x.GeometryMode = obj.GeometryMode
         member x.Mask         = obj.Mask
         member x.CustomIndex  = customIndex

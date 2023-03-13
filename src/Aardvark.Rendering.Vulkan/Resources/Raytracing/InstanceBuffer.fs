@@ -13,16 +13,16 @@ module internal InstanceBuffer =
     [<AutoOpen>]
     module private Helpers =
 
-        let private getFlags (cullMode : CullMode) (geometryMode : GeometryMode) =
+        let private getFlags (frontFace : WindingOrder option) (geometryMode : GeometryMode) =
             let c =
-                cullMode |> (function
-                    | CullMode.Enabled order ->
+                frontFace |> (function
+                    | Some order ->
                         if order = WindingOrder.CounterClockwise then
                             VkGeometryInstanceFlagsKHR.TriangleFrontCounterclockwiseBit
                         else
                             VkGeometryInstanceFlagsKHR.None
 
-                    | CullMode.Disabled ->
+                    | _ ->
                         VkGeometryInstanceFlagsKHR.TriangleFacingCullDisableBit
                 )
 
@@ -49,7 +49,7 @@ module internal InstanceBuffer =
             let trafo = inst.Transform.GetValue(token)
             let index = inst.CustomIndex.GetValue(token)
             let mask = inst.Mask.GetValue(token)
-            let cull = inst.Culling.GetValue(token)
+            let front = inst.FrontFace.GetValue(token)
             let geom = inst.GeometryMode.GetValue(token)
             let accel = inst.Geometry.GetValue(token) |> unbox<AccelerationStructure>
 
@@ -58,7 +58,7 @@ module internal InstanceBuffer =
                 uint24 index,
                 uint8 mask,
                 getHitGroup sbt token inst,
-                getFlags cull geom,
+                getFlags front geom,
                 accel.DeviceAddress
             )
 

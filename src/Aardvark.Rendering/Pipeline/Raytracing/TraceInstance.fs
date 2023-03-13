@@ -7,7 +7,7 @@ open System
 
 [<Struct>]
 type VisibilityMask =
-    val mutable Value : uint8
+    val Value : uint8
 
     new(value : uint8)  = { Value = value }
     new(value : int8)   = VisibilityMask(uint8 value)
@@ -20,14 +20,6 @@ type VisibilityMask =
     static member All  = VisibilityMask(true)
     static member None = VisibilityMask(false)
 
-[<RequireQualifiedAccess>]
-type CullMode =
-    /// No face culling.
-    | Disabled
-
-    /// Cull all back-facing triangles.
-    | Enabled of front: WindingOrder
-
 type GeometryMode =
     /// Do not override individual geometry flags.
     | Default = 0
@@ -39,7 +31,7 @@ type GeometryMode =
     | Transparent = 2
 
 
-type HitConfig = List<Symbol>
+type HitConfig = Symbol list
 
 /// Interface for instances in a raytracing scene.
 type ITraceInstance =
@@ -53,8 +45,9 @@ type ITraceInstance =
     /// The transformation of the instance.
     abstract member Transform    : aval<Trafo3d>
 
-    /// The cull mode of the instance. Only has an effect if TraceRay() is called with one of the cull flags.
-    abstract member Culling      : aval<CullMode>
+    /// The winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the instance.
+    /// Only has an effect if TraceRay() is called with one of the cull flags.
+    abstract member FrontFace    : aval<WindingOrder option>
 
     /// Optionally overrides flags set in the geometry.
     abstract member GeometryMode : aval<GeometryMode>
@@ -78,8 +71,9 @@ type TraceInstance =
         /// The transformation of the instance.
         Transform    : aval<Trafo3d>
 
-        /// The cull mode of the instance. Only has an effect if TraceRay() is called with one of the cull flags.
-        Culling      : aval<CullMode>
+        /// The winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the instance.
+        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        FrontFace    : aval<WindingOrder option>
 
         /// Optionally overrides flags set in the geometry.
         GeometryMode : aval<GeometryMode>
@@ -95,171 +89,136 @@ type TraceInstance =
         member x.Geometry     = x.Geometry
         member x.HitGroups    = x.HitGroups
         member x.Transform    = x.Transform
-        member x.Culling      = x.Culling
+        member x.FrontFace    = x.FrontFace
         member x.GeometryMode = x.GeometryMode
         member x.Mask         = x.Mask
         member x.CustomIndex  = x.CustomIndex
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module TraceInstance =
-
-    let create (geometry : aval<IAccelerationStructure>) =
-        { Geometry     = geometry
-          HitGroups    = AVal.constant []
-          Transform    = AVal.constant Trafo3d.Identity
-          Culling      = AVal.constant CullMode.Disabled
-          GeometryMode = AVal.constant GeometryMode.Default
-          Mask         = AVal.constant VisibilityMask.All
-          CustomIndex  = AVal.constant 0u }
-
-    let create' (geometry : IAccelerationStructure) =
-        geometry |> AVal.constant |> create
-
-
-    let hitGroups (hitConfig : aval<HitConfig>) (inst : TraceInstance) =
-        { inst with HitGroups = hitConfig }
-
-    let hitGroups' (hitConfig : HitConfig) (inst : TraceInstance) =
-        inst |> hitGroups (AVal.constant hitConfig)
-
-    let hitGroup (group : aval<Symbol>) (inst : TraceInstance) =
-        let groups = group |> AVal.map List.singleton
-        inst  |> hitGroups groups
-
-    let hitGroup' (group : Symbol) (inst : TraceInstance) =
-        inst |> hitGroups' [group]
-
-
-    let transform (trafo : aval<Trafo3d>) (inst : TraceInstance) =
-        { inst with Transform = trafo }
-
-    let transform' (trafo : Trafo3d) (inst : TraceInstance) =
-        inst |> transform (AVal.constant trafo)
-
-
-    let culling (mode : aval<CullMode>) (inst : TraceInstance) =
-        { inst with Culling = mode }
-
-    let culling' (mode : CullMode) (inst : TraceInstance) =
-        inst |> culling (AVal.constant mode)
-
-
-    let geometryMode (mode : aval<GeometryMode>) (inst : TraceInstance) =
-        { inst with GeometryMode = mode }
-
-    let geometryMode' (mode : GeometryMode) (inst : TraceInstance) =
-        inst |> geometryMode (AVal.constant mode)
-
-
-    let mask (value : aval<VisibilityMask>) (inst : TraceInstance) =
-        { inst with Mask = value }
-
-    let mask' (value : VisibilityMask) (inst : TraceInstance) =
-        inst |> mask (AVal.constant value)
-
-
-    let customIndex (index : aval<uint32>) (inst : TraceInstance) =
-        { inst with CustomIndex = index }
-
-    let customIndex' (index : uint32) (inst : TraceInstance) =
-        inst |> customIndex (AVal.constant index)
-
-
 [<AutoOpen>]
-module TraceInstanceBuilder =
+module TraceInstanceFSharp =
+    open FSharp.Data.Adaptive.Operators
 
-    type GeometryMustBeSpecified = GeometryMustBeSpecified
+    type TraceInstance with
 
-    type TraceInstanceBuilder() =
-        member x.Yield(_) = GeometryMustBeSpecified
+        /// Creates an empty trace instance from the given acceleration structure.
+        static member inline ofAccelerationStructure (geometry : aval<IAccelerationStructure>) =
+            { Geometry     = geometry
+              HitGroups    = AVal.constant []
+              Transform    = AVal.constant Trafo3d.Identity
+              FrontFace    = AVal.constant None
+              GeometryMode = AVal.constant GeometryMode.Default
+              Mask         = AVal.constant VisibilityMask.All
+              CustomIndex  = AVal.constant 0u }
 
-        [<CustomOperation("geometry")>]
-        member x.Geometry(_ : GeometryMustBeSpecified, accelerationStructure : aval<IAccelerationStructure>) =
-            TraceInstance.create accelerationStructure
+        /// Creates an empty trace instance from the given acceleration structure.
+        static member inline ofAccelerationStructure (geometry : IAccelerationStructure) =
+            TraceInstance.ofAccelerationStructure ~~geometry
 
-        member x.Geometry(_ : GeometryMustBeSpecified, accelerationStructure : IAccelerationStructure) =
-            TraceInstance.create' accelerationStructure
+        /// Sets hit groups for the given trace instance.
+        static member inline hitGroups (hitConfig : aval<HitConfig>) =
+            fun (inst : TraceInstance) -> { inst with HitGroups = hitConfig }
 
-        [<CustomOperation("hitGroups")>]
-        member x.HitGroups(o : TraceInstance, g : aval<HitConfig>) =
-            o |> TraceInstance.hitGroups g
+        /// Sets hit groups for the given trace instance.
+        static member inline hitGroups (hitConfig : HitConfig) =
+            TraceInstance.hitGroups ~~hitConfig
 
-        member x.HitGroups(o : TraceInstance, g : HitConfig) =
-            o |> TraceInstance.hitGroups' g
+        /// Sets a hit group for the given trace instance with a single geometry.
+        static member inline hitGroup (group : aval<Symbol>) =
+            let groups = group |> AVal.map List.singleton
+            TraceInstance.hitGroups groups
 
-        [<CustomOperation("hitGroup")>]
-        member x.HitGroup(o : TraceInstance, g : aval<Symbol>) =
-            o |> TraceInstance.hitGroup g
+        /// Sets a hit group for the given trace instance with a single geometry.
+        static member inline hitGroup (group : Symbol) =
+            TraceInstance.hitGroups [group]
 
-        member x.HitGroup(o : TraceInstance, g : Symbol) =
-            o |> TraceInstance.hitGroup' g
+        /// Sets the transform for the given trace instance.
+        static member inline transform (trafo : aval<Trafo3d>) =
+            fun (inst : TraceInstance) -> { inst with Transform = trafo }
 
-        [<CustomOperation("transform")>]
-        member x.Transform(o : TraceInstance, t : aval<Trafo3d>) =
-            o |> TraceInstance.transform t
+        /// Sets the transform for the given trace instance.
+        static member inline transform (trafo : Trafo3d) =
+            TraceInstance.transform ~~trafo
 
-        member x.Transform(o : TraceInstance, t : Trafo3d) =
-            o |> TraceInstance.transform' t
+        /// Sets the winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the given instance.
+        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        static member inline frontFace (front : aval<WindingOrder option>) =
+            fun (inst : TraceInstance) -> { inst with FrontFace = front }
 
-        [<CustomOperation("culling")>]
-        member x.Culling(o : TraceInstance, m : aval<CullMode>) =
-            o |> TraceInstance.culling m
+        /// Sets the winding order of triangles considered to be front-facing for the given instance.
+        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        static member inline frontFace (front : aval<WindingOrder>) =
+            TraceInstance.frontFace (front |> AVal.mapNonAdaptive Some)
 
-        member x.Culling(o : TraceInstance, m : CullMode) =
-            o |> TraceInstance.culling' m
+        /// Sets the winding order of triangles considered to be front-facing, or None if back-face culling is to be disabled for the given instance.
+        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        static member inline frontFace (front : WindingOrder option) =
+            TraceInstance.frontFace ~~front
 
-        [<CustomOperation("geometryMode")>]
-        member x.GeometryMode(o : TraceInstance, m : aval<GeometryMode>) =
-            o |> TraceInstance.geometryMode m
+        /// Sets the winding order of triangles considered to be front-facing for the given instance.
+        /// Only has an effect if TraceRay() is called with one of the cull flags.
+        static member inline frontFace (front : WindingOrder) =
+            TraceInstance.frontFace (Some front)
 
-        member x.GeometryMode(o : TraceInstance, m : GeometryMode) =
-            o |> TraceInstance.geometryMode' m
+        /// Sets the geometry mode for the given trace instance.
+        static member inline geometryMode (mode : aval<GeometryMode>) =
+            fun (inst : TraceInstance) -> { inst with GeometryMode = mode }
 
-        [<CustomOperation("mask")>]
-        member x.Mask(o : TraceInstance, m : aval<VisibilityMask>) =
-            o |> TraceInstance.mask m
+        /// Sets the geometry mode for the given trace instance.
+        static member inline geometryMode (mode : GeometryMode) =
+            TraceInstance.geometryMode ~~mode
 
-        member x.Mask(o : TraceInstance, m : aval<int8>) =
-            o |> TraceInstance.mask (m |> AVal.mapNonAdaptive VisibilityMask)
+        /// Sets the visibility mask for the given trace instance.
+        static member inline mask (value : aval<VisibilityMask>) =
+            fun (inst : TraceInstance) -> { inst with Mask = value }
 
-        member x.Mask(o : TraceInstance, m : aval<uint8>) =
-            o |> TraceInstance.mask (m |> AVal.mapNonAdaptive VisibilityMask)
+        /// Sets the visibility mask for the given trace instance.
+        static member inline mask (value : aval<uint8>) =
+            TraceInstance.mask (value |> AVal.mapNonAdaptive VisibilityMask)
 
-        member x.Mask(o : TraceInstance, m : aval<int32>) =
-            o |> TraceInstance.mask (m |> AVal.mapNonAdaptive VisibilityMask)
+        /// Sets the visibility mask for the given trace instance.
+        static member inline mask (value : aval<int8>) =
+            TraceInstance.mask (value |> AVal.mapNonAdaptive VisibilityMask)
 
-        member x.Mask(o : TraceInstance, m : aval<uint32>) =
-            o |> TraceInstance.mask (m |> AVal.mapNonAdaptive VisibilityMask)
+        /// Sets the visibility mask for the given trace instance.
+        static member inline mask (value : aval<uint32>) =
+            TraceInstance.mask (value |> AVal.mapNonAdaptive VisibilityMask)
 
-        member x.Mask(o : TraceInstance, m : VisibilityMask) =
-            o |> TraceInstance.mask' m
+        /// Sets the visibility mask for the given trace instance.
+        static member inline mask (value : aval<int32>) =
+            TraceInstance.mask (value |> AVal.mapNonAdaptive VisibilityMask)
 
-        member x.Mask(o : TraceInstance, m : int8) =
-            o |> TraceInstance.mask' (VisibilityMask m)
+        /// Sets the visibility mask for the given trace instance.
+        static member inline mask (value : VisibilityMask) =
+            TraceInstance.mask ~~value
 
-        member x.Mask(o : TraceInstance, m : uint8) =
-            o |> TraceInstance.mask' (VisibilityMask m)
+        /// Sets the visibility mask for the given trace instance.
+        static member inline mask (value : uint8) =
+            TraceInstance.mask (VisibilityMask value)
 
-        member x.Mask(o : TraceInstance, m : int32) =
-            o |> TraceInstance.mask' (VisibilityMask m)
+        /// Sets the visibility mask for the given trace instance.
+        static member inline mask (value : int8) =
+            TraceInstance.mask (VisibilityMask value)
 
-        member x.Mask(o : TraceInstance, m : uint32) =
-            o |> TraceInstance.mask' (VisibilityMask m)
+        /// Sets the visibility mask for the given trace instance.
+        static member inline mask (value : uint32) =
+            TraceInstance.mask (VisibilityMask value)
 
-        [<CustomOperation("customIndex")>]
-        member x.CustomIndex(o : TraceInstance, i : aval<uint32>) =
-            o |> TraceInstance.customIndex i
+        /// Sets the visibility mask for the given trace instance.
+        static member inline mask (value : int32) =
+            TraceInstance.mask (VisibilityMask value)
 
-        member x.CustomIndex(o : TraceInstance, i : uint32) =
-            o |> TraceInstance.customIndex' i
+        /// Sets the custom index for the given trace instance.
+        static member inline customIndex (index : aval<uint32>) =
+            fun (inst : TraceInstance) -> { inst with CustomIndex = index }
 
-        member x.CustomIndex(o : TraceInstance, i : aval<int32>) =
-            o |> TraceInstance.customIndex (i |> AVal.mapNonAdaptive uint32)
+        /// Sets the custom index for the given trace instance.
+        static member inline customIndex (index : aval<int32>) =
+            TraceInstance.customIndex (index |> AVal.mapNonAdaptive uint32)
 
-        member x.CustomIndex(o : TraceInstance, i : int32) =
-            o |> TraceInstance.customIndex' (uint32 i)
+        /// Sets the custom index for the given trace instance.
+        static member inline customIndex (index : uint32) =
+            TraceInstance.customIndex ~~index
 
-        member x.Run(h : TraceInstance) =
-            h
-
-    let traceInstance = TraceInstanceBuilder()
+        /// Sets the custom index for the given trace instance.
+        static member inline customIndex (index : int32) =
+            TraceInstance.customIndex (uint32 index)
