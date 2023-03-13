@@ -2,7 +2,64 @@
 
 open Aardvark.Base
 open Aardvark.Rendering
+open FSharp.Data.Adaptive
 open System.Runtime.CompilerServices
+
+[<Struct>]
+type ClearDepth =
+    val Value : float32
+
+    new (other : ClearDepth) = { Value = other.Value}
+
+    new (value : float32) = { Value = value }
+    new (value : float)   = { Value = float32 value }
+    new (value : decimal) = { Value = float32 value }
+
+    static member op_Implicit(value : float32)  = ClearDepth value
+    static member op_Implicit(value : float)    = ClearDepth value
+    static member op_Implicit(value : decimal)  = ClearDepth value
+
+    static member op_Implicit(value : ClearDepth) = value.Value
+    static member op_Explicit(value : ClearDepth) = float value.Value
+    static member op_Explicit(value : ClearDepth) = decimal value.Value
+
+[<Struct>]
+type ClearStencil =
+    val Value : uint32
+
+    new (other : ClearStencil) = { Value = other.Value}
+
+    new (value : uint8)  = { Value = uint32 value }
+    new (value : uint16) = { Value = uint32 value }
+    new (value : uint32) = { Value = value }
+    new (value : int8)   = { Value = uint32 value }
+    new (value : int16)  = { Value = uint32 value }
+    new (value : int32)  = { Value = uint32 value }
+
+    static member op_Implicit(value : uint8)  = ClearStencil value
+    static member op_Implicit(value : uint16) = ClearStencil value
+    static member op_Implicit(value : uint32) = ClearStencil value
+    static member op_Implicit(value : int8)   = ClearStencil value
+    static member op_Implicit(value : int16)  = ClearStencil value
+    static member op_Implicit(value : int32)  = ClearStencil value
+
+    static member op_Implicit(value : ClearStencil) = value.Value
+    static member op_Explicit(value : ClearStencil) = int8 value.Value
+    static member op_Explicit(value : ClearStencil) = int16 value.Value
+    static member op_Explicit(value : ClearStencil) = int32 value.Value
+    static member op_Explicit(value : ClearStencil) = uint8 value.Value
+    static member op_Explicit(value : ClearStencil) = uint16 value.Value
+
+[<Extension; Sealed>]
+type ClearDepthStencilExtensions private () =
+
+    [<Extension>]
+    static member inline ToFloat32(depth : aval<ClearDepth>) =
+        depth |> AVal.mapNonAdaptive (fun d -> d.Value)
+
+    [<Extension>]
+    static member inline ToUInt32(stencil : aval<ClearStencil>) =
+        stencil |> AVal.mapNonAdaptive (fun d -> d.Value)
 
 [<AbstractClass; Sealed>]
 type Clear private () =
@@ -13,7 +70,7 @@ type Clear private () =
         ClearValues.empty |> ClearValues.color value
 
     static member Color(semantic : Symbol, value : ClearColor) =
-        ClearValues.empty |> ClearValues.color' semantic value
+        ClearValues.empty |> ClearValues.colorAttachment semantic value
 
     static member Colors(values : Map<Symbol, ClearColor>) = ClearValues.empty |> ClearValues.colors values
     static member Colors(values : Map<Symbol, C4f>)  = ClearValues.empty |> ClearValues.colors values
@@ -36,10 +93,10 @@ type Clear private () =
     static member Colors(values : seq<Symbol * V4i>)  = ClearValues.empty |> ClearValues.colors (Map.ofSeq values)
 
     static member Depth(value : ClearDepth) =
-        ClearValues.empty |> ClearValues.depth value
+        ClearValues.empty |> ClearValues.depth value.Value
 
     static member Stencil(value : ClearStencil) =
-        ClearValues.empty |> ClearValues.stencil value
+        ClearValues.empty |> ClearValues.stencil value.Value
 
 [<Extension; AbstractClass; Sealed>]
 type ClearValuesExtensions =
@@ -50,7 +107,7 @@ type ClearValuesExtensions =
 
     [<Extension>]
     static member Color(values : ClearValues, semantic : Symbol, color : ClearColor) =
-        values |> ClearValues.color' semantic color
+        values |> ClearValues.colorAttachment semantic color
 
     [<Extension>]
     static member Colors(values : ClearValues, colors : Map<Symbol, ClearColor>) = values |> ClearValues.colors colors
@@ -108,8 +165,8 @@ type ClearValuesExtensions =
 
     [<Extension>]
     static member Depth(values : ClearValues, depth : ClearDepth) =
-        values |> ClearValues.depth depth
+        values |> ClearValues.depth depth.Value
 
     [<Extension>]
     static member Stencil(values : ClearValues, stencil : ClearStencil) =
-        values |> ClearValues.stencil stencil
+        values |> ClearValues.stencil stencil.Value

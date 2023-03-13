@@ -553,7 +553,7 @@ module RenderTasks =
 
                     // Clear color attachments
                     for KeyValue(i, att) in signature.ColorAttachments do
-                        match values.Colors.[att.Name] with
+                        match values.[att.Name] with
                         | Some c ->
                             if att.Format.IsIntegerFormat then
                                 GL.ClearBuffer(ClearBuffer.Color, i, c.Integer.ToArray())

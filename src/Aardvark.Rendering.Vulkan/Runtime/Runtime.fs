@@ -398,7 +398,7 @@ type Runtime(device : Device) as this =
 
                     | _ -> ()
                 else
-                    match values.Colors.[name] with
+                    match values.[name] with
                     | Some color -> do! Command.ClearColor(view, TextureAspect.Color, color)
                     | _ -> ()
         }
@@ -422,7 +422,7 @@ type Runtime(device : Device) as this =
 
                 | _ -> Command.Nop
             else
-                match values.Colors.[DefaultSemantic.Colors] with
+                match values.[DefaultSemantic.Colors] with
                 | Some color ->
                     Command.ClearColor(image.[TextureAspect.Color], color)
 

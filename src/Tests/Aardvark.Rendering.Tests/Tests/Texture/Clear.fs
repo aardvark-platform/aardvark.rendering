@@ -109,9 +109,9 @@ module TextureClear =
                 let clear =
                     clear {
                         color C3b.AliceBlue
-                        color (c0, C3us.Aquamarine)
-                        color (c1, V4i(-1))
-                        color (c3, C3f(0.5))
+                        color c0 C3us.Aquamarine
+                        color c1 (V4i(-1))
+                        color c3 (C3f(0.5))
                         depth 0.5
                         stencil 4
                     }
@@ -170,8 +170,8 @@ module TextureClear =
 
                 let clearValues =
                     { ClearValues.empty with
-                        Depth   = clearDepth |> Option.map ClearDepth.create
-                        Stencil = clearStencil |> Option.map ClearStencil.create }
+                        Depth   = clearDepth |> Option.map float32
+                        Stencil = clearStencil |> Option.map uint32 }
 
                 clearFramebuffer runtime fbo clearValues
 

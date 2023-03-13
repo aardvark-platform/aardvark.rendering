@@ -1650,7 +1650,7 @@ module rec Command =
         let compile (info : CompilerInfo) (values : ClearValues) (s : IAssemblerStream) (p : IAdaptivePinning) =
             
             for KeyValue(i, att) in signature.ColorAttachments do
-                match values.Colors.[att.Name] with
+                match values.[att.Name] with
                 | Some color ->
                     s.BeginCall(3)
                     

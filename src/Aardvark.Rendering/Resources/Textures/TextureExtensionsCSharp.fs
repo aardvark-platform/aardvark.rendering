@@ -18,14 +18,14 @@ type ITextureRuntimeExtensions private() =
     /// Clears the texture with the given depth value.
     [<Extension>]
     static member ClearDepth(this : ITextureRuntime, texture : IBackendTexture, depth : ClearDepth) =
-         this.ClearDepth<_>(texture, depth)
+         this.ClearDepth<_>(texture, depth.Value)
 
     /// Clears the texture with the given stencil value.
     [<Extension>]
     static member ClearStencil(this : ITextureRuntime, texture : IBackendTexture, stencil : ClearStencil) =
-         this.ClearStencil<_>(texture, stencil)
+         this.ClearStencil<_>(texture, stencil.Value)
 
     /// Clears the texture with the given depth and stencil values.
     [<Extension>]
     static member ClearDepthStencil(this : ITextureRuntime, texture : IBackendTexture, depth : ClearDepth, stencil : ClearStencil) =
-         this.ClearDepthStencil<_, _>(texture, depth, stencil)
+         this.ClearDepthStencil<_, _>(texture, depth.Value, stencil.Value)

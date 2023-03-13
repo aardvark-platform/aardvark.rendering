@@ -36,7 +36,7 @@ type ClearTask(device : Device, renderPass : RenderPass, values : aval<ClearValu
                     do! Command.Begin q
 
                 for KeyValue(_, att) in renderPass.ColorAttachments do
-                    match values.Colors.[att.Name] with
+                    match values.[att.Name] with
                     | Some color -> do! Command.ClearColor(fbo.Attachments.[att.Name], TextureAspect.Color, color)
                     | _ -> ()
 

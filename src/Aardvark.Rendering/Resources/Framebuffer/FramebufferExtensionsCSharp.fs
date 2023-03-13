@@ -29,44 +29,44 @@ type IFramebufferRuntimeExtensions private() =
     /// Clears the framebuffer with the given color and depth.
     [<Extension>]
     static member Clear(this : IFramebufferRuntime, fbo : IFramebuffer, color : ClearColor, depth : ClearDepth) =
-        this.Clear<_, _>(fbo, color, depth)
+        this.Clear<_, _>(fbo, color, depth.Value)
 
     /// Clears the framebuffer with the given colors and depth.
     [<Extension>]
     static member Clear(this : IFramebufferRuntime, fbo : IFramebuffer, colors : Map<Symbol, C4f>, depth : ClearDepth) =
-        this.Clear<_, _>(fbo, colors, depth)
+        this.Clear<_, _>(fbo, colors, depth.Value)
 
     /// Clears the framebuffer with the given colors and depth.
     [<Extension>]
     static member Clear(this : IFramebufferRuntime, fbo : IFramebuffer, colors : seq<Symbol * C4f>, depth : ClearDepth) =
-        this.Clear<_, _>(fbo, colors, depth)
+        this.Clear<_, _>(fbo, colors, depth.Value)
 
     /// Clears the framebuffer with the given color, depth and stencil values.
     [<Extension>]
     static member Clear(this : IFramebufferRuntime, fbo : IFramebuffer, color : ClearColor, depth : ClearDepth, stencil : ClearStencil) =
-        this.Clear<_, _, _>(fbo, color, depth, stencil)
+        this.Clear<_, _, _>(fbo, color, depth.Value, stencil.Value)
 
     /// Clears the framebuffer with the given colors, depth and stencil values.
     [<Extension>]
     static member Clear(this : IFramebufferRuntime, fbo : IFramebuffer, colors : Map<Symbol, C4f>, depth : ClearDepth, stencil : ClearStencil) =
-        this.Clear<_, _, _>(fbo, colors, depth, stencil)
+        this.Clear<_, _, _>(fbo, colors, depth.Value, stencil.Value)
 
     /// Clears the framebuffer with the given colors, depth and stencil values.
     [<Extension>]
     static member Clear(this : IFramebufferRuntime, fbo : IFramebuffer, colors : seq<Symbol * C4f>, depth : ClearDepth, stencil : ClearStencil) =
-        this.Clear<_, _, _>(fbo, colors, depth, stencil)
+        this.Clear<_, _, _>(fbo, colors, depth.Value, stencil.Value)
 
     /// Clears the framebuffer with the given depth value.
     [<Extension>]
     static member ClearDepth(this : IFramebufferRuntime, fbo : IFramebuffer, depth : ClearDepth) =
-         this.ClearDepth<_>(fbo, depth)
+         this.ClearDepth<_>(fbo, depth.Value)
 
     /// Clears the framebuffer with the given stencil value.
     [<Extension>]
     static member ClearStencil(this : IFramebufferRuntime, fbo : IFramebuffer, stencil : ClearStencil) =
-         this.ClearStencil<_>(fbo, stencil)
+         this.ClearStencil<_>(fbo, stencil.Value)
 
     /// Clears the framebuffer with the given depth and stencil values.
     [<Extension>]
     static member ClearDepthStencil(this : IFramebufferRuntime, fbo : IFramebuffer, depth : ClearDepth, stencil : ClearStencil) =
-         this.ClearDepthStencil<_, _>(fbo, depth, stencil)
+         this.ClearDepthStencil<_, _>(fbo, depth.Value, stencil.Value)

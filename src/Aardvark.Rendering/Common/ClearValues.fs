@@ -1,228 +1,200 @@
 ﻿namespace Aardvark.Rendering
 
+open System
 open Aardvark.Base
 
-[<Struct; CLIMutable>]
+/// Struct representing a clear color.
+/// Holds a floating point and integer representation, one of which is used based on the format of the target.
+[<Struct>]
 type ClearColor =
-    {
-        Float   : V4f
-        Integer : V4i
-    }
+    val Float   : V4f
+    val Integer : V4i
 
-    static member Create(value : ClearColor) = value
+    new (other : ClearColor) = { Float = other.Float; Integer = other.Integer}
 
     // Conversion from floating point values
-    static member Create(value : V2f)          = { Float = V4f value; Integer = V4i value }
-    static member Create(value : V3f)          = { Float = V4f value; Integer = V4i value }
-    static member Create(value : V4f)          = { Float = V4f value; Integer = V4i value }
-    static member Create(value : V2d)          = { Float = V4f value; Integer = V4i value }
-    static member Create(value : V3d)          = { Float = V4f value; Integer = V4i value }
-    static member Create(value : V4d)          = { Float = V4f value; Integer = V4i value }
-    static member Create(value : C3f)          = { Float = V4f value; Integer = V4i (V4f value) }
-    static member Create(value : C4f)          = { Float = V4f value; Integer = V4i (V4f value) }
-    static member Create(value : C3d)          = { Float = V4f value; Integer = V4i (V4f value) }
-    static member Create(value : C4d)          = { Float = V4f value; Integer = V4i (V4f value) }
-    static member op_Implicit(value : V2f)     = ClearColor.Create(value)
-    static member op_Implicit(value : V3f)     = ClearColor.Create(value)
-    static member op_Implicit(value : V4f)     = ClearColor.Create(value)
-    static member op_Implicit(value : V2d)     = ClearColor.Create(value)
-    static member op_Implicit(value : V3d)     = ClearColor.Create(value)
-    static member op_Implicit(value : V4d)     = ClearColor.Create(value)
-    static member op_Implicit(value : C3f)     = ClearColor.Create(value)
-    static member op_Implicit(value : C4f)     = ClearColor.Create(value)
-    static member op_Implicit(value : C3d)     = ClearColor.Create(value)
-    static member op_Implicit(value : C4d)     = ClearColor.Create(value)
+    new (value : V2f) = { Float = V4f value; Integer = V4i value }
+    new (value : V3f) = { Float = V4f value; Integer = V4i value }
+    new (value : V4f) = { Float = V4f value; Integer = V4i value }
+    new (value : V2d) = { Float = V4f value; Integer = V4i value }
+    new (value : V3d) = { Float = V4f value; Integer = V4i value }
+    new (value : V4d) = { Float = V4f value; Integer = V4i value }
+    new (value : C3f) = { Float = V4f value; Integer = V4i (V4f value) }
+    new (value : C4f) = { Float = V4f value; Integer = V4i (V4f value) }
+    new (value : C3d) = { Float = V4f value; Integer = V4i (V4f value) }
+    new (value : C4d) = { Float = V4f value; Integer = V4i (V4f value) }
+
+    static member inline op_Implicit(value : V2f) = ClearColor(value)
+    static member inline op_Implicit(value : V3f) = ClearColor(value)
+    static member inline op_Implicit(value : V4f) = ClearColor(value)
+    static member inline op_Implicit(value : V2d) = ClearColor(value)
+    static member inline op_Implicit(value : V3d) = ClearColor(value)
+    static member inline op_Implicit(value : V4d) = ClearColor(value)
+    static member inline op_Implicit(value : C3f) = ClearColor(value)
+    static member inline op_Implicit(value : C4f) = ClearColor(value)
+    static member inline op_Implicit(value : C3d) = ClearColor(value)
+    static member inline op_Implicit(value : C4d) = ClearColor(value)
 
     // Conversion from uint8 values
-    static member Create(value : C3b)        = { Float = V4f (C4f value); Integer = V4i value }
-    static member Create(value : C4b)        = { Float = V4f (C4f value); Integer = V4i value }
-    static member op_Implicit(value : C3b)   = ClearColor.Create(value)
-    static member op_Implicit(value : C4b)   = ClearColor.Create(value)
+    new (value : C3b) = { Float = V4f (C4f value); Integer = V4i value }
+    new (value : C4b) = { Float = V4f (C4f value); Integer = V4i value }
+
+    static member inline op_Implicit(value : C3b) = ClearColor(value)
+    static member inline op_Implicit(value : C4b) = ClearColor(value)
 
     // Conversion from uint16 values
-    static member Create(value : C3us)        = { Float = V4f (C4f value); Integer = V4i value }
-    static member Create(value : C4us)        = { Float = V4f (C4f value); Integer = V4i value }
-    static member op_Implicit(value : C3us)   = ClearColor.Create(value)
-    static member op_Implicit(value : C4us)   = ClearColor.Create(value)
+    new (value : C3us) = { Float = V4f (C4f value); Integer = V4i value }
+    new (value : C4us) = { Float = V4f (C4f value); Integer = V4i value }
+
+    static member inline op_Implicit(value : C3us) = ClearColor(value)
+    static member inline op_Implicit(value : C4us) = ClearColor(value)
 
     // Conversion from uint32 values
-    static member Create(value : C3ui)        = { Float = V4f (C4f value); Integer = V4i(int value.R, int value.G, int value.B, int System.UInt32.MaxValue) }
-    static member Create(value : C4ui)        = { Float = V4f (C4f value); Integer = V4i(int value.R, int value.G, int value.B, int value.A) }
-    static member op_Implicit(value : C3ui)   = ClearColor.Create(value)
-    static member op_Implicit(value : C4ui)   = ClearColor.Create(value)
+    new (value : C3ui) = { Float = V4f (C4f value); Integer = V4i(int value.R, int value.G, int value.B, int System.UInt32.MaxValue) }
+    new (value : C4ui) = { Float = V4f (C4f value); Integer = V4i(int value.R, int value.G, int value.B, int value.A) }
+    new (value : V2ui) = { Float = V4f value; Integer = V4i value }
+    new (value : V3ui) = { Float = V4f value; Integer = V4i value }
+    new (value : V4ui) = { Float = V4f value; Integer = V4i value }
+
+    static member inline op_Implicit(value : C3ui) = ClearColor(value)
+    static member inline op_Implicit(value : C4ui) = ClearColor(value)
+    static member inline op_Implicit(value : V2ui) = ClearColor(value)
+    static member inline op_Implicit(value : V3ui) = ClearColor(value)
+    static member inline op_Implicit(value : V4ui) = ClearColor(value)
 
     // Conversion from int32 values
-    static member Create(value : V2i)        = { Float = V4f value; Integer = V4i value }
-    static member Create(value : V3i)        = { Float = V4f value; Integer = V4i value }
-    static member Create(value : V4i)        = { Float = V4f value; Integer = V4i value }
-    static member op_Implicit(value : V2i)   = ClearColor.Create(value)
-    static member op_Implicit(value : V3i)   = ClearColor.Create(value)
-    static member op_Implicit(value : V4i)   = ClearColor.Create(value)
+    new (value : V2i) = { Float = V4f value; Integer = V4i value }
+    new (value : V3i) = { Float = V4f value; Integer = V4i value }
+    new (value : V4i) = { Float = V4f value; Integer = V4i value }
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module ClearColor =
+    static member inline op_Implicit(value : V2i) = ClearColor(value)
+    static member inline op_Implicit(value : V3i) = ClearColor(value)
+    static member inline op_Implicit(value : V4i) = ClearColor(value)
 
-    [<AutoOpen>]
-    module private Aux =
-        let inline createAux (_ : ^Z) (x : ^T) =
-            ((^Z or ^T) : (static member Create : ^T -> ClearColor) x)
-
-    let zero =
-        { Float = V4f.Zero; Integer = V4i.Zero }
-
-    let inline create (value : ^T) =
-        createAux Unchecked.defaultof<ClearColor> value
-
-
-[<CLIMutable>]
-type ClearColors =
-    {
-        Default     : Option<ClearColor>
-        Attachments : Map<Symbol, ClearColor>
-    }
-
-    member x.Item(semantic : Symbol) =
-        match x.Attachments |> Map.tryFind semantic with
-        | None -> x.Default
-        | color -> color
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module ClearColors =
-
-    let empty =
-        { Default     = None
-          Attachments = Map.empty }
-
-    /// Creates clear colors for a single color.
-    let inline single (color : ^T) =
-        { empty with Default = color |> ClearColor.create |> Some }
-
-    /// Tries to get the clear color for the given attachment.
-    let tryGet (semantic : Symbol) (colors : ClearColors) =
-        colors.[semantic]
-
-    /// Sets a default clear color.
-    let inline set (color : ^Color) (colors : ClearColors) =
-        { colors with Default = color |> ClearColor.create |> Some }
-
-    /// Sets a clear color for the attachment with the given name.
-    let inline set' (semantic : Symbol) (color : ^Color) (colors : ClearColors) =
-        { colors with Attachments = colors.Attachments |> Map.add semantic (ClearColor.create color) }
-
-    /// Sets clear colors for the given attachments.
-    let inline setMany (values : Map<Symbol, ^Color>) (colors : ClearColors) =
-        (colors, values) ||> Map.fold (fun s sem c -> s |> set' sem c)
-
-
-[<Struct; CLIMutable>]
-type ClearDepth =
-    { Value : float32 }
-
-    static member Create(value : ClearDepth) = value
-
-    static member Create(value : float32)       = { Value = value }
-    static member op_Implicit(value : float32)  = ClearDepth.Create(value)
-
-    static member Create(value : float)         = { Value = float32 value }
-    static member op_Implicit(value : float)    = ClearDepth.Create(value)
-
-    static member Create(value : decimal)       = { Value = float32 value }
-    static member op_Implicit(value : decimal)  = ClearDepth.Create(value)
-
-    static member op_Implicit(value : ClearDepth) = value.Value
-    static member op_Explicit(value : ClearDepth) = float value.Value
-    static member op_Explicit(value : ClearDepth) = decimal value.Value
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module ClearDepth =
-
-    [<AutoOpen>]
-    module private Aux =
-        let inline createAux (_ : ^Z) (x : ^T) =
-            ((^Z or ^T) : (static member Create : ^T -> ClearDepth) x)
-
-    let inline create (value : ^T) =
-        createAux Unchecked.defaultof<ClearDepth> value
-
-
-[<Struct; CLIMutable>]
-type ClearStencil =
-    { Value : uint32 }
-
-    static member Create(value : ClearStencil) = value
-
-    static member Create(value : uint8)       = { Value = uint32 value }
-    static member op_Implicit(value : uint8)  = ClearStencil.Create(value)
-
-    static member Create(value : uint16)      = { Value = uint32 value }
-    static member op_Implicit(value : uint16) = ClearStencil.Create(value)
-
-    static member Create(value : uint32)      = { Value = value }
-    static member op_Implicit(value : uint32) = ClearStencil.Create(value)
-
-    static member Create(value : int8)        = { Value = uint32 value }
-    static member op_Implicit(value : int8)   = ClearStencil.Create(value)
-
-    static member Create(value : int16)       = { Value = uint32 value }
-    static member op_Implicit(value : int16)  = ClearStencil.Create(value)
-
-    static member Create(value : int32)       = { Value = uint32 value }
-    static member op_Implicit(value : int32)  = ClearStencil.Create(value)
-
-    static member op_Implicit(value : ClearStencil) = value.Value
-    static member op_Explicit(value : ClearStencil) = int8 value.Value
-    static member op_Explicit(value : ClearStencil) = int16 value.Value
-    static member op_Explicit(value : ClearStencil) = int32 value.Value
-    static member op_Explicit(value : ClearStencil) = uint8 value.Value
-    static member op_Explicit(value : ClearStencil) = uint16 value.Value
-
-
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module ClearStencil =
-
-    [<AutoOpen>]
-    module private Aux =
-        let inline createAux (_ : ^Z) (x : ^T) =
-            ((^Z or ^T) : (static member Create : ^T -> ClearStencil) x)
-
-    let inline create (value : ^T) =
-        createAux Unchecked.defaultof<ClearStencil> value
-
+/// Record holding color, depth and stencil values for clearing operations.
 [<CLIMutable>]
 type ClearValues =
     {
-        Colors  : ClearColors
-        Depth   : Option<ClearDepth>
-        Stencil : Option<ClearStencil>
+        /// Default clear color for any attachment.
+        Color   : ClearColor option
+
+        /// Per attachment clear colors, overriding the default clear color if present.
+        Colors  : Map<Symbol, ClearColor>
+
+        /// Depth clear value.
+        Depth   : float32 option
+
+        // Stencil clear value.
+        Stencil : uint32 option
     }
 
-[<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
-module ClearValues =
+    /// Returns the effective clear color for the given color attachment if there is any.
+    member inline x.Item(semantic : Symbol) : ClearColor option =
+        match x.Colors |> Map.tryFind semantic with
+        | None -> x.Color
+        | color -> color
 
-    let empty =
-        { Colors  = ClearColors.empty
-          Depth   = None
-          Stencil = None }
+[<AutoOpen>]
+module ClearValuesFSharp =
 
-    /// Sets a default clear color.
-    let inline color (color : ^Color) (values : ClearValues) =
-        { values with Colors = values.Colors |> ClearColors.set color }
+    module ClearValues =
 
-    /// Sets a clear color for the attachment with the given name.
-    let inline color' (semantic : Symbol) (color : ^Color) (values : ClearValues) =
-        { values with Colors = values.Colors |> ClearColors.set' semantic color }
+        module Conversion =
 
-    /// Sets clear colors for the given attachments.
-    let inline colors (colors : Map<Symbol, ^Color>) (values : ClearValues) =
-        { values with Colors = values.Colors |> ClearColors.setMany colors }
+            [<Sealed>]
+            type Converter private () =
+                static member inline ToClearColor(value : ClearColor) = value
 
-    /// Sets a depth clear value.
-    let inline depth (value : ^Depth) (values : ClearValues) =
-        { values with Depth = Some (ClearDepth.create value) }
+                // Conversion from floating point values
+                static member inline ToClearColor(value : V2f)  = ClearColor value
+                static member inline ToClearColor(value : V3f)  = ClearColor value
+                static member inline ToClearColor(value : V4f)  = ClearColor value
+                static member inline ToClearColor(value : V2d)  = ClearColor value
+                static member inline ToClearColor(value : V3d)  = ClearColor value
+                static member inline ToClearColor(value : V4d)  = ClearColor value
+                static member inline ToClearColor(value : C3f)  = ClearColor value
+                static member inline ToClearColor(value : C4f)  = ClearColor value
+                static member inline ToClearColor(value : C3d)  = ClearColor value
+                static member inline ToClearColor(value : C4d)  = ClearColor value
 
-    /// Sets a stencil clear value.
-    let inline stencil (value : ^Stencil) (values : ClearValues) =
-        { values with Stencil = Some (ClearStencil.create value) }
+                // Conversion from uint8 values
+                static member inline ToClearColor(value : C3b)  = ClearColor value
+                static member inline ToClearColor(value : C4b)  = ClearColor value
+
+                // Conversion from uint16 values
+                static member inline ToClearColor(value : C3us) = ClearColor value
+                static member inline ToClearColor(value : C4us) = ClearColor value
+
+                // Conversion from uint32 values
+                static member inline ToClearColor(value : C3ui) = ClearColor value
+                static member inline ToClearColor(value : C4ui) = ClearColor value
+                static member inline ToClearColor(value : V2ui) = ClearColor value
+                static member inline ToClearColor(value : V3ui) = ClearColor value
+                static member inline ToClearColor(value : V4ui) = ClearColor value
+
+                // Conversion from int32 values
+                static member inline ToClearColor(value : V2i)  = ClearColor value
+                static member inline ToClearColor(value : V3i)  = ClearColor value
+                static member inline ToClearColor(value : V4i)  = ClearColor value
+
+                // Conversion to depth
+                static member inline ToDepth(value : float32) = value
+                static member inline ToDepth(value : float)   = float32 value
+                static member inline ToDepth(value : decimal) = float32 value
+
+                // Conversion to stencil
+                static member inline ToStencil(value : uint8)  = uint32 value
+                static member inline ToStencil(value : uint16) = uint32 value
+                static member inline ToStencil(value : uint32) = value
+                static member inline ToStencil(value : int8)   = uint32 value
+                static member inline ToStencil(value : int16)  = uint32 value
+                static member inline ToStencil(value : int32)  = uint32 value
+
+            [<AutoOpen>]
+            module private Aux =
+                let inline colorAux (_ : ^Z) (x : ^T)   = ((^Z or ^T) : (static member ToClearColor : ^T -> ClearColor) x)
+                let inline depthAux (_ : ^Z) (x : ^T)   = ((^Z or ^T) : (static member ToDepth : ^T -> float32) x)
+                let inline stencilAux (_ : ^Z) (x : ^T) = ((^Z or ^T) : (static member ToStencil : ^T -> uint32) x)
+
+            let inline toColor (value : ^T)   = colorAux Unchecked.defaultof<Converter> value
+            let inline toDepth (value : ^T)   = depthAux Unchecked.defaultof<Converter> value
+            let inline toStencil (value : ^T) = stencilAux Unchecked.defaultof<Converter> value
+
+        /// Empty clear values.
+        let empty =
+            { Color   = None
+              Colors  = Map.empty
+              Depth   = None
+              Stencil = None }
+
+        /// Creates clear values of a single color.
+        let inline ofColor (color : ^T) =
+            { empty with Color = color |> Conversion.toColor |> Some }
+
+        /// Returns the effective clear color for the given color attachment if there is any.
+        let inline tryGetColor (semantic : Symbol) (values : ClearValues) =
+            values.[semantic]
+
+        /// Sets a default clear color.
+        let inline color (color : ^Color) (values : ClearValues) =
+            { values with Color = Some <| Conversion.toColor color }
+
+        /// Sets a clear color for the color attachment with the given name.
+        let inline colorAttachment (semantic : Symbol) (color : ^Color) (values : ClearValues) =
+            { values with Colors = values.Colors |> Map.add semantic (Conversion.toColor color) }
+
+        /// Sets clear colors for the given color attachments.
+        let inline colors (colors : Map<Symbol, ^Color>) (values : ClearValues) =
+            let colors = (values.Colors, colors) ||> Map.fold (fun s sem c -> s |> Map.add sem (Conversion.toColor c))
+            { values with Colors = colors }
+
+        /// Sets a depth clear value.
+        let inline depth (value : ^Depth) (values : ClearValues) =
+            { values with Depth = Some (Conversion.toDepth value) }
+
+        /// Sets a stencil clear value.
+        let inline stencil (value : ^Stencil) (values : ClearValues) =
+            { values with Stencil = Some (Conversion.toStencil value) }
 
 [<AutoOpen>]
 module ``Clear Utlities`` =
@@ -237,13 +209,19 @@ module ``Clear Utlities`` =
         member inline x.Color(s : ClearValues, color : ^Color) =
             s |> ClearValues.color color
 
+        [<CustomOperation("color")>]
+        member inline x.Color(s : ClearValues, semantic : Symbol, color : ^Color) =
+            s |> ClearValues.colorAttachment semantic color
+
+        [<CustomOperation("color"); Obsolete("Use untupled overload of this builder operation instead.")>]
         member inline x.Color(s : ClearValues, (semantic : Symbol, color : ^Color)) =
-            s |> ClearValues.color' semantic color
+            s |> ClearValues.colorAttachment semantic color
 
         [<CustomOperation("colors")>]
         member inline x.Colors(s : ClearValues, colors : Map<Symbol, ^Color>) =
             s |> ClearValues.colors colors
 
+        [<CustomOperation("colors")>]
         member inline x.Colors(s : ClearValues, colors : seq<Symbol * ^Color>) =
             s |> ClearValues.colors (Map.ofSeq colors)
 

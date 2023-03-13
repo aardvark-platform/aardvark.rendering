@@ -839,7 +839,7 @@ module ``Image Command Extensions`` =
             else
                 Command.nop
 
-    // We hide these methods since they use ClearColor, ClearDepth and ClearStencil, which have
+    // We hide these methods since they use ClearColor, which has
     // implicit conversion operators for better C# interop. They would take precedence over the SRTP variants defined below, resulting in warnings.
     // We also cannot move the implementation to the SRTP variants directly, since they make use of private functions.
     module ``Internal Clear Commands`` =
@@ -878,7 +878,7 @@ module ``Image Command Extensions`` =
                             [img.Image]
                     }
 
-            static member ClearDepthStencilImpl(img : ImageSubresourceRange, depth : ClearDepth, stencil : ClearStencil) =
+            static member ClearDepthStencilImpl(img : ImageSubresourceRange, depth : float32, stencil : uint32) =
                 if img.Image.IsNull then
                     Command.Nop
                 else
@@ -891,7 +891,7 @@ module ``Image Command Extensions`` =
                             let originalLayout = img.Image.Layout
                             cmd.Enqueue (Command.TransformLayout(img.Image, VkImageLayout.TransferDstOptimal))
 
-                            let mutable clearValue = VkClearDepthStencilValue(depth.Value, stencil.Value)
+                            let mutable clearValue = VkClearDepthStencilValue(depth, stencil)
                             let mutable range = img.VkImageSubresourceRange
                             clearValue |> pin (fun pClear ->
                                 range |> pin (fun pRange ->
@@ -909,10 +909,10 @@ module ``Image Command Extensions`` =
     type Command with
 
         static member inline ClearColor(img : ImageSubresourceRange, color : ^Color) =
-            Command.ClearColorImpl(img, ClearColor.create color)
+            Command.ClearColorImpl(img, ClearValues.Conversion.toColor color)
 
         static member inline ClearDepthStencil(img : ImageSubresourceRange, depth : ^Depth, stencil : ^Stencil) =
-            Command.ClearDepthStencilImpl(img, ClearDepth.create depth, ClearStencil.create stencil)
+            Command.ClearDepthStencilImpl(img, ClearValues.Conversion.toDepth depth, ClearValues.Conversion.toStencil stencil)
 
 
 [<AutoOpen>]

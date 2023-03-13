@@ -1183,7 +1183,6 @@ module private RuntimeCommands =
             let values = values.GetValue token
             let depth = values.Depth
             let stencil = values.Stencil
-            let colors = values.Colors
 
             // create an array containing the depth-clear (if any)
             let depthClears =
@@ -1228,7 +1227,7 @@ module private RuntimeCommands =
             // create an array containing all color-clears
             let colorClears = 
                 compiler.renderPass.ColorAttachments |> Map.toArray |> Array.choose (fun (i, att) ->
-                    match colors.[att.Name] with
+                    match values.[att.Name] with
                     | Some value ->
                         let clear =
                             if att.Format.IsIntegerFormat then

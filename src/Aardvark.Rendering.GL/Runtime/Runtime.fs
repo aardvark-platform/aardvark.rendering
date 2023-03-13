@@ -371,7 +371,7 @@ type Runtime(debug : IDebugConfig) =
             if fbo.Signature.ColorAttachments.Count = 1 then
                 let _, att = fbo.Signature.ColorAttachments |> Map.toList |> List.head
 
-                match values.Colors.[att.Name] with
+                match values.[att.Name] with
                 | Some c ->
                     if att.Format.IsIntegerFormat then
                         // clear depth stencil if requested
@@ -393,7 +393,7 @@ type Runtime(debug : IDebugConfig) =
 
                 // clear each color layer individually
                 for KeyValue(i, att) in fbo.Signature.ColorAttachments do
-                    match values.Colors.[att.Name] with
+                    match values.[att.Name] with
                     | Some c ->
                         if att.Format.IsIntegerFormat then
                             GL.ClearBuffer(ClearBuffer.Color, i, c.Integer.ToArray())
@@ -452,7 +452,7 @@ type Runtime(debug : IDebugConfig) =
                     if mask <> ClearBufferMask.None then
                         GL.Clear(mask)
                 else
-                    match values.Colors.[DefaultSemantic.Colors] with
+                    match values.[DefaultSemantic.Colors] with
                     | Some color ->
                         GL.DrawBuffer(DrawBufferMode.ColorAttachment0)
                         if texture.Format.IsIntegerFormat then
