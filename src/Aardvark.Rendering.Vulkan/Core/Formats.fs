@@ -532,12 +532,6 @@ module VkFormat =
         elif stencilFormats.Contains fmt then VkImageAspectFlags.StencilBit
         else VkImageAspectFlags.ColorBit
 
-    let toShaderAspect (fmt : VkFormat) =
-        if depthStencilFormats.Contains fmt then VkImageAspectFlags.DepthBit
-        elif depthFormats.Contains fmt then VkImageAspectFlags.DepthBit
-        elif stencilFormats.Contains fmt then VkImageAspectFlags.StencilBit
-        else VkImageAspectFlags.ColorBit
-
     let toColFormat =
         let r = Col.Format.Gray
         let rg = Col.Format.RG

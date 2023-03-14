@@ -189,6 +189,9 @@ module ImageDownloadExtensions =
 
 
         let downloadLevelDepthStencil (offset : V2i) (src : ImageSubresource) (dst : Matrix<'T>) (device : Device) =
+            if src.Aspect <> TextureAspect.Depth && src.Aspect <> TextureAspect.Stencil then
+                failf "cannot download level of subresource with aspect %A (must be Depth or Stencil)" src.Aspect
+
             let size = V2i dst.Size
 
             let offset =
@@ -237,9 +240,17 @@ module ImageDownloadExtensions =
             this |> Image.downloadLevel offset size format src dst
 
         [<Extension>]
-        static member inline DownloadDepth(this : Device, src : ImageSubresource, dst : Matrix<float32>, offset : V2i) =
+        static member DownloadDepth(this : Device, src : ImageSubresource, dst : Matrix<float32>, offset : V2i) =
+            if not <| src.Aspect.HasFlag TextureAspect.Depth then
+                failf "cannot download depth data from subresource with aspect %A" src.Aspect
+
+            let src = src.Image.[TextureAspect.Depth, src.Level, src.Slice]
             this |> Image.downloadLevelDepthStencil offset src dst
 
         [<Extension>]
-        static member inline DownloadStencil(this : Device, src : ImageSubresource, dst : Matrix<int>, offset : V2i) =
+        static member DownloadStencil(this : Device, src : ImageSubresource, dst : Matrix<int>, offset : V2i) =
+            if not <| src.Aspect.HasFlag TextureAspect.Stencil then
+                failf "cannot download stencil data from subresource with aspect %A" src.Aspect
+
+            let src = src.Image.[TextureAspect.Stencil, src.Level, src.Slice]
             this |> Image.downloadLevelDepthStencil offset src dst

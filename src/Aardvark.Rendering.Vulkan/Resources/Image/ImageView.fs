@@ -67,11 +67,13 @@ module ImageViewCommandExtensions =
         static member inline ClearColor(view : ImageView, aspect : TextureAspect, color : ^Color) =
             let levels = view.MipLevelRange
             let slices = view.ArrayRange
+            let aspect = view.Aspect &&& aspect
             Command.ClearColor(view.Image.[aspect, levels.Min .. levels.Max, slices.Min .. slices.Max], color)
 
         static member inline ClearDepthStencil(view : ImageView, aspect : TextureAspect, depth : ^Depth, stencil : ^Stencil) =
             let levels = view.MipLevelRange
             let slices = view.ArrayRange
+            let aspect = view.Aspect &&& aspect
             Command.ClearDepthStencil(view.Image.[aspect, levels.Min .. levels.Max, slices.Min .. slices.Max], depth, stencil)
 
 [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
@@ -133,7 +135,7 @@ module ImageView =
         if levels < 1 then failf "cannot create image view with level-count: %A" levels
         if slices < 1 then failf "cannot create image view with slice-count: %A" levels
 
-        let aspect = VkFormat.toShaderAspect img.Format
+        let aspect = VkFormat.toAspect img.Format
 
         let isResolved, img = 
             if samplerType.isMS then
@@ -198,7 +200,7 @@ module ImageView =
         if levels < 1 then failf "cannot create image view with level-count: %A" levels
         if slices < 1 then failf "cannot create image view with slice-count: %A" levels
 
-        let aspect = VkFormat.toShaderAspect img.Format
+        let aspect = VkFormat.toAspect img.Format
 
         let isResolved, img = 
             if imageType.isMS then
@@ -259,7 +261,7 @@ module ImageView =
         if levels < 1 then failf "cannot create image view with level-count: %A" levels
         if slices < 1 then failf "cannot create image view with slice-count: %A" levels
 
-        let aspect = VkFormat.toShaderAspect img.Format
+        let aspect = VkFormat.toAspect img.Format
 
         let viewType = viewTypeTex slices img.Dimension
         native {

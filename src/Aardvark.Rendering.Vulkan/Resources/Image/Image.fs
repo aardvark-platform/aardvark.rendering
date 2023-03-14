@@ -323,7 +323,7 @@ module internal ImagePropertiesExtensions =
     type FShade.GLSL.GLSLSamplerType with
         member x.Properties =
             let format =
-                if x.isShadow then TextureFormat.Depth24Stencil8
+                if x.isShadow then TextureFormat.DepthComponent32f
                 elif x.IsInteger then TextureFormat.Rgba8i
                 else TextureFormat.Rgba8
 
@@ -1243,10 +1243,7 @@ module private ImageRanges =
         let ofFramebufferOutput (src : IFramebufferOutput) =
             match src with
             | :? Image as img ->
-                if VkFormat.hasDepth img.Format then
-                    img.[TextureAspect.Depth, 0, *]
-                else
-                    img.[TextureAspect.Color, 0, *]
+                img.[img.TextureFormat.Aspect, 0, *]
 
             | :? ITextureLevel as src ->
                 let srcImage = src.Texture |> unbox<Image>

@@ -811,7 +811,6 @@ type IBackendTextureExtensions private() =
     ///<summary>
     /// Creates an output view of the texture with the given level and slice.
     /// In case the texture is an array or a cube and slice is negative, all items or faces are selected as texture layers.
-    /// If the texture format is a depth-stencil format, the depth aspect is selected.
     ///</summary>
     ///<param name="texture">The texture.</param>
     ///<param name="level">The level for the output view. Default is 0.</param>
@@ -820,9 +819,4 @@ type IBackendTextureExtensions private() =
     static member GetOutputView(texture : IBackendTexture,
                                 [<Optional; DefaultParameterValue(0)>] level : int,
                                 [<Optional; DefaultParameterValue(-1)>] slice : int) =
-        let aspect =
-            match texture.Format.Aspect with
-            | TextureAspect.DepthStencil -> TextureAspect.Depth
-            | asp -> asp
-
-        texture.GetOutputView(aspect, level, slice)
+        texture.GetOutputView(texture.Format.Aspect, level, slice)
