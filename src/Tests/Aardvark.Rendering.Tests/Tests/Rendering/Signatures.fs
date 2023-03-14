@@ -350,6 +350,6 @@ module FramebufferSignature =
                 "Render combined",     Cases.renderCombined
                 "Render multisampled", Cases.renderToMultisampled
 
-            "Render to cube array (layered)", Cases.renderToCubeArrayLayered
+            "Render to cube array layered", Cases.renderToCubeArrayLayered
         ]
         |> prepareCases backend "Framebuffer signatures"

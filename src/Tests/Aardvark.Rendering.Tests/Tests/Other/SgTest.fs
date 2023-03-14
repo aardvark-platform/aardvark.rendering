@@ -105,7 +105,7 @@ module ``SceneGraph Tests`` =
         Expect.equal count countAfterDispose "unexpected count after disposing"
 
     let onActivationMultiRenderObject =
-        test "Sg.OnActivation (multiple RenderObjects)" {
+        test "Sg.OnActivation multiple RenderObjects" {
 
             let sg (withCountingActivator : ISg -> ISg) =
                 Sg.ofList [
@@ -118,7 +118,7 @@ module ``SceneGraph Tests`` =
         }
 
     let delayModifySurface =
-        test "Sg.Delay (modify surface)" {
+        test "Sg.Delay modify surface" {
             use app = TestApplication.create Backend.Vulkan
             let runtime = app.Runtime
 

@@ -1136,25 +1136,25 @@ module TextureUpload =
                 "2D multisampled array",                  Cases.texture2DMultisampledArray
                 "2D multisampled array subwindow",        Cases.texture2DMultisampledArraySubwindow
 
-            "2D compressed DDS (BC1)",                    Cases.texture2DCompressedDDSBC1
-            "2D compressed DDS (BC2)",                    Cases.texture2DCompressedDDSBC2
-            "2D compressed DDS (BC3)",                    Cases.texture2DCompressedDDSBC3
-            "2D compressed DDS (BC4u)",                   Cases.texture2DCompressedDDSBC4u
-            "2D compressed DDS (BC5u)",                   Cases.texture2DCompressedDDSBC5u
+            "2D compressed DDS BC1",                    Cases.texture2DCompressedDDSBC1
+            "2D compressed DDS BC2",                    Cases.texture2DCompressedDDSBC2
+            "2D compressed DDS BC3",                    Cases.texture2DCompressedDDSBC3
+            "2D compressed DDS BC4u",                   Cases.texture2DCompressedDDSBC4u
+            "2D compressed DDS BC5u",                   Cases.texture2DCompressedDDSBC5u
             "2D compressed subwindow",                    Cases.texture2DCompressedSubwindow
 
             // Uploading BC6/7 is possible on both backends, but there is no
             // easy way to flip these, and unfortunately we want to flip all our textures on upload -_-
-                //"2D compressed DDS (BC6h)",     Cases.texture2DCompressedDDSBC6h
-                //"2D compressed DDS (BC7)",      Cases.texture2DCompressedDDSBC7
+                //"2D compressed DDS BC6h",     Cases.texture2DCompressedDDSBC6h
+                //"2D compressed DDS BC7",      Cases.texture2DCompressedDDSBC7
 
             // Vulkan does not support generation of mipmaps for already compressed textures
             if backend <> Backend.Vulkan then
-                "2D compressed DDS (BC1) mipmap generation",  Cases.texture2DCompressedDDSBC1MipmapGeneration
-                "2D compressed DDS (BC2) mipmap generation",  Cases.texture2DCompressedDDSBC2MipmapGeneration
-                "2D compressed DDS (BC3) mipmap generation",  Cases.texture2DCompressedDDSBC3MipmapGeneration
-                "2D compressed DDS (BC4u) mipmap generation", Cases.texture2DCompressedDDSBC4uMipmapGeneration
-                "2D compressed DDS (BC5u) mipmap generation", Cases.texture2DCompressedDDSBC5uMipmapGeneration
+                "2D compressed DDS BC1 mipmap generation",  Cases.texture2DCompressedDDSBC1MipmapGeneration
+                "2D compressed DDS BC2 mipmap generation",  Cases.texture2DCompressedDDSBC2MipmapGeneration
+                "2D compressed DDS BC3 mipmap generation",  Cases.texture2DCompressedDDSBC3MipmapGeneration
+                "2D compressed DDS BC4u mipmap generation", Cases.texture2DCompressedDDSBC4uMipmapGeneration
+                "2D compressed DDS BC5u mipmap generation", Cases.texture2DCompressedDDSBC5uMipmapGeneration
 
             if backend <> Backend.Vulkan then // not supported (only really used for CEF?)
                 "2D StreamingTexture",      Cases.texture2DStreaming

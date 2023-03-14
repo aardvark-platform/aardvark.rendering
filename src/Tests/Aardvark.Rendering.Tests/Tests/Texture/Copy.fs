@@ -573,7 +573,7 @@ module TextureCopy =
 
             "2D array mipmapped",               Cases.texture2DArrayMipmapped
             "2D multisampled",                  Cases.texture2DMultisampled false
-            "2D multisampled (with resolve)",   Cases.texture2DMultisampled true
+            "2D multisampled with resolve",     Cases.texture2DMultisampled true
             "2D multisampled depth",            Cases.texture2DMultisampledDepth
             "2D multisampled depth subwindow",  Cases.texture2DMultisampledDepthSubwindow
             "Cube mipmapped",                   Cases.textureCubeMipmapped

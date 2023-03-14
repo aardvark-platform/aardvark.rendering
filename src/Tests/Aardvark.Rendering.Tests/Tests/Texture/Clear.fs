@@ -232,34 +232,34 @@ module TextureClear =
 
     let tests (backend : Backend) =
         [
-            "Color rgba8",                                              Cases.rgba8
-            "Color rgba32i",                                            Cases.rgba32i
-            "Color rgba16ui",                                           Cases.rgba16ui
-            "Color rgba32ui",                                           Cases.rgba32ui
-            "Color rgba32f",                                            Cases.rgba32f
-            "Depth",                                                    Cases.depth
-            "Depth-stencil",                                            Cases.depthStencil
-            "Depth-stencil (only depth)",                               Cases.depthStencilOnlyDepth
-            "Depth-stencil (only stencil)",                             Cases.depthStencilOnlyStencil
+            "Color rgba8",                              Cases.rgba8
+            "Color rgba32i",                            Cases.rgba32i
+            "Color rgba16ui",                           Cases.rgba16ui
+            "Color rgba32ui",                           Cases.rgba32ui
+            "Color rgba32f",                            Cases.rgba32f
+            "Depth",                                    Cases.depth
+            "Depth-stencil",                            Cases.depthStencil
+            "Depth-only",                               Cases.depthStencilOnlyDepth
+            "Stencil-only",                             Cases.depthStencilOnlyStencil
 
-            "Framebuffer",                                              Cases.framebufferMixed
-            "Framebuffer (compiled)",                                   Cases.framebufferMixedCompileClear
-            "Framebuffer (render command)",                             Cases.framebufferMixedRenderCommand
+            "Framebuffer",                              Cases.framebufferMixed
+            "Framebuffer compiled",                     Cases.framebufferMixedCompileClear
+            "Framebuffer render command",               Cases.framebufferMixedRenderCommand
 
-            "Framebuffer depth",                                        Cases.framebufferDepth
-            "Framebuffer depth (compiled)",                             Cases.framebufferDepthCompileClear
-            "Framebuffer depth (render command)",                       Cases.framebufferDepthRenderCommand
+            "Framebuffer depth",                        Cases.framebufferDepth
+            "Framebuffer depth compiled",               Cases.framebufferDepthCompileClear
+            "Framebuffer depth render command",         Cases.framebufferDepthRenderCommand
 
-            "Framebuffer depth-stencil",                                Cases.framebufferDepthStencil
-            "Framebuffer depth-stencil (compiled)",                     Cases.framebufferDepthStencilCompileClear
-            "Framebuffer depth-stencil (render command)",               Cases.framebufferDepthStencilRenderCommand
+            "Framebuffer depth-stencil",                Cases.framebufferDepthStencil
+            "Framebuffer depth-stencil compiled",       Cases.framebufferDepthStencilCompileClear
+            "Framebuffer depth-stencil render command", Cases.framebufferDepthStencilRenderCommand
 
-            "Framebuffer depth-stencil (only depth)",                   Cases.framebufferDepthStencilOnlyDepth
-            "Framebuffer depth-stencil (only depth, compiled)",         Cases.framebufferDepthStencilOnlyDepthCompileClear
-            "Framebuffer depth-stencil (only depth, render command)",   Cases.framebufferDepthStencilOnlyDepthRenderCommand
+            "Framebuffer depth-only",                   Cases.framebufferDepthStencilOnlyDepth
+            "Framebuffer depth-only, compiled",         Cases.framebufferDepthStencilOnlyDepthCompileClear
+            "Framebuffer depth-only, render command",   Cases.framebufferDepthStencilOnlyDepthRenderCommand
 
-            "Framebuffer depth-stencil (only stencil)",                 Cases.framebufferDepthStencilOnlyStencil
-            "Framebuffer depth-stencil (only stencil, compiled)",       Cases.framebufferDepthStencilOnlyStencilCompileClear
-            "Framebuffer depth-stencil (only stencil, render command)", Cases.framebufferDepthStencilOnlyStencilRenderCommand
+            "Framebuffer stencil-only",                 Cases.framebufferDepthStencilOnlyStencil
+            "Framebuffer stencil-only, compiled",       Cases.framebufferDepthStencilOnlyStencilCompileClear
+            "Framebuffer stencil-only, render command", Cases.framebufferDepthStencilOnlyStencilRenderCommand
         ]
         |> prepareCases backend "Clear"
