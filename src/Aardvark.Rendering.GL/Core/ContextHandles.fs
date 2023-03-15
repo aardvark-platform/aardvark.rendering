@@ -33,8 +33,11 @@ module ContextHandleGLExtensions =
             GL.Enable(EnableCap.TextureCubeMapSeamless)
             GL.Disable(EnableCap.PolygonSmooth)
             GL.Hint(HintTarget.FragmentShaderDerivativeHint, HintMode.Nicest)
-            if Config.DepthRange = DepthRange.ZeroToOne then
-                GL.ClipControl(ClipOrigin.LowerLeft, ClipDepthMode.ZeroToOne)
+            if RuntimeConfig.DepthRange = DepthRange.ZeroToOne then
+                if GL.ARB_clip_control then
+                    GL.ClipControl(ClipOrigin.LowerLeft, ClipDepthMode.ZeroToOne)
+                else
+                    failf "cannot set depth range to [0, 1] without GL_ARB_clip_control or OpenGL 4.5"
 
 /// <summary>
 /// a handle represents a GL context which can be made current and released

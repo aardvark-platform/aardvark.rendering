@@ -101,6 +101,7 @@
     <Compile Include="Pipeline\Modes\WindingOrder.fs" />
     <Compile Include="Pipeline\Modes\BlendMode.fs" />
     <Compile Include="Pipeline\Modes\StencilMode.fs" />
+    <Compile Include="Pipeline\Modes\DepthRange.fs" />
     <Compile Include="Pipeline\Modes\DepthTest.fs" />
     <Compile Include="Pipeline\Modes\DepthBias.fs" />
     <Compile Include="Pipeline\Modes\ColorMask.fs" />

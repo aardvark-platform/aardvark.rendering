@@ -4,12 +4,11 @@ open Aardvark.Rendering
 open System.Runtime.InteropServices
 open OpenTK.Graphics
 
-type DepthRange = MinusOneToOne=0 | ZeroToOne=1
-
 /// <summary>
 /// A module containing default GL configuration properties
 /// </summary>
 module Config =
+
     /// <summary>
     /// The major GL Version for default contexts
     /// </summary>
@@ -56,16 +55,14 @@ module Config =
     /// </summary>
     let Buffers = 2
 
-    /// <summary>
-    /// Specifies the depth range convention: The default is MinusOneToOne [-1, 1]. 
-    /// Setting the DepthRange to ZeroToOne [0, 1] allows implementing a "reversed depth" zbuffer with increased precission.
-    /// NOTE: Internally it will use glClipControl to set the convention and requires OpenGL 4.5 to work.
-    ///       FShade is not aware of this configuration, it still expects shader to follow the [-1, 1] convention and allows automatic conversion to [0, 1] as used by Vulkan.
-    ///       This means for OpenGL use the depth values are untouched and it up for the application to use suitable projection transformations when setting the DepthRange to [0, 1].
-    /// </summary>
-    let mutable DepthRange = DepthRange.MinusOneToOne
 
 module RuntimeConfig =
+
+    /// <summary>
+    /// Specifies the expected depth range of normalized device coordinates.
+    /// Setting a depth range of [0, 1] requires GL_ARB_clip_control or OpenGL 4.5.
+    /// </summary>
+    let mutable DepthRange = DepthRange.MinusOneToOne
 
     /// ResourceSet.Update and Program.Run use a GL fence sync if true.
     /// This flag improves timings for GPU uploads but also incurs a (possible) performance
@@ -95,6 +92,7 @@ module RuntimeConfig =
     /// used over the implicit encoding provided by OpenGL.
     /// </summary>
     let mutable PreferHostSideTextureCompression = true
+
 
 /// Reporting modes for OpenGL errors.
 type ErrorFlagCheck =

@@ -39,6 +39,7 @@
     <Compile Include="Core\Extensions\ARB_framebuffer_no_attachments.fs" />
     <Compile Include="Core\Extensions\ARB_get_program_binary.fs" />
     <Compile Include="Core\Extensions\ARB_compute_variable_group_size.fs" />
+    <Compile Include="Core\Extensions\ARB_clip_control.fs" />
     <Compile Include="Core\Extensions\EXT_memory_object.fs" />
     <Compile Include="Core\Config.fs" />
     <Compile Include="Core\DebugOutput.fs" />
