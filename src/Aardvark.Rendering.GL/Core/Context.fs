@@ -193,7 +193,7 @@ type Context(runtime : IRuntime, createContext : unit -> ContextHandle) as this 
             "OpenGL"
         ]
 
-    let resourceContexts = Array.init Config.NumberOfResourceContexts (fun _ -> createContext())
+    let resourceContexts = Array.init RuntimeConfig.NumberOfResourceContexts (fun _ -> createContext())
     let resourceContextCount = resourceContexts.Length
 
     let memoryUsage = MemoryUsage()

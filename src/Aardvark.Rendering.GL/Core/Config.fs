@@ -5,7 +5,7 @@ open System.Runtime.InteropServices
 open OpenTK.Graphics
 
 /// <summary>
-/// A module containing default GL configuration properties
+/// A module containing the OpenGL application configuration
 /// </summary>
 module Config =
 
@@ -30,12 +30,6 @@ module Config =
     let mutable ContextFlags = GraphicsContextFlags.Default
 
     /// <summary>
-    /// The number of resource context to be created for a default
-    /// rendering context instance.
-    /// </summary>
-    let mutable NumberOfResourceContexts = 2
-
-    /// <summary>
     /// The number of bits used for color values in default contexts
     /// </summary>
     let BitsPerPixel = 32
@@ -57,6 +51,12 @@ module Config =
 
 
 module RuntimeConfig =
+
+    /// <summary>
+    /// The number of resource context to be created for a default
+    /// rendering context instance.
+    /// </summary>
+    let mutable NumberOfResourceContexts = 2
 
     /// <summary>
     /// Specifies the expected depth range of normalized device coordinates.
