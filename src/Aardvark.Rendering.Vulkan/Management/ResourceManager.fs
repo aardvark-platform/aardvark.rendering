@@ -177,17 +177,6 @@ type AbstractResourceLocation<'T>(owner : IResourceCache, key : list<obj>) =
     interface IResourceLocation<'T> with
         member x.Update(u, t, rt) = x.Update(u, t, rt)
 
-type private DummyResourceCache(device : Device) =
-    interface IResourceCache with
-        member x.Device = device
-        member x.Remove key = ()
-
-
-[<AbstractClass>]
-type UncachedResourceLocation<'T>(device : Device) =
-    inherit AbstractResourceLocation<'T>(DummyResourceCache(device), [])
-
-
 type ImmutableResourceLocation<'Input, 'Handle>(owner : IResourceCache, key : list<obj>,
                                                 input : aval<'Input>, desc : ImmutableResourceDescription<'Input, 'Handle>) =
     inherit AbstractResourceLocation<'Handle>(owner, key)
@@ -402,44 +391,6 @@ type AbstractPointerResourceWithEquality<'T when 'T : unmanaged>(owner : IResour
 
     interface INativeResourceLocation<'T> with
         member x.Pointer = x.Pointer
-
-type ResourceLocationCache<'T>(device : Device) =
-    let store = System.Collections.Concurrent.ConcurrentDictionary<list<obj>, IResourceLocation<'T>>()
-
-    member x.GetOrCreate(key : list<obj>, create : IResourceCache -> list<obj> -> #IResourceLocation<'T>) =
-        let res =
-            store.GetOrAdd(key, fun key ->
-                let res = create x key :> IResourceLocation<_>
-                res
-            )
-        res
-
-    member x.Clear() =
-        let res = store.Values |> Seq.toArray
-        for r in res do r.ReleaseAll()
-
-    interface IResourceCache with
-        member x.Device = device
-        member x.Remove key = store.TryRemove key |> ignore
-
-type NativeResourceLocationCache<'T when 'T : unmanaged>(device : Device) =
-    let store = System.Collections.Concurrent.ConcurrentDictionary<list<obj>, INativeResourceLocation<'T>>()
-
-    member x.GetOrCreate(key : list<obj>, create : IResourceCache -> list<obj> -> #INativeResourceLocation<'T>) =
-        let res =
-            store.GetOrAdd(key, fun key ->
-                let res = create x key :> INativeResourceLocation<_>
-                res
-            )
-        res
-
-    member x.Clear() =
-        let res = store.Values |> Seq.toArray
-        for r in res do r.ReleaseAll()
-
-    interface IResourceCache with
-        member x.Device = device
-        member x.Remove key = store.TryRemove key |> ignore
 
 
 module Resources =
@@ -1631,11 +1582,55 @@ module Resources =
                     | None -> failwith "[Resource] inconsistent state"
 
 
+module internal ResourceCaches =
+    open System.Runtime.CompilerServices
+
+    type DummyResourceCache(device : Device) =
+        interface IResourceCache with
+            member x.Device = device
+            member x.Remove key = ()
+
+    type ResourceCache<'T when 'T :> IResourceLocation>(device : Device) =
+        let store = ConcurrentDictionary<list<obj>, 'T>()
+
+        member x.GetOrCreate(key : list<obj>, create : IResourceCache -> list<obj> -> 'T) =
+            store.GetOrAdd(key, create x)
+
+        member x.Clear() =
+            let res = store.Values |> Seq.toArray
+            for r in res do r.ReleaseAll()
+
+        interface IResourceCache with
+            member x.Device = device
+            member x.Remove key = store.TryRemove key |> ignore
+
+    type ResourceLocationCache<'T>(device : Device) =
+        inherit ResourceCache<IResourceLocation<'T>>(device)
+
+    type NativeResourceLocationCache<'T when 'T : unmanaged>(device : Device) =
+        inherit ResourceCache<INativeResourceLocation<'T>>(device)
+
+    type ImageSamplerMapCache() =
+        let store = ConditionalWeakTable<IAdaptiveValue, amap<int, IResourceLocation<Resources.ImageSampler>>>()
+
+        member x.GetOrAdd(textures : IAdaptiveValue, create : IAdaptiveValue -> _) =
+            lock store (fun _ ->
+                match store.TryGetValue textures with
+                | (true, map) -> map
+                | _ ->
+                    let map = create textures
+                    store.Add(textures, map)
+                    map
+            )
+
+
 open Resources
 open Resources.Raytracing
+open ResourceCaches
 
 type ResourceManager(device : Device) =
-    //let descriptorPool = device.CreateDescriptorPool(1 <<< 22, 1 <<< 22)
+
+    let dummyCache              = DummyResourceCache(device)
 
     let bufferCache             = ResourceLocationCache<Buffer>(device)
     let indirectBufferCache     = ResourceLocationCache<IndirectBuffer>(device)
@@ -1648,7 +1643,7 @@ type ResourceManager(device : Device) =
     let samplerStateCache       = ResourceLocationCache<SamplerState>(device)
     let imageSamplerCache       = ResourceLocationCache<ImageSampler>(device)
     let imageSamplerArrayCache  = ResourceLocationCache<ImageSamplerArray>(device)
-    let imageSamplerMapCache    = ConcurrentDictionary<IAdaptiveValue, amap<int, IResourceLocation<ImageSampler>>>()
+    let imageSamplerMapCache    = ImageSamplerMapCache()
     let dynamicProgramCache     = ResourceLocationCache<ShaderProgram>(device)
 
     let accelerationStructureCache = ResourceLocationCache<Raytracing.AccelerationStructure>(device)
@@ -1848,7 +1843,7 @@ type ResourceManager(device : Device) =
         let program = device.CreateShaderProgram(pass, data)
 
         let resource =
-            { new UncachedResourceLocation<ShaderProgram>(pass.Device) with
+            { new AbstractResourceLocation<ShaderProgram>(dummyCache, []) with
                 override x.Create () = ()
                 override x.Destroy () = program.Dispose()
                 override x.GetHandle(u, t, rt) = { handle = program; version = 0 }
@@ -1864,7 +1859,7 @@ type ResourceManager(device : Device) =
             FShade.EffectDebugger.saveCode data program.Surface
 
         let resource =
-            { new UncachedResourceLocation<ShaderProgram>(signature.Device) with
+            { new AbstractResourceLocation<ShaderProgram>(dummyCache, []) with
                 override x.Create () = ()
                 override x.Destroy () = program.Dispose()
                 override x.GetHandle(u, t, rt) = { handle = program; version = 0 }
