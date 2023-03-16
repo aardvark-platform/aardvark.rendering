@@ -68,9 +68,16 @@ and IResourceCache =
     abstract member Device : Device
     abstract member Remove : key : list<obj> -> unit
 
-type INativeResourceLocation<'T when 'T : unmanaged> =
-    inherit IResourceLocation<'T>
+type INativeResourcePointer<'T when 'T : unmanaged> =
+    inherit IResourceLocation
     abstract member Pointer : nativeptr<'T>
+
+type INativeResourceLocation<'T, 'V when 'V : unmanaged> =
+    inherit IResourceLocation<'T>
+    inherit INativeResourcePointer<'V>
+
+type INativeResourceLocation<'T when 'T : unmanaged> =
+    INativeResourceLocation<'T, 'T>
 
 
 [<AutoOpen>]
@@ -391,6 +398,30 @@ type AbstractPointerResourceWithEquality<'T when 'T : unmanaged>(owner : IResour
 
     interface INativeResourceLocation<'T> with
         member x.Pointer = x.Pointer
+
+[<AbstractClass>]
+type AbstractResourceLocationWithPointer<'T, 'V when 'T :> Resource<'V> and 'V : equality and 'V : unmanaged>(owner : IResourceCache, key : list<obj>) =
+    inherit AbstractResourceLocation<'T>(owner, key)
+
+    let mutable ptr = NativePtr.zero<'V>
+
+    abstract member Compute : user: IResourceUser * token: AdaptiveToken * renderToken: RenderToken -> ResourceInfo<'T>
+
+    override x.Create() =
+        ptr <- NativePtr.alloc 1
+
+    override x.Destroy() =
+        if not <| NativePtr.isNull ptr then
+            NativePtr.free ptr
+            ptr <- NativePtr.zero
+
+    override x.GetHandle(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
+        let info = x.Compute(user, token, renderToken)
+        info.handle.Handle |> NativePtr.write ptr
+        info
+
+    interface INativeResourceLocation<'T, 'V> with
+        member x.Pointer = ptr
 
 
 module Resources =
@@ -1492,7 +1523,7 @@ module Resources =
 
         type RaytracingPipelineResource(owner : IResourceCache, key : list<obj>,
                                         program : RaytracingProgram, maxRecursionDepth : aval<int>) =
-            inherit AbstractResourceLocation<RaytracingPipeline>(owner, key)
+            inherit AbstractResourceLocationWithPointer<RaytracingPipeline, VkPipeline>(owner, key)
 
             let mutable handle : Option<RaytracingPipelineDescription * RaytracingPipeline> = None
             let mutable version = 0
@@ -1515,12 +1546,13 @@ module Resources =
                 { handle = pipeline; version = version }
 
             override x.Create() =
-                ()
+                base.Create()
 
             override x.Destroy() =
                 destroy()
+                base.Destroy()
 
-            override x.GetHandle(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
+            override x.Compute(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
                 if x.OutOfDate then
                     let depth = maxRecursionDepth.GetValue(user, token, renderToken) |> min recursionDepthLimit
                     let description = { Program = program; MaxRecursionDepth = uint32 depth }
@@ -1539,7 +1571,7 @@ module Resources =
 
         type ShaderBindingTableResource(owner : IResourceCache, key : list<obj>,
                                         pipeline : IResourceLocation<RaytracingPipeline>, hitConfigs : aval<Set<HitConfig>>) =
-            inherit AbstractResourceLocation<ShaderBindingTable>(owner, key)
+            inherit AbstractResourceLocationWithPointer<ShaderBindingTable, ShaderBindingTableHandle>(owner, key)
 
             let mutable handle : Option<ShaderBindingTable> = None
             let mutable version = 0
@@ -1562,13 +1594,15 @@ module Resources =
                 { handle = updated; version = version }
 
             override x.Create() =
+                base.Create()
                 pipeline.Acquire()
 
             override x.Destroy() =
                 destroy()
                 pipeline.Release()
+                base.Destroy()
 
-            override x.GetHandle(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
+            override x.Compute(user : IResourceUser, token : AdaptiveToken, renderToken : RenderToken) =
                 if x.OutOfDate then
                     let pipeline = pipeline.Update(user, token, renderToken)
                     let configs = hitConfigs.GetValue(user, token, renderToken)
@@ -1607,8 +1641,11 @@ module internal ResourceCaches =
     type ResourceLocationCache<'T>(device : Device) =
         inherit ResourceCache<IResourceLocation<'T>>(device)
 
-    type NativeResourceLocationCache<'T when 'T : unmanaged>(device : Device) =
-        inherit ResourceCache<INativeResourceLocation<'T>>(device)
+    type NativeResourceLocationCache<'T, 'V when 'V : unmanaged>(device : Device) =
+        inherit ResourceCache<INativeResourceLocation<'T, 'V>>(device)
+
+    type NativeResourceLocationCache<'T when 'T : unmanaged> =
+        NativeResourceLocationCache<'T, 'T>
 
     type ImageSamplerMapCache() =
         let store = ConditionalWeakTable<IAdaptiveValue, amap<int, IResourceLocation<Resources.ImageSampler>>>()
@@ -1647,8 +1684,8 @@ type ResourceManager(device : Device) =
     let dynamicProgramCache     = ResourceLocationCache<ShaderProgram>(device)
 
     let accelerationStructureCache = ResourceLocationCache<Raytracing.AccelerationStructure>(device)
-    let raytracingPipelineCache    = ResourceLocationCache<Raytracing.RaytracingPipeline>(device)
-    let shaderBindingTableCache    = ResourceLocationCache<Raytracing.ShaderBindingTable>(device)
+    let raytracingPipelineCache    = NativeResourceLocationCache<Raytracing.RaytracingPipeline, VkPipeline>(device)
+    let shaderBindingTableCache    = NativeResourceLocationCache<Raytracing.ShaderBindingTable, ShaderBindingTableHandle>(device)
 
     let vertexInputCache        = NativeResourceLocationCache<VkPipelineVertexInputStateCreateInfo>(device)
     let inputAssemblyCache      = NativeResourceLocationCache<VkPipelineInputAssemblyStateCreateInfo>(device)

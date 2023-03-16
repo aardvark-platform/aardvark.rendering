@@ -30,30 +30,50 @@ type ShaderBindingSubtable<'T when 'T : comparison> =
               Indices = lookup }
     end
 
+[<StructLayout(LayoutKind.Sequential)>]
+type ShaderBindingTableHandle =
+    struct
+        val public RaygenTable   : VkStridedDeviceAddressRegionKHR
+        val public MissTable     : VkStridedDeviceAddressRegionKHR
+        val public HitGroupTable : VkStridedDeviceAddressRegionKHR
+        val public CallableTable : VkStridedDeviceAddressRegionKHR
+
+        new (raygen, miss, hit, callable) =
+            { RaygenTable = raygen; MissTable = miss; HitGroupTable = hit; CallableTable = callable }
+    end
 
 type ShaderBindingTable =
     class
-        inherit Resource
+        inherit Resource<ShaderBindingTableHandle>
         val public RaygenTable   : ShaderBindingSubtable<Symbol>
         val public MissTable     : ShaderBindingSubtable<Symbol>
-        val public CallableTable : ShaderBindingSubtable<Symbol>
         val public HitGroupTable : ShaderBindingSubtable<HitConfig>
+        val public CallableTable : ShaderBindingSubtable<Symbol>
 
         override x.Destroy() =
             x.RaygenTable.Dispose()
             x.MissTable.Dispose()
-            x.CallableTable.Dispose()
             x.HitGroupTable.Dispose()
+            x.CallableTable.Dispose()
 
         new(raygenTable : ShaderBindingSubtable<Symbol>,
             missTable : ShaderBindingSubtable<Symbol>,
-            callableTable : ShaderBindingSubtable<Symbol>,
-            hitGroupTable : ShaderBindingSubtable<HitConfig>) =
-            { inherit Resource(raygenTable.Device)
+            hitGroupTable : ShaderBindingSubtable<HitConfig>,
+            callableTable : ShaderBindingSubtable<Symbol>) =
+
+            let handle =
+                ShaderBindingTableHandle(
+                    raygenTable.AddressRegion,
+                    missTable.AddressRegion,
+                    hitGroupTable.AddressRegion,
+                    callableTable.AddressRegion
+                )
+
+            { inherit Resource<_>(raygenTable.Device, handle)
               RaygenTable = raygenTable
               MissTable = missTable
-              CallableTable = callableTable
-              HitGroupTable = hitGroupTable}
+              HitGroupTable = hitGroupTable
+              CallableTable = callableTable }
     end
 
 
@@ -330,11 +350,7 @@ module ShaderBindingTable =
         // Build a new table with the new subtables, old subtables are re-used.
         if recreated then
             table.Dispose()
-
-            new ShaderBindingTable(
-                raygenTable, missTable,
-                callableTable, hitGroupTable
-            )
+            new ShaderBindingTable(raygenTable, missTable, hitGroupTable, callableTable)
 
         // Every subtable could be updated in-place.
         // Remove the added references, and return the old table.
@@ -362,7 +378,4 @@ module ShaderBindingTable =
         let callableTable = tableData.CallableData |> ShaderBindingSubtable.create device
         let hitGroupTable = tableData.HitGroupData |> ShaderBindingSubtable.create device
 
-        new ShaderBindingTable(
-            raygenTable, missTable,
-            callableTable, hitGroupTable
-        )
+        new ShaderBindingTable(raygenTable, missTable, hitGroupTable, callableTable)

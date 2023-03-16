@@ -87,9 +87,9 @@ type PreparedRaytracingPipeline(device         : Device,
                                 state          : RaytracingPipelineState,
                                 resources      : list<IResourceLocation>,
                                 program        : RaytracingProgram,
-                                pipeline       : IResourceLocation<RaytracingPipeline>,
-                                descriptorSets : IResourceLocation<DescriptorSetBinding>,
-                                sbt            : IResourceLocation<ShaderBindingTable>,
+                                pipeline       : INativeResourceLocation<RaytracingPipeline, VkPipeline>,
+                                descriptorSets : INativeResourceLocation<DescriptorSetBinding>,
+                                sbt            : INativeResourceLocation<ShaderBindingTable, ShaderBindingTableHandle>,
                                 hitConfigPool  : IDisposable) =
 
     inherit Resource(device)

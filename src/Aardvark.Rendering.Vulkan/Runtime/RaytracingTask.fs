@@ -21,12 +21,14 @@ module private ``Trace Command Extensions`` =
 
     type Command with
 
-        static member BindRaytracingPipeline(pipeline : RaytracingPipeline, descriptorSets : DescriptorSetBinding) =
+        static member BindRaytracingPipeline(pPipeline : nativeptr<VkPipeline>, pDescriptorSets : nativeptr<DescriptorSetBinding>) =
             { new Command() with
                 member x.Compatible = QueueFlags.Compute
                 member x.Enqueue cmd =
+                    let descriptorSets = NativePtr.toByRef pDescriptorSets
+
                     cmd.AppendCommand()
-                    VkRaw.vkCmdBindPipeline(cmd.Handle, VkPipelineBindPoint.RayTracingKhr, pipeline.Handle)
+                    VkRaw.vkCmdBindPipeline(cmd.Handle, VkPipelineBindPoint.RayTracingKhr, pPipeline.Value)
 
                     cmd.AppendCommand()
                     VkRaw.vkCmdBindDescriptorSets(
@@ -38,19 +40,17 @@ module private ``Trace Command Extensions`` =
                     []
             }
 
-        static member TraceRays(shaderBindingTable : ShaderBindingTable,
-                                width : uint32, height : uint32, depth : uint32) =
+        static member TraceRays(pShaderBindingTable : nativeptr<ShaderBindingTableHandle>, width : uint32, height : uint32, depth : uint32) =
             { new Command() with
                 member x.Compatible = QueueFlags.Compute
                 member x.Enqueue cmd =
                     cmd.AppendCommand()
-                    native {
-                        let! pRaygenAddress   = shaderBindingTable.RaygenTable.AddressRegion
-                        let! pMissAddress     = shaderBindingTable.MissTable.AddressRegion
-                        let! pHitAddress      = shaderBindingTable.HitGroupTable.AddressRegion
-                        let! pCallableAddress = shaderBindingTable.CallableTable.AddressRegion
-                        VkRaw.vkCmdTraceRaysKHR(cmd.Handle, pRaygenAddress, pMissAddress, pHitAddress, pCallableAddress, width, height, depth)
-                    }
+
+                    let pRaygenAddress : nativeptr<VkStridedDeviceAddressRegionKHR> = NativePtr.cast pShaderBindingTable
+                    let pMissAddress = pRaygenAddress |> NativePtr.step 1
+                    let pHitAddress = pRaygenAddress |> NativePtr.step 2
+                    let pCallableAddress = pRaygenAddress |> NativePtr.step 3
+                    VkRaw.vkCmdTraceRaysKHR(cmd.Handle, pRaygenAddress, pMissAddress, pHitAddress, pCallableAddress, width, height, depth)
 
                     []
             }
@@ -58,9 +58,9 @@ module private ``Trace Command Extensions`` =
     [<CompilationRepresentation(CompilationRepresentationFlags.ModuleSuffix)>]
     module RaytracingCommand =
 
-        let toCommand (shaderBindingTable : ShaderBindingTable) = function
+        let toCommand (pShaderBindingTable : nativeptr<ShaderBindingTableHandle>) = function
             | RaytracingCommand.TraceRaysCmd(size) ->
-                Command.TraceRays(shaderBindingTable, uint32 size.X, uint32 size.Y, uint32 size.Z)
+                Command.TraceRays(pShaderBindingTable, uint32 size.X, uint32 size.Y, uint32 size.Z)
 
             | RaytracingCommand.SyncBufferCmd(buffer, src, dst) ->
                 let buffer = unbox<Buffer> buffer
@@ -85,61 +85,32 @@ module private ``Trace Command Extensions`` =
 [<AutoOpen>]
 module private RaytracingTaskInternals =
 
-    type private ResourceHandle<'T>(location : IResourceLocation<'T>) =
-        let mutable cache = { version = -1; handle = Unchecked.defaultof<'T> }
-
-        member x.Handle = cache.handle
-
-        member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
-            let info = location.Update(ResourceUser.None, token, renderToken)
-            let changed = info.version <> cache.version
-            cache <- info
-            changed
-
-    type CompiledCommand(manager : ResourceManager, resources : ResourceLocationSet, pipelineState : RaytracingPipelineState, input : aval<RaytracingCommand[]>) =
-        inherit AdaptiveObject()
-
-        let mutable commands = [||]
+    type CompiledCommand(manager : ResourceManager, resources : ResourceLocationSet, pipelineState : RaytracingPipelineState, input : alist<RaytracingCommand>) =
+        let reader = input.GetReader()
         let mutable compiled = [||]
 
         let preparedPipeline = manager.PrepareRaytracingPipeline(pipelineState)
 
-        let pipeline = ResourceHandle(preparedPipeline.Pipeline)
-        let descriptorSets = ResourceHandle(preparedPipeline.DescriptorSets)
-        let shaderBindingTable = ResourceHandle(preparedPipeline.ShaderBindingTable)
-
         do for r in preparedPipeline.Resources do
             resources.Add(r)
 
-        new (manager : ResourceManager, resources : ResourceLocationSet, pipelineState : RaytracingPipelineState, commands : alist<RaytracingCommand>) =
-            let commands = commands |> AList.toAVal |> AVal.map IndexList.toArray
-            new CompiledCommand(manager, resources, pipelineState, commands)
-
         member x.Commands = compiled
 
-        member x.Update(token : AdaptiveToken, renderToken : RenderToken) =
-            x.EvaluateIfNeeded token false (fun token ->
-                let mutable changed = false
+        member x.Update(token : AdaptiveToken) =
+            let deltas = reader.GetChanges(token)
 
-                changed <- pipeline.Update(token, renderToken) || changed
-                changed <- descriptorSets.Update(token, renderToken) || changed
-                changed <- shaderBindingTable.Update(token, renderToken) || changed
+            if deltas.Count > 0 then
+                let commands = reader.State.AsArray
 
-                let cmds = input.GetValue token
-                if cmds <> commands then
-                    changed <- true
-                    commands <- cmds
+                Array.Resize(&compiled, commands.Length + 1)
+                compiled.[0] <- Command.BindRaytracingPipeline(preparedPipeline.Pipeline.Pointer, preparedPipeline.DescriptorSets.Pointer)
 
-                if changed then
-                    Array.Resize(&compiled, commands.Length + 1)
+                for i = 0 to commands.Length - 1 do
+                    compiled.[i + 1] <- commands.[i] |> RaytracingCommand.toCommand preparedPipeline.ShaderBindingTable.Pointer
 
-                    compiled.[0] <- Command.BindRaytracingPipeline(pipeline.Handle, descriptorSets.Handle)
-
-                    for i = 0 to commands.Length - 1 do
-                        compiled.[i + 1] <- commands.[i] |> RaytracingCommand.toCommand shaderBindingTable.Handle
-
-                changed
-            )
+                true
+            else
+                false
 
         member x.Dispose() =
             for r in preparedPipeline.Resources do
@@ -177,7 +148,7 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
 
         resources.Use(t, rt, fun resourcesChanged ->
             let commandChanged =
-                compiled.Update(t, rt)
+                compiled.Update t
 
             tt.Sync()
 
@@ -191,7 +162,6 @@ type RaytracingTask(manager : ResourceManager, pipeline : RaytracingPipelineStat
                         |> sprintf "{ %s }"
 
                     Log.line "[Raytracing] recompile commands: %s" cause
-
 
                 inner.Begin CommandBufferUsage.None
 
